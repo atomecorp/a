@@ -61,7 +61,11 @@ puts note.instance_var_read(:saved_text)        # -> "Initial value"
 puts note.respond_to?(:highlight)               # -> true
 puts note.inspect                               # -> full DSL object dump
 
-page.add(note)
+# Call to a Rust backend function for a heavy computation
+data = { name: "John", age: 42 }
+result = rust(:process_data, data)
+puts "Rust response: \#{result}"
+
 ```
 
 ---
