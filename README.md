@@ -137,7 +137,33 @@ pub fn process_data(data: HashMap<String, serde_json::Value>) -> String {
 }
 ```
 
-This backend module can be imported and exposed via `tauri.conf.json` to allow communication from the DSL/frontend.
+<!-- This backend module can be imported and exposed via `tauri.conf.json` to allow communication from the DSL/frontend.-->
+
+# JavaScript to Call Rust from DSL via Tauri
+
+This file shows how the JavaScript generated from DSL can call Rust backend commands using Tauri’s `invoke` API.
+
+```js
+// Example JS call to Rust function `process_data`
+async function callRustProcess() {
+  const data = {
+    name: "John",
+    age: 42
+  };
+
+  try {
+    const result = await window.__TAURI__.invoke("process_data", { data });
+    console.log("Rust returned:", result);
+  } catch (e) {
+    console.error("Rust call failed:", e);
+  }
+}
+
+// Trigger the call (example)
+document.addEventListener("DOMContentLoaded", callRustProcess);
+```
+
+> This code assumes `process_data` is registered in your Tauri backend with the `#[tauri::command]` attribute and declared in `tauri.conf.json`.
 
 
 ---
