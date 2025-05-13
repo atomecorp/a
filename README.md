@@ -34,6 +34,36 @@ Create a development environment combining the flexibility of a simple, elegant,
 * **Flexibility**: The scripting language enables intuitive, powerful code with advanced metaprogramming capabilities.
 * **Interoperability**: A performant bridge between frontend and backend leverages each technology’s strengths.
 
+## Minimal DSL Example (Editable Text Inline, Events, Metaprogramming)
+
+```text
+page = box(id: :main, width: :full, height: :full, attach: :body)
+
+note = text(id: :note,
+			content: "✎ Edit me inline",
+			editable: true,         # maps to contenteditable
+			draggable: true,
+			left: 88,
+			top: 88,
+			style: { font_size: 20, color: :blue })
+
+note.on(:key_down) do |e|
+  puts "Key: #{e[:key]}"
+end
+
+note.define_method(:highlight) do
+  self[:color] = :red
+end
+
+note.instance_var_write(:saved_text, "Initial value")
+
+puts note.instance_var_read(:saved_text)        # -> "Initial value"
+puts note.respond_to?(:highlight)               # -> true
+puts note.inspect                               # -> full DSL object dump
+
+page.add(note)
+```
+
 ---
 
 This document serves as a guide for engineers or development teams to implement the full solution described.
