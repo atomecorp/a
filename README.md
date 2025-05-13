@@ -68,6 +68,78 @@ puts "Rust response: \#{result}"
 
 ```
 
+# Rust Parser and Backend for DSL
+
+This file contains the minimal Rust code to:
+
+* Parse a simple DSL object
+* Convert it into JavaScript
+* Handle a backend method `process_data` exposed to Tauri frontend
+
+---
+
+## Node Parser and JS Generator
+
+```rust
+use serde_json::json;
+use std::collections::HashMap;
+
+// Simulate a simple node structure for UI elements
+#[derive(Debug)]
+struct Node {
+    id: String,
+    element_type: String,
+    properties: HashMap<String, serde_json::Value>,
+}
+
+impl Node {
+    fn new(id: &str, element_type: &str) -> Self {
+        Node {
+            id: id.to_string(),
+            element_type: element_type.to_string(),
+            properties: HashMap::new(),
+        }
+    }
+
+    fn set(&mut self, key: &str, value: serde_json::Value) {
+        self.properties.insert(key.to_string(), value);
+    }
+
+    fn to_js(&self) -> String {
+        let props = serde_json::to_string(&self.properties).unwrap();
+        format!("createNode('{}', '{}', {});", self.id, self.element_type, props)
+    }
+}
+
+// DSL instruction handler (simplified)
+pub fn parse_dsl() -> Vec<String> {
+    let mut node = Node::new("note", "text");
+    node.set("content", json!("✎ Edit me inline"));
+    node.set("editable", json!(true));
+    node.set("draggable", json!(true));
+    node.set("left", json!(88));
+    node.set("top", json!(88));
+    node.set("style", json!({ "font_size": 20, "color": "blue" }));
+    vec![node.to_js()]
+}
+```
+
+---
+
+## Backend Method for Heavy Processing
+
+```rust
+#[tauri::command]
+pub fn process_data(data: HashMap<String, serde_json::Value>) -> String {
+    let name = data.get("name").unwrap_or(&json!("unknown"));
+    let age = data.get("age").unwrap_or(&json!(0));
+    format!("Processed user {} aged {}", name, age)
+}
+```
+
+This backend module can be imported and exposed via `tauri.conf.json` to allow communication from the DSL/frontend.
+
+
 ---
 
 This document serves as a guide for engineers or development teams to implement the full solution described.
