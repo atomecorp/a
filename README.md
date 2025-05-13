@@ -129,7 +129,6 @@ pub fn parse_dsl() -> Vec<String> {
 ## Backend Method for Heavy Processing
 
 ```rust
-#[tauri::command]
 pub fn process_data(data: HashMap<String, serde_json::Value>) -> String {
     let name = data.get("name").unwrap_or(&json!("unknown"));
     let age = data.get("age").unwrap_or(&json!(0));
