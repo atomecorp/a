@@ -1,305 +1,343 @@
 @echo off
-setlocal enabledelayedexpansion
 
-echo ==================================================
-echo TAURI DSL PROJECT - COMPLETE INSTALLATION SCRIPT
-echo ==================================================
-echo.
-echo This script will install and configure a complete
-echo Tauri DSL project environment.
-echo.
-echo Press any key to begin installation...
-pause > nul
+REM Définir un nom d'application par défaut
+set DEFAULT_APP_NAME=my_app
 
-:: Check prerequisites
-echo Checking prerequisites...
-where node >nul 2>nul
-if %ERRORLEVEL% neq 0 (
-    echo ERROR: Node.js is not installed!
-    echo Please install Node.js from https://nodejs.org/
-    echo and run this script again.
-    goto :error
+REM Modified part - using goto statements for the problematic conditional logic
+if not "%~1"=="" goto :SET_APP_NAME
+echo Aucun nom d'application fourni, utilisation du nom par défaut: %DEFAULT_APP_NAME%
+set APP_NAME=%DEFAULT_APP_NAME%
+goto :CHECK_DIRECTORY
+
+:SET_APP_NAME
+set APP_NAME=%1
+echo Using app name: %APP_NAME%
+
+:CHECK_DIRECTORY
+if not exist "%APP_NAME%" goto :CREATE_APP
+
+echo Le répertoire %APP_NAME% existe déjà.
+echo Voulez-vous le supprimer? (y/N):
+set CONFIRM=
+set /p CONFIRM=
+if "%CONFIRM%"=="" set CONFIRM=N
+if /i not "%CONFIRM%"=="Y" goto :USE_EXISTING
+
+echo Suppression du répertoire %APP_NAME%...
+rmdir /s /q "%APP_NAME%"
+goto :CREATE_APP
+
+:USE_EXISTING
+echo Conservation du répertoire existant. Lancement de l'application...
+cd %APP_NAME%
+call npm run tauri dev
+exit /b 0
+
+:CREATE_APP
+REM End of modified part - rest of script is unchanged from original
+
+echo Création de l'application Tauri: %APP_NAME%
+
+REM Utiliser create-tauri-app avec le template vanilla pour créer l'application
+REM L'option --yes permet d'accepter automatiquement les valeurs par défaut
+call npm create tauri-app@latest %APP_NAME% -- --template vanilla --manager npm --yes
+
+REM Accéder au répertoire de l'application
+cd %APP_NAME%
+
+REM Sauvegarder le chemin du répertoire de l'application (chemin absolu)
+set APP_DIR=%cd%
+
+REM Retourner au répertoire parent
+cd ..
+
+REM Vérifier si le répertoire src existe
+if exist src (
+  REM Copier le contenu du répertoire src vers le répertoire src de l'application
+  echo Copie des fichiers personnalisés...
+  xcopy /E /Y /I src "%APP_DIR%\src"
+) else (
+  echo Avertissement: Le répertoire src n'existe pas à la racine.
+  mkdir "%APP_DIR%\src"
 )
 
-where npm >nul 2>nul
-if %ERRORLEVEL% neq 0 (
-    echo ERROR: npm is not installed!
-    echo Please install Node.js from https://nodejs.org/
-    echo and run this script again.
-    goto :error
+REM Retourner au répertoire de l'application
+cd %APP_NAME%
+
+REM Ajouter les dépendances Axum au fichier Cargo.toml existant
+echo Ajout des dépendances Axum...
+powershell -Command "$content = Get-Content src-tauri\Cargo.toml; if (-not (Select-String -Pattern 'axum =' -Path 'src-tauri\Cargo.toml' -Quiet)) { $updated = $false; $newContent = @(); foreach($line in $content) { $newContent += $line; if ($line.Trim() -eq '[dependencies]' -and -not $updated) { $newContent += 'axum = \"0.7.9\"'; $newContent += 'tokio = { version = \"1\", features = [\"full\"] }'; $newContent += 'tower-http = { version = \"0.5.0\", features = [\"fs\", \"cors\"] }'; $updated = $true; } } $newContent | Set-Content src-tauri\Cargo.toml }"
+
+REM Créer un fichier pour le serveur Axum avec les corrections nécessaires
+echo Création du fichier serveur Axum...
+if not exist src-tauri\src\server mkdir src-tauri\src\server
+(
+echo use axum::{
+echo     routing::get_service,
+echo     Router,
+echo };
+echo use std::{net::SocketAddr, path::PathBuf};
+echo use tower_http::{
+echo     cors::CorsLayer,
+echo     services::ServeDir,
+echo };
+echo.
+echo pub async fn start_server^(static_dir: PathBuf^) {
+echo     // Imprimer le chemin absolu pour le débogage
+echo     println!^("Servir les fichiers depuis: {}", static_dir.display^(^)^);
+echo
+echo     // Création du service pour servir les fichiers statiques
+echo     let serve_dir = ServeDir::new^(static_dir^)
+echo         .append_index_html_on_directories^(true^); // Pour servir index.html automatiquement
+echo
+echo     let serve_service = get_service^(serve_dir^).handle_error^(|error| async move {
+echo         println!^("Erreur lors du service des fichiers: {:?}", error^);
+echo         ^(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur lors du service des fichiers"^)
+echo     }^);
+echo.
+echo     // Configuration du routeur avec CORS
+echo     let app = Router::new^(^)
+echo         .nest_service^("/", serve_service^)
+echo         .layer^(CorsLayer::permissive^(^)^);
+echo.
+echo     // Définition de l'adresse
+echo     let addr = SocketAddr::from^(^([127, 0, 0, 1], 3000^)^);
+echo.
+echo     println!^("Serveur Axum démarré sur {}", addr^);
+echo     println!^("Serveur Node.js Fastify démarré sur http://localhost:3001"^);
+echo.
+echo     // Démarrage du serveur avec l'API moderne d'Axum
+echo     let listener = tokio::net::TcpListener::bind^(addr^).await.unwrap^(^);
+echo     axum::serve^(listener, app^).await.unwrap^(^);
+echo }
+) > src-tauri\src\server\mod.rs
+
+REM Modifier le fichier main.rs avec le chemin absolu vers le répertoire src et l'ajout du serveur Node
+echo Modification du fichier main.rs...
+(
+echo #![cfg_attr^(
+echo     all^(not^(debug_assertions^), target_os = "windows"^),
+echo     windows_subsystem = "windows"
+echo ^)]
+echo.
+echo mod server;
+echo use std::process::Command;
+echo.
+echo fn main^(^) {
+echo     // Utiliser le chemin absolu codé en dur vers le répertoire src
+echo     // Cela n'est pas idéal mais c'est un contournement pour le problème avec current_dir^(^)
+echo     let static_dir = std::path::PathBuf::from^("%APP_DIR%\\src"^);
+echo     println!^("Chemin du répertoire src: {}", static_dir.display^(^)^);
+echo.
+echo     tauri::Builder::default^(^)
+echo         .setup^(move |_app| {
+echo             let static_dir_clone = static_dir.clone^(^);
+echo
+echo             // Lancer le serveur Axum dans un thread séparé
+echo             std::thread::spawn^(move || {
+echo                 println!^("Démarrage du serveur Axum pour servir les fichiers depuis: {}", static_dir_clone.display^(^)^);
+echo                 let rt = tokio::runtime::Runtime::new^(^).unwrap^(^);
+echo                 rt.block_on^(async {
+echo                     server::start_server^(static_dir_clone^).await;
+echo                 }^);
+echo             }^);
+echo
+echo             // Lancer le serveur Node.js Fastify dans un thread séparé après Tauri
+echo             std::thread::spawn^(move || {
+echo                 println!^("Démarrage du serveur Node.js Fastify..."^);
+echo
+echo                 // Attendre que Tauri soit complètement initialisé ^(délai de 2 secondes^)
+echo                 std::thread::sleep^(std::time::Duration::from_secs^(2^)^);
+echo
+echo                 // Lancer le script Node.js avec node
+echo                 let output = Command::new^("node"^)
+echo                     .current_dir^("%APP_DIR%"^)
+echo                     .arg^("fastify-server.mjs"^)
+echo                     .output^(^);
+echo
+echo                 match output {
+echo                     Ok^(o^) =^> {
+echo                         if o.status.success^(^) {
+echo                             println!^("Serveur Node.js Fastify démarré avec succès"^);
+echo                         } else {
+echo                             eprintln!^("Erreur lors du démarrage du serveur Node.js: {}",
+echo                                 String::from_utf8_lossy^(^&o.stderr^)^);
+echo                         }
+echo                     },
+echo                     Err^(e^) =^> eprintln!^("Erreur lors du lancement du serveur Node.js: {}", e^),
+echo                 }
+echo             }^);
+echo.
+echo             Ok^(^(^)^)
+echo         }^)
+echo         .run^(tauri::generate_context!^(^)^)
+echo         .expect^("Erreur lors de l'exécution de l'application Tauri"^);
+echo }
+) > src-tauri\src\main.rs
+
+REM Vérifier le fichier index.html et le modifier si nécessaire
+echo Vérification et modification de index.html...
+if exist src\index.html (
+  powershell -Command "Write-Host 'Contenu de index.html:'; Get-Content src\index.html; $scriptTags = Select-String -Pattern '<script.*src=\"([^\"]*)\".*>' -Path 'src\index.html' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value }; foreach ($tag in $scriptTags) { $scriptPath = $tag -replace '.*src=\"([^\"]*)\".*', '$1'; if ($scriptPath.StartsWith('/')) { $basePath = $scriptPath.Substring(1); } else { $basePath = $scriptPath; } $newTag = '<script type=\"module\" src=\"http://localhost:3000/' + $basePath + '\" defer></script>'; $escapedTag = [regex]::Escape($tag); (Get-Content src\index.html) -replace $escapedTag, $newTag | Set-Content src\index.html; Write-Host ('Script modifié: ' + $scriptPath + ' -> http://localhost:3000/' + $basePath); }"
+) else (
+  echo Création d'un fichier index.html basique...
+  (
+  echo ^<!DOCTYPE html^>
+  echo ^<html lang="fr"^>
+  echo ^<head^>
+  echo   ^<meta charset="UTF-8"^>
+  echo   ^<meta name="viewport" content="width=device-width, initial-scale=1.0"^>
+  echo   ^<title^>Application Tauri^</title^>
+  echo   ^<script type="module" src="http://localhost:3000/test.js" defer^>^</script^>
+  echo ^</head^>
+  echo ^<body^>
+  echo   ^<h1^>Bienvenue dans votre application Tauri^</h1^>
+  echo   ^<p^>Cette application utilise:^</p^>
+  echo   ^<ul^>
+  echo     ^<li^>Axum sur le port 3000 pour servir les fichiers statiques^</li^>
+  echo     ^<li^>Fastify sur le port 3001 pour les API^</li^>
+  echo   ^</ul^>
+  echo   ^<p^>API endpoints disponibles:^</p^>
+  echo   ^<ul^>
+  echo     ^<li^>^<a href="http://localhost:3001/api/status" target="_blank"^>Status API^</a^>^</li^>
+  echo     ^<li^>^<a href="http://localhost:3001/api/test" target="_blank"^>Test API^</a^>^</li^>
+  echo   ^</ul^>
+  echo ^</body^>
+  echo ^</html^>
+  ) > src\index.html
 )
 
-:: Create project directory
+REM Créer un fichier de test pour vérifier que le serveur fonctionne
+echo Création d'un fichier de test dans le répertoire src...
+(
+echo console.log^('Le serveur Axum fonctionne correctement!'^);
+echo document.addEventListener^('DOMContentLoaded', ^(^) =^> {
+echo   const infoDiv = document.createElement^('div'^);
+echo   infoDiv.innerHTML = '^<p^>JavaScript chargé correctement!^</p^>';
+echo   document.body.appendChild^(infoDiv^);
+echo }^);
+) > src\test.js
+
+REM Installer les dépendances pour le serveur Fastify
+echo Installation des dépendances pour le serveur Fastify...
+call npm install --save fastify @fastify/cors
+
+REM Créer le fichier serveur Fastify
+echo Création du serveur Fastify...
+(
+echo // Serveur Fastify pour l'application Tauri ^(avec modules ES^)
+echo import Fastify from 'fastify';
+echo import { fileURLToPath } from 'url';
+echo import { dirname, join, extname } from 'path';
+echo import { readFile, existsSync, writeFileSync } from 'fs';
+echo import { promisify } from 'util';
+echo import fastifyCors from '@fastify/cors';
 echo.
-echo Creating project directory structure...
-set PROJECT_DIR=%CD%\tauri_dsl_project
-if not exist "%PROJECT_DIR%" mkdir "%PROJECT_DIR%"
-cd "%PROJECT_DIR%"
-
-:: Create subdirectories
-if not exist tauri_app mkdir tauri_app
-if not exist dsl_compiler mkdir dsl_compiler
-if not exist rust_dsp_module mkdir rust_dsp_module
-if not exist backend_saas mkdir backend_saas
-
-:: Setup DSL Compiler
+echo // Conversion des méthodes en Promise
+echo const readFileAsync = promisify^(readFile^);
 echo.
-echo Setting up DSL compiler...
-cd dsl_compiler
-if not exist src mkdir src
-if not exist package.json (
-    echo {^
-  "name": "dsl-compiler",^
-  "version": "1.0.0",^
-  "description": "DSL compiler for Tauri project",^
-  "main": "src/cli.js",^
-  "scripts": {^
-    "start": "node src/cli.js"^
-  }^
-} > package.json
-)
-
-:: Create cli.js
-echo const fs = require('fs');> src\cli.js
-echo const path = require('path');>> src\cli.js
-echo.>> src\cli.js
-echo // Define paths>> src\cli.js
-echo const DSL_SOURCE_DIR = path.resolve(__dirname, '../../tauri_app/src/dsl_source');>> src\cli.js
-echo const JS_OUTPUT_DIR = path.resolve(__dirname, '../../tauri_app/src/dsl_compiled');>> src\cli.js
-echo.>> src\cli.js
-echo console.log('DSL Compiler starting...');>> src\cli.js
-echo console.log('Source directory:', DSL_SOURCE_DIR);>> src\cli.js
-echo console.log('Output directory:', JS_OUTPUT_DIR);>> src\cli.js
-echo.>> src\cli.js
-echo // Create output directory if needed>> src\cli.js
-echo if (!fs.existsSync(JS_OUTPUT_DIR)) {>> src\cli.js
-echo     fs.mkdirSync(JS_OUTPUT_DIR, { recursive: true });>> src\cli.js
-echo     console.log('Created output directory');>> src\cli.js
-echo }>> src\cli.js
-echo.>> src\cli.js
-echo // List DSL files>> src\cli.js
-echo try {>> src\cli.js
-echo     const files = fs.readdirSync(DSL_SOURCE_DIR);>> src\cli.js
-echo     const dslFiles = files.filter(file =^> file.endsWith('.dsl'));>> src\cli.js
-echo     console.log(`Found ${dslFiles.length} DSL files: ${dslFiles.join(', ')}`);>> src\cli.js
-echo     >> src\cli.js
-echo     // Process each DSL file>> src\cli.js
-echo     dslFiles.forEach(file =^> {>> src\cli.js
-echo         const filePath = path.join(DSL_SOURCE_DIR, file);>> src\cli.js
-echo         const content = fs.readFileSync(filePath, 'utf-8');>> src\cli.js
-echo         console.log(`Processing ${file} (${content.length} bytes)`);>> src\cli.js
-echo         >> src\cli.js
-echo         // Generate JS file>> src\cli.js
-echo         const jsPath = path.join(JS_OUTPUT_DIR, file.replace('.dsl', '.js'));>> src\cli.js
-echo         const jsContent = `>> src\cli.js
-echo // Generated from ${file} by DSL compiler>> src\cli.js
-echo console.log("DSL file processed: ${file}");>> src\cli.js
-echo.>> src\cli.js
-echo // DOM manipulation to show it works>> src\cli.js
-echo document.addEventListener('DOMContentLoaded', () =^> {>> src\cli.js
-echo     console.log("DSL script running");>> src\cli.js
-echo     const dslOutput = document.getElementById('dsl-output');>> src\cli.js
-echo     if (dslOutput) {>> src\cli.js
-echo         dslOutput.innerHTML += '<h3>DSL Compiler Test Successful!</h3>';>> src\cli.js
-echo         dslOutput.innerHTML += '<div>Original DSL code:</div>';>> src\cli.js
-echo         dslOutput.innerHTML += '<pre>' + \`${content.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$')}\` + '</pre>';>> src\cli.js
-echo     } else {>> src\cli.js
-echo         console.error("Could not find #dsl-output element");>> src\cli.js
-echo     }>> src\cli.js
-echo });`;>> src\cli.js
-echo         >> src\cli.js
-echo         fs.writeFileSync(jsPath, jsContent);>> src\cli.js
-echo         console.log(`Generated JS file: ${jsPath}`);>> src\cli.js
-echo     });>> src\cli.js
-echo } catch (error) {>> src\cli.js
-echo     console.error('Error processing DSL files:', error);>> src\cli.js
-echo }>> src\cli.js
-echo.>> src\cli.js
-echo console.log('DSL compilation complete!');>> src\cli.js
-
-:: Return to project directory
-cd "%PROJECT_DIR%"
-
-:: Setup Tauri App
+echo // Configuration du serveur Fastify
+echo const fastify = Fastify^({ logger: true }^);
 echo.
-echo Setting up Tauri App...
-cd tauri_app
-
-:: Create package.json
-echo {^
-  "name": "tauri_app",^
-  "version": "1.0.0",^
-  "description": "Tauri DSL Application",^
-  "scripts": {^
-    "compile-dsl": "node ../dsl_compiler/src/cli.js",^
-    "dev:fe": "serve src -p 1420",^
-    "predev": "npm run compile-dsl",^
-    "dev": "concurrently \"npm run dev:fe\" \"tauri dev\"",^
-    "prebuild": "npm run compile-dsl",^
-    "build": "tauri build"^
-  },^
-  "dependencies": {^
-    "@tauri-apps/api": "^2.0.0"^
-  },^
-  "devDependencies": {^
-    "@tauri-apps/cli": "^2.0.0",^
-    "concurrently": "^8.0.1",^
-    "serve": "^14.2.0"^
-  }^
-} > package.json
-
-:: Create frontend structure
-if not exist src mkdir src
-if not exist src\assets mkdir src\assets
-if not exist src\dsl_source mkdir src\dsl_source
-if not exist src\dsl_compiled mkdir src\dsl_compiled
-
-:: Create sample DSL file
-echo # Sample DSL File> src\dsl_source\main.dsl
-echo # This demonstrates the basic syntax of our DSL language>> src\dsl_source\main.dsl
-echo.>> src\dsl_source\main.dsl
-echo object UIElement {>> src\dsl_source\main.dsl
-echo   hash properties>> src\dsl_source\main.dsl
-echo.>> src\dsl_source\main.dsl
-echo   define_method set(key, value) {>> src\dsl_source\main.dsl
-echo     this.properties.set(key, value)>> src\dsl_source\main.dsl
-echo   }>> src\dsl_source\main.dsl
-echo.>> src\dsl_source\main.dsl
-echo   define_method get(key) {>> src\dsl_source\main.dsl
-echo     return this.properties.get(key)>> src\dsl_source\main.dsl
-echo   }>> src\dsl_source\main.dsl
-echo }>> src\dsl_source\main.dsl
-echo.>> src\dsl_source\main.dsl
-echo a = UIElement.new()>> src\dsl_source\main.dsl
-echo a.set("color", "blue")>> src\dsl_source\main.dsl
-echo a.set("position", { x: 100, y: 50 })>> src\dsl_source\main.dsl
-echo.>> src\dsl_source\main.dsl
-echo b = UIElement.new()>> src\dsl_source\main.dsl
-echo b.set("color", "red")>> src\dsl_source\main.dsl
-echo b.set("position", { x: 200, y: 100 })>> src\dsl_source\main.dsl
-echo.>> src\dsl_source\main.dsl
-echo print(a.get("color"))  # would output: blue>> src\dsl_source\main.dsl
-
-:: Create HTML file
-echo ^<!DOCTYPE html^>> src\index.html
-echo ^<html lang="en"^>>> src\index.html
-echo ^<head^>>> src\index.html
-echo     ^<meta charset="UTF-8"^>>> src\index.html
-echo     ^<meta name="viewport" content="width=device-width, initial-scale=1.0"^>>> src\index.html
-echo     ^<title^>DSL Tauri Application^</title^>>> src\index.html
-echo     ^<style^>>> src\index.html
-echo         body {>> src\index.html
-echo             font-family: system-ui, sans-serif;>> src\index.html
-echo             padding: 20px;>> src\index.html
-echo             max-width: 800px;>> src\index.html
-echo             margin: 0 auto;>> src\index.html
-echo             line-height: 1.5;>> src\index.html
-echo         }>> src\index.html
-echo         h1 {>> src\index.html
-echo             color: #333;>> src\index.html
-echo         }>> src\index.html
-echo         #dsl-output {>> src\index.html
-echo             margin-top: 20px;>> src\index.html
-echo             padding: 15px;>> src\index.html
-echo             background-color: #f0f0f0;>> src\index.html
-echo             border-radius: 8px;>> src\index.html
-echo         }>> src\index.html
-echo         pre {>> src\index.html
-echo             background-color: #e0e0e0;>> src\index.html
-echo             padding: 10px;>> src\index.html
-echo             border-radius: 4px;>> src\index.html
-echo             overflow: auto;>> src\index.html
-echo         }>> src\index.html
-echo     ^</style^>>> src\index.html
-echo ^</head^>>> src\index.html
-echo ^<body^>>> src\index.html
-echo     ^<h1^>DSL Tauri Application^</h1^>>> src\index.html
-echo     ^<p^>This is a demonstration of the DSL compiler integration with Tauri.^</p^>>> src\index.html
-echo     >> src\index.html
-echo     ^<div id="dsl-output"^>>> src\index.html
-echo         ^<h2^>DSL Compilation Output:^</h2^>>> src\index.html
-echo         ^<!-- Content will be inserted here by the DSL script --^>>> src\index.html
-echo     ^</div^>>> src\index.html
-echo     >> src\index.html
-echo     ^<!-- Import the compiled DSL file --^>>> src\index.html
-echo     ^<script src="./dsl_compiled/main.js"^>^</script^>>> src\index.html
-echo ^</body^>>> src\index.html
-echo ^</html^>>> src\index.html
-
-:: Install dependencies
+echo // Récupérer le chemin du fichier actuel et le dossier parent
+echo const __filename = fileURLToPath^(import.meta.url^);
+echo const __dirname = dirname^(__filename^);
 echo.
-echo Installing dependencies...
-call npm install
+echo // Enregistrer le plugin CORS
+echo await fastify.register^(fastifyCors, {
+echo   origin: true, // Autoriser toutes les origines
+echo   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+echo   credentials: true
+echo }^);
+echo.
+echo // Port pour le serveur Fastify ^(différent d'Axum qui utilise 3000^)
+echo const PORT = 3001;
+echo.
+echo // Chemin du répertoire src
+echo const srcDir = join^(__dirname, 'src'^);
+echo.
+echo // Routes API
+echo fastify.get^('/api/status', async ^(request, reply^) =^> {
+echo   return {
+echo     status: 'ok',
+echo     message: 'Serveur Fastify opérationnel',
+echo     timestamp: new Date^(^).toISOString^(^)
+echo   };
+echo }^);
+echo.
+echo // Route pour tester le serveur
+echo fastify.get^('/api/test', async ^(request, reply^) =^> {
+echo   return {
+echo     message: 'Test réussi!',
+echo     server: 'Fastify',
+echo     version: fastify.version
+echo   };
+echo }^);
+echo.
+echo // Créer un fichier de test Node.js spécifique
+echo try {
+echo   writeFileSync^(join^(srcDir, 'test-node.js'^), 
+echo   "console.log('Le serveur Fastify fonctionne correctement!'); " +
+echo   "console.log('Ce fichier est servi par Fastify sur le port 3001');"
+echo   ^);
+echo } catch ^(err^) {
+echo   console.error^('Erreur lors de la création du fichier test-node.js:', err^);
+echo }
+echo.
+echo // Gestionnaire pour servir des fichiers statiques
+echo fastify.get^('/*', async ^(request, reply^) =^> {
+echo   try {
+echo     const requestPath = request.url === '/' ? '/index.html' : request.url;
+echo     const filePath = join^(srcDir, requestPath^);
+echo
+echo     // Vérifier si le fichier existe
+echo     if ^(existsSync^(filePath^)^) {
+echo       const content = await readFileAsync^(filePath^);
+echo
+echo       // Déterminer le type de contenu basé sur l'extension
+echo       const ext = extname^(filePath^).toLowerCase^(^);
+echo       let contentType = 'text/plain';
+echo
+echo       switch^(ext^) {
+echo         case '.html': contentType = 'text/html'; break;
+echo         case '.js': contentType = 'application/javascript'; break;
+echo         case '.css': contentType = 'text/css'; break;
+echo         case '.json': contentType = 'application/json'; break;
+echo         case '.png': contentType = 'image/png'; break;
+echo         case '.jpg': case '.jpeg': contentType = 'image/jpeg'; break;
+echo       }
+echo
+echo       reply.type^(contentType^).send^(content^);
+echo     } else {
+echo       reply.code^(404^).send^({ error: 'Fichier non trouvé' }^);
+echo     }
+echo   } catch ^(err^) {
+echo     fastify.log.error^(err^);
+echo     reply.code^(500^).send^({ error: 'Erreur interne du serveur' }^);
+echo   }
+echo }^);
+echo.
+echo // Démarrer le serveur
+echo const start = async ^(^) =^> {
+echo   try {
+echo     await fastify.listen^({ port: PORT, host: '0.0.0.0' }^);
+echo     fastify.log.info^(`Serveur Fastify démarré sur http://localhost:${PORT}`^);
+echo     fastify.log.info^('Endpoints disponibles:'^);
+echo     fastify.log.info^('- http://localhost:3001/api/status'^);
+echo     fastify.log.info^('- http://localhost:3001/api/test'^);
+echo     fastify.log.info^('- http://localhost:3001/test-node.js'^);
+echo   } catch ^(err^) {
+echo     fastify.log.error^(err^);
+echo     process.exit^(1^);
+echo   }
+echo };
+echo.
+echo start^(^);
+) > fastify-server.mjs
 
-:: Initialize Tauri
-echo.
-echo Initializing Tauri...
-call npx @tauri-apps/cli init
+REM Lancer le développement
+echo Lancement de l'application en mode développement...
+call npm run tauri dev
 
-:: Return to project root
-cd "%PROJECT_DIR%"
-
-:: Test the DSL compiler
-echo.
-echo Testing DSL compiler...
-node dsl_compiler/src/cli.js
-
-:: Create startup script
-echo @echo off> start-app.bat
-echo echo Starting Tauri DSL Application...>> start-app.bat
-echo cd tauri_app>> start-app.bat
-echo npm run dev>> start-app.bat
-echo pause>> start-app.bat
-
-:: Create README file
-echo # Tauri DSL Project> README.md
-echo.>> README.md
-echo This project demonstrates the integration of a custom Domain-Specific Language (DSL) with Tauri.>> README.md
-echo.>> README.md
-echo ## Project Structure>> README.md
-echo.>> README.md
-echo - **tauri_app/**: Tauri application with frontend code>> README.md
-echo - **dsl_compiler/**: DSL compiler that transpiles DSL to JavaScript>> README.md
-echo - **rust_dsp_module/**: Rust DSP library (placeholder)>> README.md
-echo - **backend_saas/**: Node.js backend (placeholder)>> README.md
-echo.>> README.md
-echo ## How to Run>> README.md
-echo.>> README.md
-echo Simply double-click the `start-app.bat` file to compile the DSL and start the application.>> README.md
-echo.>> README.md
-echo ## Development>> README.md
-echo.>> README.md
-echo To modify the DSL code, edit the files in `tauri_app/src/dsl_source/`.>> README.md
-echo.>> README.md
-echo ## Requirements>> README.md
-echo.>> README.md
-echo - Node.js>> README.md
-echo - Rust (installed automatically by Tauri if not present)>> README.md
-
-:: Display completion message
-echo.
-echo ==================================================
-echo Installation Complete!
-echo ==================================================
-echo.
-echo The Tauri DSL project has been successfully installed at:
-echo %PROJECT_DIR%
-echo.
-echo To start the application, either:
-echo 1. Double-click the 'start-app.bat' file
-echo    OR
-echo 2. Run the following commands:
-echo    cd tauri_app
-echo    npm run dev
-echo.
-echo Thank you for testing this application!
-echo.
-goto :end
-
-:error
-echo.
-echo Installation failed. Please check the error messages above.
-echo.
-
-:end
-pause
+:END
+echo Script completed.
