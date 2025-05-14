@@ -12,10 +12,23 @@ if "%~1"=="" (
   set APP_NAME=%1
 )
 
-REM Vérifier si le répertoire existe déjà et le supprimer si c'est le cas
+REM Vérifier si le répertoire existe déjà et demander confirmation avant de le supprimer
 if exist "%APP_NAME%" (
-  echo Le répertoire %APP_NAME% existe déjà. Suppression...
-  rmdir /s /q "%APP_NAME%"
+  echo Le répertoire %APP_NAME% existe déjà.
+  set /p CONFIRM=Voulez-vous le supprimer? (y/N):
+
+  REM Si aucune réponse (juste Enter), utiliser N par défaut
+  if "%CONFIRM%"=="" set CONFIRM=N
+
+  if /i "%CONFIRM%"=="Y" (
+    echo Suppression du répertoire %APP_NAME%...
+    rmdir /s /q "%APP_NAME%"
+  ) else (
+    echo Conservation du répertoire existant. Lancement de l'application...
+    cd %APP_NAME%
+    call npm run tauri dev
+    exit /b 0
+  )
 )
 
 echo Création de l'application Tauri: %APP_NAME%
@@ -33,9 +46,15 @@ set APP_DIR=%cd%
 REM Retourner au répertoire parent
 cd ..
 
-REM Copier le contenu du répertoire src vers le répertoire src de l'application
-echo Copie des fichiers personnalisés...
-xcopy /E /Y /I src "%APP_DIR%\src"
+REM Vérifier si le répertoire src existe
+if exist src (
+  REM Copier le contenu du répertoire src vers le répertoire src de l'application
+  echo Copie des fichiers personnalisés...
+  xcopy /E /Y /I src "%APP_DIR%\src"
+) else (
+  echo Avertissement: Le répertoire src n'existe pas à la racine.
+  mkdir "%APP_DIR%\src"
+)
 
 REM Retourner au répertoire de l'application
 cd %APP_NAME%
@@ -80,6 +99,7 @@ echo     // Définition de l'adresse
 echo     let addr = SocketAddr::from^(^([127, 0, 0, 1], 3000^)^);
 echo.
 echo     println!^("Serveur Axum démarré sur {}", addr^);
+echo     println!^("Serveur Node.js Fastify démarré sur http://localhost:3001"^);
 echo.
 echo     // Démarrage du serveur avec l'API moderne d'Axum
 echo     let listener = tokio::net::TcpListener::bind^(addr^).await.unwrap^(^);
@@ -127,7 +147,7 @@ echo
 echo                 // Lancer le script Node.js avec node
 echo                 let output = Command::new^("node"^)
 echo                     .current_dir^("%APP_DIR%"^)
-echo                     .arg^("fastify-server.js"^)
+echo                     .arg^("fastify-server.mjs"^)
 echo                     .output^(^);
 echo
 echo                 match output {
@@ -152,12 +172,45 @@ echo }
 
 REM Vérifier le fichier index.html et le modifier si nécessaire
 echo Vérification et modification de index.html...
-powershell -Command "Write-Host 'Contenu de index.html:'; Get-Content src\index.html; $scriptTags = Select-String -Pattern '<script.*src=\"([^\"]*)\".*>' -Path 'src\index.html' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value }; foreach ($tag in $scriptTags) { $scriptPath = $tag -replace '.*src=\"([^\"]*)\".*', '$1'; if ($scriptPath.StartsWith('/')) { $basePath = $scriptPath.Substring(1); } else { $basePath = $scriptPath; } $newTag = '<script type=\"module\" src=\"http://localhost:3000/' + $basePath + '\" defer></script>'; $escapedTag = [regex]::Escape($tag); (Get-Content src\index.html) -replace $escapedTag, $newTag | Set-Content src\index.html; Write-Host ('Script modifié: ' + $scriptPath + ' -> http://localhost:3000/' + $basePath); }"
+if exist src\index.html (
+  powershell -Command "Write-Host 'Contenu de index.html:'; Get-Content src\index.html; $scriptTags = Select-String -Pattern '<script.*src=\"([^\"]*)\".*>' -Path 'src\index.html' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value }; foreach ($tag in $scriptTags) { $scriptPath = $tag -replace '.*src=\"([^\"]*)\".*', '$1'; if ($scriptPath.StartsWith('/')) { $basePath = $scriptPath.Substring(1); } else { $basePath = $scriptPath; } $newTag = '<script type=\"module\" src=\"http://localhost:3000/' + $basePath + '\" defer></script>'; $escapedTag = [regex]::Escape($tag); (Get-Content src\index.html) -replace $escapedTag, $newTag | Set-Content src\index.html; Write-Host ('Script modifié: ' + $scriptPath + ' -> http://localhost:3000/' + $basePath); }"
+) else (
+  echo Création d'un fichier index.html basique...
+  (
+  echo ^<!DOCTYPE html^>
+  echo ^<html lang="fr"^>
+  echo ^<head^>
+  echo   ^<meta charset="UTF-8"^>
+  echo   ^<meta name="viewport" content="width=device-width, initial-scale=1.0"^>
+  echo   ^<title^>Application Tauri^</title^>
+  echo   ^<script type="module" src="http://localhost:3000/test.js" defer^>^</script^>
+  echo ^</head^>
+  echo ^<body^>
+  echo   ^<h1^>Bienvenue dans votre application Tauri^</h1^>
+  echo   ^<p^>Cette application utilise:^</p^>
+  echo   ^<ul^>
+  echo     ^<li^>Axum sur le port 3000 pour servir les fichiers statiques^</li^>
+  echo     ^<li^>Fastify sur le port 3001 pour les API^</li^>
+  echo   ^</ul^>
+  echo   ^<p^>API endpoints disponibles:^</p^>
+  echo   ^<ul^>
+  echo     ^<li^>^<a href="http://localhost:3001/api/status" target="_blank"^>Status API^</a^>^</li^>
+  echo     ^<li^>^<a href="http://localhost:3001/api/test" target="_blank"^>Test API^</a^>^</li^>
+  echo   ^</ul^>
+  echo ^</body^>
+  echo ^</html^>
+  ) > src\index.html
+)
 
 REM Créer un fichier de test pour vérifier que le serveur fonctionne
 echo Création d'un fichier de test dans le répertoire src...
 (
 echo console.log^('Le serveur Axum fonctionne correctement!'^);
+echo document.addEventListener^('DOMContentLoaded', ^(^) =^> {
+echo   const infoDiv = document.createElement^('div'^);
+echo   infoDiv.innerHTML = '^<p^>JavaScript chargé correctement!^</p^>';
+echo   document.body.appendChild^(infoDiv^);
+echo }^);
 ) > src\test.js
 
 REM Installer les dépendances pour le serveur Fastify
@@ -276,9 +329,6 @@ echo };
 echo.
 echo start^(^);
 ) > fastify-server.mjs
-
-REM Modifier le fichier main.rs pour utiliser le bon nom de fichier .mjs
-powershell -Command "(Get-Content src-tauri\src\main.rs) -replace 'fastify-server\.js', 'fastify-server.mjs' | Set-Content src-tauri\src\main.rs"
 
 REM Lancer le développement
 echo Lancement de l'application en mode développement...

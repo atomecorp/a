@@ -3,6 +3,10 @@
 # Définir un nom d'application par défaut
 DEFAULT_APP_NAME="my_app"
 
+# Définir les ports
+AXUM_PORT=3000
+FASTIFY_PORT=3001
+
 # Vérifier si un nom d'application a été fourni
 if [ $# -eq 0 ]; then
   echo "Aucun nom d'application fourni, utilisation du nom par défaut: $DEFAULT_APP_NAME"
@@ -11,10 +15,24 @@ else
   APP_NAME=$1
 fi
 
-# Vérifier si le répertoire existe déjà et le supprimer si c'est le cas
+# Vérifier si le répertoire existe déjà et demander confirmation avant de le supprimer
 if [ -d "$APP_NAME" ]; then
-  echo "Le répertoire $APP_NAME existe déjà. Suppression..."
-  rm -rf "$APP_NAME"
+  echo "Le répertoire $APP_NAME existe déjà."
+  echo "Voulez-vous le supprimer? (y/N): " # Syntaxe compatible avec zsh
+  read CONFIRM
+
+  # Si aucune réponse (juste Enter), utiliser N par défaut
+  CONFIRM=${CONFIRM:-N}
+
+  if [[ $CONFIRM =~ ^[Yy]$ ]]; then
+    echo "Suppression du répertoire $APP_NAME..."
+    rm -rf "$APP_NAME"
+  else
+    echo "Conservation du répertoire existant. Lancement de l'application..."
+    cd "$APP_NAME"
+    npm run tauri dev
+    exit 0
+  fi
 fi
 
 echo "Création de l'application Tauri: $APP_NAME"
@@ -38,7 +56,12 @@ cd ..
 
 # Copier le contenu du répertoire src vers le répertoire src de l'application
 echo "Copie des fichiers personnalisés..."
-cp -R $CURRENT_DIR/src/* $APP_DIR/src/
+if [ -d "$CURRENT_DIR/src" ]; then
+    cp -R $CURRENT_DIR/src/* $APP_DIR/src/
+else
+    echo "Avertissement: Le répertoire src n'existe pas à la racine."
+    mkdir -p $APP_DIR/src
+fi
 
 # Retourner au répertoire de l'application
 cd $APP_NAME
@@ -103,6 +126,7 @@ pub async fn start_server(static_dir: PathBuf) {
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
 
     println!("Serveur Axum démarré sur {}", addr);
+    println!("Serveur Node.js Fastify démarré sur http://localhost:3001");
 
     // Démarrage du serveur avec l'API moderne d'Axum
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -150,7 +174,7 @@ fn main() {
                 // Lancer le script Node.js avec node
                 let output = Command::new("node")
                     .current_dir("$APP_DIR_ABSOLUTE")
-                    .arg("fastify-server.js")
+                    .arg("fastify-server.mjs")
                     .output();
 
                 match output {
@@ -200,9 +224,12 @@ grep -o '<script[^>]*src="[^"]*"[^>]*>' src/index.html | while read -r script_ta
   escaped_new_tag=$(echo "$new_tag" | sed 's/[\/&]/\\&/g')
 
   # Remplacer la balise dans le fichier index.html
-  sed -i "s/$escaped_tag/$escaped_new_tag/g" src/index.html
+  sed -i.bak "s/$escaped_tag/$escaped_new_tag/g" src/index.html
   echo "Script modifié: $script_path -> http://localhost:3000/$base_path"
 done
+
+# Supprimer les fichiers de sauvegarde créés par sed
+find . -name "*.bak" -type f -delete
 
 # Créer un fichier de test pour vérifier que le serveur fonctionne
 echo "Création d'un fichier de test dans le répertoire src..."
@@ -326,9 +353,6 @@ const start = async () => {
 
 start();
 EOL
-
-# Modifier le fichier main.rs pour utiliser le bon nom de fichier .mjs
-sed -i '' 's/fastify-server\.js/fastify-server.mjs/g' src-tauri/src/main.rs
 
 echo "Lancement de l'application en mode développement..."
 npm run tauri dev
