@@ -3,10 +3,6 @@
 # Définir un nom d'application par défaut
 DEFAULT_APP_NAME="my_app"
 
-# Définir les ports
-AXUM_PORT=3000
-FASTIFY_PORT=3001
-
 # Vérifier si un nom d'application a été fourni
 if [ $# -eq 0 ]; then
   echo "Aucun nom d'application fourni, utilisation du nom par défaut: $DEFAULT_APP_NAME"
@@ -15,13 +11,11 @@ else
   APP_NAME=$1
 fi
 
-# Vérifier si le répertoire existe déjà et demander confirmation avant de le supprimer
+# Vérifier si le répertoire existe déjà
 if [ -d "$APP_NAME" ]; then
   echo "Le répertoire $APP_NAME existe déjà."
-  echo "Voulez-vous le supprimer? (y/N): " # Syntaxe compatible avec zsh
+  echo -n "Voulez-vous le supprimer? (y/N): "
   read CONFIRM
-
-  # Si aucune réponse (juste Enter), utiliser N par défaut
   CONFIRM=${CONFIRM:-N}
 
   if [[ $CONFIRM =~ ^[Yy]$ ]]; then
@@ -37,141 +31,96 @@ fi
 
 echo "Création de l'application Tauri: $APP_NAME"
 
-# Utiliser create-tauri-app avec le template vanilla pour créer l'application
-# L'option --yes permet d'accepter automatiquement les valeurs par défaut
+# Créer l'application avec valeurs par défaut
 npm create tauri-app@latest $APP_NAME -- --template vanilla --manager npm --yes
 
-# Sauvegarder le chemin du répertoire actuel
+# Sauvegarder les chemins
 CURRENT_DIR=$(pwd)
+cd $APP_NAME
+APP_DIR=$(pwd)
+APP_DIR_ABSOLUTE=$(realpath "$APP_DIR")
+cd ..
+
+# Copier le répertoire src s'il existe
+if [ -d "$CURRENT_DIR/src" ]; then
+    echo "Copie des fichiers personnalisés..."
+    cp -R $CURRENT_DIR/src/* $APP_DIR/src/
+else
+    echo "Création du répertoire src..."
+    mkdir -p $APP_DIR/src
+fi
+
+# Créer un fichier test.js
+echo "console.log('Le serveur Axum fonctionne correctement!');" > "$APP_DIR/src/test.js"
 
 # Accéder au répertoire de l'application
 cd $APP_NAME
 
-# Sauvegarder le chemin du répertoire de l'application
-APP_DIR=$(pwd)
-APP_DIR_ABSOLUTE=$(realpath "$APP_DIR")
-
-# Retourner au répertoire parent
-cd ..
-
-# Copier le contenu du répertoire src vers le répertoire src de l'application
-echo "Copie des fichiers personnalisés..."
-if [ -d "$CURRENT_DIR/src" ]; then
-    cp -R $CURRENT_DIR/src/* $APP_DIR/src/
-else
-    echo "Avertissement: Le répertoire src n'existe pas à la racine."
-    mkdir -p $APP_DIR/src
-fi
-
-# Retourner au répertoire de l'application
-cd $APP_NAME
-
-# Ajouter les dépendances Axum au fichier Cargo.toml existant
+# Ajouter les dépendances Axum
 echo "Ajout des dépendances Axum..."
-# Vérifier si les dépendances existent déjà avant de les ajouter
 if ! grep -q "axum =" src-tauri/Cargo.toml; then
-  # Créer un fichier temporaire
   TEMP_FILE=$(mktemp)
-
-  # Traiter le fichier Cargo.toml ligne par ligne
   while IFS= read -r line; do
     echo "$line" >> "$TEMP_FILE"
-    # Ajouter nos dépendances après la section [dependencies]
     if [[ $line == '[dependencies]' ]]; then
       echo "axum = \"0.7.9\"" >> "$TEMP_FILE"
       echo "tokio = { version = \"1\", features = [\"full\"] }" >> "$TEMP_FILE"
       echo "tower-http = { version = \"0.5.0\", features = [\"fs\", \"cors\"] }" >> "$TEMP_FILE"
     fi
   done < src-tauri/Cargo.toml
-
-  # Remplacer le fichier original par le fichier temporaire
   mv "$TEMP_FILE" src-tauri/Cargo.toml
 fi
 
-# Créer un dossier pour le serveur Axum
-echo "Création du fichier serveur Axum..."
+# Créer le serveur Axum
+echo "Création du serveur Axum..."
 mkdir -p src-tauri/src/server
-
-# Créer le fichier mod.rs pour le serveur Axum
 cat > src-tauri/src/server/mod.rs << 'EOL'
-use axum::{
-    routing::get_service,
-    Router,
-};
+use axum::{routing::get_service, Router};
 use std::{net::SocketAddr, path::PathBuf};
-use tower_http::{
-    cors::CorsLayer,
-    services::ServeDir,
-};
+use tower_http::{cors::CorsLayer, services::ServeDir};
 
 pub async fn start_server(static_dir: PathBuf) {
-    // Imprimer le chemin absolu pour le débogage
-    println!("Servir les fichiers depuis: {}", static_dir.display());
-
-    // Création du service pour servir les fichiers statiques
-    let serve_dir = ServeDir::new(static_dir)
-        .append_index_html_on_directories(true); // Pour servir index.html automatiquement
-
+    let serve_dir = ServeDir::new(static_dir).append_index_html_on_directories(true);
     let serve_service = get_service(serve_dir).handle_error(|error| async move {
-        println!("Erreur lors du service des fichiers: {:?}", error);
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur lors du service des fichiers")
+        println!("Erreur: {:?}", error);
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur")
     });
 
-    // Configuration du routeur avec CORS
-    let app = Router::new()
-        .nest_service("/", serve_service)
-        .layer(CorsLayer::permissive());
-
-    // Définition de l'adresse
+    let app = Router::new().nest_service("/", serve_service).layer(CorsLayer::permissive());
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    println!("Serveur Axum: http://localhost:3000");
 
-    println!("Serveur Axum démarré sur {}", addr);
-    println!("Serveur Node.js Fastify démarré sur http://localhost:3001");
-
-    // Démarrage du serveur avec l'API moderne d'Axum
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 EOL
 
-# Modifier le fichier main.rs avec le chemin codé en dur et l'appel au serveur Node
+# Modifier le fichier main.rs
 echo "Modification du fichier main.rs..."
 cat > src-tauri/src/main.rs << EOL
-#![cfg_attr(
-    all(not(debug_assertions), target_os = "windows"),
-    windows_subsystem = "windows"
-)]
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod server;
 use std::process::Command;
 
 fn main() {
-    // Utiliser le chemin absolu codé en dur vers le répertoire src
-    // Cela n'est pas idéal mais c'est un contournement pour le problème avec current_dir()
     let static_dir = std::path::PathBuf::from("$APP_DIR_ABSOLUTE/src");
-    println!("Chemin du répertoire src: {}", static_dir.display());
 
     tauri::Builder::default()
         .setup(move |_app| {
             let static_dir_clone = static_dir.clone();
 
-            // Lancer le serveur Axum dans un thread séparé
+            // Serveur Axum
             std::thread::spawn(move || {
-                println!("Démarrage du serveur Axum pour servir les fichiers depuis: {}", static_dir_clone.display());
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(async {
                     server::start_server(static_dir_clone).await;
                 });
             });
 
-            // Lancer le serveur Node.js Fastify dans un thread séparé après Tauri
+            // Serveur Fastify
             std::thread::spawn(move || {
-                println!("Démarrage du serveur Node.js Fastify...");
-
-                // Attendre que Tauri soit complètement initialisé (délai de 2 secondes)
                 std::thread::sleep(std::time::Duration::from_secs(2));
-
-                // Lancer le script Node.js avec node
                 let output = Command::new("node")
                     .current_dir("$APP_DIR_ABSOLUTE")
                     .arg("fastify-server.mjs")
@@ -179,84 +128,53 @@ fn main() {
 
                 match output {
                     Ok(o) => {
-                        if o.status.success() {
-                            println!("Serveur Node.js Fastify démarré avec succès");
-                        } else {
-                            eprintln!("Erreur lors du démarrage du serveur Node.js: {}",
-                                String::from_utf8_lossy(&o.stderr));
+                        if !o.status.success() {
+                            eprintln!("Erreur fastify: {}", String::from_utf8_lossy(&o.stderr));
                         }
                     },
-                    Err(e) => eprintln!("Erreur lors du lancement du serveur Node.js: {}", e),
+                    Err(e) => eprintln!("Erreur: {}", e),
                 }
             });
 
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("Erreur lors de l'exécution de l'application Tauri");
+        .expect("Erreur Tauri");
 }
 EOL
 
-# Créer un fichier de test pour vérifier que le serveur fonctionne
-echo "Création d'un fichier de test dans le répertoire src..."
-cat > src/test.js << 'EOL'
-console.log('Le serveur Axum fonctionne correctement!');
-document.addEventListener('DOMContentLoaded', () => {
-  const infoDiv = document.createElement('div');
-  infoDiv.innerHTML = '<p>JavaScript chargé correctement!</p>';
-  document.body.appendChild(infoDiv);
-});
-EOL
-
-# Installer les dépendances pour le serveur Fastify
-echo "Installation des dépendances pour le serveur Fastify..."
+# Installer les dépendances pour Fastify
+echo "Installation des dépendances Fastify..."
 npm install --save fastify @fastify/cors
 
-# Créer le fichier serveur Fastify
+# Créer le serveur Fastify avec gestion des fichiers statiques
 echo "Création du serveur Fastify..."
 cat > fastify-server.mjs << 'EOL'
-// Serveur Fastify pour l'application Tauri (avec modules ES)
 import Fastify from 'fastify';
 import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
-import { readFile, existsSync, writeFileSync } from 'fs';
+import { readFile, existsSync } from 'fs';
 import { promisify } from 'util';
 import fastifyCors from '@fastify/cors';
 
-// Conversion des méthodes en Promise
 const readFileAsync = promisify(readFile);
-
-// Configuration du serveur Fastify
 const fastify = Fastify({ logger: true });
+await fastify.register(fastifyCors, { origin: true });
 
-// Récupérer le chemin du fichier actuel et le dossier parent
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Enregistrer le plugin CORS
-await fastify.register(fastifyCors, {
-  origin: true, // Autoriser toutes les origines
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  credentials: true
-});
-
-// Port pour le serveur Fastify (différent d'Axum qui utilise 3000)
 const PORT = 3001;
-
-// Chemin du répertoire src
 const srcDir = join(__dirname, 'src');
 
 // Routes API
-fastify.get('/api/status', async (request, reply) => {
+fastify.get('/api/status', async () => {
   return {
     status: 'ok',
-    message: 'Serveur Fastify opérationnel',
     timestamp: new Date().toISOString()
   };
 });
 
-// Route pour tester le serveur
-fastify.get('/api/test', async (request, reply) => {
+fastify.get('/api/test', async () => {
   return {
     message: 'Test réussi!',
     server: 'Fastify',
@@ -264,27 +182,14 @@ fastify.get('/api/test', async (request, reply) => {
   };
 });
 
-// Créer un fichier de test Node.js spécifique
-try {
-  writeFileSync(join(srcDir, 'test-node.js'), `
-console.log('Le serveur Fastify fonctionne correctement!');
-console.log('Ce fichier est servi par Fastify sur le port 3001');
-`);
-} catch (err) {
-  console.error('Erreur lors de la création du fichier test-node.js:', err);
-}
-
 // Gestionnaire pour servir des fichiers statiques
 fastify.get('/*', async (request, reply) => {
   try {
     const requestPath = request.url === '/' ? '/index.html' : request.url;
     const filePath = join(srcDir, requestPath);
 
-    // Vérifier si le fichier existe
     if (existsSync(filePath)) {
       const content = await readFileAsync(filePath);
-
-      // Déterminer le type de contenu basé sur l'extension
       const ext = extname(filePath).toLowerCase();
       let contentType = 'text/plain';
 
@@ -307,15 +212,10 @@ fastify.get('/*', async (request, reply) => {
   }
 });
 
-// Démarrer le serveur
 const start = async () => {
   try {
-    await fastify.listen({ port: PORT, host: '0.0.0.0' });
-    fastify.log.info(`Serveur Fastify démarré sur http://localhost:${PORT}`);
-    fastify.log.info('Endpoints disponibles:');
-    fastify.log.info('- http://localhost:3001/api/status');
-    fastify.log.info('- http://localhost:3001/api/test');
-    fastify.log.info('- http://localhost:3001/test-node.js');
+    await fastify.listen({ port: PORT, host: '127.0.0.1' });
+    console.log(`API Fastify: http://localhost:${PORT}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
@@ -325,5 +225,5 @@ const start = async () => {
 start();
 EOL
 
-echo "Lancement de l'application en mode développement..."
+echo "Lancement de l'application..."
 npm run tauri dev
