@@ -197,44 +197,15 @@ fn main() {
 }
 EOL
 
-# Vérifier le fichier index.html et le modifier si nécessaire
-echo "Vérification et modification de index.html..."
-# Vérifier d'abord le contenu du fichier pour diagnostic
-echo "Contenu de index.html:"
-cat src/index.html
-
-# Modifier toutes les balises script pour qu'elles pointent vers le serveur Axum
-# Cette approche traite chaque balise script individuellement
-grep -o '<script[^>]*src="[^"]*"[^>]*>' src/index.html | while read -r script_tag; do
-  # Extraire le chemin du script
-  script_path=$(echo "$script_tag" | sed -n 's/.*src="\([^"]*\)".*/\1/p')
-  if [[ $script_path == /* ]]; then
-    # Si le chemin commence par /, enlever le / initial
-    base_path=${script_path#/}
-  else
-    # Sinon utiliser le chemin tel quel
-    base_path=$script_path
-  fi
-
-  # Créer la nouvelle balise script
-  new_tag="<script type=\"module\" src=\"http://localhost:3000/$base_path\" defer></script>"
-
-  # Échapper les caractères spéciaux dans la balise originale pour sed
-  escaped_tag=$(echo "$script_tag" | sed 's/[\/&]/\\&/g')
-  escaped_new_tag=$(echo "$new_tag" | sed 's/[\/&]/\\&/g')
-
-  # Remplacer la balise dans le fichier index.html
-  sed -i.bak "s/$escaped_tag/$escaped_new_tag/g" src/index.html
-  echo "Script modifié: $script_path -> http://localhost:3000/$base_path"
-done
-
-# Supprimer les fichiers de sauvegarde créés par sed
-find . -name "*.bak" -type f -delete
-
 # Créer un fichier de test pour vérifier que le serveur fonctionne
 echo "Création d'un fichier de test dans le répertoire src..."
 cat > src/test.js << 'EOL'
 console.log('Le serveur Axum fonctionne correctement!');
+document.addEventListener('DOMContentLoaded', () => {
+  const infoDiv = document.createElement('div');
+  infoDiv.innerHTML = '<p>JavaScript chargé correctement!</p>';
+  document.body.appendChild(infoDiv);
+});
 EOL
 
 # Installer les dépendances pour le serveur Fastify

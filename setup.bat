@@ -170,38 +170,6 @@ echo         .expect^("Erreur lors de l'exécution de l'application Tauri"^);
 echo }
 ) > src-tauri\src\main.rs
 
-REM Vérifier le fichier index.html et le modifier si nécessaire
-echo Vérification et modification de index.html...
-if exist src\index.html (
-  powershell -Command "Write-Host 'Contenu de index.html:'; Get-Content src\index.html; $scriptTags = Select-String -Pattern '<script.*src=\"([^\"]*)\".*>' -Path 'src\index.html' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Value }; foreach ($tag in $scriptTags) { $scriptPath = $tag -replace '.*src=\"([^\"]*)\".*', '$1'; if ($scriptPath.StartsWith('/')) { $basePath = $scriptPath.Substring(1); } else { $basePath = $scriptPath; } $newTag = '<script type=\"module\" src=\"http://localhost:3000/' + $basePath + '\" defer></script>'; $escapedTag = [regex]::Escape($tag); (Get-Content src\index.html) -replace $escapedTag, $newTag | Set-Content src\index.html; Write-Host ('Script modifié: ' + $scriptPath + ' -> http://localhost:3000/' + $basePath); }"
-) else (
-  echo Création d'un fichier index.html basique...
-  (
-  echo ^<!DOCTYPE html^>
-  echo ^<html lang="fr"^>
-  echo ^<head^>
-  echo   ^<meta charset="UTF-8"^>
-  echo   ^<meta name="viewport" content="width=device-width, initial-scale=1.0"^>
-  echo   ^<title^>Application Tauri^</title^>
-  echo   ^<script type="module" src="http://localhost:3000/test.js" defer^>^</script^>
-  echo ^</head^>
-  echo ^<body^>
-  echo   ^<h1^>Bienvenue dans votre application Tauri^</h1^>
-  echo   ^<p^>Cette application utilise:^</p^>
-  echo   ^<ul^>
-  echo     ^<li^>Axum sur le port 3000 pour servir les fichiers statiques^</li^>
-  echo     ^<li^>Fastify sur le port 3001 pour les API^</li^>
-  echo   ^</ul^>
-  echo   ^<p^>API endpoints disponibles:^</p^>
-  echo   ^<ul^>
-  echo     ^<li^>^<a href="http://localhost:3001/api/status" target="_blank"^>Status API^</a^>^</li^>
-  echo     ^<li^>^<a href="http://localhost:3001/api/test" target="_blank"^>Test API^</a^>^</li^>
-  echo   ^</ul^>
-  echo ^</body^>
-  echo ^</html^>
-  ) > src\index.html
-)
-
 REM Créer un fichier de test pour vérifier que le serveur fonctionne
 echo Création d'un fichier de test dans le répertoire src...
 (
