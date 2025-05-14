@@ -110,7 +110,7 @@ pub async fn start_server(static_dir: PathBuf) {
 }
 EOL
 
-# Modifier le fichier main.rs avec le chemin codé en dur (ce n'est pas idéal mais ça devrait fonctionner pour le développement)
+# Modifier le fichier main.rs avec le chemin codé en dur et l'appel au serveur Node
 echo "Modification du fichier main.rs..."
 cat > src-tauri/src/main.rs << EOL
 #![cfg_attr(
@@ -119,6 +119,7 @@ cat > src-tauri/src/main.rs << EOL
 )]
 
 mod server;
+use std::process::Command;
 
 fn main() {
     // Utiliser le chemin absolu codé en dur vers le répertoire src
@@ -137,6 +138,32 @@ fn main() {
                 rt.block_on(async {
                     server::start_server(static_dir_clone).await;
                 });
+            });
+
+            // Lancer le serveur Node.js Fastify dans un thread séparé après Tauri
+            std::thread::spawn(move || {
+                println!("Démarrage du serveur Node.js Fastify...");
+
+                // Attendre que Tauri soit complètement initialisé (délai de 2 secondes)
+                std::thread::sleep(std::time::Duration::from_secs(2));
+
+                // Lancer le script Node.js avec node
+                let output = Command::new("node")
+                    .current_dir("$APP_DIR_ABSOLUTE")
+                    .arg("fastify-server.js")
+                    .output();
+
+                match output {
+                    Ok(o) => {
+                        if o.status.success() {
+                            println!("Serveur Node.js Fastify démarré avec succès");
+                        } else {
+                            eprintln!("Erreur lors du démarrage du serveur Node.js: {}",
+                                String::from_utf8_lossy(&o.stderr));
+                        }
+                    },
+                    Err(e) => eprintln!("Erreur lors du lancement du serveur Node.js: {}", e),
+                }
             });
 
             Ok(())
@@ -182,6 +209,126 @@ echo "Création d'un fichier de test dans le répertoire src..."
 cat > src/test.js << 'EOL'
 console.log('Le serveur Axum fonctionne correctement!');
 EOL
+
+# Installer les dépendances pour le serveur Fastify
+echo "Installation des dépendances pour le serveur Fastify..."
+npm install --save fastify @fastify/cors
+
+# Créer le fichier serveur Fastify
+echo "Création du serveur Fastify..."
+cat > fastify-server.mjs << 'EOL'
+// Serveur Fastify pour l'application Tauri (avec modules ES)
+import Fastify from 'fastify';
+import { fileURLToPath } from 'url';
+import { dirname, join, extname } from 'path';
+import { readFile, existsSync, writeFileSync } from 'fs';
+import { promisify } from 'util';
+import fastifyCors from '@fastify/cors';
+
+// Conversion des méthodes en Promise
+const readFileAsync = promisify(readFile);
+
+// Configuration du serveur Fastify
+const fastify = Fastify({ logger: true });
+
+// Récupérer le chemin du fichier actuel et le dossier parent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Enregistrer le plugin CORS
+await fastify.register(fastifyCors, {
+  origin: true, // Autoriser toutes les origines
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true
+});
+
+// Port pour le serveur Fastify (différent d'Axum qui utilise 3000)
+const PORT = 3001;
+
+// Chemin du répertoire src
+const srcDir = join(__dirname, 'src');
+
+// Routes API
+fastify.get('/api/status', async (request, reply) => {
+  return {
+    status: 'ok',
+    message: 'Serveur Fastify opérationnel',
+    timestamp: new Date().toISOString()
+  };
+});
+
+// Route pour tester le serveur
+fastify.get('/api/test', async (request, reply) => {
+  return {
+    message: 'Test réussi!',
+    server: 'Fastify',
+    version: fastify.version
+  };
+});
+
+// Créer un fichier de test Node.js spécifique
+try {
+  writeFileSync(join(srcDir, 'test-node.js'), `
+console.log('Le serveur Fastify fonctionne correctement!');
+console.log('Ce fichier est servi par Fastify sur le port 3001');
+`);
+} catch (err) {
+  console.error('Erreur lors de la création du fichier test-node.js:', err);
+}
+
+// Gestionnaire pour servir des fichiers statiques
+fastify.get('/*', async (request, reply) => {
+  try {
+    const requestPath = request.url === '/' ? '/index.html' : request.url;
+    const filePath = join(srcDir, requestPath);
+
+    // Vérifier si le fichier existe
+    if (existsSync(filePath)) {
+      const content = await readFileAsync(filePath);
+
+      // Déterminer le type de contenu basé sur l'extension
+      const ext = extname(filePath).toLowerCase();
+      let contentType = 'text/plain';
+
+      switch(ext) {
+        case '.html': contentType = 'text/html'; break;
+        case '.js': contentType = 'application/javascript'; break;
+        case '.css': contentType = 'text/css'; break;
+        case '.json': contentType = 'application/json'; break;
+        case '.png': contentType = 'image/png'; break;
+        case '.jpg': case '.jpeg': contentType = 'image/jpeg'; break;
+      }
+
+      reply.type(contentType).send(content);
+    } else {
+      reply.code(404).send({ error: 'Fichier non trouvé' });
+    }
+  } catch (err) {
+    fastify.log.error(err);
+    reply.code(500).send({ error: 'Erreur interne du serveur' });
+  }
+});
+
+// Démarrer le serveur
+const start = async () => {
+  try {
+    await fastify.listen({ port: PORT, host: '0.0.0.0' });
+    fastify.log.info(`Serveur Fastify démarré sur http://localhost:${PORT}`);
+    fastify.log.info('Endpoints disponibles:');
+    fastify.log.info('- http://localhost:3001/api/status');
+    fastify.log.info('- http://localhost:3001/api/test');
+    fastify.log.info('- http://localhost:3001/test-node.js');
+  } catch (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+};
+
+start();
+EOL
+
+# Modifier le fichier main.rs pour utiliser le bon nom de fichier .mjs
+sed -i '' 's/fastify-server\.js/fastify-server.mjs/g' src-tauri/src/main.rs
 
 echo "Lancement de l'application en mode développement..."
 npm run tauri dev
