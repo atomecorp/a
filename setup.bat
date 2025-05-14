@@ -21,6 +21,19 @@ call npm create tauri-app@latest %APP_NAME% -- --template vanilla --manager npm 
 REM Accéder au répertoire de l'application
 cd %APP_NAME%
 
+REM Sauvegarder le chemin du répertoire de l'application
+set APP_DIR=%cd%
+
+REM Retourner au répertoire parent
+cd ..
+
+REM Copier le contenu du répertoire src vers le répertoire src de l'application
+echo Copie des fichiers personnalisés...
+xcopy /E /Y /I src "%APP_DIR%\src"
+
+REM Retourner au répertoire de l'application
+cd %APP_NAME%
+
 REM Lancer le développement
 echo Lancement de l'application en mode développement...
 call npm run tauri dev

@@ -17,7 +17,23 @@ echo "Création de l'application Tauri: $APP_NAME"
 # L'option --yes permet d'accepter automatiquement les valeurs par défaut
 npm create tauri-app@latest $APP_NAME -- --template vanilla --manager npm --yes
 
+# Sauvegarder le chemin du répertoire actuel
+CURRENT_DIR=$(pwd)
+
 # Accéder au répertoire de l'application
+cd $APP_NAME
+
+# Sauvegarder le chemin du répertoire de l'application
+APP_DIR=$(pwd)
+
+# Retourner au répertoire parent
+cd ..
+
+# Copier le contenu du répertoire src vers le répertoire src de l'application
+echo "Copie des fichiers personnalisés..."
+cp -R $CURRENT_DIR/src/* $APP_DIR/src/
+
+# Retourner au répertoire de l'application
 cd $APP_NAME
 
 # Lancer le développement
