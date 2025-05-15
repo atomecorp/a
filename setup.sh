@@ -50,8 +50,6 @@ else
     mkdir -p $APP_DIR/src
 fi
 
-# Créer un fichier test.js
-echo "console.log('Le serveur Axum fonctionne correctement!');" > "$APP_DIR/src/test.js"
 
 # Accéder au répertoire de l'application
 cd $APP_NAME

@@ -47,9 +47,6 @@ if exist src (
   mkdir "%APP_DIR%\src"
 )
 
-REM Créer un fichier test.js
-echo console.log('Le serveur Axum fonctionne correctement!'); > "%APP_DIR%\src\test.js"
-
 REM Retourner au répertoire de l'application
 cd %APP_NAME%
 
