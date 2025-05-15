@@ -22,7 +22,7 @@ class AJS {
         return obj;
     }
 
-    static inspect(obj) {
+    static inspect(obj, visited = new Set()) {
         if (obj === null) return 'nil';
         if (obj === undefined) return 'nil';
 
@@ -30,13 +30,20 @@ class AJS {
         if (typeof obj === 'number') return obj.toString();
         if (typeof obj === 'boolean') return obj.toString();
 
+        // Protection contre les références circulaires
+        if (typeof obj === 'object' && obj !== null) {
+            if (visited.has(obj)) return '[Circular]';
+            visited.add(obj);
+        }
+
         if (Array.isArray(obj)) {
-            return `[${obj.map(item => AJS.inspect(item)).join(', ')}]`;
+            const items = obj.map(item => AJS.inspect(item, new Set(visited)));
+            return `[${items.join(', ')}]`;
         }
 
         if (typeof obj === 'object') {
             const pairs = Object.entries(obj).map(([key, value]) =>
-                `${key}: ${AJS.inspect(value)}`
+                `${key}: ${AJS.inspect(value, new Set(visited))}`
             );
             return `{${pairs.join(', ')}}`;
         }
@@ -116,28 +123,54 @@ Object.prototype.inspect = function() {
 };
 
 
+function puts(val){
+    console.log(val)
+}
 
 
-// Ajout d'extensions aux objets natifs de JavaScript
-Object.prototype.define_method = function(name, fn) {
-    this[name] = fn;
-    return this;
-};
-
-// Ajout de méthodes à Array pour le rendre plus Ruby-like
-Array.prototype.each = function(callback) {
-    this.forEach(callback);
-    return this;
-};
-
-// Extension de la classe Object pour permettre l'inspection
-Object.prototype.inspect = function() {
-    return AJS.inspect(this);
-};
-
-console.log('AJS est chargé !');
-
+window.puts = puts;
 // Exportez AJS pour qu'il soit disponible globalement
 window.AJS = AJS;
 // OU en utilisant export pour les modules ES6
 export default AJS;
+
+
+//
+//
+//
+// function grab(val) {
+//     // Obtenir l'élément DOM
+//     const element = document.getElementById(val);
+//     if (!element) return null;
+//
+//     // Liste des propriétés à transformer en méthodes getter/setter
+//     const properties = ['width', 'height', 'color', 'backgroundColor'];
+//
+//     // Ajouter des méthodes pour chaque propriété
+//     properties.forEach(prop => {
+//         element[prop] = function(value) {
+//             // Mapper les propriétés spéciales
+//             const styleProp = prop === 'color' ? 'color' :
+//                 prop === 'backgroundColor' ? 'backgroundColor' : prop;
+//
+//             if (arguments.length === 0) {
+//                 // Getter
+//                 const computedStyle = window.getComputedStyle(this);
+//                 return computedStyle[styleProp];
+//             } else {
+//                 // Setter
+//                 if (typeof value === 'number' && (prop === 'width' || prop === 'height')) {
+//                     this.style[styleProp] = `${value}px`;
+//                 } else {
+//                     this.style[styleProp] = value;
+//                 }
+//                 console.log(`Setting ${prop} to ${value}`);
+//                 return this; // Pour le chaînage
+//             }
+//         };
+//     });
+//
+//     return element;
+// }
+//
+// window.grab = grab;
