@@ -2,7 +2,7 @@
 setlocal
 
 REM Définir un nom d'application par défaut
-set DEFAULT_APP_NAME=my_app
+set DEFAULT_APP_NAME=atome
 
 REM Vérifier si un nom d'application a été fourni
 set APP_NAME=%1

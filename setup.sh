@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Définir un nom d'application par défaut
-DEFAULT_APP_NAME="my_app"
+DEFAULT_APP_NAME="atome"
 
 # Vérifier si un nom d'application a été fourni
 if [ $# -eq 0 ]; then
