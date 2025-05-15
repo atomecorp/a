@@ -3,3 +3,4 @@ add websocket
 add PWA support
 done:  Fastify for node
 R&D : QuickJS/Slint for full native integration 
+ORM integration : Objection.js 
