@@ -8,6 +8,7 @@
  */
 
 let A = (() => {
+
     // Global storage for Atome instances by ID for references
     const atomeRegistry = {};
 
@@ -240,6 +241,7 @@ let A = (() => {
             }
         });
     };
+
 
     // Create dimension particles
     createDimensionParticle('x', 'left');
@@ -966,6 +968,7 @@ let A = (() => {
         return false;
     };
 
+
     // Export for use as a module
     window.A = A;
     return A;
@@ -1023,6 +1026,8 @@ function grab(id) {
 // Exposer globalement
 window.grab = grab;
 window.registerInstance = registerInstance;
+
+
 
 // Enregistrer les instances existantes
 // Ajouter après avoir créé container:
