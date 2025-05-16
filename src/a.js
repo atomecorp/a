@@ -84,44 +84,64 @@ const A = (() => {
             el.style.backgroundColor = v;
         },
         shadow: (el, v) => {
-            // Check if v is an array or a single shadow object
-            const shadows = Array.isArray(v) ? v : [v];
+            if (Array.isArray(v)) {
+                // Multiple shadows case
+                let result = '';
+                const len = v.length;
 
-            // Array to store all shadow strings
-            const shadowStrings = [];
+                for (let i = 0; i < len; i++) {
+                    const shadow = v[i];
+                    const blur = shadow.blur !== undefined ? shadow.blur : 7;
+                    const x = shadow.x !== undefined ? shadow.x : 3;
+                    const y = shadow.y !== undefined ? shadow.y : 3;
+                    const inset = shadow.invert ? 'inset ' : '';
 
-            // Process each shadow definition
-            shadows.forEach(shadow => {
-                // Define default values for this shadow
-                const blur = shadow.blur !== undefined ? shadow.blur : 7;
-                const x = shadow.x !== undefined ? shadow.x : 3;
-                const y = shadow.y !== undefined ? shadow.y : 3;
-                const inset = shadow.invert ? 'inset ' : '';
+                    // Color processing (optimized)
+                    let color = 'rgba(0,0,0,0.6)';
 
-                // Color processing
-                let color = 'rgba(0,0,0,0.6)'; // Default value
+                    if (shadow.color) {
+                        if (typeof shadow.color === 'string') {
+                            color = shadow.color;
+                        } else if (typeof shadow.color === 'object') {
+                            const red = shadow.color.red !== undefined ? Math.round(shadow.color.red * 255) : 0;
+                            const green = shadow.color.green !== undefined ? Math.round(shadow.color.green * 255) : 0;
+                            const blue = shadow.color.blue !== undefined ? Math.round(shadow.color.blue * 255) : 0;
+                            const alpha = shadow.color.alpha !== undefined ? shadow.color.alpha : 0.6;
 
-                if (shadow.color) {
-                    if (typeof shadow.color === 'string') {
-                        // If color is already a string, use it directly
-                        color = shadow.color;
-                    } else if (typeof shadow.color === 'object') {
-                        // If color is an object with RGBA properties (values from 0 to 1)
-                        const red = shadow.color.red !== undefined ? Math.round(shadow.color.red * 255) : 0;
-                        const green = shadow.color.green !== undefined ? Math.round(shadow.color.green * 255) : 0;
-                        const blue = shadow.color.blue !== undefined ? Math.round(shadow.color.blue * 255) : 0;
-                        const alpha = shadow.color.alpha !== undefined ? shadow.color.alpha : 0.6;
+                            color = `rgba(${red},${green},${blue},${alpha})`;
+                        }
+                    }
+
+                    // Build the shadow string and add comma if needed
+                    result += inset + x + 'px ' + y + 'px ' + blur + 'px ' + color;
+                    if (i < len - 1) result += ', ';
+                }
+
+                el.style.boxShadow = result;
+            } else {
+                // Single shadow case - optimized path without array conversion
+                const blur = v.blur !== undefined ? v.blur : 7;
+                const x = v.x !== undefined ? v.x : 3;
+                const y = v.y !== undefined ? v.y : 3;
+                const inset = v.invert ? 'inset ' : '';
+
+                let color = 'rgba(0,0,0,0.6)';
+
+                if (v.color) {
+                    if (typeof v.color === 'string') {
+                        color = v.color;
+                    } else if (typeof v.color === 'object') {
+                        const red = v.color.red !== undefined ? Math.round(v.color.red * 255) : 0;
+                        const green = v.color.green !== undefined ? Math.round(v.color.green * 255) : 0;
+                        const blue = v.color.blue !== undefined ? Math.round(v.color.blue * 255) : 0;
+                        const alpha = v.color.alpha !== undefined ? v.color.alpha : 0.6;
 
                         color = `rgba(${red},${green},${blue},${alpha})`;
                     }
                 }
 
-                // Create the shadow string and add it to the array
-                shadowStrings.push(inset + x + 'px ' + y + 'px ' + blur + 'px ' + color);
-            });
-
-            // Apply all shadows by joining them with commas
-            el.style.boxShadow = shadowStrings.join(', ');
+                el.style.boxShadow = inset + x + 'px ' + y + 'px ' + blur + 'px ' + color;
+            }
         },
         unit: (el, v, _, data) => {
             // Ne fait rien directement, mais sera utilisé par d'autres handlers
