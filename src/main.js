@@ -701,7 +701,8 @@ const container = new A({
   color: 'blue',
   smooth: 10,
   // shadow: '27px 4px 8px rgba(0,0,0,0.6)',
-  shadow: {blur: 3, x: 4, y: 8, color: 'rgba(0,0,0,0.6)',invert: true},
+      shadow: [{blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6},invert: true},
+        {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6},invert: false}],
   overflow: 'hidden',
   fasten: [] // Contiendra les IDs des enfants
 });
