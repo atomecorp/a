@@ -700,7 +700,8 @@ const container = new A({
   // backgroundColor: 'blue',
   color: 'blue',
   smooth: 10,
-  boxShadow: '7px 4px 8px rgba(0,0,0,0.6)',
+  // shadow: '27px 4px 8px rgba(0,0,0,0.6)',
+  shadow: {blur: 3, x: 4, y: 8, color: 'rgba(0,0,0,0.6)',invert: true},
   overflow: 'hidden',
   fasten: [] // Contiendra les IDs des enfants
 });

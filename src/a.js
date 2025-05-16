@@ -83,6 +83,17 @@ const A = (() => {
         color:(el, v) => {
             el.style.backgroundColor = v;
         },
+        shadow: (el, v) => {
+            // Définir les valeurs par défaut
+            const blur = v.blur !== undefined ? v.blur : 7;
+            const x = v.x !== undefined ? v.x : 3;
+            const y = v.y !== undefined ? v.y : 3;
+            const color = v.color !== undefined ? v.color : 'rgba(0,0,0,0.6)';
+            const inset = v.invert ? 'inset ' : ''; // Ajouter la gestion de l'option inset
+
+            // Appliquer directement le style
+            el.style.boxShadow = inset + x + 'px ' + y + 'px ' + blur + 'px ' + color;
+        },
         unit: (el, v, _, data) => {
             // Ne fait rien directement, mais sera utilisé par d'autres handlers
         },
@@ -526,10 +537,6 @@ window.A = A;
 export default A;
 
 
-/**
- * Solution la plus simple : créer un cache global des instances
- * Cela garantit que grab() retourne exactement la même instance
- */
 
 // Cache global des instances A créées manuellement
 const instanceCache = {};
