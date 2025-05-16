@@ -1,15 +1,23 @@
 
-const A = (() => {
-    // Stockage global des instances Atome par ID pour les références
+/**
+ * Particle Framework - A flexible meta-programming approach for property handlers
+ *
+ * This framework allows you to define behavior for properties as "particles"
+ * with pre-processing and post-processing capabilities, as well as type validation
+ * and organization by categories.
+ */
+
+let A = (() => {
+    // Global storage for Atome instances by ID for references
     const atomeRegistry = {};
 
-    // Style de base pour réinitialiser les valeurs par défaut
+    // Base styles to reset default values
     const baseStyles = {
         margin: '0',
         padding: '0',
         boxSizing: 'border-box',
         display: 'block',
-        position: 'absolute', // Par défaut en position absolue
+        position: 'absolute', // Default absolute positioning
         lineHeight: 'normal',
         fontSize: 'inherit',
         fontWeight: 'inherit',
@@ -17,281 +25,122 @@ const A = (() => {
         background: 'transparent'
     };
 
-    // Handlers prédéfinis pour certaines clés
-    const handlers = {
-        id: (el, v, _, __, instance) => {
-            el.id = v;
-            // Enregistrer l'instance dans le registre global pour références ultérieures
-            if (v) {
-                atomeRegistry[v] = instance;
+    /**
+     * Particle class - Encapsulates a property handler with pre/post processing
+     */
+    class Particle {
+        /**
+         * Creates a new Particle
+         * @param {Object} config - Configuration object for the particle
+         * @param {string} config.name - Name of the particle (property name)
+         * @param {string} config.type - Expected data type ('number', 'string', etc.)
+         * @param {string} config.category - Category for organizing particles
+         * @param {Function|Object} config.handler - Handler function or object with before/process/after methods
+         */
+        constructor(config) {
+            this.name = config.name;
+            this.type = config.type;
+            this.category = config.category;
+
+            // If handler is a function, use it as the main process function
+            if (typeof config.handler === 'function') {
+                this.process = config.handler;
+                this.before = null;
+                this.after = null;
             }
-        },
-        class: (el, v) => {
-            const cls = Array.isArray(v) ? v.join(' ') : v;
-            el.className = cls;
-        },
-        markup: (el, v, instance) => {
-            // Si markup est spécifié, on crée un nouvel élément du type demandé
-            if (v && typeof v === 'string') {
-                const newEl = document.createElement(v);
-                // Copier les attributs et styles de l'ancien élément
-                Array.from(el.attributes).forEach(attr => {
-                    newEl.setAttribute(attr.name, attr.value);
-                });
-                newEl.style.cssText = el.style.cssText;
-                // Remplacer l'élément dans l'instance
-                instance._element = newEl;
-                return newEl; // Important : retourner le nouvel élément
+            // If handler is an object with process/before/after methods
+            else if (typeof config.handler === 'object') {
+                this.process = config.handler.process || ((el, v) => {});
+                this.before = config.handler.before || null;
+                this.after = config.handler.after || null;
             }
-            return el;
-        },
-        type: (el, v) => { el.dataset.type = v; },
-        renderers: (el, v) => {
-            if (Array.isArray(v)) v.forEach(r => el.classList.add(`renderer-${r}`));
-        },
-        apply: (el, v) => {
-            if (Array.isArray(v)) v.forEach(fn => {
-                if (typeof el[fn] === 'function') el[fn]();
-            });
-        },
-        attach: (el, v) => {
-            let parent;
-            if (typeof v === 'string') {
-                parent = document.querySelector(v) || document.body;
-            } else if (v instanceof HTMLElement) {
-                parent = v;
-            } else parent = document.body;
-            parent.appendChild(el);
-        },
-        center: (el, v) => {
-            if (v) {
-                // Centrer horizontalement tout en respectant la position absolue
-                el.style.left = '50%';
-                el.style.transform = 'translateX(-50%)';
-                // Si on veut aussi centrer verticalement
-                // el.style.top = '50%';
-                // el.style.transform = 'translate(-50%, -50%)';
-            }
-        },
-        smooth: (el, v) => {
-            if (typeof v === 'number') {
-                el.style.borderRadius = `${v}px`;
-            } else if (typeof v === 'string') {
-                el.style.borderRadius = v;
-            }
-        },
-        color:(el, v) => {
-            el.style.backgroundColor = v;
-        },
-        shadow: (el, v) => {
-            if (Array.isArray(v)) {
-                // Multiple shadows case
-                let result = '';
-                const len = v.length;
+            // Alternatively, use direct method definitions if provided
+            if (config.process) this.process = config.process;
+            if (config.before) this.before = config.before;
+            if (config.after) this.after = config.after;
+        }
 
-                for (let i = 0; i < len; i++) {
-                    const shadow = v[i];
-                    const blur = shadow.blur !== undefined ? shadow.blur : 7;
-                    const x = shadow.x !== undefined ? shadow.x : 3;
-                    const y = shadow.y !== undefined ? shadow.y : 3;
-                    const inset = shadow.invert ? 'inset ' : '';
-
-                    // Color processing (optimized)
-                    let color = 'rgba(0,0,0,0.6)';
-
-                    if (shadow.color) {
-                        if (typeof shadow.color === 'string') {
-                            color = shadow.color;
-                        } else if (typeof shadow.color === 'object') {
-                            const red = shadow.color.red !== undefined ? Math.round(shadow.color.red * 255) : 0;
-                            const green = shadow.color.green !== undefined ? Math.round(shadow.color.green * 255) : 0;
-                            const blue = shadow.color.blue !== undefined ? Math.round(shadow.color.blue * 255) : 0;
-                            const alpha = shadow.color.alpha !== undefined ? shadow.color.alpha : 0.6;
-
-                            color = `rgba(${red},${green},${blue},${alpha})`;
-                        }
-                    }
-
-                    // Build the shadow string and add comma if needed
-                    result += inset + x + 'px ' + y + 'px ' + blur + 'px ' + color;
-                    if (i < len - 1) result += ', ';
-                }
-
-                el.style.boxShadow = result;
-            } else {
-                // Single shadow case - optimized path without array conversion
-                const blur = v.blur !== undefined ? v.blur : 7;
-                const x = v.x !== undefined ? v.x : 3;
-                const y = v.y !== undefined ? v.y : 3;
-                const inset = v.invert ? 'inset ' : '';
-
-                let color = 'rgba(0,0,0,0.6)';
-
-                if (v.color) {
-                    if (typeof v.color === 'string') {
-                        color = v.color;
-                    } else if (typeof v.color === 'object') {
-                        const red = v.color.red !== undefined ? Math.round(v.color.red * 255) : 0;
-                        const green = v.color.green !== undefined ? Math.round(v.color.green * 255) : 0;
-                        const blue = v.color.blue !== undefined ? Math.round(v.color.blue * 255) : 0;
-                        const alpha = v.color.alpha !== undefined ? v.color.alpha : 0.6;
-
-                        color = `rgba(${red},${green},${blue},${alpha})`;
-                    }
-                }
-
-                el.style.boxShadow = inset + x + 'px ' + y + 'px ' + blur + 'px ' + color;
-            }
-        },
-        unit: (el, v, _, data) => {
-            // Ne fait rien directement, mais sera utilisé par d'autres handlers
-        },
-        innerHTML: (el, v) => {
-            el.innerHTML = v;
-        },
-        text: (el, v) => {
-            el.textContent = v;
-        },
-        // Contrôle si les styles par défaut doivent être appliqués
-        reset: (el, v) => {
-            // Si reset est false, ne pas appliquer les styles de base
-            if (v === false) return;
-
-            // Appliquer les styles de base pour réinitialiser les défauts du navigateur
-            for (const [key, value] of Object.entries(baseStyles)) {
-                el.style[key] = value;
-            }
-        },
-        // Pour permettre de définir une position relative plutôt qu'absolue
-        position: (el, v) => {
-            el.style.position = v;
-        },
-        // Gestion des origines
-        origin: (el, v) => {
-            if (!v || typeof v !== 'object') return;
-
-            // On stocke l'origine dans les données de l'élément pour référence
-            el.dataset.origin = JSON.stringify(v);
-
-            // Application des ajustements de position si nécessaire
-            // Note: ceci serait mieux géré avec un système complet de positionnement
-        },
-        // Gestion du débordement
-        overflow: (el, v) => {
-            el.style.overflow = v;
-        },
-        // Gestion des objets fastened (rattachés)
-        fasten: (el, v, _, __, instance) => {
-            if (Array.isArray(v)) {
-                el.dataset.fasten = v.join(',');
-                // Stocker les IDs des enfants dans l'instance
-                instance._fastened = v;
-            }
-        },
-        // NOUVEAU - Gestion des éléments enfants
-        children: (el, v, _, __, instance) => {
-            if (!Array.isArray(v) || v.length === 0) return;
-
-            // Utilisation de DocumentFragment pour améliorer les performances
-            const fragment = document.createDocumentFragment();
-
-            // Tableau pour stocker les IDs des enfants créés
-            const childrenIds = [];
-
-            // Créer chaque enfant et l'attacher au fragment
-            v.forEach(childConfig => {
-                // S'assurer que l'enfant est bien configuré
-                const childAtome = new A({
-                    ...childConfig,
-                    attach: null // On n'attache pas tout de suite
-                });
-
-                // Ajouter l'élément au fragment
-                fragment.appendChild(childAtome.getElement());
-
-                // Si l'enfant a un ID, l'ajouter à la liste des enfants
-                if (childConfig.id) {
-                    childrenIds.push(childConfig.id);
-                }
-            });
-
-            // Attacher tous les enfants en une seule opération
-            el.appendChild(fragment);
-
-            // Si des enfants ont été créés avec des IDs, les ajouter à fasten
-            if (childrenIds.length > 0) {
-                // Si fasten existe déjà, fusionner les tableaux
-                if (instance._fastened && Array.isArray(instance._fastened)) {
-                    instance._fastened = [...new Set([...instance._fastened, ...childrenIds])];
-                    el.dataset.fasten = instance._fastened.join(',');
-                } else {
-                    instance._fastened = childrenIds;
-                    el.dataset.fasten = childrenIds.join(',');
-                }
-            }
-        },
-        // NOUVEAU - Gestion des événements
-        events: (el, v) => {
-            if (v && typeof v === 'object') {
-                // Stocker les gestionnaires pour une suppression ultérieure
-                el._eventHandlers = el._eventHandlers || {};
-
-                for (const [event, handler] of Object.entries(v)) {
-                    if (typeof handler === 'function') {
-                        el.addEventListener(event, handler);
-                        el._eventHandlers[event] = handler;
-                    }
-                }
-            }
-        },
-        // NOUVEAU - Gestion des animations
-        animate: (el, v) => {
-            if (v && typeof v === 'object') {
-                // Définir les propriétés de transition
-                const duration = v.duration || 0.3;
-                const easing = v.easing || 'ease';
-                const delay = v.delay || 0;
-
-                el.style.transition = `all ${duration}s ${easing} ${delay}s`;
-
-                // Utiliser requestAnimationFrame pour de meilleures performances
-                if (v.properties && typeof v.properties === 'object') {
-                    requestAnimationFrame(() => {
-                        for (const [prop, value] of Object.entries(v.properties)) {
-                            el.style[prop] = typeof value === 'number' ? `${value}px` : value;
-                        }
-                    });
-                }
+        /**
+         * Validates the value against the expected type
+         * @param {any} value - Value to validate
+         * @returns {boolean} - True if valid, false otherwise
+         */
+        validateType(value) {
+            switch(this.type) {
+                case 'integer':
+                    return Number.isInteger(value);
+                case 'number':
+                    return typeof value === 'number';
+                case 'string':
+                    return typeof value === 'string';
+                case 'boolean':
+                    return typeof value === 'boolean';
+                case 'object':
+                    return typeof value === 'object' && value !== null;
+                case 'array':
+                    return Array.isArray(value);
+                case 'mixed':
+                    return true; // Accepts any type
+                default:
+                    return true;
             }
         }
-    };
 
-    // Gestion des propriétés dimensionnelles avec unités
-    const dimensionProps = ['x', 'y', 'width', 'height'];
-    dimensionProps.forEach(prop => {
-        handlers[prop] = (el, value, key, data) => {
-            if (value === undefined || value === null) return;
-
-            // Détermination de l'unité
-            let unit = 'px'; // Unité par défaut
-
-            if (data.unit && data.unit[prop]) {
-                unit = data.unit[prop];
+        /**
+         * Applies the particle to an element
+         * @param {HTMLElement} el - DOM element to apply changes to
+         * @param {any} value - Value to apply
+         * @param {Object} data - Complete data object
+         * @param {Object} instance - ABase instance
+         * @returns {any} - Result of the operation
+         */
+        apply(el, value, data, instance) {
+            // 1. Validation (optional)
+            if (!this.validateType(value)) {
+                console.warn(`Warning: Property '${this.name}' expects type '${this.type}' but received ${typeof value}`);
             }
 
-            // Mappage des propriétés x/y vers left/top
-            const cssProp = prop === 'x' ? 'left' :
-                prop === 'y' ? 'top' : prop;
+            // 2. Pre-processing if defined
+            let processedValue = value;
+            if (this.before) {
+                processedValue = this.before(value, el, data, instance);
+            }
 
-            // Application de la propriété avec son unité
-            el.style[cssProp] = `${value}${unit}`;
-        };
-    });
+            // 3. Main processing
+            const result = this.process(el, processedValue, data, instance);
 
-    // Handler par défaut pour toutes les autres clés
+            // 4. Post-processing if defined
+            if (this.after) {
+                this.after(el, processedValue, result, data, instance);
+            }
+
+            return result;
+        }
+    }
+
+    // Registry for all particles
+    const particleRegistry = {};
+
+    /**
+     * Defines and registers a new particle
+     * @param {Object} config - Configuration for the particle
+     * @returns {Particle} - The created particle
+     */
+    const defineParticle = (config) => {
+        const particle = new Particle(config);
+        particleRegistry[config.name] = particle;
+        return particle;
+    };
+
+    /**
+     * Default handler for properties without a specific particle
+     * @param {HTMLElement} el - DOM element
+     * @param {any} value - Value to apply
+     * @param {string} key - Property name
+     */
     function defaultHandler(el, value, key) {
         if (typeof value === 'number' || typeof value === 'string') {
-            // styles en px si nombre
+            // styles in px if number
             el.style[key] = typeof value === 'number' ? `${value}px` : value;
         } else if (typeof value === 'boolean') {
             el.dataset[key] = value;
@@ -304,30 +153,476 @@ const A = (() => {
         }
     }
 
-    // Classe A avec proxy pour accès direct aux propriétés
+    // Define all standard particles
+
+    // --- Structural particles ---
+    defineParticle({
+        name: 'id',
+        type: 'string',
+        category: 'structural',
+        process(el, v, _, instance) {
+            el.id = v;
+            // Register the instance in the global registry for later references
+            if (v) {
+                atomeRegistry[v] = instance;
+            }
+        }
+    });
+
+    defineParticle({
+        name: 'class',
+        type: 'mixed',
+        category: 'structural',
+        process(el, v) {
+            const cls = Array.isArray(v) ? v.join(' ') : v;
+            el.className = cls;
+        }
+    });
+
+    defineParticle({
+        name: 'markup',
+        type: 'string',
+        category: 'structural',
+        process(el, v, _, instance) {
+            // If markup is specified, create a new element of the requested type
+            if (v && typeof v === 'string') {
+                const newEl = document.createElement(v);
+                // Copy attributes and styles from the old element
+                Array.from(el.attributes).forEach(attr => {
+                    newEl.setAttribute(attr.name, attr.value);
+                });
+                newEl.style.cssText = el.style.cssText;
+                // Replace the element in the instance
+                instance._element = newEl;
+                return newEl; // Important: return the new element
+            }
+            return el;
+        }
+    });
+
+    defineParticle({
+        name: 'type',
+        type: 'string',
+        category: 'structural',
+        process(el, v) {
+            el.dataset.type = v;
+        }
+    });
+
+    defineParticle({
+        name: 'renderers',
+        type: 'array',
+        category: 'structural',
+        process(el, v) {
+            if (Array.isArray(v)) v.forEach(r => el.classList.add(`renderer-${r}`));
+        }
+    });
+
+    // --- Physical particles (positioning and dimensions) ---
+
+    // Helper function for dimension properties
+    const createDimensionParticle = (name, cssProperty) => {
+        return defineParticle({
+            name,
+            type: 'number',
+            category: 'physical',
+            process(el, value, data) {
+                if (value === undefined || value === null) return;
+
+                // Determine the unit
+                let unit = 'px'; // Default unit
+                if (data.unit && data.unit[name]) {
+                    unit = data.unit[name];
+                }
+
+                // Apply the property with its unit
+                el.style[cssProperty] = `${value}${unit}`;
+            }
+        });
+    };
+
+    // Create dimension particles
+    createDimensionParticle('x', 'left');
+    createDimensionParticle('y', 'top');
+    createDimensionParticle('width', 'width');
+    createDimensionParticle('height', 'height');
+
+    defineParticle({
+        name: 'position',
+        type: 'string',
+        category: 'physical',
+        process(el, v) {
+            el.style.position = v;
+        }
+    });
+
+    defineParticle({
+        name: 'origin',
+        type: 'object',
+        category: 'physical',
+        process(el, v) {
+            if (!v || typeof v !== 'object') return;
+
+            // Store the origin in the element's data for reference
+            el.dataset.origin = JSON.stringify(v);
+
+            // Apply position adjustments if necessary
+            // Note: this would be better managed with a complete positioning system
+        }
+    });
+
+    defineParticle({
+        name: 'overflow',
+        type: 'string',
+        category: 'physical',
+        process(el, v) {
+            el.style.overflow = v;
+        }
+    });
+
+    defineParticle({
+        name: 'center',
+        type: 'boolean',
+        category: 'physical',
+        process(el, v) {
+            if (v) {
+                // Center horizontally while respecting absolute positioning
+                el.style.left = '50%';
+                el.style.transform = 'translateX(-50%)';
+                // If we also want to center vertically
+                // el.style.top = '50%';
+                // el.style.transform = 'translate(-50%, -50%)';
+            }
+        }
+    });
+
+    // --- Visual particles ---
+    defineParticle({
+        name: 'smooth',
+        type: 'mixed',
+        category: 'visual',
+        process(el, v) {
+            if (typeof v === 'number') {
+                el.style.borderRadius = `${v}px`;
+            } else if (typeof v === 'string') {
+                el.style.borderRadius = v;
+            }
+        }
+    });
+
+    defineParticle({
+        name: 'color',
+        type: 'string',
+        category: 'visual',
+        process(el, v) {
+            el.style.backgroundColor = v;
+        }
+    });
+
+    // Complex shadow particle with preprocessing example
+    defineParticle({
+        name: 'shadow',
+        type: 'mixed',
+        category: 'visual',
+
+        // Preprocess to normalize shadow configurations
+        before(v) {
+            // Convert single shadow object to array for unified processing
+            if (v && typeof v === 'object' && !Array.isArray(v)) {
+                return [v];
+            }
+            return v;
+        },
+
+        // Main process function
+        process(el, v) {
+            if (!Array.isArray(v)) return;
+
+            // Multiple shadows case
+            let result = '';
+            const len = v.length;
+
+            for (let i = 0; i < len; i++) {
+                const shadow = v[i];
+                const blur = shadow.blur !== undefined ? shadow.blur : 7;
+                const x = shadow.x !== undefined ? shadow.x : 3;
+                const y = shadow.y !== undefined ? shadow.y : 3;
+                const inset = shadow.invert ? 'inset ' : '';
+
+                // Color processing
+                let color = 'rgba(0,0,0,0.6)';
+
+                if (shadow.color) {
+                    if (typeof shadow.color === 'string') {
+                        color = shadow.color;
+                    } else if (typeof shadow.color === 'object') {
+                        const red = shadow.color.red !== undefined ? Math.round(shadow.color.red * 255) : 0;
+                        const green = shadow.color.green !== undefined ? Math.round(shadow.color.green * 255) : 0;
+                        const blue = shadow.color.blue !== undefined ? Math.round(shadow.color.blue * 255) : 0;
+                        const alpha = shadow.color.alpha !== undefined ? shadow.color.alpha : 0.6;
+
+                        color = `rgba(${red},${green},${blue},${alpha})`;
+                    }
+                }
+
+                // Build the shadow string and add comma if needed
+                result += inset + x + 'px ' + y + 'px ' + blur + 'px ' + color;
+                if (i < len - 1) result += ', ';
+            }
+
+            el.style.boxShadow = result;
+        },
+
+        // Post-processing example
+        after(el, v) {
+            // Add a data attribute with the number of shadows
+            if (Array.isArray(v)) {
+                el.dataset.shadowCount = v.length;
+            }
+        }
+    });
+
+    // --- Content particles ---
+    defineParticle({
+        name: 'text',
+        type: 'string',
+        category: 'content',
+        process(el, v) {
+            el.textContent = v;
+        }
+    });
+
+    defineParticle({
+        name: 'innerHTML',
+        type: 'string',
+        category: 'content',
+        process(el, v) {
+            el.innerHTML = v;
+        }
+    });
+
+    // --- Behavioral particles ---
+    defineParticle({
+        name: 'reset',
+        type: 'boolean',
+        category: 'behavioral',
+        process(el, v) {
+            // If reset is false, don't apply the base styles
+            if (v === false) return;
+
+            // Apply base styles to reset browser defaults
+            for (const [key, value] of Object.entries(baseStyles)) {
+                el.style[key] = value;
+            }
+        }
+    });
+
+    defineParticle({
+        name: 'apply',
+        type: 'array',
+        category: 'behavioral',
+        process(el, v) {
+            if (Array.isArray(v)) v.forEach(fn => {
+                if (typeof el[fn] === 'function') el[fn]();
+            });
+        }
+    });
+
+    defineParticle({
+        name: 'attach',
+        type: 'mixed',
+        category: 'behavioral',
+        process(el, v) {
+            let parent;
+            if (typeof v === 'string') {
+                parent = document.querySelector(v) || document.body;
+            } else if (v instanceof HTMLElement) {
+                parent = v;
+            } else parent = document.body;
+            parent.appendChild(el);
+        }
+    });
+
+    defineParticle({
+        name: 'unit',
+        type: 'object',
+        category: 'behavioral',
+        process(el, v) {
+            // Does nothing directly, but will be used by other handlers
+        }
+    });
+
+    // --- Relationship particles ---
+    defineParticle({
+        name: 'fasten',
+        type: 'array',
+        category: 'relationship',
+        process(el, v, _, instance) {
+            if (Array.isArray(v)) {
+                el.dataset.fasten = v.join(',');
+                // Store the IDs of the children in the instance
+                instance._fastened = v;
+            }
+        }
+    });
+
+    defineParticle({
+        name: 'children',
+        type: 'array',
+        category: 'relationship',
+        process(el, v, _, instance) {
+            if (!Array.isArray(v) || v.length === 0) return;
+
+            // Use DocumentFragment to improve performance
+            const fragment = document.createDocumentFragment();
+
+            // Array to store the IDs of created children
+            const childrenIds = [];
+
+            // Create each child and attach it to the fragment
+            v.forEach(childConfig => {
+                // Ensure the child is properly configured
+                const childAtome = new A({
+                    ...childConfig,
+                    attach: null // Don't attach right away
+                });
+
+                // Add the element to the fragment
+                fragment.appendChild(childAtome.getElement());
+
+                // If the child has an ID, add it to the list of children
+                if (childConfig.id) {
+                    childrenIds.push(childConfig.id);
+                }
+            });
+
+            // Attach all children in a single operation
+            el.appendChild(fragment);
+
+            // If children were created with IDs, add them to fasten
+            if (childrenIds.length > 0) {
+                // If fasten already exists, merge the arrays
+                if (instance._fastened && Array.isArray(instance._fastened)) {
+                    instance._fastened = [...new Set([...instance._fastened, ...childrenIds])];
+                    el.dataset.fasten = instance._fastened.join(',');
+                } else {
+                    instance._fastened = childrenIds;
+                    el.dataset.fasten = childrenIds.join(',');
+                }
+            }
+        }
+    });
+
+    // --- Interactive particles ---
+    defineParticle({
+        name: 'events',
+        type: 'object',
+        category: 'interactive',
+        process(el, v) {
+            if (v && typeof v === 'object') {
+                // Store the handlers for later removal
+                el._eventHandlers = el._eventHandlers || {};
+
+                for (const [event, handler] of Object.entries(v)) {
+                    if (typeof handler === 'function') {
+                        el.addEventListener(event, handler);
+                        el._eventHandlers[event] = handler;
+                    }
+                }
+            }
+        }
+    });
+
+    defineParticle({
+        name: 'animate',
+        type: 'object',
+        category: 'interactive',
+        process(el, v) {
+            if (v && typeof v === 'object') {
+                // Set transition properties
+                const duration = v.duration || 0.3;
+                const easing = v.easing || 'ease';
+                const delay = v.delay || 0;
+
+                el.style.transition = `all ${duration}s ${easing} ${delay}s`;
+
+                // Use requestAnimationFrame for better performance
+                if (v.properties && typeof v.properties === 'object') {
+                    requestAnimationFrame(() => {
+                        for (const [prop, value] of Object.entries(v.properties)) {
+                            el.style[prop] = typeof value === 'number' ? `${value}px` : value;
+                        }
+                    });
+                }
+            }
+        }
+    });
+
+    // Example of a simple rotation particle
+    defineParticle({
+        name: 'rotation',
+        type: 'number',
+        category: 'transform',
+
+        // Before processing, normalize the angle
+        before(value) {
+            return value % 360;
+        },
+
+        // Main process
+        process(el, value) {
+            // Preserve existing transforms
+            const currentTransform = el.style.transform || '';
+            // Remove any existing rotate transform
+            const cleanTransform = currentTransform.replace(/rotate\([^)]*\)/g, '').trim();
+            // Add new rotation
+            el.style.transform = `${cleanTransform} rotate(${value}deg)`.trim();
+        },
+
+        // After processing
+        after(el, value) {
+            // Add a data attribute for the rotation value
+            el.dataset.rotation = value;
+
+            // Add orientation classes
+            if (value > 45 && value < 135) {
+                el.classList.add('rotated-right');
+            } else if (value >= 135 && value < 225) {
+                el.classList.add('upside-down');
+            } else if (value >= 225 && value < 315) {
+                el.classList.add('rotated-left');
+            } else {
+                el.classList.add('normal-orientation');
+            }
+        }
+    });
+
+    /**
+     * Base class for A objects with proxy for direct property access
+     */
     class ABase {
         constructor(jsonObject) {
             if (!jsonObject || typeof jsonObject !== 'object' || Array.isArray(jsonObject)) {
-                throw new TypeError('Objet JSON invalide (non-null, objet attendu).');
+                throw new TypeError('Invalid JSON object (non-null, object expected).');
             }
             this._data = jsonObject;
             this._element = document.createElement('div');
-            this._fastened = []; // Liste des éléments rattachés (enfants)
+            this._fastened = []; // List of attached elements (children)
 
-            // Créer un proxy pour le style
+            // Create a proxy for the style
             this._styleProxy = new Proxy({}, {
                 get: (target, prop) => {
                     return this._element.style[prop];
                 },
                 set: (target, prop, value) => {
-                    // Logger la propriété et la valeur ajoutée/modifiée
+                    // Log the property and value being added/modified
                     console.log(`Style: ${prop} = ${value}`);
                     this._element.style[prop] = value;
                     return true;
                 }
             });
 
-            // Par défaut, appliquer le reset des styles
+            // By default, apply the style reset
             if (this._data.reset !== false) {
                 for (const [key, value] of Object.entries(baseStyles)) {
                     this._element.style[key] = value;
@@ -336,7 +631,7 @@ const A = (() => {
 
             this._process();
 
-            // Intégration automatique si attach est fourni
+            // Automatic integration if attach is provided
             if (this._data.attach && !this._element.parentNode) {
                 let parent;
                 const v = this._data.attach;
@@ -348,15 +643,15 @@ const A = (() => {
                 parent.appendChild(this._element);
             }
 
-            // Création du proxy pour accès direct aux propriétés
+            // Create the proxy for direct property access
             return new Proxy(this, {
                 get(target, prop) {
-                    // Accès au style via .style
+                    // Access to style via .style
                     if (prop === 'style') {
                         return target._styleProxy;
                     }
 
-                    // Propriétés spéciales qui doivent être accessibles directement
+                    // Special properties that should be directly accessible
                     if (prop === '_data' || prop === '_fastened' || prop === '_process' ||
                         prop === 'destroy' || prop === 'get' || prop === 'set' ||
                         prop === 'addChild' || prop === 'removeChild' ||
@@ -365,36 +660,39 @@ const A = (() => {
                         return target[prop];
                     }
 
-                    // Accès à l'élément DOM via .element
+                    // Access to the DOM element via .element
                     if (prop === 'element') {
                         return target._element;
                     }
 
-                    // Si la propriété existe dans _data, créer une fonction getter/setter
+                    // If the property exists in _data, create a getter/setter function
                     if (prop in target._data) {
-                        // Retourner une fonction qui agit comme getter/setter
+                        // Return a function that acts as getter/setter
                         return function(value) {
-                            // Si un argument est fourni, c'est un setter
+                            // If an argument is provided, it's a setter
                             if (arguments.length > 0) {
-                                // Logger la propriété et la valeur ajoutée/modifiée
+                                // Log the property and value being added/modified
                                 console.log(`Property: ${prop} = ${value}`);
 
                                 target._data[prop] = value;
-                                // Appliquer la modification à l'élément
-                                const handler = handlers[prop] || defaultHandler;
-                                handler(target._element, value, prop, target._data, target);
-                                return target; // Pour chaînage
+                                // Apply the modification to the element
+                                if (particleRegistry[prop]) {
+                                    particleRegistry[prop].apply(target._element, value, target._data, target);
+                                } else {
+                                    defaultHandler(target._element, value, prop);
+                                }
+                                return target; // For chaining
                             }
-                            // Sans argument, c'est un getter
+                            // Without an argument, it's a getter
                             return target._data[prop];
                         };
                     }
 
-                    // Sinon, retourner la propriété normale de l'objet
+                    // Otherwise, return the normal property of the object
                     return target[prop];
                 },
                 set(target, prop, value) {
-                    // Ne pas permettre de modifier certaines propriétés spéciales
+                    // Don't allow modifying certain special properties
                     if (prop === '_data' || prop === '_element' || prop === '_fastened' ||
                         prop === '_process' || prop === 'destroy' || prop === 'get' ||
                         prop === 'set' || prop === 'addChild' || prop === 'removeChild' ||
@@ -403,86 +701,119 @@ const A = (() => {
                         return false;
                     }
 
-                    // Propriétés spéciales
+                    // Special properties
                     if (prop === 'element') {
-                        return false; // Ne pas permettre de remplacer directement l'élément
+                        return false; // Don't allow directly replacing the element
                     }
 
                     if (prop === 'style') {
-                        return false; // On ne peut pas remplacer le proxy de style
+                        return false; // Can't replace the style proxy
                     }
 
-                    // Si c'est une propriété connue dans _data, la mettre à jour et l'appliquer
+                    // If it's a known property in _data, update it and apply it
                     if (prop in target._data) {
-                        // Logger la propriété et la valeur ajoutée/modifiée
+                        // Log the property and value being added/modified
                         console.log(`Property: ${prop} = ${value}`);
 
                         target._data[prop] = value;
 
-                        // Appliquer la modification à l'élément
-                        const handler = handlers[prop] || defaultHandler;
-                        handler(target._element, value, prop, target._data, target);
+                        // Apply the modification to the element
+                        if (particleRegistry[prop]) {
+                            particleRegistry[prop].apply(target._element, value, target._data, target);
+                        } else {
+                            defaultHandler(target._element, value, prop);
+                        }
 
                         return true;
                     }
 
-                    // Sinon, définir comme propriété normale de l'objet
+                    // Otherwise, set as a normal property of the object
                     target[prop] = value;
                     return true;
                 }
             });
         }
 
+        /**
+         * Process all properties in the data object
+         */
         _process() {
             let el = this._element;
             const data = this._data;
-            const fnHandlers = handlers;
-            const fallback = defaultHandler;
 
-            // Traiter markup en premier s'il existe
-            if (data.markup && fnHandlers.markup) {
-                el = fnHandlers.markup(el, data.markup, this);
+            // Process markup first if it exists
+            if (data.markup && particleRegistry.markup) {
+                el = particleRegistry.markup.apply(el, data.markup, data, this);
             }
 
-            // Traiter les propriétés height et width prioritairement pour éviter le problème de height: 0
-            if (data.height !== undefined) {
-                el.style.height = typeof data.height === 'number' ? `${data.height}px` : data.height;
+            // Process height and width properties first to avoid the height: 0 problem
+            if (data.height !== undefined && particleRegistry.height) {
+                particleRegistry.height.apply(el, data.height, data, this);
             }
-            if (data.width !== undefined) {
-                el.style.width = typeof data.width === 'number' ? `${data.width}px` : data.width;
-            }
-
-            // Traiter l'ID en premier pour l'enregistrement
-            if (data.id && fnHandlers.id) {
-                fnHandlers.id(el, data.id, 'id', data, this);
+            if (data.width !== undefined && particleRegistry.width) {
+                particleRegistry.width.apply(el, data.width, data, this);
             }
 
-            // Boucle pour toutes les autres propriétés
+            // Process ID first for registration
+            if (data.id && particleRegistry.id) {
+                particleRegistry.id.apply(el, data.id, data, this);
+            }
+
+            // Define the order of categories for processing
+            const categoryOrder = ['structural', 'physical', 'visual', 'content', 'behavioral', 'relationship', 'interactive', 'transform'];
+
+            // Process properties by category
+            for (const category of categoryOrder) {
+                for (const [key, value] of Object.entries(data)) {
+                    // Skip already processed properties
+                    if (key === 'markup' || key === 'height' || key === 'width' || key === 'id') continue;
+
+                    const particle = particleRegistry[key];
+                    if (particle && particle.category === category) {
+                        particle.apply(el, value, data, this);
+                    }
+                }
+            }
+
+            // Process remaining properties (without a category or default)
             for (const [key, value] of Object.entries(data)) {
-                if (key === 'markup' || key === 'height' || key === 'width' || key === 'id') continue; // Déjà traités
-                const fn = fnHandlers[key] || fallback;
-                fn(el, value, key, data, this);
+                // Skip already processed properties
+                if (key === 'markup' || key === 'height' || key === 'width' || key === 'id') continue;
+                if (particleRegistry[key]) continue; // Already processed in the previous loop
+
+                // Default handler for properties without a particle
+                defaultHandler(el, value, key);
             }
 
-            // S'assurer que la position est correctement définie
+            // Ensure position is properly defined
             if (!el.style.position && (data.x !== undefined || data.y !== undefined)) {
                 el.style.position = 'absolute';
             }
         }
 
-        // Récupère l'élément créé
+        /**
+         * Gets the created element
+         * @returns {HTMLElement} - The DOM element
+         */
         getElement() {
             return this._element;
         }
 
-        // Obtenir tous les éléments rattachés (enfants)
+        /**
+         * Gets all attached elements (children)
+         * @returns {Array} - Array of Atome instances
+         */
         getFastened() {
             return this._fastened.map(id => atomeRegistry[id]).filter(Boolean);
         }
 
-        // Ajouter un élément enfant
+        /**
+         * Adds a child element
+         * @param {Object|ABase} childConfig - Child configuration or an existing Atome instance
+         * @returns {ABase} - The created or attached child
+         */
         addChild(childConfig) {
-            // Si childConfig est déjà un Atome
+            // If childConfig is already an Atome
             if (childConfig instanceof ABase) {
                 this._element.appendChild(childConfig.getElement());
                 if (childConfig._data.id) {
@@ -492,13 +823,13 @@ const A = (() => {
                 return childConfig;
             }
 
-            // Sinon, créer un nouvel Atome à partir de la config
+            // Otherwise, create a new Atome from the config
             const child = new A({
                 ...childConfig,
                 attach: this._element
             });
 
-            // Si l'enfant a un ID, l'ajouter à la liste des enfants
+            // If the child has an ID, add it to the list of children
             if (childConfig.id) {
                 this._fastened.push(childConfig.id);
                 this._element.dataset.fasten = this._fastened.join(',');
@@ -507,7 +838,11 @@ const A = (() => {
             return child;
         }
 
-        // Supprimer un enfant par ID
+        /**
+         * Removes a child by ID
+         * @param {string} childId - ID of the child to remove
+         * @returns {boolean} - True if successful, false otherwise
+         */
         removeChild(childId) {
             const child = atomeRegistry[childId];
             if (child && child.getElement().parentNode === this._element) {
@@ -519,27 +854,41 @@ const A = (() => {
             return false;
         }
 
-        // Méthode pour obtenir une valeur à partir des données
+        /**
+         * Gets a value from the data
+         * @param {string} key - Property name
+         * @returns {any} - The property value
+         */
         get(key) {
             return this._data[key];
         }
 
-        // Méthode pour définir une valeur et l'appliquer
+        /**
+         * Sets a value and applies it
+         * @param {string} key - Property name
+         * @param {any} value - Value to set
+         * @returns {ABase} - This instance for chaining
+         */
         set(key, value) {
             this._data[key] = value;
-            const handler = handlers[key] || defaultHandler;
-            handler(this._element, value, key, this._data, this);
+            if (particleRegistry[key]) {
+                particleRegistry[key].apply(this._element, value, this._data, this);
+            } else {
+                defaultHandler(this._element, value, key);
+            }
             return this;
         }
 
-        // Méthode de nettoyage - peut être appelée pour libérer les ressources
+        /**
+         * Cleanup method - can be called to free resources
+         */
         destroy() {
-            // Supprimer du DOM
+            // Remove from DOM
             if (this._element.parentNode) {
                 this._element.parentNode.removeChild(this._element);
             }
 
-            // Supprimer les écouteurs d'événements
+            // Remove event listeners
             if (this._element._eventHandlers) {
                 for (const [event, handler] of Object.entries(this._element._eventHandlers)) {
                     this._element.removeEventListener(event, handler);
@@ -547,28 +896,34 @@ const A = (() => {
                 this._element._eventHandlers = {};
             }
 
-            // Supprimer du registre
+            // Remove from registry
             if (this._data.id) {
                 delete atomeRegistry[this._data.id];
             }
 
-            // Nettoyer les références
+            // Clean up references
             this._fastened = null;
             this._data = null;
         }
     }
 
-    // Création de la classe A finale
+    /**
+     * Creation of the final A class
+     */
     const A = function(config) {
         return new ABase(config);
     };
 
-    // Ajout des méthodes statiques
+    /**
+     * Add static methods to the A constructor
+     */
+
+    // Get an instance by ID
     A.getById = function(id) {
         return atomeRegistry[id];
     };
 
-
+    // Clean up the registry by removing instances that are no longer in the DOM
     A.cleanRegistry = function() {
         for (const id in atomeRegistry) {
             const instance = atomeRegistry[id];
@@ -578,13 +933,45 @@ const A = (() => {
         }
     };
 
+    /**
+     * Expose particle management API
+     */
+
+    // Register a new particle
+    A.defineParticle = defineParticle;
+
+    // Get a particle from the registry
+    A.getParticle = function(name) {
+        return particleRegistry[name];
+    };
+
+    // List all available particles
+    A.listParticles = function() {
+        return Object.keys(particleRegistry);
+    };
+
+    // List particles by category
+    A.listParticlesByCategory = function(category) {
+        return Object.entries(particleRegistry)
+            .filter(([_, particle]) => particle.category === category)
+            .map(([name]) => name);
+    };
+
+    // Remove a particle
+    A.removeParticle = function(name) {
+        if (particleRegistry[name]) {
+            delete particleRegistry[name];
+            return true;
+        }
+        return false;
+    };
+
+    // Export for use as a module
+    window.A = A;
     return A;
 })();
 
-// Export pour l'utilisation comme module
-window.A = A;
 export default A;
-
 
 
 // Cache global des instances A créées manuellement
