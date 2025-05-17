@@ -126,6 +126,9 @@ let A, grab, puts, defineParticle;
             cssProperties.forEach(prop => {
                 if (typeof this[prop] === 'function' || reservedMethods.includes(prop)) return;
 
+                // Capture 'this' to prevent reference issues in the nested function
+                const self = this;
+
                 this[prop] = function(value) {
                     if (arguments.length === 0) return this._data[prop];
 
@@ -134,7 +137,9 @@ let A, grab, puts, defineParticle;
                     // Apply CSS property directly
                     const styleUpdates = {};
                     const datasetUpdates = {};
-                    this._collectPropertyUpdates(prop, value, styleUpdates, datasetUpdates);
+
+                    // Use self instead of this for the method call
+                    self._collectPropertyUpdates(prop, value, styleUpdates, datasetUpdates);
 
                     // Apply updates
                     if (Object.keys(styleUpdates).length > 0) {
@@ -240,11 +245,13 @@ let A, grab, puts, defineParticle;
                         console.error(`Error calling particle ${key}:`, err);
                     }
                 } else {
-                    // Direct access without additional lookups
-                    // Use the correct method: _collectPropertyUpdates instead of _processDefaultProperty
+                    // Use a bound function call to avoid 'this' reference issues
                     const styleUpdates = {};
                     const datasetUpdates = {};
-                    this._collectPropertyUpdates(key, value, styleUpdates, datasetUpdates);
+                    // Call the method with the proper 'this' context
+                    A.prototype._collectPropertyUpdates.call(
+                        this, key, value, styleUpdates, datasetUpdates
+                    );
 
                     // Apply updates
                     if (Object.keys(styleUpdates).length > 0) {
@@ -474,13 +481,14 @@ let A, grab, puts, defineParticle;
         category: 'appearance',
         process(el, v) {
             if (Array.isArray(v)) {
-                const shadows = v.map(shadow => {
-                    const {blur=0, x=0, y=0, color={}, invert=false} = shadow;
+                // Rename to avoid variable shadowing
+                const shadowEffects = v.map(shadowItem => {
+                    const {blur=0, x=0, y=0, color={}, invert=false} = shadowItem;
                     const {red=0, green=0, blue=0, alpha=1} = color;
                     const rgba = `rgba(${red*255},${green*255},${blue*255},${alpha})`;
                     return `${invert ? 'inset ' : ''}${x}px ${y}px ${blur}px ${rgba}`;
                 }).join(', ');
-                el.style.boxShadow = shadows;
+                el.style.boxShadow = shadowEffects;
             } else if (typeof v === 'string') {
                 el.style.boxShadow = v;
             }
