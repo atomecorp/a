@@ -5,10 +5,15 @@
 // Export main variables for ES6
 let A, grab, puts, defineParticle;
 
+// Variables à exposer pour les définitions externes de particules
+let _formatSize, _isNumber, _registry;
+
 // Framework implementation
 (function() {
     // Global registry for instances
     const registry = {};
+    // Exposer registry pour une utilisation externe
+    _registry = registry;
 
     // Particles registry
     const particles = {};
@@ -29,6 +34,8 @@ let A, grab, puts, defineParticle;
             return typeof v === 'number';
         };
     })();
+    // Exposer isNumber pour une utilisation externe
+    _isNumber = isNumber;
 
     // Size formatting with caching for common values
     const formatSize = (function() {
@@ -50,6 +57,8 @@ let A, grab, puts, defineParticle;
             return `${v}px`;
         };
     })();
+    // Exposer formatSize pour une utilisation externe
+    _formatSize = formatSize;
 
     // Define a particle
     defineParticle = function(config) {
@@ -394,122 +403,6 @@ let A, grab, puts, defineParticle;
         console.log(msg);
     };
 
-    // Define base particles
-    defineParticle({
-        name: 'id',
-        type: 'string',
-        category: 'structural',
-        process(el, v, _, instance) {
-            el.id = v;
-            if (v) registry[v] = instance;
-        }
-    });
-
-    defineParticle({
-        name: 'markup',
-        type: 'string',
-        category: 'structural',
-        process(el, v, data, instance) {
-            if (!v || typeof v !== 'string') return;
-
-            const newEl = document.createElement(v);
-            // Copy attributes
-            for (const attr of el.attributes) {
-                newEl.setAttribute(attr.name, attr.value);
-            }
-
-            // Copy styles
-            newEl.style.cssText = el.style.cssText;
-
-            // Replace element
-            instance.element = newEl;
-        }
-    });
-
-    defineParticle({
-        name: 'x',
-        type: 'number',
-        category: 'position',
-        process(el, v) { el.style.left = formatSize(v); }
-    });
-
-    defineParticle({
-        name: 'y',
-        type: 'number',
-        category: 'position',
-        process(el, v) { el.style.top = formatSize(v); }
-    });
-
-    defineParticle({
-        name: 'width',
-        type: 'number',
-        category: 'dimension',
-        process(el, v) { el.style.width = formatSize(v); }
-    });
-
-    defineParticle({
-        name: 'height',
-        type: 'number',
-        category: 'dimension',
-        process(el, v) { el.style.height = formatSize(v); }
-    });
-
-    defineParticle({
-        name: 'color',
-        type: 'string',
-        category: 'appearance',
-        process(el, v) { el.style.backgroundColor = v; }
-    });
-
-    defineParticle({
-        name: 'backgroundColor',
-        type: 'string',
-        category: 'appearance',
-        process(el, v) { el.style.backgroundColor = v; }
-    });
-
-    defineParticle({
-        name: 'smooth',
-        type: 'number',
-        category: 'appearance',
-        process(el, v) { el.style.borderRadius = formatSize(v); }
-    });
-
-    defineParticle({
-        name: 'shadow',
-        type: 'object',
-        category: 'appearance',
-        process(el, v) {
-            if (Array.isArray(v)) {
-                // Rename to avoid variable shadowing
-                el.style.boxShadow = v.map(shadowItem => {
-                    const {blur = 0, x = 0, y = 0, color = {}, invert = false} = shadowItem;
-                    const {red = 0, green = 0, blue = 0, alpha = 1} = color;
-                    const rgba = `rgba(${red * 255},${green * 255},${blue * 255},${alpha})`;
-                    return `${invert ? 'inset ' : ''}${x}px ${y}px ${blur}px ${rgba}`;
-                }).join(', ');
-            } else if (typeof v === 'string') {
-                el.style.boxShadow = v;
-            }
-        }
-    });
-
-    defineParticle({
-        name: 'overflow',
-        type: 'string',
-        category: 'appearance',
-        process(el, v) { el.style.overflow = v; }
-    });
-
-    defineParticle({
-        name: 'attach',
-        type: 'any',
-        category: 'structural',
-        process(el, v, _, instance) {
-            instance._handleAttach(v);
-        }
-    });
-
     // Export to global scope
     window.A = A;
     window.grab = grab;
@@ -519,3 +412,149 @@ let A, grab, puts, defineParticle;
 
 // Export for ES modules
 export { A as default, A, grab, defineParticle, puts };
+
+// DÉFINITIONS DE PARTICULES EXTERNES
+// =================================
+
+// Particule id
+defineParticle({
+    name: 'id',
+    type: 'string',
+    category: 'structural',
+    process(el, v, _, instance) {
+        el.id = v;
+        if (v) _registry[v] = instance;  // Utilise _registry exposé
+    }
+});
+
+// Particule markup
+defineParticle({
+    name: 'markup',
+    type: 'string',
+    category: 'structural',
+    process(el, v, data, instance) {
+        if (!v || typeof v !== 'string') return;
+
+        const newEl = document.createElement(v);
+        // Copy attributes
+        for (const attr of el.attributes) {
+            newEl.setAttribute(attr.name, attr.value);
+        }
+
+        // Copy styles
+        newEl.style.cssText = el.style.cssText;
+
+        // Replace element
+        instance.element = newEl;
+    }
+});
+
+// Particule x
+defineParticle({
+    name: 'x',
+    type: 'number',
+    category: 'position',
+    process(el, v) {
+        el.style.left = _formatSize(v);  // Utilise _formatSize exposé
+    }
+});
+
+// Particule y
+defineParticle({
+    name: 'y',
+    type: 'number',
+    category: 'position',
+    process(el, v) {
+        el.style.top = _formatSize(v);  // Utilise _formatSize exposé
+    }
+});
+
+// Particule width
+defineParticle({
+    name: 'width',
+    type: 'number',
+    category: 'dimension',
+    process(el, v) {
+        el.style.width = _formatSize(v);  // Utilise _formatSize exposé
+    }
+});
+
+// Particule height
+defineParticle({
+    name: 'height',
+    type: 'number',
+    category: 'dimension',
+    process(el, v) {
+        el.style.height = _formatSize(v);  // Utilise _formatSize exposé
+    }
+});
+
+// Particule color
+defineParticle({
+    name: 'color',
+    type: 'string',
+    category: 'appearance',
+    process(el, v) {
+        el.style.backgroundColor = v;
+    }
+});
+
+// Particule backgroundColor
+defineParticle({
+    name: 'backgroundColor',
+    type: 'string',
+    category: 'appearance',
+    process(el, v) {
+        el.style.backgroundColor = v;
+    }
+});
+
+// Particule smooth
+defineParticle({
+    name: 'smooth',
+    type: 'number',
+    category: 'appearance',
+    process(el, v) {
+        el.style.borderRadius = _formatSize(v);  // Utilise _formatSize exposé
+    }
+});
+
+// Particule shadow
+defineParticle({
+    name: 'shadow',
+    type: 'object',
+    category: 'appearance',
+    process(el, v) {
+        if (Array.isArray(v)) {
+            // Rename to avoid variable shadowing
+            el.style.boxShadow = v.map(shadowItem => {
+                const {blur = 0, x = 0, y = 0, color = {}, invert = false} = shadowItem;
+                const {red = 0, green = 0, blue = 0, alpha = 1} = color;
+                const rgba = `rgba(${red * 255},${green * 255},${blue * 255},${alpha})`;
+                return `${invert ? 'inset ' : ''}${x}px ${y}px ${blur}px ${rgba}`;
+            }).join(', ');
+        } else if (typeof v === 'string') {
+            el.style.boxShadow = v;
+        }
+    }
+});
+
+// Particule overflow
+defineParticle({
+    name: 'overflow',
+    type: 'string',
+    category: 'appearance',
+    process(el, v) {
+        el.style.overflow = v;
+    }
+});
+
+// Particule attach
+defineParticle({
+    name: 'attach',
+    type: 'any',
+    category: 'structural',
+    process(el, v, _, instance) {
+        instance._handleAttach(v);
+    }
+});
