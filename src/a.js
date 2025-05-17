@@ -1,433 +1,435 @@
 /**
- * Optimized A Framework - Minimalist version with extensible particles support
+ * Optimized A Framework - Minimalist version with modular structure
  */
 
 // Export main variables for ES6
 let A, grab, puts, defineParticle;
 
-// Variables à exposer pour les définitions externes de particules
-let _formatSize, _isNumber, _registry;
+// Variables to expose for external particle definitions
+let _formatSize, _isNumber, _registry, _particles;
 
-// Framework implementation
-(function() {
-    // Global registry for instances
-    const registry = {};
-    // Exposer registry pour une utilisation externe
-    _registry = registry;
+// SECTION 1: UTILITIES
+// ===================
 
-    // Particles registry
-    const particles = {};
-
-    // Base styles
-    const baseStyles = {
-        margin: '0', padding: '0', boxSizing: 'border-box',
-        display: 'block', position: 'absolute',
-        lineHeight: 'normal', fontSize: 'inherit',
-        fontWeight: 'inherit', color: 'inherit',
-        background: 'transparent'
+// Isolated isNumber function
+_isNumber = (function() {
+    return function(v) {
+        return typeof v === 'number';
     };
+})();
 
-    // Utilities - optimized with caching for better performance
-    const isNumber = (function() {
-        // Deterministic function to avoid repeated typeof calls
-        return function(v) {
-            return typeof v === 'number';
-        };
-    })();
-    // Exposer isNumber pour une utilisation externe
-    _isNumber = isNumber;
+// Isolated formatSize function
+_formatSize = (function() {
+    // Cache for common values
+    const cache = new Map();
 
-    // Size formatting with caching for common values
-    const formatSize = (function() {
-        // Cache for common values (0-1000px)
-        const cache = new Map();
+    return function(v) {
+        if (!_isNumber(v)) return v;
 
-        return function(v) {
-            if (!isNumber(v)) return v;
-
-            // Use cache for common values
-            if (v >= 0 && v <= 1000 && v === Math.floor(v)) {
-                if (!cache.has(v)) {
-                    cache.set(v, `${v}px`);
-                }
-                return cache.get(v);
+        // Use cache for common values
+        if (v >= 0 && v <= 1000 && v === Math.floor(v)) {
+            if (!cache.has(v)) {
+                cache.set(v, `${v}px`);
             }
-
-            // Non-cached values
-            return `${v}px`;
-        };
-    })();
-    // Exposer formatSize pour une utilisation externe
-    _formatSize = formatSize;
-
-    // Define a particle
-    defineParticle = function(config) {
-        // Validate configuration
-        if (!config || !config.name || !config.process || typeof config.process !== 'function') {
-            console.error("Invalid particle definition:", config);
-            return null;
+            return cache.get(v);
         }
 
-        particles[config.name] = config;
-        return config;
+        // Non-cached values
+        return `${v}px`;
     };
+})();
 
-    // Main A class with maximum optimizations
-    A = class {
-        constructor(config = {}) {
-            this._data = {...config};
-            this.element = document.createElement('div');
-            this._fastened = config.fasten || [];
+// Isolated puts function
+puts = function(msg) {
+    console.log(msg);
+};
 
-            // Direct access to style and dataset to avoid repeated lookups
-            this.style = this.element.style;
-            this.dataset = this.element.dataset;
+// SECTION 2: REGISTRY
+// ===================
 
-            // Apply base styles in a single operation
-            if (config.reset !== false) {
-                Object.assign(this.style, baseStyles);
-            }
+// Global registry for instances
+_registry = {};
 
-            // Pre-instantiate all known methods to avoid dynamic creation
-            this._preparePropertyMethods();
+// Registry for particles
+_particles = {};
 
-            // Process all properties
-            this._processConfig(config);
+// Isolated grab function
+grab = (function() {
+    // Cache for recent results
+    const domCache = new Map();
 
-            // Attach element if needed
-            if (config.attach) {
-                this._handleAttach(config.attach);
-            }
+    return function(id) {
+        if (!id) return null;
 
-            // Register instance if it has an ID
-            if (config.id) {
-                registry[config.id] = this;
+        // Check registry first (fast)
+        const instance = _registry[id];
+        if (instance) return instance;
+
+        // Check DOM cache
+        if (domCache.has(id)) {
+            const cached = domCache.get(id);
+            // Verify element is still in the DOM
+            if (cached && cached.isConnected) {
+                return cached;
+            } else {
+                // Remove obsolete entry
+                domCache.delete(id);
             }
         }
 
-        // Pre-instantiate methods for all known particles
-        _preparePropertyMethods() {
-            // List of methods not to create
-            const reservedMethods = ['inspect', 'addChild', 'getElement', 'getFastened', 'style', 'element'];
+        // Look in the DOM
+        const element = document.getElementById(id);
+        if (!element) return null;
 
-            // Create methods for all known particles
-            for (const name in particles) {
-                if (reservedMethods.includes(name) || typeof this[name] === 'function') continue;
+        // Add useful methods - only once!
+        if (!element._enhanced) {
+            // Mark as enhanced to avoid duplication
+            element._enhanced = true;
 
-                const particle = particles[name];
-                this[name] = function(value) {
-                    if (arguments.length === 0) return this._data[name];
-
-                    this._data[name] = value;
-
-                    try {
-                        particle.process(this.element, value, this._data, this);
-                    } catch (err) {
-                        console.error(`Error when calling particle ${name}:`, err);
-                    }
-
-                    return this;
-                };
-            }
-
-            // Additionally add methods for standard CSS properties without particles
-            const cssProperties = ['zIndex', 'opacity', 'transform', 'transition', 'display'];
+            const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
             cssProperties.forEach(prop => {
-                if (typeof this[prop] === 'function' || reservedMethods.includes(prop)) return;
+                const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
 
-                // Capture 'this' to prevent reference issues in the nested function
-                const self = this;
-
-                this[prop] = function(value) {
-                    if (arguments.length === 0) return this._data[prop];
-
-                    this._data[prop] = value;
-
-                    // Apply CSS property directly
-                    const styleUpdates = {};
-                    const datasetUpdates = {};
-
-                    // Use self instead of this for the method call
-                    self._collectPropertyUpdates(prop, value, styleUpdates, datasetUpdates);
-
-                    // Apply updates
-                    if (Object.keys(styleUpdates).length > 0) {
-                        Object.assign(this.element.style, styleUpdates);
-                    }
-                    if (Object.keys(datasetUpdates).length > 0) {
-                        Object.assign(this.element.dataset, datasetUpdates);
+                element[prop] = function(value) {
+                    if (arguments.length === 0) {
+                        return getComputedStyle(this)[styleProp];
                     }
 
+                    this.style[styleProp] = _isNumber(value) ? _formatSize(value) : value;
                     return this;
                 };
             });
         }
 
+        // Cache for future calls
+        domCache.set(id, element);
+
+        return element;
+    };
+})();
+
+// SECTION 3: PARTICLES
+// ====================
+
+// Isolated defineParticle function
+defineParticle = function(config) {
+    // Validate configuration
+    if (!config || !config.name || !config.process || typeof config.process !== 'function') {
+        console.error("Invalid particle definition:", config);
+        return null;
+    }
+
+    _particles[config.name] = config;
+    return config;
+};
+
+// SECTION 4: CLASS A (CORE)
+// =========================
+
+// Base styles
+const baseStyles = {
+    margin: '0', padding: '0', boxSizing: 'border-box',
+    display: 'block', position: 'absolute',
+    lineHeight: 'normal', fontSize: 'inherit',
+    fontWeight: 'inherit', color: 'inherit',
+    background: 'transparent'
+};
+
+// Main A class with maximum optimizations
+A = class {
+    constructor(config = {}) {
+        this._data = {...config};
+        this.element = document.createElement('div');
+        this._fastened = config.fasten || [];
+
+        // Direct access to style and dataset to avoid repeated lookups
+        this.style = this.element.style;
+        this.dataset = this.element.dataset;
+
+        // Apply base styles in a single operation
+        if (config.reset !== false) {
+            Object.assign(this.style, baseStyles);
+        }
+
+        // Pre-instantiate all known methods to avoid dynamic creation
+        this._preparePropertyMethods();
+
         // Process all properties
-        _processConfig(config) {
-            // Collect style updates to apply them at once
-            const styleUpdates = {};
-            const datasetUpdates = {};
+        this._processConfig(config);
 
-            for (const [key, value] of Object.entries(config)) {
-                if (key === 'fasten' || key === 'reset') {
-                    continue; // Already handled
-                }
-
-                // Find associated particle
-                const particle = particles[key];
-                if (particle) {
-                    try {
-                        // Particles can modify the element directly
-                        particle.process(this.element, value, config, this);
-                    } catch (err) {
-                        console.error(`Error processing particle ${key}:`, err);
-                    }
-                } else {
-                    // Default handling - collect instead of applying immediately
-                    this._collectPropertyUpdates(key, value, styleUpdates, datasetUpdates);
-                }
-
-                // Create a method for this property if it doesn't already exist
-                if (typeof this[key] !== 'function') {
-                    this._createPropertyMethod(key);
-                }
-            }
-
-            // Apply all style updates at once
-            if (Object.keys(styleUpdates).length > 0) {
-                Object.assign(this.element.style, styleUpdates);
-            }
-
-            // Apply all dataset updates at once
-            if (Object.keys(datasetUpdates).length > 0) {
-                Object.assign(this.element.dataset, datasetUpdates);
-            }
+        // Attach element if needed
+        if (config.attach) {
+            this._handleAttach(config.attach);
         }
 
-        // Collect updates instead of applying them immediately
-        _collectPropertyUpdates(key, value, styleUpdates, datasetUpdates) {
-            if (typeof value === 'number') {
-                // Numeric value = likely a size in pixels
-                styleUpdates[key] = formatSize(value);
-            } else if (typeof value === 'string') {
-                // String value = likely a direct CSS property
-                styleUpdates[key] = value;
-            } else if (Array.isArray(value)) {
-                // Array = store in dataset
-                datasetUpdates[key] = value.join(',');
-            } else if (value instanceof HTMLElement) {
-                // HTML Element = add as child (cannot be deferred)
-                this.element.appendChild(value);
-            } else if (value && typeof value === 'object') {
-                // Object = serialize to JSON
-                datasetUpdates[key] = JSON.stringify(value);
-            }
+        // Register instance if it has an ID
+        if (config.id) {
+            _registry[config.id] = this;
         }
+    }
 
-        // Create a getter/setter method for a property
-        _createPropertyMethod(key) {
-            if (key === 'inspect' || key === 'addChild' || key === 'getElement' ||
-                typeof this[key] === 'function') {
-                return; // Don't create method for these reserved names or existing methods
-            }
+    // Pre-instantiate methods for all known particles
+    _preparePropertyMethods() {
+        // List of methods not to create
+        const reservedMethods = ['inspect', 'addChild', 'getElement', 'getFastened', 'style', 'element'];
 
-            // Use direct binding rather than a complete closure
-            // to reduce memory overhead
-            const particle = particles[key];
-            const hasParticle = !!particle;
+        // Create methods for all known particles
+        for (const name in _particles) {
+            if (reservedMethods.includes(name) || typeof this[name] === 'function') continue;
 
-            this[key] = function(value) {
-                if (arguments.length === 0) {
-                    // Getter - direct access, no additional processing
-                    return this._data[key];
-                }
+            const particle = _particles[name];
+            this[name] = function(value) {
+                if (arguments.length === 0) return this._data[name];
 
-                // Setter
-                this._data[key] = value;
+                this._data[name] = value;
 
-                // Apply value via particle if it exists
-                if (hasParticle) {
-                    try {
-                        particle.process(this.element, value, this._data, this);
-                    } catch (err) {
-                        console.error(`Error calling particle ${key}:`, err);
-                    }
-                } else {
-                    // Use a bound function call to avoid 'this' reference issues
-                    const styleUpdates = {};
-                    const datasetUpdates = {};
-                    // Call the method with the proper 'this' context
-                    A.prototype._collectPropertyUpdates.call(
-                        this, key, value, styleUpdates, datasetUpdates
-                    );
-
-                    // Apply updates
-                    if (Object.keys(styleUpdates).length > 0) {
-                        Object.assign(this.element.style, styleUpdates);
-                    }
-                    if (Object.keys(datasetUpdates).length > 0) {
-                        Object.assign(this.element.dataset, datasetUpdates);
-                    }
+                try {
+                    particle.process(this.element, value, this._data, this);
+                } catch (err) {
+                    console.error(`Error when calling particle ${name}:`, err);
                 }
 
                 return this;
             };
         }
 
-        // Handle DOM attachment - optimized version
-        _handleAttach(value) {
-            // Avoid setTimeout if possible
-            // Using requestAnimationFrame ensures attachment is done
-            // during the next render cycle, which is more efficient
-            if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                this._performAttach(value);
-            } else {
-                requestAnimationFrame(() => this._performAttach(value));
-            }
-        }
+        // Additionally add methods for standard CSS properties without particles
+        const cssProperties = ['zIndex', 'opacity', 'transform', 'transition', 'display'];
+        cssProperties.forEach(prop => {
+            if (typeof this[prop] === 'function' || reservedMethods.includes(prop)) return;
 
-        // Factorized attachment function
-        _performAttach(value) {
-            if (this.element.parentNode) return;
+            // Capture 'this' to prevent reference issues in the nested function
+            const self = this;
 
-            let parent;
-            if (typeof value === 'string') {
-                parent = document.querySelector(value) || document.body;
-            } else if (value instanceof HTMLElement) {
-                parent = value;
-            } else {
-                parent = document.body;
-            }
+            this[prop] = function(value) {
+                if (arguments.length === 0) return this._data[prop];
 
-            parent.appendChild(this.element);
-        }
+                this._data[prop] = value;
 
-        // Public API
-        getElement() {
-            return this.element;
-        }
+                // Apply CSS property directly
+                const styleUpdates = {};
+                const datasetUpdates = {};
 
-        getFastened() {
-            return this._fastened.map(id => registry[id]).filter(Boolean);
-        }
+                // Use self instead of this for the method call
+                self._collectPropertyUpdates(prop, value, styleUpdates, datasetUpdates);
 
-        addChild(childConfig) {
-            if (childConfig instanceof A) {
-                this.element.appendChild(childConfig.getElement());
-                if (childConfig._data.id) {
-                    this._fastened.push(childConfig._data.id);
+                // Apply updates
+                if (Object.keys(styleUpdates).length > 0) {
+                    Object.assign(this.element.style, styleUpdates);
                 }
-                return childConfig;
+                if (Object.keys(datasetUpdates).length > 0) {
+                    Object.assign(this.element.dataset, datasetUpdates);
+                }
+
+                return this;
+            };
+        });
+    }
+
+    // Process all properties
+    _processConfig(config) {
+        // Collect style updates to apply them at once
+        const styleUpdates = {};
+        const datasetUpdates = {};
+
+        for (const [key, value] of Object.entries(config)) {
+            if (key === 'fasten' || key === 'reset') {
+                continue; // Already handled
             }
 
-            const child = new A({...childConfig, attach: this.element});
-            if (childConfig.id) {
-                this._fastened.push(childConfig.id);
+            // Find associated particle
+            const particle = _particles[key];
+            if (particle) {
+                try {
+                    // Particles can modify the element directly
+                    particle.process(this.element, value, config, this);
+                } catch (err) {
+                    console.error(`Error processing particle ${key}:`, err);
+                }
+            } else {
+                // Default handling - collect instead of applying immediately
+                this._collectPropertyUpdates(key, value, styleUpdates, datasetUpdates);
             }
-            return child;
+
+            // Create a method for this property if it doesn't already exist
+            if (typeof this[key] !== 'function') {
+                this._createPropertyMethod(key);
+            }
         }
 
-        inspect() {
-            console.group('A Instance');
-            console.log('ID:', this._data.id);
-            console.log('Element:', this.element);
-            console.log('Style:', this.element.style.cssText);
-            console.log('Data:', this._data);
-            console.groupEnd();
+        // Apply all style updates at once
+        if (Object.keys(styleUpdates).length > 0) {
+            Object.assign(this.element.style, styleUpdates);
+        }
+
+        // Apply all dataset updates at once
+        if (Object.keys(datasetUpdates).length > 0) {
+            Object.assign(this.element.dataset, datasetUpdates);
+        }
+    }
+
+    // Collect updates instead of applying them immediately
+    _collectPropertyUpdates(key, value, styleUpdates, datasetUpdates) {
+        if (typeof value === 'number') {
+            // Numeric value = likely a size in pixels
+            styleUpdates[key] = _formatSize(value);
+        } else if (typeof value === 'string') {
+            // String value = likely a direct CSS property
+            styleUpdates[key] = value;
+        } else if (Array.isArray(value)) {
+            // Array = store in dataset
+            datasetUpdates[key] = value.join(',');
+        } else if (value instanceof HTMLElement) {
+            // HTML Element = add as child (cannot be deferred)
+            this.element.appendChild(value);
+        } else if (value && typeof value === 'object') {
+            // Object = serialize to JSON
+            datasetUpdates[key] = JSON.stringify(value);
+        }
+    }
+
+    // Create a getter/setter method for a property
+    _createPropertyMethod(key) {
+        if (key === 'inspect' || key === 'addChild' || key === 'getElement' ||
+            typeof this[key] === 'function') {
+            return; // Don't create method for these reserved names or existing methods
+        }
+
+        // Use direct binding rather than a complete closure
+        // to reduce memory overhead
+        const particle = _particles[key];
+        const hasParticle = !!particle;
+
+        this[key] = function(value) {
+            if (arguments.length === 0) {
+                // Getter - direct access, no additional processing
+                return this._data[key];
+            }
+
+            // Setter
+            this._data[key] = value;
+
+            // Apply value via particle if it exists
+            if (hasParticle) {
+                try {
+                    particle.process(this.element, value, this._data, this);
+                } catch (err) {
+                    console.error(`Error calling particle ${key}:`, err);
+                }
+            } else {
+                // Use a bound function call to avoid 'this' reference issues
+                const styleUpdates = {};
+                const datasetUpdates = {};
+                // Call the method with the proper 'this' context
+                A.prototype._collectPropertyUpdates.call(
+                    this, key, value, styleUpdates, datasetUpdates
+                );
+
+                // Apply updates
+                if (Object.keys(styleUpdates).length > 0) {
+                    Object.assign(this.element.style, styleUpdates);
+                }
+                if (Object.keys(datasetUpdates).length > 0) {
+                    Object.assign(this.element.dataset, datasetUpdates);
+                }
+            }
+
             return this;
-        }
-
-        static getById(id) {
-            return registry[id];
-        }
-    };
-
-    // Optimized grab function with caching
-    grab = (function() {
-        // Cache for recent results
-        const domCache = new Map();
-
-        return function(id) {
-            if (!id) return null;
-
-            // Check registry first (fast)
-            const instance = registry[id];
-            if (instance) return instance;
-
-            // Check DOM cache
-            if (domCache.has(id)) {
-                const cached = domCache.get(id);
-                // Verify element is still in the DOM
-                if (cached && cached.isConnected) {
-                    return cached;
-                } else {
-                    // Remove obsolete entry
-                    domCache.delete(id);
-                }
-            }
-
-            // Look in the DOM
-            const element = document.getElementById(id);
-            if (!element) return null;
-
-            // Add useful methods - only once!
-            if (!element._enhanced) {
-                // Mark as enhanced to avoid duplication
-                element._enhanced = true;
-
-                const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
-                cssProperties.forEach(prop => {
-                    const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
-
-                    element[prop] = function(value) {
-                        if (arguments.length === 0) {
-                            return getComputedStyle(this)[styleProp];
-                        }
-
-                        this.style[styleProp] = isNumber(value) ? formatSize(value) : value;
-                        return this;
-                    };
-                });
-            }
-
-            // Cache for future calls
-            domCache.set(id, element);
-
-            return element;
         };
-    })();
+    }
 
-    // puts function
-    puts = function(msg) {
-        console.log(msg);
-    };
+    // Handle DOM attachment - optimized version
+    _handleAttach(value) {
+        // Avoid setTimeout if possible
+        // Using requestAnimationFrame ensures attachment is done
+        // during the next render cycle, which is more efficient
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            this._performAttach(value);
+        } else {
+            requestAnimationFrame(() => this._performAttach(value));
+        }
+    }
 
-    // Export to global scope
-    window.A = A;
-    window.grab = grab;
-    window.puts = puts;
-    window.defineParticle = defineParticle;
-})();
+    // Factorized attachment function
+    _performAttach(value) {
+        if (this.element.parentNode) return;
+
+        let parent;
+        if (typeof value === 'string') {
+            parent = document.querySelector(value) || document.body;
+        } else if (value instanceof HTMLElement) {
+            parent = value;
+        } else {
+            parent = document.body;
+        }
+
+        parent.appendChild(this.element);
+    }
+
+    // Public API
+    getElement() {
+        return this.element;
+    }
+
+    getFastened() {
+        return this._fastened.map(id => _registry[id]).filter(Boolean);
+    }
+
+    addChild(childConfig) {
+        if (childConfig instanceof A) {
+            this.element.appendChild(childConfig.getElement());
+            if (childConfig._data.id) {
+                this._fastened.push(childConfig._data.id);
+            }
+            return childConfig;
+        }
+
+        const child = new A({...childConfig, attach: this.element});
+        if (childConfig.id) {
+            this._fastened.push(childConfig.id);
+        }
+        return child;
+    }
+
+    inspect() {
+        console.group('A Instance');
+        console.log('ID:', this._data.id);
+        console.log('Element:', this.element);
+        console.log('Style:', this.element.style.cssText);
+        console.log('Data:', this._data);
+        console.groupEnd();
+        return this;
+    }
+
+    static getById(id) {
+        return _registry[id];
+    }
+};
+
+// Export to global scope
+window.A = A;
+window.grab = grab;
+window.puts = puts;
+window.defineParticle = defineParticle;
 
 // Export for ES modules
 export { A as default, A, grab, defineParticle, puts };
 
-// DÉFINITIONS DE PARTICULES EXTERNES
-// =================================
+// EXTERNAL PARTICLE DEFINITIONS
+// ============================
 
-// Particule id
+// Particle id
 defineParticle({
     name: 'id',
     type: 'string',
     category: 'structural',
     process(el, v, _, instance) {
         el.id = v;
-        if (v) _registry[v] = instance;  // Utilise _registry exposé
+        if (v) _registry[v] = instance;  // Uses exposed _registry
     }
 });
 
-// Particule markup
+// Particle markup
 defineParticle({
     name: 'markup',
     type: 'string',
@@ -449,47 +451,47 @@ defineParticle({
     }
 });
 
-// Particule x
+// Particle x
 defineParticle({
     name: 'x',
     type: 'number',
     category: 'position',
     process(el, v) {
-        el.style.left = _formatSize(v);  // Utilise _formatSize exposé
+        el.style.left = _formatSize(v);  // Uses exposed _formatSize
     }
 });
 
-// Particule y
+// Particle y
 defineParticle({
     name: 'y',
     type: 'number',
     category: 'position',
     process(el, v) {
-        el.style.top = _formatSize(v);  // Utilise _formatSize exposé
+        el.style.top = _formatSize(v);  // Uses exposed _formatSize
     }
 });
 
-// Particule width
+// Particle width
 defineParticle({
     name: 'width',
     type: 'number',
     category: 'dimension',
     process(el, v) {
-        el.style.width = _formatSize(v);  // Utilise _formatSize exposé
+        el.style.width = _formatSize(v);  // Uses exposed _formatSize
     }
 });
 
-// Particule height
+// Particle height
 defineParticle({
     name: 'height',
     type: 'number',
     category: 'dimension',
     process(el, v) {
-        el.style.height = _formatSize(v);  // Utilise _formatSize exposé
+        el.style.height = _formatSize(v);  // Uses exposed _formatSize
     }
 });
 
-// Particule color
+// Particle color
 defineParticle({
     name: 'color',
     type: 'string',
@@ -499,7 +501,7 @@ defineParticle({
     }
 });
 
-// Particule backgroundColor
+// Particle backgroundColor
 defineParticle({
     name: 'backgroundColor',
     type: 'string',
@@ -509,17 +511,17 @@ defineParticle({
     }
 });
 
-// Particule smooth
+// Particle smooth
 defineParticle({
     name: 'smooth',
     type: 'number',
     category: 'appearance',
     process(el, v) {
-        el.style.borderRadius = _formatSize(v);  // Utilise _formatSize exposé
+        el.style.borderRadius = _formatSize(v);  // Uses exposed _formatSize
     }
 });
 
-// Particule shadow
+// Particle shadow
 defineParticle({
     name: 'shadow',
     type: 'object',
@@ -539,7 +541,7 @@ defineParticle({
     }
 });
 
-// Particule overflow
+// Particle overflow
 defineParticle({
     name: 'overflow',
     type: 'string',
@@ -549,7 +551,7 @@ defineParticle({
     }
 });
 
-// Particule attach
+// Particle attach
 defineParticle({
     name: 'attach',
     type: 'any',
