@@ -542,22 +542,24 @@ defineParticle({
 });
 
 //////////////////////////////////////////////////////////////////////////////////////////
-
 /**
  * A Framework - Simple Particles Extension
  * Une approche simplifiée pour ajouter des particles CSS au framework A
  */
 
 (function() {
+    // Variable pour contrôler le débogage
+    const ENABLE_LOGS = true;
+
     // Attendre que le framework A soit chargé
     function waitForA() {
         if (typeof window.A !== 'function' || typeof window.defineParticle !== 'function') {
-            console.log('En attente du framework A...');
+            if (ENABLE_LOGS) console.log('En attente du framework A...');
             setTimeout(waitForA, 10);
             return;
         }
 
-        console.log('Framework A détecté, initialisation des particles...');
+        if (ENABLE_LOGS) console.log('Framework A détecté, initialisation des particles...');
         initSimpleParticles();
     }
 
@@ -573,67 +575,70 @@ defineParticle({
             'display', 'flexDirection', 'justifyContent', 'alignItems'
         ];
 
+        // Regex pré-compilée pour les propriétés qui nécessitent des pixels
+        const needsPxRegex = /^(width|height|top|left|right|bottom|margin|padding|border|font|line|gap|radius)/;
+
         // Définir un particle pour chaque propriété CSS avec un log explicite
-        cssPropsList.forEach(prop => {
-            // Vérifier si ce particle existe déjà
-            try {
-                const particleExists = window._particles && window._particles[prop];
-                if (particleExists) {
-                    console.log(`[Simple] Le particle ${prop} existe déjà, il sera remplacé par notre version`);
-                }
-            } catch (e) {
-                // Ignorer les erreurs d'accès
-            }
+        for (let i = 0; i < cssPropsList.length; i++) {
+            const prop = cssPropsList[i];
 
             // Définir un nouveau particle avec des logs explicites
             window.defineParticle({
                 name: prop,
                 type: 'any',
                 category: 'css-simple',
-                process(el, v, data, instance) {
-                    console.log(`=== PARTICLE ACTIVÉ: ${prop} ===`);
-                    console.log(`Valeur: ${v}`);
-                    console.log(`Élément: ${el.tagName || 'inconnu'}`);
-                    console.log(`ID: ${el.id || 'sans ID'}`);
+                process: function(el, v, data, instance) {
+                    if (ENABLE_LOGS) {
+                        console.log(`=== PARTICLE ACTIVÉ: ${prop} ===`);
+                        console.log(`Valeur: ${v}`);
+                        console.log(`Élément: ${el.tagName || 'inconnu'}`);
+                        console.log(`ID: ${el.id || 'sans ID'}`);
+                    }
 
                     // Appliquer la valeur avec gestion automatique des unités
                     if (typeof v === 'number') {
                         // Propriétés dimensionnelles
-                        const needsPx = /^(width|height|top|left|right|bottom|margin|padding|border|font|line|gap|radius)/.test(prop);
-                        el.style[prop] = needsPx ? `${v}px` : v;
+                        el.style[prop] = needsPxRegex.test(prop) ? `${v}px` : v;
                     } else {
                         // Valeurs non numériques
                         el.style[prop] = v;
                     }
 
-                    console.log(`Style appliqué: ${prop}=${el.style[prop]}`);
+                    if (ENABLE_LOGS) {
+                        console.log(`Style appliqué: ${prop}=${el.style[prop]}`);
+                    }
                 }
             });
 
-            console.log(`[Simple] Particle ${prop} défini avec logs explicites`);
-        });
+            if (ENABLE_LOGS) {
+                console.log(`[Simple] Particle ${prop} défini avec logs explicites`);
+            }
+        }
 
         // Définir un particle spécial pour 'role' (utilisé dans l'exemple)
         window.defineParticle({
             name: 'role',
             type: 'string',
             category: 'attribute-simple',
-            process(el, v) {
-                console.log(`=== PARTICLE ROLE ACTIVÉ ===`);
-                console.log(`Valeur: ${v}`);
-                console.log(`Élément: ${el.tagName || 'inconnu'}`);
+            process: function(el, v) {
+                if (ENABLE_LOGS) {
+                    console.log(`=== PARTICLE ROLE ACTIVÉ ===`);
+                    console.log(`Valeur: ${v}`);
+                    console.log(`Élément: ${el.tagName || 'inconnu'}`);
+                }
                 el.setAttribute('role', v);
             }
         });
 
-        console.log('[Simple] Tous les particles simplifiés ont été définis');
-        console.log('[Simple] Prêt à tester avec new A({...})');
+        if (ENABLE_LOGS) {
+            console.log('[Simple] Tous les particles simplifiés ont été définis');
+            console.log('[Simple] Prêt à tester avec new A({...})');
+        }
     }
 
     // Démarrer l'initialisation
     waitForA();
 })();
-
 //////////////////////////////////////////////////////////////////////////////////////////
 
 
