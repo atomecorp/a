@@ -697,14 +697,13 @@ const container = new A({
   y: 50,
   width: 400,
   height: 300,
-  // backgroundColor: 'blue',
   color: 'blue',
   display: 'block',
   smooth: 10,
       shadow: [{blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6},invert: true},
         {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6},invert: false}],
   overflow: 'hidden',
-  fasten: [] // Contiendra les IDs des enfants
+  fasten: [] // will contain the IDs of children
 });
 
 puts(container)
