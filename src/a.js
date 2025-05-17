@@ -542,103 +542,232 @@ defineParticle({
 });
 
 //////////////////////////////////////////////////////////////////////////////////////////
+
 /**
- * A Framework - Simple Particles Extension
- * Une approche simplifiée pour ajouter des particles CSS au framework A
+ * A Framework - Particles Extension
+ * Optimized for maximum performance with zero overhead
  */
 
 (function() {
-    // Variable pour contrôler le débogage
-    const ENABLE_LOGS = true;
-
-    // Attendre que le framework A soit chargé
-    function waitForA() {
-        if (typeof window.A !== 'function' || typeof window.defineParticle !== 'function') {
-            if (ENABLE_LOGS) console.log('En attente du framework A...');
-            setTimeout(waitForA, 10);
+    function checkFrameworkLoaded() {
+        if (typeof window.defineParticle !== 'function') {
+            setTimeout(checkFrameworkLoaded, 10);
             return;
         }
-
-        if (ENABLE_LOGS) console.log('Framework A détecté, initialisation des particles...');
-        initSimpleParticles();
+        initParticlesExtension();
     }
 
-    // Fonction d'initialisation principale
-    function initSimpleParticles() {
-        // Propriétés CSS intéressantes pour le test
-        const cssPropsList = [
-            'position', 'top', 'left', 'right', 'bottom',
-            'margin', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
-            'padding', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-            'fontSize', 'fontWeight', 'textAlign', 'lineHeight',
-            'border', 'borderRadius', 'boxShadow',
-            'display', 'flexDirection', 'justifyContent', 'alignItems'
-        ];
-
-        // Regex pré-compilée pour les propriétés qui nécessitent des pixels
-        const needsPxRegex = /^(width|height|top|left|right|bottom|margin|padding|border|font|line|gap|radius)/;
-
-        // Définir un particle pour chaque propriété CSS avec un log explicite
-        for (let i = 0; i < cssPropsList.length; i++) {
-            const prop = cssPropsList[i];
-
-            // Définir un nouveau particle avec des logs explicites
-            window.defineParticle({
-                name: prop,
-                type: 'any',
-                category: 'css-simple',
-                process: function(el, v, data, instance) {
-                    if (ENABLE_LOGS) {
-                        console.log(`=== PARTICLE ACTIVÉ: ${prop} ===`);
-                        console.log(`Valeur: ${v}`);
-                        console.log(`Élément: ${el.tagName || 'inconnu'}`);
-                        console.log(`ID: ${el.id || 'sans ID'}`);
-                    }
-
-                    // Appliquer la valeur avec gestion automatique des unités
-                    if (typeof v === 'number') {
-                        // Propriétés dimensionnelles
-                        el.style[prop] = needsPxRegex.test(prop) ? `${v}px` : v;
-                    } else {
-                        // Valeurs non numériques
-                        el.style[prop] = v;
-                    }
-
-                    if (ENABLE_LOGS) {
-                        console.log(`Style appliqué: ${prop}=${el.style[prop]}`);
-                    }
-                }
-            });
-
-            if (ENABLE_LOGS) {
-                console.log(`[Simple] Particle ${prop} défini avec logs explicites`);
-            }
-        }
-
-        // Définir un particle spécial pour 'role' (utilisé dans l'exemple)
+    function initParticlesExtension() {
+        // Test particle for 'role'
         window.defineParticle({
             name: 'role',
             type: 'string',
-            category: 'attribute-simple',
-            process: function(el, v) {
-                if (ENABLE_LOGS) {
-                    console.log(`=== PARTICLE ROLE ACTIVÉ ===`);
-                    console.log(`Valeur: ${v}`);
-                    console.log(`Élément: ${el.tagName || 'inconnu'}`);
+            category: 'attribute',
+            process(el, v) { el.setAttribute('role', v); }
+        });
+
+        // SECTION 1: CSS PROPERTIES
+        const nativeStyleProps = [
+            'alignContent', 'alignItems', 'alignSelf', 'animation', 'animationDelay', 'animationDirection', 'animationDuration',
+            'animationFillMode', 'animationIterationCount', 'animationName', 'animationPlayState', 'animationTimingFunction',
+            'backfaceVisibility', 'background', 'backgroundAttachment', 'backgroundBlendMode', 'backgroundClip',
+            'backgroundColor', 'backgroundImage', 'backgroundOrigin', 'backgroundPosition', 'backgroundRepeat',
+            'backgroundSize', 'border', 'borderBottom', 'borderBottomColor', 'borderBottomLeftRadius', 'borderBottomRightRadius',
+            'borderBottomStyle', 'borderBottomWidth', 'borderCollapse', 'borderColor', 'borderImage', 'borderImageOutset',
+            'borderImageRepeat', 'borderImageSlice', 'borderImageSource', 'borderImageWidth', 'borderLeft', 'borderLeftColor',
+            'borderLeftStyle', 'borderLeftWidth', 'borderRadius', 'borderRight', 'borderRightColor', 'borderRightStyle',
+            'borderRightWidth', 'borderSpacing', 'borderStyle', 'borderTop', 'borderTopColor', 'borderTopLeftRadius',
+            'borderTopRightRadius', 'borderTopStyle', 'borderTopWidth', 'borderWidth', 'bottom', 'boxShadow', 'boxSizing',
+            'captionSide', 'clear', 'clip', 'color', 'columnCount', 'columnFill', 'columnGap', 'columnRule', 'columnRuleColor',
+            'columnRuleStyle', 'columnRuleWidth', 'columns', 'columnSpan', 'columnWidth', 'content', 'counterIncrement',
+            'counterReset', 'cursor', 'direction', 'display', 'emptyCells', 'filter', 'flex', 'flexBasis', 'flexDirection',
+            'flexFlow', 'flexGrow', 'flexShrink', 'flexWrap', 'float', 'font', 'fontFamily', 'fontFeatureSettings', 'fontKerning',
+            'fontSize', 'fontSizeAdjust', 'fontStretch', 'fontStyle', 'fontVariant', 'fontVariantCaps', 'fontWeight', 'gap',
+            'grid', 'gridArea', 'gridAutoColumns', 'gridAutoFlow', 'gridAutoRows', 'gridColumn', 'gridColumnEnd', 'gridColumnGap',
+            'gridColumnStart', 'gridGap', 'gridRow', 'gridRowEnd', 'gridRowGap', 'gridRowStart', 'gridTemplate',
+            'gridTemplateAreas', 'gridTemplateColumns', 'gridTemplateRows', 'height', 'justifyContent', 'left', 'letterSpacing',
+            'lineHeight', 'listStyle', 'listStyleImage', 'listStylePosition', 'listStyleType', 'margin', 'marginBottom',
+            'marginLeft', 'marginRight', 'marginTop', 'maxHeight', 'maxWidth', 'minHeight', 'minWidth', 'objectFit',
+            'objectPosition', 'opacity', 'order', 'outline', 'outlineColor', 'outlineOffset', 'outlineStyle', 'outlineWidth',
+            'overflow', 'overflowX', 'overflowY', 'padding', 'paddingBottom', 'paddingLeft', 'paddingRight', 'paddingTop',
+            'pageBreakAfter', 'pageBreakBefore', 'pageBreakInside', 'perspective', 'perspectiveOrigin', 'pointerEvents',
+            'position', 'quotes', 'resize', 'right', 'rowGap', 'scrollBehavior', 'tabSize', 'tableLayout', 'textAlign',
+            'textAlignLast', 'textDecoration', 'textDecorationColor', 'textDecorationLine', 'textDecorationStyle',
+            'textIndent', 'textJustify', 'textOverflow', 'textShadow', 'textTransform', 'top', 'transform', 'transformOrigin',
+            'transformStyle', 'transition', 'transitionDelay', 'transitionDuration', 'transitionProperty',
+            'transitionTimingFunction', 'unicodeBidi', 'userSelect', 'verticalAlign', 'visibility', 'whiteSpace', 'width',
+            'wordBreak', 'wordSpacing', 'wordWrap', 'zIndex'
+        ];
+
+        const existingCssParticles = ['width', 'height', 'color', 'backgroundColor', 'x', 'y', 'overflow'];
+        const dimensionalProps = new Set(['Width', 'Height', 'Top', 'Left', 'Bottom', 'Right', 'Margin', 'Padding', 'Indent', 'Radius', 'fontSize', 'lineHeight', 'gap', 'Gap']);
+
+        function needsPx(prop) {
+            if (prop === 'fontSize' || prop === 'lineHeight') return true;
+            if (prop === 'gap') return true;
+            for (const dimProp of dimensionalProps) {
+                if (prop.includes(dimProp)) return true;
+            }
+            return false;
+        }
+
+        nativeStyleProps.forEach(prop => {
+            if (existingCssParticles.includes(prop)) return;
+
+            window.defineParticle({
+                name: prop,
+                type: 'any',
+                category: 'css',
+                process(el, v) {
+                    puts('Style '+prop+' modified with value '+v);
+
+                    if (typeof v === 'number') {
+                        el.style[prop] = needsPx(prop) ? `${v}px` : v;
+                    } else {
+                        el.style[prop] = v;
+                    }
                 }
-                el.setAttribute('role', v);
+            });
+        });
+
+        // SECTION 2: HTML ATTRIBUTES
+        const nativeHTMLAttributes = [
+            'accesskey', 'autocapitalize', 'class', 'contenteditable', 'contextmenu', 'dir', 'draggable', 'hidden',
+            'lang', 'spellcheck', 'style', 'tabindex', 'title', 'translate', 'src', 'href', 'alt', 'type', 'value', 'name',
+            'placeholder', 'disabled', 'checked', 'readonly', 'multiple', 'required', 'maxlength', 'minlength', 'pattern',
+            'step', 'min', 'max', 'width', 'height', 'autofocus', 'controls', 'download', 'form', 'formaction', 'formenctype',
+            'formmethod', 'formnovalidate', 'formtarget', 'label', 'list', 'target'
+        ];
+
+        nativeHTMLAttributes.forEach(attr => {
+            const particleName = `attr${attr.charAt(0).toUpperCase() + attr.slice(1)}`;
+
+            window.defineParticle({
+                name: particleName,
+                type: 'any',
+                category: 'attribute',
+                process(el, v) {
+                    puts('html '+prop+' modified with value '+v);
+
+                    if (v === null || v === undefined) {
+                        el.removeAttribute(attr);
+                    } else if (v === true) {
+                        el.setAttribute(attr, '');
+                    } else if (v === false) {
+                        el.removeAttribute(attr);
+                    } else {
+                        el.setAttribute(attr, v);
+                    }
+                }
+            });
+        });
+
+        // SECTION 3: DOM PROPERTIES
+        const nativeDOMProperties = [
+            'accessKey', 'attributes', 'baseURI', 'childElementCount', 'childNodes', 'children', 'classList', 'className',
+            'clientHeight', 'clientLeft', 'clientTop', 'clientWidth', 'contentEditable', 'dataset', 'dir', 'firstChild',
+            'firstElementChild', 'hidden', 'innerHTML', 'innerText', 'lang', 'lastChild', 'lastElementChild', 'localName',
+            'namespaceURI', 'nextSibling', 'nextElementSibling', 'nodeName', 'nodeType', 'nodeValue', 'offsetHeight',
+            'offsetLeft', 'offsetParent', 'offsetTop', 'offsetWidth', 'ownerDocument', 'parentElement', 'parentNode',
+            'previousSibling', 'previousElementSibling', 'scrollHeight', 'scrollLeft', 'scrollTop', 'scrollWidth',
+            'tabIndex', 'tagName', 'textContent', 'title'
+        ];
+
+        const readOnlyProps = new Set([
+            'attributes', 'baseURI', 'childElementCount', 'childNodes', 'children', 'clientHeight', 'clientLeft',
+            'clientTop', 'clientWidth', 'firstChild', 'firstElementChild', 'lastChild', 'lastElementChild', 'localName',
+            'namespaceURI', 'nextSibling', 'nextElementSibling', 'nodeName', 'nodeType', 'offsetHeight', 'offsetLeft',
+            'offsetParent', 'offsetTop', 'offsetWidth', 'ownerDocument', 'parentElement', 'parentNode', 'previousSibling',
+            'previousElementSibling', 'scrollHeight', 'scrollWidth', 'tagName'
+        ]);
+
+        nativeDOMProperties.forEach(prop => {
+            if (readOnlyProps.has(prop)) return;
+
+            const particleName = `prop${prop.charAt(0).toUpperCase() + prop.slice(1)}`;
+
+            window.defineParticle({
+                name: particleName,
+                type: 'any',
+                category: 'property',
+                process(el, v) {
+                    puts('DOM '+prop+' modified with value '+v);
+
+                    if (prop === 'classList' && Array.isArray(v)) {
+                        el.className = v.join(' ');
+                    } else if (prop === 'dataset' && typeof v === 'object' && v !== null) {
+                        const dataset = el.dataset;
+                        for (const key in v) {
+                            dataset[key] = v[key];
+                        }
+                    } else {
+                        el[prop] = v;
+                    }
+                }
+            });
+        });
+
+        // SECTION 4: SPECIAL PARTICLES
+        window.defineParticle({
+            name: 'class',
+            type: 'any',
+            category: 'attribute',
+            process(el, v) {
+                puts('SPECIAL '+prop+' modified with value '+v);
+
+                if (typeof v === 'string') {
+                    el.className = v;
+                } else if (Array.isArray(v)) {
+                    el.className = v.join(' ');
+                } else if (v && typeof v === 'object') {
+                    const classList = el.classList;
+                    for (const className in v) {
+                        v[className] ? classList.add(className) : classList.remove(className);
+                    }
+                }
             }
         });
 
-        if (ENABLE_LOGS) {
-            console.log('[Simple] Tous les particles simplifiés ont été définis');
-            console.log('[Simple] Prêt à tester avec new A({...})');
-        }
+        window.defineParticle({
+            name: 'text',
+            type: 'string',
+            category: 'content',
+            process(el, v) { el.textContent = v; }
+        });
+
+        window.defineParticle({
+            name: 'html',
+            type: 'string',
+            category: 'content',
+            process(el, v) { el.innerHTML = v; }
+        });
+
+        window.defineParticle({
+            name: 'on',
+            type: 'object',
+            category: 'event',
+            process(el, v) {
+                if (!v || typeof v !== 'object') return;
+                puts('event '+prop+' modified with value '+v);
+                for (const eventName in v) {
+                    const handler = v[eventName];
+                    if (typeof handler !== 'function') continue;
+
+                    const handlerKey = `_a_${eventName}`;
+                    if (el[handlerKey]) {
+                        el.removeEventListener(eventName, el[handlerKey]);
+                    }
+
+                    el[handlerKey] = handler;
+                    el.addEventListener(eventName, handler);
+                }
+            }
+        });
     }
 
-    // Démarrer l'initialisation
-    waitForA();
+    checkFrameworkLoaded();
 })();
+
 //////////////////////////////////////////////////////////////////////////////////////////
 
 
