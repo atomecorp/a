@@ -80,7 +80,7 @@ let A, grab, puts, defineParticle;
             }
 
             // Pre-instantiate all known methods to avoid dynamic creation
-            this._preinstantiateMethods();
+            this._preparePropertyMethods();
 
             // Process all properties
             this._processConfig(config);
@@ -97,7 +97,7 @@ let A, grab, puts, defineParticle;
         }
 
         // Pre-instantiate methods for all known particles
-        _preinstantiateMethods() {
+        _preparePropertyMethods() {
             // List of methods not to create
             const reservedMethods = ['inspect', 'addChild', 'getElement', 'getFastened', 'style', 'element'];
 
@@ -482,13 +482,12 @@ let A, grab, puts, defineParticle;
         process(el, v) {
             if (Array.isArray(v)) {
                 // Rename to avoid variable shadowing
-                const shadowEffects = v.map(shadowItem => {
-                    const {blur=0, x=0, y=0, color={}, invert=false} = shadowItem;
-                    const {red=0, green=0, blue=0, alpha=1} = color;
-                    const rgba = `rgba(${red*255},${green*255},${blue*255},${alpha})`;
+                el.style.boxShadow = v.map(shadowItem => {
+                    const {blur = 0, x = 0, y = 0, color = {}, invert = false} = shadowItem;
+                    const {red = 0, green = 0, blue = 0, alpha = 1} = color;
+                    const rgba = `rgba(${red * 255},${green * 255},${blue * 255},${alpha})`;
                     return `${invert ? 'inset ' : ''}${x}px ${y}px ${blur}px ${rgba}`;
                 }).join(', ');
-                el.style.boxShadow = shadowEffects;
             } else if (typeof v === 'string') {
                 el.style.boxShadow = v;
             }
