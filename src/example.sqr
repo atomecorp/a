@@ -1,0 +1,90 @@
+#### DSL js syntaxe
+
+wait 1000 do
+    log "Hello_deferred"
+end
+
+compute 3, 4 do |sum|
+log "Result is:"
+log sum
+end
+
+def add(a, b)
+a + b
+end
+
+add(3,4) do |sum|
+log "Result is:"
+log sum
+end
+
+def my_method(*args)
+args.each do |arg|
+log arg
+end
+end
+my_method(:Hello_first, :all, :you, :people)
+
+def hash_method({args})
+args.each_with_index do |arg, index|
+log "#{index}: #{arg}"
+end
+end
+
+hash_method({first: :Hello_there, second: :all, third: :you, fourth: :people})
+
+a={first: :Hello_you, second: :all, third: :you, fourth: :people}
+
+puts a[:first]
+
+puts a.json
+a=[1,2,3,4]
+a.each do |item|
+log item
+end
+
+console.log("Hello from JavaScript!")
+
+# Squirrel block
+def ma_fonction(valeur)
+console.log("Processing", valeur)
+
+# Pure JavaScript
+setTimeout(() => {
+    console.log("Processing completed after delay")
+}, 1000)
+
+    # Mixed syntax
+    [1, 2, 3].each do |item|
+console.log(item * 2)
+end
+
+return valeur * 2
+end
+
+# Using DOM-safe approach
+const resultat = ma_fonction(42)
+console.log(`Result is: ${resultat}`)
+
+# Safe DOM access if needed
+const resultElement = document.getElementById("resultat")
+if (resultElement) {
+    resultElement.textContent = `Result is: ${resultat}`
+}
+
+
+#### pure js syntaxe
+setTimeout(() => {
+    console.log("Processing completed after delay")
+}, 3000)
+
+function addition(a, b) {
+    return a + b;
+}
+
+# Exemple d'utilisation
+const resultat_o = addition(3, 6);
+console.log("=======> Résultat :", resultat_o); # Affiche : Résultat : 8
+
+puts('$$$$$$$$$$$$$$$$$$$$$$$$$$$$ and $$$$$$$$$$$$$$$$$$$$$$$$$$$$$')
+
