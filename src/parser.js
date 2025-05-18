@@ -182,30 +182,41 @@ function parseSquirrel(squirrelCode) {
     // Fix variable redeclarations
     // This is a simplified approach - for complex code, more sophisticated analysis is needed
     let modifiedCode = "";
-    const declaredVars = new Set();
+    const declaredVars = new Set(); // Renommé pour cette version
 
     for (const line of jsCode.split('\n')) {
         const constMatch = line.match(/^const\s+(\w+)\s*=/);
         if (constMatch) {
             const varName = constMatch[1];
-            if (declaredVars.has(varName)) {
+            if (declaredVars.has(varName)) { // Utiliser declaredVars ici
                 // Replace const with let for redeclarations
                 modifiedCode += line.replace(/^const\s+/, 'let ') + '\n';
             } else {
-                declaredVars.add(varName);
+                declaredVars.add(varName); // Utiliser declaredVars ici
                 modifiedCode += line + '\n';
             }
         } else {
             modifiedCode += line + '\n';
         }
     }
+    // ATTENTION: Le résultat de cette boucle est dans `modifiedCode`.
+    // Il faut assigner `modifiedCode` à `jsCode` si c'est l'intention.
+    // jsCode = modifiedCode; // <--- Cette ligne était manquante dans le code fourni si modifiedCode doit être le nouveau jsCode
 
     // Handle container2 references - make sure fastened properties use the right variable
-    if (modifiedCode.includes('const container2 =')) {
+    // NOTE: Ces opérations devraient s'appliquer à la version la plus à jour du code (jsCode ou modifiedCode)
+    // Si jsCode = modifiedCode; a été ajouté au-dessus, alors on continue avec jsCode. Sinon, il faut utiliser modifiedCode.
+    // Pour la suite, je vais assumer que vous vouliez que modifiedCode devienne la nouvelle base.
+    // Donc, je vais remplacer jsCode par modifiedCode pour les opérations suivantes.
+    // Ou mieux, réassigner :
+    jsCode = modifiedCode;
+
+
+    if (jsCode.includes('const container2 =')) { // Opérer sur jsCode (qui est maintenant modifiedCode)
         // Fix references in the code
-        const containerIndex = modifiedCode.indexOf('const container2 =');
-        const beforeCode = modifiedCode.substring(0, containerIndex);
-        let afterCode = modifiedCode.substring(containerIndex);
+        const containerIndex = jsCode.indexOf('const container2 =');
+        const beforeCode = jsCode.substring(0, containerIndex);
+        let afterCode = jsCode.substring(containerIndex);
 
         // In the code after container2 is declared, there might be references to container
         // that should be to container2 instead - especially property access
@@ -215,55 +226,55 @@ function parseSquirrel(squirrelCode) {
             /container\.element\.dataset/g, 'container2.element.dataset'
         );
 
-        modifiedCode = beforeCode + fixedAfterCode;
+        jsCode = beforeCode + fixedAfterCode;
     }
 
     // Special case: Fix the second container declaration directly
-    if (modifiedCode.includes('const container2 =') &&
-        modifiedCode.includes('id: \'main_container\',')) {
+    if (jsCode.includes('const container2 =') &&
+        jsCode.includes('id: \'main_container\',')) {
         // Change the ID to avoid conflict
-        modifiedCode = modifiedCode.replace(
+        jsCode = jsCode.replace(
             /(const container2 = new A\(\{[^{]*id:\s*)'main_container'/,
             "$1'main_container2'"
         );
 
         // Update references to that ID
-        modifiedCode = modifiedCode.replace(
+        jsCode = jsCode.replace(
             /(attach:\s*)'#main_container'/g,
             "$1'#main_container2'"
         );
     }
 
     // Add _fastened initialization to prevent errors
-    modifiedCode = modifiedCode.replace(
+    jsCode = jsCode.replace(
         /(container2)(\._fastened\.push)/g,
         "$1._fastened = $1._fastened || []; $1$2"
     );
 
     // Add utility functions if needed
-    if (modifiedCode.includes('compute(')) {
-        modifiedCode = `
+    if (jsCode.includes('compute(')) {
+        jsCode = `
 // Definition of compute function
 function compute(a, b, callback) {
   const sum = a + b;
   callback(sum);
 }
-` + modifiedCode;
+` + jsCode;
     }
 
     // Add grab function if needed
-    if (modifiedCode.includes('grab(')) {
-        modifiedCode = `
+    if (jsCode.includes('grab(')) {
+        jsCode = `
 // Definition of grab function (similar to document.getElementById)
 function grab(id) {
   return document.getElementById(id);
 }
-` + modifiedCode;
+` + jsCode;
     }
 
     // Final syntax validation and correction
     // Apply the fixJavaScript function as a final pass
-    return fixJavaScript(modifiedCode);
+    return fixJavaScript(jsCode); // Utiliser jsCode ici
 }
 
 /**
@@ -290,14 +301,14 @@ function fixJavaScript(code) {
         (_, before, expr, after) => `console.log("${before}" + (${expr}) + "${after}")`);
 
     // 4. Fix variable declarations - additional check
-    const declaredVars = new Set();
+    const declaredVarsFix = new Set(); // Renommé pour éviter conflit avec celui de parseSquirrel
     let lines = fixedCode.split('\n');
 
     // First pass: collect all declared variables
     for (const line of lines) {
         const varDecl = line.match(/^\s*(var|let|const)\s+(\w+)/);
         if (varDecl) {
-            declaredVars.add(varDecl[2]);
+            declaredVarsFix.add(varDecl[2]);
         }
     }
 
@@ -305,9 +316,10 @@ function fixJavaScript(code) {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const varAssign = line.match(/^\s*(\w+)\s*=\s*(?:\{|\[)/);
-        if (varAssign && !declaredVars.has(varAssign[1])) {
+        // Ajout d'une condition pour ne pas ajouter 'let' si c'est une propriété d'objet (simple heuristique)
+        if (varAssign && !declaredVarsFix.has(varAssign[1]) && !line.includes('.')) {
             lines[i] = line.replace(/^(\s*)(\w+)(\s*=)/, "$1let $2$3");
-            declaredVars.add(varAssign[1]);
+            declaredVarsFix.add(varAssign[1]);
         }
     }
 
@@ -420,6 +432,9 @@ function runSquirrel(code) {
                         console.log("Added missing closing parentheses.");
                     }
                 }
+                // IL EST IMPORTANT DE RELANCER L'ERREUR OU DE RETOURNER NULL ICI
+                // SINON ON ESSAIE D'EXECUTER DU CODE POTENTIELLEMENT TOUJOURS CASSE
+                throw syntaxError; // Relance l'erreur pour qu'elle soit traitée par le catch externe
             }
 
             return new Function(jsCode)();
