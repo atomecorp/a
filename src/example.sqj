@@ -1,5 +1,7 @@
 
 
+
+
 const container = new A({
     attach: 'body',
     id: 'main_container',
@@ -18,23 +20,26 @@ const container = new A({
     fasten: [] // will contain the IDs of children
 });
 
-puts(container)
-puts(container.width)
-puts(container.element)
+// puts(container)
+// puts(container.width)
+// puts(container.element)
 
 setTimeout(() => {
+    // puts(container.color())
+    container.display('888px')
+
     console.log("Delayed for 2 second.");
     container.width(800)
-    puts("====> "+container.width())
-    // const element = document.getElementById("main_container");
+    // puts("====> "+container.width())
+    const element = document.getElementById("main_container");
 
 // Changer la position left (en pixels)
 //   element.style.left = "0px";
-    let element = grab('main_container');
-    console.log(container === element)
-    element.height(12);
-    element.style.top='290px'
-    puts (">>> "+ element.style.top)
+    let element2 = grab('main_container');
+    console.log(container === element2)
+    element2.height(12);
+    element2.style.top='290px'
+    // puts (">>> "+ element2.style.top)
     container.style.left = "50px";
 }, 2000);
 
@@ -206,8 +211,8 @@ const infoButton = content.addChild({
 });
 
 // Vérification du résultat
-console.log('Container fasten:', container._fastened); // Devrait afficher ['header', 'content']
-console.log('Content fasten:', content._fastened);    // Devrait afficher ['red_box', 'blue_box', 'green_circle', 'info_button']
+// console.log('Container fasten:', container._fastened); // Devrait afficher ['header', 'content']
+// console.log('Content fasten:', content._fastened);    // Devrait afficher ['red_box', 'blue_box', 'green_circle', 'info_button']
 
 // 5. Exemple d'animation sur un élément avec mise à jour de fasten
 const greenCircle = A.getById('green_circle');
@@ -290,3 +295,30 @@ const child1 = new A({
     backgroundColor: 'yellow',
     smooth: 10
 });
+
+
+// Using DOM-safe approach
+
+
+// Safe DOM access if needed
+    const resultElement = document.getElementById("resultat")
+if (resultElement) {
+    resultElement.textContent = `Result is: ${resultat}`
+}
+
+
+/// pure js syntaxe
+setTimeout(() => {
+    console.log("Processing completed after delay")
+}, 3000)
+
+function addition(a, b) {
+    return a + b;
+}
+
+// Exemple d'utilisation
+const resultat_o = addition(3, 6);
+console.log("second result is :", resultat_o); // Affiche : Résultat : 8
+
+
+

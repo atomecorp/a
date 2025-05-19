@@ -40,9 +40,9 @@ _formatSize = (function() {
 })();
 
 // Isolated puts function
-puts = function(msg) {
-    console.log(msg);
-};
+// puts = function(msg) {
+//     console.log(msg);
+// };
 
 // SECTION 2: REGISTRY
 // ===================
@@ -619,7 +619,7 @@ defineParticle({
                 type: 'any',
                 category: 'css',
                 process(el, v) {
-                    puts('Style '+prop+' modified with value '+v);
+                    // puts('Style '+prop+' modified with value '+v);
 
                     if (typeof v === 'number') {
                         el.style[prop] = needsPx(prop) ? `${v}px` : v;
@@ -647,7 +647,7 @@ defineParticle({
                 type: 'any',
                 category: 'attribute',
                 process(el, v) {
-                    puts('html '+prop+' modified with value '+v);
+                    // puts('html '+prop+' modified with value '+v);
 
                     if (v === null || v === undefined) {
                         el.removeAttribute(attr);
@@ -691,7 +691,7 @@ defineParticle({
                 type: 'any',
                 category: 'property',
                 process(el, v) {
-                    puts('DOM '+prop+' modified with value '+v);
+                    // puts('DOM '+prop+' modified with value '+v);
 
                     if (prop === 'classList' && Array.isArray(v)) {
                         el.className = v.join(' ');
@@ -713,7 +713,7 @@ defineParticle({
             type: 'any',
             category: 'attribute',
             process(el, v) {
-                puts('SPECIAL '+prop+' modified with value '+v);
+                // puts('SPECIAL '+prop+' modified with value '+v);
 
                 if (typeof v === 'string') {
                     el.className = v;
@@ -748,7 +748,7 @@ defineParticle({
             category: 'event',
             process(el, v) {
                 if (!v || typeof v !== 'object') return;
-                puts('event '+prop+' modified with value '+v);
+                // puts('event '+prop+' modified with value '+v);
                 for (const eventName in v) {
                     const handler = v[eventName];
                     if (typeof handler !== 'function') continue;
