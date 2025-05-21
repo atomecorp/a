@@ -149,7 +149,7 @@ document.getElementById('mybtn').addEventListener('click', () => alert('clicked!
 
 ### 🪛 Add New Particles
 
-Use `defineParticle('yourProp', handler)` in `a.js` or new module.
+Use `defineParticle('yourProp', handler)` in `essentials.js` or new module.
 
 ### 📁 Add to Core
 
