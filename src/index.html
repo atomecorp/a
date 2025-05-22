@@ -5,15 +5,39 @@
     <link rel="stylesheet" href="css/styles.css"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Application JavaScript</title>
-        <script type="module" src="squirrel/squirrel_ast_parser.js" defer></script>
+    <script type="module" src="squirrel/parser/acorn.js" defer></script>
+    <!--        <script type="module" src="squirrel/squirrel_ast_parser.js" defer></script>-->
     <script type="module" src="a/utils.js" defer></script>
     <script type="module" src="a/a.js" defer></script>
     <script type="module" src="native/utils.js" defer></script>
     <script type="module" src="a/particles/identity.js" defer></script>
     <script type="module" src="a/particles/dimension.js" defer></script>
-        <script type="module" src="squirrel/run_application.js" defer></script>
-<!--    <script type="module" src="application/example.js" defer></script>-->
+<!--        <script type="module" src="squirrel/run_application.js" defer></script>-->
+    <script type="module" src="application/example.js" defer></script>
 </head>
 <body>
+<h1>Ruby Parser WASM (local)</h1>
+<textarea id="ruby-code" cols="60" rows="10">
+def hello(name)
+  puts "Hello, #{name}!"
+end
+
+hello("Jeezs")
+  </textarea>
+<button id="parse-btn">Parse Ruby</button>
+<pre id="output"></pre>
+
+<!-- Charger le parser Ruby localement -->
+<script src="squirrel/parser/web-lib-ruby-parser.js"></script>
+<script>
+    LibRubyParser.onLoad(() => {
+        document.getElementById("parse-btn").onclick = function () {
+            const code = document.getElementById("ruby-code").value;
+            const result = LibRubyParser.parse(code);
+            document.getElementById("output").textContent =
+                JSON.stringify(result, null, 2);
+        };
+    });
+</script>
 </body>
 </html>

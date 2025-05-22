@@ -1,35 +1,57 @@
 #### DSL js syntaxe
+const container = A.new({
+                          attach: 'body',
+                          id: 'main_container',
+                          markup: 'span',
+                          role: 'container',
+                          x: 150,
+                          y: 50,
+                          width: 400,
+                          height: 300,
+                          color: 'orange',
+                          display: 'block',
+                          smooth: 10,
+                          shadow: [
+                            {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
+                            {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
+                          ],
+                          overflow: 'hidden',
+                          fasten: []
+                        })
+
+
+
 
 wait 1000 do
-    log "Hello_deferred"
+  log "Hello_deferred"
 end
 
 compute 3, 4 do |sum|
-log "Result is:"
-log sum
+  log "Result is:"
+  log sum
 end
 
 def add(a, b)
-a + b
+  a + b
 end
 
 add(3,4) do |sum
 |
-log "Result is:"
-log sum
+  log "Result is:"
+  log sum
 end
 
 def my_method(*args)
-args.each do |arg|
-log arg
-end
+  args.each do |arg|
+    log arg
+  end
 end
 my_method(:Hello_first, :all, :you, :people)
 
 def hash_method(args)
-args.each_with_index do |arg, index|
-log "#{index}: #{arg}"
-end
+  args.each_with_index do |arg, index|
+    log "#{index}: #{arg}"
+  end
 end
 
 hash_method({first: :Hello_there, second: :all, third: :you, fourth: :people})
@@ -41,22 +63,29 @@ puts a[:first]
 puts a.json
 a=[1,2,3,4]
 a.each do |item|
-log item
+  log item
 end
 
 console.log("Hello from JavaScript!")
 
 # Squirrel block
 def ma_fonction(velue)
-    puts value
+  puts value
 end
 
 
 
 # Mixed syntax
 [1, 2, 3].each do |item|
-    console.log(item * 2)
- end
+  console.log(item * 2)
+end
+
+
+def hello(name)
+  puts "Hello, #{name}!"
+end
+a={poil: :toto, bio: :tit}
+hello("Jeezs "+ a)
 
 
 

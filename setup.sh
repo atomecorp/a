@@ -29,6 +29,10 @@ if [ -d "$APP_NAME" ]; then
   fi
 fi
 
+mkdir -p src/squirrel/parser
+
+curl -o src/squirrel/parser/acorn.js https://cdn.jsdelivr.net/npm/acorn@8.11.3/dist/acorn.js
+
 echo "Création de l'application Tauri: $APP_NAME"
 
 # Créer l'application avec valeurs par défaut
