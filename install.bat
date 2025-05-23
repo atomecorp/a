@@ -6,7 +6,7 @@ set "DEFAULT_APP_NAME=atome"
 set "NODE_VERSION=20.11.0"
 set "RUST_INSTALLED=false"
 set "NODE_INSTALLED=false"
-
+goto :main
 :: Fonction pour afficher les messages colorés
 :print_status
     set "color=%~1"
