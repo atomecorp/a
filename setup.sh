@@ -15,6 +15,7 @@ fi
 if [ -d "$APP_NAME" ]; then
   echo "Le répertoire $APP_NAME existe déjà."
   echo -n "Voulez-vous le supprimer? (y/N): "
+  # shellcheck disable=SC2162
   read CONFIRM
   CONFIRM=${CONFIRM:-N}
 
@@ -23,6 +24,7 @@ if [ -d "$APP_NAME" ]; then
     rm -rf "$APP_NAME"
   else
     echo "Conservation du répertoire existant. Lancement de l'application..."
+    # shellcheck disable=SC2164
     cd "$APP_NAME"
     npm run tauri dev
     exit 0
@@ -36,27 +38,30 @@ curl -o src/squirrel/parser/acorn.js https://cdn.jsdelivr.net/npm/acorn@8.11.3/d
 echo "Création de l'application Tauri: $APP_NAME"
 
 # Créer l'application avec valeurs par défaut
-npm create tauri-app@latest $APP_NAME -- --template vanilla --manager npm --yes
+npm create tauri-app@latest "$APP_NAME" -- --template vanilla --manager npm --yes
 
 # Sauvegarder les chemins
 CURRENT_DIR=$(pwd)
-cd $APP_NAME
+# shellcheck disable=SC2164
+cd "$APP_NAME"
 APP_DIR=$(pwd)
 APP_DIR_ABSOLUTE=$(realpath "$APP_DIR")
+# shellcheck disable=SC2103
 cd ..
 
 # Copier le répertoire src s'il existe
 if [ -d "$CURRENT_DIR/src" ]; then
     echo "Copie des fichiers personnalisés..."
-    cp -R $CURRENT_DIR/src/* $APP_DIR/src/
+    cp -R "$CURRENT_DIR"/src/* "$APP_DIR"/src/
 else
     echo "Création du répertoire src..."
-    mkdir -p $APP_DIR/src
+    mkdir -p "$APP_DIR"/src
 fi
 
 
 # Accéder au répertoire de l'application
-cd $APP_NAME
+# shellcheck disable=SC2164
+cd "$APP_NAME"
 
 # Ajouter les dépendances Axum
 echo "Ajout des dépendances Axum..."
@@ -65,6 +70,7 @@ if ! grep -q "axum =" src-tauri/Cargo.toml; then
   while IFS= read -r line; do
     echo "$line" >> "$TEMP_FILE"
     if [[ $line == '[dependencies]' ]]; then
+      # shellcheck disable=SC2129
       echo "axum = \"0.7.9\"" >> "$TEMP_FILE"
       echo "tokio = { version = \"1\", features = [\"full\"] }" >> "$TEMP_FILE"
       echo "tower-http = { version = \"0.5.0\", features = [\"fs\", \"cors\"] }" >> "$TEMP_FILE"
@@ -131,10 +137,10 @@ fn main() {
                 match output {
                     Ok(o) => {
                         if !o.status.success() {
-                            eprintln!("Erreur fastify: {}", String::from_utf8_lossy(&o.stderr));
+                            println!("Erreur fastify: {}", String::from_utf8_lossy(&o.stderr));
                         }
                     },
-                    Err(e) => eprintln!("Erreur: {}", e),
+                    Err(e) => println!("Erreur: {}", e),
                 }
             });
 
