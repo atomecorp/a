@@ -61,15 +61,16 @@
 
 ## 🧩 Features
 
-| Status | Priority  | Task | Description |
-|--------|-----------|------|-------------|
-| [ ]    | VERY HIGH | WebSocket support | Allow real-time communication with a backend or between clients. |
-| [ ]    | HIGH      | Axum hot reload integration | Enable live reloading of Axum server endpoints when developing. |
-| [ ]    | VERY HIGH | PWA support | Add manifest, service worker, and offline capabilities. |
-| [ ]    | HIGH      | JSON serializer for DSL export | Export any atome object to a JSON config that can be reloaded. |
-| [ ]    | MEDIUM    | GUI Builder for visual DSL editing | Create a minimal drag-and-drop interface to create UI DSL code. |
-| [ ]    | MEDIU     | Offline-first mode | Ensure DSL and UI can run fully offline including asset fallback. |
-| [ ]    | LOW       | Define preset/style system for consistent UI | Predefined styles/themes for text, shape, buttons, etc. |
+| Status | Priority  | Task                                         | Description                                                       |
+|--------|-----------|----------------------------------------------|-------------------------------------------------------------------|
+| [ ]    | VERY HIGH | WebSocket support                            | Allow real-time communication with a backend or between clients.  |
+| [ ]    | VERY HIGH | GSAP support                                 | Allow Animation.                                                  |
+| [ ]    | HIGH      | Axum hot reload integration                  | Enable live reloading of Axum server endpoints when developing.   |
+| [ ]    | VERY HIGH | PWA support                                  | Add manifest, service worker, and offline capabilities.           |
+| [ ]    | HIGH      | JSON serializer for DSL export               | Export any atome object to a JSON config that can be reloaded.    |
+| [ ]    | MEDIUM    | GUI Builder for visual DSL editing           | Create a minimal drag-and-drop interface to create UI DSL code.   |
+| [ ]    | MEDIU     | Offline-first mode                           | Ensure DSL and UI can run fully offline including asset fallback. |
+| [ ]    | LOW       | Define preset/style system for consistent UI | Predefined styles/themes for text, shape, buttons, etc.           |
 
 ---
 

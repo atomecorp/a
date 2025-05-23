@@ -61,9 +61,9 @@ install_nodejs() {
     fi
 
     print_status "yellow" "Installation de Node.js et npm..."
-    
+
     local os=$(detect_os)
-    
+
     case $os in
         "macos")
             if ! check_command brew; then
@@ -107,7 +107,7 @@ install_nodejs() {
             return 1
             ;;
     esac
-    
+
     if check_command node && check_command npm; then
         print_status "green" "✓ Node.js et npm installés avec succès"
         print_status "yellow" "  Node.js version: $(node -v)"
@@ -129,13 +129,13 @@ install_rust() {
     fi
 
     print_status "yellow" "Installation de Rust et Cargo..."
-    
+
     # rustup est la méthode recommandée pour installer Rust sur toutes les plateformes
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    
+
     # Charger Rust dans l'environnement actuel
     source $HOME/.cargo/env
-    
+
     if check_command rustc && check_command cargo; then
         print_status "green" "✓ Rust et Cargo installés avec succès"
         print_status "yellow" "  Rust version: $(rustc --version)"
@@ -150,9 +150,9 @@ install_rust() {
 # Fonction pour installer les dépendances système pour Tauri
 install_tauri_dependencies() {
     local os=$(detect_os)
-    
+
     print_status "yellow" "Installation des dépendances système pour Tauri..."
-    
+
     case $os in
         "macos")
             if ! check_command xcode-select; then
@@ -160,12 +160,12 @@ install_tauri_dependencies() {
                 xcode-select --install || true
                 # On ignore les erreurs car xcode-select --install peut échouer si déjà installé
             fi
-            
+
             if ! check_command brew; then
                 print_status "yellow" "Installation de Homebrew..."
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             fi
-            
+
             # Installations nécessaires pour Tauri sur macOS
             brew install libiconv
             ;;
@@ -236,7 +236,7 @@ install_tauri_dependencies() {
             return 1
             ;;
     esac
-    
+
     print_status "green" "✓ Dépendances système pour Tauri installées"
     return 0
 }
@@ -250,9 +250,9 @@ install_git() {
     fi
 
     print_status "yellow" "Installation de Git..."
-    
+
     local os=$(detect_os)
-    
+
     case $os in
         "macos")
             if ! check_command brew; then
@@ -291,7 +291,7 @@ install_git() {
             return 1
             ;;
     esac
-    
+
     if check_command git; then
         print_status "green" "✓ Git installé avec succès"
         print_status "yellow" "  Git version: $(git --version)"
@@ -302,32 +302,35 @@ install_git() {
     fi
 }
 
-# Fonction principale d'installation
-main() {
+# Fonction pour installer toutes les dépendances
+install_dependencies() {
     print_status "yellow" "=== Démarrage de l'installation des dépendances ==="
-    
+
     local os=$(detect_os)
     if [ "$os" == "unknown" ]; then
         print_status "red" "Système d'exploitation non reconnu. Pris en charge: Linux, macOS, FreeBSD"
         exit 1
     fi
-    
+
     print_status "yellow" "Système détecté: $os"
-    
+
     # Installer Git d'abord car il peut être nécessaire pour d'autres installations
     install_git
-    
+
     # Installer Node.js et npm
     install_nodejs
-    
+
     # Installer Rust et Cargo
     install_rust
-    
+
     # Installer les dépendances système pour Tauri
     install_tauri_dependencies
-    
+
     print_status "green" "=== Toutes les dépendances sont installées avec succès ==="
-    
+}
+
+# Fonction principale pour créer et configurer le projet
+setup_project() {
     # Définir un nom d'application par défaut
     DEFAULT_APP_NAME="atome"
 
@@ -342,7 +345,7 @@ main() {
     # Vérifier si le répertoire existe déjà
     if [ -d "$APP_NAME" ]; then
       print_status "yellow" "Le répertoire $APP_NAME existe déjà."
-      print_status "yellow" -n "Voulez-vous le supprimer? (y/N): "
+      echo -n "Voulez-vous le supprimer? (y/N): "
       read CONFIRM
       CONFIRM=${CONFIRM:-N}
 
@@ -357,14 +360,18 @@ main() {
       fi
     fi
 
+    # Créer le répertoire src et télécharger acorn.js
+    mkdir -p src/squirrel/parser
+    curl -o src/squirrel/parser/acorn.js https://cdn.jsdelivr.net/npm/acorn@8.11.3/dist/acorn.js
+
     print_status "yellow" "Création de l'application Tauri: $APP_NAME"
 
     # Créer l'application avec valeurs par défaut
-    npm create tauri-app@latest $APP_NAME -- --template vanilla --manager npm --yes
+    npm create tauri-app@latest "$APP_NAME" -- --template vanilla --manager npm --yes
 
     # Sauvegarder les chemins
     CURRENT_DIR=$(pwd)
-    cd $APP_NAME
+    cd "$APP_NAME"
     APP_DIR=$(pwd)
     APP_DIR_ABSOLUTE=$(realpath "$APP_DIR")
     cd ..
@@ -372,15 +379,22 @@ main() {
     # Copier le répertoire src s'il existe
     if [ -d "$CURRENT_DIR/src" ]; then
         print_status "yellow" "Copie des fichiers personnalisés..."
-        cp -R $CURRENT_DIR/src/* $APP_DIR/src/
+        cp -R "$CURRENT_DIR"/src/* "$APP_DIR"/src/
     else
         print_status "yellow" "Création du répertoire src..."
-        mkdir -p $APP_DIR/src
+        mkdir -p "$APP_DIR"/src
     fi
 
+    # Copier le serveur Fastify s'il existe
+    if [ -f "$CURRENT_DIR/fastify-server.mjs" ]; then
+        print_status "yellow" "Copie du serveur Fastify..."
+        cp "$CURRENT_DIR"/fastify-server.mjs "$APP_DIR"/
+    else
+        print_status "yellow" "Attention: fichier fastify-server.mjs non trouvé à la racine du projet"
+    fi
 
     # Accéder au répertoire de l'application
-    cd $APP_NAME
+    cd "$APP_NAME"
 
     # Ajouter les dépendances Axum
     print_status "yellow" "Ajout des dépendances Axum..."
@@ -455,10 +469,10 @@ fn main() {
                 match output {
                     Ok(o) => {
                         if !o.status.success() {
-                            eprintln!("Erreur fastify: {}", String::from_utf8_lossy(&o.stderr));
+                            println!("Erreur fastify: {}", String::from_utf8_lossy(&o.stderr));
                         }
                     },
-                    Err(e) => eprintln!("Erreur: {}", e),
+                    Err(e) => println!("Erreur: {}", e),
                 }
             });
 
@@ -473,86 +487,17 @@ EOL
     print_status "yellow" "Installation des dépendances Fastify..."
     npm install --save fastify @fastify/cors
 
-    # Créer le serveur Fastify avec gestion des fichiers statiques
-    print_status "yellow" "Création du serveur Fastify..."
-    cat > fastify-server.mjs << 'EOL'
-import Fastify from 'fastify';
-import { fileURLToPath } from 'url';
-import { dirname, join, extname } from 'path';
-import { readFile, existsSync } from 'fs';
-import { promisify } from 'util';
-import fastifyCors from '@fastify/cors';
-
-const readFileAsync = promisify(readFile);
-const fastify = Fastify({ logger: true });
-await fastify.register(fastifyCors, { origin: true });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const PORT = 3001;
-const srcDir = join(__dirname, 'src');
-
-// Routes API
-fastify.get('/api/status', async () => {
-  return {
-    status: 'ok',
-    timestamp: new Date().toISOString()
-  };
-});
-
-fastify.get('/api/test', async () => {
-  return {
-    message: 'Test réussi!',
-    server: 'Fastify',
-    version: fastify.version
-  };
-});
-
-// Gestionnaire pour servir des fichiers statiques
-fastify.get('/*', async (request, reply) => {
-  try {
-    const requestPath = request.url === '/' ? '/index.html' : request.url;
-    const filePath = join(srcDir, requestPath);
-
-    if (existsSync(filePath)) {
-      const content = await readFileAsync(filePath);
-      const ext = extname(filePath).toLowerCase();
-      let contentType = 'text/plain';
-
-      switch(ext) {
-        case '.html': contentType = 'text/html'; break;
-        case '.js': contentType = 'application/javascript'; break;
-        case '.css': contentType = 'text/css'; break;
-        case '.json': contentType = 'application/json'; break;
-        case '.png': contentType = 'image/png'; break;
-        case '.jpg': case '.jpeg': contentType = 'image/jpeg'; break;
-      }
-
-      reply.type(contentType).send(content);
-    } else {
-      reply.code(404).send({ error: 'Fichier non trouvé' });
-    }
-  } catch (err) {
-    fastify.log.error(err);
-    reply.code(500).send({ error: 'Erreur interne du serveur' });
-  }
-});
-
-const start = async () => {
-  try {
-    await fastify.listen({ port: PORT, host: '127.0.0.1' });
-    console.log(`API Fastify: http://localhost:${PORT}`);
-  } catch (err) {
-    fastify.log.error(err);
-    process.exit(1);
-  }
-};
-
-start();
-EOL
-
     print_status "yellow" "Lancement de l'application..."
     npm run tauri dev
+}
+
+# Fonction principale
+main() {
+    # Installer les dépendances système
+    install_dependencies
+
+    # Configurer et lancer le projet
+    setup_project "$@"
 }
 
 # Exécution de la fonction principale avec tous les arguments
