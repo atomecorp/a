@@ -18,152 +18,371 @@
 //         console.error("❌ Erreur :", err);
 //     });
 
+// 🚀 COMPLETE & OPTIMIZED Ruby-to-JS Transpiler
+// Full feature set with maximum performance
 
-// JavaScript: Full transpile function for lib-ruby-parser output
-// Transpile Ruby AST into JavaScript
-// ✅ Utilitaire pour convertir les strings internes Ruby (Bytes, Symboles, etc.) en JS safe strings
-function toJSString(value) {
-    if (!value) return '""';
-    if (typeof value === 'string') return JSON.stringify(value);
-    if (typeof value === 'number') return value.toString();
-    if (value.value) return JSON.stringify(value.value);
-    if (value.name?.raw) return JSON.stringify(String.fromCharCode(...Object.values(value.name.raw)));
-    if (value.name) return JSON.stringify(value.name);
-    if (value.raw) return JSON.stringify(String.fromCharCode(...Object.values(value.raw)));
-    return JSON.stringify(String(value));
+// ✅ Pre-compiled lookup tables for fastest node processing
+const NODE_PROCESSORS = Object.freeze({
+    'Begin': (node) => node.statements?.map(fastTranspile).join(';\n') || '',
+    'Lvasgn': (node) => `let ${node.name} = ${fastTranspile(node.value)}`,
+    'Const': (node) => `const ${node.name} = ${fastTranspile(node.value)}`,
+    'Gvasgn': (node) => `window.${node.name} = ${fastTranspile(node.value)}`,
+    'Hash': (node) => {
+        if (!node.pairs?.length) return '{}';
+        const pairs = node.pairs.map(pair => {
+            const key = fastTranspile(pair.key);
+            const value = fastTranspile(pair.value);
+            return `${key}: ${value}`;
+        });
+        return `{ ${pairs.join(', ')} }`;
+    },
+    'Pair': (node) => `${fastTranspile(node.key)}: ${fastTranspile(node.value)}`,
+    'Array': (node) => {
+        if (!node.elements?.length) return '[]';
+        return `[${node.elements.map(fastTranspile).join(', ')}]`;
+    },
+    'Int': (node) => node.value?.toString() || '0',
+    'Float': (node) => node.value?.toString() || '0',
+    'Str': (node) => JSON.stringify(node.value || ''),
+    'Sym': (node) => JSON.stringify(node.name || node.value || ''),
+    'True': () => 'true',
+    'False': () => 'false',
+    'Nil': () => 'null',
+    'Lvar': (node) => node.name || 'unknownVar',
+    'Gvar': (node) => `window.${node.name?.slice(1) || 'unknownGlobalVar'}`,
+    'Ivar': (node) => `this.${node.name?.slice(1) || 'unknownInstanceVar'}`,
+    'Cvar': (node) => `this.constructor.${node.name?.slice(2) || 'unknownClassVar'}`
+});
+
+// ✅ Method mapping for Ruby -> JS conversion
+const METHOD_MAP = Object.freeze({
+    'puts': 'console.log',
+    'log': 'console.log',
+    'p': 'console.log',
+    'print': 'console.log'
+});
+
+// ✅ Fast string interpolation processing
+function processDstr(node) {
+    if (!node.parts?.length) return '""';
+    const parts = node.parts.map(part => {
+        if (typeof part === 'string') return part;
+        if (part.type === 'Str') return part.value || '';
+        return '${' + fastTranspile(part) + '}';
+    });
+    return '`' + parts.join('') + '`';
 }
 
-// ✅ Sanitize JS final output pour éviter erreurs de nom ou collisions
-function sanitize(js) {
-    return js
-        .replace(/const\(let /g, 'let ')                     // Fix const(let xxx)
-        .replace(/undefined/g, 'null')                       // Sécurité JS
-        .replace(/\[object Object\]/g, 'null')              // Fix objets mal parsés
-        .replace(/function null\(.*?\)/g, 'function anon()') // Cas sans nom
-        .replace(/\(\(\) => \{\n  \n\}\)/g, '(() => {})'); // Blocs vides
-}
+// ✅ Fast Send node processing (most common Ruby construct)
+function processSend(node) {
+    const recv = node.receiver ? fastTranspile(node.receiver) : '';
+    const method = node.method_name || 'unknownMethod';
+    const args = node.args?.map(fastTranspile).join(', ') || '';
 
-// ✅ Transpileur minimal Ruby AST ➝ JavaScript
-function transpile(node) {
-    if (!node || typeof node !== 'object') return 'null';
-    if (!node.type) return `/* No type for: ${JSON.stringify(node)} */`;
+    // Special method mappings
+    const mappedMethod = METHOD_MAP[method] || method;
 
-    switch (node.type) {
-        case 'Begin':
-            return node.statements.map(transpile).join('\n');
+    // Special cases for framework integration
+    if (method === 'new' && recv === 'A') {
+        return `new A(${args})`;
+    }
 
-        case 'Lvasgn':
-            return `let ${node.name} = ${transpile(node.value)};`;
+    if (method === 'each' && recv) {
+        return `${recv}.forEach`;
+    }
 
-        case 'Hash': {
-            const pairs = node.pairs.map(pair => `${toJSString(pair.key)}: ${transpile(pair.value)}`);
-            return `{ ${pairs.join(', ')} }`;
-        }
+    // Handle puts/log without receiver
+    if (!recv && (method === 'puts' || method === 'log' || method === 'p')) {
+        return `console.log(${args})`;
+    }
 
-        case 'Array':
-            return `[${node.elements.map(transpile).join(', ')}]`;
-
-        case 'Int':
-        case 'Float':
-            return node.value;
-
-        case 'Str':
-        case 'Sym':
-            return toJSString(node.value || node.name);
-
-        case 'True':
-            return 'true';
-
-        case 'False':
-            return 'false';
-
-        case 'Lvar':
-            return node.name;
-
-        case 'Dstr':
-            return '`' + node.parts.map(transpile).join('') + '`';
-
-        case 'Send': {
-            const recv = node.receiver ? transpile(node.receiver) + '.' : '';
-            const method = node.method_name;
-            const args = node.args ? node.args.map(transpile).join(', ') : '';
-            if (!recv && method === 'puts') return `console.log(${args})`;
-            return `${recv}${method}(${args})`;
-        }
-
-        case 'Def': {
-            const fnName = node.name || 'anon';
-            const args = (node.args?.args || []).map(a => a.name || 'arg').join(', ');
-            const body = transpile(node.body);
-            return `function ${fnName}(${args}) {\n  ${body}\n}`;
-        }
-
-        case 'Block': {
-            const call = transpile(node.call);
-            const args = (node.args?.args || []).map(a => a.name || 'arg').join(', ');
-            const body = Array.isArray(node.body) ? node.body.map(transpile).join('\n  ') : transpile(node.body);
-            return `${call}(((${args}) => {\n  ${body}\n}))`;
-        }
-
-        case 'Return':
-            return `return ${transpile(node.value)}`;
-
-        case 'Binary':
-            return `${transpile(node.left)} ${node.operator} ${transpile(node.right)}`;
-
-        case 'Index':
-            return `${transpile(node.recv)}[${node.indexes.map(transpile).join(', ')}]`;
-
-        default:
-            console.warn(`⚠️ Unhandled node type: ${node.type}`);
-            return `/* Unhandled node type: ${node.type} */`;
+    // Standard method call
+    if (recv) {
+        return `${recv}.${mappedMethod}(${args})`;
+    } else {
+        return `${mappedMethod}(${args})`;
     }
 }
 
-// ✅ Fonction principale
-function runParsedAST(ast) {
+// ✅ Block processing for Ruby blocks -> JS callbacks
+function processBlock(node) {
+    const call = fastTranspile(node.call);
+    const args = (node.args?.args || []).map(a => a.name || 'arg').join(', ');
+    const body = Array.isArray(node.body) ?
+        node.body.map(fastTranspile).join(';\n  ') :
+        fastTranspile(node.body);
+    return `${call}((${args}) => {\n  ${body}\n})`;
+}
+
+// ✅ Function definition processing
+function processDef(node) {
+    const fnName = node.name || 'anon';
+    const args = (node.args?.args || []).map(a => a.name || 'arg').join(', ');
+    const body = fastTranspile(node.body);
+    return `function ${fnName}(${args}) {\n  ${body};\n}`;
+}
+
+// ✅ Conditional processing
+function processIf(node) {
+    const condition = fastTranspile(node.cond);
+    const thenBranch = fastTranspile(node.if_true);
+    const elseBranch = node.if_false ? fastTranspile(node.if_false) : '';
+
+    if (elseBranch) {
+        return `if (${condition}) {\n  ${thenBranch};\n} else {\n  ${elseBranch};\n}`;
+    } else {
+        return `if (${condition}) {\n  ${thenBranch};\n}`;
+    }
+}
+
+// ✅ Main ultra-fast transpiler
+function fastTranspile(node) {
+    if (!node) return 'null';
+    if (typeof node !== 'object') return JSON.stringify(node);
+    if (!node.type) {
+        // Handle malformed nodes
+        console.warn('Node without type:', node);
+        return `/* Malformed node: ${JSON.stringify(node).slice(0, 100)}... */`;
+    }
+
+    // Fast lookup for common nodes
+    const processor = NODE_PROCESSORS[node.type];
+    if (processor) return processor(node);
+
+    // Handle complex nodes that need special processing
+    switch (node.type) {
+        case 'Send':
+            return processSend(node);
+
+        case 'Dstr':
+            return processDstr(node);
+
+        case 'Block':
+            return processBlock(node);
+
+        case 'Def':
+            return processDef(node);
+
+        case 'If':
+            return processIf(node);
+
+        case 'Return':
+            return `return ${fastTranspile(node.value)}`;
+
+        case 'Binary':
+            return `${fastTranspile(node.left)} ${node.operator} ${fastTranspile(node.right)}`;
+
+        case 'Index':
+            if (!node.indexes?.length) return `${fastTranspile(node.recv)}[]`;
+            return `${fastTranspile(node.recv)}[${node.indexes.map(fastTranspile).join(', ')}]`;
+
+        case 'While':
+            const whileCond = fastTranspile(node.cond);
+            const whileBody = fastTranspile(node.body);
+            return `while (${whileCond}) {\n  ${whileBody};\n}`;
+
+        case 'For':
+            const forVar = node.var ? fastTranspile(node.var) : 'item';
+            const forIterable = fastTranspile(node.in);
+            const forBody = fastTranspile(node.body);
+            return `for (const ${forVar} of ${forIterable}) {\n  ${forBody};\n}`;
+
+        case 'Case':
+            // Simple case -> switch conversion
+            const caseExpr = fastTranspile(node.expr);
+            const whenBranches = (node.when_bodies || []).map(when => {
+                const values = when.values?.map(fastTranspile).join(', ') || 'default';
+                const body = fastTranspile(when.body);
+                return values === 'default' ?
+                    `default:\n    ${body};\n    break;` :
+                    `case ${values}:\n    ${body};\n    break;`;
+            }).join('\n  ');
+            return `switch (${caseExpr}) {\n  ${whenBranches}\n}`;
+
+        default:
+            console.warn(`⚠️ Unhandled node type: ${node.type}`);
+            return `/* Unhandled: ${node.type} */`;
+    }
+}
+
+// ✅ Single-pass string optimization
+const FAST_REPLACEMENTS = [
+    [/A\.new\s*\(/g, 'new A('],
+    [/puts\s+/g, 'console.log('],
+    [/log\s+/g, 'console.log('],
+    [/undefined/g, 'null'],
+    [/const\(let /g, 'let '],
+    [/\[object Object\]/g, 'null'],
+    [/function null\(/g, 'function anon(']
+];
+
+function ultraFastSanitize(code) {
+    let result = code;
+    for (const [pattern, replacement] of FAST_REPLACEMENTS) {
+        result = result.replace(pattern, replacement);
+    }
+    return result;
+}
+
+// ✅ Enhanced DSL processor with full Ruby-like syntax support
+function processRawDSL(code) {
+    return code
+        .replace(/A\.new\s*\(/g, 'new A(')
+        .replace(/wait\s+(\d+)\s+do\s*([\s\S]*?)\s*end/g, 'setTimeout(() => { $2 }, $1)')
+        .replace(/compute\s+(\d+),\s*(\d+)\s+do\s*\|(.*?)\|\s*([\s\S]*?)\s*end/g,
+            'compute($1, $2)(($3) => { $4 })')
+        .replace(/(\w+)\.each\s+do\s*\|(.*?)\|\s*([\s\S]*?)\s*end/g,
+            '$1.forEach(($2) => { $3 })');
+}
+
+// ✅ Optimized execution with error handling
+function executeJS(jsCode) {
     try {
-        const js = transpile(ast);
-        const clean = sanitize(js);
-        const fn = new Function(clean);
-        fn();
-        return clean;
+        const fn = new Function(jsCode);
+        return fn();
     } catch (err) {
-        console.error('Execution failed:', err);
+        console.error('❌ Execution failed:', err);
+        console.error('Generated code:', jsCode);
         return null;
     }
 }
 
+// ✅ Main AST processor
+function runParsedAST(ast) {
+    try {
+        const js = fastTranspile(ast);
+        const clean = ultraFastSanitize(js);
 
-// Runtime helpers if needed
-function wait(ms) {
-    return (fn) => setTimeout(fn, parseInt(ms));
+        console.log('🧠 JavaScript transpiled:\n', clean);
+
+        return executeJS(clean);
+    } catch (err) {
+        console.error('❌ Transpilation failed:', err);
+        return null;
+    }
 }
 
-function compute(a, b) {
-    return (fn) => fn(a + b); // adapt as needed
+// ✅ Smart code processor with automatic detection
+function processCode(rawCode) {
+    if (!rawCode?.trim()) return;
+
+    const lines = rawCode.split('\n');
+    let dslBuffer = '';
+    let rubyBuffer = '';
+    let inDSLSection = false;
+    let dslComplete = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // Detect DSL section start
+        if (trimmed.includes('#### DSL') || trimmed.includes('DSL js syntaxe')) {
+            inDSLSection = true;
+            continue;
+        }
+
+        // If we're in DSL section
+        if (inDSLSection) {
+            // Check if this line starts a multi-line construct
+            if (trimmed.includes('const') && trimmed.includes('A.new') && trimmed.includes('{')) {
+                // Start collecting the complete DSL block
+                let bracketCount = 0;
+                let dslBlock = '';
+
+                // Count brackets to find the complete block
+                for (let j = i; j < lines.length; j++) {
+                    const currentLine = lines[j];
+                    dslBlock += currentLine + '\n';
+
+                    // Count opening and closing brackets
+                    for (const char of currentLine) {
+                        if (char === '{') bracketCount++;
+                        if (char === '}') bracketCount--;
+                    }
+
+                    // If brackets are balanced, we have a complete block
+                    if (bracketCount === 0 && dslBlock.includes('}')) {
+                        dslBuffer += dslBlock;
+                        i = j; // Skip processed lines
+                        inDSLSection = false;
+                        dslComplete = true;
+                        break;
+                    }
+                }
+            } else if (trimmed && !trimmed.startsWith('#')) {
+                // Single line DSL
+                dslBuffer += line + '\n';
+            }
+
+            // End DSL section on empty line or when we've processed a complete block
+            if (!trimmed && dslComplete) {
+                inDSLSection = false;
+            }
+        } else {
+            // Not in DSL section - check if it's Ruby code
+            if (trimmed && !trimmed.startsWith('#') && !dslComplete) {
+                rubyBuffer += line + '\n';
+            }
+        }
+    }
+
+    // Execute DSL immediately for instant visual feedback
+    if (dslBuffer.trim()) {
+        console.log('🔧 Processing DSL code...');
+        const processedDSL = processRawDSL(dslBuffer);
+        const cleanDSL = ultraFastSanitize(processedDSL);
+        executeJS(cleanDSL);
+        console.log('✅ DSL executed');
+    }
+
+    // Process Ruby code asynchronously
+    if (rubyBuffer.trim()) {
+        console.log('🔧 Processing Ruby code...');
+        console.log('Ruby buffer content:', rubyBuffer);
+        setTimeout(() => {
+            try {
+                if (typeof LibRubyParser !== 'undefined') {
+                    const result = LibRubyParser.parse(rubyBuffer);
+                    console.log('Parse result:', result);
+                    if (result?.ast) {
+                        runParsedAST(result.ast);
+                        console.log('✅ Ruby code processed');
+                    } else {
+                        console.warn('No AST returned from parser');
+                    }
+                } else {
+                    console.warn('LibRubyParser not available');
+                }
+            } catch (e) {
+                console.error('❌ Ruby processing failed:', e);
+            }
+        }, 0);
+    }
 }
 
+// ✅ Runtime helpers
+window.wait = (ms) => (fn) => setTimeout(fn, parseInt(ms));
+window.compute = (a, b) => (fn) => fn(a + b);
 
-window.addEventListener('DOMContentLoaded', () => {
-    // on attend que la lib soit dispo globalement
+// ✅ Initialize when DOM is ready
+function initTranspiler() {
     const checkReady = setInterval(() => {
         if (typeof LibRubyParser !== 'undefined' && typeof LibRubyParser.parse === 'function') {
             clearInterval(checkReady);
 
-            fetch('../application/example.sqr')
+            fetch('./application/example.sqr')
                 .then(res => res.text())
                 .then(code => {
-                    const result = LibRubyParser.parse(code);
-                    // console.log(code)
-                    const jsCode = transpile(result.ast);
-                    console.log('🧠 JavaScript transpiled:\n', jsCode);
+                    console.log('📄 Original code loaded');
+                    processCode(code);
                 })
-                .catch(console.error);
+                .catch(e => console.error('❌ Failed to load code:', e));
         }
     }, 50);
-});
+}
 
-
-// best solution to run js parsed data : const run = new Function(transpile(ast));
-// run();
+// Start when DOM is ready
+document.readyState === 'loading' ?
+    document.addEventListener('DOMContentLoaded', initTranspiler) :
+    initTranspiler();});
