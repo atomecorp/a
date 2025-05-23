@@ -7,6 +7,7 @@ set "NODE_VERSION=20.11.0"
 set "RUST_INSTALLED=false"
 set "NODE_INSTALLED=false"
 goto :main
+
 :: Fonction pour afficher les messages colorés
 :print_status
     set "color=%~1"
@@ -55,7 +56,7 @@ goto :eof
     powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
 
     :: Actualiser les variables d'environnement
-    refreshenv >nul 2>&1
+    call refreshenv >nul 2>&1
 
     call :check_command choco
     if %errorlevel% equ 0 (
@@ -107,7 +108,7 @@ goto :eof
     )
 
     :: Actualiser les variables d'environnement
-    refreshenv >nul 2>&1
+    call refreshenv >nul 2>&1
 
     call :check_command node
     set "node_check=%errorlevel%"
@@ -232,7 +233,7 @@ goto :eof
     )
 
     :: Actualiser les variables d'environnement
-    refreshenv >nul 2>&1
+    call refreshenv >nul 2>&1
 
     call :check_command git
     if %errorlevel% equ 0 (
@@ -243,6 +244,35 @@ goto :eof
         call :print_status "yellow" "Veuillez redémarrer votre terminal et relancer le script"
         exit /b 1
     )
+goto :eof
+
+:: Fonction pour ajouter les dépendances Cargo
+:add_cargo_dependencies
+    call :print_status "yellow" "Modification du fichier Cargo.toml..."
+
+    :: Créer un fichier temporaire avec le nouveau contenu
+    set "temp_cargo=%TEMP%\cargo_temp.toml"
+    set "original_cargo=src-tauri\Cargo.toml"
+
+    :: Lire le fichier original ligne par ligne et ajouter les dépendances après [dependencies]
+    set "deps_added=false"
+    (
+        for /f "usebackq delims=" %%a in ("!original_cargo!") do (
+            echo %%a
+            if "%%a"=="[dependencies]" if "!deps_added!"=="false" (
+                echo axum = "0.7.9"
+                echo tokio = { version = "1", features = ["full"] }
+                echo tower-http = { version = "0.5.0", features = ["fs", "cors"] }
+                set "deps_added=true"
+            )
+        )
+    ) > "!temp_cargo!"
+
+    :: Remplacer l'original par le fichier modifié
+    copy "!temp_cargo!" "!original_cargo!" >nul
+    del "!temp_cargo!" >nul 2>&1
+
+    call :print_status "green" "✓ Dépendances Axum ajoutées avec succès"
 goto :eof
 
 :: Fonction pour installer toutes les dépendances
@@ -263,6 +293,123 @@ goto :eof
     call :install_rust
 
     call :print_status "green" "=== Toutes les dépendances sont installées avec succès ==="
+goto :eof
+
+:: Fonction pour créer le serveur Axum
+:create_axum_server
+    call :print_status "yellow" "Création du serveur Axum..."
+    mkdir src-tauri\src\server 2>nul
+
+    :: Créer le fichier directement avec echo
+    set "server_file=src-tauri\src\server\mod.rs"
+
+    :: Supprimer le fichier s'il existe
+    if exist "%server_file%" del "%server_file%"
+
+    :: Désactiver temporairement l'expansion retardée pour préserver les !
+    setlocal disabledelayedexpansion
+
+    :: Écrire le fichier ligne par ligne
+    echo use axum::{routing::get_service, Router};> "%server_file%"
+    echo use std::{net::SocketAddr, path::PathBuf};>> "%server_file%"
+    echo use tower_http::{cors::CorsLayer, services::ServeDir};>> "%server_file%"
+    echo.>> "%server_file%"
+    echo pub async fn start_server(static_dir: PathBuf) {>> "%server_file%"
+    echo     let serve_dir = ServeDir::new(static_dir).append_index_html_on_directories(true);>> "%server_file%"
+    echo     let serve_service = get_service(serve_dir).handle_error(^|error^| async move {>> "%server_file%"
+    echo         println!("Erreur: {:?}", error);>> "%server_file%"
+    echo         (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur")>> "%server_file%"
+    echo     });>> "%server_file%"
+    echo.>> "%server_file%"
+    echo     let app = Router::new()>> "%server_file%"
+    echo         .nest_service("/", serve_service)>> "%server_file%"
+    echo         .layer(CorsLayer::permissive());>> "%server_file%"
+    echo.>> "%server_file%"
+    echo     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));>> "%server_file%"
+    echo     println!("Serveur Axum: http://localhost:3000");>> "%server_file%"
+    echo.>> "%server_file%"
+    echo     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();>> "%server_file%"
+    echo     axum::serve(listener, app).await.unwrap();>> "%server_file%"
+    echo }>> "%server_file%"
+
+    :: Réactiver l'expansion retardée
+    endlocal
+
+    if not exist "%server_file%" (
+        call :print_status "red" "✗ Échec de la création du serveur Axum"
+        exit /b 1
+    )
+
+    call :print_status "green" "✓ Serveur Axum créé avec succès"
+goto :eof
+
+:: Fonction pour créer le fichier main.rs
+:create_main_rs
+    call :print_status "yellow" "Création du fichier main.rs..."
+
+    :: Créer le fichier directement avec echo
+    set "main_file=src-tauri\src\main.rs"
+
+    :: Supprimer le fichier s'il existe
+    if exist "%main_file%" del "%main_file%"
+
+    :: Désactiver temporairement l'expansion retardée pour préserver les !
+    setlocal disabledelayedexpansion
+
+    :: Écrire le fichier ligne par ligne
+    echo #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]> "%main_file%"
+    echo.>> "%main_file%"
+    echo mod server;>> "%main_file%"
+    echo use std::process::Command;>> "%main_file%"
+    echo.>> "%main_file%"
+    echo fn main() {>> "%main_file%"
+    echo     let static_dir = std::path::PathBuf::from("%APP_DIR:\=\\%\\src");>> "%main_file%"
+    echo.>> "%main_file%"
+    echo     tauri::Builder::default()>> "%main_file%"
+    echo         .setup(move ^|_app^| {>> "%main_file%"
+    echo             let static_dir_clone = static_dir.clone();>> "%main_file%"
+    echo.>> "%main_file%"
+    echo             // Serveur Axum>> "%main_file%"
+    echo             std::thread::spawn(move ^|^| {>> "%main_file%"
+    echo                 let rt = tokio::runtime::Runtime::new().unwrap();>> "%main_file%"
+    echo                 rt.block_on(async {>> "%main_file%"
+    echo                     server::start_server(static_dir_clone).await;>> "%main_file%"
+    echo                 });>> "%main_file%"
+    echo             });>> "%main_file%"
+    echo.>> "%main_file%"
+    echo             // Serveur Fastify>> "%main_file%"
+    echo             std::thread::spawn(move ^|^| {>> "%main_file%"
+    echo                 std::thread::sleep(std::time::Duration::from_secs(2));>> "%main_file%"
+    echo                 let output = Command::new("node")>> "%main_file%"
+    echo                     .current_dir("%APP_DIR:\=\\%")>> "%main_file%"
+    echo                     .arg("fastify-server.mjs")>> "%main_file%"
+    echo                     .output();>> "%main_file%"
+    echo.>> "%main_file%"
+    echo                 match output {>> "%main_file%"
+    echo                     Ok(o) =^> {>> "%main_file%"
+    echo                         if !o.status.success() {>> "%main_file%"
+    echo                             println!("Erreur fastify: {}", String::from_utf8_lossy(^&o.stderr));>> "%main_file%"
+    echo                         }>> "%main_file%"
+    echo                     }>> "%main_file%"
+    echo                     Err(e) =^> println!("Erreur: {}", e),>> "%main_file%"
+    echo                 }>> "%main_file%"
+    echo             });>> "%main_file%"
+    echo.>> "%main_file%"
+    echo             Ok(())>> "%main_file%"
+    echo         })>> "%main_file%"
+    echo         .run(tauri::generate_context!())>> "%main_file%"
+    echo         .expect("Erreur Tauri");>> "%main_file%"
+    echo }>> "%main_file%"
+
+    :: Réactiver l'expansion retardée
+    endlocal
+
+    if not exist "%main_file%" (
+        call :print_status "red" "✗ Échec de la création du fichier main.rs"
+        exit /b 1
+    )
+
+    call :print_status "green" "✓ Fichier main.rs créé avec succès"
 goto :eof
 
 :: Fonction principale pour créer et configurer le projet
@@ -333,83 +480,16 @@ goto :eof
     call :print_status "yellow" "Ajout des dépendances Axum..."
     findstr /C:"axum =" src-tauri\Cargo.toml >nul 2>&1
     if %errorlevel% neq 0 (
-        powershell -Command "(Get-Content 'src-tauri\Cargo.toml') -replace '\[dependencies\]', '[dependencies]`naxum = \"0.7.9\"`ntokio = { version = \"1\", features = [\"full\"] }`ntower-http = { version = \"0.5.0\", features = [\"fs\", \"cors\"] }' | Set-Content 'src-tauri\Cargo.toml'"
+        call :add_cargo_dependencies
     )
 
     :: Créer le serveur Axum
-    call :print_status "yellow" "Création du serveur Axum..."
-    mkdir src-tauri\src\server 2>nul
-
-    (
-        echo use axum::{routing::get_service, Router};
-        echo use std::{net::SocketAddr, path::PathBuf};
-        echo use tower_http::{cors::CorsLayer, services::ServeDir};
-        echo.
-        echo pub async fn start_server^(static_dir: PathBuf^) {
-        echo     let serve_dir = ServeDir::new^(static_dir^).append_index_html_on_directories^(true^);
-        echo     let serve_service = get_service^(serve_dir^).handle_error^(^|error^| async move {
-        echo         println!^("Erreur: {:?}", error^);
-        echo         ^(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur"^)
-        echo     }^);
-        echo.
-        echo     let app = Router::new^(^).nest_service^("/", serve_service^).layer^(CorsLayer::permissive^(^^)^);
-        echo     let addr = SocketAddr::from^(^([127, 0, 0, 1], 3000^)^);
-        echo     println!^("Serveur Axum: http://localhost:3000"^);
-        echo.
-        echo     let listener = tokio::net::TcpListener::bind^(addr^).await.unwrap^(^);
-        echo     axum::serve^(listener, app^).await.unwrap^(^);
-        echo }
-    ) > src-tauri\src\server\mod.rs
+    call :create_axum_server
+    if %errorlevel% neq 0 exit /b 1
 
     :: Modifier le fichier main.rs
-    call :print_status "yellow" "Modification du fichier main.rs..."
-    set "APP_DIR_ESCAPED=%APP_DIR:\=\\%"
-
-    (
-        echo #![cfg_attr^(all^(not^(debug_assertions^), target_os = "windows"^), windows_subsystem = "windows"^)]
-        echo.
-        echo mod server;
-        echo use std::process::Command;
-        echo.
-        echo fn main^(^) {
-        echo     let static_dir = std::path::PathBuf::from^("!APP_DIR_ESCAPED!\\src"^);
-        echo.
-        echo     tauri::Builder::default^(^)
-        echo         .setup^(move ^|_app^| {
-        echo             let static_dir_clone = static_dir.clone^(^);
-        echo.
-        echo             // Serveur Axum
-        echo             std::thread::spawn^(move ^|^| {
-        echo                 let rt = tokio::runtime::Runtime::new^(^).unwrap^(^);
-        echo                 rt.block_on^(async {
-        echo                     server::start_server^(static_dir_clone^).await;
-        echo                 }^);
-        echo             }^);
-        echo.
-        echo             // Serveur Fastify
-        echo             std::thread::spawn^(move ^|^| {
-        echo                 std::thread::sleep^(std::time::Duration::from_secs^(2^^)^);
-        echo                 let output = Command::new^("node"^)
-        echo                     .current_dir^("!APP_DIR_ESCAPED!"^)
-        echo                     .arg^("fastify-server.mjs"^)
-        echo                     .output^(^);
-        echo.
-        echo                 match output {
-        echo                     Ok^(o^) =^> {
-        echo                         if !o.status.success^(^) {
-        echo                             println!^("Erreur fastify: {}", String::from_utf8_lossy^(^&o.stderr^^)^);
-        echo                         }
-        echo                     },
-        echo                     Err^(e^) =^> println!^("Erreur: {}", e^),
-        echo                 }
-        echo             }^);
-        echo.
-        echo             Ok^(^^)
-        echo         }^)
-        echo         .run^(tauri::generate_context!^(^^)^)
-        echo         .expect^("Erreur Tauri"^);
-        echo }
-    ) > src-tauri\src\main.rs
+    call :create_main_rs
+    if %errorlevel% neq 0 exit /b 1
 
     :: Installer les dépendances pour Fastify
     call :print_status "yellow" "Installation des dépendances Fastify..."
@@ -419,6 +499,7 @@ goto :eof
         exit /b 1
     )
 
+    call :print_status "green" "✓ Configuration terminée avec succès!"
     call :print_status "yellow" "Lancement de l'application..."
     call npm run tauri dev
 goto :eof
