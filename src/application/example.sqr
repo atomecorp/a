@@ -9,6 +9,7 @@ const container = A.new({
                           width: 400,
                           height: 300,
                           color: 'orange',
+                          text: 'Hello world',
                           display: 'block',
                           smooth: 10,
                           shadow: [
@@ -20,6 +21,25 @@ const container = A.new({
                         })
 
 
+#
+container.onclick do
+  puts 'div clicked'
+  grab("main_container").backgroundColor("red")
+end
+
+wait 3000 do
+  puts "hello"
+  grab('main_container').color("blue")
+end
+
+# container.onmouseover do
+#   grab("button_id").backgroundColor("yellow")
+# end
+#
+# # Toujours compatible avec parenthèses
+# container.touch(:down) do
+#   grab("container_id").color("orange")
+# end
 
 
 wait 1000 do

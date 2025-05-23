@@ -132,3 +132,17 @@ defineParticle({
         instance._handleAttach(v);
     }
 });
+
+defineParticle({
+    name: 'onclick',
+    process: function(element, handler) {
+        element.onclick = handler;
+    }
+});
+
+defineParticle({
+    name: 'onmouseover',
+    process: function(element, handler) {
+        element.onmouseover = handler;
+    }
+});

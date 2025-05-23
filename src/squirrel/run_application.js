@@ -1,23 +1,3 @@
-
-// fetch("./application/example.sqr")
-//     .then((res) => res.text())
-//     .then((code) => {
-//         runSquirrel(code)
-//     })
-//     .catch((err) => {
-//         console.error("❌ Erreur :", err);
-//     });
-//
-//
-// fetch("./application/example.sqj")
-//     .then((res) => res.text())
-//     .then((code) => {
-//         runSquirrel(code)
-//     })
-//     .catch((err) => {
-//         console.error("❌ Erreur :", err);
-//     });
-
 // 🚀 FINAL Ultra-Optimized Ruby Transpiler
 // Zero overhead, vanilla JS performance, perfect syntax
 
@@ -40,12 +20,18 @@ function transpileRuby(code) {
         return '`' + fixed + '`';
     });
 
-    // 4. Block patterns (order optimized for performance)
+    // 4. Block patterns (order optimized for performance + multiline fix)
     js = js.replace(/wait\s+(\d+)\s+do\s*([\s\S]*?)\s*end/g,
-        'wait($1)(() => {$2})');
+        (match, ms, body) => {
+            const cleanBody = body.trim().replace(/\n\s*/g, '; '); // Fix multilines
+            return `wait(${ms})(() => {${cleanBody}})`;
+        });
 
     js = js.replace(/compute\s+([\d\s,]+)\s+do\s*\|([^|]*)\|\s*([\s\S]*?)\s*end/g,
-        'compute($1)(($2) => {$3})');
+        (match, args, param, body) => {
+            const cleanBody = body.trim().replace(/\n\s*/g, '; '); // Fix multilines
+            return `compute(${args})((${param}) => {${cleanBody}})`;
+        });
 
     // 5. Method calls with blocks - PERFECT syntax generation (fix line breaks)
     js = js.replace(/(\w+)\s*\(\s*([^)]+)\s*\)\s+do\s*\|([^|]*)\|\s*([\s\S]*?)\s*end/g,
@@ -54,6 +40,30 @@ function transpileRuby(code) {
             const cleanParam = param.replace(/\s+/g, ' ').trim();
             const cleanBody = body.trim();
             return `(() => { const result = ${method}(${cleanArgs}); (function(${cleanParam}) { ${cleanBody} })(result); })()`;
+        });
+
+    // 5.5 Object method calls with blocks (NEW - extensible pattern + multiline fix)
+    js = js.replace(/(\w+)\.(\w+)\s*\(\s*([^)]*)\s*\)\s+do\s*([\s\S]*?)\s*end/g,
+        (match, obj, method, args, body) => {
+            const cleanArgs = args ? args.replace(/\s+/g, ' ').trim() : '';
+            const cleanBody = body.trim().replace(/\n\s*/g, '; '); // Fix multilines
+            return `${obj}.${method}(${cleanArgs})(() => { ${cleanBody} })`;
+        });
+
+    // 5.7 Object method calls WITHOUT parentheses (onclick, onchange, etc.)
+    js = js.replace(/(\w+)\.(\w+)\s+do\s*([\s\S]*?)\s*end/g,
+        (match, obj, method, body) => {
+            const cleanBody = body.trim().replace(/\n\s*/g, '; '); // Fix multilines
+            return `${obj}.${method}(() => { ${cleanBody} })`;
+        });
+
+    // 5.6 Object method calls with blocks and parameters (for complex cases + multiline fix)
+    js = js.replace(/(\w+)\.(\w+)\s*\(\s*([^)]*)\s*\)\s+do\s*\|([^|]*)\|\s*([\s\S]*?)\s*end/g,
+        (match, obj, method, args, param, body) => {
+            const cleanArgs = args ? args.replace(/\s+/g, ' ').trim() : '';
+            const cleanParam = param.replace(/\s+/g, ' ').trim();
+            const cleanBody = body.trim().replace(/\n\s*/g, '; '); // Fix multilines
+            return `${obj}.${method}(${cleanArgs})((${cleanParam}) => { ${cleanBody} })`;
         });
 
     // 6. Array/object methods with blocks - PERFECT syntax with parentheses
@@ -104,10 +114,15 @@ function transpileRuby(code) {
             return `function ${name}() { return ${cleanBody}; }`;
         });
 
-    // 8. Simple replacements (compiled patterns for speed)
+    // 8. Simple replacements + NEW chaining support
     js = js.replace(/puts\s+([^;\n\r{}()]+)/g, 'puts($1)');
     js = js.replace(/(\w+)\[:(\w+)\]/g, '$1["$2"]');
     js = js.replace(/(\w+)\.json\b(?!\()/g, 'JSON.stringify($1)');
+
+    // NEW: Method chaining support (grab, color, etc.)
+    js = js.replace(/grab\s*\(\s*['"]([^'"]+)['"]\s*\)/g, 'grab("$1")');
+    js = js.replace(/\.color\s*\(\s*:(\w+)\s*\)/g, '.color("$1")');
+    js = js.replace(/\.(\w+)\s*\(\s*:(\w+)\s*\)/g, '.$1("$2")'); // Generic :symbol to "string"
 
     // 9. Variable assignment with global sharing
     const declaredVars = new Set();
@@ -175,9 +190,10 @@ function executeJS(js) {
                         window[funcName] = eval(funcName);
                     }
                 } catch (e) {
-                    // Try to execute anyway, might be partial block
-                    if (currentBlock.includes('function ') && !currentBlock.includes('}')) {
-                        // Function not complete, continue
+                    // Ignore incomplete blocks silently - they'll be completed later
+                    if (e.message.includes('Unexpected end of script') ||
+                        e.message.includes('Parser error')) {
+                        // Silent ignore - this is expected for incomplete blocks
                         continue;
                     }
                     console.warn(`⚠️ Block failed: ${e.message}`);
@@ -246,8 +262,10 @@ function processDSL(dslCode) {
 
     console.log('🔧 DSL processing...');
     try {
-        const cleanDSL = dslCode.replace(/A\.new\s*\(/g, 'new A(');
-        (new Function(cleanDSL))();
+        const cleanDSL = dslCode
+            .replace(/const\s+(\w+)\s*=/g, 'window.$1 =')
+            .replace(/A\.new\s*\(/g, 'new A(');
+        (new Function(cleanDSL))();  // ← AJOUTER CETTE LIGNE
         console.log('✅ DSL executed');
     } catch (e) {
         console.error('❌ DSL failed:', e);
@@ -280,10 +298,100 @@ function processCode(rawCode) {
     processRuby(rubyCode);
 }
 
-// ✅ Runtime helpers (zero-overhead, bitwise optimizations)
+// ✅ Runtime helpers + Integration with utils.js
 window.wait = ms => fn => setTimeout(fn, ms | 0);
 window.compute = (a, b) => fn => fn((a | 0) + (b | 0));
 window.puts = console.log;
+
+// ✅ Import your existing grab from utils.js (if available)
+// This will be overridden by your real grab implementation
+window.grab = window.grab || (id => {
+    const element = document.getElementById(id);
+    if (!element) {
+        console.warn(`Element with id '${id}' not found`);
+        return createGrabProxy(null);
+    }
+    return createGrabProxy(element);
+});
+
+// ✅ Enhanced grab proxy that supports ALL CSS properties
+function createGrabProxy(element) {
+    const proxy = {
+        element: element,
+
+        // Core styling methods
+        color: (value) => { if (element) element.style.color = value; return proxy; },
+        backgroundColor: (value) => { if (element) element.style.backgroundColor = value; return proxy; },
+        background: (value) => { if (element) element.style.background = value; return proxy; },
+
+        // Position & dimensions
+        left: (value) => { if (element) element.style.left = value; return proxy; },
+        right: (value) => { if (element) element.style.right = value; return proxy; },
+        top: (value) => { if (element) element.style.top = value; return proxy; },
+        bottom: (value) => { if (element) element.style.bottom = value; return proxy; },
+        width: (value) => { if (element) element.style.width = value; return proxy; },
+        height: (value) => { if (element) element.style.height = value; return proxy; },
+        x: (value) => { if (element) element.style.left = value + 'px'; return proxy; },
+        y: (value) => { if (element) element.style.top = value + 'px'; return proxy; },
+
+        // Display & visibility
+        display: (value) => { if (element) element.style.display = value; return proxy; },
+        visibility: (value) => { if (element) element.style.visibility = value; return proxy; },
+        opacity: (value) => { if (element) element.style.opacity = value; return proxy; },
+        hide: () => { if (element) element.style.display = 'none'; return proxy; },
+        show: () => { if (element) element.style.display = 'block'; return proxy; },
+
+        // Text & content
+        text: (value) => { if (element) element.textContent = value; return proxy; },
+        html: (value) => { if (element) element.innerHTML = value; return proxy; },
+        fontSize: (value) => { if (element) element.style.fontSize = value; return proxy; },
+        fontWeight: (value) => { if (element) element.style.fontWeight = value; return proxy; },
+        textAlign: (value) => { if (element) element.style.textAlign = value; return proxy; },
+
+        // Borders & effects
+        border: (value) => { if (element) element.style.border = value; return proxy; },
+        borderRadius: (value) => { if (element) element.style.borderRadius = value; return proxy; },
+        boxShadow: (value) => { if (element) element.style.boxShadow = value; return proxy; },
+
+        // Attributes
+        id: (value) => { if (element) element.id = value; return proxy; },
+        className: (value) => { if (element) element.className = value; return proxy; },
+        addClass: (cls) => { if (element) element.classList.add(cls); return proxy; },
+        removeClass: (cls) => { if (element) element.classList.remove(cls); return proxy; },
+
+        // Events (chainable)
+        click: (handler) => { if (element) element.onclick = handler; return proxy; },
+        on: (event, handler) => { if (element) element.addEventListener(event, handler); return proxy; },
+
+        // Utils
+        focus: () => { if (element) element.focus(); return proxy; },
+        blur: () => { if (element) element.blur(); return proxy; },
+        remove: () => { if (element && element.parentNode) element.parentNode.removeChild(element); return proxy; },
+
+        // Direct style access
+        style: element?.style || {},
+
+        // Get actual values
+        getValue: () => element?.value,
+        getText: () => element?.textContent,
+        getHtml: () => element?.innerHTML
+    };
+
+    return proxy;
+}
+
+window.container = {
+    touch: (direction) => (callback) => {
+        console.log(`Touch ${direction} detected on container`);
+        if (callback) callback();
+        return window.container; // Chainable
+    },
+    click: (callback) => {
+        console.log('Container clicked');
+        if (callback) callback();
+        return window.container;
+    }
+};
 
 // ✅ Ultra-fast initialization
 function init() {
