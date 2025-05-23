@@ -1,301 +1,798 @@
-// Create a new A instance with custom properties
-const container = new A({
-    attach: 'body',
-    id: 'main_container',
-    markup: 'span',
-    role: 'container',
-    x: 150,
-    y: 50,
-    width: 400,
-    height: 300,
-    color: 'orange',
-    display: 'block',
-    smooth: 10,
-    shadow: [
-        {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-        {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-    ],
-    overflow: 'hidden',
-    fasten: [] // will contain the IDs of children
-});
 
-puts(container)
-puts(container.width)
-puts(container.element)
+// // Create draggable objects
+// const obj1 = new A({
+//     attach: 'drag_1', // Attach to your container
+//     id: 'draggable_1',
+//     markup: 'div',
+//     type: 'container',
+//     x: 20,
+//     y: 30,
+//     width: 100,
+//     height: 100,
+//     backgroundColor: '#3498db',
+//     smooth: 5,
+//     content: 'Drag Me'
+// });
 
-setTimeout(() => {
-    container.display('888px')
+// const obj2 = new A({
+//     attach: 'drag_1',
+//     id: 'draggable_2',
+//     markup: 'div',
+//     type: 'container',
+//     x: 140,
+//     y: 30,
+//     width: 80,
+//     height: 80,
+//     backgroundColor: '#e74c3c',
+//     smooth: 5,
+//     content: 'Drag Me'
+// });
+// // Create a listing array similar to the Ruby version
+// const listing = [
+//   { smooth: '100%' },
+//   { color: 'red', data: 'data_put_inside' },
+//   {},
+//   {},
+//   { width: 33 },
+//   {}
+// ];
 
-    console.log("Delayed for 2 second.");
-    container.width(800)
-    const element = document.getElementById("main_container");
+// // Define the equivalent method to my_method
+// function myMethod(val = null) {
+//   // Assuming A.flash is similar to the Ruby version
+//   console.log(`so_cool : ${val}`);
+// }
+// // Simplified version with two lists and simple positioning
 
-    // Change the left position (in pixels)
-    let element2 = grab('main_container');
-    console.log(container === element2)
-    element2.height(12);
-    element2.style.top = '290px'
-    // puts(">>> " + element2.style.top)
-    container.style.left = "50px";
-}, 2000);
+// // Create first list (equivalent to list_1 in Ruby)
+// list_1 = new A({
+//   attach: 'body',
+//   id: 'list_1',
+//   markup: 'div',
+//   x: 100,
+//   y: 800,
+//   width: 200,
+//   height: 200,
+//   backgroundColor: '#e0e0e0',
+//   border: '1px solid black'
+// })
 
-// Short alias for document
-const d = document;
+// // Create an item in list_1
+// list_1_title = new A({
+//   attach: 'list_1',
+//   id: 'list_1_title',
+//   markup: 'div',
+//   x: 0,
+//   y: 0,
+//   width: '100%',
+//   height: 40,
+//   backgroundColor: '#333',
+//   text: 'List 1',
+//   color: 'white',
+//   textAlign: 'center'
+// })
 
-// Create and append an H1 and a div dynamically
-const div = Object.assign(d.body, {
-    append: Object.assign(d.createElement('h1'), {
-        textContent: 'Page generated in pure JS',
-        style: { textAlign: 'center' }
-    })
-}).appendChild(d.createElement('div'));
+// // Create second list (equivalent to list_2 in Ruby)
+// list_2 = new A({
+//   attach: 'body',
+//   id: 'list_2',
+//   markup: 'div',
+//   x: 350,
+//   y: 800,
+//   width: 200,
+//   height: 200,
+//   backgroundColor: '#f5f5f5',
+//   border: '1px solid black'
+// })
 
-// Style the created div
-Object.assign(div.style, {
-    width: '200px', height: '200px', backgroundColor: 'red', color: 'white',
-    display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer',
-    margin: '50px auto', padding: '20px', textAlign: 'center', borderRadius: '10px',
-    transition: 'background-color 0.3s'
-});
+// // Create an item in list_2
+// list_2_title = new A({
+//   attach: 'list_2',
+//   id: 'list_2_title',
+//   markup: 'div',
+//   x: 0,
+//   y: 0,
+//   width: '100%',
+//   height: 40,
+//   backgroundColor: '#333',
+//   text: 'List 2',
+//   color: 'white',
+//   textAlign: 'center'
+// })
 
-div.textContent = 'Click me to change color';
-div.onclick = () => div.style.backgroundColor = div.style.backgroundColor === 'red' ? 'green' : 'red';
+// // Use a setTimeout for the positioning (similar to the wait in Ruby)
+// setTimeout(function() {
+//   // Position list_2 relative to list_1's width
+//   list_2.x(list_1.x() + list_1.width() + 20)
+//   list_2_title.text('List 2 (Moved)')
+// }, 1000)
+// // Create a simple circle component
+// my_circle = new A({
+//   attach: 'body',
+//   id: 'my_circle',
+//   markup: 'div',
+//   x: 100,
+//   y: 65,
+//   width: 22,
+//   height: 22,
+//   backgroundColor: 'red',
+//   smooth: '100%'
+// })
 
-// Create another container
-const container2 = new A({
-    attach: 'body',
-    id: 'main_container2',
-    markup: 'div',
-    type: 'container',
-    x: 50,
-    y: 50,
-    width: 400,
-    height: 300,
-    backgroundColor: '#f5f5f5',
-    smooth: 10,
-    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-    overflow: 'hidden',
-    fasten: [] // Will contain the IDs of children
-});
+// // Add a click handler to the circle
+// my_circle.element.onclick = function() {
+//   alert('okk')
+// }
 
-// 2. Create a header inside the container
-const header = new A({
-    attach: '#main_container', // Attach to the main container
-    id: 'header',
-    markup: 'div',
-    type: 'shape',
-    x: 0,
-    y: 0,
-    width: '100%',
-    height: 60,
-    backgroundColor: '#4285f4',
-    center: false,
-    position: 'absolute',
-    color: 'white',
-    textAlign: 'center',
-    lineHeight: '60px',
-    fontWeight: 'bold',
-    fontSize: 20,
-    text: 'A Demo with Children'
-});
+// // Create a simple table
+// my_table = new A({
+//   attach: 'body',
+//   id: 'my_test_box',
+//   markup: 'div',
+//   type: 'table',
+//   x: 603,
+//   y: 550,
+//   width: 300,
+//   height: 350,
+//   smooth: 15,
+//   overflow: 'scroll',
+//   backgroundColor: 'white',
+//   border: '5px dotted black'
+// })
 
-// Update fasten list for the container
-container._fastened.push('header');
-container.element.dataset.fasten = container._fastened.join(',');
+// // Create a table header
+// table_header = new A({
+//   attach: 'my_test_box',
+//   id: 'table_header',
+//   markup: 'div',
+//   x: 0,
+//   y: 0, 
+//   width: '100%',
+//   height: 50,
+//   backgroundColor: '#333',
+//   color: 'white'
+// })
 
-// 3. Create main content with children using the children property
-const content = new A({
-    attach: '#main_container',
-    id: 'content',
-    markup: 'div',
-    type: 'content',
-    x: 0,
-    y: 60,
-    width: '100%',
-    height: 240,
-    padding: 15,
-    position: 'relative',
-    children: [
-        // Child 1: Red box
-        {
-            id: 'red_box',
-            markup: 'div',
-            type: 'shape',
-            x: 20,
-            y: 20,
-            width: 100,
-            height: 100,
-            backgroundColor: 'red',
-            smooth: 15,
-            events: {
-                click: (e) => {
-                    console.log('Red box clicked!');
-                }
-            }
-        },
-        // Child 2: Blue box
-        {
-            id: 'blue_box',
-            markup: 'div',
-            type: 'shape',
-            x: 150,
-            y: 20,
-            width: 100,
-            height: 100,
-            backgroundColor: 'blue',
-            smooth: 15,
-            color: 'white',
-            textAlign: 'center',
-            lineHeight: '100px',
-            text: 'Blue'
-        },
-        // Child 3: Green circle
-        {
-            id: 'green_circle',
-            markup: 'div',
-            type: 'shape',
-            x: 280,
-            y: 20,
-            width: 100,
-            height: 100,
-            backgroundColor: 'green',
-            smooth: '50%', // Perfect circle
-            color: 'white',
-            textAlign: 'center',
-            lineHeight: '100px',
-            text: 'Circle'
-        }
-    ],
-    fasten: [] // Will be auto-filled with child IDs
-});
+// // Create header cells
+// header_cell1 = new A({
+//   attach: 'table_header',
+//   id: 'header_cell1',
+//   markup: 'div',
+//   x: 0,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: 'ID',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid white'
+// })
 
-// Update fasten for the main container
-container._fastened.push('content');
-container.element.dataset.fasten = container._fastened.join(',');
+// header_cell2 = new A({
+//   attach: 'table_header',
+//   id: 'header_cell2',
+//   markup: 'div',
+//   x: 120,
+//   y: 0,
+//   width: 200,
+//   height: 50,
+//   text: 'Name',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid white'
+// })
 
-// 4. Dynamically create and add a new child to content
-const infoButton = content.addChild({
-    id: 'info_button',
-    markup: 'div',
-    type: 'button',
-    x: 140,
-    y: 150,
-    width: 120,
-    height: 40,
-    backgroundColor: '#ffa000',
-    smooth: 20,
-    textAlign: 'center',
-    lineHeight: '40px',
-    color: 'white',
-    fontWeight: 'bold',
-    text: 'Info',
-    cursor: 'pointer',
-    events: {
-        click: () => {
-            // Get all children of content
-            const children = content.getFastened();
-            console.log(`There are ${children.length} children in content`);
-        }
+// header_cell3 = new A({
+//   attach: 'table_header',
+//   id: 'header_cell3',
+//   markup: 'div',
+//   x: 320,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: 'Age',
+//   textAlign: 'center',
+//   lineHeight: '50px'
+// })
+
+// // Create table rows with data
+// // Row 1
+// row1 = new A({
+//   attach: 'my_test_box',
+//   id: 'row1',
+//   markup: 'div',
+//   x: 0,
+//   y: 50,
+//   width: '100%',
+//   height: 50,
+//   backgroundColor: '#f5f5f5'
+// })
+
+// cell1_1 = new A({
+//   attach: 'row1',
+//   id: 'cell1_1',
+//   markup: 'div',
+//   x: 0,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: '1',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid #ddd'
+// })
+
+// cell1_2 = new A({
+//   attach: 'row1',
+//   id: 'cell1_2',
+//   markup: 'div',
+//   x: 120,
+//   y: 0,
+//   width: 200,
+//   height: 50,
+//   text: 'Alice',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid #ddd'
+// })
+
+// cell1_3 = new A({
+//   attach: 'row1',
+//   id: 'cell1_3',
+//   markup: 'div',
+//   x: 320,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: '30',
+//   textAlign: 'center',
+//   lineHeight: '50px'
+// })
+
+// // Row 2
+// row2 = new A({
+//   attach: 'my_test_box',
+//   id: 'row2',
+//   markup: 'div',
+//   x: 0,
+//   y: 100,
+//   width: '100%',
+//   height: 50,
+//   backgroundColor: 'white'
+// })
+
+// cell2_1 = new A({
+//   attach: 'row2',
+//   id: 'cell2_1',
+//   markup: 'div',
+//   x: 0,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: '2',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid #ddd'
+// })
+
+// cell2_2 = new A({
+//   attach: 'row2',
+//   id: 'cell2_2',
+//   markup: 'div',
+//   x: 120,
+//   y: 0,
+//   width: 200,
+//   height: 50,
+//   text: 'Bob',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid #ddd'
+// })
+
+// cell2_3 = new A({
+//   attach: 'row2',
+//   id: 'cell2_3',
+//   markup: 'div',
+//   x: 320,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: '22',
+//   textAlign: 'center',
+//   lineHeight: '50px'
+// })
+
+// // Row 3 with circle reference
+// row3 = new A({
+//   attach: 'my_test_box',
+//   id: 'row3',
+//   markup: 'div',
+//   x: 0,
+//   y: 150,
+//   width: '100%',
+//   height: 50,
+//   backgroundColor: '#f5f5f5'
+// })
+
+// cell3_1 = new A({
+//   attach: 'row3',
+//   id: 'cell3_1',
+//   markup: 'div',
+//   x: 0,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: '3',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid #ddd'
+// })
+
+// cell3_2 = new A({
+//   attach: 'row3',
+//   id: 'cell3_2',
+//   markup: 'div',
+//   x: 120,
+//   y: 0,
+//   width: 200,
+//   height: 50,
+//   text: 'Vincent',
+//   textAlign: 'center',
+//   lineHeight: '50px',
+//   borderRight: '1px solid #ddd'
+// })
+
+// cell3_3 = new A({
+//   attach: 'row3',
+//   id: 'cell3_3',
+//   markup: 'div',
+//   x: 320,
+//   y: 0,
+//   width: 120,
+//   height: 50,
+//   text: '33',
+//   textAlign: 'center',
+//   lineHeight: '50px'
+// })
+
+// // Update table color
+// setTimeout(function() {
+//   my_table.backgroundColor('cyan')
+// }, 1000)
+// // Create a draggable element
+// draggable = new A({
+//   attach: 'body',
+//   id: 'draggable_item',
+//   markup: 'div',
+//   x: 200,
+//   y: 200,
+//   width: 100,
+//   height: 100,
+//   backgroundColor: 'orange',
+//   smooth: 10,
+//   text: 'Drag Me',
+//   textAlign: 'center',
+//   lineHeight: '100px',
+//   color: 'white',
+//   cursor: 'pointer',
+//   border: '2px solid #ff7700'
+// })
+
+// // Create a drop target
+// drop_target = new A({
+//   attach: 'body',
+//   id: 'drop_target',
+//   markup: 'div',
+//   x: 400,
+//   y: 400,
+//   width: 200,
+//   height: 200,
+//   backgroundColor: 'lightblue',
+//   smooth: 10,
+//   text: 'Drop Here',
+//   textAlign: 'center',
+//   lineHeight: '200px',
+//   color: 'white',
+//   border: '2px dashed blue'
+// })
+
+// // Variables to track dragging state
+// is_dragging = false
+// drag_offset_x = 0
+// drag_offset_y = 0
+
+// // Add mousedown event to start dragging
+// draggable.element.onmousedown = function(e) {
+//   is_dragging = true
+  
+//   // Calculate the offset between mouse position and element position
+//   drag_offset_x = e.clientX - draggable.x()
+//   drag_offset_y = e.clientY - draggable.y()
+  
+//   // Change appearance during drag
+//   draggable.backgroundColor('red')
+  
+//   // Prevent default browser behavior
+//   e.preventDefault()
+// }
+
+// // Add mousemove event to the document
+// document.onmousemove = function(e) {
+//   if (is_dragging) {
+//     // Update position based on mouse coordinates and offset
+//     draggable.x(e.clientX - drag_offset_x)
+//     draggable.y(e.clientY - drag_offset_y)
+//   }
+// }
+
+// // Add mouseup event to stop dragging
+// document.onmouseup = function(e) {
+//   if (is_dragging) {
+//     is_dragging = false
+    
+//     // Reset appearance
+//     draggable.backgroundColor('orange')
+    
+//     // Check if it was dropped on the target
+//     check_drop()
+//   }
+// }
+
+// // Function to check if the draggable was dropped on the target
+// function check_drop() {
+//   // Get positions and dimensions
+//   drag_x = draggable.x()
+//   drag_y = draggable.y()
+//   drag_width = draggable.width()
+//   drag_height = draggable.height()
+  
+//   target_x = drop_target.x()
+//   target_y = drop_target.y()
+//   target_width = drop_target.width()
+//   target_height = drop_target.height()
+  
+//   // Check for overlap
+//   if (
+//     drag_x < target_x + target_width &&
+//     drag_x + drag_width > target_x &&
+//     drag_y < target_y + target_height &&
+//     drag_y + drag_height > target_y
+//   ) {
+//     // Successful drop - center the item in the drop zone
+//     draggable.x(target_x + (target_width - drag_width) / 2)
+//     draggable.y(target_y + (target_height - drag_height) / 2)
+    
+//     // Change appearance to indicate successful drop
+//     draggable.backgroundColor('green')
+//     draggable.text('Dropped!')
+//     drop_target.text('Success!')
+//     drop_target.backgroundColor('lightgreen')
+//   }
+// }
+// // Create a content editable component
+// editor = new A({
+//   attach: 'body',
+//   id: 'content_editor',
+//   markup: 'div',
+//   x: 100,
+//   y: 400,
+//   width: 400,
+//   height: 200,
+//   backgroundColor: 'white',
+//   smooth: 10,
+//   border: '1px solid #ccc',
+//   padding: 10,
+//   text: 'Click here to edit this text...',
+//   overflow: 'auto'
+// })
+
+// // Make the element content editable
+// editor.element.contentEditable = 'true'
+
+// // Add styling properties specific to editable content
+// editor.element.style.outline = 'none' // Remove the default outline
+// editor.element.style.wordWrap = 'break-word' // Enable word wrapping
+
+// // Add a title/header above the editor
+// editor_title = new A({
+//   attach: 'body',
+//   id: 'editor_title',
+//   markup: 'div',
+//   x: 100,
+//   y: 360,
+//   width: 400,
+//   height: 40,
+//   backgroundColor: '#2c3e50',
+//   text: 'Content Editable Editor',
+//   color: 'white',
+//   textAlign: 'center',
+//   lineHeight: '40px',
+//   smooth: '5px 5px 0 0' // Round top corners only
+// })
+
+// // Save button - positioned to the right of the editor
+// save_button = new A({
+//   attach: 'body',
+//   id: 'save_button',
+//   markup: 'div',
+//   x: 510, // Just to the right of the editor (100 + 400 + 10)
+//   y: 400, // Same y position as the editor
+//   width: 80,
+//   height: 40,
+//   backgroundColor: '#4CAF50',
+//   text: 'Save',
+//   color: 'white',
+//   textAlign: 'center',
+//   lineHeight: '40px',
+//   cursor: 'pointer',
+//   smooth: 5
+// })
+
+// // Add event handler for the save button
+// save_button.element.onclick = function() {
+//   // Get the content and show an alert
+//   // Avoid creating a new variable named 'content'
+//   alert('Content saved:\n\n' + editor.element.innerHTML)
+// }
+
+// // Add focus and blur events for visual feedback
+// editor.element.onfocus = function() {
+//   editor.border('1px solid #3498db')
+// }
+
+// editor.element.onblur = function() {
+//   editor.border('1px solid #ccc')
+// }
+
+// // Add a status indicator for counting characters below the editor
+// status_bar = new A({
+//   attach: 'body',
+//   id: 'status_bar',
+//   markup: 'div',
+//   x: 100,
+//   y: 610, // Just below the editor (400 + 200 + 10)
+//   width: 400,
+//   height: 30,
+//   backgroundColor: '#f8f8f8',
+//   text: '0 characters',
+//   textAlign: 'right',
+//   lineHeight: '30px',
+//   padding: '0 10px',
+//   color: '#666',
+//   fontSize: 12,
+//   border: '1px solid #ccc',
+//   borderTop: 'none'
+// })
+
+// // Update character count on input
+// editor.element.oninput = function() {
+//   // Directly update the text without creating a 'count' variable
+//   status_bar.text(editor.element.innerText.length + ' characters')
+// }
+
+// // Optional: Add a toolbar with formatting buttons
+// toolbar = new A({
+//   attach: 'body',
+//   id: 'editor_toolbar',
+//   markup: 'div',
+//   x: 100,
+//   y: 580, // Just below the editor (400 + 200 - 20)
+//   width: 400,
+//   height: 30,
+//   backgroundColor: '#f1f1f1',
+//   border: '1px solid #ccc',
+//   borderTop: 'none'
+// })
+
+// // Bold button
+// bold_button = new A({
+//   attach: 'editor_toolbar',
+//   id: 'bold_button',
+//   markup: 'div',
+//   x: 10,
+//   y: 5,
+//   width: 20,
+//   height: 20,
+//   backgroundColor: '#ddd',
+//   text: 'B',
+//   fontWeight: 'bold',
+//   textAlign: 'center',
+//   lineHeight: '20px',
+//   cursor: 'pointer',
+//   smooth: 3
+// })
+
+// // Italic button
+// italic_button = new A({
+//   attach: 'editor_toolbar',
+//   id: 'italic_button',
+//   markup: 'div',
+//   x: 40,
+//   y: 5,
+//   width: 20,
+//   height: 20,
+//   backgroundColor: '#ddd',
+//   text: 'I',
+//   fontStyle: 'italic',
+//   textAlign: 'center',
+//   lineHeight: '20px',
+//   cursor: 'pointer',
+//   smooth: 3
+// })
+
+// // Underline button
+// underline_button = new A({
+//   attach: 'editor_toolbar',
+//   id: 'underline_button',
+//   markup: 'div',
+//   x: 70,
+//   y: 5,
+//   width: 20,
+//   height: 20,
+//   backgroundColor: '#ddd',
+//   text: 'U',
+//   textDecoration: 'underline',
+//   textAlign: 'center',
+//   lineHeight: '20px',
+//   cursor: 'pointer',
+//   smooth: 3
+// })
+
+// // Add event handlers for the buttons
+// bold_button.element.onclick = function() {
+//   document.execCommand('bold', false, null)
+//   editor.element.focus()
+// }
+
+// italic_button.element.onclick = function() {
+//   document.execCommand('italic', false, null)
+//   editor.element.focus()
+// }
+
+// underline_button.element.onclick = function() {
+//   document.execCommand('underline', false, null)
+//   editor.element.focus()
+// }
+//Create a content editable component
+editor = new A({
+  attach: 'body',
+  id: 'content_editor',
+  markup: 'div',
+  x: 100,
+  y: 200,
+  width: 400,
+  height: 100,
+  backgroundColor: 'white',
+  smooth: 10,
+  border: '1px solid #ccc',
+  padding: 10,
+  text: 'Type here and press Enter to send...'
+})
+
+// Make the element content editable
+editor.element.contentEditable = 'true'
+
+// Add styling
+editor.element.style.outline = 'none'
+
+// Create a response area
+response_area = new A({
+  attach: 'body',
+  id: 'response_area',
+  markup: 'div',
+  x: 100,
+  y: 350,
+  width: 400,
+  height: 200,
+  backgroundColor: '#f5f5f5',
+  smooth: 10,
+  border: '1px solid #ccc',
+  padding: 10,
+  overflow: 'auto'
+})
+
+// Create a label for the response area
+response_label = new A({
+  attach: 'body',
+  id: 'response_label',
+  markup: 'div',
+  x: 100,
+  y: 320,
+  width: 400,
+  height: 30,
+  text: 'Server Responses:',
+  textAlign: 'left',
+  lineHeight: '30px',
+  fontWeight: 'bold'
+})
+
+// Create a status indicator
+status_dot = new A({
+  attach: 'body',
+  id: 'status_dot',
+  markup: 'div',
+  x: 520,
+  y: 200,
+  width: 20,
+  height: 20,
+  backgroundColor: 'red',
+  smooth: '50%'
+})
+
+// Create WebSocket connection
+ws_status = 'disconnected'
+
+// Function to add message to response area
+function addResponse(message) {
+  // Create paragraph element
+  msg_element = document.createElement('p')
+  msg_element.style.margin = '5px 0'
+  msg_element.textContent = message
+  
+  // Add to response area
+  response_area.element.appendChild(msg_element)
+  
+  // Scroll to bottom
+  response_area.element.scrollTop = response_area.element.scrollHeight
+}
+
+// Simulate WebSocket behavior since we don't have a server
+function simulateWebSocket() {
+  // Change status to connected
+  ws_status = 'connected'
+  status_dot.backgroundColor('green')
+  
+  // Add connection message
+  addResponse('Connected to server')
+}
+
+// Handler for keydown events
+editor.element.onkeydown = function(e) {
+  // Check if Enter key was pressed (key code 13)
+  if (e.keyCode === 13) {
+    // Prevent default behavior (newline)
+    e.preventDefault()
+    
+    // Get the message
+    message = editor.element.textContent
+    
+    // Add user message to response area
+    addResponse('You: ' + message)
+    
+    // Check connection status
+    if (ws_status === 'connected') {
+      // Simulate server response
+      setTimeout(function() {
+        addResponse('Server: Received your message: "' + message + '"')
+      }, 500)
+    } else {
+      addResponse('Error: Not connected to server')
     }
-});
-
-// 5. Example of animation on an element with fasten update
-const greenCircle = A.getById('green_circle');
-if (greenCircle) {
-    greenCircle.element.addEventListener('click', function () {
-        const popup = new A({
-            attach: '#content',
-            id: 'popup',
-            markup: 'div',
-            type: 'popup',
-            x: 80,
-            y: 80,
-            width: 0,
-            height: 0,
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            smooth: 10,
-            color: 'white',
-            textAlign: 'center',
-            lineHeight: '140px',
-            opacity: 0,
-            text: 'Animation in progress!',
-            zIndex: 100,
-            animate: {
-                duration: 0.5,
-                easing: 'ease-out',
-                properties: {
-                    width: 240,
-                    height: 140,
-                    opacity: 1
-                }
-            },
-            events: {
-                click: function () {
-                    // Exit animation
-                    this.style.transition = 'all 0.3s ease-in';
-                    this.style.opacity = '0';
-                    this.style.transform = 'scale(0.5)';
-                    setTimeout(() => {
-                        this.parentNode.removeChild(this);
-                        // Update fasten
-                        content._fastened = content._fastened.filter(id => id !== 'popup');
-                        content.element.dataset.fasten = content._fastened.join(',');
-                    }, 300);
-                }
-            }
-        });
-
-        // Update fasten list for content
-        content._fastened.push('popup');
-        content.element.dataset.fasten = content._fastened.join(',');
-    });
+    
+    // Clear editor
+    editor.element.textContent = ''
+  }
 }
 
-// Simple example of using fasten property
-const simpleExample = new A({
-    attach: 'body',
-    id: 'parent_box',
-    markup: 'div',
-    type: 'container',
-    x: 500,
-    y: 50,
-    width: 200,
-    height: 200,
-    backgroundColor: '#333',
-    smooth: 10,
-    // Directly define IDs of children to attach
-    fasten: ['child_box1', 'child_box2']
-});
+// Create connect button
+connect_button = new A({
+  attach: 'body',
+  id: 'connect_button',
+  markup: 'div',
+  x: 520,
+  y: 230,
+  width: 100,
+  height: 40,
+  backgroundColor: '#2ecc71',
+  smooth: 5,
+  text: 'Connect',
+  textAlign: 'center',
+  lineHeight: '40px',
+  color: 'white',
+  cursor: 'pointer'
+})
 
-// Create corresponding children
-const child1 = new A({
-    attach: '#parent_box',
-    id: 'child_box1',
-    markup: 'div',
-    type: 'shape',
-    x: 20,
-    y: 20,
-    width: 80,
-    height: 80,
-    backgroundColor: 'yellow',
-    smooth: 10
-});
-
-// Safe DOM access if needed
-const resultElement = document.getElementById("resultat")
-if (resultElement) {
-    resultElement.textContent = `Result is: ${resultat}`
+// Add click handler for connect button
+connect_button.element.onclick = function() {
+  simulateWebSocket()
 }
-
-/// pure js syntax
-setTimeout(() => {
-    console.log("Processing completed after delay")
-}, 3000)
-
-function addition(a, b) {
-    return a + b;
-}
-
-// Example usage
-const resultat_o = addition(3, 6);
-console.log("second result is :", resultat_o); // Logs: Result: 8
