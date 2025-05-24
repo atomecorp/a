@@ -32,10 +32,13 @@ wait 3000 do
   grab('main_container').color("blue")
 end
 
-# container.onmouseover do
-#   grab("button_id").backgroundColor("yellow")
-# end
-#
+container.onmouseover do
+  grab("main_container").backgroundColor("white")
+end
+
+container.onmouseout do
+  grab("main_container").backgroundColor("orange")
+end
 # # Toujours compatible avec parenthèses
 # container.touch(:down) do
 #   grab("container_id").color("orange")

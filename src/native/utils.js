@@ -221,5 +221,26 @@
         });
     }
 
+    // SECTION 5: INDIVIDUAL EVENT PARTICLES
+    const commonEvents = [
+        'onclick', 'ondblclick', 'onmousedown', 'onmouseup', 'onmouseover',
+        'onmouseout', 'onmousemove', 'onkeydown', 'onkeyup', 'onkeypress',
+        'onfocus', 'onblur', 'onchange', 'oninput', 'onsubmit'
+    ];
+
+    commonEvents.forEach(eventName => {
+        window.defineParticle({
+            name: eventName,
+            type: 'function',
+            category: 'event',
+            process(el, handler) {
+                console.log(`✅ Using DSL method '${eventName}'`);
+                if (typeof handler === 'function') {
+                    el[eventName] = handler;
+                }
+            }
+        });
+    });
+
     checkFrameworkLoaded();
 })();
