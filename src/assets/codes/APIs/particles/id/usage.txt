@@ -1,1 +1,0 @@
-The id object is used for specific purposes as indicated in the example.

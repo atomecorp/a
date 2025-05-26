@@ -1,1 +1,0 @@
-The purpose of the thickness object could not be inferred.

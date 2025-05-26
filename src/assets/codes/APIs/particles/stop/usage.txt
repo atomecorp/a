@@ -1,1 +1,0 @@
-The purpose of the stop object could not be inferred.

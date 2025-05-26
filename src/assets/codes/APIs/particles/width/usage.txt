@@ -1,1 +1,0 @@
-The purpose of the width object could not be inferred.

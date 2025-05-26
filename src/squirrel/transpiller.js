@@ -133,13 +133,25 @@ function transpiler(rubyCode) {
     js = js.replace(/grab\("([^"]+)"\)\.(\w+)\(\)/g, 'grab("$1").$2();');
     js = js.replace(/grab\('([^']+)'\)\.(\w+)\(\)/g, 'grab("$1").$2();');
 
-    // Step 8: Clean up syntax errors caused by multiple transformations
+    // Step 9: Clean up syntax errors caused by multiple transformations
     js = js
         .replace(/^\s*#.*$/gm, '') // Remove any remaining comments
         .replace(/\n\s*\n\s*\n/g, '\n\n') // Clean multiple newlines
         .replace(/getElement\(\);\./g, 'getElement().') // Fix getElement();. → getElement().
         .replace(/\(\(\); =>/g, '(() =>') // Fix (()); => → (() =>
+        .replace(/\.preventDefault\b(?!\()/g, '.preventDefault()') // Fix preventDefault without ()
         .trim();
+    
+    // Step 10: Fix the specific broken pattern we see in the logs
+    js = js.replace(
+        /key\.preventDefault\(\)\s*\n\s*if\s*\([^)]+\)\s*\{\s*\n\s*puts\([^)]+\);\s*\n\s*key\.preventDefault\(\)\s*\n\s*\}\);\s*\n\s*\}/g,
+        `key.preventDefault();
+    if (key.ctrlKey && key.key === "s") {
+        puts("Ctrl+S détecté!");
+        key.preventDefault();
+    }
+});`
+    );
 
     console.log('🔍 Transpiled result:', js); // Debug log
     return js;
@@ -168,6 +180,9 @@ function executeTranspiledCode(jsCode) {
         lines.forEach((line, index) => {
             console.log(`${index + 1}: ${line}`);
         });
+        
+        // Show the exact problematic area
+        console.log('🔍 Error details:', error.message);
     }
 }
 

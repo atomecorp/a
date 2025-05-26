@@ -1,1 +1,0 @@
-The purpose of the connection object could not be inferred.

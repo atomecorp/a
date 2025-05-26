@@ -1,1 +1,0 @@
-The purpose of the fullscreen object could not be inferred.

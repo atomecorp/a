@@ -62,20 +62,19 @@ container = A.new({
                           fasten: []
                         })
 container.attrContenteditable(true)
-# grab("main_container").style.contentEditable = "true"
+grab("main_container").backgroundColor("pink")
 
-# grab("main_container").attr("contenteditable", "true")
+container.keyboard do |key|
+  puts "Touche pressée: #{key.key}"
+  puts "Code: #{key.code}"
+   puts "KeyCode numérique: #{key.keyCode}"  
+key.preventDefault
+  if key.ctrl && key.key == "s"
+    puts "Ctrl+S détecté!"
+    key.preventDefault()
+  end
+end
 
-# container.keyboard do |key|
-#   puts "Touche pressée: #{key.key}"
-#   puts "Code: #{key.code}"
-
-#   if key.ctrl && key.key == "s"
-#     puts "Ctrl+S détecté!"
-#     key.preventDefault()
-#   end
-# end
-#
 container.onclick do
   puts 'div clicked'
   grab("main_container").backgroundColor("yellowgreen")

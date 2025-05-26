@@ -1,1 +1,0 @@
-Specific information about how to use the paint object.

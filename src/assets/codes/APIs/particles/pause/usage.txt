@@ -1,1 +1,0 @@
-The purpose of the pause object could not be inferred.

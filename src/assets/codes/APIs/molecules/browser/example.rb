@@ -1,1 +1,0 @@
-A.browser("../src/medias/utils/examples")

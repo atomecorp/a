@@ -1,1 +1,0 @@
-The purpose of the bundle object could not be inferred.

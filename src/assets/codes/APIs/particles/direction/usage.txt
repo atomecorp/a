@@ -1,1 +1,0 @@
-The purpose of the direction object could not be inferred.
