@@ -192,4 +192,3 @@ if (typeof window !== 'undefined') {
 	window.SquirelRubyParser = SquirelRubyParser;
 }
 
-console.log('[SquirelRubyParser] Wrapper chargé - Version 1.0.0');

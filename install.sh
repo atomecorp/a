@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# kill any Fastify server running on port 3001
+set -e
+
+FASTIFY_PORT=3001
+
+# Récupère les PID écoutant sur $FASTIFY_PORT
+PIDS=$(lsof -tiTCP:"$FASTIFY_PORT" -sTCP:LISTEN)
+
+if [ -n "$PIDS" ]; then
+  echo "Arrêt du serveur sur le port $FASTIFY_PORT…"
+  # Envoie SIGTERM à chaque PID (remplace par -9 si besoin)
+  kill $PIDS
+else
+  echo "Aucun process n'écoute sur le port $FASTIFY_PORT."
+fi
 # Fonction pour afficher les messages colorés
 print_status() {
     local color=$1
@@ -332,7 +347,7 @@ install_dependencies() {
 # Fonction principale pour créer et configurer le projet
 setup_project() {
     # Définir un nom d'application par défaut
-    DEFAULT_APP_NAME="atome"
+    DEFAULT_APP_NAME="test_app"
 
     # Vérifier si un nom d'application a été fourni
     if [ $# -eq 0 ]; then
