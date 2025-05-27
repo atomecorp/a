@@ -290,16 +290,13 @@ async function initSimple() {
     try {
         hybridParser = new SimpleHybridParser();
         
-        let code = null;
-        let fileType = null;
-        
-        const checkFile = async function(path, type) {
+        const checkFile = async function(path) {
             try {
                 const response = await fetch(path);
                 if (response.ok) {
                     const content = await response.text();
                     if (content && content.trim() !== '' && !content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
-                        return { content, type };
+                        return content;
                     }
                 }
             } catch (e) {
@@ -308,33 +305,14 @@ async function initSimple() {
             return null;
         };
         
-        // 1. Try .sqh (hybrid)
-        const sqhFile = await checkFile('./application/index.sqh', 'sqh');
-        if (sqhFile) {
-            code = sqhFile.content;
-            fileType = 'sqh';
-        }
-        
-        // 2. Try .sqr (pure Ruby)
-        if (!code) {
-            const sqrFile = await checkFile('./application/index.sqr', 'sqr');
-            if (sqrFile) {
-                code = sqrFile.content;
-                fileType = 'sqr';
-            }
-        }
+        // Try .sqh (hybrid)
+        const code = await checkFile('./application/index.sqh');
         
         if (!code) {
-            throw new Error('No index file found (.sqh, .sqr)');
+            throw new Error('No index.sqh file found');
         }
         
-        let finalCode;
-        
-        if (fileType === 'sqh') {
-            finalCode = hybridParser.processHybridFile(code);
-        } else if (fileType === 'sqr') {
-            finalCode = window.transpiler ? window.transpiler(code) : code;
-        }
+        const finalCode = hybridParser.processHybridFile(code);
         
         setTimeout(() => {
             executeCode(finalCode);
@@ -342,17 +320,6 @@ async function initSimple() {
         
     } catch (e) {
         console.error('❌ Initialization failed:', e);
-        
-        try {
-            const response = await fetch('./application/index.sqr');
-            if (response.ok) {
-                const code = await response.text();
-                const js = window.transpiler ? window.transpiler(code) : code;
-                setTimeout(() => executeCode(js), 100);
-            }
-        } catch (fallbackError) {
-            console.error('❌ Fallback failed:', fallbackError);
-        }
     }
 }
 
