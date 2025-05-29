@@ -33,6 +33,7 @@
 | [ ]    | HIGH     | Add runtime type checking (optional) | Warn or error if a particle receives a value of an unexpected type. |
 | [ ]    | HIGH     | Centralize and document `defineParticle` handlers | All particles should be registered and documented in one registry file. |
 | [ ]    | HIGH     | Add warnings for unknown or mistyped particles | Catch typos like `colr` instead of `color` and warn in console. |
+| [ ]    | HIGH     | Add require| add require mecanism for ruby syntax|
 
 ---
 
