@@ -7,6 +7,7 @@ echo "Navigation vers le dossier src..."
 cd src
 
 echo "Création du dossier analysis..."
+rmdir rm -rf analysis
 mkdir -p analysis
 
 echo "Copie des fichiers..."
