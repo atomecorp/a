@@ -3,4 +3,5 @@ test_app/
 atome/
 .idea/
 src/analysis/
-
+tests/working_tests
+tests/fixed_transpiler.js

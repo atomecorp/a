@@ -4,7 +4,7 @@
 # À exécuter depuis la racine du projet
 
 echo "Navigation vers le dossier src..."
-cd src
+cd test_app/src
 
 echo "Création du dossier analysis..."
 rmdir rm -rf analysis

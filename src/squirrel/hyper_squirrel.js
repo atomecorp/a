@@ -146,10 +146,14 @@ class SimpleHybridParser {
         
         let js = cleanLines.join('\n');
         
-        // Step 1: A.new conversion
+        // CORRECTION 1: A.new avec const
         js = js.replace(/(\w+)\s*=\s*A\.new\s*\(\s*\{([\s\S]*?)\}\s*\)/g, 'const $1 = new A({\n$2\n});');
         
-        // Step 2: Event handlers
+        // CORRECTION 2: String interpolation AVANT les autres transformations
+        js = js.replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`');
+        js = js.replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`');
+        
+        // Step 3: Event handlers CORRIGÉ
         js = js.replace(/(\w+)\.(on\w+|keyboard|drag|drop|focus|blur|change|input|submit|load|resize|scroll)\s+do\s*([\s\S]*?)end/g, (match, obj, event, body) => {
             const paramMatch = body.match(/^\s*\|([^|]+)\|/);
             
@@ -170,7 +174,7 @@ class SimpleHybridParser {
             }
         });
         
-        // Step 3: Generic blocks
+        // Step 4: Generic blocks CORRIGÉ
         js = js.replace(/(\w+)\.(\w+)\s+do\s*([\s\S]*?)end/g, (match, obj, method, body) => {
             if (match.includes('addEventListener') || match.includes('setTimeout')) {
                 return match;
@@ -192,16 +196,14 @@ class SimpleHybridParser {
             }
         });
         
-        // Step 4: Wait blocks
+        // CORRECTION 3: Wait blocks VRAIMENT CORRIGÉ
         js = js.replace(/wait\s+(\d+)\s+do\s*([\s\S]*?)end/g, (match, delay, body) => {
             const bodyClean = body.trim().split('\n').map(l => '    ' + l.trim()).join('\n');
             return `setTimeout(() => {\n${bodyClean}\n}, ${delay});`;
         });
         
-        // Step 5: Quick transformations
+        // Step 6: Quick transformations
         js = js
-            .replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`')
-            .replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`')
             .replace(/puts\s+(.+)/g, 'puts($1);')
             .replace(/puts\s*\(\s*(.+)\s*\)/g, 'puts($1);')
             .replace(/key\.ctrl/g, 'key.ctrlKey')
@@ -219,7 +221,8 @@ class SimpleHybridParser {
             .replace(/\)\s*;\s*\{/g, ') {')
             .trim();
 
-        // Final fix
+        // CORRECTION 4: Final fix pour les paramètres avec |
+        js = js.replace(/\(\(\) => \{ \|([^|]+)\|/g, '(($1) => {');
         js = js.replace(/key\.preventDefault\(\)\s*\}\);$/gm, 'key.preventDefault();\n    }\n});');
 
         return js;
