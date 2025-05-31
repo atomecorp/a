@@ -1382,8 +1382,8 @@ main() {
         
         log ""
         log "🚀 UTILISATION:"
-        log "   cd test_app && ./run-sqh-tests.sh     # Tous les tests"
-        log "   cd test_app/tests && ./launch-tests.sh # Direct"
+        log "   cd ../test_app && ./run-sqh-tests.sh     # Tous les tests"
+        log "   cd ../test_app/tests && ./launch-tests.sh # Direct"
         log ""
         log "🔧 COMMANDES DISPONIBLES:"
         log "   framework    # Tests framework A"
