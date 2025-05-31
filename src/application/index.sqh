@@ -1,4 +1,6 @@
 # # Simple test for the transpiler
+
+require 'require_test'
 // // Create a new A instance with custom properties
 const container2 = new A({
     attach: 'body',
