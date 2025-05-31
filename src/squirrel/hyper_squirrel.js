@@ -1,5 +1,5 @@
-// 🚀 Simple Hybrid Parser - Acorn Strategy
-// Replaces hyper_squirrel.js with this simplified version
+// 🚀 Smart Hybrid Parser - With Inline Require Support
+// Replaces hyper_squirrel.js with this enhanced version
 
 // Global variables
 let hybridParser;
@@ -217,11 +217,12 @@ class SimpleHybridParser {
             return `setTimeout(() => {\n${bodyClean}\n}, ${delay});`;
         });
         
-        // Step 5: Quick transformations
+        // Step 5: Quick transformations - 🚀 FIXED: puts with exclamation
         js = js
             .replace(/require\s+['"]([^'"]+)['"]/g, 'require("$1");')  // 🚀 NEW: require support
             .replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`')
             .replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`')
+            .replace(/puts\s+(['"])([^'"]*)\1!/g, 'puts($1$2!$1);') // 🚀 FIXED: puts 'text'! → puts('text!');
             .replace(/puts\s+(.+)/g, 'puts($1);')
             .replace(/puts\s*\(\s*(.+)\s*\)/g, 'puts($1);')
             .replace(/key\.ctrl/g, 'key.ctrlKey')
@@ -285,7 +286,7 @@ class SimpleHybridParser {
     }
 
     /**
-     * Process a hybrid file (.sqh)
+     * Process a hybrid file (.sqh) - Basic version
      */
     processHybridFile(code) {        
         // AMÉLIORATION: Pré-nettoyage pour supprimer les commentaires Ruby avant traitement
@@ -315,6 +316,134 @@ class SimpleHybridParser {
     }
 }
 
+// 🚀 SMART: Enhanced parser with inline require support
+class SmartHybridParser extends SimpleHybridParser {
+    constructor() {
+        super();
+        this.processedFiles = new Set(); // Éviter les imports circulaires
+    }
+
+    /**
+     * 🚀 Process require statements SYNCHRONOUSLY during transpilation
+     */
+    async processRequireStatements(code) {
+        const lines = code.split('\n');
+        const processedLines = [];
+        
+        for (const line of lines) {
+            const requireMatch = line.match(/^require\s+['"]([^'"]+)['"]$/);
+            
+            if (requireMatch) {
+                const requiredFile = requireMatch[1];
+                
+                // Éviter les imports circulaires
+                if (this.processedFiles.has(requiredFile)) {
+                    console.warn(`⚠️ Circular require detected for: ${requiredFile}`);
+                    processedLines.push(`// Circular require avoided: ${requiredFile}`);
+                    continue;
+                }
+                
+                try {
+                  //  console.log(`📦 Processing require: ${requiredFile}`);
+                    this.processedFiles.add(requiredFile);
+                    
+                    const requiredCode = await this.loadRequiredFile(requiredFile);
+                    if (requiredCode) {
+                        // Traiter récursivement les requires dans le fichier requis
+                        const processedRequiredCode = await this.processRequireStatements(requiredCode);
+                        const transpiledCode = this.monBonTranspiler(processedRequiredCode);
+                        
+                        processedLines.push(`// === Required from: ${requiredFile} ===`);
+                        processedLines.push(transpiledCode);
+                        processedLines.push(`// === End of: ${requiredFile} ===`);
+                        
+                      //  console.log(`✅ Inlined require: ${requiredFile}`);
+                    } else {
+                        processedLines.push(`console.error('Failed to load: ${requiredFile}');`);
+                    }
+                } catch (error) {
+                    console.error(`❌ Error processing ${requiredFile}:`, error);
+                    processedLines.push(`console.error('Error loading: ${requiredFile}');`);
+                }
+            } else {
+                processedLines.push(line);
+            }
+        }
+        
+        return processedLines.join('\n');
+    }
+
+    /**
+     * 🚀 Load a required file during transpilation
+     */
+    async loadRequiredFile(filename) {
+        const possiblePaths = [
+            `./application/${filename}.sqh`,
+            `./${filename}.sqh`,
+            `./application/${filename}`,
+            `./${filename}`,
+            `./vie/${filename}.sqh`,
+            `./vie/${filename}`,
+        ];
+
+        for (const path of possiblePaths) {
+            try {
+                const response = await fetch(path);
+                if (response.ok) {
+                    const content = await response.text();
+                    
+                    // Éviter les pages HTML d'erreur
+                    if (!content.trim().startsWith('<!DOCTYPE') && 
+                        !content.trim().startsWith('<html')) {
+                        
+                       // console.log(`✅ Loaded for inlining: ${path}`);
+                        return content;
+                    }
+                }
+            } catch (error) {
+                // Continue avec le prochain chemin
+            }
+        }
+
+        console.error(`❌ Required file not found: ${filename}`);
+        return null;
+    }
+
+    /**
+     * 🚀 ENHANCED: Process hybrid file with INLINE require support
+     */
+    async processHybridFile(code) {
+        // console.log('🚀 Processing hybrid file with inline requires...');
+        
+        // D'abord traiter tous les requires et inliner leur contenu
+        const codeWithInlinedRequires = await this.processRequireStatements(code);
+        
+      //  console.log('📝 Code with inlined requires:', codeWithInlinedRequires);
+        
+        // Puis traiter le code hybride complet normalement
+        const preCleanedCode = codeWithInlinedRequires
+            .split('\n')
+            .map(line => {
+                if (line.includes('#') && !line.includes('#{')) {
+                    const commentIndex = line.indexOf('#');
+                    const beforeComment = line.substring(0, commentIndex).trim();
+                    if (beforeComment) {
+                        return beforeComment;
+                    }
+                    return '';
+                }
+                return line;
+            })
+            .join('\n');
+        
+        const { jsCode, rubyBlocks } = this.extractRubyFromHybrid(preCleanedCode);
+        let finalCode = this.transpileAndReplace(jsCode, rubyBlocks);
+        finalCode = this.validateAndFixJavaScript(finalCode);
+        
+        return finalCode;
+    }
+}
+
 // Simple execution function
 function executeCode(code) {
     if (!code || typeof code !== 'string' || code.trim() === '') {
@@ -328,9 +457,11 @@ function executeCode(code) {
     }
 }
 
-async function initSimple() {
+// 🚀 Enhanced initialization with smart parser
+async function initSmart() {
     try {
-        hybridParser = new SimpleHybridParser();
+        // Utiliser le parser intelligent
+        hybridParser = new SmartHybridParser();
         
         const checkFile = async function(path) {
             try {
@@ -338,13 +469,10 @@ async function initSimple() {
                 if (response.ok) {
                     let content = await response.text();
                     
-                    // Si le fichier est vide ou ne contient que des espaces/commentaires,
-                    // ajouter un commentaire pour éviter l'erreur "fichier non trouvé"
                     if (!content || content.trim() === '' || /^[\s#]*$/.test(content)) {
                         content = "# Empty file - auto-generated comment\n" + content;
                     }
                     
-                    // Rejeter seulement les pages HTML d'erreur
                     if (!content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
                         return content;
                     }
@@ -362,7 +490,10 @@ async function initSimple() {
             throw new Error('No index.sqh file found');
         }
         
-        const finalCode = hybridParser.processHybridFile(code);
+        // 🚀 Process with INLINE require support
+        const finalCode = await hybridParser.processHybridFile(code);
+        
+        //console.log('🚀 Final JavaScript with inlined requires:', finalCode);
         
         setTimeout(() => {
             executeCode(finalCode);
@@ -375,11 +506,13 @@ async function initSimple() {
 
 // Export and initialization
 window.SimpleHybridParser = SimpleHybridParser;
+window.SmartHybridParser = SmartHybridParser;
 window.executeCode = executeCode;
-window.initSimple = initSimple;
+window.initSmart = initSmart;
+window.initSimple = initSmart; // Replace simple with smart
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSimple);
+    document.addEventListener('DOMContentLoaded', initSmart);
 } else {
-    initSimple();
+    initSmart();
 }
