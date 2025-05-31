@@ -1,4 +1,4 @@
-// 🚀 Simple Hybrid Parser - Acorn Strategy
+// 🚀 Simple Hybrid Parser - Acorn Strategy - CORRECTED VERSION
 // Replaces hyper_squirrel.js with this simplified version
 
 // Global variables
@@ -124,7 +124,7 @@ class SimpleHybridParser {
     }
 
     /**
-     * ULTRA-OPTIMIZED TRANSPILER - Single Pass Parser
+     * ULTRA-OPTIMIZED TRANSPILER - Single Pass Parser - CORRECTED VERSION
      * 🚀 10x faster - Single pass, pre-compiled regex
      */
     monBonTranspiler(rubyCode) {
@@ -152,6 +152,17 @@ class SimpleHybridParser {
         // CORRECTION 2: String interpolation AVANT les autres transformations
         js = js.replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`');
         js = js.replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`');
+        
+        // CORRECTION 3: Variables simples (sans A.new) - SAFE VERSION
+        js = js.replace(/^(\w+)\s*=\s*([^=\n]+)$/gm, (match, varName, value) => {
+            // Skip if already has const/let/var or if it's an A.new assignment
+            if (match.includes('const ') || match.includes('let ') || match.includes('var ') || match.includes('A.new')) {
+                return match;
+            }
+            // Clean value and add const
+            const cleanValue = value.trim().replace(/;$/, '');
+            return `const ${varName} = ${cleanValue};`;
+        });
         
         // Step 3: Event handlers CORRIGÉ
         js = js.replace(/(\w+)\.(on\w+|keyboard|drag|drop|focus|blur|change|input|submit|load|resize|scroll)\s+do\s*([\s\S]*?)end/g, (match, obj, event, body) => {
@@ -196,10 +207,10 @@ class SimpleHybridParser {
             }
         });
         
-        // CORRECTION 3: Wait blocks VRAIMENT CORRIGÉ
+        // CORRECTION 4: Wait blocks VRAIMENT CORRIGÉ - Fix pour correspondre aux tests
         js = js.replace(/wait\s+(\d+)\s+do\s*([\s\S]*?)end/g, (match, delay, body) => {
             const bodyClean = body.trim().split('\n').map(l => '    ' + l.trim()).join('\n');
-            return `setTimeout(() => {\n${bodyClean}\n}, ${delay});`;
+            return `wait(${delay}, () => {\n${bodyClean}\n});`;
         });
         
         // Step 6: Quick transformations
@@ -209,8 +220,13 @@ class SimpleHybridParser {
             .replace(/key\.ctrl/g, 'key.ctrlKey')
             .replace(/if\s+(.+?)\s*$/gm, 'if ($1) {')
             .replace(/^\s*end\s*$/gm, '}')
+            
+            // CORRECTION 5: Grab fixes pour correspondre aux tests
             .replace(/grab\((['"])([^'"]+)\1\)\.(\w+)\(([^)]*)\)/g, 'grab($1$2$1).$3($4);')
+            
+            // CORRECTION 6: Méthodes générales avec ajout automatique de ;
             .replace(/(\w+)\.(\w+)\(([^)]*)\)(?!\s*[;}])(?!\s+do)(?!;)/g, '$1.$2($3);')
+            
             .replace(/^\s*#.*$/gm, '')
             .replace(/\n\s*\n\s*\n/g, '\n\n')
             .replace(/getElement\(\);\./g, 'getElement().')
@@ -219,9 +235,17 @@ class SimpleHybridParser {
             .replace(/;(\.[a-zA-Z])/g, '$1')
             .replace(/\(\)\s*;\s*=>/g, '() =>')
             .replace(/\)\s*;\s*\{/g, ') {')
+            
+            // CORRECTION 7: Fix double const et autres mots-clés
+            .replace(/const\s+const\s+/g, 'const ')
+            .replace(/const\s+let\s+/g, 'const ')
+            .replace(/const\s+var\s+/g, 'const ')
+            .replace(/let\s+const\s+/g, 'const ')
+            .replace(/var\s+const\s+/g, 'const ')
+            
             .trim();
 
-        // CORRECTION 4: Final fix pour les paramètres avec |
+        // CORRECTION 8: Final fix pour les paramètres avec |
         js = js.replace(/\(\(\) => \{ \|([^|]+)\|/g, '(($1) => {');
         js = js.replace(/key\.preventDefault\(\)\s*\}\);$/gm, 'key.preventDefault();\n    }\n});');
 
@@ -248,7 +272,23 @@ class SimpleHybridParser {
             .replace(/if\s*\(\s*([^)]+)\s*\)\s*\{\s*\)\s*\{/g, 'if ($1) {')
             .replace(/if\s*\(\s*\(\s*([^)]+)\s*\)\s*\)\s*\{/g, 'if ($1) {')
             .replace(/;;+/g, ';')
-            .replace(/;\s*\}\s*$/gm, '\n}');
+            .replace(/;\s*\}\s*$/gm, '\n}')
+            
+            // CORRECTION 9: Fix pour variables sans const/let/var - IMPROVED VERSION
+            .replace(/^(\w+)\s*=\s*([^=\n;]+);?$/gm, (match, varName, value) => {
+                // Skip if already has const/let/var, is A.new, or is inside a function/object
+                if (match.includes('const ') || match.includes('let ') || match.includes('var ') || 
+                    match.includes('A.new') || match.includes('new A(') || 
+                    value.includes('function') || varName === 'const') {
+                    return match;
+                }
+                // Additional safety: check if varName is a valid identifier
+                if (!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(varName)) {
+                    return match;
+                }
+                const cleanValue = value.trim().replace(/;$/, '');
+                return `const ${varName} = ${cleanValue};`;
+            });
             
         // Fix missing semicolons and parentheses
         fixedCode = fixedCode
@@ -293,27 +333,30 @@ async function initSimple() {
     try {
         hybridParser = new SimpleHybridParser();
         
-        const checkFile = async function(path) {
-            try {
-                const response = await fetch(path);
-                if (response.ok) {
-                    const content = await response.text();
-                    if (content && content.trim() !== '' && !content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
-                        return content;
-                    }
-                }
-            } catch (e) {
-                // File not found
+      const checkFile = async function(path) {
+    try {
+        const response = await fetch(path);
+        if (response.ok) {
+            const content = await response.text();
+            
+            // CORRECTION: Accepter les fichiers vides
+            // Rejeter seulement les pages HTML d'erreur
+            if (!content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
+                return content; // Retourner même si vide
             }
-            return null;
-        };
+        }
+    } catch (e) {
+        // File not found
+    }
+    return null;
+};
         
         // Try .sqh (hybrid)
         const code = await checkFile('./application/index.sqh');
         
-        if (!code) {
-            throw new Error('No index.sqh file found');
-        }
+      if (code === null) {
+    throw new Error('No index.sqh file found');
+}
         
         const finalCode = hybridParser.processHybridFile(code);
         

@@ -77,3 +77,12 @@ Object.prototype.inspect = function () {
 };
 
 window.puts = puts;
+
+function wait(delay, callback) {
+    if (typeof callback === 'function') {
+        setTimeout(callback, delay);
+    } else {
+        console.warn('wait() requires a callback function');
+    }
+}
+window.wait = wait;
