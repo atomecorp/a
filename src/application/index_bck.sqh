@@ -26,12 +26,6 @@ puts(container2)
 puts(container2.width)
 puts(container2.element)
 
-// // dummy comments
-puts (container2.width() )
-puts container2.width
-puts (container2.width)
-puts container2.id()
-
 
 
 
