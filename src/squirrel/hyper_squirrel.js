@@ -22,6 +22,7 @@ class SimpleHybridParser {
             /^end\s*$/m,                         // end keyword
             /#\{[^}]+\}/,                        // string interpolation
             /^\w+\s*=\s*A\.new\s*\(/m,          // container = A.new(
+            /^require\s+['"][\w\/\.]+['"]$/m,    // require statement
         ];
         return rubyPatterns.some(pattern => pattern.test(code));
     }
@@ -97,7 +98,8 @@ class SimpleHybridParser {
             ) ||
             trimmed.startsWith('puts ') ||
             trimmed.startsWith('grab(') ||
-            trimmed.startsWith('def ')
+            trimmed.startsWith('def ') ||
+            trimmed.startsWith('require ')  // 🚀 NEW: Support require
         );
     }
 
@@ -217,6 +219,7 @@ class SimpleHybridParser {
         
         // Step 5: Quick transformations
         js = js
+            .replace(/require\s+['"]([^'"]+)['"]/g, 'require("$1");')  // 🚀 NEW: require support
             .replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`')
             .replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`')
             .replace(/puts\s+(.+)/g, 'puts($1);')
@@ -329,28 +332,28 @@ async function initSimple() {
     try {
         hybridParser = new SimpleHybridParser();
         
-  const checkFile = async function(path) {
-    try {
-        const response = await fetch(path);
-        if (response.ok) {
-            let content = await response.text();
-            
-            // Si le fichier est vide ou ne contient que des espaces/commentaires,
-            // ajouter un commentaire pour éviter l'erreur "fichier non trouvé"
-            if (!content || content.trim() === '' || /^[\s#]*$/.test(content)) {
-                content = "# Empty file - auto-generated comment\n" + content;
+        const checkFile = async function(path) {
+            try {
+                const response = await fetch(path);
+                if (response.ok) {
+                    let content = await response.text();
+                    
+                    // Si le fichier est vide ou ne contient que des espaces/commentaires,
+                    // ajouter un commentaire pour éviter l'erreur "fichier non trouvé"
+                    if (!content || content.trim() === '' || /^[\s#]*$/.test(content)) {
+                        content = "# Empty file - auto-generated comment\n" + content;
+                    }
+                    
+                    // Rejeter seulement les pages HTML d'erreur
+                    if (!content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
+                        return content;
+                    }
+                }
+            } catch (e) {
+                // File not found
             }
-            
-            // Rejeter seulement les pages HTML d'erreur
-            if (!content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
-                return content;
-            }
-        }
-    } catch (e) {
-        // File not found
-    }
-    return null;
-};
+            return null;
+        };
         
         // Try .sqh (hybrid)
         const code = await checkFile('./application/index.sqh');

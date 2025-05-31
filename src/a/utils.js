@@ -58,7 +58,6 @@ window.grab = (function () {
 })();
 window.grab = grab;
 
-
 // Add extensions to native JavaScript objects (similar to Ruby)
 Object.prototype.define_method = function (name, fn) {
     this[name] = fn;
@@ -86,3 +85,100 @@ function wait(delay, callback) {
     }
 }
 window.wait = wait;
+
+///////
+
+// 🚀 OPTIMIZED: require() sans attente, utilise directement le bon transpiler
+
+const requireCache = new Map();
+const loadingFiles = new Set();
+
+window.require = async function(filename) {
+    // Vérifier le cache
+    if (requireCache.has(filename)) {
+        console.log(`📦 From cache: ${filename}`);
+        return requireCache.get(filename);
+    }
+    
+    // Protection contre les imports circulaires
+    if (loadingFiles.has(filename)) {
+        console.warn(`⚠️ Circular require detected: ${filename}`);
+        return null;
+    }
+    
+    loadingFiles.add(filename);
+    
+    try {
+        // Chemins à essayer (comme Ruby)
+        const paths = [
+            `./application/${filename}.sqh`,
+            `./${filename}.sqh`,
+            `./application/${filename}`,
+            `./${filename}`,
+            `./vie/${filename}.sqh`,
+            `./vie/${filename}`,
+        ];
+        
+        for (const path of paths) {
+            try {
+                const response = await fetch(path);
+                if (response.ok) {
+                    const content = await response.text();
+                    
+                    // Éviter les pages d'erreur HTML
+                    if (!content.trim().startsWith('<!DOCTYPE') && 
+                        !content.trim().startsWith('<html')) {
+                        
+                        let finalCode = content;
+                        
+                        // 🚀 Transpiler si c'est un fichier .sqh
+                        if (path.endsWith('.sqh')) {
+                            // Essayer hybridParser d'abord, sinon fallback
+                            if (window.hybridParser && 
+                                typeof window.hybridParser.processHybridFile === 'function') {
+                                
+                                console.log(`🔄 Using hybridParser for ${path}...`);
+                                finalCode = window.hybridParser.processHybridFile(content);
+                                
+                            } else if (window.transpiler && typeof window.transpiler === 'function') {
+                                
+                                console.log(`🔄 Using transpiler fallback for ${path}...`);
+                                finalCode = window.transpiler(content);
+                                
+                            } else {
+                                console.error(`❌ No transpiler available for ${path}`);
+                                return null;
+                            }
+                            
+                            console.log(`✅ Transpiled ${path}`);
+                        }
+                        
+                        // Exécuter le code transpilé
+                        if (window.executeCode && typeof window.executeCode === 'function') {
+                            window.executeCode(finalCode);
+                        } else {
+                            eval(finalCode);
+                        }
+                        
+                        // Mettre en cache
+                        requireCache.set(filename, path);
+                        
+                        console.log(`✅ Successfully required: ${path}`);
+                        return path;
+                    }
+                }
+            } catch (e) {
+                console.log(`❌ Failed to load ${path}:`, e.message);
+            }
+        }
+        
+        console.error(`❌ File not found: ${filename}`);
+        return null;
+        
+    } finally {
+        loadingFiles.delete(filename);
+    }
+};
+
+// Alias pour compatibilité
+window.load = window.require;
