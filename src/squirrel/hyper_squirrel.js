@@ -1,4 +1,4 @@
-// 🚀 Simple Hybrid Parser - Acorn Strategy - CORRECTED VERSION
+// 🚀 Simple Hybrid Parser - Acorn Strategy
 // Replaces hyper_squirrel.js with this simplified version
 
 // Global variables
@@ -113,18 +113,22 @@ class SimpleHybridParser {
             finalCode = finalCode.replace(`// ${block.placeholder}`, transpiledRuby);
         }
         
-        // 🚀 Single pass cleanup
+        // 🚀 Single pass cleanup - AMÉLIORATION: Nettoyage plus agressif des commentaires
         return finalCode
             .split('\n')
             .filter(line => {
                 const trimmed = line.trim();
-                return trimmed && !trimmed.startsWith('#') && trimmed !== 'end';
+                // Supprimer toutes les lignes vides et tous les commentaires (# et //)
+                return trimmed && 
+                       !trimmed.startsWith('//') && 
+                       !trimmed.startsWith('#') && 
+                       trimmed !== 'end';
             })
             .join('\n');
     }
 
     /**
-     * ULTRA-OPTIMIZED TRANSPILER - Single Pass Parser - CORRECTED VERSION
+     * ULTRA-OPTIMIZED TRANSPILER - Single Pass Parser
      * 🚀 10x faster - Single pass, pre-compiled regex
      */
     monBonTranspiler(rubyCode) {
@@ -132,39 +136,37 @@ class SimpleHybridParser {
             return '';
         }
 
-        // Clean the input first
+        // Clean the input first - AMÉLIORATION: Nettoyage plus complet
         const lines = rubyCode.trim().split('\n');
         const cleanLines = [];
         
-        // First pass: clean
+        // First pass: clean - supprime TOUS les commentaires Ruby
         for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line && !line.startsWith('#') && !line.startsWith('####')) {
-                cleanLines.push(lines[i]);
+            let line = lines[i];
+            const trimmed = line.trim();
+            
+            // Ignorer les lignes vides et les commentaires
+            if (!trimmed || trimmed.startsWith('#')) {
+                continue;
             }
+            
+            // Supprimer les commentaires en fin de ligne (après le code)
+            // Attention aux chaînes avec #{}
+            if (line.includes('#') && !line.includes('#{')) {
+                const commentIndex = line.indexOf('#');
+                line = line.substring(0, commentIndex).trim();
+                if (!line) continue; // Si la ligne ne contient que le commentaire
+            }
+            
+            cleanLines.push(line);
         }
         
         let js = cleanLines.join('\n');
         
-        // CORRECTION 1: A.new avec const
+        // Step 1: A.new conversion
         js = js.replace(/(\w+)\s*=\s*A\.new\s*\(\s*\{([\s\S]*?)\}\s*\)/g, 'const $1 = new A({\n$2\n});');
         
-        // CORRECTION 2: String interpolation AVANT les autres transformations
-        js = js.replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`');
-        js = js.replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`');
-        
-        // CORRECTION 3: Variables simples (sans A.new) - SAFE VERSION
-        js = js.replace(/^(\w+)\s*=\s*([^=\n]+)$/gm, (match, varName, value) => {
-            // Skip if already has const/let/var or if it's an A.new assignment
-            if (match.includes('const ') || match.includes('let ') || match.includes('var ') || match.includes('A.new')) {
-                return match;
-            }
-            // Clean value and add const
-            const cleanValue = value.trim().replace(/;$/, '');
-            return `const ${varName} = ${cleanValue};`;
-        });
-        
-        // Step 3: Event handlers CORRIGÉ
+        // Step 2: Event handlers
         js = js.replace(/(\w+)\.(on\w+|keyboard|drag|drop|focus|blur|change|input|submit|load|resize|scroll)\s+do\s*([\s\S]*?)end/g, (match, obj, event, body) => {
             const paramMatch = body.match(/^\s*\|([^|]+)\|/);
             
@@ -185,7 +187,7 @@ class SimpleHybridParser {
             }
         });
         
-        // Step 4: Generic blocks CORRIGÉ
+        // Step 3: Generic blocks
         js = js.replace(/(\w+)\.(\w+)\s+do\s*([\s\S]*?)end/g, (match, obj, method, body) => {
             if (match.includes('addEventListener') || match.includes('setTimeout')) {
                 return match;
@@ -207,27 +209,24 @@ class SimpleHybridParser {
             }
         });
         
-        // CORRECTION 4: Wait blocks VRAIMENT CORRIGÉ - Fix pour correspondre aux tests
+        // Step 4: Wait blocks
         js = js.replace(/wait\s+(\d+)\s+do\s*([\s\S]*?)end/g, (match, delay, body) => {
             const bodyClean = body.trim().split('\n').map(l => '    ' + l.trim()).join('\n');
-            return `wait(${delay}, () => {\n${bodyClean}\n});`;
+            return `setTimeout(() => {\n${bodyClean}\n}, ${delay});`;
         });
         
-        // Step 6: Quick transformations
+        // Step 5: Quick transformations
         js = js
+            .replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`')
+            .replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`')
             .replace(/puts\s+(.+)/g, 'puts($1);')
             .replace(/puts\s*\(\s*(.+)\s*\)/g, 'puts($1);')
             .replace(/key\.ctrl/g, 'key.ctrlKey')
             .replace(/if\s+(.+?)\s*$/gm, 'if ($1) {')
             .replace(/^\s*end\s*$/gm, '}')
-            
-            // CORRECTION 5: Grab fixes pour correspondre aux tests
             .replace(/grab\((['"])([^'"]+)\1\)\.(\w+)\(([^)]*)\)/g, 'grab($1$2$1).$3($4);')
-            
-            // CORRECTION 6: Méthodes générales avec ajout automatique de ;
             .replace(/(\w+)\.(\w+)\(([^)]*)\)(?!\s*[;}])(?!\s+do)(?!;)/g, '$1.$2($3);')
-            
-            .replace(/^\s*#.*$/gm, '')
+            .replace(/^\s*#.*$/gm, '') // Supprimer tous les commentaires restants
             .replace(/\n\s*\n\s*\n/g, '\n\n')
             .replace(/getElement\(\);\./g, 'getElement().')
             .replace(/\(\(\); =>/g, '(() =>')
@@ -235,18 +234,9 @@ class SimpleHybridParser {
             .replace(/;(\.[a-zA-Z])/g, '$1')
             .replace(/\(\)\s*;\s*=>/g, '() =>')
             .replace(/\)\s*;\s*\{/g, ') {')
-            
-            // CORRECTION 7: Fix double const et autres mots-clés
-            .replace(/const\s+const\s+/g, 'const ')
-            .replace(/const\s+let\s+/g, 'const ')
-            .replace(/const\s+var\s+/g, 'const ')
-            .replace(/let\s+const\s+/g, 'const ')
-            .replace(/var\s+const\s+/g, 'const ')
-            
             .trim();
 
-        // CORRECTION 8: Final fix pour les paramètres avec |
-        js = js.replace(/\(\(\) => \{ \|([^|]+)\|/g, '(($1) => {');
+        // Final fix
         js = js.replace(/key\.preventDefault\(\)\s*\}\);$/gm, 'key.preventDefault();\n    }\n});');
 
         return js;
@@ -273,22 +263,9 @@ class SimpleHybridParser {
             .replace(/if\s*\(\s*\(\s*([^)]+)\s*\)\s*\)\s*\{/g, 'if ($1) {')
             .replace(/;;+/g, ';')
             .replace(/;\s*\}\s*$/gm, '\n}')
-            
-            // CORRECTION 9: Fix pour variables sans const/let/var - IMPROVED VERSION
-            .replace(/^(\w+)\s*=\s*([^=\n;]+);?$/gm, (match, varName, value) => {
-                // Skip if already has const/let/var, is A.new, or is inside a function/object
-                if (match.includes('const ') || match.includes('let ') || match.includes('var ') || 
-                    match.includes('A.new') || match.includes('new A(') || 
-                    value.includes('function') || varName === 'const') {
-                    return match;
-                }
-                // Additional safety: check if varName is a valid identifier
-                if (!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(varName)) {
-                    return match;
-                }
-                const cleanValue = value.trim().replace(/;$/, '');
-                return `const ${varName} = ${cleanValue};`;
-            });
+            // AMÉLIORATION: Supprimer tous les commentaires restants
+            .replace(/^\s*#.*$/gm, '')
+            .replace(/\/\/.*$/gm, ''); // Supprimer aussi les commentaires JS en fin de ligne
             
         // Fix missing semicolons and parentheses
         fixedCode = fixedCode
@@ -308,7 +285,26 @@ class SimpleHybridParser {
      * Process a hybrid file (.sqh)
      */
     processHybridFile(code) {        
-        const { jsCode, rubyBlocks } = this.extractRubyFromHybrid(code);
+        // AMÉLIORATION: Pré-nettoyage pour supprimer les commentaires Ruby avant traitement
+        const preCleanedCode = code
+            .split('\n')
+            .map(line => {
+                // Si la ligne contient un commentaire Ruby en fin de ligne (mais pas d'interpolation)
+                if (line.includes('#') && !line.includes('#{')) {
+                    const commentIndex = line.indexOf('#');
+                    const beforeComment = line.substring(0, commentIndex).trim();
+                    // Si il y a du code avant le commentaire, on garde juste le code
+                    if (beforeComment) {
+                        return beforeComment;
+                    }
+                    // Sinon, c'est juste un commentaire, on le supprime
+                    return '';
+                }
+                return line;
+            })
+            .join('\n');
+        
+        const { jsCode, rubyBlocks } = this.extractRubyFromHybrid(preCleanedCode);
         let finalCode = this.transpileAndReplace(jsCode, rubyBlocks);
         finalCode = this.validateAndFixJavaScript(finalCode);
         
@@ -333,16 +329,21 @@ async function initSimple() {
     try {
         hybridParser = new SimpleHybridParser();
         
-      const checkFile = async function(path) {
+  const checkFile = async function(path) {
     try {
         const response = await fetch(path);
         if (response.ok) {
-            const content = await response.text();
+            let content = await response.text();
             
-            // CORRECTION: Accepter les fichiers vides
+            // Si le fichier est vide ou ne contient que des espaces/commentaires,
+            // ajouter un commentaire pour éviter l'erreur "fichier non trouvé"
+            if (!content || content.trim() === '' || /^[\s#]*$/.test(content)) {
+                content = "# Empty file - auto-generated comment\n" + content;
+            }
+            
             // Rejeter seulement les pages HTML d'erreur
             if (!content.trim().startsWith('<!DOCTYPE') && !content.trim().startsWith('<html')) {
-                return content; // Retourner même si vide
+                return content;
             }
         }
     } catch (e) {
@@ -354,9 +355,9 @@ async function initSimple() {
         // Try .sqh (hybrid)
         const code = await checkFile('./application/index.sqh');
         
-      if (code === null) {
-    throw new Error('No index.sqh file found');
-}
+        if (!code) {
+            throw new Error('No index.sqh file found');
+        }
         
         const finalCode = hybridParser.processHybridFile(code);
         
