@@ -1,6 +1,7 @@
 /**
  * 🚀 HYPER SQUIRREL - Transpileur Simplifié et Robuste
  * VERSION SIMPLE - Focus sur les transformations essentielles
+ * FIXED VERSION - Gestion améliorée des commentaires
  */
 
 // 🛡️ PROTECTION
@@ -11,7 +12,7 @@ if (typeof window._hyperSquirrelLocked === 'undefined') {
 }
 
 /**
- * 🎯 TRANSPILEUR SIMPLIFIÉ
+ * 🎯 TRANSPILEUR SIMPLIFIÉ - VERSION CORRIGÉE
  */
 function transpiler(rubyCode) {
     if (!rubyCode || typeof rubyCode !== 'string') {
@@ -28,20 +29,34 @@ function transpiler(rubyCode) {
         return '// Self-transpilation blocked for safety';
     }
 
-    console.log('⚡ Hyper Squirrel transpiling Ruby...');
+    // console.log('⚡ Hyper Squirrel transpiling Ruby...');
 
     let js = rubyCode.trim();
 
-    // 0. GÉRER LES REQUIRES - Transformation simple
+    // 0. GÉRER LES COMMENTAIRES EN PREMIER - VERSION AMÉLIORÉE
+    js = js
+        .replace(/^\s*####.*$/gm, '') // Remove #### comments
+        .replace(/^\s*#\s*#.*$/gm, '') // Remove # # comments (NOUVEAU)
+        .replace(/^\s*#[^#].*$/gm, '') // Remove # comments (simple)
+        .replace(/^\s*#\s*$/gm, '') // Remove lines with just # (NOUVEAU)
+        .replace(/\n\s*\n/g, '\n'); // Clean double newlines
+
+    // Si après nettoyage des commentaires il ne reste rien, retourner du code vide valide
+    if (!js.trim()) {
+        // console.log('✅ All code was comments - returning empty valid JS');
+        return '// All content was comments';
+    }
+
+    // 1. GÉRER LES REQUIRES - Transformation simple
     js = js.replace(/^require\s+['"]([^'"]+)['"]$/gm, (match, filename) => {
-        console.log(`🔗 Converting require: ${filename}`);
+        // console.log(`🔗 Converting require: ${filename}`);
         return `require('${filename}');`;  // Simple call, pas async
     });
 
-    // 1. A.new() → new A() - Pattern le plus simple
+    // 2. A.new() → new A() - Pattern le plus simple
     js = js.replace(/(\w+)\s*=\s*A\.new\s*\(/g, 'const $1 = new A(');
 
-    // 2. Événements avec do...end
+    // 3. Événements avec do...end
     js = js.replace(/(\w+)\.(on\w+|keyboard)\s+do\s*\|([^|]+)\|([\s\S]*?)end/g, 
         (match, obj, event, param, body) => {
             const cleanBody = body.trim().split('\n').map(line => '    ' + line.trim()).join('\n');
@@ -55,7 +70,7 @@ function transpiler(rubyCode) {
         }
     );
 
-    // 3. Événements sans paramètres
+    // 4. Événements sans paramètres
     js = js.replace(/(\w+)\.(on\w+)\s+do\s*([\s\S]*?)end/g, 
         (match, obj, event, body) => {
             const cleanBody = body.trim().split('\n').map(line => '    ' + line.trim()).join('\n');
@@ -63,7 +78,7 @@ function transpiler(rubyCode) {
         }
     );
 
-    // 4. Wait blocks
+    // 5. Wait blocks
     js = js.replace(/wait\s+(\d+)\s+do\s*([\s\S]*?)end/g, 
         (match, delay, body) => {
             const cleanBody = body.trim().split('\n').map(line => '    ' + line.trim()).join('\n');
@@ -71,29 +86,27 @@ function transpiler(rubyCode) {
         }
     );
 
-    // 5. String interpolation
+    // 6. String interpolation
     js = js.replace(/"([^"]*?)#\{([^}]+)\}([^"]*?)"/g, '`$1${$2}$3`');
     js = js.replace(/'([^']*?)#\{([^}]+)\}([^']*?)'/g, '`$1${$2}$3`');
 
-    // 6. Puts statements
+    // 7. Puts statements
     js = js.replace(/puts\s+(.+)/g, 'puts($1);');
 
-    // 7. Conditionals
+    // 8. Conditionals
     js = js.replace(/key\.ctrl/g, 'key.ctrlKey');
     js = js.replace(/if\s+(.+?)\s*$/gm, 'if ($1) {');
     js = js.replace(/^\s*end\s*$/gm, '}');
 
-    // 8. Grab calls
+    // 9. Grab calls
     js = js.replace(/grab\("([^"]+)"\)\.(\w+)\("([^"]+)"\)/g, 'grab("$1").$2("$3");');
     js = js.replace(/grab\("([^"]+)"\)\.(\w+)\(\)/g, 'grab("$1").$2();');
 
-    // 9. Method calls - Simple pattern
+    // 10. Method calls - Simple pattern
     js = js.replace(/(\w+)\.(\w+)\s+([^(\n]+)$/gm, '$1.$2($3);');
 
-    // 10. Nettoyage final - CORRECTION EVENTS
+    // 11. Nettoyage final - VERSION AMÉLIORÉE
     js = js
-        .replace(/^\s*####.*$/gm, '') // Remove #### comments
-        .replace(/^\s*#[^#].*$/gm, '') // Remove # comments
         .replace(/\n\s*\n/g, '\n') // Clean double newlines
         .replace(/\.preventDefault\(\}\;\)/g, '.preventDefault()') // Fix preventDefault(};)
         .replace(/\.preventDefault\(\}\)/g, '.preventDefault()') // Fix preventDefault(})
@@ -110,12 +123,18 @@ function transpiler(rubyCode) {
         .replace(/\}\s*setTimeout/g, '});\nsetTimeout') // Fix missing }); before setTimeout
         .trim();
 
-    console.log('✅ Ruby transpiled to JavaScript');
+    // Vérification finale - si le code est vide après nettoyage
+    if (!js.trim()) {
+        console.log('✅ Code became empty after processing - returning safe empty JS');
+        return '// Code was empty after processing';
+    }
+
+    // console.log('✅ Ruby transpiled to JavaScript');
     return js;
 }
 
 /**
- * 🚀 EXÉCUTION SIMPLIFIÉE
+ * 🚀 EXÉCUTION SIMPLIFIÉE - VERSION AMÉLIORÉE
  */
 function executeTranspiledCode(jsCode) {
     if (!jsCode || typeof jsCode !== 'string') {
@@ -131,14 +150,22 @@ function executeTranspiledCode(jsCode) {
         return;
     }
     
-    console.log('🔍 CODE TRANSPILED - About to execute:');
-    console.log('='.repeat(50));
-    console.log(jsCode);
-    console.log('='.repeat(50));
+    // Vérifier si le code n'est que des commentaires
+    const trimmedCode = jsCode.trim();
+    if (trimmedCode.startsWith('// All content was comments') || 
+        trimmedCode.startsWith('// Code was empty')) {
+        // console.log('✅ Skipping execution - code was only comments');
+        return;
+    }
+    
+    // console.log('🔍 CODE TRANSPILED - About to execute:');
+    // console.log('='.repeat(50));
+    // console.log(jsCode);
+    // console.log('='.repeat(50));
     
     try {
         eval(jsCode);
-        console.log('✅ Code executed successfully');
+        // console.log('✅ Code executed successfully');
     } catch (error) {
         console.error('❌ EXECUTION ERROR:');
         console.error('Message:', error.message);
@@ -159,10 +186,10 @@ function executeTranspiledCode(jsCode) {
  */
 function getTranspilerInfo() {
     return {
-        name: 'Hyper Squirrel Simple',
-        version: '3.0.0-simple',
-        approach: 'Simple regex-based transpilation',
-        features: ['A.new conversion', 'Events', 'String interpolation', 'Basic Ruby syntax']
+        name: 'Hyper Squirrel Simple Fixed',
+        version: '3.0.1-fixed',
+        approach: 'Simple regex-based transpilation with improved comment handling',
+        features: ['A.new conversion', 'Events', 'String interpolation', 'Basic Ruby syntax', 'Better comment handling']
     };
 }
 
@@ -179,4 +206,4 @@ if (!window.getTranspilerInfo) {
     window.getTranspilerInfo = getTranspilerInfo;
 }
 
-console.log('⚡ Hyper Squirrel Simple Transpiler loaded!');
+// console.log('⚡ Hyper Squirrel Simple Transpiler FIXED loaded!');

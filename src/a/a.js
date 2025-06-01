@@ -1,14 +1,12 @@
 /**
- * Optimized A Framework - Minimalist version with modular structure
+ * 🔥 CLASSE A FINALE - ARCHITECTURE ORIGINALE + PROXY INTELLIGENT
  */
-
 
 // Export main variables for ES6
 let A, defineParticle;
 
 // Variables to expose for external particle definitions
 let _formatSize, _isNumber, _registry, _particles;
-
 
 // Isolated isNumber function
 _isNumber = (function () {
@@ -17,30 +15,24 @@ _isNumber = (function () {
     };
 })();
 window._isNumber = _isNumber
+
 // Isolated formatSize function
 _formatSize = (function () {
-    // Cache for common values
     const cache = new Map();
-
     return function (v) {
         if (!_isNumber(v)) return v;
-
-        // Use cache for common values
         if (v >= 0 && v <= 1000 && v === Math.floor(v)) {
             if (!cache.has(v)) {
                 cache.set(v, `${v}px`);
             }
             return cache.get(v);
         }
-
-        // Non-cached values
         return `${v}px`;
     };
 })();
 window._formatSize = _formatSize
 
-
-// Global registry for inst
+// Global registry for instances
 _registry = {};
 window._registry = _registry;
 
@@ -48,15 +40,12 @@ window._registry = _registry;
 _particles = {};
 window._particles = _particles
 
-
 // Isolated defineParticle function
 defineParticle = function (config) {
-    // Validate configuration
     if (!config || !config.name || !config.process || typeof config.process !== 'function') {
         console.error("Invalid particle definition:", config);
         return null;
     }
-
     _particles[config.name] = config;
     return config;
 };
@@ -75,23 +64,21 @@ const baseStyles = {
     background: 'transparent'
 };
 
-// Main A class with maximum optimizations
+// 🔥 CLASSE A - ARCHITECTURE ORIGINALE + PROXY INTELLIGENT
 A = class {
     constructor(config = {}) {
         this._data = {...config};
-        this.element = document.createElement('div');
+        this.element = document.createElement(config.markup || 'div');
         this._fastened = config.fasten || [];
-
-        // Direct access to style and dataset to avoid repeated lookups
         this.style = this.element.style;
         this.dataset = this.element.dataset;
 
-        // Apply base styles in a single operation
+        // Apply base styles
         if (config.reset !== false) {
             Object.assign(this.style, baseStyles);
         }
 
-        // Pre-instantiate all known methods to avoid dynamic creation
+        // 🎯 ARCHITECTURE ORIGINALE: Préparer toutes les méthodes dynamiquement
         this._preparePropertyMethods();
 
         // Process all properties
@@ -106,12 +93,52 @@ A = class {
         if (config.id) {
             _registry[config.id] = this;
         }
+
+        // 🎯 PROXY INTELLIGENT - WRAPPER AUTOUR DE L'ARCHITECTURE EXISTANTE
+        return new Proxy(this, {
+            get(target, prop) {
+                const value = target[prop];
+                
+                // Si c'est une méthode ET une propriété Ruby-style
+                if (typeof value === 'function' && target._isRubyProperty(prop)) {
+                    // Créer une fonction magique qui peut être utilisée comme valeur OU fonction
+                    const smartProperty = function(...args) {
+                        return value.apply(target, args);
+                    };
+                    
+                    // 🎯 MAGIE: valueOf et toString retournent la valeur directement
+                    smartProperty.valueOf = () => target._data[prop];
+                    smartProperty.toString = () => String(target._data[prop]);
+                    
+                    // Pour les comparaisons et opérations
+                    smartProperty[Symbol.toPrimitive] = (hint) => {
+                        const val = target._data[prop];
+                        if (hint === 'number') return Number(val);
+                        if (hint === 'string') return String(val);
+                        return val;
+                    };
+                    
+                    return smartProperty;
+                }
+                
+                // Propriété normale - retourner tel quel
+                return value;
+            }
+        });
     }
 
-    // Pre-instantiate methods for all known particles
+    // Vérifier si c'est une propriété Ruby-style
+    _isRubyProperty(prop) {
+        const rubyProps = ['width', 'height', 'x', 'y', 'color', 'id', 'text', 'backgroundColor'];
+        return rubyProps.includes(prop);
+    }
+
+    // 🔥 ARCHITECTURE ORIGINALE: Pre-instantiate methods for all known particles
     _preparePropertyMethods() {
         // List of methods not to create
-        const reservedMethods = ['inspect', 'addChild', 'getElement', 'getFastened', 'style', 'element'];
+        const reservedMethods = [
+            'inspect', 'addChild', 'getElement', 'getFastened', 'style', 'element', 'method'
+        ];
 
         // Create methods for all known particles
         for (const name in _particles) {
@@ -134,26 +161,26 @@ A = class {
         }
 
         // Additionally add methods for standard CSS properties without particles
-        const cssProperties = ['zIndex', 'opacity', 'transform', 'transition', 'display'];
+        const cssProperties = [
+            'width', 'height', 'x', 'y', 'color', 'id', 'text', 'backgroundColor',
+            'zIndex', 'opacity', 'transform', 'transition', 'display',
+            'attrContenteditable', 'contentEditable'
+        ];
+        
         cssProperties.forEach(prop => {
             if (typeof this[prop] === 'function' || reservedMethods.includes(prop)) return;
-
-            // Capture 'this' to prevent reference issues in the nested function
-            const self = this;
 
             this[prop] = function (value) {
                 if (arguments.length === 0) return this._data[prop];
 
                 this._data[prop] = value;
 
-                // Apply CSS property directly
+                // Apply changes to DOM
                 const styleUpdates = {};
                 const datasetUpdates = {};
 
-                // Use self instead of this for the method call
-                self._collectPropertyUpdates(prop, value, styleUpdates, datasetUpdates);
+                this._collectPropertyUpdates(prop, value, styleUpdates, datasetUpdates);
 
-                // Apply updates
                 if (Object.keys(styleUpdates).length > 0) {
                     Object.assign(this.element.style, styleUpdates);
                 }
@@ -161,94 +188,78 @@ A = class {
                     Object.assign(this.element.dataset, datasetUpdates);
                 }
 
+                // Special cases
+                if (prop === 'attrContenteditable' || prop === 'contentEditable') {
+                    this.element.contentEditable = value;
+                }
+
                 return this;
             };
         });
     }
 
+    // === MÉTHODE RUBY method() ===
+    method(propertyName) {
+        const prop = propertyName.replace(':', '');
+        
+        if (typeof this[prop] === 'function') {
+            return this[prop].bind(this);
+        }
+        
+        throw new Error(`Method ${prop} not found`);
+    }
+
     // Process all properties
     _processConfig(config) {
-        // Collect style updates to apply them at once
         const styleUpdates = {};
         const datasetUpdates = {};
 
         for (const [key, value] of Object.entries(config)) {
-            if (key === 'fasten' || key === 'reset') {
-                continue; // Already handled
-            }
+            if (key === 'fasten' || key === 'reset') continue;
 
-            // Find associated particle
             const particle = _particles[key];
             if (particle) {
                 try {
-                    // Particles can modify the element directly
                     particle.process(this.element, value, config, this);
                 } catch (err) {
                     console.error(`Error processing particle ${key}:`, err);
                 }
             } else {
-                // Default handling - collect instead of applying immediately
                 this._collectPropertyUpdates(key, value, styleUpdates, datasetUpdates);
             }
 
             // Create a method for this property if it doesn't already exist
-            if (typeof this[key] !== 'function') {
+            if (typeof this[key] !== 'function' && !this.hasOwnProperty(key)) {
                 this._createPropertyMethod(key);
             }
         }
 
-        // Apply all style updates at once
         if (Object.keys(styleUpdates).length > 0) {
             Object.assign(this.element.style, styleUpdates);
         }
-
-        // Apply all dataset updates at once
         if (Object.keys(datasetUpdates).length > 0) {
             Object.assign(this.element.dataset, datasetUpdates);
         }
     }
 
-    // Collect updates instead of applying them immediately
-    _collectPropertyUpdates(key, value, styleUpdates, datasetUpdates) {
-        if (typeof value === 'number') {
-            // Numeric value = likely a size in pixels
-            styleUpdates[key] = _formatSize(value);
-        } else if (typeof value === 'string') {
-            // String value = likely a direct CSS property
-            styleUpdates[key] = value;
-        } else if (Array.isArray(value)) {
-            // Array = store in dataset
-            datasetUpdates[key] = value.join(',');
-        } else if (value instanceof HTMLElement) {
-            // HTML Element = add as child (cannot be deferred)
-            this.element.appendChild(value);
-        } else if (value && typeof value === 'object') {
-            // Object = serialize to JSON
-            datasetUpdates[key] = JSON.stringify(value);
-        }
-    }
-
-    // Create a getter/setter method for a property
+    // Create a getter/setter method for a property (ARCHITECTURE ORIGINALE)
     _createPropertyMethod(key) {
-        if (key === 'inspect' || key === 'addChild' || key === 'getElement' || typeof this[key] === 'function') {
-            return; // Don't create method for these reserved names or existing methods
+        const reservedMethods = ['inspect', 'addChild', 'getElement', 'method'];
+        
+        if (reservedMethods.includes(key) || typeof this[key] === 'function') {
+            return;
         }
 
-        // Use direct binding rather than a complete closure
-        // to reduce memory overhead
         const particle = _particles[key];
         const hasParticle = !!particle;
 
         this[key] = function (value) {
             if (arguments.length === 0) {
-                // Getter - direct access, no additional processing
                 return this._data[key];
             }
 
-            // Setter
             this._data[key] = value;
 
-            // Apply value via particle if it exists
             if (hasParticle) {
                 try {
                     particle.process(this.element, value, this._data, this);
@@ -256,13 +267,10 @@ A = class {
                     console.error(`Error calling particle ${key}:`, err);
                 }
             } else {
-                // Use a bound function call to avoid 'this' reference issues
                 const styleUpdates = {};
                 const datasetUpdates = {};
-                // Call the method with the proper 'this' context
-                A.prototype._collectPropertyUpdates.call(this, key, value, styleUpdates, datasetUpdates);
+                this._collectPropertyUpdates(key, value, styleUpdates, datasetUpdates);
 
-                // Apply updates
                 if (Object.keys(styleUpdates).length > 0) {
                     Object.assign(this.element.style, styleUpdates);
                 }
@@ -275,11 +283,49 @@ A = class {
         };
     }
 
-    // Handle DOM attachment - optimized version
+    _collectPropertyUpdates(key, value, styleUpdates, datasetUpdates) {
+        // Handle special cases first
+        switch(key) {
+            case 'width':
+                styleUpdates.width = _formatSize(value);
+                return;
+            case 'height':
+                styleUpdates.height = _formatSize(value);
+                return;
+            case 'x':
+                styleUpdates.left = _formatSize(value);
+                return;
+            case 'y':
+                styleUpdates.top = _formatSize(value);
+                return;
+            case 'color':
+            case 'backgroundColor':
+                styleUpdates.backgroundColor = value;
+                return;
+            case 'id':
+                this.element.id = value;
+                if (value) _registry[value] = this;
+                return;
+            case 'text':
+                this.element.textContent = value;
+                return;
+        }
+
+        // Generic handling
+        if (typeof value === 'number') {
+            styleUpdates[key] = _formatSize(value);
+        } else if (typeof value === 'string') {
+            styleUpdates[key] = value;
+        } else if (Array.isArray(value)) {
+            datasetUpdates[key] = value.join(',');
+        } else if (value instanceof HTMLElement) {
+            this.element.appendChild(value);
+        } else if (value && typeof value === 'object') {
+            datasetUpdates[key] = JSON.stringify(value);
+        }
+    }
+
     _handleAttach(value) {
-        // Avoid setTimeout if possible
-        // Using requestAnimationFrame ensures attachment is done
-        // during the next render cycle, which is more efficient
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
             this._performAttach(value);
         } else {
@@ -287,7 +333,6 @@ A = class {
         }
     }
 
-    // Factorized attachment function
     _performAttach(value) {
         if (this.element.parentNode) return;
 
@@ -303,14 +348,25 @@ A = class {
         parent.appendChild(this.element);
     }
 
-    // Public API
-    getElement() {
-        return this.element;
+    // === EVENT METHODS ===
+    onclick(callback) {
+        this.element.addEventListener('click', callback);
+        return this;
+    }
+    
+    onmouseover(callback) {
+        this.element.addEventListener('mouseover', callback);
+        return this;
+    }
+    
+    onmouseout(callback) {
+        this.element.addEventListener('mouseout', callback);
+        return this;
     }
 
-    getFastened() {
-        return this._fastened.map(id => _registry[id]).filter(Boolean);
-    }
+    // Public API
+    getElement() { return this.element; }
+    getFastened() { return this._fastened.map(id => _registry[id]).filter(Boolean); }
 
     addChild(childConfig) {
         if (childConfig instanceof A) {
@@ -345,11 +401,25 @@ A = class {
 
 // Export to global scope
 window.A = A;
-
 window.defineParticle = defineParticle;
 
 // Export for ES modules
 export {A as default, A, defineParticle};
 
-// EXTERNAL PARTICLE DEFINITIONS
-// ============================
+// === BENCHMARK ARCHITECTURE ORIGINALE + PROXY ===
+// console.log("=== BENCHMARK ARCHITECTURE ORIGINALE + PROXY ===");
+
+// const ultraContainer = new A({width: 200, height: 300, x: 50, color: 'red', id: 'ultra_test'});
+
+// console.log("✅ ARCHITECTURE: Dynamique (comme l'original)");
+// console.log("✅ SYNTAXE RUBY: container.width → valeur directe (proxy)");
+// console.log("✅ SYNTAXE JS: container.width() → fonction");
+// console.log("✅ TOUTES LES MÉTHODES: Créées dynamiquement");
+
+// Test des syntaxes
+// console.log("\n=== TEST SYNTAXES COMPLÈTES ===");
+// console.log("container.width:", ultraContainer.width + 0); // → 200 (conversion)
+// console.log("container.width():", ultraContainer.width()); // → 200 (fonction)
+// console.log("container.backgroundColor():", ultraContainer.backgroundColor()); // → undefined au début
+// ultraContainer.backgroundColor('blue');
+// console.log("Après backgroundColor('blue'):", ultraContainer.backgroundColor());

@@ -15,7 +15,7 @@ function squirrel_parser(hybridCode) {
         return { ruby: '', javascript: '', hybrid: false };
     }
 
-    console.log('🔍 Squirrel Parser analyzing hybrid code...');
+    // console.log('🔍 Squirrel Parser analyzing hybrid code...');
 
     const lines = hybridCode.split('\n');
     const rubyLines = [];
@@ -69,7 +69,7 @@ function squirrel_parser(hybridCode) {
         }
     };
 
-    console.log('✅ Squirrel Parser results:', result.stats);
+    // console.log('✅ Squirrel Parser results:', result.stats);
     return result;
 }
 
@@ -207,39 +207,39 @@ function detectJavaScriptFeatures(jsCode) {
 /**
  * 🧪 FONCTION DE TEST
  */
-function testSquirrelParser() {
-    const testCode = `
-// JavaScript section
-const test = new A({width: 100});
-console.log("Hello JS");
+// function testSquirrelParser() {
+//     const testCode = `
+// // JavaScript section
+// const test = new A({width: 100});
+// console.log("Hello JS");
 
-#### Ruby section
-container = A.new({
-    width: 200,
-    height: 100
-})
+// #### Ruby section
+// container = A.new({
+//     width: 200,
+//     height: 100
+// })
 
-container.onclick do
-    puts "Clicked!"
-end
-    `;
+// container.onclick do
+//     puts "Clicked!"
+// end
+//     `;
     
-    console.group('🧪 Squirrel Parser Test');
-    const result = analyzeHybridCode(testCode);
-    console.log('Test result:', result);
-    console.groupEnd();
+//     console.group('🧪 Squirrel Parser Test');
+//     const result = analyzeHybridCode(testCode);
+//     console.log('Test result:', result);
+//     console.groupEnd();
     
-    return result;
-}
+//     return result;
+// }
 
 // 🌍 EXPORTS GLOBAUX
 window.squirrel_parser = squirrel_parser;
 window.analyzeHybridCode = analyzeHybridCode;
-window.testSquirrelParser = testSquirrelParser;
+// window.testSquirrelParser = testSquirrelParser;
 
 // 🧪 AUTO-TEST en mode debug
-if (window.location.search.includes('debug=parser')) {
-    testSquirrelParser();
-}
+// if (window.location.search.includes('debug=parser')) {
+//     testSquirrelParser();
+// }
 
-console.log('🔍 Squirrel Parser loaded - Ready to separate Ruby/JS!');
+// console.log('🔍 Squirrel Parser loaded - Ready to separate Ruby/JS!');
