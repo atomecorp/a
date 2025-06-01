@@ -12,6 +12,14 @@ mkdir -p analysis
 
 echo "Copie des fichiers..."
 
+# Copie de workflow.md
+if [ -f "documentations/workflow.md" ]; then
+	cp "documentations/workflow.md" "analysis/"
+	echo "✓ workflow.md copié"
+else
+	echo "✗ workflow.md non trouvé"
+fi
+
 # Copie de a.js
 if [ -f "a/a.js" ]; then
 	cp "a/a.js" "analysis/"
@@ -36,12 +44,12 @@ else
 	echo "✗ identity.js non trouvé"
 fi
 
-# Copie de utils.js (a)
-if [ -f "a/utils.js" ]; then
-	cp "a/utils.js" "analysis/utils_a.js"
-	echo "✓ utils.js (a) copié vers utils_a.js"
+# Copie de apis.js (a)
+if [ -f "a/apis.js" ]; then
+	cp "a/apis.js" "analysis/"
+	echo "✓ apis.js (a) copié vers utils_a.js"
 else
-	echo "✗ utils.js (a) non trouvé"
+	echo "✗ apis.js (a) non trouvé"
 fi
 
 # Copie de index.sqh
@@ -54,10 +62,19 @@ fi
 
 # Copie de utils.js (native)
 if [ -f "native/utils.js" ]; then
-	cp "native/utils.js" "analysis/utils_native.js"
-	echo "✓ utils.js (native) copié vers utils_native.js"
+	cp "native/utils.js" "analysis/"
+	echo "✓ utils.js (native) copié vers utils.js"
 else
 	echo "✗ utils.js (native) non trouvé"
+fi
+
+
+# Copie de squirrel_parser.js
+if [ -f "squirrel/squirrel_parser.js" ]; then
+	cp "squirrel/squirrel_parser.js" "analysis/"
+	echo "✓ squirrel_parser.js copié"
+else
+	echo "✗ squirrel_parser.js non trouvé"
 fi
 
 # Copie de hyper_squirrel.js
@@ -68,12 +85,12 @@ else
 	echo "✗ hyper_squirrel.js non trouvé"
 fi
 
-# Copie de transpiller.js
-if [ -f "squirrel/transpiller.js" ]; then
-	cp "squirrel/transpiller.js" "analysis/"
-	echo "✓ transpiller.js copié"
+# Copie de squirrel_runner.js
+if [ -f "squirrel/squirrel_runner.js" ]; then
+	cp "squirrel/squirrel_runner.js" "analysis/"
+	echo "✓ squirrel_runner.js copié"
 else
-	echo "✗ transpiller.js non trouvé"
+	echo "✗ squirrel_runner.js non trouvé"
 fi
 
 # Copie de prism-parser.js
