@@ -93,20 +93,20 @@ container.onmouseout do
 end
 
 
-# # # Toujours compatible avec parenthèses
-# # container.touch(:down) do
-# #   grab("container_id").color("orange")
-# # end
+# Toujours compatible avec parenthèses
+container.touch(:down) do
+  grab("main_container").color("orange")
+end
 
 
-# wait 1000 do
-#   log "Hello_deferred"
-# end
+wait 1000 do
+  log "Hello_deferred"
+end
 
-# compute 3, 4 do |sum|
-#   log "Result is:"
-#   log sum
-# end
+compute 3, 4 do |sum|
+  log "Result is:"
+  log sum
+end
 
 # def add(a, b)
 #   a + b

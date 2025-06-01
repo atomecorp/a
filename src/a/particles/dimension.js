@@ -17,3 +17,14 @@ defineParticle({
         el.style.height = _formatSize(v);  // Uses exposed _formatSize
     }
 });
+
+defineParticle({
+    name: 'touch',
+    type: 'string',
+    category: 'posieventstion',
+    process(el, v) {
+
+        console.log('code to write : Touch event:', v);
+       // el.style.top = _formatSize(v);  // Uses exposed _formatSize
+    }
+});

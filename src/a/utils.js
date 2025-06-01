@@ -182,3 +182,7 @@ window.require = async function(filename) {
 
 // Alias pour compatibilité
 window.load = window.require;
+
+window.log = function(message) {
+    console.log(message);
+};
