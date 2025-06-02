@@ -1,0 +1,638 @@
+# Vie - Sampler/Sequencer/Beatmaker
+# Version compatible avec le transpileur amélioré
+
+# Variables globales pour l'état de l'application
+current_mode = 'liner'
+selected_node = nil
+project_title = 'New Project'
+lines = []
+nodes = []
+is_perform_mode = false
+
+# Configuration des couleurs et styles
+COLORS = {
+  "primary": '#2D3748',
+  "secondary": '#4A5568',
+  "accent": '#68D391',
+  "background": '#1A202C',
+  "surface": '#2D3748',
+  "text_primary": '#F7FAFC',
+  "text_secondary": '#A0ADB8',
+  "border": '#4A5568',
+  "node_bg": '#374151',
+  "node_selected": '#10B981',
+  "button_hover": '#48BB78'
+}
+
+DIMENSIONS = {
+  "header_height": 60,
+  "footer_height": 50,
+  "node_width": 200,
+  "node_height": 120,
+  "line_spacing": 140,
+  "padding": 20
+}
+
+# Conteneur principal de l'application
+main_container = A.new({
+  attach: 'body',
+  id: 'vie_main',
+  x: 0,
+  y: 0,
+  width: 1200,
+  height: 800,
+  backgroundColor: COLORS["background"],
+  overflow: 'hidden'
+})
+
+# Title Bar (Header)
+title_bar = A.new({
+  attach: main_container.getElement(),
+  id: 'title_bar',
+  x: 0,
+  y: 0,
+  width: 1200,
+  height: DIMENSIONS["header_height"],
+  backgroundColor: COLORS["primary"],
+  display: 'flex',
+  alignItems: 'center',
+  padding: '0 20px'
+})
+
+# Project title (editable)
+project_title_input = A.new({
+  attach: title_bar.getElement(),
+  id: 'project_title',
+  markup: 'input',
+  attrType: 'text',
+  attrValue: project_title,
+  backgroundColor: 'transparent',
+  color: COLORS["text_primary"],
+  border: 'none',
+  fontSize: 18,
+  fontWeight: 'bold',
+  width: 300,
+  height: 30
+})
+
+project_title_input.onchange do
+  window.project_title = grab('project_title').getElement().value
+  puts("Project renamed to: " + window.project_title)
+end
+
+# Fonction pour créer des boutons de header
+def create_header_button(text, x_offset)
+  button = A.new({
+    attach: title_bar.getElement(),
+    markup: 'button',
+    text: text,
+    x: x_offset,
+    y: 10,
+    width: 80,
+    height: 40,
+    backgroundColor: COLORS["secondary"],
+    color: COLORS["text_primary"],
+    border: "1px solid " + COLORS["border"],
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: '500'
+  })
+  
+  button.onclick do
+    puts(text + " clicked")
+    if text == 'Load'
+      load_project()
+    end
+    if text == 'Clear'
+      clear_project()
+    end
+    if text == 'Save'
+      save_project()
+    end
+  end
+  
+  button.onmouseover do
+    button.backgroundColor(COLORS["button_hover"])
+  end
+  
+  button.onmouseout do
+    button.backgroundColor(COLORS["secondary"])
+  end
+  
+  return button
+end
+
+load_btn = create_header_button('Load', 900)
+clear_btn = create_header_button('Clear', 990)
+save_btn = create_header_button('Save', 1080)
+
+# Zone principale des nodes et lignes
+main_workspace = A.new({
+  attach: main_container.getElement(),
+  id: 'workspace',
+  x: 0,
+  y: DIMENSIONS["header_height"],
+  width: 900,
+  height: 600,
+  backgroundColor: COLORS["background"],
+  overflow: 'auto',
+  position: 'relative'
+})
+
+# Barre de modes d'affichage
+mode_bar = A.new({
+  attach: main_container.getElement(),
+  id: 'mode_bar',
+  x: 0,
+  y: 680,
+  width: 1200,
+  height: 50,
+  backgroundColor: COLORS["surface"],
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 20
+})
+
+# Création des boutons de mode
+modes = ['Diagram', 'Matrix', 'Liner', 'Mix', 'Sequence']
+mode_index = 0
+
+modes.forEach do |mode|
+  mode_btn = A.new({
+    attach: mode_bar.getElement(),
+    markup: 'button',
+    text: mode,
+    width: 100,
+    height: 35,
+    backgroundColor: mode.toLowerCase() == window.current_mode ? COLORS["accent"] : COLORS["secondary"],
+    color: COLORS["text_primary"],
+    border: "1px solid " + COLORS["border"],
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontSize: 14,
+    fontWeight: '500'
+  })
+  
+  mode_btn.onclick do
+    switch_mode(mode.toLowerCase())
+    update_mode_buttons()
+  end
+  
+  mode_index = mode_index + 1
+end
+
+# Inspector contextuel
+inspector = A.new({
+  attach: main_container.getElement(),
+  id: 'inspector',
+  x: 900,
+  y: DIMENSIONS["header_height"],
+  width: 300,
+  height: 600,
+  backgroundColor: COLORS["surface"],
+  padding: 20,
+  overflow: 'auto'
+})
+
+inspector_title = A.new({
+  attach: inspector.getElement(),
+  text: 'Inspector',
+  color: COLORS["text_primary"],
+  fontSize: 18,
+  fontWeight: 'bold',
+  marginBottom: 20
+})
+
+inspector_content = A.new({
+  attach: inspector.getElement(),
+  id: 'inspector_content',
+  text: 'Select a node to view properties',
+  color: COLORS["text_secondary"],
+  fontSize: 14
+})
+
+# Footer avec actions globales
+footer = A.new({
+  attach: main_container.getElement(),
+  id: 'footer',
+  x: 0,
+  y: 730,
+  width: 1200,
+  height: DIMENSIONS["footer_height"],
+  backgroundColor: COLORS["primary"],
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 15
+})
+
+# Actions du footer
+footer_actions = ['Perform', 'Select', 'Group', 'Copy', 'Delete']
+footer_actions.forEach do |action|
+  action_btn = A.new({
+    attach: footer.getElement(),
+    markup: 'button',
+    text: action,
+    width: 70,
+    height: 30,
+    backgroundColor: action == 'Perform' && window.is_perform_mode ? COLORS["accent"] : COLORS["secondary"],
+    color: COLORS["text_primary"],
+    border: "1px solid " + COLORS["border"],
+    borderRadius: 3,
+    cursor: 'pointer',
+    fontSize: 12,
+    fontWeight: '500'
+  })
+  
+  action_btn.onclick do
+    execute_action(action)
+  end
+end
+
+# Fonctions principales de gestion des nodes et lignes
+
+def create_node(line_index, node_index, node_type)
+  node_id = "node_" + line_index.toString() + "_" + node_index.toString()
+  
+  node_container = A.new({
+    attach: grab('workspace').getElement(),
+    id: node_id,
+    x: DIMENSIONS["padding"] + (node_index * (DIMENSIONS["node_width"] + 20)),
+    y: DIMENSIONS["padding"] + (line_index * DIMENSIONS["line_spacing"]),
+    width: DIMENSIONS["node_width"],
+    height: DIMENSIONS["node_height"],
+    backgroundColor: COLORS["node_bg"],
+    border: "2px solid " + COLORS["border"],
+    borderRadius: 8,
+    cursor: 'pointer',
+    position: 'relative'
+  })
+  
+  # Header du node avec label
+  node_header = A.new({
+    attach: node_container.getElement(),
+    text: node_type,
+    x: 10,
+    y: 10,
+    color: COLORS["text_primary"],
+    fontSize: 14,
+    fontWeight: 'bold'
+  })
+  
+  # Slider de contrôle
+  slider = A.new({
+    attach: node_container.getElement(),
+    markup: 'input',
+    attrType: 'range',
+    attrMin: '0',
+    attrMax: '100',
+    attrValue: '50',
+    x: 10,
+    y: 40,
+    width: DIMENSIONS["node_width"] - 40,
+    height: 20
+  })
+  
+  # Source selector
+  source_selector = A.new({
+    attach: node_container.getElement(),
+    markup: 'select',
+    x: 10,
+    y: 70,
+    width: 100,
+    height: 25,
+    backgroundColor: COLORS["secondary"],
+    color: COLORS["text_primary"],
+    border: "1px solid " + COLORS["border"]
+  })
+  
+  # Options du selector
+  option1 = A.new({
+    attach: source_selector.getElement(),
+    markup: 'option',
+    attrValue: 'audio',
+    text: 'Audio'
+  })
+  
+  option2 = A.new({
+    attach: source_selector.getElement(),
+    markup: 'option',
+    attrValue: 'midi',
+    text: 'MIDI'
+  })
+  
+  option3 = A.new({
+    attach: source_selector.getElement(),
+    markup: 'option',
+    attrValue: 'both',
+    text: 'Both'
+  })
+  
+  # Bouton Add (toujours visible)
+  add_btn = A.new({
+    attach: node_container.getElement(),
+    markup: 'button',
+    text: '+',
+    x: DIMENSIONS["node_width"] - 35,
+    y: 70,
+    width: 25,
+    height: 25,
+    backgroundColor: COLORS["accent"],
+    color: COLORS["text_primary"],
+    border: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontSize: 16,
+    fontWeight: 'bold',
+    zIndex: 100
+  })
+  
+  # Events du node
+  node_container.onclick do
+    select_node(node_id)
+  end
+  
+  add_btn.onclick do
+    add_node_to_line(line_index, node_index + 1)
+  end
+  
+  # Ajouter le node au registre
+  node_data = {
+    "id": node_id,
+    "line": line_index,
+    "index": node_index,
+    "type": node_type,
+    "properties": {
+      "volume": 50,
+      "source": 'audio'
+    }
+  }
+  window.nodes.push(node_data)
+  
+  return node_container
+end
+
+def create_line(line_index)
+  # Bouton pour ajouter une nouvelle ligne
+  add_line_btn = A.new({
+    attach: grab('workspace').getElement(),
+    markup: 'button',
+    text: '+ New Line',
+    x: DIMENSIONS["padding"],
+    y: DIMENSIONS["padding"] + (line_index * DIMENSIONS["line_spacing"]) + DIMENSIONS["node_height"] + 10,
+    width: 120,
+    height: 30,
+    backgroundColor: COLORS["accent"],
+    color: COLORS["text_primary"],
+    border: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontSize: 12,
+    fontWeight: 'bold'
+  })
+  
+  add_line_btn.onclick do
+    add_new_line()
+  end
+  
+  # Créer le premier node de la ligne
+  create_node(line_index, 0, 'Auto Trigger')
+  
+  line_data = {
+    "index": line_index,
+    "nodes": 1
+  }
+  window.lines.push(line_data)
+end
+
+def add_node_to_line(line_index, node_index)
+  create_node(line_index, node_index, 'Filter')
+  
+  # Mettre à jour le compteur de nodes pour cette ligne
+  window.lines.forEach do |line|
+    if line["index"] == line_index
+      line["nodes"] = line["nodes"] + 1
+    end
+  end
+  
+  puts("Node added to line " + line_index.toString() + " at position " + node_index.toString())
+end
+
+def add_new_line()
+  new_line_index = window.lines.length
+  create_line(new_line_index)
+  puts("New line " + new_line_index.toString() + " created")
+end
+
+def select_node(node_id)
+  # Désélectionner le node précédent
+  if window.selected_node
+    grab(window.selected_node).borderColor(COLORS["border"])
+  end
+  
+  # Sélectionner le nouveau node
+  window.selected_node = node_id
+  grab(node_id).borderColor(COLORS["node_selected"])
+  
+  # Mettre à jour l'inspector
+  update_inspector(node_id)
+  
+  puts("Node " + node_id + " selected")
+end
+
+def update_inspector(node_id)
+  node_data = null
+  window.nodes.forEach do |node|
+    if node["id"] == node_id
+      node_data = node
+    end
+  end
+  
+  if node_data == null
+    return
+  end
+  
+  inspector_content = grab('inspector_content')
+  inspector_html = "<h3 style='color: " + COLORS["text_primary"] + "; margin-bottom: 15px;'>" + node_data["type"] + "</h3>"
+  inspector_html = inspector_html + "<div style='margin-bottom: 10px;'>"
+  inspector_html = inspector_html + "<label style='color: " + COLORS["text_secondary"] + "; display: block; margin-bottom: 5px;'>Volume:</label>"
+  inspector_html = inspector_html + "<input type='range' min='0' max='100' value='" + node_data["properties"]["volume"].toString() + "' style='width: 100%;'>"
+  inspector_html = inspector_html + "</div>"
+  inspector_html = inspector_html + "<div style='margin-bottom: 10px;'>"
+  inspector_html = inspector_html + "<label style='color: " + COLORS["text_secondary"] + "; display: block; margin-bottom: 5px;'>Source:</label>"
+  inspector_html = inspector_html + "<select style='width: 100%; background: " + COLORS["secondary"] + "; color: " + COLORS["text_primary"] + "; border: 1px solid " + COLORS["border"] + "; padding: 5px;'>"
+  inspector_html = inspector_html + "<option value='audio'>Audio</option>"
+  inspector_html = inspector_html + "<option value='midi'>MIDI</option>"
+  inspector_html = inspector_html + "<option value='both'>Both</option>"
+  inspector_html = inspector_html + "</select>"
+  inspector_html = inspector_html + "</div>"
+  
+  inspector_content.html(inspector_html)
+end
+
+def switch_mode(mode)
+  window.current_mode = mode
+  puts("Switched to " + mode + " mode")
+  
+  if mode == 'diagram'
+    puts("Diagram mode: Free-form connections")
+  end
+  if mode == 'matrix'
+    puts("Matrix mode: 8x8 grid layout")
+  end
+  if mode == 'liner'
+    puts("Liner mode: Sequential horizontal layout")
+  end
+  if mode == 'mix'
+    puts("Mix mode: Real-time mixer interface")
+  end
+  if mode == 'sequence'
+    puts("Sequence mode: Timeline sequencer")
+  end
+end
+
+def update_mode_buttons()
+  puts("Updating mode button colors")
+  # Cette fonction devrait mettre à jour l'apparence des boutons
+  # Implementation nécessaire pour changer les couleurs selon le mode actif
+end
+
+def execute_action(action)
+  if action == 'Perform'
+    toggle_perform_mode()
+  end
+  if action == 'Select'
+    puts("Select mode activated")
+  end
+  if action == 'Clear'
+    clear_workspace()
+  end
+  if action == 'Delete'
+    delete_selected_node()
+  end
+  if action == 'Copy'
+    copy_selected_node()
+  end
+  if action == 'Paste'
+    paste_node()
+  end
+  
+  puts("Action " + action + " executed")
+end
+
+def toggle_perform_mode()
+  window.is_perform_mode = !window.is_perform_mode
+  mode_text = window.is_perform_mode ? "Entering perform mode" : "Exiting perform mode"
+  puts(mode_text)
+  
+  # Désactiver/activer les interactions selon le mode
+  if window.is_perform_mode
+    puts("Performance mode: UI simplified")
+  else
+    puts("Edit mode: Full UI restored")
+  end
+end
+
+def clear_workspace()
+  window.nodes.length = 0
+  window.lines.length = 0
+  window.selected_node = null
+  
+  # Supprimer tous les elements du workspace
+  workspace = grab('workspace')
+  workspace.html('')
+  
+  puts("Workspace cleared")
+end
+
+def clear_project()
+  clear_workspace()
+  window.project_title = 'New Project'
+  grab('project_title').attrValue(window.project_title)
+  puts("Project cleared")
+end
+
+def save_project()
+  project_data = {
+    "title": window.project_title,
+    "nodes": window.nodes,
+    "lines": window.lines,
+    "mode": window.current_mode
+  }
+  
+  puts("Saving project: " + JSON.stringify(project_data))
+  # Ici on implémenterait la sauvegarde réelle
+end
+
+def load_project()
+  puts("Loading project...")
+  # Ici on implémenterait le chargement réel
+end
+
+def delete_selected_node()
+  if window.selected_node == null
+    return
+  end
+  
+  # Supprimer visuellement
+  grab(window.selected_node).getElement().remove()
+  
+  # Supprimer des données
+  new_nodes = []
+  window.nodes.forEach do |node|
+    if node["id"] != window.selected_node
+      new_nodes.push(node)
+    end
+  end
+  window.nodes = new_nodes
+  
+  window.selected_node = null
+  grab('inspector_content').text('Select a node to view properties')
+  
+  puts("Selected node deleted")
+end
+
+def copy_selected_node()
+  if window.selected_node == null
+    return
+  end
+  
+  puts("Node copied to clipboard")
+  # Implementation du copy
+end
+
+def paste_node()
+  puts("Pasting node from clipboard")
+  # Implementation du paste
+end
+
+# Gestion du redimensionnement de la fenêtre
+window.onresize do
+  new_width = window.innerWidth
+  new_height = window.innerHeight
+  
+  # Redimensionner les éléments principaux
+  grab('vie_main').width(new_width).height(new_height)
+  grab('title_bar').width(new_width)
+  grab('workspace').width(new_width - 300).height(new_height - DIMENSIONS["header_height"] - DIMENSIONS["footer_height"] - 80)
+  grab('mode_bar').width(new_width).y(new_height - DIMENSIONS["footer_height"] - 80)
+  grab('inspector').x(new_width - 300).height(new_height - DIMENSIONS["header_height"] - DIMENSIONS["footer_height"] - 80)
+  grab('footer').width(new_width).y(new_height - DIMENSIONS["footer_height"])
+end
+
+# Initialisation des variables globales
+window.current_mode = current_mode
+window.selected_node = selected_node
+window.project_title = project_title
+window.lines = lines
+window.nodes = nodes
+window.is_perform_mode = is_perform_mode
+
+# Initialisation : créer la première ligne
+wait 500 do
+  create_line(0)
+  puts("Vie Sampler/Sequencer initialized successfully!")
+  puts("Framework A with enhanced Ruby DSL (.sqh) ready for audio production")
+end
