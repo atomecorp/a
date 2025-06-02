@@ -12,13 +12,13 @@ mkdir -p analysis
 
 echo "Copie des fichiers..."
 
-# Copie de workflow.md
-if [ -f "documentations/workflow.md" ]; then
-	cp "documentations/workflow.md" "analysis/"
-	echo "✓ workflow.md copié"
-else
-	echo "✗ workflow.md non trouvé"
-fi
+# # Copie de workflow.md
+# if [ -f "documentations/workflow.md" ]; then
+# 	cp "documentations/workflow.md" "analysis/"
+# 	echo "✓ workflow.md copié"
+# else
+# 	echo "✗ workflow.md non trouvé"
+# fi
 
 # Copie de a.js
 if [ -f "a/a.js" ]; then
@@ -52,12 +52,20 @@ else
 	echo "✗ apis.js (a) non trouvé"
 fi
 
-# Copie de index.sqh
-if [ -f "application/index.sqh" ]; then
-	cp "application/index.sqh" "analysis/"
-	echo "✓ index.sqh copié"
+# Copie de index.sqr
+if [ -f "application/index.sqr" ]; then
+	cp "application/index.sqr" "analysis/"
+	echo "✓ index.sqr copié"
 else
-	echo "✗ index.sqh non trouvé"
+	echo "✗ index.sqr non trouvé"
+fi
+
+# Copie de require_test.sqh
+if [ -f "application/require_test.sqr" ]; then
+	cp "application/require_test.sqr" "analysis/"
+	echo "✓ require_test.sqr copié"
+else
+	echo "✗ require_test.sqr non trouvé"
 fi
 
 # Copie de utils.js (native)

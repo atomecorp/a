@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@ruby/prism": "^1.4.0"
+  }
+}

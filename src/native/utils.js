@@ -1,13 +1,19 @@
 (function () {
+    'use strict';
+
     function checkFrameworkLoaded() {
         if (typeof window.defineParticle !== 'function') {
-            setTimeout(checkFrameworkLoaded, 10);
+            console.log('⏳ Waiting for A Framework to load...');
+            setTimeout(checkFrameworkLoaded, 50);
             return;
         }
+        console.log('✅ A Framework detected, initializing particles extension...');
         initParticlesExtension();
     }
 
     function initParticlesExtension() {
+        console.log('🔧 Initializing particles extension...');
+
         // Test particle for 'role'
         window.defineParticle({
             name: 'role',
@@ -71,8 +77,6 @@
                 type: 'any',
                 category: 'css',
                 process(el, v) {
-                    // puts('Style '+prop+' modified with value '+v);
-
                     if (typeof v === 'number') {
                         el.style[prop] = needsPx(prop) ? `${v}px` : v;
                     } else {
@@ -99,8 +103,6 @@
                 type: 'any',
                 category: 'attribute',
                 process(el, v) {
-                    // puts('html '+prop+' modified with value '+v);
-
                     if (v === null || v === undefined) {
                         el.removeAttribute(attr);
                     } else if (v === true) {
@@ -143,8 +145,6 @@
                 type: 'any',
                 category: 'property',
                 process(el, v) {
-                    // puts('DOM '+prop+' modified with value '+v);
-
                     if (prop === 'classList' && Array.isArray(v)) {
                         el.className = v.join(' ');
                     } else if (prop === 'dataset' && typeof v === 'object' && v !== null) {
@@ -160,13 +160,11 @@
         });
 
         // SECTION 4: SPECIAL PARTICLES
-        defineParticle({
+        window.defineParticle({
             name: 'class',
             type: 'any',
             category: 'attribute',
             process(el, v) {
-                // puts('SPECIAL '+prop+' modified with value '+v);
-
                 if (typeof v === 'string') {
                     el.className = v;
                 } else if (Array.isArray(v)) {
@@ -180,7 +178,7 @@
             }
         });
 
-        defineParticle({
+        window.defineParticle({
             name: 'text',
             type: 'string',
             category: 'content',
@@ -189,7 +187,7 @@
             }
         });
 
-        defineParticle({
+        window.defineParticle({
             name: 'html',
             type: 'string',
             category: 'content',
@@ -198,13 +196,12 @@
             }
         });
 
-        defineParticle({
+        window.defineParticle({
             name: 'on',
             type: 'object',
             category: 'event',
             process(el, v) {
                 if (!v || typeof v !== 'object') return;
-                // puts('event '+prop+' modified with value '+v);
                 for (const eventName in v) {
                     const handler = v[eventName];
                     if (typeof handler !== 'function') continue;
@@ -219,28 +216,46 @@
                 }
             }
         });
+
+        // SECTION 5: INDIVIDUAL EVENT PARTICLES
+        const commonEvents = [
+            'onclick', 'ondblclick', 'onmousedown', 'onmouseup', 'onmouseover',
+            'onmouseout', 'onmousemove', 'onkeydown', 'onkeyup', 'onkeypress',
+            'onfocus', 'onblur', 'onchange', 'oninput', 'onsubmit'
+        ];
+
+        commonEvents.forEach(eventName => {
+            window.defineParticle({
+                name: eventName,
+                type: 'function',
+                category: 'event',
+                process(el, handler) {
+                    console.log(`✅ Using DSL method '${eventName}'`);
+                    if (typeof handler === 'function') {
+                        el[eventName] = handler;
+                    }
+                }
+            });
+        });
+
+        console.log('✅ All particles extension initialized successfully!');
+        
+        // Déclencher un événement pour signaler que tout est prêt
+        window.dispatchEvent(new CustomEvent('ParticlesExtensionLoaded'));
     }
 
-    // SECTION 5: INDIVIDUAL EVENT PARTICLES
-    const commonEvents = [
-        'onclick', 'ondblclick', 'onmousedown', 'onmouseup', 'onmouseover',
-        'onmouseout', 'onmousemove', 'onkeydown', 'onkeyup', 'onkeypress',
-        'onfocus', 'onblur', 'onchange', 'oninput', 'onsubmit'
-    ];
-
-    commonEvents.forEach(eventName => {
-        window.defineParticle({
-            name: eventName,
-            type: 'function',
-            category: 'event',
-            process(el, handler) {
-                console.log(`✅ Using DSL method '${eventName}'`);
-                if (typeof handler === 'function') {
-                    el[eventName] = handler;
-                }
-            }
+    // Écouter l'événement de chargement du framework A ou commencer immédiatement
+    if (window.A && window.defineParticle) {
+        console.log('✅ A Framework already loaded, initializing immediately...');
+        initParticlesExtension();
+    } else {
+        window.addEventListener('AFrameworkLoaded', () => {
+            console.log('📡 Received AFrameworkLoaded event');
+            initParticlesExtension();
         });
-    });
+        
+        // Fallback: polling check
+        checkFrameworkLoaded();
+    }
 
-    checkFrameworkLoaded();
 })();

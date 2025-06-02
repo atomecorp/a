@@ -1,24 +1,28 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"/>
-    <link rel="stylesheet" href="css/styles.css"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Application JavaScript</title>
-    <!-- Parser scripts -->
-    <script src="./squirrel/parser/prism.js"></script>
-    <script src="./squirrel/parser/prism-parser.js"></script>
-    <!-- Framework scripts -->
-    <script type="module" src="./a/apis.js" defer></script>
-    <script type="module" src="./a/a.js" defer></script>
-    <script type="module" src="./native/utils.js" defer></script>
-    <script type="module" src="./a/particles/identity.js" defer></script>
-    <script type="module" src="./a/particles/dimension.js" defer></script>
-    <!-- Main application -->
-       <script type="module" src="./squirrel/squirrel_parser.js" defer></script>
-    <script type="module" src="./squirrel/hyper_squirrel.js" defer></script>
-        <script type="module" src="./squirrel/squirrel_runner.js" defer></script>
-
+<meta charset="UTF-8"/>
+<link rel="stylesheet" href="css/styles.css"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Squirrel</title>
+<!-- ACORN - No longer needed for pure .sqr architecture -->
+<!-- <script src="squirrel/parser/acorn.js"></script> -->
+<!-- PRISM - Keep for parsing .sqr files - NOW LOCAL -->
+<script src="squirrel/parser/parsePrism.js"></script>
+<!-- WASI - Local implementation (MUST be type="module" for import) -->
+<script src="squirrel/parser/wasi_wrapper.js" type="module"></script>
+<!-- PRISM HELPER - Local helper class (REQUIRED for PrismParser) -->
+<script src="squirrel/parser/prism_helper.js"></script>
+<!-- A FRAMEWORK - Keep (core required) -->
+<script src="a/a.js"></script>
+<script src="a/apis.js"></script>
+<script src="a/particles/identity.js"></script>
+<script src="a/particles/dimension.js"></script>
+<!-- UTILS - Keep -->
+<script src="native/utils.js"></script>
+<!-- SQUIRREL - Keep but will be simplified -->
+<script src="squirrel/squirrel_orchestrator.js"></script>
+<script src="squirrel/squirrel_runner.js"></script>
 </head>
 <body>
 </body>
