@@ -139,16 +139,16 @@ end
 
 
 
-# container.keyboard do |key|
-#   puts "Touche pressée: #{key.key}"
-#   puts "Code: #{key.code}"
-#    puts "KeyCode numérique: #{key.keyCode}"  
-# key.preventDefault
-#   if key.ctrl && key.key == "s"
-# 	puts "Ctrl+S détecté!"
-# 	key.preventDefault
-#   end
-# end
+container.keyboard do |key|
+  puts "Touche pressée: #{key.key}"
+  puts "Code: #{key.code}"
+   puts "KeyCode numérique: #{key.keyCode}"  
+key.preventDefault
+  if key.ctrl && key.key == "s"
+	puts "Ctrl+S détecté!"
+	key.preventDefault
+  end
+end
 
 
 

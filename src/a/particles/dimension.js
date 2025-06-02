@@ -28,3 +28,38 @@ defineParticle({
        // el.style.top = _formatSize(v);  // Uses exposed _formatSize
     }
 });
+
+
+
+// Particle keyboard - Custom Squirrel method
+defineParticle({
+    name: 'keyboard',
+    type: 'function',
+    category: 'event',
+    process: function(element, handler) {
+        console.log('✅ Using custom keyboard event handler');
+        if (typeof handler === 'function') {
+            element.addEventListener('keydown', function(event) {
+                // Create Ruby-style key object
+                const keyObj = {
+                    key: event.key,
+                    code: event.code,
+                    keyCode: event.keyCode,
+                    ctrl: event.ctrlKey,
+                    shift: event.shiftKey,
+                    alt: event.altKey,
+                    meta: event.metaKey,
+                    preventDefault: function() {
+                        event.preventDefault();
+                    },
+                    stopPropagation: function() {
+                        event.stopPropagation();
+                    }
+                };
+                
+                // Call handler with Ruby-style key object
+                handler(keyObj);
+            });
+        }
+    }
+});

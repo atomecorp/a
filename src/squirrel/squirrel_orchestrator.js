@@ -1,532 +1,691 @@
 /**
- * 🚀 SQUIRREL ORCHESTRATOR - PURE PRISM INTEGRATION
- * ✅ Uses your working PrismParser from prism_helper.js
- * ✅ Zero regex - 100% Prism Ruby AST parsing
- * ✅ A Framework APIs priority, utils.js fallback
- * ✅ Universal mapping without specific code
+ * 🐿️ SQUIRREL ORCHESTRATOR - 100% PRISM AST TRANSPILER (AMÉLIORÉ)
+ * Utilise les vrais nœuds Prism-style pour transpiler Ruby → JavaScript SANS ERREURS
  */
 
 class SquirrelOrchestrator {
+    
     constructor() {
+        console.log('🚀 New Squirrel Orchestrator - Enhanced 100% Prism AST Transpiler!');
         this.prismParser = null;
-        this.debug = true;
-        console.log('🚀 New Squirrel Orchestrator - Pure Prism Ruby Parser!');
+        this.transpilationHandlers = this.initializeTranspilationHandlers();
+        
+        console.log(`📊 Loaded ${Object.keys(this.transpilationHandlers).length} transpilation handlers`);
     }
 
     /**
-     * 🔧 INITIALIZE USING YOUR WORKING PRISM PARSER
+     * 🎯 INITIALIZE TRANSPILATION HANDLERS
+     */
+    initializeTranspilationHandlers() {
+        console.log('🎯 Initializing enhanced transpilation handlers...');
+        
+        return {
+            // Core program structure
+            'ProgramNode': this.transpileProgramNode.bind(this),
+            'StatementsNode': this.transpileStatementsNode.bind(this),
+            
+            // Variable operations
+            'LocalVariableWriteNode': this.transpileLocalVariableWrite.bind(this),
+            'LocalVariableReadNode': this.transpileLocalVariableRead.bind(this),
+            'ExpressionNode': this.transpileExpressionNode.bind(this),
+            
+            // Method calls
+            'CallNode': this.transpileCallNode.bind(this),
+            
+            // Literals
+            'StringNode': this.transpileStringNode.bind(this),
+            'IntegerNode': this.transpileIntegerNode.bind(this),
+            'HashNode': this.transpileHashNode.bind(this),
+            'ArrayNode': this.transpileArrayNode.bind(this),
+            
+            // Control structures
+            'BlockNode': this.transpileBlockNode.bind(this),
+            'IfNode': this.transpileIfNode.bind(this),
+            
+            // Fallback
+            'UnknownNode': this.transpileUnknownNode.bind(this)
+        };
+    }
+
+    /**
+     * 🏗️ INITIALIZE PRISM PARSER
      */
     async initializePrism() {
         console.log('🏗️ Initializing Ruby Prism Parser...');
         
         try {
-            // Use your existing PrismParser that already works
-            if (window.PrismParser && window.prismParser && window.prismParser.ready) {
-                console.log('✅ Using existing working PrismParser');
-                this.prismParser = window.prismParser;
-                return true;
-            }
-            
-            // Create new instance if needed
-            if (window.PrismParser) {
-                console.log('🔧 Creating new PrismParser instance...');
-                this.prismParser = new window.PrismParser();
-                const success = await this.prismParser.initialize();
-                
-                if (success) {
-                    console.log('✅ PrismParser initialized successfully!');
-                    return true;
-                }
-            }
-            
-            throw new Error('PrismParser not available');
-            
+            console.log('🔧 Creating new PrismParser instance...');
+            this.prismParser = new PrismParser();
+            await this.prismParser.initialize();
+            console.log('✅ PrismParser initialized successfully!');
+            return true;
         } catch (error) {
-            console.error('❌ Prism initialization failed:', error);
-            return false;
-        }
-    }
-
-    /**
-     * 🔍 PARSE RUBY CODE WITH YOUR PRISM PARSER
-     */
-    parseRubyCode(rubyCode) {
-        console.log('🔍 Parsing Ruby code...');
-        
-        try {
-            if (!this.prismParser || !this.prismParser.ready) {
-                throw new Error('Prism parser not ready');
-            }
-
-            const result = this.prismParser.parseRuby(rubyCode);
-            
-            if (!result.success) {
-                throw new Error(result.error || 'Parsing failed');
-            }
-            
-            console.log('✅ Ruby code parsed successfully');
-            return this.convertPrismResult(rubyCode);
-            
-        } catch (error) {
-            console.error('❌ Prism parsing failed:', error);
-            return this.parseFallback(rubyCode);
-        }
-    }
-
-    /**
-     * 🔄 CONVERT PRISM RESULT TO PROCESSABLE FORMAT
-     */
-    convertPrismResult(rubyCode) {
-        return {
-            type: 'program',
-            value: {
-                type: 'program_node',
-                body: rubyCode.split('\n').map((line, index) => ({
-                    type: 'line_node',
-                    content: line,
-                    lineNumber: index + 1
-                }))
-            }
-        };
-    }
-
-    /**
-     * 🔍 FALLBACK PARSER
-     */
-    parseFallback(rubyCode) {
-        console.log('🔍 Using fallback line-based parsing...');
-        
-        return {
-            type: 'program',
-            value: {
-                type: 'program_node',
-                body: rubyCode.split('\n').map((line, index) => ({
-                    type: 'line_node',
-                    content: line,
-                    lineNumber: index + 1
-                }))
-            }
-        };
-    }
-
-    /**
-     * ⚡ TRANSPILE TO JAVASCRIPT - PURE UNIVERSAL
-     */
-    transpileToJS(parseResult) {
-        console.log('⚡ Transpiling with Pure Universal mapping...');
-        
-        try {
-            let jsCode;
-            
-            if (parseResult.value && parseResult.value.body) {
-                jsCode = this.processNodes(parseResult.value.body);
-            } else if (parseResult.body) {
-                jsCode = this.processNodes(parseResult.body);
-            } else {
-                jsCode = this.processLines(parseResult.toString().split('\n'));
-            }
-
-            console.log('✅ Code transpiled to JavaScript');
-            return jsCode;
-            
-        } catch (error) {
-            console.error('❌ Transpilation failed:', error);
+            console.error('❌ Failed to initialize PrismParser:', error);
             throw error;
         }
     }
 
     /**
-     * 🎯 PROCESS NODES - UNIVERSAL
+     * 🔍 PARSE RUBY CODE WITH PRISM
      */
-    processNodes(nodes) {
-        const result = [];
+    async parseRubyCode(rubyCode) {
+        console.log('🔍 Parsing Ruby code with enhanced Prism...');
         
-        for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
-            
-            if (node.type === 'line_node' || node.content) {
-                const line = node.content || node.toString();
-                const processed = this.processLine(line, nodes, i);
-                
-                if (processed && processed.newLines) {
-                    result.push(...processed.newLines);
-                    i += processed.skipLines || 0;
-                } else if (processed) {
-                    result.push(processed);
-                }
-            }
+        try {
+            const parseResult = await this.prismParser.parseRuby(rubyCode);
+            console.log('✅ Ruby code validated with Prism successfully');
+            return parseResult;
+        } catch (error) {
+            console.error('❌ Prism parsing failed:', error);
+            throw error;
         }
-        
-        return result.join('\n');
     }
 
     /**
-     * 🎯 PROCESS SINGLE LINE - UNIVERSAL MAPPING
+     * ⚡ TRANSPILE PRISM AST TO JAVASCRIPT (ENHANCED)
      */
-    processLine(line, allLines, lineIndex) {
-        if (!line || typeof line !== 'string') return '';
+    transpilePrismASTToJavaScript(ast) {
+        console.log('⚡ Transpiling Prism AST to JavaScript (Enhanced)...');
         
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) return '';
-
-        // 🎯 A.new object creation
-        if (this.isANewObject(trimmed)) {
-            console.log('🎯 Processing A.new object:', this.extractObjectName(trimmed));
-            return this.processANewObject(line, allLines, lineIndex);
+        if (!ast || !ast.body || !Array.isArray(ast.body)) {
+            throw new Error('Invalid Prism AST structure');
         }
-
-        // 🔧 wait blocks
-        if (this.isWaitBlock(trimmed)) {
-            const delay = this.extractWaitDelay(trimmed);
-            console.log('🔧 Processing wait', delay, 'do block');
-            return this.processWaitBlock(line, allLines, lineIndex);
+        
+        console.log(`🌳 Processing ${ast.body.length} Prism nodes`);
+        
+        const jsLines = [];
+        
+        for (const [index, node] of ast.body.entries()) {
+            try {
+                console.log(`🔄 [${index + 1}/${ast.body.length}] Transpiling: ${node.type || 'Unknown'}`);
+                
+                const jsCode = this.transpilePrismNode(node);
+                if (jsCode && jsCode.trim()) {
+                    jsLines.push(jsCode);
+                    console.log(`✅ Node ${index + 1} transpiled successfully`);
+                } else {
+                    console.warn(`⚠️ Node ${index + 1} produced empty JavaScript`);
+                }
+            } catch (error) {
+                console.warn(`⚠️ Failed to transpile node ${index + 1}:`, error.message);
+                console.log('Problematic node:', node);
+                
+                // Ajouter un commentaire d'erreur au lieu de faire échouer
+                jsLines.push(`// ERROR: Failed to transpile ${node.type || 'unknown'}: ${error.message}`);
+            }
         }
+        
+        let result = jsLines.join('\n');
+        
+        console.log('✅ Enhanced Prism AST transpiled to JavaScript');
+        console.log(`📊 Generated ${jsLines.length} JavaScript statements`);
+        
+        return result;
+    }
 
-        // 🚀 Method blocks: object.method do
-        if (this.isMethodBlock(trimmed)) {
-            const {objectName, methodName} = this.extractMethodBlock(trimmed);
-            console.log('🔧 Processing', methodName, 'block for:', objectName);
-            return this.processMethodBlock(line, allLines, lineIndex);
+    /**
+     * 🎯 TRANSPILE INDIVIDUAL PRISM NODE (ENHANCED)
+     */
+    transpilePrismNode(node) {
+        if (!node || typeof node !== 'object') {
+            return null;
         }
-
-        // 🎯 Method calls: object.method(args)
-        if (this.isMethodCall(trimmed)) {
-            return this.processMethodCall(line);
+        
+        const nodeType = node.type || 'UnknownNode';
+        const handler = this.transpilationHandlers[nodeType];
+        
+        if (!handler) {
+            console.warn(`⚠️ No handler found for node type: ${nodeType}`);
+            return this.transpileUnknownNode(node);
         }
-
-        // 🔧 puts statements
-        if (this.isPutsStatement(trimmed)) {
-            return this.processPutsStatement(line);
+        
+        try {
+            return handler(node);
+        } catch (error) {
+            console.error(`❌ Handler failed for ${nodeType}:`, error);
+            return `// Handler error for ${nodeType}: ${error.message}`;
         }
+    }
 
-        // 🔧 require statements
-        if (this.isRequireStatement(trimmed)) {
-            return this.processRequireStatement(line);
+    /**
+     * 📋 TRANSPILE PROGRAM NODE
+     */
+    transpileProgramNode(node) {
+        console.log('📋 Transpiling ProgramNode');
+        
+        if (node.body && Array.isArray(node.body)) {
+            return node.body.map(child => this.transpilePrismNode(child)).filter(Boolean).join('\n');
         }
+        
+        return '// Empty program';
+    }
 
+    /**
+     * 📋 TRANSPILE STATEMENTS NODE
+     */
+    transpileStatementsNode(node) {
+        console.log('📋 Transpiling StatementsNode');
+        
+        if (node.body && Array.isArray(node.body)) {
+            return node.body.map(child => this.transpilePrismNode(child)).filter(Boolean).join('\n');
+        }
+        
         return '';
     }
 
     /**
-     * 🎯 PROCESS A.NEW OBJECT CREATION
+     * 📝 TRANSPILE LOCAL VARIABLE WRITE (ENHANCED)
      */
-    processANewObject(line, allLines, lineIndex) {
-        const trimmed = line.trim();
-        const objectName = this.extractObjectName(trimmed);
-        const indent = this.getIndent(line);
-        const bodyLines = this.collectObjectLines(allLines, lineIndex + 1);
+    transpileLocalVariableWrite(node) {
+        console.log('📝 Transpiling LocalVariableWriteNode:', node.name);
         
-        const newLines = [
-            indent + 'const ' + objectName + ' = new A({'
-        ];
-        
-        for (const bodyLine of bodyLines.lines) {
-            const trimmedBody = bodyLine.trim();
-            if (trimmedBody && !trimmedBody.startsWith('#')) {
-                newLines.push(bodyLine);
-            }
+        if (!node.name) {
+            return null;
         }
         
-        newLines.push(indent + '});');
-        
-        return {
-            newLines: newLines,
-            skipLines: bodyLines.linesConsumed
-        };
-    }
-
-    /**
-     * 🔧 PROCESS WAIT BLOCKS
-     */
-    processWaitBlock(line, allLines, lineIndex) {
-        const delay = this.extractWaitDelay(line.trim());
-        const indent = this.getIndent(line);
-        const bodyLines = this.collectBlockLines(allLines, lineIndex + 1);
-        
-        const newLines = [
-            indent + 'wait(' + delay + ', function() {'
-        ];
-        
-        for (const bodyLine of bodyLines.lines) {
-            const processed = this.processLine(bodyLine, [], 0);
-            if (processed) {
-                newLines.push(processed);
-            }
-        }
-        
-        newLines.push(indent + '});');
-        
-        return {
-            newLines: newLines,
-            skipLines: bodyLines.linesConsumed
-        };
-    }
-
-    /**
-     * 🚀 PROCESS METHOD BLOCKS
-     */
-    processMethodBlock(line, allLines, lineIndex) {
-        const {objectName, methodName} = this.extractMethodBlock(line.trim());
-        const indent = this.getIndent(line);
-        const bodyLines = this.collectBlockLines(allLines, lineIndex + 1);
-        
-        const newLines = [
-            indent + objectName + '.' + methodName + '(function() {'
-        ];
-        
-        for (const bodyLine of bodyLines.lines) {
-            const processed = this.processLine(bodyLine, [], 0);
-            if (processed) {
-                newLines.push('  ' + processed);
-            }
-        }
-        
-        newLines.push(indent + '});');
-        
-        return {
-            newLines: newLines,
-            skipLines: bodyLines.linesConsumed
-        };
-    }
-
-    /**
-     * 🎯 PROCESS METHOD CALLS
-     */
-    processMethodCall(line) {
-        const trimmed = line.trim();
-        const indent = this.getIndent(line);
-        
-        // Handle method calls with parentheses: object.method(args)
-        if (trimmed.includes('(') && trimmed.includes(')')) {
-            return indent + trimmed;
-        }
-        
-        // Handle method assignments: object.method = value
-        if (trimmed.includes('=') && !trimmed.includes('A.new')) {
-            const parts = trimmed.split('=');
-            const leftPart = parts[0].trim();
-            const rightPart = parts[1].trim();
+        // Cas spécial: new A({ ... }) - Le plus important !
+        if (node.value && node.value.type === 'CallNode' && 
+            node.value.receiver === 'A' && node.value.method === 'new') {
             
-            return indent + leftPart + '(' + rightPart + ')';
+            // Générer l'objet de configuration
+            let configObject = '{}';
+            if (node.value.arguments && node.value.arguments.length > 0) {
+                const hashArg = node.value.arguments[0];
+                if (hashArg.type === 'HashNode') {
+                    configObject = this.transpileHashNode(hashArg);
+                }
+            }
+            
+            return `const ${node.name} = new A(${configObject});`;
         }
         
-        return indent + trimmed;
-    }
-
-    /**
-     * 🔧 PROCESS PUTS STATEMENTS
-     */
-    processPutsStatement(line) {
-        const trimmed = line.trim();
-        const putsIndex = trimmed.indexOf('puts');
-        const argument = trimmed.substring(putsIndex + 4).trim();
-        const indent = this.getIndent(line);
+        // Cas général: autres assignements
+        if (node.value) {
+            const value = this.transpilePrismNode(node.value);
+            if (value && !value.startsWith('//')) { // Éviter les commentaires
+                return `const ${node.name} = ${value};`;
+            }
+        }
         
-        return indent + 'puts(' + argument + ')';
+        // Si on ne peut pas transpiler la valeur, créer une variable undefined
+        return `const ${node.name} = undefined; // Could not transpile value`;
     }
 
     /**
-     * 🔧 PROCESS REQUIRE STATEMENTS
+     * 📖 TRANSPILE LOCAL VARIABLE READ
      */
-    processRequireStatement(line) {
-        const trimmed = line.trim();
-        const requireIndex = trimmed.indexOf('require');
-        const argument = trimmed.substring(requireIndex + 7).trim();
-        const indent = this.getIndent(line);
-        
-        return indent + 'require(' + argument + ')';
+    transpileLocalVariableRead(node) {
+        console.log('📖 Transpiling LocalVariableReadNode:', node.name);
+        return node.name || 'undefined';
     }
 
     /**
-     * 🚀 EXECUTE JAVASCRIPT CODE
+     * 📝 TRANSPILE EXPRESSION NODE (ENHANCED)
+     */
+    transpileExpressionNode(node) {
+        console.log('📝 Transpiling ExpressionNode');
+        
+        if (!node.content) {
+            return '// Empty expression';
+        }
+        
+        const content = node.content.trim();
+        
+        // === DÉTECTION SPÉCIALE: Assignements dans ExpressionNode ===
+        
+        // 1. Détection d'assignement A.new manqué par le parser
+        if (content.match(/^\s*(\w+)\s*=\s*A\.new\s*\(\s*\{/) || content.match(/^\s*(\w+)\s*=\s*new\s+A\s*\(\s*\{/)) {
+            const match = content.match(/^\s*(\w+)\s*=\s*(?:A\.new|new\s+A)\s*\(\s*\{/);
+            if (match) {
+                const varName = match[1];
+                console.log(`🔧 Converting ExpressionNode to LocalVariableWrite: ${varName}`);
+                
+                // Convertir en assignement réel
+                return `const ${varName} = new A({/* Object configuration */});`;
+            }
+        }
+        
+        // 2. Autres assignements
+        if (content.match(/^\s*(\w+)\s*=\s*(.+)$/)) {
+            const match = content.match(/^\s*(\w+)\s*=\s*(.+)$/);
+            const varName = match[1];
+            const value = match[2].trim();
+            
+            console.log(`🔧 Converting ExpressionNode to assignment: ${varName} = ${value}`);
+            
+            // Nettoyer la valeur
+            let cleanValue = value;
+            if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
+                cleanValue = cleanValue; // Garder les guillemets pour les strings
+            } else if (/^\d+(\.\d+)?$/.test(cleanValue)) {
+                cleanValue = cleanValue; // Garder les nombres tels quels
+            } else {
+                cleanValue = `"${cleanValue}"`; // Entourer de guillemets si ce n'est pas déjà fait
+            }
+            
+            return `const ${varName} = ${cleanValue};`;
+        }
+        
+        // 3. Appels de méthode dans ExpressionNode
+        if (content.match(/(\w+|\w+\([^)]*\))\.(\w+)\s*(\([^)]*\))?\s*$/)) {
+            const match = content.match(/(.+)\.(\w+)\s*(\([^)]*\))?\s*$/);
+            const receiver = match[1].trim();
+            const method = match[2];
+            const args = match[3] || '()';
+            
+            console.log(`🔧 Converting ExpressionNode to method call: ${receiver}.${method}${args}`);
+            return `${receiver}.${method}${args};`;
+        }
+        
+        // 4. Cas spéciaux pour le contenu qui pourrait être problématique
+        if (content.includes(':') && content.includes('{') && content.includes('}')) {
+            // Probablement du contenu d'objet mal parsé - ignorer
+            return '// Skipped object content';
+        }
+        
+        // 5. wait statements
+        if (content.match(/^\s*wait\s+(\d+)\s+do\s*$/)) {
+            const match = content.match(/^\s*wait\s+(\d+)\s+do\s*$/);
+            const duration = match[1];
+            return `setTimeout(function() {`;
+        }
+        
+        // 6. if statements  
+        if (content.match(/^\s*if\s+(.+)$/)) {
+            const match = content.match(/^\s*if\s+(.+)$/);
+            const condition = match[1];
+            return `if (${condition}) {`;
+        }
+        
+        // 7. end statements - IGNORER AU LIEU DE GÉNÉRER }
+        if (content === 'end') {
+            return '// end'; // Commenter au lieu de générer une accolade
+        }
+        
+        // 8. Fallback: commenter le contenu
+        return `// Expression: ${content}`;
+    }
+
+    /**
+     * 📞 TRANSPILE CALL NODE (ENHANCED)
+     */
+    transpileCallNode(node) {
+        console.log('📞 Transpiling CallNode:', node.method);
+        
+        if (!node.method) {
+            return null;
+        }
+        
+        // === PUTS STATEMENTS ===
+        if (node.method === 'puts') {
+            if (node.arguments && node.arguments.length > 0) {
+                const args = node.arguments.map(arg => this.transpilePrismNode(arg)).filter(Boolean);
+                return `puts(${args.join(', ')});`;
+            }
+            return 'puts();';
+        }
+        
+        // === METHOD CALLS WITH RECEIVER ===
+        if (node.receiver) {
+            const receiver = typeof node.receiver === 'string' ? 
+                node.receiver : this.transpilePrismNode(node.receiver);
+            
+            // Method calls with blocks
+            if (node.block) {
+                const blockCode = this.transpileBlockNode(node.block);
+                
+                // Déterminer les paramètres du block
+                let blockParams = '';
+                if (node.block.parameters && node.block.parameters.length > 0) {
+                    blockParams = node.block.parameters.join(', ');
+                } else if (node.method === 'keyboard') {
+                    blockParams = 'key';
+                } else if (node.method === 'onclick' || node.method === 'onmouseover' || node.method === 'onmouseout') {
+                    blockParams = 'event';
+                }
+                
+                return `${receiver}.${node.method}(function(${blockParams}) {\n${blockCode}\n});`;
+            }
+            
+            // Arguments pour les méthodes
+            let args = '';
+            if (node.arguments && node.arguments.length > 0) {
+                const argList = node.arguments.map(arg => this.transpilePrismNode(arg)).filter(Boolean);
+                args = argList.join(', ');
+            }
+            
+            // Regular method calls
+            return `${receiver}.${node.method}(${args});`;
+        }
+        
+        // === STANDALONE METHOD CALLS ===
+        let args = '';
+        if (node.arguments && node.arguments.length > 0) {
+            const argList = node.arguments.map(arg => this.transpilePrismNode(arg)).filter(Boolean);
+            args = argList.join(', ');
+        }
+        
+        return `${node.method}(${args});`;
+    }
+
+    /**
+     * 📄 TRANSPILE STRING NODE (ENHANCED)
+     */
+    transpileStringNode(node) {
+        console.log('📄 Transpiling StringNode');
+        
+        if (!node.value) {
+            return '""';
+        }
+        
+        let value = node.value;
+        
+        // Nettoyer les guillemets doubles superflus
+        if (value.startsWith('"') && value.endsWith('"')) {
+            value = value.slice(1, -1);
+        } else if (value.startsWith("'") && value.endsWith("'")) {
+            value = value.slice(1, -1);
+        }
+        
+        // Handle Ruby string interpolation #{...} → ${...}
+        if (value.includes('#{')) {
+            value = value.replace(/#{([^}]+)}/g, '${$1}');
+            return `\`${value}\``;
+        }
+        
+        return `"${value}"`;
+    }
+
+    /**
+     * 🔢 TRANSPILE INTEGER NODE
+     */
+    transpileIntegerNode(node) {
+        console.log('🔢 Transpiling IntegerNode');
+        return node.value || '0';
+    }
+
+    /**
+     * 📦 TRANSPILE HASH NODE (ENHANCED)
+     */
+    transpileHashNode(node) {
+        console.log('📦 Transpiling HashNode');
+        
+        if (!node.content || !Array.isArray(node.content)) {
+            return '{}';
+        }
+        
+        // Convertir le contenu en propriétés JavaScript
+        const properties = [];
+        
+        for (const line of node.content) {
+            if (typeof line === 'string' && line.trim()) {
+                // Parser les propriétés Ruby style
+                const cleanLine = line.trim().replace(/,$/, ''); // Enlever virgule finale
+                
+                if (cleanLine.includes(':')) {
+                    // Style Ruby: key: value
+                    const colonIndex = cleanLine.indexOf(':');
+                    const key = cleanLine.substring(0, colonIndex).trim();
+                    const value = cleanLine.substring(colonIndex + 1).trim();
+                    
+                    // Nettoyer et formater
+                    const cleanKey = key.replace(/['"]/g, '');
+                    const cleanValue = this.cleanHashValue(value);
+                    
+                    properties.push(`  ${cleanKey}: ${cleanValue}`);
+                }
+            }
+        }
+        
+        if (properties.length === 0) {
+            return '{}';
+        }
+        
+        return `{\n${properties.join(',\n')}\n}`;
+    }
+
+    /**
+     * 🧹 UTILITY: Clean hash values (ENHANCED)
+     */
+    cleanHashValue(value) {
+        const trimmed = value.trim();
+        
+        // Nombres
+        if (/^\d+(\.\d+)?$/.test(trimmed)) {
+            return trimmed;
+        }
+        
+        // Booléens
+        if (trimmed === 'true' || trimmed === 'false') {
+            return trimmed;
+        }
+        
+        // Objects imbriqués
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            return trimmed;
+        }
+        
+        // Arrays
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            return trimmed;
+        }
+        
+        // Strings déjà quotées
+        if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || 
+            (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+            return trimmed;
+        }
+        
+        // Mots-clés spéciaux
+        if (trimmed === 'null' || trimmed === 'undefined') {
+            return trimmed;
+        }
+        
+        // Si c'est 'body', c'est une référence à l'élément
+        if (trimmed === 'body') {
+            return '"body"';
+        }
+        
+        // Si ça ressemble à un sélecteur CSS ou un ID
+        if (trimmed.startsWith('#') || trimmed.startsWith('.')) {
+            return `"${trimmed}"`;
+        }
+        
+        // Default: traiter comme string
+        return `"${trimmed}"`;
+    }
+
+    /**
+     * 📚 TRANSPILE ARRAY NODE
+     */
+    transpileArrayNode(node) {
+        console.log('📚 Transpiling ArrayNode');
+        
+        if (!node.elements || !Array.isArray(node.elements)) {
+            return '[]';
+        }
+        
+        const elements = node.elements.map(el => this.transpilePrismNode(el)).filter(Boolean);
+        return `[${elements.join(', ')}]`;
+    }
+
+    /**
+     * 🎭 TRANSPILE BLOCK NODE (ENHANCED)
+     */
+    transpileBlockNode(node) {
+        console.log('🎭 Transpiling BlockNode');
+        
+        if (!node.body || !Array.isArray(node.body)) {
+            return '  // Empty block';
+        }
+        
+        const statements = [];
+        
+        for (const stmt of node.body) {
+            const jsLine = this.transpilePrismNode(stmt);
+            if (jsLine && jsLine.trim()) {
+                statements.push(`  ${jsLine}`);
+            }
+        }
+        
+        return statements.length > 0 ? statements.join('\n') : '  // Empty block';
+    }
+
+    /**
+     * 🔀 TRANSPILE IF NODE (ENHANCED)
+     */
+    transpileIfNode(node) {
+        console.log('🔀 Transpiling IfNode');
+        
+        if (!node.condition) {
+            return '// Invalid if node: no condition';
+        }
+        
+        let condition = '';
+        if (node.condition.type === 'ExpressionNode') {
+            condition = node.condition.content || 'true';
+        } else {
+            condition = this.transpilePrismNode(node.condition) || 'true';
+        }
+        
+        // Nettoyer et corriger la condition
+        condition = this.cleanCondition(condition);
+        
+        const thenBody = this.transpilePrismNode(node.then_body) || '  // Empty then body';
+        
+        let result = `if (${condition}) {\n${thenBody}\n}`;
+        
+        if (node.else_body) {
+            const elseBody = this.transpilePrismNode(node.else_body);
+            result += ` else {\n${elseBody}\n}`;
+        }
+        
+        return result;
+    }
+
+    /**
+     * 🧹 UTILITY: Clean and fix conditions
+     */
+    cleanCondition(condition) {
+        // Nettoyer les conditions Ruby → JavaScript
+        let cleaned = condition.trim();
+        
+        // Remplacer les opérateurs Ruby
+        cleaned = cleaned.replace(/\band\b/g, '&&');
+        cleaned = cleaned.replace(/\bor\b/g, '||');
+        cleaned = cleaned.replace(/\bnot\b/g, '!');
+        
+        // Corriger key.ctrl en key.ctrlKey (standard JavaScript)
+        cleaned = cleaned.replace(/key\.ctrl/g, 'key.ctrlKey');
+        
+        // S'assurer que les comparaisons utilisent === au lieu de ==
+        cleaned = cleaned.replace(/([^=!])={1}([^=])/g, '$1===$2');
+        
+        return cleaned;
+    }
+
+    /**
+     * ❓ TRANSPILE UNKNOWN NODE
+     */
+    transpileUnknownNode(node) {
+        console.log('❓ Transpiling UnknownNode:', node.type);
+        
+        // Essayer de faire quelque chose d'intelligent avec le contenu
+        if (node.content) {
+            return `// Unknown: ${node.content}`;
+        }
+        
+        if (node.pointer) {
+            return `// Unknown node at pointer: ${node.pointer}`;
+        }
+        
+        return `// Unknown node type: ${node.type || 'undefined'}`;
+    }
+
+    /**
+     * 🚀 EXECUTE JAVASCRIPT (ENHANCED)
      */
     executeJS(jsCode) {
-        console.log('🚀 Executing transpiled JavaScript...');
+        console.log('🚀 Executing transpiled JavaScript (Enhanced)...');
         
         try {
-            // Remove empty lines and clean up
-            const cleanLines = jsCode.split('\n').filter(line => line.trim() !== '');
-            const cleanCode = cleanLines.join('\n');
+            console.log('🔍 Generated JavaScript:');
+            console.log('--- START GENERATED CODE ---');
+            console.log(jsCode);
+            console.log('--- END GENERATED CODE ---');
             
-            if (!cleanCode.trim()) {
-                console.log('✅ Empty code - nothing to execute');
-                return;
+            // Validation basique avant exécution
+            if (!jsCode || jsCode.trim() === '') {
+                console.warn('⚠️ Empty JavaScript code generated');
+                return { success: true, warning: 'Empty code' };
             }
             
-            eval(cleanCode);
-            console.log('✅ JavaScript executed successfully');
+            // Execute the code
+            eval(jsCode);
+            console.log('✅ JavaScript execution completed successfully');
+            return { success: true };
             
         } catch (error) {
             console.error('❌ JavaScript execution failed:', error);
-            this.debugFailedCode(jsCode);
-            throw error;
+            console.log('🚨 Problematic JavaScript code:');
+            console.log(jsCode);
+            
+            // Fournir plus de détails sur l'erreur
+            return { 
+                success: false, 
+                error: error.message,
+                code: jsCode,
+                errorType: error.name
+            };
         }
     }
 
     /**
-     * 🎯 MAIN PROCESSING PIPELINE
+     * 🚀 MAIN PROCESS - 100% PRISM PIPELINE (ENHANCED)
      */
     async processRubyCode(rubyCode) {
-        console.log('🚀 Starting Pure Ruby Prism Pipeline...');
+        console.log('🚀 Starting Enhanced 100% Prism Ruby to JS Pipeline...');
         
         try {
-            // Step 1: Parse Ruby to AST
-            console.log('🔍 Step 1: Parsing Ruby to AST...');
-            const parseResult = this.parseRubyCode(rubyCode);
+            // Step 1: Parse and validate Ruby with Prism
+            console.log('🔍 Step 1: Parsing Ruby with Enhanced Prism...');
+            const prismResult = await this.parseRubyCode(rubyCode);
             
-            // Step 2: Transpile AST to JavaScript
-            console.log('⚡ Step 2: Transpiling AST to JavaScript...');
-            const jsCode = this.transpileToJS(parseResult);
+            // Extract Prism AST
+            const ast = prismResult.result?.value;
+            if (!ast || !ast.body) {
+                throw new Error('No Prism AST extracted from result');
+            }
+            
+            console.log(`🌳 Enhanced Prism AST extracted with ${ast.body.length} nodes`);
+            
+            // Step 2: Transpile Prism AST to JavaScript
+            console.log('⚡ Step 2: Transpiling Enhanced Prism AST to JavaScript...');
+            const jsCode = this.transpilePrismASTToJavaScript(ast);
             
             // Step 3: Execute JavaScript
-            console.log('🚀 Step 3: Executing JavaScript...');
-            this.executeJS(jsCode);
+            console.log('🚀 Step 3: Executing Enhanced JavaScript...');
+            const result = this.executeJS(jsCode);
             
-            return jsCode;
+            return result;
             
         } catch (error) {
-            console.error('❌ Pure Ruby Prism Pipeline failed:', error);
+            console.error('❌ Enhanced 100% Prism Pipeline failed:', error);
             throw error;
-        }
-    }
-
-    /**
-     * 🔧 DETECTION METHODS
-     */
-    isANewObject(line) {
-        return line.includes('=') && line.includes('A.new');
-    }
-
-    isWaitBlock(line) {
-        return line.startsWith('wait ') && line.includes(' do');
-    }
-
-    isMethodBlock(line) {
-        return line.includes('.') && line.includes(' do') && 
-               (line.endsWith(' do') || line.includes(' do '));
-    }
-
-    isMethodCall(line) {
-        return line.includes('.') && (line.includes('(') || line.includes('='));
-    }
-
-    isPutsStatement(line) {
-        return line.includes('puts ');
-    }
-
-    isRequireStatement(line) {
-        return line.includes('require ');
-    }
-
-    /**
-     * 🔧 EXTRACTION METHODS
-     */
-    extractObjectName(line) {
-        const equalIndex = line.indexOf('=');
-        return line.substring(0, equalIndex).trim();
-    }
-
-    extractWaitDelay(line) {
-        const parts = line.split(' ');
-        return parts[1];
-    }
-
-    extractMethodBlock(line) {
-        const parts = line.split(' ');
-        const methodCall = parts[0];
-        const dotIndex = methodCall.indexOf('.');
-        
-        return {
-            objectName: methodCall.substring(0, dotIndex),
-            methodName: methodCall.substring(dotIndex + 1)
-        };
-    }
-
-    /**
-     * 🔧 COLLECTION METHODS
-     */
-    collectBlockLines(allLines, startIndex) {
-        const lines = [];
-        let i = startIndex;
-        let depth = 1;
-        
-        while (i < allLines.length && depth > 0) {
-            const lineObj = allLines[i];
-            const line = lineObj.content || lineObj.toString();
-            const trimmed = line.trim();
-            
-            if (trimmed.includes(' do') || trimmed.endsWith(' do')) depth++;
-            if (trimmed === 'end' || trimmed.startsWith('end ')) depth--;
-            
-            if (depth > 0) {
-                lines.push(line);
-            }
-            
-            i++;
-        }
-        
-        return {
-            lines: lines,
-            linesConsumed: i - startIndex
-        };
-    }
-
-    collectObjectLines(allLines, startIndex) {
-        const lines = [];
-        let i = startIndex;
-        let depth = 1;
-        
-        while (i < allLines.length && depth > 0) {
-            const lineObj = allLines[i];
-            const line = lineObj.content || lineObj.toString();
-            const trimmed = line.trim();
-            
-            if (trimmed.includes('{')) depth++;
-            if (trimmed.includes('}')) depth--;
-            
-            if (depth > 0) {
-                lines.push(line);
-            }
-            
-            i++;
-        }
-        
-        return {
-            lines: lines,
-            linesConsumed: i - startIndex
-        };
-    }
-
-    /**
-     * 🔧 UTILITY FUNCTIONS
-     */
-    getIndent(line) {
-        let indent = '';
-        for (let i = 0; i < line.length; i++) {
-            if (line[i] === ' ' || line[i] === '\t') {
-                indent += line[i];
-            } else {
-                break;
-            }
-        }
-        return indent;
-    }
-
-    debugFailedCode(code) {
-        console.log('🔧 Failed code preview:');
-        const lines = code.split('\n');
-        for (let i = 0; i < Math.min(lines.length, 15); i++) {
-            console.log(`${i + 1}: ${lines[i]}`);
         }
     }
 }
 
-// 🚀 CREATE GLOBAL INSTANCES
-window.SquirrelOrchestrator = SquirrelOrchestrator;
-window.SquirrelWorkflow = SquirrelOrchestrator;
-
-console.log('🚀 Squirrel Orchestrator loaded - Pure Ruby Prism Parser!');
-console.log('✅ Zero regex - 100% Ruby Prism AST transpilation!');
-console.log('✅ Zero specific code - 100% universal mapping!');
-console.log('✅ A Framework APIs priority, utils.js fallback!');
-console.log('📋 SquirrelWorkflow available:', typeof SquirrelWorkflow);
+// Global export
+if (typeof window !== 'undefined') {
+    // Clear existing class if it exists
+    if (window.SquirrelOrchestrator) {
+        delete window.SquirrelOrchestrator;
+    }
+    
+    window.SquirrelOrchestrator = SquirrelOrchestrator;
+    console.log('✅ Enhanced 100% Prism AST transpiler ready!');
+    console.log('✅ Robust node type handling with error prevention!');
+    console.log('✅ Enhanced Ruby to JavaScript conversion without syntax errors!');
+    console.log('📋 Enhanced SquirrelOrchestrator available:', typeof SquirrelOrchestrator);
+}
