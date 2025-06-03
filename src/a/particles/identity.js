@@ -88,6 +88,7 @@ defineParticle({
     type: 'object',
     category: 'appearance',
     process(el, v) {
+        console.log(`Processing shadow:, ${el} => ${JSON.stringify(v)}`);  // Debugging log
         if (Array.isArray(v)) {
             // Rename to avoid variable shadowing
             el.style.boxShadow = v.map(shadowItem => {

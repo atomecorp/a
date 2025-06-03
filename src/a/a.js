@@ -71,11 +71,11 @@
     // 🔥 CLASS A - ORIGINAL ARCHITECTURE + SMART PROXY
     A = class {
         constructor(config = {}) {
-            this._data = {...config};
-            this.element = document.createElement(config.markup || 'div');
+            this.particles = {...config};
+            this.html_object = document.createElement(config.markup || 'div');
             this._fastened = config.fasten || [];
-            this.style = this.element.style;
-            this.dataset = this.element.dataset;
+            this.style = this.html_object.style;
+            this.dataset = this.html_object.dataset;
 
             // Apply base styles
             if (config.reset !== false) {
@@ -111,12 +111,12 @@
                         };
                         
                         // 🎯 MAGIC: valueOf and toString return the value directly
-                        smartProperty.valueOf = () => target._data[prop];
-                        smartProperty.toString = () => String(target._data[prop]);
+                        smartProperty.valueOf = () => target.particles[prop];
+                        smartProperty.toString = () => String(target.particles[prop]);
                         
                         // For comparisons and operations
                         smartProperty[Symbol.toPrimitive] = (hint) => {
-                            const val = target._data[prop];
+                            const val = target.particles[prop];
                             if (hint === 'number') return Number(val);
                             if (hint === 'string') return String(val);
                             return val;
@@ -150,12 +150,12 @@
 
                 const particle = _particles[name];
                 this[name] = function (value) {
-                    if (arguments.length === 0) return this._data[name];
+                    if (arguments.length === 0) return this.particles[name];
 
-                    this._data[name] = value;
+                    this.particles[name] = value;
 
                     try {
-                        particle.process(this.element, value, this._data, this);
+                        particle.process(this.html_object, value, this.particles, this);
                     } catch (err) {
                         console.error(`Error when calling particle ${name}:`, err);
                     }
@@ -175,9 +175,9 @@
                 if (typeof this[prop] === 'function' || reservedMethods.includes(prop)) return;
 
                 this[prop] = function (value) {
-                    if (arguments.length === 0) return this._data[prop];
+                    if (arguments.length === 0) return this.particles[prop];
 
-                    this._data[prop] = value;
+                    this.particles[prop] = value;
 
                     // Apply changes to DOM
                     const styleUpdates = {};
@@ -186,15 +186,15 @@
                     this._collectPropertyUpdates(prop, value, styleUpdates, datasetUpdates);
 
                     if (Object.keys(styleUpdates).length > 0) {
-                        Object.assign(this.element.style, styleUpdates);
+                        Object.assign(this.html_object.style, styleUpdates);
                     }
                     if (Object.keys(datasetUpdates).length > 0) {
-                        Object.assign(this.element.dataset, datasetUpdates);
+                        Object.assign(this.html_object.dataset, datasetUpdates);
                     }
 
                     // Special cases
                     if (prop === 'attrContenteditable' || prop === 'contentEditable') {
-                        this.element.contentEditable = value;
+                        this.html_object.contentEditable = value;
                     }
 
                     return this;
@@ -224,7 +224,7 @@
                 const particle = _particles[key];
                 if (particle) {
                     try {
-                        particle.process(this.element, value, config, this);
+                        particle.process(this.html_object, value, config, this);
                     } catch (err) {
                         console.error(`Error processing particle ${key}:`, err);
                     }
@@ -239,10 +239,10 @@
             }
 
             if (Object.keys(styleUpdates).length > 0) {
-                Object.assign(this.element.style, styleUpdates);
+                Object.assign(this.html_object.style, styleUpdates);
             }
             if (Object.keys(datasetUpdates).length > 0) {
-                Object.assign(this.element.dataset, datasetUpdates);
+                Object.assign(this.html_object.dataset, datasetUpdates);
             }
         }
 
@@ -259,14 +259,14 @@
 
             this[key] = function (value) {
                 if (arguments.length === 0) {
-                    return this._data[key];
+                    return this.particles[key];
                 }
 
-                this._data[key] = value;
+                this.particles[key] = value;
 
                 if (hasParticle) {
                     try {
-                        particle.process(this.element, value, this._data, this);
+                        particle.process(this.html_object, value, this.particles, this);
                     } catch (err) {
                         console.error(`Error calling particle ${key}:`, err);
                     }
@@ -276,10 +276,10 @@
                     this._collectPropertyUpdates(key, value, styleUpdates, datasetUpdates);
 
                     if (Object.keys(styleUpdates).length > 0) {
-                        Object.assign(this.element.style, styleUpdates);
+                        Object.assign(this.html_object.style, styleUpdates);
                     }
                     if (Object.keys(datasetUpdates).length > 0) {
-                        Object.assign(this.element.dataset, datasetUpdates);
+                        Object.assign(this.html_object.dataset, datasetUpdates);
                     }
                 }
 
@@ -307,11 +307,11 @@
                     styleUpdates.backgroundColor = value;
                     return;
                 case 'id':
-                    this.element.id = value;
+                    this.html_object.id = value;
                     if (value) _registry[value] = this;
                     return;
                 case 'text':
-                    this.element.textContent = value;
+                    this.html_object.textContent = value;
                     return;
             }
 
@@ -323,7 +323,7 @@
             } else if (Array.isArray(value)) {
                 datasetUpdates[key] = value.join(',');
             } else if (value instanceof HTMLElement) {
-                this.element.appendChild(value);
+                this.html_object.appendChild(value);
             } else if (value && typeof value === 'object') {
                 datasetUpdates[key] = JSON.stringify(value);
             }
@@ -338,7 +338,7 @@
         }
 
         _performAttach(value) {
-            if (this.element.parentNode) return;
+            if (this.html_object.parentNode) return;
 
             let parent;
             if (typeof value === 'string') {
@@ -349,39 +349,39 @@
                 parent = document.body;
             }
 
-            parent.appendChild(this.element);
+            parent.appendChild(this.html_object);
         }
 
         // === EVENT METHODS ===
         onclick(callback) {
-            this.element.addEventListener('click', callback);
+            this.html_object.addEventListener('click', callback);
             return this;
         }
         
         onmouseover(callback) {
-            this.element.addEventListener('mouseover', callback);
+            this.html_object.addEventListener('mouseover', callback);
             return this;
         }
         
         onmouseout(callback) {
-            this.element.addEventListener('mouseout', callback);
+            this.html_object.addEventListener('mouseout', callback);
             return this;
         }
 
         // Public API
-        getElement() { return this.element; }
+        getElement() { return this.html_object; }
         getFastened() { return this._fastened.map(id => _registry[id]).filter(Boolean); }
 
         addChild(childConfig) {
             if (childConfig instanceof A) {
-                this.element.appendChild(childConfig.getElement());
-                if (childConfig._data.id) {
-                    this._fastened.push(childConfig._data.id);
+                this.html_object.appendChild(childConfig.getElement());
+                if (childConfig.particles.id) {
+                    this._fastened.push(childConfig.particles.id);
                 }
                 return childConfig;
             }
 
-            const child = new A({...childConfig, attach: this.element});
+            const child = new A({...childConfig, attach: this.html_object});
             if (childConfig.id) {
                 this._fastened.push(childConfig.id);
             }
@@ -390,10 +390,10 @@
 
         inspect() {
             console.group('A Instance');
-            console.log('ID:', this._data.id);
-            console.log('Element:', this.element);
-            console.log('Style:', this.element.style.cssText);
-            console.log('Data:', this._data);
+            console.log('ID:', this.particles.id);
+            console.log('Element:', this.html_object);
+            console.log('Style:', this.html_object.style.cssText);
+            console.log('Data:', this.particles);
             console.groupEnd();
             return this;
         }

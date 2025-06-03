@@ -3,16 +3,17 @@
 
     function checkFrameworkLoaded() {
         if (typeof window.defineParticle !== 'function') {
-            // console.log('⏳ Waiting for A Framework to load...');
             setTimeout(checkFrameworkLoaded, 50);
             return;
         }
-        // console.log('✅ A Framework detected, initializing particles extension...');
         initParticlesExtension();
     }
 
     function initParticlesExtension() {
-        // console.log('🔧 Initializing particles extension...');
+        function common_treatment(el, v, prop) {
+            // console.log(`🔥 [COMMON] Processing property: ${prop}, value:`, v, el);
+            // console.log('-----------------');
+        }
 
         // Test particle for 'role'
         window.defineParticle({
@@ -20,6 +21,7 @@
             type: 'string',
             category: 'attribute',
             process(el, v) {
+                common_treatment(el, v, 'role');
                 el.setAttribute('role', v);
             }
         });
@@ -57,8 +59,8 @@
             'wordBreak', 'wordSpacing', 'wordWrap', 'zIndex'
         ];
 
-        const existingCssParticles = ['width', 'height', 'color', 'backgroundColor', 'x', 'y', 'overflow'];
         const dimensionalProps = new Set(['Width', 'Height', 'Top', 'Left', 'Bottom', 'Right', 'Margin', 'Padding', 'Indent', 'Radius', 'fontSize', 'lineHeight', 'gap', 'Gap']);
+        const existingCssParticles = ['width', 'height', 'color', 'backgroundColor', 'x', 'y', 'overflow'];
 
         function needsPx(prop) {
             if (prop === 'fontSize' || prop === 'lineHeight') return true;
@@ -70,13 +72,15 @@
         }
 
         nativeStyleProps.forEach(prop => {
+       
             if (existingCssParticles.includes(prop)) return;
-
+     console.log(`🔥uglly patch remove asap, for now when removed this method overrides the atome particle, this is not what we wwant`);
             window.defineParticle({
                 name: prop,
                 type: 'any',
                 category: 'css',
                 process(el, v) {
+                    common_treatment(el, v, prop);
                     if (typeof v === 'number') {
                         el.style[prop] = needsPx(prop) ? `${v}px` : v;
                     } else {
@@ -97,12 +101,12 @@
 
         nativeHTMLAttributes.forEach(attr => {
             const particleName = `attr${attr.charAt(0).toUpperCase() + attr.slice(1)}`;
-
             window.defineParticle({
                 name: particleName,
                 type: 'any',
                 category: 'attribute',
                 process(el, v) {
+                    common_treatment(el, v, particleName);
                     if (v === null || v === undefined) {
                         el.removeAttribute(attr);
                     } else if (v === true) {
@@ -137,14 +141,13 @@
 
         nativeDOMProperties.forEach(prop => {
             if (readOnlyProps.has(prop)) return;
-
             const particleName = `prop${prop.charAt(0).toUpperCase() + prop.slice(1)}`;
-
             window.defineParticle({
                 name: particleName,
                 type: 'any',
                 category: 'property',
                 process(el, v) {
+                    common_treatment(el, v, particleName);
                     if (prop === 'classList' && Array.isArray(v)) {
                         el.className = v.join(' ');
                     } else if (prop === 'dataset' && typeof v === 'object' && v !== null) {
@@ -165,6 +168,7 @@
             type: 'any',
             category: 'attribute',
             process(el, v) {
+                common_treatment(el, v, 'class');
                 if (typeof v === 'string') {
                     el.className = v;
                 } else if (Array.isArray(v)) {
@@ -183,6 +187,7 @@
             type: 'string',
             category: 'content',
             process(el, v) {
+                common_treatment(el, v, 'text');
                 el.textContent = v;
             }
         });
@@ -192,6 +197,7 @@
             type: 'string',
             category: 'content',
             process(el, v) {
+                common_treatment(el, v, 'html');
                 el.innerHTML = v;
             }
         });
@@ -201,16 +207,15 @@
             type: 'object',
             category: 'event',
             process(el, v) {
+                common_treatment(el, v, 'on'); // Fixed: was 'eventName', now 'on'
                 if (!v || typeof v !== 'object') return;
                 for (const eventName in v) {
                     const handler = v[eventName];
                     if (typeof handler !== 'function') continue;
-
                     const handlerKey = `_a_${eventName}`;
                     if (el[handlerKey]) {
                         el.removeEventListener(eventName, el[handlerKey]);
                     }
-
                     el[handlerKey] = handler;
                     el.addEventListener(eventName, handler);
                 }
@@ -230,7 +235,7 @@
                 type: 'function',
                 category: 'event',
                 process(el, handler) {
-                    // console.log(`✅ Using DSL method '${eventName}'`);
+                    common_treatment(el, handler, eventName); // Added common_treatment call
                     if (typeof handler === 'function') {
                         el[eventName] = handler;
                     }
@@ -238,24 +243,17 @@
             });
         });
 
-        // console.log('✅ All particles extension initialized successfully!');
-        
-        // Déclencher un événement pour signaler que tout est prêt
         window.dispatchEvent(new CustomEvent('ParticlesExtensionLoaded'));
     }
 
-    // Écouter l'événement de chargement du framework A ou commencer immédiatement
+    // Listen for framework loading or start immediately
     if (window.A && window.defineParticle) {
-        // console.log('✅ A Framework already loaded, initializing immediately...');
         initParticlesExtension();
     } else {
         window.addEventListener('AFrameworkLoaded', () => {
-            // console.log('📡 Received AFrameworkLoaded event');
             initParticlesExtension();
         });
-        
         // Fallback: polling check
         checkFrameworkLoaded();
     }
-
 })();

@@ -1,46 +1,65 @@
 // Create a new A instance with custom properties
-const container = new A({
-    attach: 'body',
-    id: 'main_container',
-    markup: 'span',
-    role: 'container',
-    x: 150,
-    y: 50,
-    width: 400,
-    height: 300,
-    color: 'orange',
-    display: 'block',
-    smooth: 10,
-    shadow: [
-        {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-        {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-    ],
-    overflow: 'hidden',
-    fasten: [] // will contain the IDs of children
-});
+// const html_container = new A({
+//     attach: 'body',
+//     id: 'main_html_container',
+//     markup: 'span',
+//     role: 'container',
+//     x: 150,
+//     y: 50,
+//     width: 400,
+//     height: 300,
+//     color: 'orange',
+//     display: 'block',
+//     smooth: 10,
+//     shadow: [
+//         {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
+//         {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
+//     ],
+//     overflow: 'hidden',
+//     fasten: [] // will contain the IDs of children
+// });
 
-puts(container)
-puts(container.width)
-puts(container.element)
+// puts(html_container)
+// puts(html_container.width)
+// puts(html_container.html_object)
 
-setTimeout(() => {
-    container.display('888px')
+// setTimeout(() => {
+//     // html_container.display('none')
 
-    console.log("Delayed for 2 second.");
-    container.width(800)
-    const element = document.getElementById("main_container");
+//     console.log("Delayed for 2 second.");
+//     html_container.width(800)
+//     // html_container.left('800px');
+//     html_container.html_object.style.left = '600px';
+//     puts ('----------')
+//     puts(html_container.particles );
+//     puts ('----------')
 
-    // Change the left position (in pixels)
-    let element2 = grab('main_container');
-    console.log(container === element2)
-    element2.height(12);
-    element2.style.top = '290px'
-    // puts(">>> " + element2.style.top)
-    container.style.left = "50px";
-}, 2000);
+//     const element = document.getElementById("main_html_container");
 
-// Short alias for document
-const d = document;
+//     // Change the left position (in pixels)
+//     let element2 = grab('main_html_container');
+//     console.log(html_container === element2)
+//     element2.height(12);
+//     element2.style.top = '290px'
+//     puts(">>> " + element2.style.top)
+//     html_container.style.left = "50px";
+// }, 2000);
+// wait(2000, () => {
+//     console.log("This message is displayed after a 2-second delay.");
+// });
+
+// const element = grab('main_html_container');
+
+// if (element) {
+//     console.log('Element found:', element);
+//     element.width(50); // Change the width of the element
+//     element.style.backgroundColor = 'blue'; // Change the background color
+// } else {
+//     console.error('Element not found');
+// }
+
+// // Short alias for document
+// const d = document;
 
 // // Create and append an H1 and a div dynamically
 // const div = Object.assign(d.body, {

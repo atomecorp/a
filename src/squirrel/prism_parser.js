@@ -1,6 +1,6 @@
 // Enhanced Prism Parser - Production Version
-// Pure Ruby AST processing without tests
-// Version 2.0 - Production Ready
+// Now uses RealPrismHelper with official Prism JavaScript API
+// Version 3.0 - Real Prism Integration
 
 class PrismParser {
     constructor() {
@@ -13,25 +13,26 @@ class PrismParser {
     // Initialize the parser
     async initialize() {
         try {
-            // console.log('🚀 Initializing Prism Parser...');
+            console.log('🚀 Initializing Prism Parser with Real API...');
             
-            if (!window.PrismHelper) {
-                throw new Error('PrismHelper class not available');
+            // Use RealPrismHelper instead of PrismHelper
+            if (!window.RealPrismHelper) {
+                throw new Error('RealPrismHelper class not available');
             }
             
-            this.helper = new window.PrismHelper();
+            this.helper = new window.RealPrismHelper();
             const success = await this.helper.initialize();
             
             if (success) {
                 this.initialized = true;
-                // console.log('✅ Prism Parser initialized successfully');
+                console.log('✅ Prism Parser initialized successfully with Real API');
                 
                 // Quick warmup
                 await this.warmUp();
                 
                 return true;
             } else {
-                throw new Error('PrismHelper initialization failed');
+                throw new Error('RealPrismHelper initialization failed');
             }
             
         } catch (error) {
@@ -46,9 +47,9 @@ class PrismParser {
         try {
             const testCode = 'puts "ready"';
             await this.parseRuby(testCode);
-            // console.log('🔥 Parser ready for production');
+            console.log('🔥 Real Prism Parser ready for production');
         } catch (error) {
-            // console.warn('⚠️ Parser warmup failed:', error.message);
+            console.warn('⚠️ Parser warmup failed:', error.message);
         }
     }
     
@@ -59,16 +60,16 @@ class PrismParser {
         }
         
         try {
-            // console.log('🔍 Parsing Ruby code...');
+            console.log('🔍 Parsing Ruby code with Real Prism API...');
             
-            // Parse using PrismHelper
+            // Parse using RealPrismHelper (official API)
             const parseResult = this.helper.parseRuby(rubyCode);
             
             if (!parseResult || !parseResult.success) {
                 throw new Error(`Parse failed: ${parseResult?.error || 'Unknown error'}`);
             }
             
-            // Extract the AST
+            // Extract the AST - now it has REAL Prism nodes with proper properties
             const ast = parseResult.result;
             if (!ast) {
                 throw new Error('No AST returned from parser');
@@ -78,14 +79,27 @@ class PrismParser {
             this.lastAST = ast;
             this.lastParseResult = parseResult;
             
-            // console.log('✅ Ruby code parsed successfully');
-            // console.log(`📊 AST contains ${ast.body?.length || 0} nodes`);
+            console.log('✅ Ruby code parsed successfully with Real API');
+            console.log(`📊 AST contains ${ast.body?.length || 0} real Prism nodes`);
+            
+            // Log a sample node to verify it has real properties
+            if (ast.body && ast.body.length > 0) {
+                const firstNode = ast.body[0];
+                console.log('🔍 Sample node structure:', {
+                    type: firstNode.type,
+                    hasName: 'name' in firstNode,
+                    hasValue: 'value' in firstNode,
+                    hasArguments: 'arguments' in firstNode,
+                    hasReceiver: 'receiver' in firstNode,
+                    keys: Object.keys(firstNode)
+                });
+            }
             
             // Return the AST directly
             return ast;
             
         } catch (error) {
-            console.error('❌ Parse failed:', error);
+            console.error('❌ Real Prism Parse failed:', error);
             
             // Return a minimal fallback AST
             const fallbackAST = this.createFallbackAST(rubyCode, error);
@@ -97,7 +111,7 @@ class PrismParser {
     
     // Create a fallback AST when parsing fails
     createFallbackAST(code, error) {
-        // console.log('📝 Creating fallback AST');
+        console.log('📝 Creating fallback AST');
         
         return {
             type: 'ProgramNode',
@@ -127,9 +141,30 @@ class PrismParser {
                     end_offset: line.length
                 },
                 line_number: index + 1,
-                source_line: line
+                source_line: line,
+                // Add real-looking properties for compatibility
+                name: this.extractName(line),
+                value: this.extractValue(line)
             };
         });
+    }
+    
+    // Extract name from line (for LocalVariableWriteNode)
+    extractName(line) {
+        if (line.includes('=') && !line.includes('==')) {
+            const match = line.match(/^\s*(\w+)\s*=/);
+            return match ? match[1] : null;
+        }
+        return null;
+    }
+    
+    // Extract value from line 
+    extractValue(line) {
+        if (line.includes('=') && !line.includes('==')) {
+            const equalIndex = line.indexOf('=');
+            return line.substring(equalIndex + 1).trim();
+        }
+        return null;
     }
     
     // Detect Ruby statement types for fallback
@@ -145,7 +180,7 @@ class PrismParser {
         } else if (line.startsWith('if ')) {
             return 'IfNode';
         } else if (line.startsWith('wait ')) {
-            return 'WaitNode';
+            return 'CallNode';
         } else {
             return 'CallNode';
         }
@@ -173,7 +208,8 @@ class PrismParser {
             ready: this.isReady(),
             hasLastAST: !!this.lastAST,
             lastASTType: this.lastAST?.type || null,
-            lastParseSuccess: this.lastParseResult?.success || false
+            lastParseSuccess: this.lastParseResult?.success || false,
+            usingRealAPI: true
         };
     }
 }
@@ -199,4 +235,4 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = PrismParser;
 }
 
-// console.log('✅ PrismParser Production ready');
+console.log('✅ PrismParser v3.0 ready - Real Prism API integration');
