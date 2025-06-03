@@ -6,3 +6,4 @@ src/analysis/
 src/squirrel/parser/
 tests/working_tests
 tests/fixed_transpiler.js
+.watcher.pid
