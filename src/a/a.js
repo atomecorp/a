@@ -1,6 +1,6 @@
 /**
- * 🔥 CLASSE A FINALE - ARCHITECTURE ORIGINALE + PROXY INTELLIGENT
- * VERSION CORRIGÉE - Sans exports ES6 problématiques
+ * 🔥 FINAL CLASS A - ORIGINAL ARCHITECTURE + SMART PROXY
+ * FIXED VERSION - Without problematic ES6 exports
  */
 
 (function() {
@@ -68,7 +68,7 @@
         background: 'transparent'
     };
 
-    // 🔥 CLASSE A - ARCHITECTURE ORIGINALE + PROXY INTELLIGENT
+    // 🔥 CLASS A - ORIGINAL ARCHITECTURE + SMART PROXY
     A = class {
         constructor(config = {}) {
             this._data = {...config};
@@ -82,7 +82,7 @@
                 Object.assign(this.style, baseStyles);
             }
 
-            // 🎯 ARCHITECTURE ORIGINALE: Préparer toutes les méthodes dynamiquement
+            // 🎯 ORIGINAL ARCHITECTURE: Prepare all methods dynamically
             this._preparePropertyMethods();
 
             // Process all properties
@@ -98,23 +98,23 @@
                 _registry[config.id] = this;
             }
 
-            // 🎯 PROXY INTELLIGENT - WRAPPER AUTOUR DE L'ARCHITECTURE EXISTANTE
+            // 🎯 SMART PROXY - WRAPPER AROUND EXISTING ARCHITECTURE
             return new Proxy(this, {
                 get(target, prop) {
                     const value = target[prop];
                     
-                    // Si c'est une méthode ET une propriété Ruby-style
+                    // If it's a method AND a Ruby-style property
                     if (typeof value === 'function' && target._isRubyProperty(prop)) {
-                        // Créer une fonction magique qui peut être utilisée comme valeur OU fonction
+                        // Create a magic function that can be used as a value OR function
                         const smartProperty = function(...args) {
                             return value.apply(target, args);
                         };
                         
-                        // 🎯 MAGIE: valueOf et toString retournent la valeur directement
+                        // 🎯 MAGIC: valueOf and toString return the value directly
                         smartProperty.valueOf = () => target._data[prop];
                         smartProperty.toString = () => String(target._data[prop]);
                         
-                        // Pour les comparaisons et opérations
+                        // For comparisons and operations
                         smartProperty[Symbol.toPrimitive] = (hint) => {
                             const val = target._data[prop];
                             if (hint === 'number') return Number(val);
@@ -125,19 +125,19 @@
                         return smartProperty;
                     }
                     
-                    // Propriété normale - retourner tel quel
+                    // Normal property - return as is
                     return value;
                 }
             });
         }
 
-        // Vérifier si c'est une propriété Ruby-style
+        // Check if it's a Ruby-style property
         _isRubyProperty(prop) {
             const rubyProps = ['width', 'height', 'x', 'y', 'color', 'id', 'text', 'backgroundColor'];
             return rubyProps.includes(prop);
         }
 
-        // 🔥 ARCHITECTURE ORIGINALE: Pre-instantiate methods for all known particles
+        // 🔥 ORIGINAL ARCHITECTURE: Pre-instantiate methods for all known particles
         _preparePropertyMethods() {
             // List of methods not to create
             const reservedMethods = [
@@ -202,7 +202,7 @@
             });
         }
 
-        // === MÉTHODE RUBY method() ===
+        // === RUBY method() ===
         method(propertyName) {
             const prop = propertyName.replace(':', '');
             
@@ -246,7 +246,7 @@
             }
         }
 
-        // Create a getter/setter method for a property (ARCHITECTURE ORIGINALE)
+        // Create a getter/setter method for a property (ORIGINAL ARCHITECTURE)
         _createPropertyMethod(key) {
             const reservedMethods = ['inspect', 'addChild', 'getElement', 'method'];
             
@@ -410,6 +410,6 @@
     // Notify that A framework is loaded
     window.dispatchEvent(new CustomEvent('AFrameworkLoaded'));
     
-    console.log('✅ A Framework loaded with defineParticle');
+    // console.log('✅ A Framework loaded with defineParticle');
 
 })();

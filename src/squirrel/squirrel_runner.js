@@ -9,14 +9,14 @@ class SquirrelRunner {
     constructor() {
         this.orchestrator = null;
         this.ready = false;
-        console.log('🚀 Squirrel Runner - Production Mode');
+        // console.log('🚀 Squirrel Runner - Production Mode');
     }
 
     /**
      * 🔧 INITIALIZE RUNNER
      */
     async init() {
-        console.log('🏗️ Initializing Squirrel Runner...');
+        // console.log('🏗️ Initializing Squirrel Runner...');
         
         try {
             // Wait for dependencies
@@ -26,7 +26,7 @@ class SquirrelRunner {
             this.orchestrator = new window.SquirrelOrchestrator();
             
             // Initialize Prism
-            console.log('🔧 Initializing Prism WASM...');
+            // console.log('🔧 Initializing Prism WASM...');
             const prismReady = await this.orchestrator.initializePrism();
             
             if (!prismReady) {
@@ -34,7 +34,7 @@ class SquirrelRunner {
             }
             
             this.ready = true;
-            console.log('✅ Squirrel Runner ready for production!');
+            // console.log('✅ Squirrel Runner ready for production!');
             return true;
             
         } catch (error) {
@@ -57,7 +57,7 @@ class SquirrelRunner {
                 window.A && 
                 window.puts && 
                 window.wait) {
-                console.log('✅ All dependencies loaded');
+                // console.log('✅ All dependencies loaded');
                 return true;
             }
             
@@ -65,7 +65,7 @@ class SquirrelRunner {
             waited += checkInterval;
         }
         
-        console.log('⚠️ Continuing with available dependencies...');
+        // console.log('⚠️ Continuing with available dependencies...');
         return true;
     }
 
@@ -73,7 +73,7 @@ class SquirrelRunner {
      * 🚀 RUN SQUIRREL FILE
      */
     async runFile(filename) {
-        console.log('🚀 Loading and executing:', filename);
+        // console.log('🚀 Loading and executing:', filename);
         
         try {
             if (!this.ready) {
@@ -81,7 +81,7 @@ class SquirrelRunner {
             }
 
             // Load file
-            console.log('📁 Loading file...');
+            // console.log('📁 Loading file...');
             const response = await fetch(filename);
             
             if (!response.ok) {
@@ -89,19 +89,19 @@ class SquirrelRunner {
             }
             
             const content = await response.text();
-            console.log(`✅ File loaded: ${content.length} characters`);
-            console.log('📄 Ruby content preview:');
-            console.log('--- START RUBY CODE ---');
-            console.log(content.substring(0, 500) + (content.length > 500 ? '...' : ''));
-            console.log('--- END RUBY CODE ---');
+            // console.log(`✅ File loaded: ${content.length} characters`);
+            // console.log('📄 Ruby content preview:');
+            // console.log('--- START RUBY CODE ---');
+            // console.log(content.substring(0, 500) + (content.length > 500 ? '...' : ''));
+            // console.log('--- END RUBY CODE ---');
             
             // Process with orchestrator
-            console.log('⚡ Starting Ruby → JavaScript transpilation...');
+            // console.log('⚡ Starting Ruby → JavaScript transpilation...');
             const result = await this.orchestrator.processRubyCode(content);
             
             if (result.success) {
-                console.log('🎉 Squirrel application executed successfully!');
-                console.log('✨ Your Ruby code is now running as JavaScript!');
+                // console.log('🎉 Squirrel application executed successfully!');
+                // console.log('✨ Your Ruby code is now running as JavaScript!');
             } else {
                 console.error('❌ Execution failed:', result.error);
             }
@@ -110,7 +110,7 @@ class SquirrelRunner {
             
         } catch (error) {
             console.error('❌ Failed to execute Squirrel file:', error);
-            console.log('🔧 Error details:', error.message);
+            // console.log('🔧 Error details:', error.message);
             throw error;
         }
     }
@@ -119,7 +119,7 @@ class SquirrelRunner {
      * 🎯 RUN SQUIRREL CODE DIRECTLY
      */
     async runCode(rubyCode) {
-        console.log('🚀 Executing Ruby code directly...');
+        // console.log('🚀 Executing Ruby code directly...');
         
         try {
             if (!this.ready) {
@@ -127,7 +127,7 @@ class SquirrelRunner {
             }
 
             const result = await this.orchestrator.processRubyCode(rubyCode);
-            console.log('✅ Ruby code executed successfully');
+            // console.log('✅ Ruby code executed successfully');
             return result;
             
         } catch (error) {
@@ -140,7 +140,7 @@ class SquirrelRunner {
      * 🔧 AUTO-START APPLICATION
      */
     async autoStart() {
-        console.log('🚀 Auto-starting Squirrel application...');
+        // console.log('🚀 Auto-starting Squirrel application...');
         
         try {
             // Wait for DOM
@@ -153,12 +153,12 @@ class SquirrelRunner {
             // Small delay to ensure everything is loaded
             await new Promise(resolve => setTimeout(resolve, 300));
 
-            console.log('🎯 Executing application/index.sqr...');
+            // console.log('🎯 Executing application/index.sqr...');
             await this.runFile('./application/index.sqr');
             
         } catch (error) {
             console.error('❌ Auto-start failed:', error);
-            console.log('🔧 Make sure application/index.sqr exists and contains valid Ruby code');
+            // console.log('🔧 Make sure application/index.sqr exists and contains valid Ruby code');
         }
     }
 
@@ -192,11 +192,11 @@ class SquirrelRunner {
 window.SquirrelRunner = SquirrelRunner;
 
 // 🎯 CREATE GLOBAL RUNNER INSTANCE
-console.log('🚀 Creating Squirrel Runner (Production)...');
+// console.log('🚀 Creating Squirrel Runner (Production)...');
 window.globalSquirrelRunner = new SquirrelRunner();
 
-console.log('✅ Squirrel Runner loaded!');
-console.log('🎯 Ready to execute application/index.sqr');
+// console.log('✅ Squirrel Runner loaded!');
+// console.log('🎯 Ready to execute application/index.sqr');
 
 // 🔄 AUTO-START APPLICATION
 if (typeof window !== 'undefined') {
@@ -219,7 +219,7 @@ window.runSquirrel = async (code) => {
 window.squirrelStatus = () => {
     if (window.globalSquirrelRunner) {
         const status = window.globalSquirrelRunner.getStatus();
-        console.table(status);
+        // console.table(status);
         return status;
     }
     return { error: 'Squirrel Runner not available' };

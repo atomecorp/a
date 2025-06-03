@@ -168,7 +168,7 @@ class WASIWrapper {
             proc_exit: (code) => {
                 this.exitCode = code;
                 if (code !== 0) {
-                    console.warn(`Process exited with code ${code}`);
+                    // console.warn(`Process exited with code ${code}`);
                 }
                 // Don't throw - let it exit gracefully
             },
@@ -221,8 +221,8 @@ class WASIWrapper {
         this.memory = instance.exports.memory;
         this.view = new DataView(this.memory.buffer);
         
-        console.log('✅ WASI initialized with complete function set');
-        console.log('📊 Memory size:', this.memory.buffer.byteLength, 'bytes');
+        // console.log('✅ WASI initialized with complete function set');
+        // console.log('📊 Memory size:', this.memory.buffer.byteLength, 'bytes');
         
         return instance;
     }
@@ -231,14 +231,14 @@ class WASIWrapper {
         // Call _start if it exists
         if (instance.exports._start) {
             try {
-                console.log('🚀 Starting WASM module...');
+                // console.log('🚀 Starting WASM module...');
                 instance.exports._start();
-                console.log('✅ WASM module started successfully');
+                // console.log('✅ WASM module started successfully');
             } catch (error) {
                 if (this.exitCode === 0 || this.exitCode === null) {
-                    console.log('✅ WASM _start completed normally');
+                    // console.log('✅ WASM _start completed normally');
                 } else {
-                    console.warn('⚠️ WASM _start warning:', error.message);
+                    // console.warn('⚠️ WASM _start warning:', error.message);
                 }
             }
         }
@@ -253,7 +253,7 @@ window.WASIWrapper = WASIWrapper;
 window.createWASI = function(args = [], env = {}, fds = []) {
     try {
         const wasi = new WASIWrapper(args, env, fds);
-        console.log('✅ WASI instance created successfully');
+        // console.log('✅ WASI instance created successfully');
         return wasi;
     } catch (error) {
         console.error('❌ Failed to create WASI instance:', error);
@@ -264,5 +264,5 @@ window.createWASI = function(args = [], env = {}, fds = []) {
 // Signal ready
 setTimeout(() => {
     window.dispatchEvent(new CustomEvent('wasi-ready'));
-    console.log('✅ WASI wrapper ready');
+    // console.log('✅ WASI wrapper ready');
 }, 100);

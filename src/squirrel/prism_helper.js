@@ -12,11 +12,11 @@ class PrismHelper {
 
     // Initialize WASM module with WASI support
     async initialize() {
-        console.log('🔬 Initializing Prism Helper...');
+        // console.log('🔬 Initializing Prism Helper...');
         
         try {
             // Step 1: Load WASM module - try multiple sources
-            console.log('1️⃣ Loading WASM module...');
+            // console.log('1️⃣ Loading WASM module...');
             
             const wasmUrls = [
                 // Local Squirrel parser location (correct path)
@@ -35,19 +35,19 @@ class PrismHelper {
             
             for (const url of wasmUrls) {
                 try {
-                    console.log('🔄 Trying WASM URL:', url);
+                    // console.log('🔄 Trying WASM URL:', url);
                     const response = await fetch(url);
                     
                     if (response.ok) {
                         wasmBytes = await response.arrayBuffer();
                         workingUrl = url;
-                        console.log('✅ WASM loaded from:', url);
+                        // console.log('✅ WASM loaded from:', url);
                         break;
                     } else {
-                        console.log('❌ Failed to load from:', url, 'Status:', response.status);
+                        // console.log('❌ Failed to load from:', url, 'Status:', response.status);
                     }
                 } catch (error) {
-                    console.log('❌ Error loading from:', url, error.message);
+                    // console.log('❌ Error loading from:', url, error.message);
                 }
             }
             
@@ -55,13 +55,13 @@ class PrismHelper {
                 throw new Error('Failed to load WASM from any source');
             }
             
-            console.log('✅ WASM file verified (', wasmBytes.byteLength, 'bytes)');
+            // console.log('✅ WASM file verified (', wasmBytes.byteLength, 'bytes)');
             
             // Step 2: Create WASI instance
-            console.log('2️⃣ Creating WASI instance...');
+            // console.log('2️⃣ Creating WASI instance...');
             
             // Step 3: Instantiate WASM
-            console.log('3️⃣ Instantiating WASM...');
+            // console.log('3️⃣ Instantiating WASM...');
             
             // Use the existing WASI wrapper instead of window.WASI
             let wasi;
@@ -79,23 +79,23 @@ class PrismHelper {
             };
             
             // Check WASI functions
-            console.log('📋 Checking WASI functions...');
+            // console.log('📋 Checking WASI functions...');
             const requiredFunctions = ['fd_write', 'fd_read', 'fd_close', 'proc_exit'];
             const wasiImports = wasi.wasiImport || wasi.getImports();
             const availableFunctions = Object.keys(wasiImports);
             
             for (const func of requiredFunctions) {
                 if (!wasiImports[func]) {
-                    console.warn(`⚠️ Missing WASI function: ${func}`);
+                    // console.warn(`⚠️ Missing WASI function: ${func}`);
                 }
             }
             
-            console.log('✅ All required WASI functions verified');
+            // console.log('✅ All required WASI functions verified');
             
             const wasmModule = await WebAssembly.compile(wasmBytes);
             this.instance = await WebAssembly.instantiate(wasmModule, importObject);
             
-            console.log('4️⃣ WASM instantiated successfully');
+            // console.log('4️⃣ WASM instantiated successfully');
             
             // Step 4: Initialize WASI
             if (wasi.initialize) {
@@ -104,16 +104,16 @@ class PrismHelper {
                 wasi.start(this.instance);
             }
             
-            console.log('5️⃣ Starting WASM module...');
+            // console.log('5️⃣ Starting WASM module...');
             
             // Store references
             this.memory = this.instance.exports.memory;
             this.exports = this.instance.exports;
             this.ready = true;
             
-            console.log('✅ Prism Helper initialized successfully!');
-            console.log('📋 Available exports:', Object.keys(this.exports).slice(0, 10), '...');
-            console.log('📋 Parse functions:', this.getParseFunctions());
+            // console.log('✅ Prism Helper initialized successfully!');
+            // console.log('📋 Available exports:', Object.keys(this.exports).slice(0, 10), '...');
+            // console.log('📋 Parse functions:', this.getParseFunctions());
             
             return true;
             
@@ -169,8 +169,8 @@ class PrismHelper {
         }
         
         try {
-            console.log('🔍 Parsing Ruby code with enhanced Prism...');
-            console.log('📊 Code length:', code.length, 'characters');
+            // console.log('🔍 Parsing Ruby code with enhanced Prism...');
+            // console.log('📊 Code length:', code.length, 'characters');
             
             // Find serialization functions
             const exports = this.exports;
@@ -178,7 +178,7 @@ class PrismHelper {
                 f.includes('serialize') || f.includes('buffer')
             );
             
-            console.log('📋 Available serialize functions:', serializeFunctions.slice(0, 10), '...');
+            // console.log('📋 Available serialize functions:', serializeFunctions.slice(0, 10), '...');
             
             // Look for the main serialization function
             let serializeFunc = null;
@@ -192,13 +192,13 @@ class PrismHelper {
             for (const candidate of candidates) {
                 if (exports[candidate]) {
                     serializeFunc = exports[candidate];
-                    console.log('🎯 Found serialization function:', candidate);
+                    // console.log('🎯 Found serialization function:', candidate);
                     break;
                 }
             }
             
             if (!serializeFunc) {
-                console.log('❌ No serialization function found, trying direct parse...');
+                // console.log('❌ No serialization function found, trying direct parse...');
                 return this.tryDirectParse(code);
             }
             
@@ -229,19 +229,19 @@ class PrismHelper {
                 bufferView[4] = bufferSize;     // capacity (low 32 bits)
                 bufferView[5] = 0;              // capacity (high 32 bits)
                 
-                console.log('📊 Allocated buffer struct at:', bufferStruct, 'buffer at:', bufferPtr);
+                // console.log('📊 Allocated buffer struct at:', bufferStruct, 'buffer at:', bufferPtr);
                 
                 // Call pm_serialize_parse(buffer, source, length, options)
                 // Options can be null/0 for default parsing
                 const result = serializeFunc(bufferStruct, sourcePtr, sourceAllocation.length, 0);
                 
-                console.log('✅ Serialization function returned:', result);
+                // console.log('✅ Serialization function returned:', result);
                 
                 // Read the buffer length after parsing
                 const finalBufferView = new Uint32Array(this.memory.buffer, bufferStruct, 6);
                 const serializedLength = finalBufferView[2]; // length field
                 
-                console.log('📊 Serialized data length:', serializedLength, 'bytes');
+                // console.log('📊 Serialized data length:', serializedLength, 'bytes');
                 
                 if (serializedLength > 0) {
                     // Read the serialized data
@@ -259,7 +259,7 @@ class PrismHelper {
                     return astResult;
                     
                 } else {
-                    console.log('⚠️ No serialized data produced, creating mock result');
+                    // console.log('⚠️ No serialized data produced, creating mock result');
                     
                     // Clean up
                     if (exports.free) {
@@ -282,12 +282,12 @@ class PrismHelper {
     
     // Deserialize Prism's binary AST format using the official deserializer
     deserializePrismAST(sourceCode, serializedData) {
-        console.log('🔍 Deserializing Prism AST from', serializedData.length, 'bytes');
+        // console.log('🔍 Deserializing Prism AST from', serializedData.length, 'bytes');
         
         try {
             // Check if we have the official Prism deserializer
             if (typeof window !== 'undefined' && window.PrismDeserializer) {
-                console.log('🎯 Using official Prism deserializer');
+                // console.log('🎯 Using official Prism deserializer');
                 
                 try {
                     const result = window.PrismDeserializer.load(sourceCode, serializedData);
@@ -310,7 +310,7 @@ class PrismHelper {
             
             // Try to use deserialize.js if available
             if (typeof window !== 'undefined' && window.deserialize) {
-                console.log('🎯 Using deserialize.js');
+                // console.log('🎯 Using deserialize.js');
                 
                 try {
                     const result = window.deserialize(sourceCode, serializedData);
@@ -331,8 +331,7 @@ class PrismHelper {
                 }
             }
             
-            // Manual basic deserialization following Prism format
-            console.log('🎯 Using manual basic deserialization');
+            // console.log('🎯 Using manual basic deserialization');
             
             const dataView = new DataView(serializedData.buffer, serializedData.byteOffset, serializedData.byteLength);
             let offset = 0;
@@ -346,7 +345,7 @@ class PrismHelper {
             
             // Read basic header
             const magic = new Uint8Array(serializedData.buffer, 0, 4);
-            console.log('📊 Magic bytes:', Array.from(magic).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            // console.log('📊 Magic bytes:', Array.from(magic).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
             
             // Create a structured result with what we can extract
             const astResult = {
@@ -445,7 +444,7 @@ class PrismHelper {
     
     // Try direct parsing as fallback
     tryDirectParse(code) {
-        console.log('🔄 Trying direct parse as fallback...');
+        // console.log('🔄 Trying direct parse as fallback...');
         
         // Try to find any parse function
         const exports = this.exports;
@@ -454,31 +453,31 @@ class PrismHelper {
         for (const funcName of parseFunctions) {
             if (funcName.includes('parse') && !funcName.includes('test') && !funcName.includes('serialize')) {
                 try {
-                    console.log('🎯 Trying direct function:', funcName);
+                    // console.log('🎯 Trying direct function:', funcName);
                     
                     const parseFunc = exports[funcName];
                     const allocation = this.allocateString(code);
                     
                     try {
                         const result = parseFunc(allocation.ptr, allocation.length);
-                        console.log('✅ Direct parse successful with:', funcName, 'result:', result);
+                        // console.log('✅ Direct parse successful with:', funcName, 'result:', result);
                         
                         this.freeString(allocation.ptr);
                         
                         return this.createSuccessResult(code, result, funcName);
                         
                     } catch (error) {
-                        console.log('❌ Direct parse failed with:', funcName, error.message);
+                        // console.log('❌ Direct parse failed with:', funcName, error.message);
                         this.freeString(allocation.ptr);
                     }
                     
                 } catch (error) {
-                    console.log('❌ Could not try function:', funcName, error.message);
+                    // console.log('❌ Could not try function:', funcName, error.message);
                 }
             }
         }
         
-        console.log('❌ All direct parse attempts failed, using mock');
+        // console.log('❌ All direct parse attempts failed, using mock');
         return this.createMockParseResult(code, 'all_methods_failed');
     }
 
@@ -509,7 +508,7 @@ class PrismHelper {
     
     // Create a mock parse result when WASM parsing fails
     createMockParseResult(code, funcName) {
-        console.log('📝 Creating mock parse result...');
+        // console.log('📝 Creating mock parse result...');
         
         const mockResult = {
             type: 'ProgramNode',
@@ -586,9 +585,9 @@ puts "Hello, #{name}!"
 result = 2 + 3
 `;
 
-        console.log('🧪 Testing with Ruby code:', testCode);
+        // console.log('🧪 Testing with Ruby code:', testCode);
         const result = this.parseRuby(testCode);
-        console.log('📊 Test result:', result);
+        // console.log('📊 Test result:', result);
         
         return result;
     }

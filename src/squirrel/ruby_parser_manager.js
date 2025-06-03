@@ -7,21 +7,21 @@ class RubyParserManager {
     constructor() {
         this.prismParser = null;
         this.initialized = false;
-        console.log('🔍 Ruby Parser Manager initialized');
+        // console.log('🔍 Ruby Parser Manager initialized');
     }
 
     /**
      * 🏗️ INITIALIZE PRISM PARSER
      */
     async initializePrism() {
-        console.log('🏗️ Initializing Ruby Prism Parser...');
+        // console.log('🏗️ Initializing Ruby Prism Parser...');
         
         try {
-            console.log('🔧 Creating new PrismParser instance...');
+            // console.log('🔧 Creating new PrismParser instance...');
             this.prismParser = new window.PrismParser();
             await this.prismParser.initialize();
             this.initialized = true;
-            console.log('✅ PrismParser initialized successfully!');
+            // console.log('✅ PrismParser initialized successfully!');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize PrismParser:', error);
@@ -37,11 +37,11 @@ class RubyParserManager {
             throw new Error('Parser not initialized. Call initializePrism() first.');
         }
 
-        console.log('🔍 Parsing Ruby code with enhanced Prism...');
+        // console.log('🔍 Parsing Ruby code with enhanced Prism...');
         
         try {
             const parseResult = await this.prismParser.parseRuby(rubyCode);
-            console.log('✅ Ruby code validated with Prism successfully');
+            // console.log('✅ Ruby code validated with Prism successfully');
             return { result: { value: parseResult } };
         } catch (error) {
             console.error('❌ Prism parsing failed:', error);
@@ -53,7 +53,7 @@ class RubyParserManager {
      * 🔍 LOG ACTUAL NODE STRUCTURE FOR DEBUGGING
      */
     logNodeStructure(node, nodeIndex) {
-        console.log(`🔍 [Node ${nodeIndex}] Actual structure for ${node.type}:`);
+        // console.log(`🔍 [Node ${nodeIndex}] Actual structure for ${node.type}:`);
         
         // Log all enumerable properties
         const props = {};
@@ -70,7 +70,7 @@ class RubyParserManager {
             }
         }
         
-        console.log('📊 Node properties:', props);
+        // console.log('📊 Node properties:', props);
         
         // Log specific Prism properties we're looking for
         const prismProps = {
@@ -90,11 +90,11 @@ class RubyParserManager {
             location: node.location
         };
         
-        console.log('🎯 Prism-specific properties:', prismProps);
+        // console.log('🎯 Prism-specific properties:', prismProps);
         
         // Check for any source_line property from fallback parsing
         if (node.source_line) {
-            console.log('📄 Source line:', node.source_line);
+            // console.log('📄 Source line:', node.source_line);
         }
     }
 
@@ -120,5 +120,5 @@ class RubyParserManager {
 // Global export
 if (typeof window !== 'undefined') {
     window.RubyParserManager = RubyParserManager;
-    console.log('✅ Ruby Parser Manager ready');
+    // console.log('✅ Ruby Parser Manager ready');
 }

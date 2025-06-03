@@ -13,7 +13,7 @@ class PrismParser {
     // Initialize the parser
     async initialize() {
         try {
-            console.log('🚀 Initializing Prism Parser...');
+            // console.log('🚀 Initializing Prism Parser...');
             
             if (!window.PrismHelper) {
                 throw new Error('PrismHelper class not available');
@@ -24,7 +24,7 @@ class PrismParser {
             
             if (success) {
                 this.initialized = true;
-                console.log('✅ Prism Parser initialized successfully');
+                // console.log('✅ Prism Parser initialized successfully');
                 
                 // Quick warmup
                 await this.warmUp();
@@ -46,9 +46,9 @@ class PrismParser {
         try {
             const testCode = 'puts "ready"';
             await this.parseRuby(testCode);
-            console.log('🔥 Parser ready for production');
+            // console.log('🔥 Parser ready for production');
         } catch (error) {
-            console.warn('⚠️ Parser warmup failed:', error.message);
+            // console.warn('⚠️ Parser warmup failed:', error.message);
         }
     }
     
@@ -59,7 +59,7 @@ class PrismParser {
         }
         
         try {
-            console.log('🔍 Parsing Ruby code...');
+            // console.log('🔍 Parsing Ruby code...');
             
             // Parse using PrismHelper
             const parseResult = this.helper.parseRuby(rubyCode);
@@ -78,8 +78,8 @@ class PrismParser {
             this.lastAST = ast;
             this.lastParseResult = parseResult;
             
-            console.log('✅ Ruby code parsed successfully');
-            console.log(`📊 AST contains ${ast.body?.length || 0} nodes`);
+            // console.log('✅ Ruby code parsed successfully');
+            // console.log(`📊 AST contains ${ast.body?.length || 0} nodes`);
             
             // Return the AST directly
             return ast;
@@ -97,7 +97,7 @@ class PrismParser {
     
     // Create a fallback AST when parsing fails
     createFallbackAST(code, error) {
-        console.log('📝 Creating fallback AST');
+        // console.log('📝 Creating fallback AST');
         
         return {
             type: 'ProgramNode',
@@ -199,4 +199,4 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = PrismParser;
 }
 
-console.log('✅ PrismParser Production ready');
+// console.log('✅ PrismParser Production ready');

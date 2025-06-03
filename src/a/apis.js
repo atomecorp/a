@@ -1,8 +1,15 @@
+/**
+ * 🌐 APIS - EXTENSIONS FOR JAVASCRIPT
+ * Adding Ruby-like functionalities to JavaScript
+ */
+
+// Add the puts method to display in the console
 window.puts = function puts(val) {
     console.log(val);
 };
 window.puts = puts;
 
+// Add the grab method to retrieve DOM elements
 window.grab = (function () {
     // Cache for recent results
     const domCache = new Map();
@@ -10,18 +17,18 @@ window.grab = (function () {
     return function (id) {
         if (!id) return null;
 
-        // Check in registry first (fast path)
+        // Check the registry first (fast path)
         const instance = _registry[id];
         if (instance) return instance;
 
-        // Check in DOM cache
+        // Check the DOM cache
         if (domCache.has(id)) {
             const cached = domCache.get(id);
-            // Ensure the element is still in the DOM
+            // Check if the element is still in the DOM
             if (cached && cached.isConnected) {
                 return cached;
             } else {
-                // Remove outdated entry
+                // Remove obsolete entry
                 domCache.delete(id);
             }
         }
@@ -50,7 +57,7 @@ window.grab = (function () {
             });
         }
 
-        // Store in cache for future calls
+        // Store in the cache for future calls
         domCache.set(id, element);
 
         return element;
@@ -64,19 +71,20 @@ Object.prototype.define_method = function (name, fn) {
     return this;
 };
 
-// Add methods to Array to mimic Ruby-like behavior
+// Add methods to Array to mimic Ruby behavior
 Array.prototype.each = function (callback) {
     this.forEach(callback);
     return this;
 };
 
-// Extend Object class to allow inspection
+// Extend the Object class to allow inspection
 Object.prototype.inspect = function () {
     return AJS.inspect(this);
 };
 
 window.puts = puts;
 
+// Add a wait function for delays
 function wait(delay, callback) {
     if (typeof callback === 'function') {
         setTimeout(callback, delay);
@@ -94,22 +102,22 @@ const requireCache = new Map();
 const loadingFiles = new Set();
 
 window.require = async function(filename) {
-    // Vérifier le cache
+    // Check the cache
     if (requireCache.has(filename)) {
-        console.log(`📦 From cache: ${filename}`);
+        // console.log(`📦 From cache: ${filename}`);
         return requireCache.get(filename);
     }
     
-    // Protection contre les imports circulaires
+    // Protection against circular imports
     if (loadingFiles.has(filename)) {
-        console.warn(`⚠️ Circular require detected: ${filename}`);
+        // console.warn(`⚠️ Circular require detected: ${filename}`);
         return null;
     }
     
     loadingFiles.add(filename);
     
     try {
-        // Chemins à essayer (comme Ruby) - Support .sqr et .rb
+        // Paths to try (like Ruby) - Support .sqr and .rb
         const paths = [
             `./application/${filename}.sqr`,      // Support .sqr
             `./application/${filename}.rb`,       // 🆕 Support .rb
@@ -128,40 +136,40 @@ window.require = async function(filename) {
                 if (response.ok) {
                     const content = await response.text();
                     
-                    // Éviter les pages d'erreur HTML
+                    // Avoid HTML error pages
                     if (!content.trim().startsWith('<!DOCTYPE') && 
                         !content.trim().startsWith('<html')) {
                         
                         let finalCode = content;
                         
-                        // 🚀 TRANSPILER si c'est un fichier Ruby (.sqr OU .rb)
+                        // 🚀 TRANSPILER if it's a Ruby file (.sqr OR .rb)
                         if (path.endsWith('.sqr') || path.endsWith('.rb')) {
-                            console.log(`🔄 Transpiling Ruby file: ${path}...`);
+                            // console.log(`🔄 Transpiling Ruby file: ${path}...`);
                             
-                            // 🎯 Utiliser SquirrelOrchestrator pour tous les fichiers Ruby
+                            // 🎯 Use SquirrelOrchestrator for all Ruby files
                             if (window.SquirrelOrchestrator) {
                                 try {
-                                    console.log(`🦫 Using SquirrelOrchestrator for ${path}...`);
+                                    // console.log(`🦫 Using SquirrelOrchestrator for ${path}...`);
                                     
-                                    // Créer une instance et traiter le fichier Ruby
+                                    // Create an instance and process the Ruby file
                                     const orchestrator = new window.SquirrelOrchestrator();
                                     await orchestrator.initializePrism();
                                     
-                                    // Parser et transpiler le code Ruby
+                                    // Parse and transpile the Ruby code
                                     const parseResult = await orchestrator.parseRubyCode(content);
                                     const ast = parseResult.result?.value;
                                     
                                     if (ast && ast.body) {
                                         finalCode = orchestrator.transpilePrismASTToJavaScript(ast);
-                                        console.log(`✅ Successfully transpiled ${path} with SquirrelOrchestrator`);
+                                        // console.log(`✅ Successfully transpiled ${path} with SquirrelOrchestrator`);
                                     } else {
                                         throw new Error('No AST generated');
                                     }
                                     
                                 } catch (error) {
                                     console.error(`❌ SquirrelOrchestrator failed for ${path}:`, error);
-                                    console.warn(`⚠️ Executing raw Ruby code for ${path}`);
-                                    // Si le transpiler échoue, essayer d'exécuter le code tel quel
+                                    // console.warn(`⚠️ Executing raw Ruby code for ${path}`);
+                                    // If the transpiler fails, try executing the code as is
                                     finalCode = `// Raw Ruby code from ${path}\n${content}`;
                                 }
                             } else {
@@ -169,25 +177,25 @@ window.require = async function(filename) {
                                 finalCode = `// No transpiler available for ${path}\n${content}`;
                             }
                             
-                            console.log(`✅ Processed ${path}`);
+                            // console.log(`✅ Processed ${path}`);
                         }
                         
-                        // Exécuter le code transpilé
+                        // Execute the transpiled code
                         if (window.executeCode && typeof window.executeCode === 'function') {
                             window.executeCode(finalCode);
                         } else {
                             eval(finalCode);
                         }
                         
-                        // Mettre en cache
+                        // Cache the result
                         requireCache.set(filename, path);
                         
-                        console.log(`✅ Successfully required: ${path}`);
+                        // console.log(`✅ Successfully required: ${path}`);
                         return path;
                     }
                 }
             } catch (e) {
-                console.log(`❌ Failed to load ${path}:`, e.message);
+                // console.log(`❌ Failed to load ${path}:`, e.message);
             }
         }
         
@@ -199,9 +207,7 @@ window.require = async function(filename) {
     }
 };
 
-// Code cleaned up - .sqh support removed
-
-// Alias pour compatibilité
+// Alias for compatibility
 window.load = window.require;
 
 window.log = function(message) {

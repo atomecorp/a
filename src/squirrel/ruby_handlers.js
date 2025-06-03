@@ -7,7 +7,7 @@ class RubyHandlers {
     constructor(codeGenerator) {
         this.codeGenerator = codeGenerator;
         this.transpileNodeMethod = null; // Will be set by TranspilerCore
-        console.log('🎯 Ruby Handlers initialized');
+        // console.log('🎯 Ruby Handlers initialized');
     }
 
     /**
@@ -15,7 +15,7 @@ class RubyHandlers {
      */
     setTranspileNodeMethod(transpileNodeMethod) {
         this.transpileNodeMethod = transpileNodeMethod;
-        console.log('✅ TranspileNode method set in RubyHandlers');
+        // console.log('✅ TranspileNode method set in RubyHandlers');
     }
 
     /**
@@ -75,7 +75,7 @@ class RubyHandlers {
      * 📋 TRANSPILE PROGRAM NODE
      */
     transpileProgramNode(node) {
-        console.log('📋 Transpiling ProgramNode');
+        // console.log('📋 Transpiling ProgramNode');
         
         if (node.body && Array.isArray(node.body)) {
             return node.body.map(child => this.transpileNode(child)).filter(Boolean).join('\n');
@@ -88,7 +88,7 @@ class RubyHandlers {
      * 📋 TRANSPILE STATEMENTS NODE
      */
     transpileStatementsNode(node) {
-        console.log('📋 Transpiling StatementsNode');
+        // console.log('📋 Transpiling StatementsNode');
         
         if (node.body && Array.isArray(node.body)) {
             return node.body.map(child => this.transpileNode(child)).filter(Boolean).join('\n');
@@ -101,14 +101,14 @@ class RubyHandlers {
      * 📝 TRANSPILE LOCAL VARIABLE WRITE
      */
     transpileLocalVariableWrite(node) {
-        console.log('📝 Transpiling LocalVariableWriteNode (FIXED)');
-        console.log('📊 Real node structure:', {
-            name: node.name,
-            hasValue: !!node.value,
-            valueType: node.value?.type,
-            depth: node.depth,
-            allProps: Object.keys(node)
-        });
+        // console.log('📝 Transpiling LocalVariableWriteNode (FIXED)');
+        // console.log('📊 Real node structure:', {
+        //     name: node.name,
+        //     hasValue: !!node.value,
+        //     valueType: node.value?.type,
+        //     depth: node.depth,
+        //     allProps: Object.keys(node)
+        // });
         
         // Try different ways to get the variable name
         let varName = null;
@@ -130,14 +130,14 @@ class RubyHandlers {
             return `// Could not extract variable name from: ${JSON.stringify(node)}`;
         }
         
-        console.log(`✅ Found variable name: ${varName}`);
+        // console.log(`✅ Found variable name: ${varName}`);
         
         // Handle the value
         if (node.value) {
             const valueJS = this.transpileNode(node.value);
             if (valueJS && !valueJS.startsWith('//')) {
                 const result = `const ${varName} = ${valueJS};`;
-                console.log('✅ Generated assignment:', result);
+                // console.log('✅ Generated assignment:', result);
                 return result;
             }
         }
@@ -151,20 +151,20 @@ class RubyHandlers {
                 // For multiline A.new, we need to reconstruct the full assignment
                 // This is a simplified version - could be improved
                 const result = `const ${varName} = new A({});`;
-                console.log('✅ Generated A.new assignment from source:', result);
+                // console.log('✅ Generated A.new assignment from source:', result);
                 return result;
             }
             
             // General assignment conversion
             if (line.includes('=')) {
                 const jsLine = this.convertRubyAssignmentToJS(line);
-                console.log('✅ Generated assignment from source line:', jsLine);
+                // console.log('✅ Generated assignment from source line:', jsLine);
                 return jsLine;
             }
         }
         
         const fallback = `const ${varName} = undefined; // Could not transpile value`;
-        console.log('⚠️ Using fallback assignment:', fallback);
+        // console.log('⚠️ Using fallback assignment:', fallback);
         return fallback;
     }
 
@@ -172,7 +172,7 @@ class RubyHandlers {
      * 📖 TRANSPILE LOCAL VARIABLE READ
      */
     transpileLocalVariableRead(node) {
-        console.log('📖 Transpiling LocalVariableReadNode');
+        // console.log('📖 Transpiling LocalVariableReadNode');
         
         if (node.name) {
             return String(node.name);
@@ -189,16 +189,16 @@ class RubyHandlers {
      * 📞 TRANSPILE CALL NODE
      */
     transpileCallNode(node) {
-        console.log('📞 Transpiling CallNode (FIXED)');
-        console.log('📊 Real CallNode structure:', {
-            name: node.name,
-            hasReceiver: !!node.receiver,
-            receiver: node.receiver,
-            hasArguments: !!node.arguments,
-            argumentCount: node.arguments?.arguments?.length || 0,
-            hasBlock: !!node.block,
-            flags: node.flags
-        });
+        // console.log('📞 Transpiling CallNode (FIXED)');
+        // console.log('📊 Real CallNode structure:', {
+        //     name: node.name,
+        //     hasReceiver: !!node.receiver,
+        //     receiver: node.receiver,
+        //     hasArguments: !!node.arguments,
+        //     argumentCount: node.arguments?.arguments?.length || 0,
+        //     hasBlock: !!node.block,
+        //     flags: node.flags
+        // });
         
         // Try different ways to get method name
         let methodName = null;
@@ -224,7 +224,7 @@ class RubyHandlers {
             return null;
         }
         
-        console.log(`✅ Found method name: ${methodName}`);
+        // console.log(`✅ Found method name: ${methodName}`);
         
         // PUTS STATEMENTS
         if (methodName === 'puts') {
@@ -249,7 +249,7 @@ class RubyHandlers {
      * 🎯 HANDLE PUTS STATEMENT
      */
     handlePutsStatement(node) {
-        console.log('🎯 Processing puts statement');
+        // console.log('🎯 Processing puts statement');
         
         let args = [];
         if (node.arguments && node.arguments.arguments) {
@@ -263,7 +263,7 @@ class RubyHandlers {
         }
         
         const result = `puts(${args.join(', ')});`;
-        console.log('✅ Generated puts:', result);
+        // console.log('✅ Generated puts:', result);
         return result;
     }
 
@@ -271,7 +271,7 @@ class RubyHandlers {
      * ⏰ HANDLE WAIT STATEMENT
      */
     handleWaitStatement(node) {
-        console.log('🎯 Processing wait statement');
+        // console.log('🎯 Processing wait statement');
         let delay = '1000';
         
         if (node.arguments && node.arguments.arguments && node.arguments.arguments.length > 0) {
@@ -282,11 +282,11 @@ class RubyHandlers {
         if (node.block) {
             const blockCode = this.transpileBlockNode(node.block);
             const result = `wait(${delay}, function() {\n${blockCode}\n});`;
-            console.log('✅ Generated wait with block:', result);
+            // console.log('✅ Generated wait with block:', result);
             return result;
         } else {
             const result = `setTimeout(function() {\n  // Empty wait block\n}, ${delay});`;
-            console.log('✅ Generated empty wait:', result);
+            // console.log('✅ Generated empty wait:', result);
             return result;
         }
     }
@@ -295,7 +295,7 @@ class RubyHandlers {
      * 🎯 HANDLE METHOD CALL WITH RECEIVER
      */
     handleMethodCallWithReceiver(node, methodName) {
-        console.log('🎯 Processing method call with receiver');
+        // console.log('🎯 Processing method call with receiver');
         
         const receiver = this.transpileNode(node.receiver) || 'this';
         
@@ -313,7 +313,7 @@ class RubyHandlers {
             }
             
             const result = `${receiver}.${methodName}(function(${blockParams}) {\n${blockCode}\n});`;
-            console.log('✅ Generated method call with block:', result);
+            // console.log('✅ Generated method call with block:', result);
             return result;
         }
         
@@ -325,7 +325,7 @@ class RubyHandlers {
         }
         
         const result = `${receiver}.${methodName}(${args});`;
-        console.log('✅ Generated method call:', result);
+        // console.log('✅ Generated method call:', result);
         return result;
     }
 
@@ -333,11 +333,11 @@ class RubyHandlers {
      * 🎯 HANDLE STANDALONE METHOD CALL
      */
     handleStandaloneMethodCall(node, methodName) {
-        console.log('🎯 Processing standalone method call');
+        // console.log('🎯 Processing standalone method call');
         
         // Skip property-like calls that should be part of object literals
         if (this.isPropertyCall(node)) {
-            console.log('⚠️ Skipping property call:', methodName);
+            // console.log('⚠️ Skipping property call:', methodName);
             return null;
         }
         
@@ -348,7 +348,7 @@ class RubyHandlers {
         }
         
         const result = `${methodName}(${args});`;
-        console.log('✅ Generated standalone call:', result);
+        // console.log('✅ Generated standalone call:', result);
         return result;
     }
 
@@ -370,7 +370,7 @@ class RubyHandlers {
      * 📄 TRANSPILE STRING NODE
      */
     transpileStringNode(node) {
-        console.log('📄 Transpiling StringNode');
+        // console.log('📄 Transpiling StringNode');
         
         let value = '';
         
@@ -389,7 +389,7 @@ class RubyHandlers {
             }
         }
         
-        console.log('📄 String value:', value);
+        // console.log('📄 String value:', value);
         
         // Handle Ruby string interpolation #{...} → ${...}
         if (value.includes('#{')) {
@@ -404,7 +404,7 @@ class RubyHandlers {
      * 🔢 TRANSPILE INTEGER NODE
      */
     transpileIntegerNode(node) {
-        console.log('🔢 Transpiling IntegerNode');
+        // console.log('🔢 Transpiling IntegerNode');
         
         if (node.value !== undefined) {
             return String(node.value);
@@ -424,7 +424,7 @@ class RubyHandlers {
      * 📦 TRANSPILE ARGUMENTS NODE
      */
     transpileArgumentsNode(node) {
-        console.log('📦 Transpiling ArgumentsNode');
+        // console.log('📦 Transpiling ArgumentsNode');
         
         if (node.arguments && Array.isArray(node.arguments)) {
             return node.arguments.map(arg => this.transpileNode(arg)).filter(Boolean).join(', ');
@@ -437,7 +437,7 @@ class RubyHandlers {
      * 📦 TRANSPILE HASH NODE
      */
     transpileHashNode(node) {
-        console.log('📦 Transpiling HashNode');
+        // console.log('📦 Transpiling HashNode');
         
         // For hash nodes, try to find elements/pairs/content
         let elements = null;
@@ -470,7 +470,7 @@ class RubyHandlers {
      * 📚 TRANSPILE ARRAY NODE
      */
     transpileArrayNode(node) {
-        console.log('📚 Transpiling ArrayNode');
+        // console.log('📚 Transpiling ArrayNode');
         
         if (node.elements && Array.isArray(node.elements)) {
             const elements = node.elements.map(el => this.transpileNode(el)).filter(Boolean);
@@ -484,7 +484,7 @@ class RubyHandlers {
      * 🎭 TRANSPILE BLOCK NODE
      */
     transpileBlockNode(node) {
-        console.log('🎭 Transpiling BlockNode');
+        // console.log('🎭 Transpiling BlockNode');
         
         if (node.body && Array.isArray(node.body)) {
             const statements = node.body.map(stmt => {
@@ -502,7 +502,7 @@ class RubyHandlers {
      * 🔀 TRANSPILE IF NODE
      */
     transpileIfNode(node) {
-        console.log('🔀 Transpiling IfNode');
+        // console.log('🔀 Transpiling IfNode');
         
         if (!node.condition) {
             return '// Invalid if node: no condition';
@@ -527,7 +527,7 @@ class RubyHandlers {
      * ❓ TRANSPILE UNKNOWN NODE
      */
     transpileUnknownNode(node) {
-        console.log('❓ Transpiling UnknownNode');
+        // console.log('❓ Transpiling UnknownNode');
         
         if (node.source_line) {
             const line = node.source_line.trim();
@@ -608,5 +608,5 @@ class RubyHandlers {
 // Global export
 if (typeof window !== 'undefined') {
     window.RubyHandlers = RubyHandlers;
-    console.log('✅ Ruby Handlers ready');
+    // console.log('✅ Ruby Handlers ready');
 }

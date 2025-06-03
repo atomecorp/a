@@ -5,14 +5,14 @@
 
 class CodeGenerator {
     constructor() {
-        console.log('🏗️ Code Generator initialized');
+        // console.log('🏗️ Code Generator initialized');
     }
 
     /**
      * 🎯 GENERATE A.new() CALL FROM RUBY SOURCE
      */
     generateANewCall(variableName, rubyCode) {
-        console.log(`🎯 Generating A.new() call for: ${variableName}`);
+        // console.log(`🎯 Generating A.new() call for: ${variableName}`);
         
         // Extraire le contenu du hash Ruby
         const hashMatch = rubyCode.match(/A\.new\s*\(\s*\{([\s\S]*?)\}\s*\)/);
@@ -30,7 +30,7 @@ class CodeGenerator {
      * 📦 CONVERT RUBY HASH TO JAVASCRIPT OBJECT
      */
     convertRubyHashToJS(rubyHashContent) {
-        console.log('📦 Converting Ruby hash to JavaScript object');
+        // console.log('📦 Converting Ruby hash to JavaScript object');
         
         if (!rubyHashContent || !rubyHashContent.trim()) {
             return '{}';
@@ -190,7 +190,7 @@ class CodeGenerator {
      * 🧩 PARSE COMPLEX RUBY ARRAY WITH OBJECTS (FIXED)
      */
     parseComplexRubyArray(content) {
-        console.log('🧩 Parsing complex Ruby array:', content);
+        // console.log('🧩 Parsing complex Ruby array:', content);
         
         const elements = [];
         let current = '';
@@ -261,30 +261,30 @@ class CodeGenerator {
             elements.push(current.trim());
         }
         
-        console.log('🔍 Extracted elements:', elements);
+        // console.log('🔍 Extracted elements:', elements);
         
         // Convert each element
         const jsElements = elements.map(element => {
             const trimmedElement = element.trim();
-            console.log('🔄 Converting element:', trimmedElement);
+            // console.log('🔄 Converting element:', trimmedElement);
             
             if (trimmedElement.startsWith('{') && trimmedElement.endsWith('}')) {
                 // It's an object - convert to proper JavaScript object
                 const objectContent = trimmedElement.slice(1, -1);
                 const jsObjectContent = this.convertRubyObjectContent(objectContent);
                 const result = `{ ${jsObjectContent} }`;
-                console.log('✅ Converted object:', result);
+                // console.log('✅ Converted object:', result);
                 return result;
             } else {
                 // It's a simple value
                 const result = this.convertRubyValueToJS(trimmedElement);
-                console.log('✅ Converted value:', result);
+                // console.log('✅ Converted value:', result);
                 return result;
             }
         });
         
         const finalResult = `[${jsElements.join(', ')}]`;
-        console.log('🎯 Final array result:', finalResult);
+        // console.log('🎯 Final array result:', finalResult);
         return finalResult;
     }
 
@@ -292,7 +292,7 @@ class CodeGenerator {
      * 🔧 CONVERT RUBY OBJECT CONTENT TO JS
      */
     convertRubyObjectContent(content) {
-        console.log('🔧 Converting Ruby object content:', content);
+        // console.log('🔧 Converting Ruby object content:', content);
         
         const properties = [];
         const lines = content.split(/[,\n]/).map(line => line.trim()).filter(line => line);
@@ -318,7 +318,7 @@ class CodeGenerator {
         }
         
         const result = properties.join(', ');
-        console.log('🔧 Object content result:', result);
+        // console.log('🔧 Object content result:', result);
         return result;
     }
 
@@ -377,7 +377,7 @@ class CodeGenerator {
      * 🔧 FIX JAVASCRIPT SYNTAX ERRORS
      */
     fixJavaScriptSyntax(jsCode) {
-        console.log('🔧 Fixing JavaScript syntax errors...');
+        // console.log('🔧 Fixing JavaScript syntax errors...');
         
         let fixed = jsCode;
         
@@ -404,7 +404,7 @@ class CodeGenerator {
             
             // Skip standalone method calls that look like hash properties
             if (this.isStandalonePropertyCall(trimmed)) {
-                console.log(`🗑️ Removing standalone call: ${trimmed}`);
+                // console.log(`🗑️ Removing standalone call: ${trimmed}`);
                 continue;
             }
             
@@ -412,7 +412,7 @@ class CodeGenerator {
         }
         
         const result = validLines.join('\n');
-        console.log('✅ JavaScript syntax fixed');
+        // console.log('✅ JavaScript syntax fixed');
         return result;
     }
 
@@ -439,7 +439,7 @@ class CodeGenerator {
      * 🧹 CLEAN GENERATED CODE
      */
     cleanGeneratedCode(jsCode) {
-        console.log('🧹 Cleaning generated code...');
+        // console.log('🧹 Cleaning generated code...');
         
         let cleaned = jsCode;
         
@@ -459,7 +459,7 @@ class CodeGenerator {
      * 🎯 GENERATE COMPLETE RUBY TO JS CONVERSION
      */
     generateCompleteRubyConversion(rubyCode) {
-        console.log('🎯 Generating complete Ruby to JS conversion...');
+        // console.log('🎯 Generating complete Ruby to JS conversion...');
         
         // Extract variable assignments
         const assignments = this.extractRubyAssignments(rubyCode);
@@ -543,5 +543,5 @@ class CodeGenerator {
 // Global export
 if (typeof window !== 'undefined') {
     window.CodeGenerator = CodeGenerator;
-    console.log('✅ Code Generator ready');
+    // console.log('✅ Code Generator ready');
 }

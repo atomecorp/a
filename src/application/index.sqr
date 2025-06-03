@@ -1,193 +1,193 @@
 
 
-# Main container with purple styling
-container = A.new({
-	attach: 'body',
-	id: 'main_container',
-	markup: 'div',
-	role: 'container',
-	x: 50,
-	y: 50,
-	width: 300,
-	height: 400,
-	color: 'purple',
-	text: 'Hello Squirrel World!',
-	display: 'block',
-	contenteditable: true,
-	smooth: 10,
-	shadow: [
-		{
-			blur: 3,
-			x: 4,
-			y: 8,
-			color: {red: 0, green: 0, blue: 0, alpha: 0.6},
-			invert: true
-		},
-		{
-			blur: 12,
-			x: 0,
-			y: 0,
-			color: {red: 0, green: 0.5, blue: 0, alpha: 0.6},
-			invert: false
-		}
-	],
-	overflow: 'hidden'
-})
+# # Main container with purple styling
+# container = A.new({
+# 	attach: 'body',
+# 	id: 'main_container',
+# 	markup: 'div',
+# 	role: 'container',
+# 	x: 50,
+# 	y: 50,
+# 	width: 300,
+# 	height: 400,
+# 	color: 'purple',
+# 	text: 'Hello Squirrel World!',
+# 	display: 'block',
+# 	contenteditable: true,
+# 	smooth: 10,
+# 	shadow: [
+# 		{
+# 			blur: 3,
+# 			x: 4,
+# 			y: 8,
+# 			color: {red: 0, green: 0, blue: 0, alpha: 0.6},
+# 			invert: true
+# 		},
+# 		{
+# 			blur: 12,
+# 			x: 0,
+# 			y: 0,
+# 			color: {red: 0, green: 0.5, blue: 0, alpha: 0.6},
+# 			invert: false
+# 		}
+# 	],
+# 	overflow: 'hidden'
+# })
 
-# Secondary container with orange styling
-container2 = A.new({
-	attach: 'body',
-	id: 'secondary_container',
-	markup: 'div',
-	role: 'container',
-	x: 400,
-	y: 50,
-	width: 250,
-	height: 300,
-	color: 'orange',
-	text: 'Second Container',
-	display: 'block',
-	smooth: 15,
-	shadow: [
-		{
-			blur: 5,
-			x: 2,
-			y: 4,
-			color: {red: 1, green: 0.5, blue: 0, alpha: 0.4},
-			invert: false
-		}
-	]
-})
+# # Secondary container with orange styling
+# container2 = A.new({
+# 	attach: 'body',
+# 	id: 'secondary_container',
+# 	markup: 'div',
+# 	role: 'container',
+# 	x: 400,
+# 	y: 50,
+# 	width: 250,
+# 	height: 300,
+# 	color: 'orange',
+# 	text: 'Second Container',
+# 	display: 'block',
+# 	smooth: 15,
+# 	shadow: [
+# 		{
+# 			blur: 5,
+# 			x: 2,
+# 			y: 4,
+# 			color: {red: 1, green: 0.5, blue: 0, alpha: 0.4},
+# 			invert: false
+# 		}
+# 	]
+# })
 
-# Interactive button
-button = A.new({
-	attach: 'main_container',
-	id: 'action_button',
-	markup: 'button',
-	role: 'button',
-	x: 20,
-	y: 300,
-	width: 120,
-	height: 40,
-	color: 'green',
-	text: 'Click me!',
-	smooth: 5,
-	# onclick: -> {
-	# 	puts "Button clicked!"
-	# 	# Change container color on click
-	# 	container.color = 'blue'
-	# 	container.text = 'Clicked!'
-	# }
-})
+# # Interactive button
+# button = A.new({
+# 	attach: 'main_container',
+# 	id: 'action_button',
+# 	markup: 'button',
+# 	role: 'button',
+# 	x: 20,
+# 	y: 300,
+# 	width: 120,
+# 	height: 40,
+# 	color: 'green',
+# 	text: 'Click me!',
+# 	smooth: 5,
+# 	# onclick: -> {
+# 	# 	puts "Button clicked!"
+# 	# 	# Change container color on click
+# 	# 	container.color = 'blue'
+# 	# 	container.text = 'Clicked!'
+# 	# }
+# })
 
-# Text display element
-text_display = A.new({
-	attach: 'secondary_container',
-	id: 'text_display',
-	markup: 'p',
-	role: 'text',
-	x: 10,
-	y: 10,
-	width: 200,
-	height: 50,
-	color: 'black',
-	text: 'Pure Ruby .sqr file!',
-	font_size: '16px',
-	font_weight: 'bold'
-})
-
-
-
-# Ruby-style logging
-puts "🎉 Pure Ruby .sqr file loaded successfully!"
-puts "✅ No JavaScript mixing - clean Ruby syntax only!"
-puts "🚀 Containers created and animated!"
+# # Text display element
+# text_display = A.new({
+# 	attach: 'secondary_container',
+# 	id: 'text_display',
+# 	markup: 'p',
+# 	role: 'text',
+# 	x: 33,
+# 	y: 180,
+# 	width: 200,
+# 	height: 50,
+# 	color: 'black',
+# 	text: 'Pure Ruby .sqr file!',
+# 	font_size: '16px',
+# 	font_weight: 'bold'
+# })
 
 
 
-# Ruby-style event handling
-# container2.attrContenteditable(true)
-# grab("main_container").backgroundColor("red")
+# # Ruby-style logging
+# puts "🎉 Pure Ruby .sqr file loaded successfully!"
+# puts "✅ No JavaScript mixing - clean Ruby syntax only!"
+# puts "🚀 Containers created and animated!"
 
 
 
-# ###############
-# # # Testing grab method found in apis.js
-# wait 3000 do 
-# 	grab('main_container').text("New text")
-# 	grab('main_container').color("yellowgreen")
-# end
-
-# # Testing dynamic modifications
-# wait 2000 do 
-# 	container.text("Modified after 2 seconds!")
-# 	container2.color("cyan")
-# end
-
-# container.onclick do
-#   puts 'div clicked'
-#   grab("main_container").backgroundColor("yellow")
-# end
-
-# container.onmouseover do
-#   grab("main_container").backgroundColor("white")
-# end
-
-# container.onmouseout do
-#   grab("main_container").backgroundColor("orange")
-# end
+# # Ruby-style event handling
+# # container2.attrContenteditable(true)
+# # grab("main_container").backgroundColor("red")
 
 
 
-# container.keyboard do |key|
-#   puts "Touche pressée: #{key.key}"
-#   puts "Code: #{key.code}"
-#    puts "KeyCode numérique: #{key.keyCode}"  
-# key.preventDefault
-#   if key.ctrl && key.key == "s"
-# 	puts "Ctrl+S détecté!"
-# 	key.preventDefault
-#   end
-# end
+# # ###############
+# # # # Testing grab method found in apis.js
+# # wait 3000 do 
+# # 	grab('main_container').text("New text")
+# # 	grab('main_container').color("yellowgreen")
+# # end
+
+# # # Testing dynamic modifications
+# # wait 2000 do 
+# # 	container.text("Modified after 2 seconds!")
+# # 	container2.color("cyan")
+# # end
+
+# # container.onclick do
+# #   puts 'div clicked'
+# #   grab("main_container").backgroundColor("yellow")
+# # end
+
+# # container.onmouseover do
+# #   grab("main_container").backgroundColor("white")
+# # end
+
+# # container.onmouseout do
+# #   grab("main_container").backgroundColor("orange")
+# # end
 
 
 
-# require 'require_test' # this file is named :require_test.sqr and located at the same level as index.sqr and contains :puts 'required file loaded succesfully!'
+# # container.keyboard do |key|
+# #   puts "Touche pressée: #{key.key}"
+# #   puts "Code: #{key.code}"
+# #    puts "KeyCode numérique: #{key.keyCode}"  
+# # key.preventDefault
+# #   if key.ctrl && key.key == "s"
+# # 	puts "Ctrl+S détecté!"
+# # 	key.preventDefault
+# #   end
+# # end
 
 
-# # Animation loop using Ruby syntax
-# def animate_containers
-# 	# Ruby-style animation logic
-# 	time = Time.now.to_f
-# 	offset = Math.sin(time) * 10
+
+# # require 'require_test' # this file is named :require_test.sqr and located at the same level as index.sqr and contains :puts 'required file loaded succesfully!'
+
+
+# # # Animation loop using Ruby syntax
+# # def animate_containers
+# # 	# Ruby-style animation logic
+# # 	time = Time.now.to_f
+# # 	offset = Math.sin(time) * 10
 	
-# 	container.y = 50 + offset
-# 	container2.y = 50 - offset
+# # 	container.y = 50 + offset
+# # 	container2.y = 50 - offset
 	
-# 	# Schedule next frame
-# 	wait 16 do 
-# 		animate_containers
-# 	end 
+# # 	# Schedule next frame
+# # 	wait 16 do 
+# # 		animate_containers
+# # 	end 
 
-# end
+# # end
 
-# # Start animation
-# animate_containers()
+# # # Start animation
+# # animate_containers()
 
 
 
-# # Helper methods in Ruby style
-# def change_theme(theme_name)
-# 	case theme_name
-# 	when 'dark'
-# 		container.color = 'black'
-# 		container2.color = 'gray'
-# 		puts "Theme changed to dark"
-# 	when 'light'
-# 		container.color = 'white'
-# 		container2.color = 'lightblue'
-# 		puts "Theme changed to light"
-# 	else
-# 		puts "Unknown theme: #{theme_name}"
-# 	end
-# end
+# # # Helper methods in Ruby style
+# # def change_theme(theme_name)
+# # 	case theme_name
+# # 	when 'dark'
+# # 		container.color = 'black'
+# # 		container2.color = 'gray'
+# # 		puts "Theme changed to dark"
+# # 	when 'light'
+# # 		container.color = 'white'
+# # 		container2.color = 'lightblue'
+# # 		puts "Theme changed to light"
+# # 	else
+# # 		puts "Unknown theme: #{theme_name}"
+# # 	end
+# # end

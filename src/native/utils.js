@@ -3,16 +3,16 @@
 
     function checkFrameworkLoaded() {
         if (typeof window.defineParticle !== 'function') {
-            console.log('⏳ Waiting for A Framework to load...');
+            // console.log('⏳ Waiting for A Framework to load...');
             setTimeout(checkFrameworkLoaded, 50);
             return;
         }
-        console.log('✅ A Framework detected, initializing particles extension...');
+        // console.log('✅ A Framework detected, initializing particles extension...');
         initParticlesExtension();
     }
 
     function initParticlesExtension() {
-        console.log('🔧 Initializing particles extension...');
+        // console.log('🔧 Initializing particles extension...');
 
         // Test particle for 'role'
         window.defineParticle({
@@ -230,7 +230,7 @@
                 type: 'function',
                 category: 'event',
                 process(el, handler) {
-                    console.log(`✅ Using DSL method '${eventName}'`);
+                    // console.log(`✅ Using DSL method '${eventName}'`);
                     if (typeof handler === 'function') {
                         el[eventName] = handler;
                     }
@@ -238,7 +238,7 @@
             });
         });
 
-        console.log('✅ All particles extension initialized successfully!');
+        // console.log('✅ All particles extension initialized successfully!');
         
         // Déclencher un événement pour signaler que tout est prêt
         window.dispatchEvent(new CustomEvent('ParticlesExtensionLoaded'));
@@ -246,11 +246,11 @@
 
     // Écouter l'événement de chargement du framework A ou commencer immédiatement
     if (window.A && window.defineParticle) {
-        console.log('✅ A Framework already loaded, initializing immediately...');
+        // console.log('✅ A Framework already loaded, initializing immediately...');
         initParticlesExtension();
     } else {
         window.addEventListener('AFrameworkLoaded', () => {
-            console.log('📡 Received AFrameworkLoaded event');
+            // console.log('📡 Received AFrameworkLoaded event');
             initParticlesExtension();
         });
         

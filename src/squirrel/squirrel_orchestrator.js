@@ -6,24 +6,24 @@
 class SquirrelOrchestrator {
     
     constructor() {
-        console.log('🚀 MODULAR Squirrel Orchestrator - 5 Component Architecture!');
+        // console.log('🚀 MODULAR Squirrel Orchestrator - 5 Component Architecture!');
         
         // Initialize the transpiler core (which initializes all other components)
         this.transpilerCore = new window.TranspilerCore();
         
-        console.log('📊 All components loaded successfully');
-        console.log('🎯 Ready for Ruby to JavaScript transpilation!');
+        // console.log('📊 All components loaded successfully');
+        // console.log('🎯 Ready for Ruby to JavaScript transpilation!');
     }
 
     /**
      * 🏗️ INITIALIZE ALL COMPONENTS
      */
     async initializePrism() {
-        console.log('🏗️ Initializing all Squirrel components...');
+        // console.log('🏗️ Initializing all Squirrel components...');
         
         try {
             await this.transpilerCore.initializePrism();
-            console.log('✅ All Squirrel components initialized successfully!');
+            // console.log('✅ All Squirrel components initialized successfully!');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Squirrel components:', error);
@@ -56,12 +56,12 @@ class SquirrelOrchestrator {
      * 🚀 MAIN PROCESS - COMPLETE RUBY TO JS PIPELINE
      */
     async processRubyCode(rubyCode) {
-        console.log('🚀 Starting MODULAR Prism Ruby to JS Pipeline...');
-        console.log('🏗️ Architecture: RubyParserManager → CodeGenerator → RubyHandlers → TranspilerCore → SquirrelOrchestrator');
+        // console.log('🚀 Starting MODULAR Prism Ruby to JS Pipeline...');
+        // console.log('🏗️ Architecture: RubyParserManager → CodeGenerator → RubyHandlers → TranspilerCore → SquirrelOrchestrator');
         
         try {
             const result = await this.transpilerCore.processRubyCode(rubyCode);
-            console.log('🎉 MODULAR pipeline completed successfully!');
+            // console.log('🎉 MODULAR pipeline completed successfully!');
             return result;
         } catch (error) {
             console.error('❌ MODULAR pipeline failed:', error);
@@ -134,7 +134,7 @@ class SquirrelOrchestrator {
      * 🎯 QUICK TEST METHOD
      */
     async quickTest() {
-        console.log('🧪 Running quick Squirrel test...');
+        // console.log('🧪 Running quick Squirrel test...');
         
         const testCode = `
 puts "Hello from modular Squirrel!"
@@ -147,7 +147,7 @@ container = A.new({
 
         try {
             const result = await this.processRubyCode(testCode);
-            console.log('✅ Quick test completed:', result.success ? 'SUCCESS' : 'FAILED');
+            // console.log('✅ Quick test completed:', result.success ? 'SUCCESS' : 'FAILED');
             return result;
         } catch (error) {
             console.error('❌ Quick test failed:', error);
@@ -161,14 +161,14 @@ container = A.new({
     async performanceTest(rubyCode) {
         const startTime = performance.now();
         
-        console.log('⏱️ Starting performance test...');
+        // console.log('⏱️ Starting performance test...');
         
         try {
             const result = await this.processRubyCode(rubyCode);
             const endTime = performance.now();
             const duration = endTime - startTime;
             
-            console.log(`⏱️ Performance test completed in ${duration.toFixed(2)}ms`);
+            // console.log(`⏱️ Performance test completed in ${duration.toFixed(2)}ms`);
             
             return {
                 ...result,
@@ -198,8 +198,8 @@ container = A.new({
 // Global export
 if (typeof window !== 'undefined') {
     window.SquirrelOrchestrator = SquirrelOrchestrator;
-    console.log('✅ MODULAR Squirrel Orchestrator ready!');
-    console.log('🏗️ 5-Component Architecture: RubyParserManager + CodeGenerator + RubyHandlers + TranspilerCore + SquirrelOrchestrator');
-    console.log('🎯 Enhanced with smart Ruby-to-JS conversion!');
-    console.log('🛠️ Advanced diagnostics and component access available!');
+    // console.log('✅ MODULAR Squirrel Orchestrator ready!');
+    // console.log('🏗️ 5-Component Architecture: RubyParserManager + CodeGenerator + RubyHandlers + TranspilerCore + SquirrelOrchestrator');
+    // console.log('🎯 Enhanced with smart Ruby-to-JS conversion!');
+    // console.log('🛠️ Advanced diagnostics and component access available!');
 }
