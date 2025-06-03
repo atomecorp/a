@@ -17,9 +17,7 @@
     
     <!-- Utils -->
     <script src="native/utils.js"></script>
-    
-    <!-- Tests and Diagnostics -->
-    <script src="tests/tests.js"></script>
+
     
     <!-- A Framework -->
     <script src="a/a.js"></script>
@@ -27,7 +25,11 @@
     <script src="a/particles/identity.js"></script>
     <script src="a/particles/dimension.js"></script>
     
-    <!-- Squirrel Core -->
+    <!-- Squirrel Core - Split en 5 modules -->
+    <script src="squirrel/ruby_parser_manager.js"></script>
+    <script src="squirrel/code_generator.js"></script>
+    <script src="squirrel/ruby_handlers.js"></script>
+    <script src="squirrel/transpiler_core.js"></script>
     <script src="squirrel/squirrel_orchestrator.js"></script>
     <script src="squirrel/squirrel_runner.js"></script>
 </head>

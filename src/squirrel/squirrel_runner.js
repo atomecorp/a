@@ -1,22 +1,22 @@
 /**
- * 🚀 SQUIRREL RUNNER - PURE PRISM COMPATIBLE
- * ✅ Works with your PrismParser integration
- * ✅ Zero specific code - 100% universal
- * ✅ A Framework + utils.js automatic mapping
+ * 🚀 SQUIRREL RUNNER - PRODUCTION VERSION
+ * ✅ Pure execution of application/index.sqr
+ * ✅ No tests - Direct Ruby to JavaScript execution
+ * ✅ 100% Prism WASM powered
  */
 
 class SquirrelRunner {
     constructor() {
         this.orchestrator = null;
         this.ready = false;
-        console.log('🚀 New Squirrel Runner - Pure Prism Pipeline!');
+        console.log('🚀 Squirrel Runner - Production Mode');
     }
 
     /**
      * 🔧 INITIALIZE RUNNER
      */
     async init() {
-        console.log('🏗️ Initializing New Squirrel Runner...');
+        console.log('🏗️ Initializing Squirrel Runner...');
         
         try {
             // Wait for dependencies
@@ -25,7 +25,7 @@ class SquirrelRunner {
             // Create orchestrator instance
             this.orchestrator = new window.SquirrelOrchestrator();
             
-            // Initialize Prism using your working parser
+            // Initialize Prism
             console.log('🔧 Initializing Prism WASM...');
             const prismReady = await this.orchestrator.initializePrism();
             
@@ -34,11 +34,11 @@ class SquirrelRunner {
             }
             
             this.ready = true;
-            console.log('✅ New Squirrel Runner initialized successfully!');
+            console.log('✅ Squirrel Runner ready for production!');
             return true;
             
         } catch (error) {
-            console.error('❌ New Squirrel Runner initialization failed:', error);
+            console.error('❌ Squirrel Runner initialization failed:', error);
             throw error;
         }
     }
@@ -47,12 +47,11 @@ class SquirrelRunner {
      * 🔧 WAIT FOR DEPENDENCIES
      */
     async waitForDependencies() {
-        const maxWait = 5000; // 5 seconds
-        const checkInterval = 100; // 100ms
+        const maxWait = 3000; // 3 seconds
+        const checkInterval = 100;
         let waited = 0;
         
         while (waited < maxWait) {
-            // Check if all required dependencies are loaded
             if (window.SquirrelOrchestrator && 
                 window.PrismParser && 
                 window.A && 
@@ -66,15 +65,7 @@ class SquirrelRunner {
             waited += checkInterval;
         }
         
-        console.warn('⚠️ Some dependencies may be missing, continuing anyway...');
-        console.log('Available:', {
-            SquirrelOrchestrator: !!window.SquirrelOrchestrator,
-            PrismParser: !!window.PrismParser,
-            A: !!window.A,
-            puts: !!window.puts,
-            wait: !!window.wait
-        });
-        
+        console.log('⚠️ Continuing with available dependencies...');
         return true;
     }
 
@@ -82,7 +73,7 @@ class SquirrelRunner {
      * 🚀 RUN SQUIRREL FILE
      */
     async runFile(filename) {
-        console.log('🚀 Running Squirrel file:', filename);
+        console.log('🚀 Loading and executing:', filename);
         
         try {
             if (!this.ready) {
@@ -98,16 +89,28 @@ class SquirrelRunner {
             }
             
             const content = await response.text();
-            console.log('✅ File loaded:', content.length, 'characters');
+            console.log(`✅ File loaded: ${content.length} characters`);
+            console.log('📄 Ruby content preview:');
+            console.log('--- START RUBY CODE ---');
+            console.log(content.substring(0, 500) + (content.length > 500 ? '...' : ''));
+            console.log('--- END RUBY CODE ---');
             
             // Process with orchestrator
+            console.log('⚡ Starting Ruby → JavaScript transpilation...');
             const result = await this.orchestrator.processRubyCode(content);
             
-            console.log('✅ Squirrel file executed successfully');
+            if (result.success) {
+                console.log('🎉 Squirrel application executed successfully!');
+                console.log('✨ Your Ruby code is now running as JavaScript!');
+            } else {
+                console.error('❌ Execution failed:', result.error);
+            }
+            
             return result;
             
         } catch (error) {
-            console.error('❌ Squirrel file execution failed:', error);
+            console.error('❌ Failed to execute Squirrel file:', error);
+            console.log('🔧 Error details:', error.message);
             throw error;
         }
     }
@@ -116,7 +119,7 @@ class SquirrelRunner {
      * 🎯 RUN SQUIRREL CODE DIRECTLY
      */
     async runCode(rubyCode) {
-        console.log('🚀 Running Squirrel code directly...');
+        console.log('🚀 Executing Ruby code directly...');
         
         try {
             if (!this.ready) {
@@ -124,37 +127,38 @@ class SquirrelRunner {
             }
 
             const result = await this.orchestrator.processRubyCode(rubyCode);
-            console.log('✅ Squirrel code executed successfully');
+            console.log('✅ Ruby code executed successfully');
             return result;
             
         } catch (error) {
-            console.error('❌ Squirrel code execution failed:', error);
+            console.error('❌ Ruby code execution failed:', error);
             throw error;
         }
     }
 
     /**
-     * 🔧 AUTO-START FUNCTIONALITY
+     * 🔧 AUTO-START APPLICATION
      */
     async autoStart() {
-        console.log('🔄 Auto-starting Pure Prism Squirrel...');
+        console.log('🚀 Auto-starting Squirrel application...');
         
         try {
-            // Wait for DOM to be ready
+            // Wait for DOM
             if (document.readyState === 'loading') {
                 await new Promise(resolve => {
                     document.addEventListener('DOMContentLoaded', resolve);
                 });
             }
 
-            // Additional wait to ensure all scripts are loaded
-            await new Promise(resolve => setTimeout(resolve, 200));
+            // Small delay to ensure everything is loaded
+            await new Promise(resolve => setTimeout(resolve, 300));
 
-            console.log('🚀 Starting main file...');
+            console.log('🎯 Executing application/index.sqr...');
             await this.runFile('./application/index.sqr');
             
         } catch (error) {
             console.error('❌ Auto-start failed:', error);
+            console.log('🔧 Make sure application/index.sqr exists and contains valid Ruby code');
         }
     }
 
@@ -171,24 +175,52 @@ class SquirrelRunner {
     isReady() {
         return this.ready;
     }
+
+    /**
+     * 📊 GET STATUS INFO
+     */
+    getStatus() {
+        return {
+            ready: this.ready,
+            orchestrator: !!this.orchestrator,
+            prism: this.orchestrator?.prismParser?.isReady() || false
+        };
+    }
 }
 
 // 🚀 CREATE GLOBAL INSTANCE
 window.SquirrelRunner = SquirrelRunner;
 
 // 🎯 CREATE GLOBAL RUNNER INSTANCE
-console.log('🚀 Creating global Pure Prism Squirrel Runner...');
+console.log('🚀 Creating Squirrel Runner (Production)...');
 window.globalSquirrelRunner = new SquirrelRunner();
 
-console.log('🚀 Squirrel Runner loaded!');
-console.log('✅ Ready for pure Prism-based Ruby execution!');
+console.log('✅ Squirrel Runner loaded!');
+console.log('🎯 Ready to execute application/index.sqr');
 
-// 🔄 AUTO-START IF ENABLED
+// 🔄 AUTO-START APPLICATION
 if (typeof window !== 'undefined') {
-    // Wait a bit more to ensure your PrismParser is ready
+    // Wait for all systems to be ready
     setTimeout(() => {
         if (window.globalSquirrelRunner) {
             window.globalSquirrelRunner.autoStart();
         }
-    }, 500); // Increased delay to ensure PrismParser is ready
+    }, 800); // Enough time for Prism to initialize
 }
+
+// 🎯 GLOBAL HELPER FUNCTIONS
+window.runSquirrel = async (code) => {
+    if (window.globalSquirrelRunner) {
+        return await window.globalSquirrelRunner.runCode(code);
+    }
+    console.error('❌ Squirrel Runner not available');
+};
+
+window.squirrelStatus = () => {
+    if (window.globalSquirrelRunner) {
+        const status = window.globalSquirrelRunner.getStatus();
+        console.table(status);
+        return status;
+    }
+    return { error: 'Squirrel Runner not available' };
+};

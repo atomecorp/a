@@ -106,53 +106,53 @@ puts "🚀 Containers created and animated!"
 
 
 # Ruby-style event handling
-container.attrContenteditable(true)
-grab("main_container").backgroundColor("red")
+# container2.attrContenteditable(true)
+# grab("main_container").backgroundColor("red")
 
 
 
-###############
-# # Testing grab method found in apis.js
-wait 3000 do 
-	grab('main_container').text("New text")
-	grab('main_container').color("yellowgreen")
-end
+# ###############
+# # # Testing grab method found in apis.js
+# wait 3000 do 
+# 	grab('main_container').text("New text")
+# 	grab('main_container').color("yellowgreen")
+# end
 
-# Testing dynamic modifications
-wait 2000 do 
-	container.text("Modified after 2 seconds!")
-	container2.color("cyan")
-end
+# # Testing dynamic modifications
+# wait 2000 do 
+# 	container.text("Modified after 2 seconds!")
+# 	container2.color("cyan")
+# end
 
-container.onclick do
-  puts 'div clicked'
-  grab("main_container").backgroundColor("yellow")
-end
+# container.onclick do
+#   puts 'div clicked'
+#   grab("main_container").backgroundColor("yellow")
+# end
 
-container.onmouseover do
-  grab("main_container").backgroundColor("white")
-end
+# container.onmouseover do
+#   grab("main_container").backgroundColor("white")
+# end
 
-container.onmouseout do
-  grab("main_container").backgroundColor("orange")
-end
-
-
-
-container.keyboard do |key|
-  puts "Touche pressée: #{key.key}"
-  puts "Code: #{key.code}"
-   puts "KeyCode numérique: #{key.keyCode}"  
-key.preventDefault
-  if key.ctrl && key.key == "s"
-	puts "Ctrl+S détecté!"
-	key.preventDefault
-  end
-end
+# container.onmouseout do
+#   grab("main_container").backgroundColor("orange")
+# end
 
 
 
-require 'require_test' # this file is named :require_test.sqr and located at the same level as index.sqr and contains :puts 'required file loaded succesfully!'
+# container.keyboard do |key|
+#   puts "Touche pressée: #{key.key}"
+#   puts "Code: #{key.code}"
+#    puts "KeyCode numérique: #{key.keyCode}"  
+# key.preventDefault
+#   if key.ctrl && key.key == "s"
+# 	puts "Ctrl+S détecté!"
+# 	key.preventDefault
+#   end
+# end
+
+
+
+# require 'require_test' # this file is named :require_test.sqr and located at the same level as index.sqr and contains :puts 'required file loaded succesfully!'
 
 
 # # Animation loop using Ruby syntax
