@@ -88,7 +88,7 @@ window.wait = wait;
 
 ///////
 
-// 🚀 OPTIMIZED: require() sans attente, utilise directement le bon transpiler
+// 🚀 OPTIMIZED: require() - Support for .sqr and .rb transpilation
 
 const requireCache = new Map();
 const loadingFiles = new Set();
@@ -109,13 +109,16 @@ window.require = async function(filename) {
     loadingFiles.add(filename);
     
     try {
-        // Chemins à essayer (comme Ruby)
+        // Chemins à essayer (comme Ruby) - Support .sqr et .rb
         const paths = [
-            `./application/${filename}.sqh`,
-            `./${filename}.sqh`,
+            `./application/${filename}.sqr`,      // Support .sqr
+            `./application/${filename}.rb`,       // 🆕 Support .rb
+            `./${filename}.sqr`,                  // Support .sqr
+            `./${filename}.rb`,                   // 🆕 Support .rb
             `./application/${filename}`,
             `./${filename}`,
-            `./vie/${filename}.sqh`,
+            `./vie/${filename}.sqr`,              // Support .sqr
+            `./vie/${filename}.rb`,               // 🆕 Support .rb
             `./vie/${filename}`,
         ];
         
@@ -131,26 +134,42 @@ window.require = async function(filename) {
                         
                         let finalCode = content;
                         
-                        // 🚀 Transpiler si c'est un fichier .sqh
-                        if (path.endsWith('.sqh')) {
-                            // Essayer hybridParser d'abord, sinon fallback
-                            if (window.hybridParser && 
-                                typeof window.hybridParser.processHybridFile === 'function') {
-                                
-                                console.log(`🔄 Using hybridParser for ${path}...`);
-                                finalCode = window.hybridParser.processHybridFile(content);
-                                
-                            } else if (window.transpiler && typeof window.transpiler === 'function') {
-                                
-                                console.log(`🔄 Using transpiler fallback for ${path}...`);
-                                finalCode = window.transpiler(content);
-                                
+                        // 🚀 TRANSPILER si c'est un fichier Ruby (.sqr OU .rb)
+                        if (path.endsWith('.sqr') || path.endsWith('.rb')) {
+                            console.log(`🔄 Transpiling Ruby file: ${path}...`);
+                            
+                            // 🎯 Utiliser SquirrelOrchestrator pour tous les fichiers Ruby
+                            if (window.SquirrelOrchestrator) {
+                                try {
+                                    console.log(`🦫 Using SquirrelOrchestrator for ${path}...`);
+                                    
+                                    // Créer une instance et traiter le fichier Ruby
+                                    const orchestrator = new window.SquirrelOrchestrator();
+                                    await orchestrator.initializePrism();
+                                    
+                                    // Parser et transpiler le code Ruby
+                                    const parseResult = await orchestrator.parseRubyCode(content);
+                                    const ast = parseResult.result?.value;
+                                    
+                                    if (ast && ast.body) {
+                                        finalCode = orchestrator.transpilePrismASTToJavaScript(ast);
+                                        console.log(`✅ Successfully transpiled ${path} with SquirrelOrchestrator`);
+                                    } else {
+                                        throw new Error('No AST generated');
+                                    }
+                                    
+                                } catch (error) {
+                                    console.error(`❌ SquirrelOrchestrator failed for ${path}:`, error);
+                                    console.warn(`⚠️ Executing raw Ruby code for ${path}`);
+                                    // Si le transpiler échoue, essayer d'exécuter le code tel quel
+                                    finalCode = `// Raw Ruby code from ${path}\n${content}`;
+                                }
                             } else {
-                                console.error(`❌ No transpiler available for ${path}`);
-                                return null;
+                                console.error(`❌ No SquirrelOrchestrator available for ${path}`);
+                                finalCode = `// No transpiler available for ${path}\n${content}`;
                             }
                             
-                            console.log(`✅ Transpiled ${path}`);
+                            console.log(`✅ Processed ${path}`);
                         }
                         
                         // Exécuter le code transpilé
@@ -179,6 +198,8 @@ window.require = async function(filename) {
         loadingFiles.delete(filename);
     }
 };
+
+// Code cleaned up - .sqh support removed
 
 // Alias pour compatibilité
 window.load = window.require;

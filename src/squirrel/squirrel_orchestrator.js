@@ -1,12 +1,12 @@
 /**
- * 🐿️ SQUIRREL ORCHESTRATOR - 100% PRISM AST TRANSPILER (AMÉLIORÉ)
- * Utilise les vrais nœuds Prism-style pour transpiler Ruby → JavaScript SANS ERREURS
+ * 🐿️ SQUIRREL ORCHESTRATOR - 100% PRISM AST TRANSPILER
+ * Version 2.0 - Corrigé et optimisé pour l'interface PrismParser async
  */
 
 class SquirrelOrchestrator {
     
     constructor() {
-        console.log('🚀 New Squirrel Orchestrator - Enhanced 100% Prism AST Transpiler!');
+        console.log('🚀 Enhanced Squirrel Orchestrator - 100% Prism AST Transpiler!');
         this.prismParser = null;
         this.transpilationHandlers = this.initializeTranspilationHandlers();
         
@@ -17,8 +17,6 @@ class SquirrelOrchestrator {
      * 🎯 INITIALIZE TRANSPILATION HANDLERS
      */
     initializeTranspilationHandlers() {
-        console.log('🎯 Initializing enhanced transpilation handlers...');
-        
         return {
             // Core program structure
             'ProgramNode': this.transpileProgramNode.bind(this),
@@ -27,7 +25,6 @@ class SquirrelOrchestrator {
             // Variable operations
             'LocalVariableWriteNode': this.transpileLocalVariableWrite.bind(this),
             'LocalVariableReadNode': this.transpileLocalVariableRead.bind(this),
-            'ExpressionNode': this.transpileExpressionNode.bind(this),
             
             // Method calls
             'CallNode': this.transpileCallNode.bind(this),
@@ -66,15 +63,16 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * 🔍 PARSE RUBY CODE WITH PRISM
+     * 🔍 PARSE RUBY CODE WITH PRISM (CORRIGÉ)
      */
     async parseRubyCode(rubyCode) {
         console.log('🔍 Parsing Ruby code with enhanced Prism...');
         
         try {
-            const parseResult = await this.prismParser.parseRuby(rubyCode);
+            // Le PrismParser.parseRuby() retourne directement l'AST
+            const ast = await this.prismParser.parseRuby(rubyCode);
             console.log('✅ Ruby code validated with Prism successfully');
-            return parseResult;
+            return ast; // Retourner directement l'AST
         } catch (error) {
             console.error('❌ Prism parsing failed:', error);
             throw error;
@@ -82,10 +80,10 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * ⚡ TRANSPILE PRISM AST TO JAVASCRIPT (ENHANCED)
+     * ⚡ TRANSPILE PRISM AST TO JAVASCRIPT (OPTIMISÉ)
      */
     transpilePrismASTToJavaScript(ast) {
-        console.log('⚡ Transpiling Prism AST to JavaScript (Enhanced)...');
+        console.log('⚡ Transpiling Prism AST to JavaScript...');
         
         if (!ast || !ast.body || !Array.isArray(ast.body)) {
             throw new Error('Invalid Prism AST structure');
@@ -103,13 +101,9 @@ class SquirrelOrchestrator {
                 if (jsCode && jsCode.trim()) {
                     jsLines.push(jsCode);
                     console.log(`✅ Node ${index + 1} transpiled successfully`);
-                } else {
-                    console.warn(`⚠️ Node ${index + 1} produced empty JavaScript`);
                 }
             } catch (error) {
                 console.warn(`⚠️ Failed to transpile node ${index + 1}:`, error.message);
-                console.log('Problematic node:', node);
-                
                 // Ajouter un commentaire d'erreur au lieu de faire échouer
                 jsLines.push(`// ERROR: Failed to transpile ${node.type || 'unknown'}: ${error.message}`);
             }
@@ -117,14 +111,14 @@ class SquirrelOrchestrator {
         
         let result = jsLines.join('\n');
         
-        console.log('✅ Enhanced Prism AST transpiled to JavaScript');
+        console.log('✅ Prism AST transpiled to JavaScript');
         console.log(`📊 Generated ${jsLines.length} JavaScript statements`);
         
         return result;
     }
 
     /**
-     * 🎯 TRANSPILE INDIVIDUAL PRISM NODE (ENHANCED)
+     * 🎯 TRANSPILE INDIVIDUAL PRISM NODE
      */
     transpilePrismNode(node) {
         if (!node || typeof node !== 'object') {
@@ -151,12 +145,9 @@ class SquirrelOrchestrator {
      * 📋 TRANSPILE PROGRAM NODE
      */
     transpileProgramNode(node) {
-        console.log('📋 Transpiling ProgramNode');
-        
         if (node.body && Array.isArray(node.body)) {
             return node.body.map(child => this.transpilePrismNode(child)).filter(Boolean).join('\n');
         }
-        
         return '// Empty program';
     }
 
@@ -164,30 +155,24 @@ class SquirrelOrchestrator {
      * 📋 TRANSPILE STATEMENTS NODE
      */
     transpileStatementsNode(node) {
-        console.log('📋 Transpiling StatementsNode');
-        
         if (node.body && Array.isArray(node.body)) {
             return node.body.map(child => this.transpilePrismNode(child)).filter(Boolean).join('\n');
         }
-        
         return '';
     }
 
     /**
-     * 📝 TRANSPILE LOCAL VARIABLE WRITE (ENHANCED)
+     * 📝 TRANSPILE LOCAL VARIABLE WRITE
      */
     transpileLocalVariableWrite(node) {
-        console.log('📝 Transpiling LocalVariableWriteNode:', node.name);
-        
         if (!node.name) {
             return null;
         }
         
-        // Cas spécial: new A({ ... }) - Le plus important !
+        // Cas spécial: new A({ ... })
         if (node.value && node.value.type === 'CallNode' && 
             node.value.receiver === 'A' && node.value.method === 'new') {
             
-            // Générer l'objet de configuration
             let configObject = '{}';
             if (node.value.arguments && node.value.arguments.length > 0) {
                 const hashArg = node.value.arguments[0];
@@ -199,15 +184,14 @@ class SquirrelOrchestrator {
             return `const ${node.name} = new A(${configObject});`;
         }
         
-        // Cas général: autres assignements
+        // Cas général
         if (node.value) {
             const value = this.transpilePrismNode(node.value);
-            if (value && !value.startsWith('//')) { // Éviter les commentaires
+            if (value && !value.startsWith('//')) {
                 return `const ${node.name} = ${value};`;
             }
         }
         
-        // Si on ne peut pas transpiler la valeur, créer une variable undefined
         return `const ${node.name} = undefined; // Could not transpile value`;
     }
 
@@ -215,108 +199,18 @@ class SquirrelOrchestrator {
      * 📖 TRANSPILE LOCAL VARIABLE READ
      */
     transpileLocalVariableRead(node) {
-        console.log('📖 Transpiling LocalVariableReadNode:', node.name);
         return node.name || 'undefined';
     }
 
     /**
-     * 📝 TRANSPILE EXPRESSION NODE (ENHANCED)
-     */
-    transpileExpressionNode(node) {
-        console.log('📝 Transpiling ExpressionNode');
-        
-        if (!node.content) {
-            return '// Empty expression';
-        }
-        
-        const content = node.content.trim();
-        
-        // === DÉTECTION SPÉCIALE: Assignements dans ExpressionNode ===
-        
-        // 1. Détection d'assignement A.new manqué par le parser
-        if (content.match(/^\s*(\w+)\s*=\s*A\.new\s*\(\s*\{/) || content.match(/^\s*(\w+)\s*=\s*new\s+A\s*\(\s*\{/)) {
-            const match = content.match(/^\s*(\w+)\s*=\s*(?:A\.new|new\s+A)\s*\(\s*\{/);
-            if (match) {
-                const varName = match[1];
-                console.log(`🔧 Converting ExpressionNode to LocalVariableWrite: ${varName}`);
-                
-                // Convertir en assignement réel
-                return `const ${varName} = new A({/* Object configuration */});`;
-            }
-        }
-        
-        // 2. Autres assignements
-        if (content.match(/^\s*(\w+)\s*=\s*(.+)$/)) {
-            const match = content.match(/^\s*(\w+)\s*=\s*(.+)$/);
-            const varName = match[1];
-            const value = match[2].trim();
-            
-            console.log(`🔧 Converting ExpressionNode to assignment: ${varName} = ${value}`);
-            
-            // Nettoyer la valeur
-            let cleanValue = value;
-            if (cleanValue.startsWith('"') && cleanValue.endsWith('"')) {
-                cleanValue = cleanValue; // Garder les guillemets pour les strings
-            } else if (/^\d+(\.\d+)?$/.test(cleanValue)) {
-                cleanValue = cleanValue; // Garder les nombres tels quels
-            } else {
-                cleanValue = `"${cleanValue}"`; // Entourer de guillemets si ce n'est pas déjà fait
-            }
-            
-            return `const ${varName} = ${cleanValue};`;
-        }
-        
-        // 3. Appels de méthode dans ExpressionNode
-        if (content.match(/(\w+|\w+\([^)]*\))\.(\w+)\s*(\([^)]*\))?\s*$/)) {
-            const match = content.match(/(.+)\.(\w+)\s*(\([^)]*\))?\s*$/);
-            const receiver = match[1].trim();
-            const method = match[2];
-            const args = match[3] || '()';
-            
-            console.log(`🔧 Converting ExpressionNode to method call: ${receiver}.${method}${args}`);
-            return `${receiver}.${method}${args};`;
-        }
-        
-        // 4. Cas spéciaux pour le contenu qui pourrait être problématique
-        if (content.includes(':') && content.includes('{') && content.includes('}')) {
-            // Probablement du contenu d'objet mal parsé - ignorer
-            return '// Skipped object content';
-        }
-        
-        // 5. wait statements
-        if (content.match(/^\s*wait\s+(\d+)\s+do\s*$/)) {
-            const match = content.match(/^\s*wait\s+(\d+)\s+do\s*$/);
-            const duration = match[1];
-            return `setTimeout(function() {`;
-        }
-        
-        // 6. if statements  
-        if (content.match(/^\s*if\s+(.+)$/)) {
-            const match = content.match(/^\s*if\s+(.+)$/);
-            const condition = match[1];
-            return `if (${condition}) {`;
-        }
-        
-        // 7. end statements - IGNORER AU LIEU DE GÉNÉRER }
-        if (content === 'end') {
-            return '// end'; // Commenter au lieu de générer une accolade
-        }
-        
-        // 8. Fallback: commenter le contenu
-        return `// Expression: ${content}`;
-    }
-
-    /**
-     * 📞 TRANSPILE CALL NODE (ENHANCED)
+     * 📞 TRANSPILE CALL NODE (CORRIGÉ POUR WAIT)
      */
     transpileCallNode(node) {
-        console.log('📞 Transpiling CallNode:', node.method);
-        
         if (!node.method) {
             return null;
         }
         
-        // === PUTS STATEMENTS ===
+        // PUTS STATEMENTS
         if (node.method === 'puts') {
             if (node.arguments && node.arguments.length > 0) {
                 const args = node.arguments.map(arg => this.transpilePrismNode(arg)).filter(Boolean);
@@ -325,7 +219,29 @@ class SquirrelOrchestrator {
             return 'puts();';
         }
         
-        // === METHOD CALLS WITH RECEIVER ===
+        // WAIT STATEMENTS - CORRIGÉ
+        if (node.method === 'wait') {
+            let delay = '1000'; // default
+            
+            if (node.arguments && node.arguments.length > 0) {
+                const delayArg = node.arguments[0];
+                if (delayArg.type === 'IntegerNode') {
+                    delay = delayArg.value || '1000';
+                } else {
+                    delay = this.transpilePrismNode(delayArg) || '1000';
+                }
+            }
+            
+            // Si il y a un bloc, transpiler le bloc comme callback
+            if (node.block && node.block.body) {
+                const blockCode = this.transpileBlockNode(node.block);
+                return `wait(${delay}, function() {\n${blockCode}\n});`;
+            } else {
+                return `setTimeout(function() {\n  // Empty wait block\n}, ${delay});`;
+            }
+        }
+        
+        // METHOD CALLS WITH RECEIVER
         if (node.receiver) {
             const receiver = typeof node.receiver === 'string' ? 
                 node.receiver : this.transpilePrismNode(node.receiver);
@@ -334,7 +250,6 @@ class SquirrelOrchestrator {
             if (node.block) {
                 const blockCode = this.transpileBlockNode(node.block);
                 
-                // Déterminer les paramètres du block
                 let blockParams = '';
                 if (node.block.parameters && node.block.parameters.length > 0) {
                     blockParams = node.block.parameters.join(', ');
@@ -354,11 +269,10 @@ class SquirrelOrchestrator {
                 args = argList.join(', ');
             }
             
-            // Regular method calls
             return `${receiver}.${node.method}(${args});`;
         }
         
-        // === STANDALONE METHOD CALLS ===
+        // STANDALONE METHOD CALLS
         let args = '';
         if (node.arguments && node.arguments.length > 0) {
             const argList = node.arguments.map(arg => this.transpilePrismNode(arg)).filter(Boolean);
@@ -369,18 +283,16 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * 📄 TRANSPILE STRING NODE (ENHANCED)
+     * 📄 TRANSPILE STRING NODE
      */
     transpileStringNode(node) {
-        console.log('📄 Transpiling StringNode');
-        
         if (!node.value) {
             return '""';
         }
         
         let value = node.value;
         
-        // Nettoyer les guillemets doubles superflus
+        // Nettoyer les guillemets superflus
         if (value.startsWith('"') && value.endsWith('"')) {
             value = value.slice(1, -1);
         } else if (value.startsWith("'") && value.endsWith("'")) {
@@ -400,35 +312,28 @@ class SquirrelOrchestrator {
      * 🔢 TRANSPILE INTEGER NODE
      */
     transpileIntegerNode(node) {
-        console.log('🔢 Transpiling IntegerNode');
         return node.value || '0';
     }
 
     /**
-     * 📦 TRANSPILE HASH NODE (ENHANCED)
+     * 📦 TRANSPILE HASH NODE
      */
     transpileHashNode(node) {
-        console.log('📦 Transpiling HashNode');
-        
         if (!node.content || !Array.isArray(node.content)) {
             return '{}';
         }
         
-        // Convertir le contenu en propriétés JavaScript
         const properties = [];
         
         for (const line of node.content) {
             if (typeof line === 'string' && line.trim()) {
-                // Parser les propriétés Ruby style
-                const cleanLine = line.trim().replace(/,$/, ''); // Enlever virgule finale
+                const cleanLine = line.trim().replace(/,$/, '');
                 
                 if (cleanLine.includes(':')) {
-                    // Style Ruby: key: value
                     const colonIndex = cleanLine.indexOf(':');
                     const key = cleanLine.substring(0, colonIndex).trim();
                     const value = cleanLine.substring(colonIndex + 1).trim();
                     
-                    // Nettoyer et formater
                     const cleanKey = key.replace(/['"]/g, '');
                     const cleanValue = this.cleanHashValue(value);
                     
@@ -445,7 +350,7 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * 🧹 UTILITY: Clean hash values (ENHANCED)
+     * 🧹 UTILITY: Clean hash values
      */
     cleanHashValue(value) {
         const trimmed = value.trim();
@@ -460,13 +365,9 @@ class SquirrelOrchestrator {
             return trimmed;
         }
         
-        // Objects imbriqués
-        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-            return trimmed;
-        }
-        
-        // Arrays
-        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        // Objects et arrays
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
             return trimmed;
         }
         
@@ -477,16 +378,11 @@ class SquirrelOrchestrator {
         }
         
         // Mots-clés spéciaux
-        if (trimmed === 'null' || trimmed === 'undefined') {
-            return trimmed;
+        if (trimmed === 'null' || trimmed === 'undefined' || trimmed === 'body') {
+            return trimmed === 'body' ? '"body"' : trimmed;
         }
         
-        // Si c'est 'body', c'est une référence à l'élément
-        if (trimmed === 'body') {
-            return '"body"';
-        }
-        
-        // Si ça ressemble à un sélecteur CSS ou un ID
+        // Sélecteurs CSS
         if (trimmed.startsWith('#') || trimmed.startsWith('.')) {
             return `"${trimmed}"`;
         }
@@ -499,8 +395,6 @@ class SquirrelOrchestrator {
      * 📚 TRANSPILE ARRAY NODE
      */
     transpileArrayNode(node) {
-        console.log('📚 Transpiling ArrayNode');
-        
         if (!node.elements || !Array.isArray(node.elements)) {
             return '[]';
         }
@@ -510,11 +404,9 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * 🎭 TRANSPILE BLOCK NODE (ENHANCED)
+     * 🎭 TRANSPILE BLOCK NODE
      */
     transpileBlockNode(node) {
-        console.log('🎭 Transpiling BlockNode');
-        
         if (!node.body || !Array.isArray(node.body)) {
             return '  // Empty block';
         }
@@ -532,23 +424,14 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * 🔀 TRANSPILE IF NODE (ENHANCED)
+     * 🔀 TRANSPILE IF NODE
      */
     transpileIfNode(node) {
-        console.log('🔀 Transpiling IfNode');
-        
         if (!node.condition) {
             return '// Invalid if node: no condition';
         }
         
-        let condition = '';
-        if (node.condition.type === 'ExpressionNode') {
-            condition = node.condition.content || 'true';
-        } else {
-            condition = this.transpilePrismNode(node.condition) || 'true';
-        }
-        
-        // Nettoyer et corriger la condition
+        let condition = this.transpilePrismNode(node.condition) || 'true';
         condition = this.cleanCondition(condition);
         
         const thenBody = this.transpilePrismNode(node.then_body) || '  // Empty then body';
@@ -564,10 +447,9 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * 🧹 UTILITY: Clean and fix conditions
+     * 🧹 UTILITY: Clean conditions
      */
     cleanCondition(condition) {
-        // Nettoyer les conditions Ruby → JavaScript
         let cleaned = condition.trim();
         
         // Remplacer les opérateurs Ruby
@@ -575,10 +457,10 @@ class SquirrelOrchestrator {
         cleaned = cleaned.replace(/\bor\b/g, '||');
         cleaned = cleaned.replace(/\bnot\b/g, '!');
         
-        // Corriger key.ctrl en key.ctrlKey (standard JavaScript)
+        // Corriger key.ctrl en key.ctrlKey
         cleaned = cleaned.replace(/key\.ctrl/g, 'key.ctrlKey');
         
-        // S'assurer que les comparaisons utilisent === au lieu de ==
+        // S'assurer que les comparaisons utilisent ===
         cleaned = cleaned.replace(/([^=!])={1}([^=])/g, '$1===$2');
         
         return cleaned;
@@ -588,25 +470,22 @@ class SquirrelOrchestrator {
      * ❓ TRANSPILE UNKNOWN NODE
      */
     transpileUnknownNode(node) {
-        console.log('❓ Transpiling UnknownNode:', node.type);
-        
-        // Essayer de faire quelque chose d'intelligent avec le contenu
-        if (node.content) {
-            return `// Unknown: ${node.content}`;
+        if (node.source_line) {
+            return `// Unknown: ${node.source_line}`;
         }
         
-        if (node.pointer) {
-            return `// Unknown node at pointer: ${node.pointer}`;
+        if (node.content) {
+            return `// Unknown: ${node.content}`;
         }
         
         return `// Unknown node type: ${node.type || 'undefined'}`;
     }
 
     /**
-     * 🚀 EXECUTE JAVASCRIPT (ENHANCED)
+     * 🚀 EXECUTE JAVASCRIPT
      */
     executeJS(jsCode) {
-        console.log('🚀 Executing transpiled JavaScript (Enhanced)...');
+        console.log('🚀 Executing transpiled JavaScript...');
         
         try {
             console.log('🔍 Generated JavaScript:');
@@ -614,7 +493,6 @@ class SquirrelOrchestrator {
             console.log(jsCode);
             console.log('--- END GENERATED CODE ---');
             
-            // Validation basique avant exécution
             if (!jsCode || jsCode.trim() === '') {
                 console.warn('⚠️ Empty JavaScript code generated');
                 return { success: true, warning: 'Empty code' };
@@ -627,10 +505,6 @@ class SquirrelOrchestrator {
             
         } catch (error) {
             console.error('❌ JavaScript execution failed:', error);
-            console.log('🚨 Problematic JavaScript code:');
-            console.log(jsCode);
-            
-            // Fournir plus de détails sur l'erreur
             return { 
                 success: false, 
                 error: error.message,
@@ -641,36 +515,35 @@ class SquirrelOrchestrator {
     }
 
     /**
-     * 🚀 MAIN PROCESS - 100% PRISM PIPELINE (ENHANCED)
+     * 🚀 MAIN PROCESS - 100% PRISM PIPELINE (CORRIGÉ)
      */
     async processRubyCode(rubyCode) {
-        console.log('🚀 Starting Enhanced 100% Prism Ruby to JS Pipeline...');
+        console.log('🚀 Starting 100% Prism Ruby to JS Pipeline...');
         
         try {
-            // Step 1: Parse and validate Ruby with Prism
-            console.log('🔍 Step 1: Parsing Ruby with Enhanced Prism...');
-            const prismResult = await this.parseRubyCode(rubyCode);
+            // Step 1: Parse Ruby with Prism (CORRIGÉ)
+            console.log('🔍 Step 1: Parsing Ruby with Prism...');
+            const ast = await this.parseRubyCode(rubyCode);
             
-            // Extract Prism AST
-            const ast = prismResult.result?.value;
+            // Vérifier que nous avons un AST valide (CORRIGÉ)
             if (!ast || !ast.body) {
-                throw new Error('No Prism AST extracted from result');
+                throw new Error('No valid AST received from parser');
             }
             
-            console.log(`🌳 Enhanced Prism AST extracted with ${ast.body.length} nodes`);
+            console.log(`🌳 Prism AST extracted with ${ast.body.length} nodes`);
             
             // Step 2: Transpile Prism AST to JavaScript
-            console.log('⚡ Step 2: Transpiling Enhanced Prism AST to JavaScript...');
+            console.log('⚡ Step 2: Transpiling Prism AST to JavaScript...');
             const jsCode = this.transpilePrismASTToJavaScript(ast);
             
             // Step 3: Execute JavaScript
-            console.log('🚀 Step 3: Executing Enhanced JavaScript...');
+            console.log('🚀 Step 3: Executing JavaScript...');
             const result = this.executeJS(jsCode);
             
             return result;
             
         } catch (error) {
-            console.error('❌ Enhanced 100% Prism Pipeline failed:', error);
+            console.error('❌ Prism Pipeline failed:', error);
             throw error;
         }
     }
@@ -678,14 +551,8 @@ class SquirrelOrchestrator {
 
 // Global export
 if (typeof window !== 'undefined') {
-    // Clear existing class if it exists
-    if (window.SquirrelOrchestrator) {
-        delete window.SquirrelOrchestrator;
-    }
-    
     window.SquirrelOrchestrator = SquirrelOrchestrator;
-    console.log('✅ Enhanced 100% Prism AST transpiler ready!');
-    console.log('✅ Robust node type handling with error prevention!');
-    console.log('✅ Enhanced Ruby to JavaScript conversion without syntax errors!');
-    console.log('📋 Enhanced SquirrelOrchestrator available:', typeof SquirrelOrchestrator);
+    console.log('✅ Enhanced Squirrel Orchestrator ready!');
+    console.log('✅ Fixed async interface with PrismParser!');
+    console.log('✅ Removed obsolete code and optimized transpilation!');
 }

@@ -1,29 +1,35 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<link rel="stylesheet" href="css/styles.css"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Squirrel</title>
-<!-- ACORN - No longer needed for pure .sqr architecture -->
-<!-- <script src="squirrel/parser/acorn.js"></script> -->
-<!-- PRISM - Keep for parsing .sqr files - NOW LOCAL -->
-<script src="squirrel/parser/parsePrism.js"></script>
-<!-- WASI - Local implementation (MUST be type="module" for import) -->
-<script src="squirrel/parser/wasi_wrapper.js" type="module"></script>
-<!-- PRISM HELPER - Local helper class (REQUIRED for PrismParser) -->
-<script src="squirrel/parser/prism_helper.js"></script>
-<!-- UTILS - Keep -->
-<script src="native/utils.js"></script>
-<!-- A FRAMEWORK - Keep (core required) -->
-<script src="a/a.js"></script>
-<script src="a/apis.js"></script>
-<script src="a/particles/identity.js"></script>
-<script src="a/particles/dimension.js"></script>
-
-<!-- SQUIRREL - Keep but will be simplified -->
-<script src="squirrel/squirrel_orchestrator.js"></script>
-<script src="squirrel/squirrel_runner.js"></script>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Squirrel</title>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/styles.css"/>
+    
+    <!-- WASI Implementation -->
+    <script src="squirrel/wasi_wrapper.js"></script>
+    
+    <!-- Prism Parser Components -->
+    <script src="squirrel/prism_helper.js"></script>
+    <script src="squirrel/prism_parser.js"></script>
+    
+    <!-- Utils -->
+    <script src="native/utils.js"></script>
+    
+    <!-- Tests and Diagnostics -->
+    <script src="tests/tests.js"></script>
+    
+    <!-- A Framework -->
+    <script src="a/a.js"></script>
+    <script src="a/apis.js"></script>
+    <script src="a/particles/identity.js"></script>
+    <script src="a/particles/dimension.js"></script>
+    
+    <!-- Squirrel Core -->
+    <script src="squirrel/squirrel_orchestrator.js"></script>
+    <script src="squirrel/squirrel_runner.js"></script>
 </head>
 <body>
 </body>

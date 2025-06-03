@@ -152,7 +152,7 @@ end
 
 
 
-# require 'require_test' # this file is named :require_test.sqr and located at the same level as index.sqr and contains :puts 'required file loaded siccesfully!'
+require 'require_test' # this file is named :require_test.sqr and located at the same level as index.sqr and contains :puts 'required file loaded succesfully!'
 
 
 # # Animation loop using Ruby syntax

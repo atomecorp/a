@@ -1,5 +1,18 @@
 #!/bin/bash
 
+if [ -f "./install_prism.sh" ]; then
+    ./install_prism.sh
+fi
+if [ -f "./watcher.sh" ]; then
+    echo "🚀 Lancement du watcher en arrière-plan..."
+    ./watcher.sh &
+    WATCHER_PID=$!
+    echo "✅ Watcher démarré (PID: $WATCHER_PID)"
+    
+    # Optionnel: sauvegarder le PID pour pouvoir l'arrêter plus tard
+    echo $WATCHER_PID > .watcher.pid
+fi
+
 # Script d'installation Tauri corrigé - Version complètement réécrite
 set -e  # Arrête le script en cas d'erreur
 
