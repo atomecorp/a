@@ -80,9 +80,7 @@ class SquirrelRunner {
         while (waited < maxWait) {
             if (window.SquirrelOrchestrator && 
                 window.PrismParser && 
-                window.A && 
-                window.puts && 
-                window.wait) {
+                window.A) {
                 return true;
             }
             
@@ -90,7 +88,7 @@ class SquirrelRunner {
             waited += checkInterval;
         }
         
-        // console.log('⚠️ Continuing with available dependencies...');
+        // Continue with available dependencies
         return true;
     }
 

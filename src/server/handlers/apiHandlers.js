@@ -49,8 +49,6 @@ function registerRoutes(fastify) {
         { expiresIn: '24h' }
       );
       
-      console.log(`👤 Mock user registered: ${username} (${userId})`);
-      
       return {
         user: {
           id: userData.id,
@@ -94,8 +92,6 @@ function registerRoutes(fastify) {
         JWT_SECRET,
         { expiresIn: '24h' }
       );
-      
-      console.log(`🔑 Mock user logged in: ${username} (${foundUser.id})`);
       
       return {
         user: {

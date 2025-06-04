@@ -75,8 +75,6 @@ class RealPrismHelper {
         
         if (!parseFunction) {
             console.warn('⚠️ No Prism parse function found in WASM exports');
-            console.log('Available exports:', Object.keys(exports));
-            console.log('Looking for one of:', possibleFunctions);
         }
         
         this.parseFunction = parseFunction;

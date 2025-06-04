@@ -148,6 +148,15 @@ defineParticle({
     }
 });
 
+defineParticle({
+    name: 'contenteditable',
+    type: 'boolean',
+    category: 'behavior',
+    process(el, v) {
+        el.contentEditable = v;
+    }
+});
+
 // Export for ES6 modules
 export default {};
 

@@ -44,7 +44,6 @@ const listing = [
 // Define the equivalent method to my_method
 function myMethod(val = null) {
   // Assuming A.flash is similar to the Ruby version
-  console.log(`so_cool : ${val}`);
 }
 // Simplified version with two lists and simple positioning
 

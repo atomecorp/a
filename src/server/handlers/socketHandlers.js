@@ -8,11 +8,8 @@ const authenticatedSockets = new Map();
 // Authentication handler
 function connect(data, socket) {
   try {
-    console.log(`🔐 Connection attempt from socket ${socket.id}:`, data);
-    
     // Validate connection data structure
     if (!data || !data.auth || !data.auth.id || !data.auth.token) {
-      console.log('Invalid connection data structure');
       socket.emit('connection_error', {
         message: 'Invalid connection data structure - auth.id and auth.token required'
       });
@@ -26,8 +23,6 @@ function connect(data, socket) {
     try {
       decoded = jwt.verify(token, JWT_SECRET);
     } catch (jwtError) {
-      console.log('JWT verification failed:', jwtError.message);
-      
       if (jwtError.name === 'TokenExpiredError') {
         socket.emit('connection_error', {
           message: 'Token has expired'
@@ -42,7 +37,6 @@ function connect(data, socket) {
 
     // Verify user ID matches token
     if (decoded.userId !== userId) {
-      console.log('Token user ID mismatch');
       socket.emit('connection_error', {
         message: 'Token user ID mismatch'
       });
@@ -66,7 +60,6 @@ function connect(data, socket) {
     // Handle disconnection cleanup
     socket.on('disconnect', () => {
       authenticatedSockets.delete(socket.id);
-      console.log(`🔌 Socket ${socket.id} disconnected and cleaned up`);
     });
 
   } catch (error) {
@@ -80,8 +73,6 @@ function connect(data, socket) {
 // Enhanced message handler with database operations
 async function handleMessage(data, socket) {
   try {
-    console.log(`📨 Processing message from socket ${socket.id}:`, data);
-
     // Validate message structure
     if (!data || !data.action) {
       socket.emit('message_error', { 

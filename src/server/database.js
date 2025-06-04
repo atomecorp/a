@@ -110,11 +110,9 @@ class DatabaseOperations {
   static async initialize() {
     try {
       await sequelize.authenticate();
-      console.log('Database connection established successfully.');
       
       // Sync models (create tables if they don't exist)
       await sequelize.sync({ alter: true });
-      console.log('Database models synchronized.');
       
       return true;
     } catch (error) {

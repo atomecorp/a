@@ -30,6 +30,14 @@ class NativeCodeGenerator {
         }
         
         for (const statement of statementsToProcess) {
+            // 🚫 FILTER OUT COMMENTS at statement level
+            if (statement && 
+                (statement.type === 'CommentNode' || 
+                 statement.type === 'comment' ||
+                 (typeof statement === 'string' && statement.trim().startsWith('#')))) {
+                continue; // Skip comment statements
+            }
+            
             const nativeJS = this.convertToNativeJS(statement);
             if (nativeJS) {
                 jsLines.push(nativeJS);
@@ -60,6 +68,13 @@ class NativeCodeGenerator {
         
         if (!node.type) return null;
         
+        // 🚫 FILTER OUT COMMENTS - Do not transpile comment nodes
+        if (node.type === 'CommentNode' || 
+            node.type === 'comment' || 
+            (typeof node === 'string' && node.trim().startsWith('#'))) {
+            return null; // Skip comments entirely
+        }
+        
         switch (node.type) {
             // Prism AST node types
             case 'LocalVariableWriteNode':
@@ -67,7 +82,20 @@ class NativeCodeGenerator {
             case 'CallNode':
                 return this.generateFunctionCall(node);
             case 'StringNode':
-                return `"${node.value}"`;
+                // Handle Unicode properly - use unescaped property for proper Unicode support
+                let stringValue = '';
+                if (node.unescaped && node.unescaped.value !== undefined) {
+                    stringValue = node.unescaped.value;
+                } else if (node.value !== undefined) {
+                    stringValue = node.value;
+                } else if (node.unescaped) {
+                    // Sometimes unescaped is directly the string
+                    stringValue = node.unescaped;
+                }
+                
+                // Properly escape the string for JavaScript, preserving Unicode
+                const result = JSON.stringify(stringValue);
+                return result;
             case 'IntegerNode':
                 return String(node.value);
             case 'FloatNode':
@@ -192,7 +220,7 @@ class NativeCodeGenerator {
                 console.warn(`❌ Unexpected hash element type: ${element.type}`);
                 return 'null: null';
             }
-        });
+        }).filter(prop => prop !== null); // 🚫 Filter out null values (comments)
         
         return `{\n  ${props.join(',\n  ')}\n}`;
     }
@@ -201,6 +229,15 @@ class NativeCodeGenerator {
      * Generate key-value pair from AssocNode
      */
     generateAssocPair(node) {
+        // 🚫 FILTER OUT COMMENTS - Skip if key looks like a comment
+        if (node.key && (
+            (node.key.type === 'StringNode' && node.key.value.startsWith('#')) ||
+            (node.key.type === 'SymbolNode' && node.key.value.startsWith('#')) ||
+            (typeof node.key === 'string' && node.key.startsWith('#'))
+        )) {
+            return null; // Skip comment-like keys
+        }
+        
         // Handle different key types
         let key;
         if (node.key.type === 'SymbolNode') {

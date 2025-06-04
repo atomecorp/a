@@ -168,7 +168,7 @@
             const cssProperties = [
                 'width', 'height', 'x', 'y', 'color', 'id', 'text', 'backgroundColor',
                 'zIndex', 'opacity', 'transform', 'transition', 'display',
-                'attrContenteditable', 'contentEditable'
+                'attrContenteditable', 'contentEditable', 'contenteditable'
             ];
             
             cssProperties.forEach(prop => {
@@ -194,6 +194,8 @@
 
                     // Special cases
                     if (prop === 'attrContenteditable' || prop === 'contentEditable') {
+                        this.html_object.contentEditable = value;
+                    } else if (prop === 'contenteditable') {
                         this.html_object.contentEditable = value;
                     }
 
@@ -312,6 +314,10 @@
                     return;
                 case 'text':
                     this.html_object.textContent = value;
+                    return;
+                case 'contenteditable':
+                    // Map Ruby contenteditable to DOM contentEditable property
+                    this.html_object.contentEditable = value;
                     return;
             }
 

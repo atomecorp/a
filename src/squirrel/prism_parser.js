@@ -83,21 +83,16 @@ class PrismParser {
     
     // Main parsing method - Returns AST directly
     async parseRuby(rubyCode) {
-        console.log('🚀 PrismParser.parseRuby called with:', rubyCode);
-        
         // Ensure initialization before parsing
         if (!this.initialized) {
-            console.log('🔧 Initializing PrismParser...');
             await this.initialize();
         }
         
         try {
             // Parsing Ruby code with Real Prism API
-            console.log('🚀 Calling helper.parseRuby...');
             
             // Parse using RealPrismHelper (official API)
             const parseResult = this.helper.parseRuby(rubyCode);
-            console.log('📊 Helper parse result:', parseResult);
             
             if (!parseResult || !parseResult.success) {
                 throw new Error(`Parse failed: ${parseResult?.error || 'Unknown error'}`);
@@ -113,12 +108,8 @@ class PrismParser {
             this.lastAST = ast;
             this.lastParseResult = parseResult;
             
-            // Ruby code parsed successfully with Real API
-            console.log('✅ AST extracted successfully:', ast);
-            
             // Log a sample node to verify it has real properties
             if (ast.body && ast.body.length > 0) {
-                console.log('🔍 Sample AST node:', ast.body[0]);
                 // Sample node structure verification
             }
             
@@ -132,7 +123,6 @@ class PrismParser {
             // Return a minimal fallback AST
             console.warn('⚠️ Creating fallback AST...');
             const fallbackAST = this.createFallbackAST(rubyCode, error);
-            console.log('📄 Fallback AST:', fallbackAST);
             this.lastAST = fallbackAST;
             
             return fallbackAST;
