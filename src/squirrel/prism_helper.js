@@ -523,8 +523,12 @@ class RealPrismHelper {
     }
 }
 
+// Export and global assignment for compatibility  
+export default RealPrismHelper;
+
 if (typeof window !== 'undefined') {
     window.RealPrismHelper = RealPrismHelper;
+    window.PrismHelper = RealPrismHelper; // Alias for compatibility
 }
 
-console.log('✅ RealPrismHelper ready - Official Prism JavaScript API');
+console.log('✅ Prism Helper ES6 module ready - Official Prism JavaScript API');

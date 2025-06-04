@@ -2,6 +2,8 @@
 // Now uses RealPrismHelper with official Prism JavaScript API
 // Version 3.0 - Real Prism Integration
 
+import WASIWrapper from './wasi_wrapper.js';
+
 class PrismParser {
     constructor() {
         this.helper = null;
@@ -230,9 +232,16 @@ if (typeof window !== 'undefined') {
     };
 }
 
+// Export and global assignment for compatibility
+export default PrismParser;
+
+if (typeof window !== 'undefined') {
+    window.PrismParser = PrismParser;
+}
+
 // Export for modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = PrismParser;
 }
 
-console.log('✅ PrismParser v3.0 ready - Real Prism API integration');
+console.log('✅ Prism Parser ES6 module ready - Real Prism API integration');

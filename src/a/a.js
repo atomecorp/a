@@ -407,9 +407,17 @@
     window.A = A;
     window.defineParticle = defineParticle;
 
+    // Export for ES6 modules
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = { A, defineParticle };
+    }
+
     // Notify that A framework is loaded
     window.dispatchEvent(new CustomEvent('AFrameworkLoaded'));
     
-    // console.log('✅ A Framework loaded with defineParticle');
+    console.log('✅ A Framework ES6 module ready');
 
 })();
+
+// ES6 export
+export default window.A;

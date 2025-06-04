@@ -1,15 +1,14 @@
-(function () {
-    'use strict';
+'use strict';
 
-    function checkFrameworkLoaded() {
-        if (typeof window.defineParticle !== 'function') {
-            setTimeout(checkFrameworkLoaded, 50);
-            return;
-        }
-        initParticlesExtension();
+function checkFrameworkLoaded() {
+    if (typeof window.defineParticle !== 'function') {
+        setTimeout(checkFrameworkLoaded, 50);
+        return;
     }
+    initParticlesExtension();
+}
 
-    function initParticlesExtension() {
+function initParticlesExtension() {
         function common_treatment(el, v, prop) {
             // console.log(`🔥 [COMMON] Processing property: ${prop}, value:`, v, el);
             // console.log('-----------------');
@@ -256,4 +255,42 @@
         // Fallback: polling check
         checkFrameworkLoaded();
     }
-})();
+
+// Utility functions
+function kebabToCamel(str) {
+    return str.replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+}
+
+function camelToKebab(str) {
+    return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+function toCamelCase(str) {
+    return str.replace(/[-_](.)/g, (_, group1) => group1.toUpperCase());
+}
+
+function toKebabCase(str) {
+    return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+// Export utilities for ES6 compatibility
+const utils = {
+    checkFrameworkLoaded,
+    initParticlesExtension,
+    kebabToCamel,
+    camelToKebab,
+    toCamelCase,
+    toKebabCase
+};
+
+export default utils;
+
+// Maintain global compatibility
+if (typeof window !== 'undefined') {
+    window.utils = utils;
+}
+
+// Initialize utilities
+checkFrameworkLoaded();
+
+console.log('✅ Utils ES6 module ready');

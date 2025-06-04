@@ -251,8 +251,12 @@ class CleanCodeGenerator {
     }
 }
 
+// Export and global assignment for compatibility
+export default CleanCodeGenerator;
+
 // Global export
 if (typeof window !== 'undefined') {
     window.CleanCodeGenerator = CleanCodeGenerator;
-    console.log('✅ Clean Code Generator ready');
+    window.CodeGenerator = CleanCodeGenerator; // Alias
+    console.log('✅ Code Generator ES6 module ready');
 }

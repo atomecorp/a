@@ -4,13 +4,17 @@
  * Version 3.0 - Real Prism Integration
  */
 
+import RubyHandlers from './ruby_handlers.js';
+import CodeGenerator from './code_generator.js';
+import RubyParserManager from './ruby_parser_manager.js';
+
 class TranspilerCore {
     constructor() {
         // Use CleanCodeGenerator as primary generator
-        this.cleanCodeGenerator = new window.CleanCodeGenerator();
+        this.cleanCodeGenerator = new (window.CleanCodeGenerator || CodeGenerator)();
         // RubyHandlers can use CleanCodeGenerator or null since we don't use the old methods
-        this.rubyHandlers = new window.RubyHandlers(this.cleanCodeGenerator);
-        this.parserManager = new window.RubyParserManager();
+        this.rubyHandlers = new (window.RubyHandlers || RubyHandlers)(this.cleanCodeGenerator);
+        this.parserManager = new (window.RubyParserManager || RubyParserManager)();
         
         // Set up the transpileNode method for handlers
         this.rubyHandlers.setTranspileNodeMethod(this.transpilePrismNode.bind(this));
@@ -319,8 +323,11 @@ class TranspilerCore {
     }
 }
 
+// Export and global assignment for compatibility
+export default TranspilerCore;
+
 // Global export
 if (typeof window !== 'undefined') {
     window.TranspilerCore = TranspilerCore;
-    console.log('✅ Transpiler Core v3.0 ready - Real Prism + CleanCodeGenerator');
+    console.log('✅ Transpiler Core ES6 module ready - Real Prism + CleanCodeGenerator');
 }

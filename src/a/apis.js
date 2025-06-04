@@ -4,13 +4,13 @@
  */
 
 // Add the puts method to display in the console
-window.puts = function puts(val) {
+function puts(val) {
     console.log(val);
-};
+}
 window.puts = puts;
 
 // Add the grab method to retrieve DOM elements
-window.grab = (function () {
+const grab = (function () {
     // Cache for recent results
     const domCache = new Map();
 
@@ -81,8 +81,6 @@ Array.prototype.each = function (callback) {
 Object.prototype.inspect = function () {
     return AJS.inspect(this);
 };
-
-window.puts = puts;
 
 // Add a wait function for delays
 function wait(delay, callback) {
@@ -207,9 +205,16 @@ window.require = async function(filename) {
     }
 };
 
+// Declare functions at top level for ES6 export
+const requireFile = window.require;
+
 // Alias for compatibility
 window.load = window.require;
 
-window.log = function(message) {
+const log = function(message) {
     console.log(message);
 };
+window.log = log;
+
+// Export for ES6 modules
+export { puts, wait, grab, requireFile, log };

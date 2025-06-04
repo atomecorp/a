@@ -5,6 +5,8 @@
  * ✅ 100% Prism WASM powered
  */
 
+import SquirrelOrchestrator from './squirrel_orchestrator.js';
+
 class SquirrelRunner {
     constructor() {
         this.orchestrator = null;
@@ -23,7 +25,7 @@ class SquirrelRunner {
             await this.waitForDependencies();
             
             // Create orchestrator instance
-            this.orchestrator = new window.SquirrelOrchestrator();
+            this.orchestrator = new (window.SquirrelOrchestrator || SquirrelOrchestrator)();
             
             // Initialize Prism
             // console.log('🔧 Initializing Prism WASM...');
@@ -208,10 +210,35 @@ if (typeof window !== 'undefined') {
     }, 800); // Enough time for Prism to initialize
 }
 
+// Export and global assignment for compatibility
+export default SquirrelRunner;
+
+// Global export
+if (typeof window !== 'undefined') {
+    window.SquirrelRunner = SquirrelRunner;
+    
+    // Create global runner instance
+    window.globalSquirrelRunner = new SquirrelRunner();
+    
+    // Auto-start application
+    setTimeout(() => {
+        if (window.globalSquirrelRunner) {
+            window.globalSquirrelRunner.autoStart();
+        }
+    }, 800);
+}
+
 // 🎯 GLOBAL HELPER FUNCTIONS
 window.runSquirrel = async (code) => {
     if (window.globalSquirrelRunner) {
         return await window.globalSquirrelRunner.runCode(code);
+    }
+    console.error('❌ Squirrel Runner not available');
+};
+
+window.runSquirrelFile = async (filename) => {
+    if (window.globalSquirrelRunner) {
+        return await window.globalSquirrelRunner.runFile(filename);
     }
     console.error('❌ Squirrel Runner not available');
 };
@@ -224,3 +251,5 @@ window.squirrelStatus = () => {
     }
     return { error: 'Squirrel Runner not available' };
 };
+
+console.log('✅ Squirrel Runner ES6 module ready');

@@ -595,8 +595,11 @@ class RubyHandlers {
     }
 }
 
+// Export and global assignment for compatibility
+export default RubyHandlers;
+
 // Global export
 if (typeof window !== 'undefined') {
     window.RubyHandlers = RubyHandlers;
-    console.log('✅ Ruby Handlers v3.0 ready - Real Prism integration');
+    console.log('✅ Ruby Handlers ES6 module ready - Real Prism integration');
 }

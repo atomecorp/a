@@ -147,3 +147,7 @@ defineParticle({
         element.onmouseover = handler;
     }
 });
+
+// Export for ES6 modules
+export default {};
+console.log('✅ Identity Particle ES6 module ready');

@@ -318,3 +318,7 @@
 // // Example usage
 // const resultat_o = addition(3, 6);
 // console.log("second result is :", resultat_o); // Logs: Result: 8
+
+// Export for ES6 modules
+export default {};
+console.log('✅ Application index ES6 module ready');

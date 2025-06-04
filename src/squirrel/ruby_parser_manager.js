@@ -4,6 +4,8 @@
  * Version 3.0 - Real Prism Integration
  */
 
+import PrismParser from './prism_parser.js';
+
 class RubyParserManager {
     constructor() {
         this.prismParser = null;
@@ -19,7 +21,7 @@ class RubyParserManager {
         
         try {
             console.log('🔧 Creating new PrismParser instance with Real API...');
-            this.prismParser = new window.PrismParser();
+            this.prismParser = new (window.PrismParser || PrismParser)();
             await this.prismParser.initialize();
             this.initialized = true;
             console.log('✅ Real PrismParser initialized successfully!');
@@ -169,8 +171,11 @@ class RubyParserManager {
     }
 }
 
+// Export and global assignment for compatibility
+export default RubyParserManager;
+
 // Global export
 if (typeof window !== 'undefined') {
     window.RubyParserManager = RubyParserManager;
-    console.log('✅ Ruby Parser Manager v3.0 ready - Real Prism integration');
+    console.log('✅ Ruby Parser Manager ES6 module ready - Real Prism integration');
 }

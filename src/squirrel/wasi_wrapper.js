@@ -261,8 +261,17 @@ window.createWASI = function(args = [], env = {}, fds = []) {
     }
 };
 
+// Export and global assignment for compatibility
+export default WASIWrapper;
+
+// Maintain global compatibility
+if (typeof window !== 'undefined') {
+    window.WASI = WASIWrapper;
+    window.WASIWrapper = WASIWrapper;
+}
+
 // Signal ready
 setTimeout(() => {
     window.dispatchEvent(new CustomEvent('wasi-ready'));
-    // console.log('✅ WASI wrapper ready');
+    console.log('✅ WASI Wrapper ES6 module ready');
 }, 100);

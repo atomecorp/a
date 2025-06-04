@@ -3,13 +3,15 @@
  * Version 5.0 - Architecture modulaire avec 5 composants
  */
 
+import TranspilerCore from './transpiler_core.js';
+
 class SquirrelOrchestrator {
     
     constructor() {
         // console.log('🚀 MODULAR Squirrel Orchestrator - 5 Component Architecture!');
         
         // Initialize the transpiler core (which initializes all other components)
-        this.transpilerCore = new window.TranspilerCore();
+        this.transpilerCore = new (window.TranspilerCore || TranspilerCore)();
         
         // console.log('📊 All components loaded successfully');
         // console.log('🎯 Ready for Ruby to JavaScript transpilation!');
@@ -195,10 +197,13 @@ container = A.new({
     }
 }
 
+// Export and global assignment for compatibility
+export default SquirrelOrchestrator;
+
 // Global export
 if (typeof window !== 'undefined') {
     window.SquirrelOrchestrator = SquirrelOrchestrator;
-    // console.log('✅ MODULAR Squirrel Orchestrator ready!');
+    console.log('✅ Squirrel Orchestrator ES6 module ready!');
     // console.log('🏗️ 5-Component Architecture: RubyParserManager + CodeGenerator + RubyHandlers + TranspilerCore + SquirrelOrchestrator');
     // console.log('🎯 Enhanced with smart Ruby-to-JS conversion!');
     // console.log('🛠️ Advanced diagnostics and component access available!');
