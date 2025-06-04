@@ -1,16 +1,37 @@
 #!/bin/bash
 
+# Stocker le répertoire de départ dès le début
+SCRIPT_DIR=$(pwd)
+
+# Fonction de nettoyage
+cleanup() {
+    print_status "yellow" "🧹 Nettoyage en cours..."
+    
+    # Tuer le watcher si le PID existe
+    if [ -f ".watcher.pid" ]; then
+        WATCHER_PID=$(cat .watcher.pid)
+        kill $WATCHER_PID 2>/dev/null || true
+        rm -f .watcher.pid
+        print_status "yellow" "✅ Watcher arrêté"
+    fi
+    
+    # Réutiliser la fonction existante pour Fastify (port 3001)
+    kill_fastify_server
+    
+    # Tuer seulement le serveur Axum (port 3000)
+    if command -v lsof >/dev/null 2>&1; then
+        PIDS=$(lsof -tiTCP:3000 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$PIDS" ]; then
+            print_status "yellow" "Arrêt du serveur Axum (port 3000)..."
+            kill $PIDS 2>/dev/null || true
+        fi
+    fi
+    
+    print_status "green" "🏁 Nettoyage terminé"
+}
+
 if [ -f "./install_prism.sh" ]; then
     ./install_prism.sh
-fi
-if [ -f "./watcher.sh" ]; then
-    echo "🚀 Lancement du watcher en arrière-plan..."
-    ./watcher.sh &
-    WATCHER_PID=$!
-    echo "✅ Watcher démarré (PID: $WATCHER_PID)"
-    
-    # Optionnel: sauvegarder le PID pour pouvoir l'arrêter plus tard
-    echo $WATCHER_PID > .watcher.pid
 fi
 
 # Script d'installation Tauri corrigé - Version complètement réécrite
@@ -425,6 +446,16 @@ setup_project() {
             if [ -f "$WORKING_DIR/$APP_NAME/package.json" ]; then
                 print_status "yellow" "Tentative de lancement de l'application existante..."
                 cd "$WORKING_DIR/$APP_NAME"
+                
+                # Lancer le watcher avant Tauri (depuis le répertoire d'origine)
+                if [ -f "$SCRIPT_DIR/watcher.sh" ]; then
+                    echo "🚀 Lancement du watcher en arrière-plan..."
+                    (cd "$SCRIPT_DIR" && ./watcher.sh) &
+                    WATCHER_PID=$!
+                    echo "✅ Watcher démarré (PID: $WATCHER_PID)"
+                    echo $WATCHER_PID > .watcher.pid
+                fi
+                
                 npm run tauri dev
                 return 0
             else
@@ -714,6 +745,16 @@ EOL
     find src -type f | head -10
     
     print_status "yellow" "Lancement de l'application Tauri..."
+    
+    # Lancer le watcher avant Tauri (depuis le répertoire d'origine)
+    if [ -f "$SCRIPT_DIR/watcher.sh" ]; then
+        echo "🚀 Lancement du watcher en arrière-plan..."
+        (cd "$SCRIPT_DIR" && ./watcher.sh) &
+        WATCHER_PID=$!
+        echo "✅ Watcher démarré (PID: $WATCHER_PID)"
+        echo $WATCHER_PID > .watcher.pid
+    fi
+    
     npm run tauri dev || {
         print_status "red" "Échec du lancement de l'application Tauri"
         print_status "yellow" "Vérifiez les logs ci-dessus pour diagnostiquer le problème"
@@ -724,6 +765,8 @@ EOL
 # Fonction principale avec gestion d'erreurs complète
 main() {
     print_status "green" "=== DÉMARRAGE DE L'INSTALLATION TAURI ==="
+    
+    trap cleanup EXIT INT TERM
     
     # Activer le mode debug si demandé
     if [ "${1:-}" = "--debug" ] || [ "${DEBUG:-0}" = "1" ]; then

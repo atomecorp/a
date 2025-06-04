@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# watcher.sh — Watch ./src and copy any changed file to ./test_app/src
+# watcher.sh — Watch ./src and copy only changed files to ./test_app/src
 
 # Check if watchexec is installed
 if ! command -v watchexec >/dev/null 2>&1; then
@@ -28,16 +28,15 @@ if [ ! -d "./src" ]; then
 fi
 
 # Create destination directory if it doesn't exist
-mkdir -p ./test_app/src
+mkdir -p "./test_app/src"
 
 echo "👀 Watching ./src for file changes..."
 echo "🎯 Files will be copied to ./test_app/src/"
 echo "🛑 Press Ctrl+C to stop watching"
 
-# Initial sync
-echo "🔄 Initial sync..."
-rsync -av --delete ./src/ ./test_app/src/
-
-# Watch for changes and sync
-watchexec --watch ./src --no-vcs-ignore --no-default-ignore -- \
-  sh -c 'echo "🔄 Syncing changes..."; rsync -av --delete ./src/ ./test_app/src/ && echo "✅ Sync complete"'
+# Simple approach: copy entire src directory on any change
+watchexec --watch "./src" --no-vcs-ignore --no-default-ignore -- sh -c '
+  echo "📄 Change detected, copying files..."
+  rsync -av --delete ./src/ ./test_app/src/
+  echo "✅ Copy complete"
+'
