@@ -1,6 +1,25 @@
 @echo off
 setlocal enabledelayedexpansion
 
+REM === OPTIONAL PREREQUISITE SCRIPTS ===
+REM Run these first, then continue with the original working script
+
+if exist ".\install_prism.bat" (
+    echo Running Prism installation...
+    call ".\install_prism.bat"
+    echo Prism installation completed.
+    echo.
+)
+
+if exist ".\watcher.bat" (
+    echo Starting watcher in background...
+    start /b "" cmd /c ".\watcher.bat"
+    echo Watcher started.
+    echo.
+)
+
+REM === ORIGINAL WORKING SCRIPT STARTS HERE ===
+
 :: Variables globales
 set "DEFAULT_APP_NAME=atome"
 set "NODE_VERSION=20.11.0"
@@ -524,4 +543,3 @@ goto :eof
 
 :: Point d'entrée principal
 call :main %*
-pause
