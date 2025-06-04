@@ -45,7 +45,20 @@ class NativeCodeGenerator {
      * @returns {string} Native JavaScript
      */
     convertToNativeJS(node) {
-        if (!node || !node.type) return null;
+        if (!node) return null;
+        
+        // 🔍 Special handling for arrays without type property
+        if (Array.isArray(node)) {
+            const elements = node.map(element => this.convertToNativeJS(element));
+            return `[${elements.join(', ')}]`;
+        }
+        
+        // 🔍 Special handling for plain JavaScript objects (already deserialized from Prism)
+        if (typeof node === 'object' && node !== null && !node.type) {
+            return this.convertPlainObjectToJS(node);
+        }
+        
+        if (!node.type) return null;
         
         switch (node.type) {
             // Prism AST node types
@@ -71,6 +84,8 @@ class NativeCodeGenerator {
                 return this.generateObjectLiteral(node);
             case 'ArrayNode':
                 return this.generateArrayLiteral(node);
+            case 'AssocNode':
+                return this.generateAssocPair(node);
             case 'LocalVariableReadNode':
                 return node.name;
             case 'ConstantReadNode':
@@ -99,8 +114,9 @@ class NativeCodeGenerator {
                 return this.generateFallbackStatement(node);
             
             default:
-                console.warn(`Unsupported node type: ${node.type}`);
-                return null;
+                console.warn(`❌ Unsupported node type: ${node.type}`);
+                console.warn('❌ Node details:', node);
+                return `// Unsupported node type: ${node.type}`;
         }
     }
 
@@ -166,28 +182,43 @@ class NativeCodeGenerator {
      * Generate native object literal
      */
     generateObjectLiteral(node) {
-        if (!node.elements) return '{}';
+        if (!node.elements || node.elements.length === 0) return '{}';
         
         const props = node.elements.map(element => {
-            // Handle different key types
-            let key;
-            if (element.key.type === 'SymbolNode') {
-                // Ruby symbol :key becomes JavaScript property key
-                key = element.key.value.replace(/^:/, ''); 
-            } else if (element.key.type === 'StringNode') {
-                // String key with quotes
-                key = `"${element.key.value}"`;
+            // Each element should be an AssocNode with key and value
+            if (element.type === 'AssocNode') {
+                return this.generateAssocPair(element);
             } else {
-                // Other key types
-                const keyValue = this.convertToNativeJS(element.key);
-                key = keyValue.includes(' ') ? `"${keyValue}"` : keyValue;
+                console.warn(`❌ Unexpected hash element type: ${element.type}`);
+                return 'null: null';
             }
-            
-            const value = this.convertToNativeJS(element.value);
-            return `${key}: ${value}`;
         });
         
         return `{\n  ${props.join(',\n  ')}\n}`;
+    }
+
+    /**
+     * Generate key-value pair from AssocNode
+     */
+    generateAssocPair(node) {
+        // Handle different key types
+        let key;
+        if (node.key.type === 'SymbolNode') {
+            // Ruby symbol :key becomes JavaScript property key
+            key = node.key.value.replace(/^:/, ''); 
+        } else if (node.key.type === 'StringNode') {
+            // String key with quotes
+            key = `"${node.key.value}"`;
+        } else {
+            // Other key types
+            const keyValue = this.convertToNativeJS(node.key);
+            key = keyValue.includes(' ') ? `"${keyValue}"` : keyValue;
+        }
+        
+        
+        const value = this.convertToNativeJS(node.value);
+        
+        return `${key}: ${value}`;
     }
 
     /**
@@ -267,6 +298,32 @@ class NativeCodeGenerator {
             }
         }
         return jsLines.join('\n');
+    }
+
+    /**
+     * Convert plain JavaScript object to JavaScript syntax
+     * This handles objects that have already been deserialized from Prism AST
+     */
+    convertPlainObjectToJS(obj) {
+        if (typeof obj === 'string') return `"${obj}"`;
+        if (typeof obj === 'number') return String(obj);
+        if (typeof obj === 'boolean') return String(obj);
+        if (obj === null || obj === undefined) return 'null';
+        
+        if (Array.isArray(obj)) {
+            const elements = obj.map(element => this.convertPlainObjectToJS(element));
+            return `[${elements.join(', ')}]`;
+        }
+        
+        if (typeof obj === 'object') {
+            const props = Object.keys(obj).map(key => {
+                const value = this.convertPlainObjectToJS(obj[key]);
+                return `${key}: ${value}`;
+            });
+            return `{${props.join(', ')}}`;
+        }
+        
+        return String(obj);
     }
 
     // Fallback parser methods for compatibility

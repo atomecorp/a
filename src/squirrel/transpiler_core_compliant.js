@@ -41,10 +41,8 @@ class TranspilerCore {
      * 🔧 INTERNAL INITIALIZATION LOGIC
      */
     async _doInitialize() {
-        // console.log('🔧 TranspilerCore: Starting initialization...');
         try {
             await this.parserManager.initializePrism();
-            // console.log('✅ TranspilerCore: Initialization complete');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Transpiler Core:', error);

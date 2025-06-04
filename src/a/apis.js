@@ -118,12 +118,15 @@ window.require = async function(filename) {
         // Paths to try (like Ruby) - Support .sqr and .rb
         const paths = [
             `./application/${filename}.sqr`,      // Support .sqr
+            `./application/${filename}.sqh`,      // 🆕 Support .sqh
             `./application/${filename}.rb`,       // 🆕 Support .rb
             `./${filename}.sqr`,                  // Support .sqr
+            `./${filename}.sqh`,                  // 🆕 Support .sqh
             `./${filename}.rb`,                   // 🆕 Support .rb
             `./application/${filename}`,
             `./${filename}`,
             `./vie/${filename}.sqr`,              // Support .sqr
+            `./vie/${filename}.sqh`,              // 🆕 Support .sqh
             `./vie/${filename}.rb`,               // 🆕 Support .rb
             `./vie/${filename}`,
         ];
@@ -140,14 +143,13 @@ window.require = async function(filename) {
                         
                         let finalCode = content;
                         
-                        // 🚀 TRANSPILER if it's a Ruby file (.sqr OR .rb)
-                        if (path.endsWith('.sqr') || path.endsWith('.rb')) {
+                        // 🚀 TRANSPILER if it's a Ruby file (.sqr OR .rb OR .sqh)
+                        if (path.endsWith('.sqr') || path.endsWith('.rb') || path.endsWith('.sqh')) {
                             // console.log(`🔄 Transpiling Ruby file: ${path}...`);
                             
                             // 🎯 Use SquirrelOrchestrator for all Ruby files
                             if (window.SquirrelOrchestrator) {
                                 try {
-                                    // console.log(`🦫 Using SquirrelOrchestrator for ${path}...`);
                                     
                                     // Create an instance and process the Ruby file
                                     const orchestrator = new window.SquirrelOrchestrator();
@@ -159,14 +161,13 @@ window.require = async function(filename) {
                                     
                                     if (ast && ast.body) {
                                         finalCode = orchestrator.transpilePrismASTToJavaScript(ast);
-                                        // console.log(`✅ Successfully transpiled ${path} with SquirrelOrchestrator`);
                                     } else {
                                         throw new Error('No AST generated');
                                     }
                                     
                                 } catch (error) {
                                     console.error(`❌ SquirrelOrchestrator failed for ${path}:`, error);
-                                    // console.warn(`⚠️ Executing raw Ruby code for ${path}`);
+                                    console.warn(`⚠️ Executing raw Ruby code for ${path}`);
                                     // If the transpiler fails, try executing the code as is
                                     finalCode = `// Raw Ruby code from ${path}\n${content}`;
                                 }
@@ -175,7 +176,6 @@ window.require = async function(filename) {
                                 finalCode = `// No transpiler available for ${path}\n${content}`;
                             }
                             
-                            // console.log(`✅ Processed ${path}`);
                         }
                         
                         // Execute the transpiled code
@@ -188,7 +188,6 @@ window.require = async function(filename) {
                         // Cache the result
                         requireCache.set(filename, path);
                         
-                        // console.log(`✅ Successfully required: ${path}`);
                         return path;
                     }
                 }

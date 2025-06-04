@@ -69,7 +69,6 @@ class RealPrismHelper {
         for (const funcName of possibleFunctions) {
             if (exports[funcName]) {
                 parseFunction = funcName;
-                console.log(`✅ Found Prism parse function: ${funcName}`);
                 break;
             }
         }

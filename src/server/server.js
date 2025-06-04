@@ -15,7 +15,6 @@ async function startServer() {
     // Initialize database first
     console.log('🔄 Initializing database...');
     await DatabaseOperations.initialize();
-    console.log('✅ Database ready!');
 
     // Register Socket.IO plugin
     await server.register(fastifySocketIo, {
@@ -58,7 +57,6 @@ async function startServer() {
 
     // Start the server
     await server.listen({ port: PORT, host: '0.0.0.0' });
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
     
   } catch (error) {
     console.error('❌ Server startup failed:', error);

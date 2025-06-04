@@ -44,13 +44,10 @@ class RubyParserManager {
      * 🔧 INTERNAL INITIALIZATION LOGIC
      */
     async _doInitialize() {
-        // console.log('🔧 RubyParserManager: Starting initialization...');
         try {
             this.prismParser = new (window.PrismParser || PrismParser)();
-            // console.log('🔧 RubyParserManager: PrismParser created, calling initialize...');
             await this.prismParser.initialize();
             this.initialized = true;
-            // console.log('✅ RubyParserManager: Initialization complete');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Real PrismParser:', error);

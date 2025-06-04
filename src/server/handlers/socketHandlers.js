@@ -56,7 +56,6 @@ function connect(data, socket) {
       authenticatedAt: new Date().toISOString()
     });
 
-    console.log(`✅ Socket ${socket.id} authenticated for user ${decoded.userId}`);
     
     socket.emit('connection_success', {
       message: 'Successfully authenticated',
@@ -137,7 +136,6 @@ async function handleMessage(data, socket) {
       return;
     }
 
-    console.log(`🎯 Processing action: ${data.action}`);
     
     // Route to appropriate handler based on action
     switch (data.action) {

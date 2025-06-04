@@ -221,8 +221,6 @@ class WASIWrapper {
         this.memory = instance.exports.memory;
         this.view = new DataView(this.memory.buffer);
         
-        // console.log('✅ WASI initialized with complete function set');
-        // console.log('📊 Memory size:', this.memory.buffer.byteLength, 'bytes');
         
         return instance;
     }
@@ -231,12 +229,9 @@ class WASIWrapper {
         // Call _start if it exists
         if (instance.exports._start) {
             try {
-                // console.log('🚀 Starting WASM module...');
                 instance.exports._start();
-                // console.log('✅ WASM module started successfully');
             } catch (error) {
                 if (this.exitCode === 0 || this.exitCode === null) {
-                    // console.log('✅ WASM _start completed normally');
                 } else {
                     // console.warn('⚠️ WASM _start warning:', error.message);
                 }
@@ -253,7 +248,6 @@ window.WASIWrapper = WASIWrapper;
 window.createWASI = function(args = [], env = {}, fds = []) {
     try {
         const wasi = new WASIWrapper(args, env, fds);
-        // console.log('✅ WASI instance created successfully');
         return wasi;
     } catch (error) {
         console.error('❌ Failed to create WASI instance:', error);

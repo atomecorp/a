@@ -8,14 +8,11 @@ import TranspilerCore from './transpiler_core_compliant.js';
 class SquirrelOrchestrator {
     
     constructor() {
-        // console.log('🚀 MODULAR Squirrel Orchestrator - 5 Component Architecture!');
         
         // Initialize the transpiler core (which initializes all other components)
         this.transpilerCore = new (window.TranspilerCore || TranspilerCore)();
         this.initializationPromise = null;
         
-        // console.log('📊 All components loaded successfully');
-        // console.log('🎯 Ready for Ruby to JavaScript transpilation!');
     }
 
     /**
@@ -44,11 +41,9 @@ class SquirrelOrchestrator {
      * 🔧 INTERNAL INITIALIZATION LOGIC
      */
     async _doInitialize() {
-        // console.log('🔧 SquirrelOrchestrator: Starting initialization...');
         
         try {
             await this.transpilerCore.initializePrism();
-            // console.log('✅ SquirrelOrchestrator: All Squirrel components initialized successfully!');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Squirrel components:', error);
@@ -85,7 +80,6 @@ class SquirrelOrchestrator {
      * 🚀 MAIN PROCESS - COMPLETE RUBY TO JS PIPELINE
      */
     async processRubyCode(rubyCode) {
-        // console.log('🚀 Starting MODULAR Prism Ruby to JS Pipeline...');
         // console.log('🏗️ Architecture: RubyParserManager → CodeGenerator → RubyHandlers → TranspilerCore → SquirrelOrchestrator');
         
         try {
@@ -176,7 +170,6 @@ container = A.new({
 
         try {
             const result = await this.processRubyCode(testCode);
-            // console.log('✅ Quick test completed:', result.success ? 'SUCCESS' : 'FAILED');
             return result;
         } catch (error) {
             console.error('❌ Quick test failed:', error);
@@ -232,6 +225,5 @@ if (typeof window !== 'undefined') {
     window.SquirrelOrchestrator = SquirrelOrchestrator;
 
     // console.log('🏗️ 5-Component Architecture: RubyParserManager + CodeGenerator + RubyHandlers + TranspilerCore + SquirrelOrchestrator');
-    // console.log('🎯 Enhanced with smart Ruby-to-JS conversion!');
     // console.log('🛠️ Advanced diagnostics and component access available!');
 }

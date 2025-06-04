@@ -12,7 +12,6 @@ class SquirrelRunner {
         this.orchestrator = null;
         this.ready = false;
         this.initializationPromise = null;
-        // console.log('🚀 Squirrel Runner - Production Mode');
     }
 
     /**
@@ -46,7 +45,6 @@ class SquirrelRunner {
      * 🔧 INTERNAL INITIALIZATION LOGIC
      */
     async _doInit() {
-        // console.log('🔧 SquirrelRunner: Starting initialization...');
         
         try {
             // Wait for dependencies
@@ -56,7 +54,6 @@ class SquirrelRunner {
             this.orchestrator = new (window.SquirrelOrchestrator || SquirrelOrchestrator)();
             
             // Initialize Prism
-            // console.log('🔧 SquirrelRunner: Initializing Prism WASM...');
             const prismReady = await this.orchestrator.initializePrism();
             
             if (!prismReady) {
@@ -64,7 +61,6 @@ class SquirrelRunner {
             }
             
             this.ready = true;
-            // console.log('✅ SquirrelRunner: Ready for production!');
             return true;
             
         } catch (error) {
@@ -87,7 +83,6 @@ class SquirrelRunner {
                 window.A && 
                 window.puts && 
                 window.wait) {
-                // console.log('✅ All dependencies loaded');
                 return true;
             }
             
@@ -103,7 +98,6 @@ class SquirrelRunner {
      * 🚀 RUN SQUIRREL FILE
      */
     async runFile(filename) {
-        // console.log('🚀 Loading and executing:', filename);
         
         try {
             if (!this.ready) {
@@ -119,7 +113,6 @@ class SquirrelRunner {
             }
             
             const content = await response.text();
-            // console.log(`✅ File loaded: ${content.length} characters`);
             // console.log('📄 Ruby content preview:');
             // console.log('--- START RUBY CODE ---');
             // console.log(content.substring(0, 500) + (content.length > 500 ? '...' : ''));
@@ -140,7 +133,6 @@ class SquirrelRunner {
             
         } catch (error) {
             console.error('❌ Failed to execute Squirrel file:', error);
-            // console.log('🔧 Error details:', error.message);
             throw error;
         }
     }
@@ -149,7 +141,6 @@ class SquirrelRunner {
      * 🎯 RUN SQUIRREL CODE DIRECTLY
      */
     async runCode(rubyCode) {
-        // console.log('🚀 Executing Ruby code directly...');
         
         try {
             if (!this.ready) {
@@ -157,7 +148,6 @@ class SquirrelRunner {
             }
 
             const result = await this.orchestrator.processRubyCode(rubyCode);
-            // console.log('✅ Ruby code executed successfully');
             return result;
             
         } catch (error) {
@@ -170,7 +160,6 @@ class SquirrelRunner {
      * 🔧 AUTO-START APPLICATION
      */
     async autoStart() {
-        // console.log('🚀 Auto-starting Squirrel application...');
         
         try {
             // Wait for DOM
@@ -183,12 +172,10 @@ class SquirrelRunner {
             // Ensure proper initialization
             await this.init();
 
-            // console.log('🎯 Executing application/index.sqr...');
             await this.runFile('./application/index.sqr');
             
         } catch (error) {
             console.error('❌ Auto-start failed:', error);
-            // console.log('🔧 Make sure application/index.sqr exists and contains valid Ruby code');
         }
     }
 
@@ -222,11 +209,8 @@ class SquirrelRunner {
 window.SquirrelRunner = SquirrelRunner;
 
 // 🎯 CREATE GLOBAL RUNNER INSTANCE
-// console.log('🚀 Creating Squirrel Runner (Production)...');
 window.globalSquirrelRunner = new SquirrelRunner();
 
-// console.log('✅ Squirrel Runner loaded!');
-// console.log('🎯 Ready to execute application/index.sqr');
 
 // 🔄 AUTO-START APPLICATION
 if (typeof window !== 'undefined') {
