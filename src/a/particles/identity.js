@@ -88,7 +88,7 @@ defineParticle({
     type: 'object',
     category: 'appearance',
     process(el, v) {
-        console.log(`Processing shadow:, ${el} => ${JSON.stringify(v)}`);  // Debugging log
+        // Process shadow property
         if (Array.isArray(v)) {
             // Rename to avoid variable shadowing
             el.style.boxShadow = v.map(shadowItem => {
@@ -150,4 +150,4 @@ defineParticle({
 
 // Export for ES6 modules
 export default {};
-console.log('✅ Identity Particle ES6 module ready');
+

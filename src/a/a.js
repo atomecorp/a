@@ -390,10 +390,7 @@
 
         inspect() {
             console.group('A Instance');
-            console.log('ID:', this.particles.id);
-            console.log('Element:', this.html_object);
-            console.log('Style:', this.html_object.style.cssText);
-            console.log('Data:', this.particles);
+            // Debug information
             console.groupEnd();
             return this;
         }
@@ -415,7 +412,7 @@
     // Notify that A framework is loaded
     window.dispatchEvent(new CustomEvent('AFrameworkLoaded'));
     
-    console.log('✅ A Framework ES6 module ready');
+
 
 })();
 

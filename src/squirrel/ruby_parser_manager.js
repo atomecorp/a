@@ -10,21 +10,47 @@ class RubyParserManager {
     constructor() {
         this.prismParser = null;
         this.initialized = false;
-        console.log('🔍 Ruby Parser Manager v3.0 initialized for Real Prism');
+        this.initializationPromise = null;
     }
 
     /**
      * 🏗️ INITIALIZE PRISM PARSER
      */
     async initializePrism() {
-        console.log('🏗️ Initializing Real Prism Parser...');
+        // Return existing promise if initialization is already in progress
+        if (this.initializationPromise) {
+            return await this.initializationPromise;
+        }
+        
+        // Return true if already initialized
+        if (this.initialized) {
+            return true;
+        }
+        
+        // Create and store the initialization promise
+        this.initializationPromise = this._doInitialize();
         
         try {
-            console.log('🔧 Creating new PrismParser instance with Real API...');
+            const result = await this.initializationPromise;
+            return result;
+        } catch (error) {
+            // Reset promise on failure so it can be retried
+            this.initializationPromise = null;
+            throw error;
+        }
+    }
+    
+    /**
+     * 🔧 INTERNAL INITIALIZATION LOGIC
+     */
+    async _doInitialize() {
+        // console.log('🔧 RubyParserManager: Starting initialization...');
+        try {
             this.prismParser = new (window.PrismParser || PrismParser)();
+            // console.log('🔧 RubyParserManager: PrismParser created, calling initialize...');
             await this.prismParser.initialize();
             this.initialized = true;
-            console.log('✅ Real PrismParser initialized successfully!');
+            // console.log('✅ RubyParserManager: Initialization complete');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Real PrismParser:', error);
@@ -36,24 +62,19 @@ class RubyParserManager {
      * 🔍 PARSE RUBY CODE WITH REAL PRISM
      */
     async parseRubyCode(rubyCode) {
+        // Ensure initialization is complete before parsing
         if (!this.initialized) {
-            throw new Error('Parser not initialized. Call initializePrism() first.');
+            await this.initializePrism();
         }
-
-        console.log('🔍 Parsing Ruby code with Real Prism API...');
         
         try {
             const parseResult = await this.prismParser.parseRuby(rubyCode);
-            console.log('✅ Ruby code validated with Real Prism successfully');
+
             
             // Verify we got real Prism nodes
             if (parseResult && parseResult.body && parseResult.body.length > 0) {
                 const sampleNode = parseResult.body[0];
-                console.log('🔍 Sample node verification:', {
-                    type: sampleNode.type,
-                    hasRealProperties: this.hasRealPrismProperties(sampleNode),
-                    properties: Object.keys(sampleNode)
-                });
+                // Sample node verification
             }
             
             return { result: { value: parseResult } };
@@ -87,7 +108,7 @@ class RubyParserManager {
      * 🔍 LOG REAL NODE STRUCTURE FOR DEBUGGING
      */
     logNodeStructure(node, nodeIndex) {
-        console.log(`🔍 [Node ${nodeIndex}] Real Prism node structure for ${node.type}:`);
+
         
         // Log the specific properties we expect for different node types
         const nodeTypeProps = {
@@ -121,32 +142,25 @@ class RubyParserManager {
             }
         }
         
-        console.log('📊 Real Prism properties:', actualProps);
+
         
         // Log additional properties found
         const additionalProps = Object.keys(node).filter(key => !expectedProps.includes(key));
         if (additionalProps.length > 0) {
-            console.log('📝 Additional properties:', additionalProps);
+
         }
         
         // Quality check
         const hasExpectedProps = expectedProps.some(prop => prop in node);
-        console.log(`🎯 Node quality: ${hasExpectedProps ? 'REAL Prism node ✅' : 'Fallback/Mock node ⚠️'}`);
+
         
         // For debugging: show structure of complex properties
         if (node.arguments && typeof node.arguments === 'object') {
-            console.log('🔍 Arguments structure:', {
-                type: node.arguments.type,
-                hasArguments: 'arguments' in node.arguments,
-                argumentCount: node.arguments.arguments?.length || 0
-            });
+            // Arguments structure debug
         }
         
         if (node.value && typeof node.value === 'object') {
-            console.log('🔍 Value structure:', {
-                type: node.value.type,
-                keys: Object.keys(node.value)
-            });
+            // Value structure debug
         }
     }
 
@@ -177,5 +191,5 @@ export default RubyParserManager;
 // Global export
 if (typeof window !== 'undefined') {
     window.RubyParserManager = RubyParserManager;
-    console.log('✅ Ruby Parser Manager ES6 module ready - Real Prism integration');
+
 }

@@ -1,6 +1,6 @@
 /**
- * 🔬 REAL PRISM HELPER - SUIVANT EXACTEMENT LA DOC OFFICIELLE
- * Basé sur: https://github.com/ruby/prism/blob/main/docs/javascript.md
+ * 🔬 REAL PRISM HELPER - VERSION LOCALE UNIQUEMENT
+ * Utilise les fichiers Prism locaux pour un fonctionnement hors ligne
  */
 
 class RealPrismHelper {
@@ -12,13 +12,13 @@ class RealPrismHelper {
 
     async initialize() {
         try {
-            // Suivre exactement la doc officielle avec CDN
-            await this.setupOfficialPrismWithCDN();
+            // Utiliser uniquement les ressources locales
+            await this.setupLocalPrism();
             this.ready = true;
             return true;
         } catch (error) {
-            console.error('❌ Official Prism failed:', error);
-            // Fallback optimisé
+            console.error('❌ Local Prism initialization failed:', error);
+            // Fallback optimisé local
             this.createOptimizedFallback();
             this.ready = true;
             return true;
@@ -26,84 +26,91 @@ class RealPrismHelper {
     }
 
     /**
-     * 🔧 SETUP OFFICIEL AVEC CDN (comme dans la doc)
+     * 🔧 SETUP LOCAL PRISM - VERSION HORS LIGNE UNIQUEMENT
      */
-    async setupOfficialPrismWithCDN() {
-        // Step 1: Import WASI shim from CDN
+    async setupLocalPrism() {
+        // Step 1: Utiliser le WASI wrapper local déjà chargé
+        if (!window.WASI && window.WASIWrapper) {
+            window.WASI = window.WASIWrapper;
+        }
+        
         if (!window.WASI) {
-            await this.loadWASIFromCDN();
+            throw new Error('WASI wrapper local non disponible');
         }
 
-        // Step 2: Import parsePrism from CDN
+        // Step 2: Charger parsePrism local (si nécessaire)
         if (!window.parsePrism) {
-            await this.loadParsePrismFromCDN();
+            await this.loadLocalParsePrism();
         }
 
-        // Step 3: Fetch WASM from CDN (évite les problèmes MIME type)
-        const wasm = await WebAssembly.compileStreaming(
-            fetch("https://unpkg.com/@ruby/prism@latest/src/prism.wasm")
-        );
+        // Step 3: Charger le fichier WASM local
+        const wasmPath = './squirrel/parser/prism.wasm';
+        const wasmResponse = await fetch(wasmPath);
+        if (!wasmResponse.ok) {
+            throw new Error(`Impossible de charger le fichier WASM local: ${wasmPath}`);
+        }
+        
+        const wasm = await WebAssembly.compileStreaming(wasmResponse);
 
-        // Step 4: Instantiate and initialize WASI exactly like in docs
+        // Step 4: Instantiate and initialize WASI with WASM
         const wasi = new window.WASI([], [], []);
         this.instance = await WebAssembly.instantiate(wasm, {
             wasi_snapshot_preview1: wasi.wasiImport
         });
         wasi.initialize(this.instance);
 
-        // Step 5: Create parse function exactly like in docs
+        // Step 5: Verify WASM exports for proper Prism functions
+        const exports = this.instance.exports;
+        
+        // Check for the correct Prism parsing function
+        const possibleFunctions = ['pm_serialize_parse', 'pm_parse', 'prism_serialize_parse', 'prism_parse'];
+        let parseFunction = null;
+        
+        for (const funcName of possibleFunctions) {
+            if (exports[funcName]) {
+                parseFunction = funcName;
+                console.log(`✅ Found Prism parse function: ${funcName}`);
+                break;
+            }
+        }
+        
+        if (!parseFunction) {
+            console.warn('⚠️ No Prism parse function found in WASM exports');
+            console.log('Available exports:', Object.keys(exports));
+            console.log('Looking for one of:', possibleFunctions);
+        }
+        
+        this.parseFunction = parseFunction;
+
+        // Step 6: Create the parse function using real WASM integration
         this.parse = (source) => {
             return window.parsePrism(this.instance.exports, source);
         };
-
-        console.log('✅ Official Prism with CDN initialized');
     }
 
     /**
-     * 📚 LOAD WASI FROM CDN
+     * 📚 LOAD LOCAL parsePrism
      */
-    async loadWASIFromCDN() {
+    async loadLocalParsePrism() {
+        // Si nous avons des fichiers Prism locaux, les utiliser
+        // Sinon, créer une version de base compatible
         try {
-            const response = await fetch("https://unpkg.com/@bjorn3/browser_wasi_shim@latest/dist/index.js");
-            if (response.ok) {
-                const wasiCode = await response.text();
-                // Execute in module context
-                const module = { exports: {} };
-                const exports = module.exports;
-                eval(`(function(module, exports) { ${wasiCode} })(module, exports)`);
-                
-                if (module.exports.WASI) {
-                    window.WASI = module.exports.WASI;
-                } else if (window.WASIWrapper) {
-                    window.WASI = window.WASIWrapper;
-                }
-            }
-        } catch (error) {
-            if (window.WASIWrapper) {
-                window.WASI = window.WASIWrapper;
-            } else {
-                throw new Error('WASI not available');
-            }
-        }
-    }
-
-    /**
-     * 📚 LOAD parsePrism FROM CDN
-     */
-    async loadParsePrismFromCDN() {
-        try {
-            const response = await fetch("https://unpkg.com/@ruby/prism@latest/src/parsePrism.js");
+            // Essayer de charger un fichier parsePrism local s'il existe
+            const parsePrismPath = './squirrel/parser/parsePrism.js';
+            const response = await fetch(parsePrismPath);
             if (response.ok) {
                 const prismCode = await response.text();
                 eval(prismCode);
-            }
-            
-            if (!window.parsePrism) {
-                throw new Error('parsePrism not loaded');
+            } else {
+                throw new Error('parsePrism local non trouvé');
             }
         } catch (error) {
-            // Create basic parsePrism if CDN fails
+            // Créer une version de base si aucun fichier local n'existe
             window.parsePrism = this.createBasicParsePrism();
+        }
+        
+        if (!window.parsePrism) {
+            throw new Error('Impossible de créer parsePrism');
         }
     }
 
@@ -137,7 +144,7 @@ class RealPrismHelper {
                 warnings: []
             };
         };
-        console.log('✅ Using optimized fallback parser');
+
     }
 
     /**
@@ -408,7 +415,7 @@ class RealPrismHelper {
                 // Nettoyer les virgules en trop
                 jsStr = jsStr.replace(/,(\s*[}\]])/g, '$1');
                 
-                console.log('Parsing shadow element:', jsStr);
+
                 const parsed = JSON.parse(jsStr);
                 return parsed;
             }
@@ -531,4 +538,3 @@ if (typeof window !== 'undefined') {
     window.PrismHelper = RealPrismHelper; // Alias for compatibility
 }
 
-console.log('✅ Prism Helper ES6 module ready - Official Prism JavaScript API');

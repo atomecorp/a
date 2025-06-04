@@ -11,6 +11,7 @@ class SquirrelRunner {
     constructor() {
         this.orchestrator = null;
         this.ready = false;
+        this.initializationPromise = null;
         // console.log('🚀 Squirrel Runner - Production Mode');
     }
 
@@ -18,7 +19,34 @@ class SquirrelRunner {
      * 🔧 INITIALIZE RUNNER
      */
     async init() {
-        // console.log('🏗️ Initializing Squirrel Runner...');
+        // Return existing promise if initialization is already in progress
+        if (this.initializationPromise) {
+            return await this.initializationPromise;
+        }
+        
+        // Return true if already initialized
+        if (this.ready) {
+            return true;
+        }
+        
+        // Create and store the initialization promise
+        this.initializationPromise = this._doInit();
+        
+        try {
+            const result = await this.initializationPromise;
+            return result;
+        } catch (error) {
+            // Reset promise on failure so it can be retried
+            this.initializationPromise = null;
+            throw error;
+        }
+    }
+    
+    /**
+     * 🔧 INTERNAL INITIALIZATION LOGIC
+     */
+    async _doInit() {
+        // console.log('🔧 SquirrelRunner: Starting initialization...');
         
         try {
             // Wait for dependencies
@@ -28,7 +56,7 @@ class SquirrelRunner {
             this.orchestrator = new (window.SquirrelOrchestrator || SquirrelOrchestrator)();
             
             // Initialize Prism
-            // console.log('🔧 Initializing Prism WASM...');
+            // console.log('🔧 SquirrelRunner: Initializing Prism WASM...');
             const prismReady = await this.orchestrator.initializePrism();
             
             if (!prismReady) {
@@ -36,7 +64,7 @@ class SquirrelRunner {
             }
             
             this.ready = true;
-            // console.log('✅ Squirrel Runner ready for production!');
+            // console.log('✅ SquirrelRunner: Ready for production!');
             return true;
             
         } catch (error) {
@@ -152,8 +180,8 @@ class SquirrelRunner {
                 });
             }
 
-            // Small delay to ensure everything is loaded
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // Ensure proper initialization
+            await this.init();
 
             // console.log('🎯 Executing application/index.sqr...');
             await this.runFile('./application/index.sqr');
@@ -202,12 +230,20 @@ window.globalSquirrelRunner = new SquirrelRunner();
 
 // 🔄 AUTO-START APPLICATION
 if (typeof window !== 'undefined') {
-    // Wait for all systems to be ready
-    setTimeout(() => {
+    // Wait for DOM and start application properly
+    const startApplication = async () => {
         if (window.globalSquirrelRunner) {
-            window.globalSquirrelRunner.autoStart();
+            await window.globalSquirrelRunner.autoStart();
         }
-    }, 800); // Enough time for Prism to initialize
+    };
+    
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startApplication);
+    } else {
+        // DOM already loaded, start immediately
+        startApplication();
+    }
 }
 
 // Export and global assignment for compatibility
@@ -219,18 +255,12 @@ if (typeof window !== 'undefined') {
     
     // Create global runner instance
     window.globalSquirrelRunner = new SquirrelRunner();
-    
-    // Auto-start application
-    setTimeout(() => {
-        if (window.globalSquirrelRunner) {
-            window.globalSquirrelRunner.autoStart();
-        }
-    }, 800);
 }
 
 // 🎯 GLOBAL HELPER FUNCTIONS
 window.runSquirrel = async (code) => {
     if (window.globalSquirrelRunner) {
+        await window.globalSquirrelRunner.init(); // Ensure initialization
         return await window.globalSquirrelRunner.runCode(code);
     }
     console.error('❌ Squirrel Runner not available');
@@ -238,6 +268,7 @@ window.runSquirrel = async (code) => {
 
 window.runSquirrelFile = async (filename) => {
     if (window.globalSquirrelRunner) {
+        await window.globalSquirrelRunner.init(); // Ensure initialization
         return await window.globalSquirrelRunner.runFile(filename);
     }
     console.error('❌ Squirrel Runner not available');
@@ -252,4 +283,3 @@ window.squirrelStatus = () => {
     return { error: 'Squirrel Runner not available' };
 };
 
-console.log('✅ Squirrel Runner ES6 module ready');

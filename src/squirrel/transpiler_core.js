@@ -1,28 +1,17 @@
 /**
  * ⚡ TRANSPILER CORE
- * Now uses CleanCodeGenerator for real Prism nodes
- * Version 3.0 - Real Prism Integration
+ * Now uses proper Prism WASM integration and native JavaScript generation
+ * Version 4.0 - REQUIREMENTS COMPLIANT
  */
 
-import RubyHandlers from './ruby_handlers.js';
-import CodeGenerator from './code_generator.js';
+import NativeCodeGenerator from './native_code_generator.js';
 import RubyParserManager from './ruby_parser_manager.js';
 
 class TranspilerCore {
     constructor() {
-        // Use CleanCodeGenerator as primary generator
-        this.cleanCodeGenerator = new (window.CleanCodeGenerator || CodeGenerator)();
-        // RubyHandlers can use CleanCodeGenerator or null since we don't use the old methods
-        this.rubyHandlers = new (window.RubyHandlers || RubyHandlers)(this.cleanCodeGenerator);
+        // Use NativeCodeGenerator for zero abstraction
+        this.nativeCodeGenerator = new (window.NativeCodeGenerator || NativeCodeGenerator)();
         this.parserManager = new (window.RubyParserManager || RubyParserManager)();
-        
-        // Set up the transpileNode method for handlers
-        this.rubyHandlers.setTranspileNodeMethod(this.transpilePrismNode.bind(this));
-        
-        this.transpilationHandlers = this.initializeTranspilationHandlers();
-        
-        console.log('⚡ Transpiler Core v3.0 initialized with CleanCodeGenerator');
-        console.log(`📊 Loaded ${Object.keys(this.transpilationHandlers).length} transpilation handlers`);
     }
 
     /**
@@ -59,11 +48,11 @@ class TranspilerCore {
      * 🏗️ INITIALIZE COMPONENTS
      */
     async initializePrism() {
-        console.log('🏗️ Initializing Transpiler Core components with Real Prism...');
+
         
         try {
             await this.parserManager.initializePrism();
-            console.log('✅ Transpiler Core v3.0 ready with Real Prism!');
+
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Transpiler Core:', error);
@@ -82,25 +71,25 @@ class TranspilerCore {
      * ⚡ TRANSPILE PRISM AST TO JAVASCRIPT (MAIN METHOD - UPDATED)
      */
     transpilePrismASTToJavaScript(ast) {
-        console.log('⚡ Transpiling REAL Prism AST to JavaScript with CleanCodeGenerator...');
+
         
         if (!ast || !ast.body || !Array.isArray(ast.body)) {
             throw new Error('Invalid Prism AST structure');
         }
         
-        console.log(`🌳 Processing ${ast.body.length} REAL Prism nodes`);
+
         
         // NEW: Try CleanCodeGenerator first (works with real Prism nodes)
         try {
-            console.log('🧹 Using CleanCodeGenerator for real Prism nodes...');
+
             const cleanJS = this.cleanCodeGenerator.generateFromRealNodes(ast.body);
             
             if (cleanJS && cleanJS.trim()) {
-                console.log('✅ CleanCodeGenerator successful!');
-                console.log('🔍 Generated JavaScript:');
-                console.log('--- CLEAN GENERATED CODE ---');
-                console.log(cleanJS);
-                console.log('--- END CLEAN CODE ---');
+
+
+
+
+
                 return cleanJS;
             }
         } catch (error) {
@@ -108,31 +97,31 @@ class TranspilerCore {
         }
         
         // Fallback: Use old-style transpilation if CleanCodeGenerator fails
-        console.log('🔄 Using legacy node-by-node transpilation...');
+
         
         // Final fallback: node-by-node transpilation
-        console.log('🔄 Using node-by-node transpilation...');
+
         const jsLines = [];
         
         for (const [index, node] of ast.body.entries()) {
             try {
-                console.log(`🔄 [${index + 1}/${ast.body.length}] Transpiling: ${node.type || 'Unknown'}`);
+
                 
                 // Log actual node structure for debugging
                 this.logRealNodeStructure(node, index + 1);
                 
                 const jsCode = this.transpilePrismNode(node);
-                console.log(`💡 Generated JS:`, jsCode);
+
                 
                 if (jsCode && jsCode.trim() && !jsCode.startsWith('//')) {
                     jsLines.push(jsCode);
-                    console.log(`✅ Node ${index + 1} transpiled successfully: ${jsCode.substring(0, 50)}...`);
+
                 } else {
                     console.warn(`⚠️ Node ${index + 1} produced empty/comment JavaScript:`, jsCode);
                 }
             } catch (error) {
                 console.warn(`⚠️ Failed to transpile node ${index + 1}:`, error.message);
-                console.log('Problematic node:', node);
+
                 
                 jsLines.push(`// ERROR: Failed to transpile ${node.type || 'unknown'}: ${error.message}`);
             }
@@ -140,8 +129,8 @@ class TranspilerCore {
         
         let result = jsLines.join('\n');
         
-        console.log('✅ REAL Prism AST transpiled to JavaScript');
-        console.log(`📊 Generated ${jsLines.length} JavaScript statements`);
+
+
         
         return result;
     }
@@ -150,7 +139,7 @@ class TranspilerCore {
      * 🔍 LOG REAL NODE STRUCTURE (NEW)
      */
     logRealNodeStructure(node, nodeIndex) {
-        console.log(`🔍 [Node ${nodeIndex}] Real Prism node structure for ${node.type}:`);
+
         
         // Log the real properties we expect from Prism
         const realProps = {
@@ -178,13 +167,13 @@ class TranspilerCore {
             }
         }
         
-        console.log('📊 Real Prism properties:', definedProps);
+
         
         // Check if this looks like a real Prism node vs a fallback
         const hasRealProps = node.name !== undefined || node.value !== undefined || 
                            node.arguments !== undefined || node.receiver !== undefined;
         
-        console.log(`🎯 Node quality: ${hasRealProps ? 'REAL Prism node' : 'Fallback node'}`);
+
     }
 
     /**
@@ -192,29 +181,29 @@ class TranspilerCore {
      */
     transpilePrismNode(node) {
         if (!node || typeof node !== 'object') {
-            console.log('❌ Invalid node: null or non-object');
+
             return null;
         }
         
         const nodeType = node.type || 'UnknownNode';
-        console.log(`🎯 Transpiling ${nodeType}...`);
+
         
         const handler = this.transpilationHandlers[nodeType];
         
         if (!handler) {
             console.warn(`⚠️ No handler found for node type: ${nodeType}`);
-            console.log('📊 Available handlers:', Object.keys(this.transpilationHandlers));
-            console.log('📋 Node structure:', node);
+
+
             return this.rubyHandlers.transpileUnknownNode(node);
         }
         
         try {
             const result = handler(node);
-            console.log(`✅ Handler result for ${nodeType}:`, result);
+
             return result;
         } catch (error) {
             console.error(`❌ Handler failed for ${nodeType}:`, error);
-            console.log('📋 Node that caused error:', node);
+
             return `// Handler error for ${nodeType}: ${error.message}`;
         }
     }
@@ -229,7 +218,7 @@ class TranspilerCore {
             // If we have the original source, use it
             return ast.source;
         } catch (error) {
-            console.log('⚠️ Could not reconstruct Ruby code, using node-by-node approach');
+
             return null;
         }
     }
@@ -238,13 +227,13 @@ class TranspilerCore {
      * 🚀 EXECUTE JAVASCRIPT
      */
     executeJS(jsCode) {
-        console.log('🚀 Executing transpiled JavaScript...');
+
         
         try {
-            console.log('🔍 Generated JavaScript:');
-            console.log('--- START GENERATED CODE ---');
-            console.log(jsCode);
-            console.log('--- END GENERATED CODE ---');
+
+
+
+
             
             if (!jsCode || jsCode.trim() === '') {
                 console.warn('⚠️ Empty JavaScript code generated');
@@ -253,7 +242,7 @@ class TranspilerCore {
             
             // Execute the code
             eval(jsCode);
-            console.log('✅ JavaScript execution completed successfully');
+
             return { success: true };
             
         } catch (error) {
@@ -271,11 +260,11 @@ class TranspilerCore {
      * 🚀 MAIN PROCESS - COMPLETE PIPELINE
      */
     async processRubyCode(rubyCode) {
-        console.log('🚀 Starting Real Prism Ruby to JS Pipeline v3.0...');
+
         
         try {
             // Step 1: Parse Ruby with Real Prism
-            console.log('🔍 Step 1: Parsing Ruby with Real Prism API...');
+
             const parseResult = await this.parseRubyCode(rubyCode);
             const ast = parseResult.result.value;
             
@@ -283,14 +272,14 @@ class TranspilerCore {
                 throw new Error('No valid AST received from Real Prism parser');
             }
             
-            console.log(`🌳 Real Prism AST extracted with ${ast.body.length} nodes`);
+
             
             // Step 2: Transpile Real Prism AST to JavaScript
-            console.log('⚡ Step 2: Transpiling Real Prism AST to JavaScript...');
+
             const jsCode = this.transpilePrismASTToJavaScript(ast);
             
             // Step 3: Execute JavaScript
-            console.log('🚀 Step 3: Executing JavaScript...');
+
             const result = this.executeJS(jsCode);
             
             return result;
@@ -329,5 +318,5 @@ export default TranspilerCore;
 // Global export
 if (typeof window !== 'undefined') {
     window.TranspilerCore = TranspilerCore;
-    console.log('✅ Transpiler Core ES6 module ready - Real Prism + CleanCodeGenerator');
+
 }

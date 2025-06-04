@@ -5,7 +5,7 @@
 
 class CleanCodeGenerator {
     constructor() {
-        console.log('🧹 Clean Code Generator initialized');
+        // Clean Code Generator initialized
     }
 
     /**
@@ -36,7 +36,7 @@ class CleanCodeGenerator {
             case 'CallNode':
                 return this.convertMethodCall(node);
             default:
-                console.log(`⚠️ Unknown node type: ${node.type}`);
+                // Unknown node type
                 return null;
         }
     }
@@ -149,7 +149,7 @@ class CleanCodeGenerator {
                 return this.convertMethodCall(node);
                 
             default:
-                console.log(`⚠️ Unknown node type in convertNode: ${node.type}`);
+                // Unknown node type in convertNode
                 return JSON.stringify(node);
         }
     }
@@ -258,5 +258,5 @@ export default CleanCodeGenerator;
 if (typeof window !== 'undefined') {
     window.CleanCodeGenerator = CleanCodeGenerator;
     window.CodeGenerator = CleanCodeGenerator; // Alias
-    console.log('✅ Code Generator ES6 module ready');
+
 }

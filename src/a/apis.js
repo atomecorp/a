@@ -5,7 +5,7 @@
 
 // Add the puts method to display in the console
 function puts(val) {
-    console.log(val);
+    // Log value
 }
 window.puts = puts;
 
@@ -212,7 +212,7 @@ const requireFile = window.require;
 window.load = window.require;
 
 const log = function(message) {
-    console.log(message);
+    // Alert message
 };
 window.log = log;
 

@@ -24,7 +24,7 @@ defineParticle({
     category: 'posieventstion',
     process(el, v) {
 
-        console.log('code to write : Touch event:', v);
+        // TODO: Touch event implementation
        // el.style.top = _formatSize(v);  // Uses exposed _formatSize
     }
 });
@@ -37,7 +37,7 @@ defineParticle({
     type: 'function',
     category: 'event',
     process: function(element, handler) {
-        console.log('✅ Using custom keyboard event handler');
+        // TODO: Custom keyboard event handler
         if (typeof handler === 'function') {
             element.addEventListener('keydown', function(event) {
                 // Create Ruby-style key object
@@ -66,4 +66,3 @@ defineParticle({
 
 // Export for ES6 modules
 export default {};
-console.log('✅ Dimension Particle ES6 module ready');

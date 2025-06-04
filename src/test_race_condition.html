@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Race Condition Test</title>
+</head>
+<body>
+    <h1>Testing Race Condition Fix</h1>
+    <div id="test-results"></div>
+    <button onclick="runTest()">Run Test</button>
+    <button onclick="location.reload()">Manual Refresh</button>
+    
+    <script>
+        let testCount = 0;
+        
+        async function runTest() {
+            testCount++;
+            const results = document.getElementById('test-results');
+            results.innerHTML += `<p>Test ${testCount}: Starting initialization test...</p>`;
+            
+            try {
+                // Test multiple rapid initializations
+                const promises = [];
+                for (let i = 0; i < 5; i++) {
+                    promises.push(testInitialization(i));
+                }
+                
+                const results_array = await Promise.all(promises);
+                results.innerHTML += `<p style="color: green;">✅ Test ${testCount}: All ${results_array.length} concurrent initializations succeeded!</p>`;
+                
+            } catch (error) {
+                results.innerHTML += `<p style="color: red;">❌ Test ${testCount}: Failed - ${error.message}</p>`;
+            }
+        }
+        
+        async function testInitialization(index) {
+            if (window.globalSquirrelRunner) {
+                await window.globalSquirrelRunner.init();
+                return `Init ${index} OK`;
+            } else {
+                throw new Error(`globalSquirrelRunner not available for init ${index}`);
+            }
+        }
+        
+        // Auto-test on page load
+        window.addEventListener('load', () => {
+            setTimeout(runTest, 1000);
+        });
+    </script>
+    
+    <!-- Load the transpiler -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

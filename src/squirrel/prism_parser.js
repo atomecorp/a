@@ -10,12 +10,38 @@ class PrismParser {
         this.initialized = false;
         this.lastAST = null;
         this.lastParseResult = null;
+        this.initializationPromise = null;
     }
     
     // Initialize the parser
     async initialize() {
+        // Return existing promise if initialization is already in progress
+        if (this.initializationPromise) {
+            return await this.initializationPromise;
+        }
+        
+        // Return true if already initialized
+        if (this.initialized) {
+            return true;
+        }
+        
+        // Create and store the initialization promise
+        this.initializationPromise = this._doInitialize();
+        
         try {
-            console.log('🚀 Initializing Prism Parser with Real API...');
+            const result = await this.initializationPromise;
+            return result;
+        } catch (error) {
+            // Reset promise on failure so it can be retried
+            this.initializationPromise = null;
+            throw error;
+        }
+    }
+    
+    // Internal initialization logic
+    async _doInitialize() {
+        try {
+            // Initializing Prism Parser with Real API
             
             // Use RealPrismHelper instead of PrismHelper
             if (!window.RealPrismHelper) {
@@ -27,7 +53,7 @@ class PrismParser {
             
             if (success) {
                 this.initialized = true;
-                console.log('✅ Prism Parser initialized successfully with Real API');
+                // Prism Parser initialized successfully with Real API
                 
                 // Quick warmup
                 await this.warmUp();
@@ -49,7 +75,7 @@ class PrismParser {
         try {
             const testCode = 'puts "ready"';
             await this.parseRuby(testCode);
-            console.log('🔥 Real Prism Parser ready for production');
+            // Real Prism Parser ready for production
         } catch (error) {
             console.warn('⚠️ Parser warmup failed:', error.message);
         }
@@ -57,12 +83,13 @@ class PrismParser {
     
     // Main parsing method - Returns AST directly
     async parseRuby(rubyCode) {
+        // Ensure initialization before parsing
         if (!this.initialized) {
-            throw new Error('Parser not initialized. Call initialize() first.');
+            await this.initialize();
         }
         
         try {
-            console.log('🔍 Parsing Ruby code with Real Prism API...');
+            // Parsing Ruby code with Real Prism API
             
             // Parse using RealPrismHelper (official API)
             const parseResult = this.helper.parseRuby(rubyCode);
@@ -81,20 +108,11 @@ class PrismParser {
             this.lastAST = ast;
             this.lastParseResult = parseResult;
             
-            console.log('✅ Ruby code parsed successfully with Real API');
-            console.log(`📊 AST contains ${ast.body?.length || 0} real Prism nodes`);
+            // Ruby code parsed successfully with Real API
             
             // Log a sample node to verify it has real properties
             if (ast.body && ast.body.length > 0) {
-                const firstNode = ast.body[0];
-                console.log('🔍 Sample node structure:', {
-                    type: firstNode.type,
-                    hasName: 'name' in firstNode,
-                    hasValue: 'value' in firstNode,
-                    hasArguments: 'arguments' in firstNode,
-                    hasReceiver: 'receiver' in firstNode,
-                    keys: Object.keys(firstNode)
-                });
+                // Sample node structure verification
             }
             
             // Return the AST directly
@@ -113,7 +131,7 @@ class PrismParser {
     
     // Create a fallback AST when parsing fails
     createFallbackAST(code, error) {
-        console.log('📝 Creating fallback AST');
+        // Creating fallback AST
         
         return {
             type: 'ProgramNode',
@@ -244,4 +262,3 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = PrismParser;
 }
 
-console.log('✅ Prism Parser ES6 module ready - Real Prism API integration');

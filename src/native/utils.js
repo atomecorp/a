@@ -73,7 +73,7 @@ function initParticlesExtension() {
         nativeStyleProps.forEach(prop => {
        
             if (existingCssParticles.includes(prop)) return;
-     console.log(`🔥uglly patch remove asap, for now when removed this method overrides the atome particle, this is not what we wwant`);
+     console.log(`🔥uglly patch remove asap, for now when removed this method overrides the atome particle, this is not what we want`);
             window.defineParticle({
                 name: prop,
                 type: 'any',
@@ -293,4 +293,3 @@ if (typeof window !== 'undefined') {
 // Initialize utilities
 checkFrameworkLoaded();
 
-console.log('✅ Utils ES6 module ready');

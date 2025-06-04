@@ -273,5 +273,5 @@ if (typeof window !== 'undefined') {
 // Signal ready
 setTimeout(() => {
     window.dispatchEvent(new CustomEvent('wasi-ready'));
-    console.log('✅ WASI Wrapper ES6 module ready');
+
 }, 100);

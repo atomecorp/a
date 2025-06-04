@@ -34,32 +34,32 @@ container = A.new({
 	overflow: 'hidden'
 })
 
-# # Secondary container with orange styling
-# container2 = A.new({
-# 	attach: 'body',
-# 	id: 'secondary_container',
-# 	markup: 'div',
-# 	role: 'container',
-# 	x: 400,
-# 	y: 50,
-# 	width: 250,
-# 	height: 300,
-# 	color: 'orange',
-# 	text: 'Second Container',
-# 	display: 'block',
-# 	smooth: 15,
-# 	shadow: [
-# 		{
-# 			blur: 5,
-# 			x: 2,
-# 			y: 4,
-# 			color: {red: 1, green: 0.5, blue: 0, alpha: 0.4},
-# 			invert: false
-# 		}
-# 	]
-# })
+# Secondary container with orange styling
+container2 = A.new({
+	attach: 'body',
+	id: 'secondary_container',
+	markup: 'div',
+	role: 'container',
+	x: 400,
+	y: 50,
+	width: 250,
+	height: 300,
+	color: 'orange',
+	text: 'Second Container',
+	display: 'block',
+	smooth: 15,
+	shadow: [
+		{
+			blur: 5,
+			x: 2,
+			y: 4,
+			color: {red: 1, green: 0.5, blue: 0, alpha: 0.4},
+			invert: false
+		}
+	]
+})
 
-# # Interactive button
+# Interactive button
 # button = A.new({
 # 	attach: 'main_container',
 # 	id: 'action_button',

@@ -8,7 +8,7 @@ class RubyHandlers {
     constructor(codeGenerator) {
         this.codeGenerator = codeGenerator; // Can be CleanCodeGenerator or null
         this.transpileNodeMethod = null; // Will be set by TranspilerCore
-        console.log('🎯 Ruby Handlers v3.0 initialized for Real Prism nodes');
+        // Ruby Handlers v3.0 initialized for Real Prism nodes
     }
 
     /**
@@ -16,7 +16,7 @@ class RubyHandlers {
      */
     setTranspileNodeMethod(transpileNodeMethod) {
         this.transpileNodeMethod = transpileNodeMethod;
-        console.log('✅ TranspileNode method set in RubyHandlers v3.0');
+        // TranspileNode method set in RubyHandlers v3.0
     }
 
     /**
@@ -76,7 +76,7 @@ class RubyHandlers {
      * 📋 TRANSPILE PROGRAM NODE
      */
     transpileProgramNode(node) {
-        console.log('📋 Transpiling ProgramNode');
+        // Transpiling ProgramNode
         
         if (node.body && Array.isArray(node.body)) {
             return node.body.map(child => this.transpileNode(child)).filter(Boolean).join('\n');
@@ -89,7 +89,7 @@ class RubyHandlers {
      * 📋 TRANSPILE STATEMENTS NODE
      */
     transpileStatementsNode(node) {
-        console.log('📋 Transpiling StatementsNode');
+        // Transpiling StatementsNode
         
         if (node.body && Array.isArray(node.body)) {
             return node.body.map(child => this.transpileNode(child)).filter(Boolean).join('\n');
@@ -102,14 +102,7 @@ class RubyHandlers {
      * 📝 TRANSPILE LOCAL VARIABLE WRITE (UPDATED FOR REAL PRISM NODES)
      */
     transpileLocalVariableWrite(node) {
-        console.log('📝 Transpiling LocalVariableWriteNode with Real Prism properties');
-        console.log('📊 Real node structure:', {
-            name: node.name,
-            hasValue: !!node.value,
-            valueType: node.value?.type,
-            depth: node.depth,
-            allProps: Object.keys(node)
-        });
+        // Transpiling LocalVariableWriteNode with Real Prism properties
         
         // With real Prism nodes, we should have the 'name' property directly
         let varName = node.name;
@@ -129,21 +122,21 @@ class RubyHandlers {
             return `// Could not extract variable name from: ${JSON.stringify(node)}`;
         }
         
-        console.log(`✅ Found variable name: ${varName}`);
+        // Found variable name
         
         // Handle the value with real Prism nodes
         if (node.value) {
             const valueJS = this.transpileNode(node.value);
             if (valueJS && !valueJS.startsWith('//')) {
                 const result = `const ${varName} = ${valueJS};`;
-                console.log('✅ Generated assignment:', result);
+                // Generated assignment
                 return result;
             }
         }
         
         // Fallback
         const fallback = `const ${varName} = undefined; // Could not transpile value`;
-        console.log('⚠️ Using fallback assignment:', fallback);
+        // Using fallback assignment
         return fallback;
     }
 
@@ -151,7 +144,7 @@ class RubyHandlers {
      * 📖 TRANSPILE LOCAL VARIABLE READ
      */
     transpileLocalVariableRead(node) {
-        console.log('📖 Transpiling LocalVariableReadNode');
+        // Transpiling LocalVariableReadNode
         
         if (node.name) {
             return String(node.name);
@@ -168,16 +161,7 @@ class RubyHandlers {
      * 📞 TRANSPILE CALL NODE (UPDATED FOR REAL PRISM NODES)
      */
     transpileCallNode(node) {
-        console.log('📞 Transpiling CallNode with Real Prism properties');
-        console.log('📊 Real CallNode structure:', {
-            name: node.name,
-            hasReceiver: !!node.receiver,
-            receiver: node.receiver?.name || node.receiver?.type,
-            hasArguments: !!node.arguments,
-            argumentCount: node.arguments?.arguments?.length || 0,
-            hasBlock: !!node.block,
-            flags: node.flags
-        });
+        // Transpiling CallNode with Real Prism properties
         
         // With real Prism nodes, we should have the 'name' property directly
         let methodName = node.name;
@@ -201,7 +185,7 @@ class RubyHandlers {
             return null;
         }
         
-        console.log(`✅ Found method name: ${methodName}`);
+
         
         // PUTS STATEMENTS
         if (methodName === 'puts') {
@@ -231,7 +215,7 @@ class RubyHandlers {
      * 🆕 HANDLE A.new CALL (NEW)
      */
     handleANewCall(node) {
-        console.log('🆕 Processing A.new call');
+
         
         let args = '';
         if (node.arguments && node.arguments.arguments) {
@@ -240,7 +224,7 @@ class RubyHandlers {
         }
         
         const result = `new A(${args})`;
-        console.log('✅ Generated A.new:', result);
+
         return result;
     }
 
@@ -248,7 +232,7 @@ class RubyHandlers {
      * 🎯 HANDLE PUTS STATEMENT
      */
     handlePutsStatement(node) {
-        console.log('🎯 Processing puts statement');
+
         
         let args = [];
         if (node.arguments && node.arguments.arguments) {
@@ -262,7 +246,7 @@ class RubyHandlers {
         }
         
         const result = `puts(${args.join(', ')});`;
-        console.log('✅ Generated puts:', result);
+
         return result;
     }
 
@@ -270,7 +254,7 @@ class RubyHandlers {
      * ⏰ HANDLE WAIT STATEMENT
      */
     handleWaitStatement(node) {
-        console.log('🎯 Processing wait statement');
+
         let delay = '1000';
         
         if (node.arguments && node.arguments.arguments && node.arguments.arguments.length > 0) {
@@ -281,11 +265,11 @@ class RubyHandlers {
         if (node.block) {
             const blockCode = this.transpileBlockNode(node.block);
             const result = `wait(${delay}, function() {\n${blockCode}\n});`;
-            console.log('✅ Generated wait with block:', result);
+
             return result;
         } else {
             const result = `setTimeout(function() {\n  // Empty wait block\n}, ${delay});`;
-            console.log('✅ Generated empty wait:', result);
+
             return result;
         }
     }
@@ -294,7 +278,7 @@ class RubyHandlers {
      * 🎯 HANDLE METHOD CALL WITH RECEIVER
      */
     handleMethodCallWithReceiver(node, methodName) {
-        console.log('🎯 Processing method call with receiver');
+
         
         const receiver = this.transpileNode(node.receiver) || 'this';
         
@@ -312,7 +296,7 @@ class RubyHandlers {
             }
             
             const result = `${receiver}.${methodName}(function(${blockParams}) {\n${blockCode}\n});`;
-            console.log('✅ Generated method call with block:', result);
+
             return result;
         }
         
@@ -324,7 +308,7 @@ class RubyHandlers {
         }
         
         const result = `${receiver}.${methodName}(${args});`;
-        console.log('✅ Generated method call:', result);
+
         return result;
     }
 
@@ -332,7 +316,7 @@ class RubyHandlers {
      * 🎯 HANDLE STANDALONE METHOD CALL
      */
     handleStandaloneMethodCall(node, methodName) {
-        console.log('🎯 Processing standalone method call');
+
         
         let args = '';
         if (node.arguments && node.arguments.arguments) {
@@ -341,7 +325,7 @@ class RubyHandlers {
         }
         
         const result = `${methodName}(${args});`;
-        console.log('✅ Generated standalone call:', result);
+
         return result;
     }
 
@@ -349,7 +333,7 @@ class RubyHandlers {
      * 📄 TRANSPILE STRING NODE
      */
     transpileStringNode(node) {
-        console.log('📄 Transpiling StringNode');
+
         
         let value = '';
         
@@ -368,7 +352,7 @@ class RubyHandlers {
             }
         }
         
-        console.log('📄 String value:', value);
+
         
         // Handle Ruby string interpolation #{...} → ${...}
         if (value.includes('#{')) {
@@ -383,7 +367,7 @@ class RubyHandlers {
      * 🔢 TRANSPILE INTEGER NODE
      */
     transpileIntegerNode(node) {
-        console.log('🔢 Transpiling IntegerNode');
+
         
         if (node.value !== undefined) {
             return String(node.value);
@@ -403,7 +387,7 @@ class RubyHandlers {
      * 📦 TRANSPILE ARGUMENTS NODE
      */
     transpileArgumentsNode(node) {
-        console.log('📦 Transpiling ArgumentsNode');
+
         
         if (node.arguments && Array.isArray(node.arguments)) {
             return node.arguments.map(arg => this.transpileNode(arg)).filter(Boolean).join(', ');
@@ -416,7 +400,7 @@ class RubyHandlers {
      * 📦 TRANSPILE HASH NODE
      */
     transpileHashNode(node) {
-        console.log('📦 Transpiling HashNode');
+
         
         // For hash nodes, try to find elements/pairs/content
         let elements = null;
@@ -449,7 +433,7 @@ class RubyHandlers {
      * 📚 TRANSPILE ARRAY NODE
      */
     transpileArrayNode(node) {
-        console.log('📚 Transpiling ArrayNode');
+
         
         if (node.elements && Array.isArray(node.elements)) {
             const elements = node.elements.map(el => this.transpileNode(el)).filter(Boolean);
@@ -463,7 +447,7 @@ class RubyHandlers {
      * 🎭 TRANSPILE BLOCK NODE
      */
     transpileBlockNode(node) {
-        console.log('🎭 Transpiling BlockNode');
+
         
         if (node.body && Array.isArray(node.body)) {
             const statements = node.body.map(stmt => {
@@ -481,7 +465,7 @@ class RubyHandlers {
      * 🔀 TRANSPILE IF NODE
      */
     transpileIfNode(node) {
-        console.log('🔀 Transpiling IfNode');
+
         
         if (!node.condition) {
             return '// Invalid if node: no condition';
@@ -506,7 +490,7 @@ class RubyHandlers {
      * ❓ TRANSPILE UNKNOWN NODE
      */
     transpileUnknownNode(node) {
-        console.log('❓ Transpiling UnknownNode');
+
         
         if (node.source_line) {
             const line = node.source_line.trim();
@@ -601,5 +585,5 @@ export default RubyHandlers;
 // Global export
 if (typeof window !== 'undefined') {
     window.RubyHandlers = RubyHandlers;
-    console.log('✅ Ruby Handlers ES6 module ready - Real Prism integration');
+
 }

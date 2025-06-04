@@ -3,7 +3,7 @@
  * Version 5.0 - Architecture modulaire avec 5 composants
  */
 
-import TranspilerCore from './transpiler_core.js';
+import TranspilerCore from './transpiler_core_compliant.js';
 
 class SquirrelOrchestrator {
     
@@ -12,6 +12,7 @@ class SquirrelOrchestrator {
         
         // Initialize the transpiler core (which initializes all other components)
         this.transpilerCore = new (window.TranspilerCore || TranspilerCore)();
+        this.initializationPromise = null;
         
         // console.log('📊 All components loaded successfully');
         // console.log('🎯 Ready for Ruby to JavaScript transpilation!');
@@ -21,11 +22,33 @@ class SquirrelOrchestrator {
      * 🏗️ INITIALIZE ALL COMPONENTS
      */
     async initializePrism() {
-        // console.log('🏗️ Initializing all Squirrel components...');
+        // Return existing promise if initialization is already in progress
+        if (this.initializationPromise) {
+            return await this.initializationPromise;
+        }
+        
+        // Create and store the initialization promise
+        this.initializationPromise = this._doInitialize();
+        
+        try {
+            const result = await this.initializationPromise;
+            return result;
+        } catch (error) {
+            // Reset promise on failure so it can be retried
+            this.initializationPromise = null;
+            throw error;
+        }
+    }
+    
+    /**
+     * 🔧 INTERNAL INITIALIZATION LOGIC
+     */
+    async _doInitialize() {
+        // console.log('🔧 SquirrelOrchestrator: Starting initialization...');
         
         try {
             await this.transpilerCore.initializePrism();
-            // console.log('✅ All Squirrel components initialized successfully!');
+            // console.log('✅ SquirrelOrchestrator: All Squirrel components initialized successfully!');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize Squirrel components:', error);
@@ -37,6 +60,10 @@ class SquirrelOrchestrator {
      * 🔍 PARSE RUBY CODE
      */
     async parseRubyCode(rubyCode) {
+        // Ensure initialization before parsing
+        if (!this.initializationPromise) {
+            await this.initializePrism();
+        }
         return await this.transpilerCore.parseRubyCode(rubyCode);
     }
 
@@ -203,7 +230,7 @@ export default SquirrelOrchestrator;
 // Global export
 if (typeof window !== 'undefined') {
     window.SquirrelOrchestrator = SquirrelOrchestrator;
-    console.log('✅ Squirrel Orchestrator ES6 module ready!');
+
     // console.log('🏗️ 5-Component Architecture: RubyParserManager + CodeGenerator + RubyHandlers + TranspilerCore + SquirrelOrchestrator');
     // console.log('🎯 Enhanced with smart Ruby-to-JS conversion!');
     // console.log('🛠️ Advanced diagnostics and component access available!');
