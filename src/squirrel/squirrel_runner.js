@@ -1,8 +1,7 @@
 /**
- * 🚀 SQUIRREL RUNNER - PRODUCTION VERSION
- * ✅ Pure execution of application/index.sqr
- * ✅ No tests - Direct Ruby to JavaScript execution
- * ✅ 100% Prism WASM powered
+ * 🚀 SQUIRREL RUNNER - VERSION OPTIMISÉE
+ * Exécution directe de application/index.sqr
+ * Propulsé par Prism WASM
  */
 
 import SquirrelOrchestrator from './squirrel_orchestrator.js';
@@ -18,17 +17,13 @@ class SquirrelRunner {
      * 🔧 INITIALIZE RUNNER
      */
     async init() {
-        // Return existing promise if initialization is already in progress
         if (this.initializationPromise) {
             return await this.initializationPromise;
         }
         
-        // Return true if already initialized
         if (this.ready) {
             return true;
         }
-        
-        // Create and store the initialization promise
         this.initializationPromise = this._doInit();
         
         try {
@@ -103,7 +98,6 @@ class SquirrelRunner {
             }
 
             // Load file
-            // console.log('📁 Loading file...');
             const response = await fetch(filename);
             
             if (!response.ok) {
@@ -111,18 +105,22 @@ class SquirrelRunner {
             }
             
             const content = await response.text();
-            // console.log('📄 Ruby content preview:');
-            // console.log('--- START RUBY CODE ---');
-            // console.log(content.substring(0, 500) + (content.length > 500 ? '...' : ''));
-            // console.log('--- END RUBY CODE ---');
             
-            // Process with orchestrator
-            // console.log('⚡ Starting Ruby → JavaScript transpilation...');
-            const result = await this.orchestrator.processRubyCode(content);
+            // Process with orchestrator - Auto-save activé pour tous les fichiers .sqr
+            const result = await this.orchestrator.processRubyCode(content, {
+                autoSave: true,
+                filename: filename.replace(/\.sqr$/, '.js'),
+                sourceFile: filename,
+                metadata: {
+                    executedAt: new Date().toISOString(),
+                    fileType: 'squirrel',
+                    autoExecuted: true
+                }
+            });
             
             if (result.success) {
-                // console.log('🎉 Squirrel application executed successfully!');
-                // console.log('✨ Your Ruby code is now running as JavaScript!');
+                if (result.savedFiles) {
+                }
             } else {
                 console.error('❌ Execution failed:', result.error);
             }
@@ -138,14 +136,31 @@ class SquirrelRunner {
     /**
      * 🎯 RUN SQUIRREL CODE DIRECTLY
      */
-    async runCode(rubyCode) {
+    async runCode(rubyCode, options = {}) {
         
         try {
             if (!this.ready) {
                 await this.init();
             }
 
-            const result = await this.orchestrator.processRubyCode(rubyCode);
+            // Par défaut, activer l'auto-save pour le code direct aussi
+            const processOptions = {
+                autoSave: options.autoSave !== false, // true par défaut
+                filename: options.filename || 'direct-code.js',
+                sourceFile: options.sourceFile || 'direct-execution',
+                metadata: {
+                    executedAt: new Date().toISOString(),
+                    fileType: 'direct-ruby',
+                    autoExecuted: false,
+                    ...options.metadata
+                }
+            };
+
+            const result = await this.orchestrator.processRubyCode(rubyCode, processOptions);
+            
+            if (result.success && result.savedFiles) {
+            }
+            
             return result;
             
         } catch (error) {
@@ -259,7 +274,6 @@ window.runSquirrelFile = async (filename) => {
 window.squirrelStatus = () => {
     if (window.globalSquirrelRunner) {
         const status = window.globalSquirrelRunner.getStatus();
-        // console.table(status);
         return status;
     }
     return { error: 'Squirrel Runner not available' };

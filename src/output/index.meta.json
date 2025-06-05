@@ -1,0 +1,18 @@
+{
+  "originalFilename": "./application/index.js",
+  "timestamp": "2025-06-05T13:04:34.381Z",
+  "jsFile": "index.js",
+  "rubyFile": "index.sqr",
+  "size": {
+    "javascript": 1584,
+    "ruby": 3890
+  },
+  "autoSave": true,
+  "transpilationTime": "2025-06-05T13:04:34.381Z",
+  "sourceFile": "./application/index.sqr",
+  "transpilerVersion": "1.0.0",
+  "executedAt": "2025-06-05T13:04:34.379Z",
+  "fileType": "squirrel",
+  "autoExecuted": true,
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15"
+}

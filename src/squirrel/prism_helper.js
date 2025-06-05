@@ -12,12 +12,12 @@ class RealPrismHelper {
 
     async initialize() {
         try {
-            // Utiliser uniquement les ressources locales
+            // Try to use the real Prism parser first
             await this.setupLocalPrism();
             this.ready = true;
             return true;
         } catch (error) {
-            console.error('❌ Local Prism initialization failed:', error);
+            console.warn('⚠️ Real Prism parser failed, using fallback:', error.message);
             // Fallback optimisé local
             this.createOptimizedFallback();
             this.ready = true;
@@ -160,7 +160,14 @@ class RealPrismHelper {
                 continue;
             }
 
-            if (line.includes('=') && !line.includes('==') && !line.includes('!=')) {
+            // Check for any method call with do...end block syntax
+            if (line.includes(' do') && !line.includes('=')) {
+                const result = this.parseMethodWithBlock(line, lines, i);
+                if (result.statement) {
+                    statements.push(result.statement);
+                }
+                i = result.nextIndex;
+            } else if (line.includes('=') && !line.includes('==') && !line.includes('!=')) {
                 const result = this.parseAssignment(line, lines, i);
                 if (result.statement) {
                     statements.push(result.statement);
@@ -445,9 +452,8 @@ class RealPrismHelper {
      */
     parseOtherStatement(line) {
         if (line.startsWith('puts ') || line.startsWith('print ')) {
-            const parts = line.split(' ', 2);
-            const method = parts[0];
-            const arg = parts.slice(1).join(' ');
+            const method = line.startsWith('puts ') ? 'puts' : 'print';
+            const arg = line.substring(method.length + 1).trim(); // Get everything after "puts " or "print "
             
             return {
                 type: 'CallNode',
@@ -461,7 +467,153 @@ class RealPrismHelper {
                 flags: 0
             };
         }
+        
+        // Handle chained method calls like grab("main_container").backgroundColor("blue")
+        const chainedCallMatch = line.match(/^(\w+)\s*\(([^)]*)\)\.(\w+)\s*\(([^)]*)\)\s*$/);
+        if (chainedCallMatch) {
+            const [, firstMethodName, firstArgs, secondMethodName, secondArgs] = chainedCallMatch;
+            
+            // Parse first method arguments
+            const firstMethodArgs = [];
+            if (firstArgs.trim()) {
+                const argParts = firstArgs.split(',').map(arg => arg.trim()).filter(Boolean);
+                for (const arg of argParts) {
+                    firstMethodArgs.push(this.parseSimpleValue(arg));
+                }
+            }
+            
+            // Parse second method arguments
+            const secondMethodArgs = [];
+            if (secondArgs.trim()) {
+                const argParts = secondArgs.split(',').map(arg => arg.trim()).filter(Boolean);
+                for (const arg of argParts) {
+                    secondMethodArgs.push(this.parseSimpleValue(arg));
+                }
+            }
+            
+            return {
+                type: 'CallNode',
+                name: secondMethodName,
+                receiver: {
+                    type: 'CallNode',
+                    name: firstMethodName,
+                    receiver: null,
+                    arguments: {
+                        type: 'ArgumentsNode',
+                        arguments: firstMethodArgs
+                    },
+                    block: null,
+                    flags: 0
+                },
+                arguments: {
+                    type: 'ArgumentsNode',
+                    arguments: secondMethodArgs
+                },
+                block: null,
+                flags: 0
+            };
+        }
+
+        // Handle method calls with receiver (object.method syntax)
+        const methodCallMatch = line.match(/^(\w+)\.(\w+)\s*\(([^)]*)\)\s*$/);
+        if (methodCallMatch) {
+            const [, receiverName, methodName, argsString] = methodCallMatch;
+            
+            // Parse arguments
+            const methodArgs = [];
+            if (argsString.trim()) {
+                // Split arguments by commas and parse each
+                const argParts = argsString.split(',').map(arg => arg.trim()).filter(Boolean);
+                for (const arg of argParts) {
+                    methodArgs.push(this.parseSimpleValue(arg));
+                }
+            }
+            
+            return {
+                type: 'CallNode',
+                name: methodName,
+                receiver: {
+                    type: 'LocalVariableReadNode',
+                    name: receiverName
+                },
+                arguments: {
+                    type: 'ArgumentsNode',
+                    arguments: methodArgs
+                },
+                block: null,
+                flags: 0
+            };
+        }
+        
         return null;
+    }
+
+    /**
+     * 🔍 PARSE METHOD WITH BLOCK - Generic handler for "method_name args do...end" syntax
+     */
+    parseMethodWithBlock(line, allLines, currentIndex) {
+        // Extract method name and arguments from "method_name args do"
+        const blockMatch = line.match(/^(\w+)\s*(.*?)\s+do\s*$/);
+        if (!blockMatch) {
+            return { statement: null, nextIndex: currentIndex + 1 };
+        }
+
+        const methodName = blockMatch[1];
+        const argsString = blockMatch[2].trim();
+        const blockStatements = [];
+        let nextIndex = currentIndex + 1;
+
+        // Parse arguments
+        const methodArgs = [];
+        if (argsString) {
+            // Split arguments by spaces/commas and parse each
+            const argParts = argsString.split(/[\s,]+/).filter(Boolean);
+            for (const arg of argParts) {
+                methodArgs.push(this.parseSimpleValue(arg));
+            }
+        }
+
+        // Parse statements inside the do...end block
+        while (nextIndex < allLines.length) {
+            const blockLine = allLines[nextIndex].trim();
+            
+            if (blockLine === 'end') {
+                nextIndex++; // Skip the 'end' line
+                break;
+            }
+            
+            if (!blockLine || blockLine.startsWith('#')) {
+                nextIndex++;
+                continue;
+            }
+
+            // Parse statement inside the block
+            const stmt = this.parseOtherStatement(blockLine);
+            if (stmt) {
+                blockStatements.push(stmt);
+            }
+            
+            nextIndex++;
+        }
+
+        // Create the method call node with block
+        const methodStatement = {
+            type: 'CallNode',
+            name: methodName,
+            receiver: null,
+            arguments: {
+                type: 'ArgumentsNode',
+                arguments: methodArgs
+            },
+            block: {
+                type: 'BlockNode',
+                body: blockStatements,
+                parameters: []
+            },
+            flags: 0
+        };
+
+        return { statement: methodStatement, nextIndex: nextIndex };
     }
 
     /**

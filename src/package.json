@@ -1,0 +1,42 @@
+{
+  "name": "squirrel-transpiler",
+  "version": "1.0.0",
+  "description": "Squirrel Ruby to JavaScript Transpiler with File Saving Capabilities",
+  "type": "module",
+  "main": "js/app.js",
+  "scripts": {
+    "start": "node server/squirrel-server.js",
+    "server": "node server/squirrel-server.js",
+    "dev": "node server/squirrel-server.js",
+    "dev-server": "python3 -m http.server 8000",
+    "start-both": "npm run server & npm run dev-server",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ruby",
+    "javascript",
+    "transpiler",
+    "squirrel",
+    "prism",
+    "wasm"
+  ],
+  "author": "Squirrel Transpiler Team",
+  "license": "MIT",
+  "dependencies": {
+    "@fastify/cors": "^10.1.0",
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/static": "^8.2.0",
+    "fastify": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "bugs": {
+    "url": "."
+  },
+  "homepage": "."
+}

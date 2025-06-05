@@ -117,7 +117,12 @@ class TranspilerCore {
             // Step 3: Execute JavaScript
             const result = this.executeJS(jsCode);
             
-            return result;
+            // Step 4: Return result including the transpiled JavaScript code
+            return {
+                ...result,
+                js: jsCode,  // Include the transpiled JavaScript code for auto-save
+                ast: ast     // Include AST for debugging if needed
+            };
             
         } catch (error) {
             console.error('❌ Real Prism Pipeline failed:', error);

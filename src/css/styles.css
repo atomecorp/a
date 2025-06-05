@@ -1,23 +1,25 @@
+/* ===== SQUIRREL STYLES - VERSION OPTIMISÉE ===== */
+
+/* Reset et base */
 * {
-  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
-
-  font-family: system-ui, -apple-system, -apple-system-font, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;
   font-size: 12px;
   margin: 0;
   padding: 0;
-  background: rgba(39, 39, 39, 1);
+  background: #272727;
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
   width: 100%;
   height: 100%;
-  z-index: 0;
   color: lightgray;
-  touch-action: manipulation; /*allow pinch to scroll and pan but lock the zoom */
-
+  touch-action: manipulation;
 }
+
+/* Polices personnalisées */
 @font-face {
   font-family: 'Roboto-Thin';
   src: url('../assets/fonts/Roboto/Roboto-Thin.ttf') format('truetype');
@@ -29,50 +31,32 @@ pre {
   padding: 0;
 }
 
+/* Vue principale */
+#view {
+  position: absolute;
+  inset: 0;
+  font-size: 25px;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+}
 
-.matrix{
+/* Composants */
+.matrix {
   background-color: blue;
   border-radius: 9px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  flex-direction: column;
   gap: 12px;
   padding: 3px;
 }
-/*.matrix_element{*/
-/*    background-color: rebeccapurple;*/
-/*    width: 100%;*/
-/*    height: 29px;*/
-/*    border-radius: 59px;*/
-/*    display: flex;*/
-/*    justify-content: center;*/
-/*    align-items: center;*/
-/*    flex-direction: column;*/
-/*    margin-bottom: 20px;*/
-/*    padding: 0px*/
-/*}*/
 
-#view {
-  left: 0px;
-  font-size: 25px;
-  right: 0px;
-  top: 0px;
-  bottom: 0px;
-  width: auto;
-  /*display: block;*/
-  height: auto;
-  overflow: hidden;
-  position: absolute;
-  -webkit-overflow-scrolling: touch;
-}
-
-
+/* États de sélection */
 .ui-selected {
-  border: #00bb00 solid 3px;
+  border: 3px solid #00bb00;
 }
 
 .ui-selecting {
-  border: orange solid 3px;
+  border: 3px solid orange;
 }
 
 .selected {
@@ -80,14 +64,13 @@ pre {
   background-color: #00bb00;
 }
 
+/* Élément Atome */
 .atome {
   will-change: transform;
   cursor: default;
   pointer-events: auto;
   caret-color: white;
   outline: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
   user-select: none;
   position: absolute;
   display: inline-block;
@@ -100,21 +83,18 @@ pre {
   box-sizing: border-box;
 }
 
+/* Texte */
 .text {
-  /*-webkit-text-fill-color: transparent;*/
-  /*-webkit-background-clip: text;*/
   word-wrap: break-word;
   white-space: pre-wrap;
   position: relative;
-
-  /*    add on to test with multiple styles*/
   display: inline-block;
   box-sizing: border-box;
-  /*overflow: hidden;*/
   text-overflow: ellipsis;
   min-width: 0;
 }
 
+/* Centrage */
 .center {
   display: flex;
   justify-content: center;
@@ -130,48 +110,27 @@ pre {
   transform: translateY(-50%);
 }
 
-.center_horizontal{
+.center_horizontal {
   display: flex;
   justify-content: center;
   position: absolute;
   transform: translateX(-50%);
 }
 
-.e_align_h_left {
-  text-align: left;
-}
-
-.e_align_h_right {
-  text-align: right;
-}
-
-.e_align_h_center {
-  text-align: center;
-}
-
-.el_align_h {
-  text-align: justify;
-}
+/* Alignements */
+.e_align_h_left { text-align: left; }
+.e_align_h_right { text-align: right; }
+.e_align_h_center { text-align: center; }
+.el_align_h { text-align: justify; }
 
 .el_align_v {
   display: flex;
   align-items: center;
 }
 
-
 .el_align_v_bottom {
   display: flex;
   align-items: flex-end;
 }
-
-/*::selection {*/
-/*    color: transparent;*/
-/*    background: none;*/
-/*}*/
-/*!* For Mozilla Firefox *!*/
-/*::-moz-selection {*/
-/*    color: transparent;*/
-/*    background: none;*/
-/*}*/
 
 

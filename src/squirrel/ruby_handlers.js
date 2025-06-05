@@ -1,32 +1,29 @@
 /**
  * 🎯 RUBY HANDLERS
- * Now compatible with CleanCodeGenerator and Real Prism nodes
- * Version 3.0 - Real Prism Integration
+ * Gestionnaires pour la transpilation Ruby vers JavaScript
+ * Version optimisée
  */
 
 class RubyHandlers {
     constructor(codeGenerator) {
-        this.codeGenerator = codeGenerator; // Can be CleanCodeGenerator or null
-        this.transpileNodeMethod = null; // Will be set by TranspilerCore
-        // Ruby Handlers v3.0 initialized for Real Prism nodes
+        this.codeGenerator = codeGenerator;
+        this.transpileNodeMethod = null;
     }
 
     /**
-     * 🔧 SET TRANSPILE NODE METHOD (CALLED BY TRANSPILER CORE)
+     * 🔧 SET TRANSPILE NODE METHOD
      */
     setTranspileNodeMethod(transpileNodeMethod) {
         this.transpileNodeMethod = transpileNodeMethod;
-        // TranspileNode method set in RubyHandlers v3.0
     }
 
     /**
-     * 🎯 TRANSPILE NODE (USES INJECTED METHOD)
+     * 🎯 TRANSPILE NODE
      */
     transpileNode(node) {
         if (this.transpileNodeMethod) {
             return this.transpileNodeMethod(node);
         } else {
-            // Fallback to local method if not set yet
             return this.transpileNodeLocal(node);
         }
     }
@@ -57,6 +54,8 @@ class RubyHandlers {
                 return this.transpileStringNode(node);
             case 'IntegerNode':
                 return this.transpileIntegerNode(node);
+            case 'FloatNode':
+                return this.transpileFloatNode(node);
             case 'HashNode':
                 return this.transpileHashNode(node);
             case 'ArrayNode':
@@ -67,7 +66,22 @@ class RubyHandlers {
                 return this.transpileBlockNode(node);
             case 'IfNode':
                 return this.transpileIfNode(node);
+            case 'ConstantReadNode':
+                return this.transpileConstantReadNode(node);
+            case 'SymbolNode':
+                return this.transpileSymbolNode(node);
+            case 'TrueNode':
+                return 'true';
+            case 'FalseNode':
+                return 'false';
+            case 'NilNode':
+                return 'null';
+            case 'AssocNode':
+                return this.transpileAssocNode(node);
+            case 'BeginNode':
+                return this.transpileBeginNode(node);
             default:
+                console.warn(`⚠️ Unknown node type: ${nodeType}`, node);
                 return this.transpileUnknownNode(node);
         }
     }
@@ -384,6 +398,13 @@ class RubyHandlers {
     }
 
     /**
+     * 🔢 TRANSPILE FLOAT NODE
+     */
+    transpileFloatNode(node) {
+        return String(node.value || 0.0);
+    }
+
+    /**
      * 📦 TRANSPILE ARGUMENTS NODE
      */
     transpileArgumentsNode(node) {
@@ -444,46 +465,64 @@ class RubyHandlers {
     }
 
     /**
-     * 🎭 TRANSPILE BLOCK NODE
+     * 📋 TRANSPILE CONSTANT READ NODE
      */
-    transpileBlockNode(node) {
-
-        
-        if (node.body && Array.isArray(node.body)) {
-            const statements = node.body.map(stmt => {
-                const jsLine = this.transpileNode(stmt);
-                return jsLine ? `  ${jsLine}` : null;
-            }).filter(Boolean);
-            
-            return statements.length > 0 ? statements.join('\n') : '  // Empty block';
-        }
-        
-        return '  // Empty block';
+    transpileConstantReadNode(node) {
+        return node.name || 'UnknownConstant';
     }
 
     /**
-     * 🔀 TRANSPILE IF NODE
+     * 🔣 TRANSPILE SYMBOL NODE
      */
-    transpileIfNode(node) {
+    transpileSymbolNode(node) {
+        // Ruby symbols become strings in JavaScript
+        return `"${node.value || node.name || ''}"`;
+    }
 
-        
-        if (!node.condition) {
-            return '// Invalid if node: no condition';
+    /**
+     * 🔗 TRANSPILE ASSOC NODE (for hash key-value pairs)
+     */
+    transpileAssocNode(node) {
+        const key = node.key ? this.transpileNode(node.key) : 'null';
+        const value = node.value ? this.transpileNode(node.value) : 'null';
+        return `${key}: ${value}`;
+    }
+
+    /**
+     * 🎯 TRANSPILE BEGIN NODE
+     */
+    transpileBeginNode(node) {
+        if (node.statements) {
+            return this.transpileNode(node.statements);
+        }
+        return '';
+    }
+
+    /**
+     * 🧱 TRANSPILE BLOCK NODE
+     */
+    transpileBlockNode(node) {
+        if (!node) {
+            return '';
         }
         
-        let condition = this.transpileNode(node.condition) || 'true';
-        condition = this.cleanCondition(condition);
-        
-        const thenBody = this.transpileNode(node.then_body) || '  // Empty then body';
-        
-        let result = `if (${condition}) {\n${thenBody}\n}`;
-        
-        if (node.else_body) {
-            const elseBody = this.transpileNode(node.else_body);
-            result += ` else {\n${elseBody}\n}`;
+        // Handle block body
+        if (node.body) {
+            // If body is a StatementsNode or has body array
+            if (node.body.body && Array.isArray(node.body.body)) {
+                return node.body.body.map(stmt => this.transpileNode(stmt)).filter(Boolean).join('\n');
+            }
+            // If body is directly an array
+            else if (Array.isArray(node.body)) {
+                return node.body.map(stmt => this.transpileNode(stmt)).filter(Boolean).join('\n');
+            }
+            // Single statement
+            else {
+                return this.transpileNode(node.body);
+            }
         }
         
-        return result;
+        return '';
     }
 
     /**
@@ -548,7 +587,7 @@ class RubyHandlers {
     convertRubyMethodCallToJS(line) {
         let jsLine = line
             .replace(/\bputs\s+/, 'puts(')
-            .replace(/\bprint\s+/, 'console.log(');
+            .replace(/\bprint\s+/, 'print(');
         
         if (!jsLine.endsWith(')')) {
             jsLine += ')';
@@ -560,30 +599,11 @@ class RubyHandlers {
         
         return jsLine;
     }
-
-    convertRubyValueToJS(rubyValue) {
-        const trimmed = rubyValue.trim();
-        
-        // Numbers
-        if (/^\d+(\.\d+)?$/.test(trimmed)) {
-            return trimmed;
-        }
-        
-        // Booleans
-        if (trimmed === 'true' || trimmed === 'false') {
-            return trimmed;
-        }
-        
-        // Default: treat as string
-        return `"${trimmed}"`;
-    }
 }
 
 // Export and global assignment for compatibility
 export default RubyHandlers;
 
-// Global export
 if (typeof window !== 'undefined') {
     window.RubyHandlers = RubyHandlers;
-
 }

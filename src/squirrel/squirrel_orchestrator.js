@@ -1,30 +1,24 @@
 /**
  * 🐿️ SQUIRREL ORCHESTRATOR - COORDINATEUR PRINCIPAL
- * Version 5.0 - Architecture modulaire avec 5 composants
+ * Version optimisée - Architecture modulaire simplifiée
  */
 
 import TranspilerCore from './transpiler_core_compliant.js';
 
 class SquirrelOrchestrator {
-    
     constructor() {
-        
-        // Initialize the transpiler core (which initializes all other components)
         this.transpilerCore = new (window.TranspilerCore || TranspilerCore)();
         this.initializationPromise = null;
-        
     }
 
     /**
      * 🏗️ INITIALIZE ALL COMPONENTS
      */
     async initializePrism() {
-        // Return existing promise if initialization is already in progress
         if (this.initializationPromise) {
             return await this.initializationPromise;
         }
         
-        // Create and store the initialization promise
         this.initializationPromise = this._doInitialize();
         
         try {
@@ -79,15 +73,79 @@ class SquirrelOrchestrator {
     /**
      * 🚀 MAIN PROCESS - COMPLETE RUBY TO JS PIPELINE
      */
-    async processRubyCode(rubyCode) {
-        // console.log('🏗️ Architecture: RubyParserManager → CodeGenerator → RubyHandlers → TranspilerCore → SquirrelOrchestrator');
+    async processRubyCode(rubyCode, options = {}) {
         
         try {
             const result = await this.transpilerCore.processRubyCode(rubyCode);
-            // console.log('🎉 MODULAR pipeline completed successfully!');
+            
+            // Debug logging for auto-save
+            
+            // Auto-save si l'option est activée et que SquirrelSaver est disponible
+            if (options.autoSave && window.SquirrelSaver) {
+                try {
+                    
+                    const saveResult = await window.SquirrelSaver.autoSave({
+                        code: result.js,
+                        originalCode: rubyCode,
+                        filename: options.filename || 'transpiled.js',
+                        timestamp: new Date().toISOString(),
+                        metadata: {
+                            sourceFile: options.sourceFile,
+                            transpilerVersion: '5.0',
+                            ...options.metadata
+                        }
+                    });
+                    
+                    if (saveResult) {
+                        result.savedFiles = saveResult.files;
+                    } else {
+                        console.warn('⚠️ Auto-save returned null/false');
+                    }
+                } catch (saveError) {
+                    console.warn('⚠️ Auto-save failed (continuing execution):', saveError.message);
+                    console.error('💥 Auto-save error details:', saveError);
+                }
+            }
+            
             return result;
         } catch (error) {
             console.error('❌ MODULAR pipeline failed:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 💾 SAVE TRANSPILED CODE TO DISK
+     */
+    async saveTranspiledCode(rubyCode, filename = 'manual-save.js', metadata = {}) {
+        if (!window.SquirrelSaver) {
+            throw new Error('SquirrelSaver not available. Make sure the server is running.');
+        }
+
+        try {
+            // Transpiler le code d'abord
+            const result = await this.processRubyCode(rubyCode);
+            
+            // Sauvegarder sur le disque
+            const saveResult = await window.SquirrelSaver.saveTranspiledCode({
+                transpiledCode: result.js,
+                rubyCode: rubyCode,
+                filename: filename,
+                metadata: {
+                    transpilerVersion: '5.0',
+                    architecture: 'Modular',
+                    timestamp: new Date().toISOString(),
+                    ...metadata
+                }
+            });
+
+            return {
+                transpilation: result,
+                save: saveResult
+            };
+
+        } catch (error) {
+            console.error('❌ Failed to save transpiled code:', error);
             throw error;
         }
     }
@@ -157,7 +215,6 @@ class SquirrelOrchestrator {
      * 🎯 QUICK TEST METHOD
      */
     async quickTest() {
-        // console.log('🧪 Running quick Squirrel test...');
         
         const testCode = `
 puts "Hello from modular Squirrel!"
@@ -183,14 +240,12 @@ container = A.new({
     async performanceTest(rubyCode) {
         const startTime = performance.now();
         
-        // console.log('⏱️ Starting performance test...');
         
         try {
             const result = await this.processRubyCode(rubyCode);
             const endTime = performance.now();
             const duration = endTime - startTime;
             
-            // console.log(`⏱️ Performance test completed in ${duration.toFixed(2)}ms`);
             
             return {
                 ...result,
@@ -224,6 +279,4 @@ export default SquirrelOrchestrator;
 if (typeof window !== 'undefined') {
     window.SquirrelOrchestrator = SquirrelOrchestrator;
 
-    // console.log('🏗️ 5-Component Architecture: RubyParserManager + CodeGenerator + RubyHandlers + TranspilerCore + SquirrelOrchestrator');
-    // console.log('🛠️ Advanced diagnostics and component access available!');
 }

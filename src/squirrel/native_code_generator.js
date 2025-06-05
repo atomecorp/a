@@ -1,41 +1,34 @@
 /**
  * 🎯 NATIVE CODE GENERATOR
- * Generates pure vanilla JavaScript with ZERO abstraction layers
- * Strictly compliant with requirement: "use only native JavaScript"
+ * Génère du JavaScript vanilla pur sans couches d'abstraction
  */
 
 class NativeCodeGenerator {
     /**
      * Generate native JavaScript from Prism AST
-     * @param {Array|Object} statements - Array of Prism AST nodes or single AST
-     * @returns {string} Native JavaScript code
      */
     generateNativeJS(statements) {
         const jsLines = [];
         
-        // Handle both array of statements and single AST object
         let statementsToProcess = [];
         
         if (Array.isArray(statements)) {
             statementsToProcess = statements;
         } else if (statements && statements.type === 'program' && statements.statements) {
-            // Handle fallback parser format
             statementsToProcess = statements.statements;
         } else if (statements && statements.body) {
-            // Handle Prism AST format
             statementsToProcess = statements.body;
         } else if (statements) {
-            // Single statement
             statementsToProcess = [statements];
         }
         
         for (const statement of statementsToProcess) {
-            // 🚫 FILTER OUT COMMENTS at statement level
+            // Filter out comments
             if (statement && 
                 (statement.type === 'CommentNode' || 
                  statement.type === 'comment' ||
                  (typeof statement === 'string' && statement.trim().startsWith('#')))) {
-                continue; // Skip comment statements
+                continue;
             }
             
             const nativeJS = this.convertToNativeJS(statement);
@@ -158,15 +151,14 @@ class NativeCodeGenerator {
     }
 
     /**
-     * Generate native function call - ONLY console.log for puts
+     * Generate native function call - ONLY puts from apis.js
      */
     generateFunctionCall(node) {
         const methodName = node.name;
         
-        // Convert Ruby puts to native console.log
         if (methodName === 'puts') {
             const args = this.generateArgumentsList(node.arguments);
-            return `console.log(${args});`;
+            return `puts(${args});`;
         }
         
         // A.new becomes native object constructor
@@ -178,7 +170,13 @@ class NativeCodeGenerator {
         // Handle wait method calls
         if (methodName === 'wait') {
             const args = this.generateArgumentsList(node.arguments);
-            return `setTimeout(() => {\n  // Wait callback\n}, ${args || '1000'})`;
+            if (node.block) {
+                // Generate block content
+                const blockContent = this.generateBlockContent(node.block);
+                return `wait(${args || '1000'}, function() {\n${blockContent}\n});`;
+            } else {
+                return `wait(${args || '1000'});`;
+            }
         }
         
         // Handle grab method calls  
@@ -382,7 +380,7 @@ class NativeCodeGenerator {
         const args = node.arguments;
         
         if (method === 'puts') {
-            return `console.log(${args});`;
+            return `puts(${args});`;
         }
         
         return `${method}(${args});`;
@@ -415,7 +413,7 @@ class NativeCodeGenerator {
         // Handle puts statements
         if (content.startsWith('puts ')) {
             const message = content.substring(5);
-            return `console.log(${message});`;
+            return `puts(${message});`;
         }
         
         // Handle end statements
@@ -460,6 +458,36 @@ class NativeCodeGenerator {
         
         // Default: return as-is (might be a variable reference)
         return value;
+    }
+
+    /**
+     * Generate block content from block node
+     */
+    generateBlockContent(blockNode) {
+        if (!blockNode) {
+            return '  // Empty block';
+        }
+
+        let statements = [];
+        
+        // Handle different block body structures
+        if (blockNode.body) {
+            if (Array.isArray(blockNode.body)) {
+                statements = blockNode.body;
+            } else if (blockNode.body.body && Array.isArray(blockNode.body.body)) {
+                statements = blockNode.body.body;
+            } else {
+                statements = [blockNode.body];
+            }
+        }
+
+        // Generate JavaScript for each statement in the block
+        const jsLines = statements.map(stmt => {
+            const js = this.convertToNativeJS(stmt);
+            return js ? `  ${js}` : null;
+        }).filter(Boolean);
+
+        return jsLines.length > 0 ? jsLines.join('\n') : '  // Empty block';
     }
 }
 
