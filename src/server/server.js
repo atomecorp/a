@@ -13,7 +13,9 @@ const PORT = process.env.PORT || 3000;
 async function startServer() {
   try {
     // Initialize database first
+    console.log('🔄 Initializing database...');
     await DatabaseOperations.initialize();
+    console.log('✅ Database ready!');
 
     // Register Socket.IO plugin
     await server.register(fastifySocketIo, {
@@ -28,6 +30,8 @@ async function startServer() {
       if (err) throw err;
       
       server.io.on('connection', (socket) => {
+        console.log(`Client connected: ${socket.id}`);
+        
         socket.on('connect_request', (data) => {
           connect(data, socket);
         });
@@ -37,7 +41,7 @@ async function startServer() {
         });
         
         socket.on('disconnect', () => {
-          // Client disconnected
+          console.log(`Client disconnected: ${socket.id}`);
         });
       });
     });
@@ -54,6 +58,7 @@ async function startServer() {
 
     // Start the server
     await server.listen({ port: PORT, host: '0.0.0.0' });
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
     
   } catch (error) {
     console.error('❌ Server startup failed:', error);
@@ -63,9 +68,11 @@ async function startServer() {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
+  console.log('\n Shutting down ...');
   try {
     await DatabaseOperations.close();
     await server.close();
+    console.log(' Server shut down successfully');
     process.exit(0);
   } catch (error) {
     console.error(' Error during shutdown:', error);

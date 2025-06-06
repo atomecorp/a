@@ -22,7 +22,7 @@ const LITTLE_ENDIAN = (() => {
 
   if (uint8[0] === 0x44) {
     return true;
-  } else if (uint8[0] === 0x11) {
+  } else if (uInt8[0] === 0x11) {
     return false;
   } else {
     throw new Error("Mixed endianness");

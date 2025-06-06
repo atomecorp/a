@@ -1,82 +1,68 @@
-# 🐿️ Squirrel - Ruby to JavaScript Transpiler
-
-## 🚀 Quick Start
-
-```bash
-# Start the Squirrel system
-./start-squirrel.sh
-
-# Open http://localhost:3001 in your browser
-# Your Ruby code from application/index.sqr will be automatically transpiled and saved
-```
-
-## 🎯 Features
-
-- **Ruby → JavaScript Transpilation** using Prism WASM
-- **Automatic file saving** of transpiled code to disk
-- **Real-time execution** in the browser
-- **Framework A** for DOM manipulation
-- **Modern ES6 modules** architecture
-
-## 💾 Auto-Save System
-
-The transpiled JavaScript code is automatically saved to the `output/` directory with:
-- **JavaScript files** (`.js`) - Transpiled code ready to run
-- **Ruby source files** (`.sqr`) - Original Ruby code backup  
-- **Metadata files** (`.meta.json`) - Transpilation details and timestamps
+# 🔄 Ruby to JavaScript Transpiler (Prism WASM)
 
 ## 📁 Project Structure
 
 ```
-checkapp/
+src/
 ├── index.html                    # Main HTML entry point
-├── start-squirrel.sh             # Main startup script
-├── clean-output.sh               # Output cleanup script
 ├── css/
 │   └── styles.css               # Styles
 ├── application/
 │   └── index.sqr                # Ruby source code entry point
-├── server/
-│   └── squirrel-server.js       # Fastify server with auto-save
-├── output/                      # Auto-saved transpiled files
 ├── a/                           # A Framework
 │   ├── a.js
 │   ├── apis.js
 │   └── particles/
-├── squirrel/                    # Squirrel transpiler
-│   ├── parser/                  # Prism WASM files
-│   ├── squirrel_orchestrator.js # Main transpiler
-│   ├── squirrel_runner.js       # Auto-execution
-│   ├── squirrel_saver.js        # Auto-save client
-│   └── ...                     # Other transpiler modules
-└── assets/                     # Resources (fonts, images, etc.)
+│       ├── identity.js
+│       └── dimension.js
+├── utils.js                     # Utility functions
+└── squirrel/                    # Squirrel transpiler
+    ├── parser/                  # Downloaded Prism files
+    │   ├── prism.wasm          # Prism WASM binary
+    │   ├── nodes.js            # Prism node definitions
+    │   ├── visitor.js          # AST visitor
+    │   └── deserialize.js      # WASM deserializer
+    ├── wasi_wrapper.js         # WASI implementation (manual)
+    ├── prism_helper.js         # Prism WASM helper (manual)
+    ├── prism_parser.js         # Main parser interface (manual)
+    ├── squirrel_orchestrator.js # Transpiler orchestrator
+    └── squirrel_runner.js      # Squirrel runner
 ```
 
 ## 🔧 Setup Instructions
 
-### 1. Install Dependencies
-
-```bash
-npm install
-```
-
-### 2. Install Prism WASM
+### 1. Install Prism WASM
 
 ```bash
 chmod +x install_prism.sh
 ./install_prism.sh
 ```
 
-### 3. Start the System
-
-```bash
-./start-squirrel.sh
-```
-
 This will:
-- Start the Fastify server with auto-save functionality
-- Serve the application at http://localhost:3001
-- Automatically transpile and save Ruby code from `application/index.sqr`
+- Download `@ruby/prism` via npm
+- Copy `prism.wasm` to `squirrel/parser/`
+- Copy optional Prism JS files to `squirrel/parser/`
+
+### 2. File Organization
+
+**Downloaded files** (from Prism):
+- `squirrel/parser/prism.wasm`
+- `squirrel/parser/nodes.js`
+- `squirrel/parser/visitor.js`
+- `squirrel/parser/deserialize.js`
+
+**Manually created files** (our code):
+- `squirrel/wasi_wrapper.js`
+- `squirrel/prism_helper.js`
+- `squirrel/prism_parser.js`
+
+### 3. Tauri Integration
+
+Since this runs inside Tauri:
+- No separate development server needed
+- Uses Tauri's built-in file serving
+- WASM files are served directly by Tauri
+- All paths are relative to the web root
 
 ## 🚀 How It Works
 
