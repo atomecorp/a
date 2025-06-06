@@ -2,8 +2,10 @@
 test_app/
 atome/
 .idea/
+node_modules
 src/analysis/
 src/squirrel/parser/
 tests/working_tests
 tests/fixed_transpiler.js
 .watcher.pid
+src-tauri/target/
