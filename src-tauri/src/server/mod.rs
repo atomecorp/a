@@ -13,8 +13,8 @@ pub async fn start_server(static_dir: PathBuf) {
         .nest_service("/", serve_service)
         .layer(CorsLayer::permissive());
         
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("Serveur Axum démarré: http://localhost:3000");
+    let addr = SocketAddr::from(([127, 0, 0, 1], 7000));
+    println!("Serveur Axum démarré: http://localhost:7000");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
