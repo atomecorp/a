@@ -1,1 +1,0 @@
-node fastify-server.mjs
