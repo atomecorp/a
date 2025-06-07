@@ -3,11 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "🐿️ Framework hybride moderne avec Svelte + Tauri",
+  "description": "🐿️ Framework hybride moderne avec Vanilla JS + Tauri + Axum",
   "scripts": {
     "dev": "./dev.sh",
-    "build:svelte": "rollup -c",
-    "watch:svelte": "rollup -c -w", 
     "start:server": "node fastify-server.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev"
@@ -17,12 +15,6 @@
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
-    "@rollup/plugin-commonjs": "^28.0.3",
-    "@rollup/plugin-node-resolve": "^16.0.1",
-    "@rollup/plugin-terser": "^0.4.4",
-    "fastify": "^5.3.3",
-    "rollup": "^4.42.0",
-    "rollup-plugin-svelte": "^7.2.2",
-    "svelte": "^5.33.14"
+    "fastify": "^5.3.3"
   }
 }

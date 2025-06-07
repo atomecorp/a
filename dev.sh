@@ -1,18 +1,12 @@
 #!/bin/bash
 
-# 🚀 SCRIPT DE DÉVELOPPEMENT SQUIRREL + SVELTE
+# 🚀 SCRIPT DE DÉVELOPPEMENT SQUIRREL FRAMEWORK (Vanilla JS + Tauri + Axum)
 
-echo "🔧 Squirrel Development Script"
+echo "🔧 Squirrel Development Script - Pure Vanilla JS Mode"
 
 # Fonction de nettoyage
 cleanup() {
     echo "🧹 Arrêt des processus..."
-    
-    # Tuer Rollup watch
-    if [ ! -z "$ROLLUP_PID" ]; then
-        kill $ROLLUP_PID 2>/dev/null
-        echo "✅ Rollup watch arrêté"
-    fi
     
     # Tuer Fastify
     if [ ! -z "$FASTIFY_PID" ]; then
@@ -29,6 +23,7 @@ cleanup() {
     # Nettoyage des ports
     lsof -ti:3001 | xargs kill -9 2>/dev/null
     lsof -ti:1420 | xargs kill -9 2>/dev/null
+    lsof -ti:7000 | xargs kill -9 2>/dev/null
     
     exit 0
 }
@@ -36,19 +31,7 @@ cleanup() {
 # Gérer les signaux
 trap cleanup SIGINT SIGTERM
 
-echo "📦 1. Construction du bundle Svelte..."
-npm run build:svelte
-
-if [ $? -eq 0 ]; then
-    echo "✅ Bundle Svelte construit avec succès"
-else
-    echo "❌ Erreur lors de la construction Svelte"
-    exit 1
-fi
-
-echo "👀 2. Démarrage du watch Rollup..."
-npm run watch:svelte &
-ROLLUP_PID=$!
+echo "✅ No build step needed - Pure Vanilla JS ready!"
 
 echo "🚀 3. Démarrage du serveur Fastify..."
 npm run start:server &

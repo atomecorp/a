@@ -1,40 +1,17 @@
-import { nodeResolve } from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
-import terser from '@rollup/plugin-terser';
-import svelte from 'rollup-plugin-svelte';
+// Rollup configuration for Squirrel Framework (Vanilla JS)
+// Build configuration for framework A and application bundling
 
 export default {
-  input: 'src/svelte/index.js',
+  input: 'src/js/app.js',
   output: {
-    file: 'src/svelte/build/bundle.js',
+    file: 'src/js/bundle.js',
     format: 'iife',
-    name: 'SquirrelSvelte',
-    sourcemap: true,
-    exports: 'named'
+    name: 'SquirrelApp',
+    sourcemap: true
   },
   plugins: [
-    svelte({
-      // Compiler options
-      compilerOptions: {
-        dev: process.env.NODE_ENV !== 'production',
-        generate: 'dom'
-      },
-      // CSS handling
-      emitCss: false // CSS will be included in the bundle
-    }),
-    nodeResolve({
-      browser: true,
-      dedupe: ['svelte']
-    }),
-    commonjs(),
-    // Minify only in production
-    process.env.NODE_ENV === 'production' && terser({
-      compress: {
-        drop_console: true,
-        drop_debugger: true
-      }
-    })
-  ].filter(Boolean),
+    // Future plugins for vanilla JS optimization can be added here
+  ],
   external: [],
   watch: {
     clearScreen: false

@@ -49,12 +49,6 @@ class SquirrelApp {
         ];
 
         await this.loadModulesParallel(frameworkModules);
-        
-        // Load Svelte bundle as script (IIFE format)
-        await this.loadSvelteBundle();
-        
-        // Initialiser Svelte si disponible
-        await this.initSvelteIntegration();
     }
 
     async loadApplicationModules() {
@@ -99,33 +93,6 @@ class SquirrelApp {
             // Continuer sans ce module si non-critique
             return null;
         }
-    }
-
-    /**
-     * Charge le bundle Svelte comme script (IIFE format)
-     */
-    async loadSvelteBundle() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = '../svelte/build/bundle.js';
-            script.onload = () => {
-                // Vérifier si SquirrelSvelte global est disponible
-                if (window.SquirrelSvelte) {
-                    // Stocker comme module pour cohérence
-                    this.modules.set('svelte', window.SquirrelSvelte);
-                    resolve();
-                } else {
-                    console.warn('⚠️ SquirrelSvelte global not found after bundle load');
-                    resolve(); // Continue anyway
-                }
-            };
-            script.onerror = (error) => {
-                console.error('❌ Failed to load Svelte bundle:', error);
-                resolve(); // Continue anyway, Svelte is optional
-            };
-            
-            document.head.appendChild(script);
-        });
     }
 
     shouldLoadApplication() {
@@ -189,58 +156,7 @@ class SquirrelApp {
         return Array.from(this.modules.keys());
     }
     
-    /**
-     * Initialise l'intégration Svelte si le module est disponible
-     */
-    async initSvelteIntegration() {
-        const svelteModule = this.modules.get('svelte');
-        
-        if (svelteModule && svelteModule.default) {
-            try {
-                this.svelteIntegration = svelteModule.default(this);
-                
-                // API publique pour Svelte
-                window.createSquirrelDashboard = (containerId) => {
-                    return this.svelteIntegration?.createDashboard(containerId);
-                };
-                
-                window.createSquirrelSettings = (containerId) => {
-                    return this.svelteIntegration?.createSettingsPanel(containerId);
-                };
-                
-            } catch (error) {
-                console.warn('⚠️ Svelte integration failed:', error);
-                console.error('Full Svelte error:', error);
-            }
-        } else if (window.SquirrelSvelte) {
-            // Fallback: Use global SquirrelSvelte directly
-            try {
-                if (window.SquirrelSvelte.default) {
-                    this.svelteIntegration = window.SquirrelSvelte.default(this);
-                    
-                    // API publique pour Svelte
-                    window.createSquirrelDashboard = (containerId) => {
-                        return this.svelteIntegration?.createDashboard(containerId);
-                    };
-                    
-                    window.createSquirrelSettings = (containerId) => {
-                        return this.svelteIntegration?.createSettingsPanel(containerId);
-                    };
-                }
-            } catch (error) {
-                console.warn('⚠️ Global Svelte integration failed:', error);
-            }
-        } else {
-            console.info('ℹ️ Svelte module not available');
-        }
-    }
-    
-    /**
-     * API publique pour Svelte
-     */
-    getSvelteIntegration() {
-        return this.svelteIntegration;
-    }
+
 }
 
 // Instance globale
