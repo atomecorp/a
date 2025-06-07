@@ -12,7 +12,7 @@ class SquirrelApp {
 
     async init() {
         try {
-            console.log(`🐿️ Initializing Squirrel v${this.version}...`);
+            // console.log(`🐿️ Initializing Squirrel v${this.version}...`);
             
             // Phase 1: Core essentials
             await this.loadCoreModules();
@@ -24,7 +24,7 @@ class SquirrelApp {
             await this.loadApplicationModules();
             
             this.initialized = true;
-            console.log('✅ Squirrel initialized successfully');
+            // console.log('✅ Squirrel initialized successfully');
             
             // Rendre la version disponible globalement
             window.SQUIRREL_VERSION = this.version;
@@ -90,10 +90,10 @@ class SquirrelApp {
 
     async loadModule(name, path, optional = false) {
         try {
-            console.log(`📦 Loading ${name} from ${path}...`);
+            // console.log(`📦 Loading ${name} from ${path}...`);
             const module = await import(path);
             this.modules.set(name, module);
-            console.log(`✅ ${name} loaded successfully:`, module);
+            // console.log(`✅ ${name} loaded successfully:`, module);
             return module;
         } catch (error) {
             if (optional) {
@@ -112,16 +112,16 @@ class SquirrelApp {
      */
     async loadSvelteBundle() {
         return new Promise((resolve, reject) => {
-            console.log('📦 Loading Svelte bundle as script...');
+            // console.log('📦 Loading Svelte bundle as script...');
             
             const script = document.createElement('script');
             script.src = '../svelte/build/bundle.js';
             script.onload = () => {
-                console.log('✅ Svelte bundle loaded successfully');
+                // console.log('✅ Svelte bundle loaded successfully');
                 
                 // Vérifier si SquirrelSvelte global est disponible
                 if (window.SquirrelSvelte) {
-                    console.log('🎯 SquirrelSvelte global found:', window.SquirrelSvelte);
+                    // console.log('🎯 SquirrelSvelte global found:', window.SquirrelSvelte);
                     // Stocker comme module pour cohérence
                     this.modules.set('svelte', window.SquirrelSvelte);
                     resolve();
@@ -142,7 +142,7 @@ class SquirrelApp {
     shouldLoadApplication() {
         // Ne pas charger l'application en mode debug core uniquement
         if (window.location.search.includes('debug=core')) {
-            console.log('🔧 Debug mode: core only');
+            // console.log('🔧 Debug mode: core only');
             return false;
         }
         
@@ -205,28 +205,28 @@ class SquirrelApp {
      * Initialise l'intégration Svelte si le module est disponible
      */
     async initSvelteIntegration() {
-        console.log('🎯 Initializing Svelte integration...');
+        // console.log('🎯 Initializing Svelte integration...');
         const svelteModule = this.modules.get('svelte');
-        console.log('📦 Svelte module found:', svelteModule);
+        // console.log('📦 Svelte module found:', svelteModule);
         
         if (svelteModule && svelteModule.default) {
             try {
-                console.log('🔧 Creating Svelte integration instance...');
+                // console.log('🔧 Creating Svelte integration instance...');
                 this.svelteIntegration = svelteModule.default(this);
-                console.log('✅ Svelte integration initialized:', this.svelteIntegration);
+                // console.log('✅ Svelte integration initialized:', this.svelteIntegration);
                 
                 // API publique pour Svelte
                 window.createSquirrelDashboard = (containerId) => {
-                    console.log('📊 Creating dashboard for:', containerId);
+                    // console.log('📊 Creating dashboard for:', containerId);
                     return this.svelteIntegration?.createDashboard(containerId);
                 };
                 
                 window.createSquirrelSettings = (containerId) => {
-                    console.log('⚙️ Creating settings for:', containerId);
+                    // console.log('⚙️ Creating settings for:', containerId);
                     return this.svelteIntegration?.createSettingsPanel(containerId);
                 };
                 
-                console.log('🌟 Global Svelte functions registered');
+                // console.log('🌟 Global Svelte functions registered');
                 
             } catch (error) {
                 console.warn('⚠️ Svelte integration failed:', error);
@@ -234,24 +234,24 @@ class SquirrelApp {
             }
         } else if (window.SquirrelSvelte) {
             // Fallback: Use global SquirrelSvelte directly
-            console.log('🔄 Using global SquirrelSvelte fallback');
+            // console.log('🔄 Using global SquirrelSvelte fallback');
             try {
                 if (window.SquirrelSvelte.default) {
                     this.svelteIntegration = window.SquirrelSvelte.default(this);
-                    console.log('✅ Svelte integration initialized from global:', this.svelteIntegration);
+                    // console.log('✅ Svelte integration initialized from global:', this.svelteIntegration);
                     
                     // API publique pour Svelte
                     window.createSquirrelDashboard = (containerId) => {
-                        console.log('📊 Creating dashboard for:', containerId);
+                        // console.log('📊 Creating dashboard for:', containerId);
                         return this.svelteIntegration?.createDashboard(containerId);
                     };
                     
                     window.createSquirrelSettings = (containerId) => {
-                        console.log('⚙️ Creating settings for:', containerId);
+                        // console.log('⚙️ Creating settings for:', containerId);
                         return this.svelteIntegration?.createSettingsPanel(containerId);
                     };
                     
-                    console.log('🌟 Global Svelte functions registered from global');
+                    // console.log('🌟 Global Svelte functions registered from global');
                 }
             } catch (error) {
                 console.warn('⚠️ Global Svelte integration failed:', error);
