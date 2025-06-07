@@ -64,5 +64,68 @@ defineParticle({
     }
 });
 
+
+
+defineParticle({
+    name: 'unit',
+    type: 'object',
+    category: 'dimension',
+    priority: 100, // Execute after other particles
+    process(el, unitMap) {
+        // Petit délai pour s'assurer que tous les autres particles sont appliqués
+        setTimeout(() => {
+            
+            if (typeof unitMap === 'object' && unitMap !== null) {
+                Object.entries(unitMap).forEach(([property, unit]) => {
+                    // Debug: voir les valeurs actuelles
+                 
+                    
+                    // Récupérer la valeur numérique actuelle
+                    let currentValue;
+                    
+                    // 1. Essayer depuis le style inline
+                    if (el.style[property]) {
+                        currentValue = parseFloat(el.style[property]);
+                    } 
+                    // 2. Essayer depuis les particles de l'instance A
+                    else {
+                        const aInstance = window.A?.instances?.find(instance => 
+                            instance.html_object === el || instance.element === el
+                        );
+                        
+                        if (aInstance?.particles?.[property] !== undefined) {
+                            const originalValue = aInstance.particles[property];
+                            currentValue = typeof originalValue === 'string' ? 
+                                parseFloat(originalValue) : originalValue;
+                        }
+                    }
+                    
+                    // 3. Fallback sur computed style
+                    if (currentValue === undefined || isNaN(currentValue)) {
+                        currentValue = parseFloat(getComputedStyle(el)[property]) || 0;
+                    }
+                    
+                    // Appliquer la nouvelle unité
+                    if (currentValue >= 0) {
+                        const newValue = currentValue + unit;
+                        el.style[property] = newValue;
+                        
+                        // Mettre à jour dans l'instance A si possible
+                        const aInstance = window.A?.instances?.find(instance => 
+                            instance.html_object === el || instance.element === el
+                        );
+                        if (aInstance?.particles) {
+                            aInstance.particles[property] = newValue;
+                        }
+                    } else {
+                        console.warn(`⚠️ No valid value found for ${property}:`, currentValue);
+                    }
+                });
+            }
+        }, 10); // Petit délai pour laisser les autres particles s'exécuter
+    }
+});
+
+
 // Export for ES6 modules
 export default {};

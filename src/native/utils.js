@@ -56,16 +56,16 @@ function initParticlesExtension() {
             'wordBreak', 'wordSpacing', 'wordWrap', 'zIndex'
         ];
 
-        const dimensionalProps = new Set(['Width', 'Height', 'Top', 'Left', 'Bottom', 'Right', 'Margin', 'Padding', 'Indent', 'Radius', 'fontSize', 'lineHeight', 'gap', 'Gap']);
+        // const dimensionalProps = new Set(['Width', 'Height', 'Top', 'Left', 'Bottom', 'Right', 'Margin', 'Padding', 'Indent', 'Radius', 'fontSize', 'lineHeight', 'gap', 'Gap']);
 
-        function needsPx(prop) {
-            if (prop === 'fontSize' || prop === 'lineHeight') return true;
-            if (prop === 'gap') return true;
-            for (const dimProp of dimensionalProps) {
-                if (prop.includes(dimProp)) return true;
-            }
-            return false;
-        }
+        // function needsPx(prop) {
+        //     if (prop === 'fontSize' || prop === 'lineHeight') return true;
+        //     if (prop === 'gap') return true;
+        //     for (const dimProp of dimensionalProps) {
+        //         if (prop.includes(dimProp)) return true;
+        //     }
+        //     return false;
+        // }
 
         nativeStyleProps.forEach(prop => {
        
@@ -74,12 +74,13 @@ function initParticlesExtension() {
                 type: 'any',
                 category: 'css',
                 process(el, v) {
-                    common_treatment(el, v, prop);
-                    if (typeof v === 'number') {
-                        el.style[prop] = needsPx(prop) ? `${v}px` : v;
-                    } else {
                         el.style[prop] = v;
-                    }
+                    // common_treatment(el, v, prop);
+                    // if (typeof v === 'number') {
+                    //     el.style[prop] = needsPx(prop) ? `${v}px` : v;
+                    // } else {
+                    //     el.style[prop] = v;
+                    // }
                 }
             });
         });
