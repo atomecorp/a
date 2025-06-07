@@ -1,34 +1,50 @@
-# Specification for a Hybrid Development System (DSL + Rust + JS)
+# 🐿️ Squirrel Framework + Svelte Integration
 
-## Objective
+## 🎯 Vue d'ensemble
 
-Create a development environment combining the flexibility of a simple, elegant, and practical scripting language, the performance of Rust, and the simplicity of a user interface built in JavaScript.
+Framework hybride moderne combinant la flexibilité d'un système de modules ES6, la réactivité de Svelte, et la performance de Rust via Tauri.
 
-## Main Components
+## 🏗️ Architecture
 
-### 1. **DSL (Domain-Specific Language)**
+### **Frontend (JavaScript + Svelte)**
+- **Squirrel Framework** - Système modulaire ES6 avec chargement dynamique
+- **Svelte Components** - Interface utilisateur réactive compilée localement
+- **Tauri Integration** - Application desktop native
 
-* **Elegant scripting language**: Inspired by the simplicity and power of dynamic languages, offering advanced features such as:
+### **Backend (Rust)**
+- **Axum Server** - API haute performance
+- **Fastify Server** - Serveur de fichiers statiques
+- **Tauri Runtime** - Intégration desktop native
 
-  * **Simple hash tables**: Intuitive data collections.
-  * **Dynamic methods**: Ability to define methods at runtime (`define_method`), check message responses (`respond_to?`), and inspect objects (`inspect`).
-  * **Metaprogramming**: Modify the behavior of objects and classes dynamically.
+## 🚀 Démarrage rapide
 
-### 2. **JavaScript Generation**
+```bash
+# Développement complet
+./dev.sh
 
-* **DSL Compilation**: Code written in the DSL is automatically translated into pure JavaScript for manipulating the user interface, ensuring maximum responsiveness.
+# Ou étape par étape
+npm run build:svelte    # Compiler Svelte
+npm run start:server    # Serveur Fastify
+npm run tauri dev       # Application Tauri
+```
 
-### 3. **Rust Backend**
+## 📁 Structure
 
-* **Heavy operations**: Complex operations and intensive computations are handled by Rust modules compiled to native code for optimal performance.
-* **API Interface**: An API facilitates communication between the JavaScript frontend and the Rust backend for critical processing.
+```
+src/
+├── js/app.js           # Point d'entrée Squirrel
+├── svelte/             # Intégration Svelte
+│   ├── index.js        # Export et intégration
+│   ├── components/     # Composants Svelte
+│   └── build/          # Bundle compilé
+├── a/                  # Modules Squirrel
+├── native/             # Utilitaires natifs
+└── index.html          # Interface principale
 
-### 4. **Interoperability**
-
-* **Smooth communication**: A high-performance mechanism exchanges data between JS (UI) and Rust (backend) with minimal latency.
-* **Optional WebAssembly**: Possibility to use WebAssembly for Rust parts when needed, while limiting its use to avoid performance loss.
-
-## Summary of Advantages
+src-tauri/              # Configuration Tauri
+fastify-server.mjs      # Serveur statique
+rollup.config.js        # Configuration Svelte
+```
 
 * **Performance**: Rust handles critical tasks, JavaScript manages the UI—resulting in high overall performance.
 * **Flexibility**: The scripting language enables intuitive, powerful code with advanced metaprogramming capabilities.

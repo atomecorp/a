@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "test_app",
+  "productName": "squirrel",
   "version": "0.1.0",
-  "identifier": "com.test_app.app",
+  "identifier": "com.squirrel.app",
   "build": {
     "frontendDist": "../src"
   },
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "test_app",
+        "title": "squirrel",
         "width": 800,
         "height": 600
       }

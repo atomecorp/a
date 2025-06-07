@@ -21,7 +21,7 @@ let static_dir = std::path::PathBuf::from("../src");
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let output = Command::new("node")
-                    .current_dir("/Users/jean-ericgodard/RubymineProjects/a/test_app")
+                    .current_dir("../")
                     .arg("fastify-server.mjs")
                     .output();
 

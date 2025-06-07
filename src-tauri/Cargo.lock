@@ -3846,7 +3846,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "test_app"
+name = "squirrel"
 version = "0.1.0"
 dependencies = [
  "axum",
