@@ -57,7 +57,6 @@ function initParticlesExtension() {
         ];
 
         const dimensionalProps = new Set(['Width', 'Height', 'Top', 'Left', 'Bottom', 'Right', 'Margin', 'Padding', 'Indent', 'Radius', 'fontSize', 'lineHeight', 'gap', 'Gap']);
-        const existingCssParticles = ['width', 'height', 'color', 'backgroundColor', 'x', 'y', 'overflow'];
 
         function needsPx(prop) {
             if (prop === 'fontSize' || prop === 'lineHeight') return true;
@@ -70,8 +69,6 @@ function initParticlesExtension() {
 
         nativeStyleProps.forEach(prop => {
        
-            if (existingCssParticles.includes(prop)) return;
-    // TODO: (`🔥uglly patch remove asap, for now when removed this method overrides the atome particle, this is not what we want`);
             window.defineParticle({
                 name: prop,
                 type: 'any',
