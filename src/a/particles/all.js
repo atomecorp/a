@@ -117,23 +117,38 @@ defineParticle({
 
 // === APPEARANCE PARTICLES ===
 
-defineParticle({
-    name: 'color',
-    type: 'string',
-    category: 'appearance',
-    process(el, v) {
-        el.style.backgroundColor = v;
+function formatColorValue(value) {
+    if (typeof value === 'string') {
+        return value; // Already a valid CSS color string
+    } else if (typeof value === 'object' && value !== null) {
+        const { red = 0, green = 0, blue = 0, alpha = 1 } = value;
+        return `rgba(${Math.round(red * 255)}, ${Math.round(green * 255)}, ${Math.round(blue * 255)}, ${alpha})`;
     }
-});
+    return 'transparent'; // Default fallback
+}
 
 defineParticle({
     name: 'backgroundColor',
-    type: 'string',
+    type: 'string|object',
     category: 'appearance',
     process(el, v) {
-        el.style.backgroundColor = v;
+            var color_f= formatColorValue(v);
+            el.style.backgroundColor = color_f;
     }
 });
+
+
+defineParticle({
+    name: 'color',
+    type: 'string|object',
+    category: 'appearance',
+    process(el, v) {
+    
+           var color_f= formatColorValue(v);
+            el.style.color = color_f;
+    }
+});
+
 
 defineParticle({
     name: 'smooth',

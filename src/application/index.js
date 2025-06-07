@@ -376,25 +376,26 @@
 
 // Create a new A instance with custom properties
 new A({
-    attach: 'body',
-    id: 'view',
-    markup: 'div',
-    role: 'container',
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 100,
-      unit: {
-        width: '%',           // Pourcentage
-        height: '%',         // Viewport height
-        // fontSize: 'rem',      // Relative em
-        // padding: 'auto',      // Valeur spéciale
-        // margin: 'calc(10px + 2vw)'  // Fonction CSS
-    },
-    color: 'blue',
-    // color: {red: 1, green: 0, blue: 0, alpha: 1},
-    display: 'block',
-    overflow: 'hidden',
+  attach: 'body',
+  id: 'view',
+  markup: 'div',
+  role: 'container',
+  text: 'Hello World',
+  fontSize: 20,
+  fontWeight: 'bold',
+  textAlign: 'center',
+  backgroundColor: 'red',
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 100,
+  unit: {
+    width: '%',
+    height: '%',
+  },
+  color: { red: 0.15, green: 0.15, blue: 0.15, alpha: 1 },
+  display: 'block',
+  overflow: 'hidden',
 });
 
 
