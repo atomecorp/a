@@ -27,6 +27,7 @@ yarn-error.log*
 src-tauri/target/
 
 # Environment
+.vscode
 .env
 .env.local
 

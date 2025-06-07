@@ -1,0 +1,256 @@
+/* ===== SQUIRREL STYLES - VERSION OPTIMISÉE ===== */
+
+/* Reset et base */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+  font-size: 12px;
+  margin: 0;
+  padding: 0;
+  background: #272727;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
+  height: 100%;
+  color: lightgray;
+  touch-action: manipulation;
+}
+
+/* Polices personnalisées */
+@font-face {
+  font-family: 'Roboto-Thin';
+  src: url('../assets/fonts/Roboto/Roboto-Thin.ttf') format('truetype');
+}
+
+pre {
+  min-width: 100px;
+  margin: 0;
+  padding: 0;
+}
+
+/* Vue principale */
+#view {
+  position: absolute;
+  inset: 0;
+  font-size: 25px;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Composants */
+.matrix {
+  background-color: blue;
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 3px;
+}
+
+/* États de sélection */
+.ui-selected {
+  border: 3px solid #00bb00;
+}
+
+.ui-selecting {
+  border: 3px solid orange;
+}
+
+.selected {
+  outline: 2px dashed white;
+  background-color: #00bb00;
+}
+
+/* Élément Atome */
+.atome {
+  will-change: transform;
+  cursor: default;
+  pointer-events: auto;
+  caret-color: white;
+  outline: none;
+  user-select: none;
+  position: absolute;
+  display: inline-block;
+  background-size: 100%;
+  background-repeat: no-repeat;
+  -webkit-overflow-scrolling: touch;
+  -webkit-user-drag: none;
+  caret-shape: bar;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+/* Texte */
+.text {
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  position: relative;
+  display: inline-block;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* Centrage */
+.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.center_vertical {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  transform: translateY(-50%);
+}
+
+.center_horizontal {
+  display: flex;
+  justify-content: center;
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+/* Alignements */
+.e_align_h_left { text-align: left; }
+.e_align_h_right { text-align: right; }
+.e_align_h_center { text-align: center; }
+.el_align_h { text-align: justify; }
+
+.el_align_v {
+  display: flex;
+  align-items: center;
+}
+
+.el_align_v_bottom {
+  display: flex;
+  align-items: flex-end;
+}
+
+/* ===== SVELTE INTEGRATION STYLES ===== */
+
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin: 20px 0 30px 0;
+    flex-wrap: wrap;
+}
+
+.controls button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.controls button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Conteneurs Svelte */
+#squirrel-dashboard,
+#squirrel-settings {
+    margin: 20px 0;
+}
+
+/* Animation d'apparition */
+.squirrel-svelte-container {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== SQUIRREL TESTING INTERFACE ===== */
+
+.container {
+  max-width: 1200px;
+  margin: 20px auto;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 10px;
+  color: #333;
+}
+
+.container h1 {
+  text-align: center;
+  color: #2c3e50;
+  margin-bottom: 30px;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.controls button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.controls button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.controls button:active {
+  transform: translateY(0);
+}
+
+#status {
+  text-align: center;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+#squirrel-dashboard, #squirrel-settings {
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+#squirrel-dashboard em, #squirrel-settings em {
+  color: #888;
+  font-style: italic;
+  display: block;
+  text-align: center;
+}
+
+/* ===== END TESTING INTERFACE ===== */
+
+
