@@ -19,12 +19,53 @@ class Slider {
             step: 1,
             value: 50,
             type: 'horizontal', // 'horizontal', 'vertical', 'circular'
+            
+            // ===== NOUVELLE API DE STYLING AVANCÉ =====
+            grip: {
+                // Styles pour le thumb/curseur
+                width: null,           // Si null, utilise thumbSize
+                height: null,          // Si null, utilise thumbSize
+                backgroundColor: '#2196f3',
+                border: '3px solid #ffffff',
+                borderRadius: '50%',
+                boxShadow: '0 4px 12px rgba(33, 150, 243, 0.4)',
+                cursor: 'pointer',
+                transition: 'transform 0.2s ease-out, box-shadow 0.2s ease-out'
+            },
+            
+            support: {
+                // Styles pour le conteneur/background
+                backgroundColor: '#ffffff',
+                border: '1px solid rgba(0,0,0,0.04)',
+                borderRadius: '12px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)',
+                padding: '15px'
+            },
+            
+            rail: {
+                // Styles pour la track/rail
+                backgroundColor: '#e0e0e0',
+                borderRadius: '3px',
+                height: null,          // Si null, utilise trackHeight
+                width: null            // Si null, utilise trackWidth
+            },
+            
+            progress: {
+                // Styles pour la barre de progression
+                backgroundColor: '#2196f3',
+                borderRadius: '3px',
+                boxShadow: '0 2px 4px rgba(33, 150, 243, 0.3)',
+                transition: 'width 0.2s ease-out, height 0.2s ease-out'
+            },
+            
+            // ===== API LEGACY (maintenue pour compatibilité) =====
             colors: {
                 container: '#ffffff',
                 track: '#e0e0e0',
                 progress: '#2196f3',
                 thumb: '#2196f3'
             },
+            
             animations: {
                 enabled: true,
                 duration: 0.2,
@@ -51,7 +92,54 @@ class Slider {
         this.isDragging = false;
         this.elements = {};
 
+        // Fusionner les styles legacy avec la nouvelle API
+        this._mergeStyleAPIs();
+
         this._init();
+    }
+
+    _mergeStyleAPIs() {
+        // Fusionner l'API legacy colors avec la nouvelle API de styling
+        if (this.config.colors) {
+            // Support (container)
+            if (this.config.colors.container && !this.originalConfig.support?.backgroundColor) {
+                this.config.support.backgroundColor = this.config.colors.container;
+            }
+            
+            // Rail (track)
+            if (this.config.colors.track && !this.originalConfig.rail?.backgroundColor) {
+                this.config.rail.backgroundColor = this.config.colors.track;
+            }
+            
+            // Progress
+            if (this.config.colors.progress && !this.originalConfig.progress?.backgroundColor) {
+                this.config.progress.backgroundColor = this.config.colors.progress;
+            }
+            
+            // Grip (thumb)
+            if (this.config.colors.thumb && !this.originalConfig.grip?.backgroundColor) {
+                this.config.grip.backgroundColor = this.config.colors.thumb;
+                // Mettre à jour aussi la boxShadow pour rester cohérent
+                if (!this.originalConfig.grip?.boxShadow) {
+                    const thumbColor = this.config.colors.thumb;
+                    this.config.grip.boxShadow = `0 4px 12px ${this._addAlphaToColor(thumbColor, 0.4)}`;
+                }
+            }
+        }
+        
+        // Appliquer les dimensions personnalisées
+        if (this.config.grip.width === null) {
+            this.config.grip.width = this.config.thumbSize;
+        }
+        if (this.config.grip.height === null) {
+            this.config.grip.height = this.config.thumbSize;
+        }
+        if (this.config.rail.height === null) {
+            this.config.rail.height = this.config.trackHeight;
+        }
+        if (this.config.rail.width === null) {
+            this.config.rail.width = this.config.trackWidth;
+        }
     }
 
     _init() {
@@ -68,12 +156,12 @@ class Slider {
     _createLinearSlider() {
         // Ajuster trackWidth et trackHeight selon le type et les dimensions
         if (this.config.type === 'vertical') {
-            // Pour vertical: trackHeight = épaisseur, trackWidth = longueur utilisable
-            if (!this.originalConfig.hasOwnProperty('trackHeight')) {
-                this.config.trackHeight = 8; // Épaisseur par défaut
-            }
+            // Pour vertical: trackWidth = épaisseur, trackHeight = longueur utilisable
             if (!this.originalConfig.hasOwnProperty('trackWidth')) {
-                this.config.trackWidth = Math.max(100, this.config.height - 40); // Longueur utilisable
+                this.config.trackWidth = 8; // Épaisseur par défaut
+            }
+            if (!this.originalConfig.hasOwnProperty('trackHeight')) {
+                this.config.trackHeight = Math.max(100, this.config.height - 40); // Longueur utilisable
             }
         } else {
             // Pour horizontal: trackWidth = longueur utilisable, trackHeight = épaisseur
@@ -108,32 +196,62 @@ class Slider {
             role: 'slider-container',
             x: this.config.x,
             y: this.config.y,
-            // CORRECTION: pour vertical, garder width=width et height=height (ne pas inverser)
             width: this.config.width,
             height: this.config.height,
-            backgroundColor: this.config.colors.container,
-            smooth: 12,
-            padding: 15,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)',
-            border: '1px solid rgba(0,0,0,0.04)',
+            // Utiliser une couleur de base pour éviter les conflits avec la particle backgroundColor
+            backgroundColor: '#ffffff', // Couleur temporaire
+            border: this.config.support.border,
+            smooth: this.config.support.borderRadius ? parseInt(this.config.support.borderRadius) : 12,
+            padding: this.config.support.padding ? parseInt(this.config.support.padding) : 15,
+            boxShadow: this.config.support.boxShadow,
             overflow: 'visible'
         });
+        
+        // Appliquer directement le style backgroundColor pour supporter les dégradés
+        // Utiliser une approche plus robuste avec un délai plus long
+        const applyGradient = () => {
+            if (this.elements.container && this.elements.container.html_object) {
+                this.elements.container.html_object.style.background = this.config.support.backgroundColor;
+                this.elements.container.html_object.style.backgroundImage = 
+                    this.config.support.backgroundColor.includes('gradient') ? 
+                    this.config.support.backgroundColor : '';
+                
+                // Debug: vérifier que le style est appliqué
+                console.log('🎨 Support background appliqué:', this.config.support.backgroundColor);
+                console.log('🔍 Element style:', this.elements.container.html_object.style.background);
+            } else {
+                // Réessayer si l'élément n'est pas encore prêt
+                setTimeout(applyGradient, 10);
+            }
+        };
+        
+        setTimeout(applyGradient, 50);
     }
 
     _createTrack() {
         const isVertical = this.config.type === 'vertical';
         
+        // Calculer le padding effectif
+        const padding = this.config.support.padding ? parseInt(this.config.support.padding) : 15;
+        const paddingTotal = padding * 2; // padding des deux côtés
+        
+        // Zone utilisable après déduction du padding
+        const usableWidth = this.config.width - paddingTotal;
+        const usableHeight = this.config.height - paddingTotal;
+        
         this.elements.track = new A({
             attach: `#${this.config.id}_container`,
             id: this.config.id + '_track',
             markup: 'div',
-            // CORRECTION FINALE: pour vertical, centrer le track fine dans le conteneur
-            x: isVertical ? (this.config.width - this.config.trackHeight) / 2 - 15 : 0,
-            y: isVertical ? 15 : (this.config.height - this.config.trackHeight) / 2 - 15,
-            width: isVertical ? this.config.trackHeight : this.config.trackWidth,
-            height: isVertical ? this.config.trackWidth : this.config.trackHeight,
-            backgroundColor: this.config.colors.track,
-            smooth: 3,
+            // CORRECTION: calcul de centrage dans la zone utilisable (après padding)
+            x: (usableWidth - this.config.trackWidth) / 2,
+            y: (usableHeight - this.config.trackHeight) / 2,
+            // Dimensions correctes selon l'orientation
+            width: this.config.trackWidth,
+            height: this.config.trackHeight,
+            // NOUVELLE API: utiliser rail pour le styling du track
+            backgroundColor: this.config.rail.backgroundColor,
+            smooth: this.config.rail.borderRadius ? parseInt(this.config.rail.borderRadius) : 3,
             position: 'relative',
             cursor: 'pointer'
         });
@@ -141,58 +259,85 @@ class Slider {
 
     _createProgress() {
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION FINALE: calculer la taille initiale correctement
+        // Correction: pour vertical, la progression se base sur trackHeight (hauteur de la barre)
         const initialSize = (this.currentValue / (this.config.max - this.config.min)) * 
-                           (isVertical ? this.config.trackWidth : this.config.trackWidth);
+                           (isVertical ? this.config.trackHeight : this.config.trackWidth);
         
         this.elements.progress = new A({
             attach: `#${this.config.id}_track`,
             id: this.config.id + '_progress',
             markup: 'div',
             x: 0,
-            // CORRECTION FINALE: pour vertical, position depuis le bas du track
-            y: isVertical ? this.config.trackWidth - initialSize : 0,
-            width: isVertical ? this.config.trackHeight : initialSize,
+            // Correction: pour vertical, y se base sur trackHeight
+            y: isVertical ? this.config.trackHeight - initialSize : 0,
+            // Correction: pour vertical, width = trackWidth, height = progression
+            width: isVertical ? this.config.trackWidth : initialSize,
             height: isVertical ? initialSize : this.config.trackHeight,
-            backgroundColor: this.config.colors.progress,
-            smooth: 3,
+            // NOUVELLE API: utiliser progress pour le styling
+            backgroundColor: '#ffffff', // Couleur temporaire pour éviter les conflits
+            smooth: this.config.progress.borderRadius ? parseInt(this.config.progress.borderRadius) : 3,
             position: 'absolute',
             transition: this.config.animations.enabled ? 
+                       this.config.progress.transition || 
                        `${isVertical ? 'height' : 'width'} ${this.config.animations.duration}s ${this.config.animations.easing}` : 'none',
-            boxShadow: '0 2px 4px rgba(33, 150, 243, 0.3)'
+            boxShadow: this.config.progress.boxShadow
         });
+        
+        // Appliquer le dégradé pour la barre de progression
+        const applyProgressGradient = () => {
+            if (this.elements.progress && this.elements.progress.html_object) {
+                this.elements.progress.html_object.style.background = this.config.progress.backgroundColor;
+                this.elements.progress.html_object.style.backgroundImage = 
+                    this.config.progress.backgroundColor.includes('gradient') ? 
+                    this.config.progress.backgroundColor : '';
+                
+                console.log('🌈 Progress background appliqué:', this.config.progress.backgroundColor);
+            } else {
+                setTimeout(applyProgressGradient, 10);
+            }
+        };
+        
+        setTimeout(applyProgressGradient, 50);
     }
 
     _createThumb() {
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION FINALE: calculer la position initiale correctement
-        const trackSize = isVertical ? this.config.trackWidth : this.config.trackWidth;
+        // Correction: pour vertical, le thumb se déplace sur trackHeight (hauteur de la barre)
+        const trackSize = isVertical ? this.config.trackHeight : this.config.trackWidth;
         const initialPosition = (this.currentValue / (this.config.max - this.config.min)) * trackSize;
         
         this.elements.thumb = new A({
             attach: `#${this.config.id}_track`,
             id: this.config.id + '_thumb',
             markup: 'div',
-            x: isVertical ? (this.config.trackHeight - this.config.thumbSize) / 2 : initialPosition - this.config.thumbSize / 2,
-            // CORRECTION FINALE: pour vertical, partir du bas du track
-            y: isVertical ? this.config.trackWidth - initialPosition - this.config.thumbSize / 2 : 
-               (this.config.trackHeight - this.config.thumbSize) / 2,
-            width: this.config.thumbSize,
-            height: this.config.thumbSize,
-            backgroundColor: this.config.colors.thumb,
-            smooth: '50%',
+            // Correction: pour vertical, x se centre sur trackWidth, y suit la position sur trackHeight
+            x: isVertical ? (this.config.trackWidth - this.config.grip.width) / 2 : initialPosition - this.config.grip.width / 2,
+            y: isVertical ? this.config.trackHeight - initialPosition - this.config.grip.height / 2 : 
+               (this.config.trackHeight - this.config.grip.height) / 2,
+            // NOUVELLE API: utiliser grip pour le styling du thumb
+            width: this.config.grip.width,
+            height: this.config.grip.height,
+            backgroundColor: this.config.grip.backgroundColor,
+            smooth: this.config.grip.borderRadius || '50%',
             position: 'absolute',
-            cursor: 'pointer',
+            cursor: this.config.grip.cursor,
             transition: this.config.animations.enabled ? 
+                       this.config.grip.transition || 
                        `transform ${this.config.animations.duration}s ${this.config.animations.easing}, box-shadow ${this.config.animations.duration}s ${this.config.animations.easing}` : 'none',
-            boxShadow: '0 4px 12px rgba(33, 150, 243, 0.4)',
-            border: '3px solid #ffffff'
+            boxShadow: this.config.grip.boxShadow,
+            border: this.config.grip.border
         });
     }
 
     _applyStyles() {
         // Appliquer le thème
         this._applyTheme();
+
+        // Appliquer les styles de la nouvelle API
+        this._applySupportStyles();
+        this._applyRailStyles();
+        this._applyProgressStyles();
+        this._applyGripStyles();
 
         // Ajouter les styles CSS pour les animations
         if (!document.getElementById('slider-animations')) {
@@ -484,7 +629,7 @@ class Slider {
         
         let relativePosition;
         if (isVertical) {
-            // CORRECTION: utiliser la hauteur réelle du track (trackWidth pour vertical)
+            // CORRECTION: pour vertical, trackHeight est la longueur de déplacement
             const trackHeight = trackRect.height;
             relativePosition = (trackRect.bottom - e.clientY) / trackHeight;
         } else {
@@ -540,8 +685,8 @@ class Slider {
         }
         
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION FINALE: calculs cohérents pour le positionnement
-        const trackSize = isVertical ? this.config.trackWidth : this.config.trackWidth;
+        // CORRECTION FINALE: pour vertical, trackHeight est la longueur de déplacement
+        const trackSize = isVertical ? this.config.trackHeight : this.config.trackWidth;
         const percentage = (this.currentValue - this.config.min) / (this.config.max - this.config.min);
         const progressSize = percentage * trackSize;
         const thumbPosition = progressSize;
@@ -549,13 +694,11 @@ class Slider {
         // Mettre à jour la barre de progression
         if (isVertical) {
             this.elements.progress.height(progressSize);
-            // CORRECTION FINALE: position depuis le bas du track
             this.elements.progress.y(trackSize - progressSize);
-            // Position du thumb depuis le bas
-            this.elements.thumb.y(trackSize - thumbPosition - this.config.thumbSize / 2);
+            this.elements.thumb.y(trackSize - thumbPosition - this.config.grip.height / 2);
         } else {
             this.elements.progress.width(progressSize);
-            this.elements.thumb.x(thumbPosition - this.config.thumbSize / 2);
+            this.elements.thumb.x(thumbPosition - this.config.grip.width / 2);
         }
 
         // Appliquer la variation de couleur basée sur la position
@@ -572,7 +715,71 @@ class Slider {
 
     setConfig(newConfig) {
         this.config = { ...this.config, ...newConfig };
+        this._mergeStyleAPIs();
         this._applyStyles();
+    }
+
+    // ===== NOUVELLE API DE STYLING DYNAMIQUE =====
+    
+    setGripStyle(styles) {
+        this.config.grip = { ...this.config.grip, ...styles };
+        this._applyGripStyles();
+    }
+    
+    setSupportStyle(styles) {
+        this.config.support = { ...this.config.support, ...styles };
+        this._applySupportStyles();
+    }
+    
+    setRailStyle(styles) {
+        this.config.rail = { ...this.config.rail, ...styles };
+        this._applyRailStyles();
+    }
+    
+    setProgressStyle(styles) {
+        this.config.progress = { ...this.config.progress, ...styles };
+        this._applyProgressStyles();
+    }
+    
+    _applyGripStyles() {
+        if (!this.elements.thumb) return;
+        
+        const thumb = this.elements.thumb.html_object;
+        if (this.config.grip.backgroundColor) thumb.style.backgroundColor = this.config.grip.backgroundColor;
+        if (this.config.grip.border) thumb.style.border = this.config.grip.border;
+        if (this.config.grip.borderRadius) thumb.style.borderRadius = this.config.grip.borderRadius;
+        if (this.config.grip.boxShadow) thumb.style.boxShadow = this.config.grip.boxShadow;
+        if (this.config.grip.cursor) thumb.style.cursor = this.config.grip.cursor;
+        if (this.config.grip.transition) thumb.style.transition = this.config.grip.transition;
+    }
+    
+    _applySupportStyles() {
+        if (!this.elements.container) return;
+        
+        const container = this.elements.container.html_object;
+        if (this.config.support.backgroundColor) container.style.backgroundColor = this.config.support.backgroundColor;
+        if (this.config.support.border) container.style.border = this.config.support.border;
+        if (this.config.support.borderRadius) container.style.borderRadius = this.config.support.borderRadius;
+        if (this.config.support.boxShadow) container.style.boxShadow = this.config.support.boxShadow;
+        if (this.config.support.padding) container.style.padding = this.config.support.padding;
+    }
+    
+    _applyRailStyles() {
+        if (!this.elements.track) return;
+        
+        const track = this.elements.track.html_object;
+        if (this.config.rail.backgroundColor) track.style.backgroundColor = this.config.rail.backgroundColor;
+        if (this.config.rail.borderRadius) track.style.borderRadius = this.config.rail.borderRadius;
+    }
+    
+    _applyProgressStyles() {
+        if (!this.elements.progress) return;
+        
+        const progress = this.elements.progress.html_object;
+        if (this.config.progress.backgroundColor) progress.style.backgroundColor = this.config.progress.backgroundColor;
+        if (this.config.progress.borderRadius) progress.style.borderRadius = this.config.progress.borderRadius;
+        if (this.config.progress.boxShadow) progress.style.boxShadow = this.config.progress.boxShadow;
+        if (this.config.progress.transition) progress.style.transition = this.config.progress.transition;
     }
 
     destroy() {

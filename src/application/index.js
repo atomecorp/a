@@ -429,14 +429,40 @@ const brightnessSlider = new Slider({
     y: 100,
     width: 80,
     height: 300,
-    trackWidth: 200,
-    trackHeight: 8,
+    trackWidth: 8,     // Épaisseur de la barre verticale (petite valeur)
+    trackHeight: 200,  // Longueur de déplacement vertical (grande valeur)
     value: 70,
-    colors: {
-        container: '#ffffff',
-        track: '#dee2e6',
-        text: '#424242'
+  
+    grip: {
+        width: 28,
+        height: 28,
+        backgroundColor: '#e74c3c',
+        border: '3px solid #ffffff',
+        borderRadius: '8px',  // Coins arrondis au lieu d'un cercle
+        boxShadow: '0 6px 20px rgba(231, 76, 60, 0.4)',
+        cursor: 'grab'
     },
+    
+    support: {
+        backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        border: 'none',
+        borderRadius: '20px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+        padding: '20px'
+    },
+    
+    rail: {
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        borderRadius: '6px',
+        height: 12
+    },
+    
+    progress: {
+        backgroundColor: 'linear-gradient(90deg, #ff6b6b, #feca57)',
+        borderRadius: '6px',
+        boxShadow: '0 4px 15px rgba(255, 107, 107, 0.4)'
+    }
+    ,
     variation: [
         { color: '#0099ff', position: { x: '0%' } },    // Froid (bleu)
         { color: '#00ff99', position: { x: '30%' } },   // Frais (vert)
