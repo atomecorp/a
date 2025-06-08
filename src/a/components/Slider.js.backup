@@ -1,56 +1,60 @@
+/**
+ * 🎚️ SLIDER COMPONENT - PARAMÉTRIQUE ET RÉUTILISABLE
+ * Compatible avec le framework A
+ * Support des types: horizontal, vertical, circular
+ */
+
 class Slider {
-    constructor(config) {
-        // Stocker la config originale pour vérifier quelles valeurs ont été explicitement définies
-        this.originalConfig = config || {};
-        
+    constructor(config = {}) {
         // Configuration par défaut
         this.config = {
             attach: 'body',
-            id: 'slider_' + Math.random().toString(36).substr(2, 9),
-            x: 20,
-            y: 20,
-            width: 300,
-            height: 60,
-            trackWidth: 300,
-            trackHeight: 8,
+            id: `slider_${Date.now()}`,
+            type: 'horizontal', // 'horizontal' | 'vertical' | 'circular'
+            x: 50,
+            y: 100,
+            width: 400,
+            height: 120,
+            trackWidth: 360,
+            trackHeight: 6,
             thumbSize: 24,
+            value: 30,
             min: 0,
             max: 100,
             step: 1,
-            value: 50,
-            type: 'horizontal', // 'horizontal', 'vertical', 'circular'
+            theme: 'material', // 'material' | 'flat' | 'custom'
             colors: {
                 container: '#ffffff',
-                track: '#e0e0e0',
+                track: '#e3f2fd',
                 progress: '#2196f3',
-                thumb: '#2196f3'
+                thumb: '#2196f3',
+                text: '#424242'
             },
+            variation: null, // Tableau de couleurs pour interpolation dynamique
             animations: {
                 enabled: true,
                 duration: 0.2,
-                easing: 'ease-out'
+                easing: 'cubic-bezier(0.4, 0.0, 0.2, 1)'
             },
             callbacks: {
                 onChange: null,
                 onStart: null,
-                onEnd: null,
-                onDrag: null
+                onEnd: null
             },
-            theme: 'material',
-            variation: null,
+            // Configuration spécifique pour les sliders circulaires
             circular: {
                 radius: 80,
                 strokeWidth: 8,
-                startAngle: 0,
-                endAngle: 270
+                startAngle: -90, // Angle de départ en degrés (-90 = 12h)
+                endAngle: 270   // Angle de fin en degrés (270 = presque tour complet)
             },
             ...config
         };
 
-        this.currentValue = this.config.value;
         this.isDragging = false;
+        this.currentValue = this.config.value;
         this.elements = {};
-
+        
         this._init();
     }
 
@@ -66,25 +70,6 @@ class Slider {
     }
 
     _createLinearSlider() {
-        // Ajuster trackWidth et trackHeight selon le type et les dimensions
-        if (this.config.type === 'vertical') {
-            // Pour vertical: trackHeight = épaisseur, trackWidth = longueur utilisable
-            if (!this.originalConfig.hasOwnProperty('trackHeight')) {
-                this.config.trackHeight = 8; // Épaisseur par défaut
-            }
-            if (!this.originalConfig.hasOwnProperty('trackWidth')) {
-                this.config.trackWidth = Math.max(100, this.config.height - 40); // Longueur utilisable
-            }
-        } else {
-            // Pour horizontal: trackWidth = longueur utilisable, trackHeight = épaisseur
-            if (!this.originalConfig.hasOwnProperty('trackWidth')) {
-                this.config.trackWidth = Math.max(100, this.config.width - 40); // Longueur utilisable
-            }
-            if (!this.originalConfig.hasOwnProperty('trackHeight')) {
-                this.config.trackHeight = 8; // Épaisseur par défaut
-            }
-        }
-        
         this._createContainer();
         this._createTrack();
         this._createProgress();
@@ -126,8 +111,7 @@ class Slider {
             attach: `#${this.config.id}_container`,
             id: this.config.id + '_track',
             markup: 'div',
-            // CORRECTION: pour vertical, trackHeight = épaisseur, trackWidth = longueur
-            x: isVertical ? (this.config.width - this.config.trackHeight) / 2 : 0,
+            x: isVertical ? (this.config.height - this.config.trackHeight) / 2 : 0,
             y: isVertical ? 0 : (this.config.height - this.config.trackHeight) / 2 - 15,
             width: isVertical ? this.config.trackHeight : this.config.trackWidth,
             height: isVertical ? this.config.trackWidth : this.config.trackHeight,
@@ -140,7 +124,6 @@ class Slider {
 
     _createProgress() {
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION: pour vertical, utiliser trackWidth (longueur) pour le calcul
         const initialSize = (this.currentValue / (this.config.max - this.config.min)) * 
                            (isVertical ? this.config.trackWidth : this.config.trackWidth);
         
@@ -149,7 +132,6 @@ class Slider {
             id: this.config.id + '_progress',
             markup: 'div',
             x: 0,
-            // CORRECTION: position depuis le bas pour vertical
             y: isVertical ? this.config.trackWidth - initialSize : 0,
             width: isVertical ? this.config.trackHeight : initialSize,
             height: isVertical ? initialSize : this.config.trackHeight,
@@ -164,7 +146,6 @@ class Slider {
 
     _createThumb() {
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION: utiliser trackWidth (longueur) pour le calcul de position
         const trackSize = isVertical ? this.config.trackWidth : this.config.trackWidth;
         const initialPosition = (this.currentValue / (this.config.max - this.config.min)) * trackSize - this.config.thumbSize / 2;
         
@@ -173,7 +154,6 @@ class Slider {
             id: this.config.id + '_thumb',
             markup: 'div',
             x: isVertical ? (this.config.trackHeight - this.config.thumbSize) / 2 : initialPosition,
-            // CORRECTION: position depuis le bas pour vertical
             y: isVertical ? this.config.trackWidth - initialPosition - this.config.thumbSize : 
                (this.config.trackHeight - this.config.thumbSize) / 2,
             width: this.config.thumbSize,
@@ -346,7 +326,7 @@ class Slider {
         if (theme.containerShadow) {
             this.elements.container.html_object.style.boxShadow = theme.containerShadow;
         }
-        if (theme.thumbShadow && this.elements.thumb) {
+        if (theme.thumbShadow) {
             this.elements.thumb.html_object.style.boxShadow = theme.thumbShadow;
         }
         if (theme.borderRadius) {
@@ -483,9 +463,7 @@ class Slider {
         
         let relativePosition;
         if (isVertical) {
-            // CORRECTION: utiliser la hauteur réelle du track (trackWidth pour vertical)
-            const trackHeight = trackRect.height;
-            relativePosition = (trackRect.bottom - e.clientY) / trackHeight;
+            relativePosition = (trackRect.bottom - e.clientY) / trackRect.height;
         } else {
             relativePosition = (e.clientX - trackRect.left) / trackRect.width;
         }
@@ -534,12 +512,11 @@ class Slider {
         this.currentValue = Math.max(this.config.min, Math.min(this.config.max, value));
         
         if (this.config.type === 'circular') {
-            this._setCircularValue(this.currentValue);
+            this._setCircularValue(value);
             return;
         }
         
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION: pour vertical, la longueur utilisable est trackWidth, pas trackHeight
         const trackSize = isVertical ? this.config.trackWidth : this.config.trackWidth;
         const percentage = (this.currentValue - this.config.min) / (this.config.max - this.config.min);
         const progressSize = percentage * trackSize;
@@ -548,7 +525,6 @@ class Slider {
         // Mettre à jour la barre de progression
         if (isVertical) {
             this.elements.progress.height(progressSize);
-            // CORRECTION: position depuis le bas du track
             this.elements.progress.y(trackSize - progressSize);
             this.elements.thumb.y(trackSize - progressSize - this.config.thumbSize / 2);
         } else {
@@ -561,10 +537,6 @@ class Slider {
     }
 
     getValue() {
-        return this.currentValue;
-    }
-
-    getCurrentValue() {
         return this.currentValue;
     }
 
@@ -599,7 +571,8 @@ class Slider {
             boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08)',
             border: '1px solid rgba(0,0,0,0.04)',
             overflow: 'visible',
-            position: 'relative'
+            position: 'relative',
+            cursor: 'pointer'
         });
     }
 
@@ -612,16 +585,10 @@ class Slider {
         svg.setAttribute('width', svgSize);
         svg.setAttribute('height', svgSize);
         svg.style.position = 'absolute';
-        
-        // SIMPLIFICATION: centrer le SVG dans le conteneur
-        const containerSize = this.config.circular.radius * 2 + this.config.thumbSize + 20;
-        const svgOffset = (containerSize - svgSize) / 2;
-        svg.style.left = svgOffset + 'px';
-        svg.style.top = svgOffset + 'px';
-        
+        svg.style.left = '10px';
+        svg.style.top = '10px';
         svg.style.pointerEvents = 'auto';
         svg.style.cursor = 'pointer';
-        svg.style.zIndex = '5';  // Z-index plus bas que le thumb
 
         const centerX = radius + strokeWidth / 2 + 10;
         const centerY = radius + strokeWidth / 2 + 10;
@@ -648,53 +615,45 @@ class Slider {
         trackArc.setAttribute('stroke-width', strokeWidth);
         trackArc.setAttribute('stroke-linecap', 'round');
         
-        // Ajouter un événement de clic sur le track pour click-to-position
+        // Ajouter un événement de clic sur le track
         trackArc.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            
-            // S'assurer qu'on n'est pas en train de dragger
-            if (!this.isDragging) {
-                const newValue = this._getValueFromCircularEvent(e);
-                if (newValue !== this.currentValue) {
-                    this.setValue(newValue);
-                    this._triggerCallback('onChange', newValue);
-                }
-            }
-        });
-        
-        // Ajouter aussi un gestionnaire sur le conteneur SVG pour capturer tous les clics
-        svg.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // Vérifier si le clic n'est pas sur le thumb lui-même
-            if (!this.isDragging && e.target !== this.elements.thumb?.html_object) {
-                const newValue = this._getValueFromCircularEvent(e);
-                if (newValue !== this.currentValue) {
-                    this.setValue(newValue);
-                    this._triggerCallback('onChange', newValue);
-                }
-            }
-        });
-        
-        // Améliorer l'accessibilité avec des événements de survol
-        trackArc.addEventListener('mouseenter', () => {
-            trackArc.style.opacity = '0.8';
-        });
-        
-        trackArc.addEventListener('mouseleave', () => {
-            trackArc.style.opacity = '1';
+            const newValue = this._getValueFromCircularEvent(e);
+            this.setValue(newValue);
+            this._triggerCallback('onChange');
         });
 
         svg.appendChild(trackArc);
         
         this.elements.container.html_object.appendChild(svg);
-        
-        // Stocker une référence simple au SVG
         this.elements.track = { 
             html_object: svg, 
             arc: trackArc,
+            centerX: centerX,
+            centerY: centerY,
+            radius: radius
+        };
+    }
+        const endY = centerY + radius * Math.sin(endRadians);
+        
+        const largeArcFlag = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
+        const pathData = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`;
+        
+        trackArc.setAttribute('d', pathData);
+        trackArc.setAttribute('fill', 'none');
+        trackArc.setAttribute('stroke', this.config.colors.track);
+        trackArc.setAttribute('stroke-width', strokeWidth);
+        trackArc.setAttribute('stroke-linecap', 'round');
+
+        svg.appendChild(trackArc);
+        
+        this.elements.container.html_object.appendChild(svg);
+        this.elements.track = { 
+            html_object: svg, 
+            arc: trackArc,
+            centerX: centerX,
+            centerY: centerY,
             radius: radius
         };
     }
@@ -714,22 +673,16 @@ class Slider {
     }
 
     _createCircularThumb() {
-        const { radius, strokeWidth, startAngle, endAngle } = this.config.circular;
+        const { radius, strokeWidth, startAngle } = this.config.circular;
+        const centerX = radius + strokeWidth / 2 + 10;
+        const centerY = radius + strokeWidth / 2 + 10;
         
-        // Calculer la position initiale basée sur la valeur courante
+        // Position initiale basée sur la valeur courante
         const percentage = (this.currentValue - this.config.min) / (this.config.max - this.config.min);
-        const angleRange = endAngle - startAngle;
+        const angleRange = this.config.circular.endAngle - startAngle;
         const currentAngle = startAngle + (percentage * angleRange);
-        
-        // SIMPLIFICATION: utiliser les dimensions du conteneur
-        const containerSize = this.config.circular.radius * 2 + this.config.thumbSize + 20;
-        const centerX = containerSize / 2;
-        const centerY = containerSize / 2;
-        
-        // Convertir l'angle en radians avec la même correction que dans _setCircularValue
         const radians = (currentAngle - 90) * Math.PI / 180;
         
-        // Position du thumb exactement sur la track (même rayon que le path SVG)
         const thumbX = centerX + radius * Math.cos(radians) - this.config.thumbSize / 2;
         const thumbY = centerY + radius * Math.sin(radians) - this.config.thumbSize / 2;
         
@@ -749,158 +702,100 @@ class Slider {
             border: '3px solid white',
             transition: this.config.animations.enabled ? 
                        `transform ${this.config.animations.duration}s ${this.config.animations.easing}` : 'none',
-            zIndex: 20,  // Z-index plus élevé que le SVG
-            pointerEvents: 'auto'  // S'assurer que le thumb capture les événements
-        });
-
-        // Empêcher que les clics sur le thumb se propagent au track
-        this.elements.thumb.html_object.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+            zIndex: 10
         });
 
         // Ajouter les événements de drag spécifiques aux sliders circulaires
         this.elements.thumb.html_object.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            e.stopPropagation();
             this.isDragging = true;
-            this.elements.thumb.html_object.style.cursor = 'grabbing';
-            
-            // Désactiver les transitions pendant le drag pour éviter les conflits
-            const originalTransition = this.elements.thumb.html_object.style.transition;
-            this.elements.thumb.html_object.style.transition = 'none';
-            
-            // Déclencher le callback onStart
-            this._triggerCallback('onStart', this.currentValue);
+            this.elements.thumb.css('cursor', 'grabbing');
             
             const handleCircularDrag = (moveEvent) => {
                 if (!this.isDragging) return;
                 
                 moveEvent.preventDefault();
-                moveEvent.stopPropagation();
-                
-                // Calculer et appliquer la nouvelle valeur de manière fluide
                 const newValue = this._getValueFromCircularEvent(moveEvent);
-                if (newValue !== this.currentValue) {
-                    this.setValue(newValue);
-                    this._triggerCallback('onDrag', newValue);
-                }
+                this.setValue(newValue);
+                this._triggerCallback('onDrag');
             };
 
-            const handleCircularDragEnd = (endEvent) => {
+            const handleCircularDragEnd = () => {
                 if (this.isDragging) {
                     this.isDragging = false;
-                    this.elements.thumb.html_object.style.cursor = 'grab';
-                    
-                    // Réactiver les transitions
-                    this.elements.thumb.html_object.style.transition = originalTransition;
-                    
-                    this._triggerCallback('onEnd', this.currentValue);
-                    this._triggerCallback('onChange', this.currentValue);
+                    this.elements.thumb.css('cursor', 'grab');
+                    this._triggerCallback('onChange');
                 }
-                
-                // Nettoyer les événements
                 document.removeEventListener('pointermove', handleCircularDrag);
                 document.removeEventListener('pointerup', handleCircularDragEnd);
-                document.removeEventListener('pointercancel', handleCircularDragEnd);
             };
 
-            // Attacher les événements de mouvement et de fin
-            document.addEventListener('pointermove', handleCircularDrag, { passive: false });
+            document.addEventListener('pointermove', handleCircularDrag);
             document.addEventListener('pointerup', handleCircularDragEnd);
-            document.addEventListener('pointercancel', handleCircularDragEnd);
         });
     }
 
     _getValueFromCircularEvent(e) {
         const { radius, strokeWidth, startAngle, endAngle } = this.config.circular;
-        
-        // SIMPLIFICATION: calcul direct du centre du conteneur
         const containerRect = this.elements.container.html_object.getBoundingClientRect();
-        const centerX = containerRect.left + containerRect.width / 2;
-        const centerY = containerRect.top + containerRect.height / 2;
+        
+        // Utiliser le centre exact du track SVG
+        const centerX = containerRect.left + radius + strokeWidth / 2 + 20; // 10px margin + 10px padding
+        const centerY = containerRect.top + radius + strokeWidth / 2 + 20;
         
         // Calculer l'angle de la souris par rapport au centre
         const deltaX = e.clientX - centerX;
         const deltaY = e.clientY - centerY;
-        let mouseDegrees = Math.atan2(deltaY, deltaX) * 180 / Math.PI + 90;
+        let angleDegrees = Math.atan2(deltaY, deltaX) * 180 / Math.PI + 90;
         
         // Normaliser l'angle entre 0 et 360
-        while (mouseDegrees < 0) mouseDegrees += 360;
-        while (mouseDegrees >= 360) mouseDegrees -= 360;
+        if (angleDegrees < 0) angleDegrees += 360;
+        if (angleDegrees >= 360) angleDegrees -= 360;
         
-        // Calculer la position sur l'arc avec gestion bidirectionnelle améliorée
-        let relativePosition = this._getRelativePositionOnArc(mouseDegrees, startAngle, endAngle);
-        
-        // Convertir en valeur et appliquer le step
-        const rawValue = this.config.min + (relativePosition * (this.config.max - this.config.min));
-        const steppedValue = Math.round(rawValue / this.config.step) * this.config.step;
-        return Math.max(this.config.min, Math.min(this.config.max, steppedValue));
-    }
-
-    _getRelativePositionOnArc(mouseDegrees, startAngle, endAngle) {
-        // Normaliser les angles de l'arc
-        let arcStart = startAngle % 360;
-        let arcEnd = endAngle % 360;
-        if (arcStart < 0) arcStart += 360;
-        if (arcEnd < 0) arcEnd += 360;
-        
+        // Calculer la position relative sur l'arc
         let relativePosition;
+        const angleRange = endAngle - startAngle;
         
-        if (arcStart <= arcEnd) {
-            // Arc simple qui ne traverse pas 0°
-            const arcRange = arcEnd - arcStart;
-            
-            if (mouseDegrees >= arcStart && mouseDegrees <= arcEnd) {
-                // Directement sur l'arc
-                relativePosition = (mouseDegrees - arcStart) / arcRange;
+        if (startAngle <= endAngle) {
+            // Cas simple : arc ne traverse pas 0°
+            if (angleDegrees >= startAngle && angleDegrees <= endAngle) {
+                relativePosition = (angleDegrees - startAngle) / angleRange;
             } else {
-                // Hors de l'arc - trouver le côté le plus proche avec logique bidirectionnelle
-                const currentValue = this.getCurrentValue();
-                const currentPercentage = (currentValue - this.config.min) / (this.config.max - this.config.min);
-                
-                // Calculer les distances angulaires avec wrap-around
-                const distToStart = this._getAngularDistance(mouseDegrees, arcStart);
-                const distToEnd = this._getAngularDistance(mouseDegrees, arcEnd);
-                
-                // Si on clique plus près du début ou si on veut descendre en valeur
-                if (distToStart < distToEnd || (distToStart === distToEnd && mouseDegrees < arcStart + arcRange / 2)) {
-                    relativePosition = 0;
-                } else {
-                    relativePosition = 1;
-                }
+                // Clamper à la limite la plus proche
+                const distToStart = Math.min(
+                    Math.abs(angleDegrees - startAngle),
+                    Math.abs(angleDegrees - startAngle + 360),
+                    Math.abs(angleDegrees - startAngle - 360)
+                );
+                const distToEnd = Math.min(
+                    Math.abs(angleDegrees - endAngle),
+                    Math.abs(angleDegrees - endAngle + 360),
+                    Math.abs(angleDegrees - endAngle - 360)
+                );
+                relativePosition = distToStart < distToEnd ? 0 : 1;
             }
         } else {
-            // Arc qui traverse 0° (ex: de 300° à 60°)
-            const totalRange = (360 - arcStart) + arcEnd;
-            
-            if (mouseDegrees >= arcStart || mouseDegrees <= arcEnd) {
-                // Sur l'arc
-                if (mouseDegrees >= arcStart) {
-                    relativePosition = (mouseDegrees - arcStart) / totalRange;
+            // Cas complexe : arc traverse 0° (ex: de 300° à 60°)
+            if (angleDegrees >= startAngle || angleDegrees <= endAngle) {
+                if (angleDegrees >= startAngle) {
+                    relativePosition = (angleDegrees - startAngle) / (360 + endAngle - startAngle);
                 } else {
-                    relativePosition = ((360 - arcStart) + mouseDegrees) / totalRange;
+                    relativePosition = (360 - startAngle + angleDegrees) / (360 + endAngle - startAngle);
                 }
             } else {
-                // Hors de l'arc - logique bidirectionnelle améliorée
-                const gapStart = arcEnd;
-                const gapEnd = arcStart;
-                const middleOfGap = (gapStart + gapEnd) / 2;
-                
-                if (mouseDegrees <= middleOfGap) {
-                    relativePosition = 1; // Plus près de la fin
-                } else {
-                    relativePosition = 0; // Plus près du début
-                }
+                // Clamper à la limite la plus proche
+                const distToStart = Math.abs(angleDegrees - startAngle);
+                const distToEnd = Math.abs(angleDegrees - endAngle);
+                relativePosition = distToStart < distToEnd ? 0 : 1;
             }
         }
         
-        return Math.max(0, Math.min(1, relativePosition));
-    }
-
-    _getAngularDistance(angle1, angle2) {
-        const diff = Math.abs(angle1 - angle2);
-        return Math.min(diff, 360 - diff);
+        // S'assurer que la position relative est entre 0 et 1
+        relativePosition = Math.max(0, Math.min(1, relativePosition));
+        
+        // Convertir en valeur et appliquer le step
+        const rawValue = this.config.min + (relativePosition * (this.config.max - this.config.min));
+        return Math.round(rawValue / this.config.step) * this.config.step;
     }
 
     _setCircularValue(value) {
@@ -913,24 +808,16 @@ class Slider {
         // Calculer l'angle pour le thumb
         const angleRange = endAngle - startAngle;
         const currentAngle = startAngle + (percentage * angleRange);
-        
-        // SIMPLIFICATION: utiliser les dimensions du conteneur
-        const containerSize = this.config.circular.radius * 2 + this.config.thumbSize + 20;
-        const centerX = containerSize / 2;
-        const centerY = containerSize / 2;
-        
-        // Convertir l'angle en radians (correction de l'offset de -90°)
         const radians = (currentAngle - 90) * Math.PI / 180;
         
-        // Position du thumb exactement sur la track (même rayon que le path SVG)
+        // Position du thumb avec le centre correct
+        const centerX = radius + strokeWidth / 2 + 10;
+        const centerY = radius + strokeWidth / 2 + 10;
         const thumbX = centerX + radius * Math.cos(radians) - this.config.thumbSize / 2;
         const thumbY = centerY + radius * Math.sin(radians) - this.config.thumbSize / 2;
         
-        // Mettre à jour la position du thumb de manière fluide
-        if (this.elements.thumb) {
-            this.elements.thumb.x(thumbX);
-            this.elements.thumb.y(thumbY);
-        }
+        this.elements.thumb.x(thumbX);
+        this.elements.thumb.y(thumbY);
         
         // Mettre à jour l'arc de progression
         this._updateCircularProgress(percentage);
@@ -940,10 +827,7 @@ class Slider {
     }
 
     _updateCircularProgress(percentage) {
-        if (!this.elements.progress || !this.elements.progress.html_object) return;
-        
         const { radius, strokeWidth, startAngle, endAngle } = this.config.circular;
-        // SIMPLIFICATION: utiliser le centre du SVG directement
         const centerX = radius + strokeWidth / 2 + 10;
         const centerY = radius + strokeWidth / 2 + 10;
         
@@ -964,7 +848,7 @@ class Slider {
         
         let pathData;
         if (percentage <= 0.001) {
-            // Pas de progression visible - utiliser un point
+            // Pas de progression visible
             pathData = `M ${startX} ${startY} L ${startX} ${startY}`;
         } else {
             pathData = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${endX} ${endY}`;
