@@ -108,8 +108,9 @@ class Slider {
             role: 'slider-container',
             x: this.config.x,
             y: this.config.y,
-            width: isVertical ? this.config.height : this.config.width,
-            height: isVertical ? this.config.width : this.config.height,
+            // CORRECTION: pour vertical, garder width=width et height=height (ne pas inverser)
+            width: this.config.width,
+            height: this.config.height,
             backgroundColor: this.config.colors.container,
             smooth: 12,
             padding: 15,
@@ -126,9 +127,9 @@ class Slider {
             attach: `#${this.config.id}_container`,
             id: this.config.id + '_track',
             markup: 'div',
-            // CORRECTION: pour vertical, trackHeight = épaisseur, trackWidth = longueur
-            x: isVertical ? (this.config.width - this.config.trackHeight) / 2 : 0,
-            y: isVertical ? 0 : (this.config.height - this.config.trackHeight) / 2 - 15,
+            // CORRECTION FINALE: pour vertical, centrer le track fine dans le conteneur
+            x: isVertical ? (this.config.width - this.config.trackHeight) / 2 - 15 : 0,
+            y: isVertical ? 15 : (this.config.height - this.config.trackHeight) / 2 - 15,
             width: isVertical ? this.config.trackHeight : this.config.trackWidth,
             height: isVertical ? this.config.trackWidth : this.config.trackHeight,
             backgroundColor: this.config.colors.track,
@@ -140,7 +141,7 @@ class Slider {
 
     _createProgress() {
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION: pour vertical, utiliser trackWidth (longueur) pour le calcul
+        // CORRECTION FINALE: calculer la taille initiale correctement
         const initialSize = (this.currentValue / (this.config.max - this.config.min)) * 
                            (isVertical ? this.config.trackWidth : this.config.trackWidth);
         
@@ -149,7 +150,7 @@ class Slider {
             id: this.config.id + '_progress',
             markup: 'div',
             x: 0,
-            // CORRECTION: position depuis le bas pour vertical
+            // CORRECTION FINALE: pour vertical, position depuis le bas du track
             y: isVertical ? this.config.trackWidth - initialSize : 0,
             width: isVertical ? this.config.trackHeight : initialSize,
             height: isVertical ? initialSize : this.config.trackHeight,
@@ -164,17 +165,17 @@ class Slider {
 
     _createThumb() {
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION: utiliser trackWidth (longueur) pour le calcul de position
+        // CORRECTION FINALE: calculer la position initiale correctement
         const trackSize = isVertical ? this.config.trackWidth : this.config.trackWidth;
-        const initialPosition = (this.currentValue / (this.config.max - this.config.min)) * trackSize - this.config.thumbSize / 2;
+        const initialPosition = (this.currentValue / (this.config.max - this.config.min)) * trackSize;
         
         this.elements.thumb = new A({
             attach: `#${this.config.id}_track`,
             id: this.config.id + '_thumb',
             markup: 'div',
-            x: isVertical ? (this.config.trackHeight - this.config.thumbSize) / 2 : initialPosition,
-            // CORRECTION: position depuis le bas pour vertical
-            y: isVertical ? this.config.trackWidth - initialPosition - this.config.thumbSize : 
+            x: isVertical ? (this.config.trackHeight - this.config.thumbSize) / 2 : initialPosition - this.config.thumbSize / 2,
+            // CORRECTION FINALE: pour vertical, partir du bas du track
+            y: isVertical ? this.config.trackWidth - initialPosition - this.config.thumbSize / 2 : 
                (this.config.trackHeight - this.config.thumbSize) / 2,
             width: this.config.thumbSize,
             height: this.config.thumbSize,
@@ -539,21 +540,22 @@ class Slider {
         }
         
         const isVertical = this.config.type === 'vertical';
-        // CORRECTION: pour vertical, la longueur utilisable est trackWidth, pas trackHeight
+        // CORRECTION FINALE: calculs cohérents pour le positionnement
         const trackSize = isVertical ? this.config.trackWidth : this.config.trackWidth;
         const percentage = (this.currentValue - this.config.min) / (this.config.max - this.config.min);
         const progressSize = percentage * trackSize;
-        const thumbPosition = progressSize - this.config.thumbSize / 2;
+        const thumbPosition = progressSize;
 
         // Mettre à jour la barre de progression
         if (isVertical) {
             this.elements.progress.height(progressSize);
-            // CORRECTION: position depuis le bas du track
+            // CORRECTION FINALE: position depuis le bas du track
             this.elements.progress.y(trackSize - progressSize);
-            this.elements.thumb.y(trackSize - progressSize - this.config.thumbSize / 2);
+            // Position du thumb depuis le bas
+            this.elements.thumb.y(trackSize - thumbPosition - this.config.thumbSize / 2);
         } else {
             this.elements.progress.width(progressSize);
-            this.elements.thumb.x(thumbPosition);
+            this.elements.thumb.x(thumbPosition - this.config.thumbSize / 2);
         }
 
         // Appliquer la variation de couleur basée sur la position

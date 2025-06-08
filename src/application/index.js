@@ -410,7 +410,7 @@ const volumeSlider = new Slider({
     x: 50,
     y: 100,
     width: 400,
-    height: 120,
+    height: 30,
     trackWidth: 360,
     value: 30,
     callbacks: {
