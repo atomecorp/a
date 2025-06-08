@@ -1,67 +1,67 @@
-# 🎨 Documentation - Nouvelle API de Styling Avancé pour Sliders
+# 🎨 Documentation - New Advanced Styling API for Sliders
 
-## Vue d'ensemble
+## Overview
 
-La nouvelle API de styling pour les composants Slider offre un contrôle granulaire sur l'apparence de chaque partie du slider. Cette API remplace progressivement l'ancienne API `colors` tout en maintenant une compatibilité complète.
+The new styling API for Slider components offers granular control over the appearance of each part of the slider. This API progressively replaces the old `colors` API while maintaining full compatibility.
 
-## Structure de l'API
+## API Structure
 
-### 🎯 grip (Styles du curseur/thumb)
-Contrôle l'apparence du curseur déplaçable du slider.
+### 🎯 grip (Cursor/thumb styles)
+Controls the appearance of the draggable cursor of the slider.
 
 ```javascript
 grip: {
-    width: 24,                    // Largeur du curseur (null = utilise thumbSize)
-    height: 24,                   // Hauteur du curseur (null = utilise thumbSize)
-    backgroundColor: '#2196f3',   // Couleur de fond
-    border: '3px solid #ffffff', // Bordure
-    borderRadius: '50%',         // Rayon des coins (50% = cercle parfait)
-    boxShadow: '0 4px 12px rgba(33, 150, 243, 0.4)', // Ombre
-    cursor: 'pointer',           // Curseur de la souris
+    width: 24,                    // Cursor width (null = uses thumbSize)
+    height: 24,                   // Cursor height (null = uses thumbSize)
+    backgroundColor: '#2196f3',   // Background color
+    border: '3px solid #ffffff', // Border
+    borderRadius: '50%',         // Corner radius (50% = perfect circle)
+    boxShadow: '0 4px 12px rgba(33, 150, 243, 0.4)', // Shadow
+    cursor: 'pointer',           // Mouse cursor
     transition: 'transform 0.2s ease-out' // Animations
 }
 ```
 
-### 🏠 support (Styles du conteneur)
-Contrôle l'apparence du conteneur principal du slider.
+### 🏠 support (Container styles)
+Controls the appearance of the main slider container.
 
 ```javascript
 support: {
-    backgroundColor: '#ffffff',   // Couleur de fond
-    border: '1px solid rgba(0,0,0,0.04)', // Bordure
-    borderRadius: '12px',        // Rayon des coins
-    boxShadow: '0 8px 32px rgba(0,0,0,0.12)', // Ombre
-    padding: '15px'              // Espacement intérieur
+    backgroundColor: '#ffffff',   // Background color
+    border: '1px solid rgba(0,0,0,0.04)', // Border
+    borderRadius: '12px',        // Corner radius
+    boxShadow: '0 8px 32px rgba(0,0,0,0.12)', // Shadow
+    padding: '15px'              // Inner spacing
 }
 ```
 
-### 🛤️ rail (Styles de la track)
-Contrôle l'apparence de la piste sur laquelle glisse le curseur.
+### 🛤️ rail (Track styles)
+Controls the appearance of the track on which the cursor slides.
 
 ```javascript
 rail: {
-    backgroundColor: '#e0e0e0',  // Couleur de fond de la track
-    borderRadius: '3px',         // Rayon des coins
-    height: null,                // Hauteur (null = utilise trackHeight)
-    width: null                  // Largeur (null = utilise trackWidth)
+    backgroundColor: '#e0e0e0',  // Track background color
+    borderRadius: '3px',         // Corner radius
+    height: null,                // Height (null = uses trackHeight)
+    width: null                  // Width (null = uses trackWidth)
 }
 ```
 
-### 📊 progress (Styles de la barre de progression)
-Contrôle l'apparence de la barre qui indique la progression/valeur.
+### 📊 progress (Progress bar styles)
+Controls the appearance of the bar that indicates progress/value.
 
 ```javascript
 progress: {
-    backgroundColor: '#2196f3',  // Couleur de fond
-    borderRadius: '3px',         // Rayon des coins
-    boxShadow: '0 2px 4px rgba(33, 150, 243, 0.3)', // Ombre
+    backgroundColor: '#2196f3',  // Background color
+    borderRadius: '3px',         // Corner radius
+    boxShadow: '0 2px 4px rgba(33, 150, 243, 0.3)', // Shadow
     transition: 'width 0.2s ease-out' // Animations
 }
 ```
 
-## Exemples d'utilisation
+## Usage Examples
 
-### 1. Slider moderne avec thumb carré
+### 1. Modern slider with square thumb
 
 ```javascript
 const modernSlider = new Slider({
@@ -74,7 +74,7 @@ const modernSlider = new Slider({
         height: 28,
         backgroundColor: '#e74c3c',
         border: '3px solid #ffffff',
-        borderRadius: '8px',  // Coins arrondis au lieu d'un cercle
+        borderRadius: '8px',  // Rounded corners instead of circle
         boxShadow: '0 6px 20px rgba(231, 76, 60, 0.4)',
         cursor: 'grab'
     },

@@ -1,31 +1,31 @@
 # 🐿️ Squirrel Framework + Svelte Integration
 
-## 🎯 Vue d'ensemble
+## 🎯 Overview
 
-Framework hybride moderne combinant la flexibilité d'un système de modules ES6, la réactivité de Svelte, et la performance de Rust via Tauri.
+Modern hybrid framework combining the flexibility of an ES6 module system, Svelte reactivity, and Rust performance via Tauri.
 
 ## 🏗️ Architecture
 
 ### **Frontend (JavaScript + Svelte)**
-- **Squirrel Framework** - Système modulaire ES6 avec chargement dynamique
-- **Svelte Components** - Interface utilisateur réactive compilée localement
-- **Tauri Integration** - Application desktop native
+- **Squirrel Framework** - ES6 modular system with dynamic loading
+- **Svelte Components** - Reactive user interface compiled locally
+- **Tauri Integration** - Native desktop application
 
 ### **Backend (Rust)**
-- **Axum Server** - API haute performance
-- **Fastify Server** - Serveur de fichiers statiques
-- **Tauri Runtime** - Intégration desktop native
+- **Axum Server** - High-performance API
+- **Fastify Server** - Static file server
+- **Tauri Runtime** - Native desktop integration
 
-## 🚀 Démarrage rapide
+## 🚀 Quick Start
 
 ```bash
-# Développement complet
+# Full development
 ./dev.sh
 
-# Ou étape par étape
-npm run build:svelte    # Compiler Svelte
-npm run start:server    # Serveur Fastify
-npm run tauri dev       # Application Tauri
+# Or step by step
+npm run build:svelte    # Compile Svelte
+npm run start:server    # Fastify server
+npm run tauri dev       # Tauri application
 ```
 
 ## 📁 Structure

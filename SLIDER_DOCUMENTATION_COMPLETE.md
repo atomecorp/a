@@ -1,50 +1,50 @@
-# Documentation Complète des Sliders - Squirrel Framework
+# Complete Slider Documentation - Squirrel Framework
 
-## Table des Matières
+## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Installation et Import](#installation-et-import)
-3. [Configuration de Base](#configuration-de-base)
-4. [API de Styling Avancé](#api-de-styling-avancé)
-5. [Types de Sliders](#types-de-sliders)
-6. [Méthodes Publiques](#méthodes-publiques)
-7. [Événements et Callbacks](#événements-et-callbacks)
-8. [Exemples Pratiques](#exemples-pratiques)
-9. [Compatibilité et Migration](#compatibilité-et-migration)
-10. [Meilleures Pratiques](#meilleures-pratiques)
+2. [Installation and Import](#installation-and-import)
+3. [Basic Configuration](#basic-configuration)
+4. [Advanced Styling API](#advanced-styling-api)
+5. [Slider Types](#slider-types)
+6. [Public Methods](#public-methods)
+7. [Events and Callbacks](#events-and-callbacks)
+8. [Practical Examples](#practical-examples)
+9. [Compatibility and Migration](#compatibility-and-migration)
+10. [Best Practices](#best-practices)
 
 ---
 
 ## Introduction
 
-Le composant Slider du Squirrel Framework offre une solution complète pour créer des contrôles de curseur personnalisables. Il supporte trois types principaux : horizontal, vertical et circulaire, avec une API de styling avancée permettant un contrôle granulaire de tous les éléments visuels.
+The Squirrel Framework Slider component offers a complete solution for creating customizable slider controls. It supports three main types: horizontal, vertical, and circular, with an advanced styling API providing granular control over all visual elements.
 
-### Fonctionnalités Principales
+### Key Features
 
-- ✨ **Styling Avancé** : API granulaire pour personnaliser chaque partie du slider
-- 🔄 **Compatibilité Rétroactive** : Support de l'ancienne API `colors`
-- 📱 **Multi-Plateforme** : Fonctionne sur desktop et mobile
-- 🎨 **Thèmes Prédéfinis** : Material Design et autres styles
-- ⚡ **Performance** : Animations fluides et optimisées
-- 🎯 **Accessibility** : Support des interactions clavier et screen readers
+- ✨ **Advanced Styling** : Granular API to customize every part of the slider
+- 🔄 **Backward Compatibility** : Support for legacy `colors` API
+- 📱 **Multi-Platform** : Works on desktop and mobile
+- 🎨 **Predefined Themes** : Material Design and other styles
+- ⚡ **Performance** : Smooth and optimized animations
+- 🎯 **Accessibility** : Support for keyboard interactions and screen readers
 
 ---
 
-## Installation et Import
+## Installation and Import
 
 ```javascript
-// Import du composant
+// Component import
 import { Slider } from './src/a/components/Slider.js';
 
-// Ou inclusion directe
+// Or direct inclusion
 <script src="./src/a/components/Slider.js"></script>
 ```
 
 ---
 
-## Configuration de Base
+## Basic Configuration
 
-### Paramètres Essentiels
+### Essential Parameters
 
 ```javascript
 const slider = new Slider({

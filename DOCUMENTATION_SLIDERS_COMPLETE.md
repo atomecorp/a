@@ -1,27 +1,27 @@
-# 🎚️ Documentation Complète - Sliders Squirrel Framework
+# 🎚️ Complete Documentation - Squirrel Framework Sliders
 
-## Table des Matières
+## Table of Contents
 1. [Introduction](#introduction)
-2. [Types de Sliders](#types-de-sliders)
-3. [Configuration de Base](#configuration-de-base)
-4. [Nouvelle API de Styling](#nouvelle-api-de-styling)
-5. [API Legacy (Compatibilité)](#api-legacy-compatibilité)
-6. [Variations de Couleurs](#variations-de-couleurs)
-7. [Animations et Transitions](#animations-et-transitions)
-8. [Événements et Callbacks](#événements-et-callbacks)
-9. [Méthodes Publiques](#méthodes-publiques)
-10. [Exemples Pratiques](#exemples-pratiques)
-11. [Thèmes Prédéfinis](#thèmes-prédéfinis)
-12. [Sliders Circulaires](#sliders-circulaires)
-13. [Bonnes Pratiques](#bonnes-pratiques)
+2. [Slider Types](#slider-types)
+3. [Basic Configuration](#basic-configuration)
+4. [New Styling API](#new-styling-api)
+5. [Legacy API (Compatibility)](#legacy-api-compatibility)
+6. [Color Variations](#color-variations)
+7. [Animations and Transitions](#animations-and-transitions)
+8. [Events and Callbacks](#events-and-callbacks)
+9. [Public Methods](#public-methods)
+10. [Practical Examples](#practical-examples)
+11. [Predefined Themes](#predefined-themes)
+12. [Circular Sliders](#circular-sliders)
+13. [Best Practices](#best-practices)
 
 ---
 
 ## Introduction
 
-Le composant Slider du Squirrel Framework offre une solution complète pour créer des curseurs interactifs avec un contrôle total sur l'apparence et le comportement. Il supporte trois types principaux : horizontal, vertical et circulaire.
+The Squirrel Framework Slider component provides a complete solution for creating interactive sliders with full control over appearance and behavior. It supports three main types: horizontal, vertical, and circular.
 
-### Importation
+### Import
 
 ```javascript
 import Slider from '../a/components/Slider.js';
@@ -29,9 +29,9 @@ import Slider from '../a/components/Slider.js';
 
 ---
 
-## Types de Sliders
+## Slider Types
 
-### 1. Slider Horizontal
+### 1. Horizontal Slider
 ```javascript
 const horizontalSlider = new Slider({
     attach: 'body',
@@ -44,7 +44,7 @@ const horizontalSlider = new Slider({
 });
 ```
 
-### 2. Slider Vertical
+### 2. Vertical Slider
 ```javascript
 const verticalSlider = new Slider({
     attach: 'body',
@@ -57,7 +57,7 @@ const verticalSlider = new Slider({
 });
 ```
 
-### 3. Slider Circulaire
+### 3. Circular Slider
 ```javascript
 const circularSlider = new Slider({
     attach: 'body',
@@ -76,60 +76,60 @@ const circularSlider = new Slider({
 
 ---
 
-## Configuration de Base
+## Basic Configuration
 
-### Propriétés Principales
+### Main Properties
 
-| Propriété | Type | Défaut | Description |
+| Property | Type | Default | Description |
 |-----------|------|--------|-------------|
-| `attach` | string | 'body' | Sélecteur CSS pour l'élément parent |
-| `id` | string | auto-généré | Identifiant unique du slider |
-| `type` | string | 'horizontal' | Type : 'horizontal', 'vertical', 'circular' |
-| `x` | number | 20 | Position X en pixels |
-| `y` | number | 20 | Position Y en pixels |
-| `width` | number | 300 | Largeur du conteneur |
-| `height` | number | 60 | Hauteur du conteneur |
-| `trackWidth` | number | 300 | Largeur de la piste |
-| `trackHeight` | number | 8 | Hauteur de la piste |
-| `thumbSize` | number | 24 | Taille du curseur (si grip.width/height non définis) |
-| `min` | number | 0 | Valeur minimale |
-| `max` | number | 100 | Valeur maximale |
-| `step` | number | 1 | Pas d'incrémentation |
-| `value` | number | 50 | Valeur initiale |
+| `attach` | string | 'body' | CSS selector for parent element |
+| `id` | string | auto-generated | Unique slider identifier |
+| `type` | string | 'horizontal' | Type: 'horizontal', 'vertical', 'circular' |
+| `x` | number | 20 | X position in pixels |
+| `y` | number | 20 | Y position in pixels |
+| `width` | number | 300 | Container width |
+| `height` | number | 60 | Container height |
+| `trackWidth` | number | 300 | Track width |
+| `trackHeight` | number | 8 | Track height |
+| `thumbSize` | number | 24 | Thumb size (if grip.width/height not defined) |
+| `min` | number | 0 | Minimum value |
+| `max` | number | 100 | Maximum value |
+| `step` | number | 1 | Increment step |
+| `value` | number | 50 | Initial value |
 
 ---
 
-## Nouvelle API de Styling
+## New Styling API
 
-### 🎯 grip - Styles du Curseur
+### 🎯 grip - Thumb Styles
 
-Le curseur est l'élément interactif que l'utilisateur déplace.
+The thumb is the interactive element that users drag.
 
 ```javascript
 grip: {
-    width: 28,                    // Largeur personnalisée
-    height: 28,                   // Hauteur personnalisée
-    backgroundColor: '#e74c3c',   // Couleur de fond
-    border: '3px solid #ffffff', // Bordure
-    borderRadius: '8px',         // Rayon des coins (50% = cercle)
-    boxShadow: '0 6px 20px rgba(231, 76, 60, 0.4)', // Ombre
-    cursor: 'grab',              // Curseur de la souris
-    transition: 'transform 0.2s ease-out' // Animations CSS
+    width: 28,                    // Custom width
+    height: 28,                   // Custom height
+    backgroundColor: '#e74c3c',   // Background color
+    border: '3px solid #ffffff', // Border
+    borderRadius: '8px',         // Corner radius (50% = circle)
+    boxShadow: '0 6px 20px rgba(231, 76, 60, 0.4)', // Shadow
+    cursor: 'grab',              // Mouse cursor
+    transition: 'transform 0.2s ease-out' // CSS animations
 }
 ```
 
-#### Propriétés Disponibles
-- `width`, `height` - Dimensions (null = utilise thumbSize)
-- `backgroundColor` - Couleur de fond (accepte gradients)
-- `border` - Style de bordure
-- `borderRadius` - Rayon des coins
-- `boxShadow` - Ombre portée (multiple ombres supportées)
-- `cursor` - Style du curseur ('grab', 'pointer', 'move', etc.)
-- `transition` - Transitions CSS
+#### Available Properties
+- `width`, `height` - Dimensions (null = uses thumbSize)
+- `backgroundColor` - Background color (accepts gradients)
+- `border` - Border style
+- `borderRadius` - Corner radius
+- `boxShadow` - Drop shadow (multiple shadows supported)
+- `cursor` - Cursor style ('grab', 'pointer', 'move', etc.)
+- `transition` - CSS transitions
 
-### 🏠 support - Styles du Conteneur
+### 🏠 support - Container Styles
 
-Le conteneur englobe tout le slider.
+The container wraps the entire slider.
 
 ```javascript
 support: {
@@ -141,35 +141,35 @@ support: {
 }
 ```
 
-#### Propriétés Disponibles
-- `backgroundColor` - Couleur de fond (gradients supportés)
-- `border` - Style de bordure
-- `borderRadius` - Rayon des coins
-- `boxShadow` - Ombre portée
-- `padding` - Espacement intérieur
+#### Available Properties
+- `backgroundColor` - Background color (gradients supported)
+- `border` - Border style
+- `borderRadius` - Corner radius
+- `boxShadow` - Drop shadow
+- `padding` - Inner spacing
 
-### 🛤️ rail - Styles de la Piste
+### 🛤️ rail - Track Styles
 
-La piste est le chemin sur lequel glisse le curseur.
+The track is the path where the thumb slides.
 
 ```javascript
 rail: {
     backgroundColor: 'rgba(255,255,255,0.3)',
     borderRadius: '6px',
-    height: 12,    // Override de trackHeight
-    width: null    // null = utilise trackWidth
+    height: 12,    // Override trackHeight
+    width: null    // null = uses trackWidth
 }
 ```
 
-#### Propriétés Disponibles
-- `backgroundColor` - Couleur de fond
-- `borderRadius` - Rayon des coins
-- `height` - Hauteur (override trackHeight si défini)
-- `width` - Largeur (override trackWidth si défini)
+#### Available Properties
+- `backgroundColor` - Background color
+- `borderRadius` - Corner radius
+- `height` - Height (overrides trackHeight if defined)
+- `width` - Width (overrides trackWidth if defined)
 
-### 📊 progress - Styles de la Progression
+### 📊 progress - Progress Styles
 
-La barre de progression indique la valeur actuelle.
+The progress bar indicates the current value.
 
 ```javascript
 progress: {
@@ -180,17 +180,17 @@ progress: {
 }
 ```
 
-#### Propriétés Disponibles
-- `backgroundColor` - Couleur de fond (gradients supportés)
-- `borderRadius` - Rayon des coins
-- `boxShadow` - Ombre portée
-- `transition` - Transitions CSS
+#### Available Properties
+- `backgroundColor` - Background color (gradients supported)
+- `borderRadius` - Corner radius
+- `boxShadow` - Drop shadow
+- `transition` - CSS transitions
 
 ---
 
-## API Legacy (Compatibilité)
+## Legacy API (Compatibility)
 
-L'ancienne API `colors` est encore supportée et automatiquement convertie :
+The old `colors` API is still supported and automatically converted:
 
 ```javascript
 colors: {
@@ -201,10 +201,10 @@ colors: {
 }
 ```
 
-### Migration Automatique
+### Automatic Migration
 
 ```javascript
-// Ancien code
+// Old code
 const slider = new Slider({
     colors: {
         container: '#f8f9fa',
@@ -214,7 +214,7 @@ const slider = new Slider({
     }
 });
 
-// Équivalent avec la nouvelle API
+// Equivalent with new API
 const slider = new Slider({
     support: { backgroundColor: '#f8f9fa' },
     rail: { backgroundColor: '#dee2e6' },
@@ -223,13 +223,13 @@ const slider = new Slider({
 });
 ```
 
-### API Hybride
+### Hybrid API
 
-Vous pouvez mélanger ancienne et nouvelle API :
+You can mix old and new APIs:
 
 ```javascript
 const hybridSlider = new Slider({
-    // Base avec l'ancienne API
+    // Base with old API
     colors: {
         container: '#fff',
         track: '#ddd',
@@ -237,9 +237,9 @@ const hybridSlider = new Slider({
         thumb: '#155724'
     },
     
-    // Override avec la nouvelle API
+    // Override with new API
     grip: {
-        borderRadius: '4px',  // Thumb carré au lieu de rond
+        borderRadius: '4px',  // Square thumb instead of round
         border: '3px solid #ffffff',
         boxShadow: '0 8px 20px rgba(21, 87, 36, 0.4)'
     },
@@ -253,21 +253,21 @@ const hybridSlider = new Slider({
 
 ---
 
-## Variations de Couleurs
+## Color Variations
 
-Le système de variation permet des changements de couleur automatiques basés sur la valeur.
+The variation system allows automatic color changes based on value.
 
-### Configuration Simple
+### Simple Configuration
 
 ```javascript
 variation: [
-    { color: '#4caf50', position: { x: '0%' } },   // Vert à 0%
-    { color: '#ff9800', position: { x: '70%' } },  // Orange à 70%
-    { color: '#f44336', position: { x: '100%' } }  // Rouge à 100%
+    { color: '#4caf50', position: { x: '0%' } },   // Green at 0%
+    { color: '#ff9800', position: { x: '70%' } },  // Orange at 70%
+    { color: '#f44336', position: { x: '100%' } }  // Red at 100%
 ]
 ```
 
-### Exemple : Thermomètre
+### Example: Thermometer
 
 ```javascript
 const tempSlider = new Slider({
@@ -276,49 +276,49 @@ const tempSlider = new Slider({
     min: -10,
     max: 40,
     variation: [
-        { color: '#2196f3', position: { x: '0%' } },   // Bleu (froid)
-        { color: '#4caf50', position: { x: '40%' } },  // Vert (tempéré)
-        { color: '#ff9800', position: { x: '70%' } },  // Orange (chaud)
-        { color: '#f44336', position: { x: '100%' } }  // Rouge (très chaud)
+        { color: '#2196f3', position: { x: '0%' } },   // Blue (cold)
+        { color: '#4caf50', position: { x: '40%' } },  // Green (mild)
+        { color: '#ff9800', position: { x: '70%' } },  // Orange (warm)
+        { color: '#f44336', position: { x: '100%' } }  // Red (hot)
     ],
     callbacks: {
         onChange: (value) => {
-            if (value < 15) console.log('🥶 Il fait froid!');
-            else if (value > 28) console.log('🔥 Il fait chaud!');
-            else console.log('😊 Température agréable');
+            if (value < 15) console.log('🥶 It\'s cold!');
+            else if (value > 28) console.log('🔥 It\'s hot!');
+            else console.log('😊 Nice temperature');
         }
     }
 });
 ```
 
-### Interpolation Automatique
+### Automatic Interpolation
 
-Le système interpole automatiquement entre les couleurs définies. Si aucune variation n'est spécifiée, une variation rouge-vert par défaut est appliquée.
+The system automatically interpolates between defined colors. If no variation is specified, a default red-green variation is applied.
 
 ---
 
-## Animations et Transitions
+## Animations and Transitions
 
-### Configuration des Animations
+### Animation Configuration
 
 ```javascript
 animations: {
-    enabled: true,           // Activer/désactiver les animations
-    duration: 0.2,          // Durée en secondes
-    easing: 'ease-out'      // Fonction d'easing CSS
+    enabled: true,           // Enable/disable animations
+    duration: 0.2,          // Duration in seconds
+    easing: 'ease-out'      // CSS easing function
 }
 ```
 
-### Easings Disponibles
+### Available Easings
 
-- `ease` - Transition standard
-- `ease-in` - Accélération progressive
-- `ease-out` - Décélération progressive
-- `ease-in-out` - Accélération puis décélération
-- `linear` - Vitesse constante
-- `cubic-bezier(0.4, 0.0, 0.2, 1)` - Fonction personnalisée
+- `ease` - Standard transition
+- `ease-in` - Progressive acceleration
+- `ease-out` - Progressive deceleration
+- `ease-in-out` - Acceleration then deceleration
+- `linear` - Constant speed
+- `cubic-bezier(0.4, 0.0, 0.2, 1)` - Custom function
 
-### Animations Personnalisées
+### Custom Animations
 
 ```javascript
 const animatedSlider = new Slider({
@@ -339,35 +339,35 @@ const animatedSlider = new Slider({
 
 ---
 
-## Événements et Callbacks
+## Events and Callbacks
 
-### Callbacks Disponibles
+### Available Callbacks
 
 ```javascript
 callbacks: {
     onChange: (value) => {
-        // Appelé à chaque changement de valeur
-        console.log(`Nouvelle valeur: ${value}`);
+        // Called on every value change
+        console.log(`New value: ${value}`);
     },
     
     onStart: (value) => {
-        // Appelé au début du drag
-        console.log(`Début du glissement: ${value}`);
+        // Called at the start of dragging
+        console.log(`Start dragging: ${value}`);
     },
     
     onEnd: (value) => {
-        // Appelé à la fin du drag
-        console.log(`Fin du glissement: ${value}`);
+        // Called at the end of dragging
+        console.log(`End dragging: ${value}`);
     },
     
     onDrag: (value) => {
-        // Appelé pendant le drag (plus fréquent qu'onChange)
-        console.log(`En cours de glissement: ${value}`);
+        // Called during dragging (more frequent than onChange)
+        console.log(`Currently dragging: ${value}`);
     }
 }
 ```
 
-### Exemple Avancé avec Feedback
+### Advanced Example with Feedback
 
 ```javascript
 const volumeSlider = new Slider({
@@ -375,10 +375,10 @@ const volumeSlider = new Slider({
     value: 50,
     callbacks: {
         onChange: (value) => {
-            // Mettre à jour l'interface
+            // Update the interface
             document.getElementById('volume-display').textContent = `${value}%`;
             
-            // Changer l'icône selon le volume
+            // Change icon according to volume level
             const icon = document.getElementById('volume-icon');
             if (value === 0) icon.className = 'icon-volume-off';
             else if (value < 30) icon.className = 'icon-volume-low';
@@ -387,16 +387,16 @@ const volumeSlider = new Slider({
         },
         
         onStart: () => {
-            // Ajouter une classe CSS pour le feedback visuel
+            // Add CSS class for visual feedback
             document.body.classList.add('adjusting-volume');
         },
         
         onEnd: (value) => {
-            // Retirer la classe et sauvegarder la préférence
+            // Remove class and save preference
             document.body.classList.remove('adjusting-volume');
             localStorage.setItem('user-volume', value);
             
-            // Effet de vibration sur mobile
+            // Vibration effect on mobile
             if (navigator.vibrate) {
                 navigator.vibrate(50);
             }
@@ -407,26 +407,26 @@ const volumeSlider = new Slider({
 
 ---
 
-## Méthodes Publiques
+## Public Methods
 
-### Méthodes de Valeur
+### Value Methods
 
 ```javascript
 const slider = new Slider({ attach: 'body' });
 
-// Définir une valeur
+// Set a value
 slider.setValue(75);
 
-// Obtenir la valeur actuelle
+// Get the current value
 const currentValue = slider.getValue();
-// ou
+// or
 const value = slider.getCurrentValue();
 ```
 
-### Méthodes de Styling Dynamique
+### Dynamic Styling Methods
 
 ```javascript
-// Modifier le style du curseur
+// Modify grip style
 slider.setGripStyle({
     backgroundColor: '#e74c3c',
     borderRadius: '0',
@@ -435,21 +435,21 @@ slider.setGripStyle({
     boxShadow: '0 8px 25px rgba(231, 76, 60, 0.6)'
 });
 
-// Modifier le style du conteneur
+// Modify container style
 slider.setSupportStyle({
     backgroundColor: '#2c3e50',
     borderRadius: '30px',
     padding: '25px'
 });
 
-// Modifier le style de la piste
+// Modify track style
 slider.setRailStyle({
     backgroundColor: '#34495e',
     height: 15,
     borderRadius: '8px'
 });
 
-// Modifier le style de la progression
+// Modify progress style
 slider.setProgressStyle({
     backgroundColor: 'linear-gradient(90deg, #9b59b6, #e74c3c)',
     borderRadius: '8px',
@@ -457,10 +457,10 @@ slider.setProgressStyle({
 });
 ```
 
-### Méthodes de Configuration
+### Configuration Methods
 
 ```javascript
-// Mettre à jour la configuration
+// Update configuration
 slider.setConfig({
     min: 0,
     max: 200,
@@ -471,15 +471,15 @@ slider.setConfig({
     }
 });
 
-// Détruire le slider
+// Destroy the slider
 slider.destroy();
 ```
 
 ---
 
-## Exemples Pratiques
+## Practical Examples
 
-### 1. Slider de Volume Audio
+### 1. Audio Volume Slider
 
 ```javascript
 const audioVolumeSlider = new Slider({
@@ -521,7 +521,7 @@ const audioVolumeSlider = new Slider({
     
     callbacks: {
         onChange: (value) => {
-            // Contrôler le volume audio
+            // Control audio volume
             const audio = document.getElementById('audio-player');
             if (audio) {
                 audio.volume = value / 100;
@@ -531,7 +531,7 @@ const audioVolumeSlider = new Slider({
 });
 ```
 
-### 2. Slider de Luminosité avec Variation
+### 2. Brightness Slider with Variation
 
 ```javascript
 const brightnessSlider = new Slider({
@@ -564,21 +564,21 @@ const brightnessSlider = new Slider({
     },
     
     variation: [
-        { color: '#34495e', position: { x: '0%' } },   // Sombre
+        { color: '#34495e', position: { x: '0%' } },   // Dark
         { color: '#f39c12', position: { x: '50%' } },  // Orange
-        { color: '#ffd700', position: { x: '100%' } }  // Jaune vif
+        { color: '#ffd700', position: { x: '100%' } }  // Bright yellow
     ],
     
     callbacks: {
         onChange: (value) => {
-            // Ajuster la luminosité de l'écran
+            // Adjust screen brightness
             document.body.style.filter = `brightness(${value}%)`;
         }
     }
 });
 ```
 
-### 3. Slider de Température Circulaire
+### 3. Circular Temperature Slider
 
 ```javascript
 const tempCircularSlider = new Slider({
@@ -607,18 +607,18 @@ const tempCircularSlider = new Slider({
     },
     
     variation: [
-        { color: '#3498db', position: { x: '0%' } },   // Bleu (froid)
-        { color: '#2ecc71', position: { x: '30%' } },  // Vert (confortable)
-        { color: '#f39c12', position: { x: '70%' } },  // Orange (chaud)
-        { color: '#e74c3c', position: { x: '100%' } }  // Rouge (très chaud)
+        { color: '#3498db', position: { x: '0%' } },   // Blue (cold)
+        { color: '#2ecc71', position: { x: '30%' } },  // Green (comfortable)
+        { color: '#f39c12', position: { x: '70%' } },  // Orange (warm)
+        { color: '#e74c3c', position: { x: '100%' } }  // Red (very hot)
     ],
     
     callbacks: {
         onChange: (value) => {
-            // Mettre à jour l'affichage de température
+            // Update temperature display
             document.getElementById('temp-display').textContent = `${value}°C`;
             
-            // Envoyer la commande au thermostat
+            // Send command to thermostat
             fetch('/api/thermostat', {
                 method: 'POST',
                 body: JSON.stringify({ temperature: value }),
@@ -631,23 +631,23 @@ const tempCircularSlider = new Slider({
 
 ---
 
-## Thèmes Prédéfinis
+## Predefined Themes
 
-### Thème Material (Défaut)
+### Material Theme (Default)
 
 ```javascript
 const materialSlider = new Slider({
     attach: 'body',
-    theme: 'material'  // Ombres douces, animations fluides
+    theme: 'material'  // Soft shadows, smooth animations
 });
 ```
 
-### Thème Flat
+### Flat Theme
 
 ```javascript
 const flatSlider = new Slider({
     attach: 'body',
-    theme: 'flat',  // Sans ombres, design minimaliste
+    theme: 'flat',  // No shadows, minimalist design
     colors: {
         container: '#34495e',
         track: '#7f8c8d',
@@ -657,7 +657,7 @@ const flatSlider = new Slider({
 });
 ```
 
-### Thème Personnalisé
+### Custom Theme
 
 ```javascript
 const customSlider = new Slider({
@@ -680,36 +680,36 @@ const customSlider = new Slider({
 
 ---
 
-## Sliders Circulaires
+## Circular Sliders
 
-### Configuration Circulaire
+### Circular Configuration
 
 ```javascript
 circular: {
-    radius: 60,        // Rayon du cercle en pixels
-    strokeWidth: 12,   // Épaisseur de la ligne
-    startAngle: -135,  // Angle de début en degrés
-    endAngle: 135      // Angle de fin en degrés
+    radius: 60,        // Circle radius in pixels
+    strokeWidth: 12,   // Line thickness
+    startAngle: -135,  // Start angle in degrees
+    endAngle: 135      // End angle in degrees
 }
 ```
 
-### Exemples d'Angles
+### Angle Examples
 
 ```javascript
-// Demi-cercle supérieur
+// Upper semicircle
 circular: { startAngle: -180, endAngle: 0 }
 
-// Demi-cercle inférieur
+// Lower semicircle
 circular: { startAngle: 0, endAngle: 180 }
 
-// Trois-quarts de cercle
+// Three-quarters circle
 circular: { startAngle: -135, endAngle: 135 }
 
-// Cercle complet
+// Full circle
 circular: { startAngle: 0, endAngle: 360 }
 ```
 
-### Slider Circulaire de Volume
+### Circular Volume Slider
 
 ```javascript
 const circularVolumeSlider = new Slider({
@@ -732,15 +732,15 @@ const circularVolumeSlider = new Slider({
     },
     
     variation: [
-        { color: '#4caf50', position: { x: '0%' } },   // Vert (silencieux)
-        { color: '#ff9800', position: { x: '70%' } },  // Orange (moyen)
-        { color: '#f44336', position: { x: '100%' } }  // Rouge (fort)
+        { color: '#4caf50', position: { x: '0%' } },   // Green (quiet)
+        { color: '#ff9800', position: { x: '70%' } },  // Orange (medium)
+        { color: '#f44336', position: { x: '100%' } }  // Red (loud)
     ],
     
     callbacks: {
         onChange: (value) => {
             if (value > 80) {
-                console.log('⚠️ Volume élevé!');
+                console.log('⚠️ High volume!');
             }
         }
     }
@@ -749,43 +749,43 @@ const circularVolumeSlider = new Slider({
 
 ---
 
-## Bonnes Pratiques
+## Best Practices
 
 ### 1. Performance
 
 ```javascript
-// ✅ Bon : Limiter les callbacks onDrag pour les opérations coûteuses
+// ✅ Good: Limit onDrag callbacks for expensive operations
 const slider = new Slider({
     attach: 'body',
     callbacks: {
         onChange: (value) => {
-            // Opération légère à chaque changement
+            // Light operation on every change
             document.getElementById('display').textContent = value;
         },
         
         onEnd: (value) => {
-            // Opération coûteuse seulement à la fin
+            // Expensive operation only at the end
             updateServerValue(value);
         }
     }
 });
 
-// ❌ Éviter : Opérations coûteuses dans onDrag
+// ❌ Avoid: Expensive operations in onDrag
 ```
 
-### 2. Accessibilité
+### 2. Accessibility
 
 ```javascript
-// ✅ Support clavier automatique
+// ✅ Automatic keyboard support
 const accessibleSlider = new Slider({
     attach: 'body',
-    // Le slider supporte automatiquement :
-    // - Flèches gauche/droite ou haut/bas
-    // - Home/End pour min/max
-    // - Tab pour la navigation
+    // The slider automatically supports:
+    // - Left/right or up/down arrows
+    // - Home/End for min/max
+    // - Tab for navigation
 });
 
-// Ajouter des labels ARIA
+// Add ARIA labels
 const container = document.getElementById('slider-container');
 container.setAttribute('role', 'slider');
 container.setAttribute('aria-label', 'Volume control');
@@ -796,7 +796,7 @@ container.setAttribute('aria-valuemax', '100');
 ### 3. Responsive Design
 
 ```javascript
-// ✅ Adapter les dimensions selon l'écran
+// ✅ Adapt dimensions according to screen size
 const responsiveSlider = new Slider({
     attach: 'body',
     width: window.innerWidth < 768 ? 250 : 400,
@@ -808,13 +808,13 @@ const responsiveSlider = new Slider({
     }
 });
 
-// Réécouter les changements de taille
+// Listen for size changes
 window.addEventListener('resize', () => {
-    // Recréer ou ajuster le slider si nécessaire
+    // Recreate or adjust the slider if necessary
 });
 ```
 
-### 4. Validation des Valeurs
+### 4. Value Validation
 
 ```javascript
 const validatedSlider = new Slider({
@@ -825,12 +825,12 @@ const validatedSlider = new Slider({
     
     callbacks: {
         onChange: (value) => {
-            // ✅ Validation et contraintes
+            // ✅ Validation and constraints
             if (value < 10) {
-                console.warn('Valeur très faible');
+                console.warn('Very low value');
             }
             
-            // Arrondir si nécessaire
+            // Round if necessary
             const roundedValue = Math.round(value / 5) * 5;
             if (roundedValue !== value) {
                 slider.setValue(roundedValue);
@@ -840,52 +840,52 @@ const validatedSlider = new Slider({
 });
 ```
 
-### 5. Gestion des Erreurs
+### 5. Error Handling
 
 ```javascript
 try {
     const slider = new Slider({
-        attach: '#non-existent-element',  // Élément qui n'existe pas
+        attach: '#non-existent-element',  // Element that doesn't exist
         value: 50
     });
 } catch (error) {
-    console.error('Erreur lors de la création du slider:', error);
-    // Fallback ou message d'erreur
+    console.error('Error creating slider:', error);
+    // Fallback or error message
 }
 ```
 
 ---
 
-## Styles CSS Additionnels
+## Additional CSS Styles
 
-### Styles pour Focus et Hover
+### Focus and Hover Styles
 
 ```css
-/* Améliorer l'accessibilité */
+/* Improve accessibility */
 .slider-thumb:focus {
     outline: 2px solid #2196f3;
     outline-offset: 2px;
 }
 
-/* Effet de survol */
+/* Hover effect */
 .slider-container:hover .slider-thumb {
     transform: scale(1.1);
 }
 
-/* Styles pour mobile */
+/* Mobile styles */
 @media (max-width: 768px) {
     .slider-thumb {
         width: 32px !important;
         height: 32px !important;
-        /* Curseur plus grand pour le tactile */
+        /* Larger thumb for touch interaction */
     }
 }
 ```
 
-### Animations Personnalisées
+### Custom Animations
 
 ```css
-/* Animation de ripple */
+/* Ripple animation */
 @keyframes ripple {
     to {
         transform: translate(-50%, -50%) scale(4);
@@ -893,7 +893,7 @@ try {
     }
 }
 
-/* Effet de pulsation */
+/* Pulse effect */
 @keyframes pulse {
     0%, 100% {
         transform: scale(1);
@@ -906,4 +906,4 @@ try {
 
 ---
 
-Cette documentation couvre tous les aspects des sliders Squirrel Framework. Pour des questions spécifiques ou des cas d'usage avancés, consultez les exemples pratiques ou créez des tests personnalisés.
+This documentation covers all aspects of Squirrel Framework sliders. For specific questions or advanced use cases, consult the practical examples or create custom tests.
