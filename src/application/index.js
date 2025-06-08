@@ -1,3 +1,6 @@
+// Import de la classe Slider paramétrée
+import Slider from '../a/components/Slider.js';
+
 // // Create a new A instance with custom properties
 // const html_container = new A({
 //     attach: 'body',
@@ -399,324 +402,188 @@
 // });
 
 
-// Slider 
+// Exemple 1: Slider horizontal classique
+const volumeSlider = new Slider({
+    attach: 'body',
+    id: 'volume_slider',
+    orientation: 'horizontal',
+    x: 50,
+    y: 100,
+    width: 400,
+    height: 120,
+    trackWidth: 360,
+    value: 30,
+    callbacks: {
+        onChange: (value) => console.log(`Volume: ${value}%`),
+        onStart: () => console.log('Volume adjustment started'),
+        onEnd: () => console.log('Volume adjustment ended')
+    }
+});
 
+// Exemple 2: Slider vertical avec variation de couleurs
+const brightnessSlider = new Slider({
+    attach: 'body',
+    id: 'brightness_slider',
+    orientation: 'vertical',
+    x: 500,
+    y: 100,
+    width: 80,
+    height: 300,
+    trackWidth: 200,
+    trackHeight: 8,
+    value: 70,
+    colors: {
+        container: '#ffffff',
+        track: '#dee2e6',
+        text: '#424242'
+    },
+    variation: [
+        { color: '#0099ff', position: { x: '0%' } },    // Froid (bleu)
+        { color: '#00ff99', position: { x: '30%' } },   // Frais (vert)
+        { color: '#ffff00', position: { x: '60%' } },   // Tiède (jaune)
+        { color: '#ff6600', position: { x: '80%' } },   // Chaud (orange)
+        { color: '#ff0000', position: { x: '100%' } }   // Très chaud (rouge)
+    ],
+    callbacks: {
+        onChange: (value) => console.log(`Brightness: ${value}%`)
+    }
+});
+
+// Exemple 3: Slider de température avec variation de couleurs
+const tempSlider = new Slider({
+    attach: 'body',
+    id: 'temperature_slider',
+    orientation: 'horizontal',
+    x: 50,
+    y: 300,
+    width: 350,
+    height: 100,
+    trackWidth: 300,
+    trackHeight: 12,
+    value: 21,
+    min: -10,
+    max: 40,
+    step: 0.5,
+    theme: 'material',
+    variation: [
+        { color: 'red', position: { x: '0%' } },    // Froid (bleu)
+        { color: 'yellow', position: { x: '30%' } },   // Frais (vert)
+        { color: 'green', position: { x: '60%' } },   // Tiède (jaune)
+        { color: 'black', position: { x: '80%' } },   // Chaud (orange)
+        { color: 'white', position: { x: '100%' } }   // Très chaud (rouge)
+    ],
+    callbacks: {
+        onChange: (value) => {
+            console.log(`Temperature: ${value}°C`);
+        }
+    }
+});
+
+// Exemple 4: Slider de volume avec design flat
+const bassSlider = new Slider({
+    attach: 'body',
+    id: 'bass_slider',
+    orientation: 'horizontal',
+    x: 50,
+    y: 450,
+    width: 250,
+    height: 80,
+    trackWidth: 200,
+    trackHeight: 4,
+    thumbSize: 20,
+    value: 50,
+    min: 0,
+    max: 100,
+    step: 5,
+    theme: 'flat',
+    colors: {
+        container: '#2c3e50',
+        track: '#34495e',
+        progress: '#e74c3c',
+        thumb: '#c0392b',
+        text: '#ecf0f1'
+    },
+    animations: {
+        enabled: true,
+        duration: 0.3,
+        easing: 'ease-out'
+    }
+});
+
+console.log('🎚️ Sliders paramétriques créés avec succès!');
+
+// Exemple 5: Slider avec variation de couleurs avancée
+const radialSlider = new Slider({
+    attach: 'body',
+    id: 'radial_gradient_slider',
+    orientation: 'horizontal',
+    x: 350,
+    y: 450,
+    width: 300,
+    height: 100,
+    trackWidth: 250,
+    trackHeight: 10,
+    thumbSize: 26,
+    value: 60,
+    min: 0,
+    max: 100,
+    step: 2,
+    theme: 'material',
+    colors: {
+        container: '#ffffff',
+        track: '#f0f0f0',
+        text: '#424242'
+    },
+    variation: [
+        { color: '#6200ea', position: { x: '0%' } },
+        { color: '#3700b3', position: { x: '50%' } },
+        { color: '#03dac6', position: { x: '100%' } }
+    ],
+    animations: {
+        enabled: true,
+        duration: 0.15,
+        easing: 'cubic-bezier(0.4, 0.0, 0.2, 1)'
+    },
+    callbacks: {
+        onChange: (value) => {
+            console.log(`🌀 Radial Effect: ${value}%`);
+        },
+        onStart: () => console.log('🎯 Radial adjustment started'),
+        onEnd: () => console.log('✅ Radial adjustment completed')
+    }
+});
+
+// Test de mise à jour programmée des valeurs
+setTimeout(() => {
+    console.log('📊 Test de mise à jour programmée des sliders...');
+    
+    // Changer la valeur du volume
+    if (volumeSlider.setValue) {
+        volumeSlider.setValue(85);
+        console.log('🔊 Volume mis à jour à 85%');
+    }
+    
+    // Changer la température
+    if (tempSlider.setValue) {
+        tempSlider.setValue(25);
+        console.log('🌡️ Température mise à jour à 25°C');
+    }
+    
+    // Tester l'effet radial
+    if (radialSlider.setValue) {
+        radialSlider.setValue(90);
+        console.log('🌀 Effet radial mis à jour à 90%');
+    }
+    
+}, 3000);
+
+console.log('🎚️ Sliders paramétriques créés avec succès!');
+console.log('📋 Types de sliders disponibles:');
+console.log('   - Slider horizontal classique (Volume)');
+console.log('   - Slider vertical avec gradient (Brightness)'); 
+console.log('   - Slider avec gradient complexe (Temperature)');
+console.log('   - Slider avec thème flat (Bass)');
+console.log('   - Slider avec gradient radial (Radial Effect)');
 
 // ...existing code...
 
-function createSexySlider(options = {}) {
-  const {
-    attach = 'body',
-    id = 'slider_' + Date.now(),
-    x = 50,
-    y = 50,
-    width = 320,
-    height = 60,
-    min = 0,
-    max = 100,
-    value = 50,
-    color = { red: 0.26, green: 0.52, blue: 0.96, alpha: 1 },
-    label = '',
-    onChange = () => {}
-  } = options;
-
-  let currentValue = value;
-  const percentage = ((currentValue - min) / (max - min)) * 100;
-
-  // Container principal avec design moderne
-  const sliderContainer = new A({
-    attach,
-    id: id + '_container',
-    markup: 'div',
-    role: 'container',
-    x,
-    y,
-    width,
-    height,
-    backgroundColor: { red: 1, green: 1, blue: 1, alpha: 0.95 },
-    smooth: 20,
-    padding: 20,
-    shadow: [
-      { blur: 20, x: 0, y: 10, color: { red: 0, green: 0, blue: 0, alpha: 0.1 }, invert: false },
-      { blur: 1, x: 0, y: 1, color: { red: 1, green: 1, blue: 1, alpha: 0.8 }, invert: true }
-    ],
-    border: '1px solid rgba(230,230,230,0.8)',
-    position: 'relative'
-  });
-
-  // Label stylé
-  if (label) {
-    new A({
-      attach: '#' + id + '_container',
-      id: id + '_label',
-      markup: 'div',
-      role: 'text',
-      x: 0,
-      y: 5,
-      width: '70%',
-      height: 18,
-      text: label,
-      fontSize: 14,
-      fontWeight: '600',
-      color: { red: 0.2, green: 0.2, blue: 0.3, alpha: 1 },
-      position: 'absolute'
-    });
-
-    // Valeur en temps réel
-    new A({
-      attach: '#' + id + '_container',
-      id: id + '_value_display',
-      markup: 'div',
-      role: 'text',
-      x: '70%',
-      y: 5,
-      width: '30%',
-      height: 18,
-      text: Math.round(currentValue).toString(),
-      fontSize: 16,
-      fontWeight: 'bold',
-      color: color,
-      textAlign: 'right',
-      position: 'absolute'
-    });
-  }
-
-  // Track moderne avec dégradé
-  const track = new A({
-    attach: '#' + id + '_container',
-    id: id + '_track',
-    markup: 'div',
-    role: 'shape',
-    x: 0,
-    y: 35,
-    width: '100%',
-    height: 8,
-    backgroundColor: { red: 0.95, green: 0.95, blue: 0.96, alpha: 1 },
-    smooth: 25,
-    position: 'absolute',
-    shadow: [
-      { blur: 3, x: 0, y: 1, color: { red: 0, green: 0, blue: 0, alpha: 0.08 }, invert: true }
-    ],
-    cursor: 'pointer'
-  });
-
-  // Progress bar avec dégradé animé
-  const progress = new A({
-    attach: '#' + id + '_track',
-    id: id + '_progress',
-    markup: 'div',
-    role: 'shape',
-    x: 0,
-    y: 0,
-    width: percentage + '%',
-    height: '100%',
-    smooth: 25,
-    position: 'absolute',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-  });
-
-  // Appliquer le dégradé sur le progress
-  const rgbColor = `${Math.round(color.red * 255)}, ${Math.round(color.green * 255)}, ${Math.round(color.blue * 255)}`;
-  progress.element.style.background = `linear-gradient(90deg, 
-    rgba(${rgbColor}, 0.7) 0%, 
-    rgba(${rgbColor}, 1) 50%, 
-    rgba(${rgbColor}, 0.9) 100%)`;
-  progress.element.style.boxShadow = `0 0 10px rgba(${rgbColor}, 0.4)`;
-
-  // Thumb ultra-moderne
-  const thumb = new A({
-    attach: '#' + id + '_container',
-    id: id + '_thumb',
-    markup: 'div',
-    role: 'shape',
-    x: (percentage / 100) * (width - 40) + 8,
-    y: 27,
-    width: 24,
-    height: 24,
-    backgroundColor: { red: 1, green: 1, blue: 1, alpha: 1 },
-    smooth: '50%',
-    position: 'absolute',
-    cursor: 'grab',
-    border: `3px solid rgba(${rgbColor}, 1)`,
-    shadow: [
-      { blur: 8, x: 0, y: 4, color: { red: 0, green: 0, blue: 0, alpha: 0.15 }, invert: false },
-      { blur: 0, x: 0, y: 0, color: color, invert: false }
-    ],
-    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-    zIndex: 10
-  });
-
-  // Glow effect pour le thumb
-  thumb.element.style.boxShadow = `
-    0 4px 12px rgba(0,0,0,0.15), 
-    0 0 0 4px rgba(${rgbColor}, 0.1),
-    0 0 20px rgba(${rgbColor}, 0.3)
-  `;
-
-  let isDragging = false;
-
-  // Fonction de mise à jour améliorée
-  function updateValue(newValue) {
-    currentValue = Math.max(min, Math.min(max, Math.round(newValue)));
-    const newPercentage = ((currentValue - min) / (max - min)) * 100;
-    
-    // Animation fluide du thumb
-    const newThumbX = (newPercentage / 100) * (width - 40) + 8;
-    thumb.element.style.transform = `translateX(${newThumbX - thumb.x()}px)`;
-    thumb.x(newThumbX);
-    
-    // Animation de la progress bar
-    progress.element.style.width = newPercentage + '%';
-    
-    // Mise à jour de l'affichage de la valeur
-    if (label) {
-      const valueDisplay = document.getElementById(id + '_value_display');
-      if (valueDisplay) {
-        valueDisplay.textContent = currentValue.toString();
-        // Animation de pulsation pour la valeur
-        valueDisplay.style.transform = 'scale(1.1)';
-        setTimeout(() => {
-          valueDisplay.style.transform = 'scale(1)';
-        }, 150);
-      }
-    }
-    
-    onChange(currentValue);
-  }
-
-  // Gestion des événements améliorée
-  function handleInteraction(e) {
-    const rect = track.element.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickPercentage = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
-    const newValue = min + (clickPercentage / 100) * (max - min);
-    updateValue(newValue);
-  }
-
-  function handleMouseDown(e) {
-    isDragging = true;
-    thumb.element.style.cursor = 'grabbing';
-    thumb.element.style.transform += ' scale(1.1)';
-    thumb.element.style.boxShadow = `
-      0 6px 16px rgba(0,0,0,0.2), 
-      0 0 0 6px rgba(${rgbColor}, 0.15),
-      0 0 30px rgba(${rgbColor}, 0.5)
-    `;
-    
-    handleInteraction(e);
-    
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    e.preventDefault();
-  }
-
-  function handleMouseMove(e) {
-    if (isDragging) {
-      handleInteraction(e);
-    }
-  }
-
-  function handleMouseUp() {
-    isDragging = false;
-    thumb.element.style.cursor = 'grab';
-    thumb.element.style.transform = thumb.element.style.transform.replace(' scale(1.1)', '');
-    thumb.element.style.boxShadow = `
-      0 4px 12px rgba(0,0,0,0.15), 
-      0 0 0 4px rgba(${rgbColor}, 0.1),
-      0 0 20px rgba(${rgbColor}, 0.3)
-    `;
-    
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
-  }
-
-  // Effets hover
-  function handleContainerHover() {
-    sliderContainer.element.style.transform = 'translateY(-2px)';
-    sliderContainer.element.style.boxShadow = `
-      0 25px 40px rgba(0,0,0,0.12),
-      0 0 0 1px rgba(${rgbColor}, 0.1)
-    `;
-  }
-
-  function handleContainerLeave() {
-    if (!isDragging) {
-      sliderContainer.element.style.transform = 'translateY(0px)';
-      sliderContainer.element.style.boxShadow = `
-        0 20px 30px rgba(0,0,0,0.1),
-        0 1px 3px rgba(255,255,255,0.8) inset
-      `;
-    }
-  }
-
-  // Attacher tous les événements
-  thumb.element.addEventListener('mousedown', handleMouseDown);
-  track.element.addEventListener('click', handleInteraction);
-  sliderContainer.element.addEventListener('mouseenter', handleContainerHover);
-  sliderContainer.element.addEventListener('mouseleave', handleContainerLeave);
-
-  // Animation d'entrée
-  sliderContainer.element.style.opacity = '0';
-  sliderContainer.element.style.transform = 'translateY(20px)';
-  setTimeout(() => {
-    sliderContainer.element.style.transition = 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
-    sliderContainer.element.style.opacity = '1';
-    sliderContainer.element.style.transform = 'translateY(0px)';
-  }, 100);
-
-  return {
-    container: sliderContainer,
-    getValue: () => currentValue,
-    setValue: updateValue,
-    destroy: () => sliderContainer.element.remove()
-  };
-}
-
-// Exemples avec style amélioré
-const volumeSlider = createSexySlider({
-  attach: 'body',
-  x: 50,
-  y: 100,
-  width: 320,
-  height: 60,
-  min: 0,
-  max: 100,
-  value: 75,
-  label: '🔊 Volume',
-  color: { red: 0.26, green: 0.52, blue: 0.96, alpha: 1 },
-  onChange: (value) => {
-    console.log('🔊 Volume:', value + '%');
-  }
-});
-
-const brightnessSlider = createSexySlider({
-  attach: 'body',
-  x: 50,
-  y: 200,
-  width: 320,
-  height: 60,
-  min: 0,
-  max: 100,
-  value: 60,
-  label: '☀️ Luminosité',
-  color: { red: 1, green: 0.65, blue: 0.0, alpha: 1 },
-  onChange: (value) => {
-    console.log('☀️ Brightness:', value + '%');
-  }
-});
-
-const temperatureSlider = createSexySlider({
-  attach: 'body',
-  x: 50,
-  y: 300,
-  width: 320,
-  height: 60,
-  min: 15,
-  max: 30,
-  value: 22,
-  label: '🌡️ Température',
-  color: { red: 0.2, green: 0.8, blue: 0.4, alpha: 1 },
-  onChange: (value) => {
-    console.log('🌡️ Temperature:', value + '°C');
-  }
-});
