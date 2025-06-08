@@ -1,697 +1,393 @@
-// Import de la classe Slider paramétrée
-import Slider from '../a/components/Slider.js';
+// Import du composant Module
+import Module from '../a/components/Module.js';
 
-// // Create a new A instance with custom properties
-// const html_container = new A({
-//     attach: 'body',
-//     id: 'main_html_container',
-//     markup: 'span',
-//     role: 'container',
-//     x: 150,
-//     y: 50,
-//     width: 400,
-//     height: 300,
-//     color: 'orange',
-//     display: 'block',
-//     smooth: 10,
-//     shadow: [
-//         {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-//         {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-//     ],
-//     overflow: 'hidden',
-//     fasten: [] // will contain the IDs of children
-// });
+console.log('🔧 Initialisation des Modules - Test de la syntaxe');
 
-// puts(html_container)
-// puts(html_container.width)
-// puts(html_container.html_object)
-
-// setTimeout(() => {
-//     // html_container.display('none')
-
-//     console.log("Delayed for 2 second.");
-//     html_container.width(800)
-//     // html_container.left('800px');
-//     html_container.html_object.style.left = '600px';
-//     puts ('----------')
-//     puts(html_container.particles );
-//     puts ('----------')
-
-//     const element = document.getElementById("main_html_container");
-
-//     // Change the left position (in pixels)
-//     let element2 = grab('main_html_container');
-//     console.log(html_container === element2)
-//     element2.height(12);
-//     element2.style.top = '290px'
-//     puts(">>> " + element2.style.top)
-//     html_container.style.left = "50px";
-// }, 2000);
-// wait(2000, () => {
-//     console.log("This message is displayed after a 2-second delay.");
-// });
-
-// const element = grab('main_html_container');
-
-// if (element) {
-//     console.log('Element found:', element);
-//     element.width(50); // Change the width of the element
-//     element.style.backgroundColor = 'blue'; // Change the background color
-// } else {
-//     console.error('Element not found');
-// }
-
-// puts ('Element ID:is ...');
-
-// // // Short alias for document
-// const d = document;
-
-// // Create and append an H1 and a div dynamically
-// const div = Object.assign(d.body, {
-//     append: Object.assign(d.createElement('h1'), {
-//         textContent: 'Page generated in pure JS',
-//         style: { textAlign: 'center' }
-//     })
-// }).appendChild(d.createElement('div'));
-
-// // Style the created div
-// Object.assign(div.style, {
-//     width: '200px', height: '200px', backgroundColor: 'red', color: 'white',
-//     display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer',
-//     margin: '50px auto', padding: '20px', textAlign: 'center', borderRadius: '10px',
-//     transition: 'background-color 0.3s'
-// });
-
-// div.textContent = 'Click me to change color';
-// div.onclick = () => div.style.backgroundColor = div.style.backgroundColor === 'red' ? 'green' : 'red';
-
-// // Create another container
-// const container2 = new A({
-//     attach: 'body',
-//     id: 'main_container2',
-//     markup: 'div',
-//     type: 'container',
-//     x: 50,
-//     y: 50,
-//     width: 400,
-//     height: 300,
-//     backgroundColor: '#f5f5f5',
-//     smooth: 10,
-//     boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-//     overflow: 'hidden',
-//     fasten: [] // Will contain the IDs of children
-// });
-
-// // 2. Create a header inside the container
-// const header = new A({
-//     attach: '#main_container', // Attach to the main container
-//     id: 'header',
-//     markup: 'div',
-//     type: 'shape',
-//     x: 0,
-//     y: 0,
-//     width: '100%',
-//     height: 60,
-//     backgroundColor: '#4285f4',
-//     center: false,
-//     position: 'absolute',
-//     color: 'white',
-//     textAlign: 'center',
-//     lineHeight: '60px',
-//     fontWeight: 'bold',
-//     fontSize: 20,
-//     text: 'A Demo with Children'
-// });
-
-
-// // 3. Create main content with children using the children property
-// const content = new A({
-//     attach: '#main_container',
-//     id: 'content',
-//     markup: 'div',
-//     type: 'content',
-//     x: 0,
-//     y: 60,
-//     width: '100%',
-//     height: 240,
-//     padding: 15,
-//     position: 'relative',
-//     children: [
-//         // Child 1: Red box
-//         {
-//             id: 'red_box',
-//             markup: 'div',
-//             type: 'shape',
-//             x: 20,
-//             y: 20,
-//             width: 100,
-//             height: 100,
-//             backgroundColor: 'red',
-//             smooth: 15,
-//             events: {
-//                 click: (e) => {
-//                     console.log('Red box clicked!');
-//                 }
-//             }
-//         },
-//         // Child 2: Blue box
-//         {
-//             id: 'blue_box',
-//             markup: 'div',
-//             type: 'shape',
-//             x: 150,
-//             y: 20,
-//             width: 100,
-//             height: 100,
-//             backgroundColor: 'blue',
-//             smooth: 15,
-//             color: 'white',
-//             textAlign: 'center',
-//             lineHeight: '100px',
-//             text: 'Blue'
-//         },
-//         // Child 3: Green circle
-//         {
-//             id: 'green_circle',
-//             markup: 'div',
-//             type: 'shape',
-//             x: 280,
-//             y: 20,
-//             width: 100,
-//             height: 100,
-//             backgroundColor: 'green',
-//             smooth: '50%', // Perfect circle
-//             color: 'white',
-//             textAlign: 'center',
-//             lineHeight: '100px',
-//             text: 'Circle'
-//         }
-//     ],
-//     fasten: [] // Will be auto-filled with child IDs
-// });
-
-// const container = new A({
-//     attach: 'body',
-//     id: 'main_html_container',
-//     markup: 'span',
-//     role: 'container',
-//     x: 550,
-//     y: 50,
-//     width: 400,
-//     height: 300,
-//     color: 'orange',
-//     display: 'block',
-//     smooth: 10,
-//     shadow: [
-//         {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-//         {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-//     ],
-//     overflow: 'hidden',
-//     fasten: [] // will contain the IDs of children
-// });
-
-
-
-
-// // Update fasten list for the container
-// container._fastened.push('header');
-// container.element.dataset.fasten = container._fastened.join(',');
-
-// // Update fasten for the main container
-// container._fastened.push('content');
-// container.element.dataset.fasten = container._fastened.join(',');
-
-// // 4. Dynamically create and add a new child to content
-// const infoButton = content.addChild({
-//     id: 'info_button',
-//     markup: 'div',
-//     type: 'button',
-//     x: 140,
-//     y: 150,
-//     width: 120,
-//     height: 40,
-//     backgroundColor: '#ffa000',
-//     smooth: 20,
-//     textAlign: 'center',
-//     lineHeight: '40px',
-//     color: 'white',
-//     fontWeight: 'bold',
-//     text: 'Info',
-//     cursor: 'pointer',
-//     events: {
-//         click: () => {
-//             // Get all children of content
-//             const children = content.getFastened();
-//             console.log(`There are ${children.length} children in content`);
-//         }
-//     }
-// });
-
-// // 5. Example of animation on an element with fasten update
-// const greenCircle = A.getById('green_circle');
-// if (greenCircle) {
-//     greenCircle.element.addEventListener('click', function () {
-//         const popup = new A({
-//             attach: '#content',
-//             id: 'popup',
-//             markup: 'div',
-//             type: 'popup',
-//             x: 80,
-//             y: 80,
-//             width: 0,
-//             height: 0,
-//             backgroundColor: 'rgba(0,0,0,0.7)',
-//             smooth: 10,
-//             color: 'white',
-//             textAlign: 'center',
-//             lineHeight: '140px',
-//             opacity: 0,
-//             text: 'Animation in progress!',
-//             zIndex: 100,
-//             animate: {
-//                 duration: 0.5,
-//                 easing: 'ease-out',
-//                 properties: {
-//                     width: 240,
-//                     height: 140,
-//                     opacity: 1
-//                 }
-//             },
-//             events: {
-//                 click: function () {
-//                     // Exit animation
-//                     this.style.transition = 'all 0.3s ease-in';
-//                     this.style.opacity = '0';
-//                     this.style.transform = 'scale(0.5)';
-//                     setTimeout(() => {
-//                         this.parentNode.removeChild(this);
-//                         // Update fasten
-//                         content._fastened = content._fastened.filter(id => id !== 'popup');
-//                         content.element.dataset.fasten = content._fastened.join(',');
-//                     }, 300);
-//                 }
-//             }
-//         });
-
-//         // Update fasten list for content
-//         content._fastened.push('popup');
-//         content.element.dataset.fasten = content._fastened.join(',');
-//     });
-// }
-
-// // Simple example of using fasten property
-// const simpleExample = new A({
-//     attach: 'body',
-//     id: 'parent_box',
-//     markup: 'div',
-//     type: 'container',
-//     x: 500,
-//     y: 50,
-//     width: 200,
-//     height: 200,
-//     backgroundColor: '#333',
-//     smooth: 10,
-//     // Directly define IDs of children to attach
-//     fasten: ['child_box1', 'child_box2']
-// });
-
-// // Create corresponding children
-// const child1 = new A({
-//     attach: '#parent_box',
-//     id: 'child_box1',
-//     markup: 'div',
-//     type: 'shape',
-//     x: 20,
-//     y: 20,
-//     width: 80,
-//     height: 80,
-//     backgroundColor: 'yellow',
-//     smooth: 10
-// });
-
-// // Safe DOM access if needed
-// const resultElement = document.getElementById("resultat")
-// if (resultElement) {
-//     resultElement.textContent = `Result is: ${resultat}`
-// }
-
-// /// pure js syntax
-// setTimeout(() => {
-//     console.log("Processing completed after delay")
-// }, 3000)
-
-// function addition(a, b) {
-//     return a + b;
-// }
-
-// // Example usage
-// const resultat_o = addition(3, 6);
-// console.log("second result is :", resultat_o); // Logs: Result: 8
-
-// // Export for ES6 modules
-// export default {};
-
-
-
-
-// const html_container = new A({
-//     attach: 'body',
-//     id: 'main_html_container',
-//     markup: 'span',
-//     role: 'container',
-//     x: 150,
-//     y: 50,
-//     width: 400,
-//     height: 300,
-//     color: 'orange',
-//     display: 'block',
-//     smooth: 10,
-//     shadow: [
-//         {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-//         {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-//     ],
-//     overflow: 'hidden',
-//     fasten: [] // will contain the IDs of children
-// });
-
-
-
-
-// // Create a new A instance with custom properties
-// new A({
-//   attach: 'body',
-//   id: 'view',
-//   markup: 'div',
-//   role: 'container',
-//   text: 'Hello World',
-//   fontSize: 20,
-//   fontWeight: 'bold',
-//   textAlign: 'center',
-//   backgroundColor: 'red',
-//   x: 0,
-//   y: 0,
-//   width: 100,
-//   height: 100,
-//   unit: {
-//     width: '%',
-//     height: '%',
-//   },
-//   color: { red: 0.15, green: 0.15, blue: 0.15, alpha: 1 },
-//   display: 'block',
-//   overflow: 'hidden',
-// });
-
-
-// Exemple 1: Slider horizontal classique
-const volumeSlider = new Slider({
+// Exemple 1: Création d'un module basique - Audio Mixer
+const audioMixer = new Module({
+    id: 'audio_mixer_01',
+    name: 'Audio Mixer',
     attach: 'body',
-    id: 'volume_slider',
-    type: 'horizontal',
-    x: 50,
-    y: 100,
-    width: 400,
-    height: 30,
-    trackWidth: 360,
-    value: 30,
-    callbacks: {
-        onChange: (value) => console.log(`Volume: ${value}%`),
-        onStart: () => console.log('Volume adjustment started'),
-        onEnd: () => console.log('Volume adjustment ended')
-    }
-});
-
-// Exemple 2: Slider vertical avec variation de couleurs
-const brightnessSlider = new Slider({
-    attach: 'body',
-    id: 'brightness_slider',
-    type: 'vertical',
-    x: 500,
-    y: 100,
-    width: 80,
-    height: 300,
-    trackWidth: 8,     // Épaisseur de la barre verticale (petite valeur)
-    trackHeight: 200,  // Longueur de déplacement vertical (grande valeur)
-    value: 70,
-  
-    grip: {
-        width: 28,
-        height: 28,
-        backgroundColor: '#e74c3c',
-        border: '3px solid #ffffff',
-        borderRadius: '8px',  // Coins arrondis au lieu d'un cercle
-        boxShadow: '0 6px 20px rgba(231, 76, 60, 0.4)',
-        cursor: 'grab'
-    },
+    x: 100,
+    y: 150,
+    width: 200,
+    height: 120,
     
-    support: {
-        backgroundColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        border: 'none',
-        borderRadius: '20px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
-        padding: '20px'
-    },
-    
-    rail: {
-        backgroundColor: 'rgba(255,255,255,0.3)',
-        borderRadius: '6px',
-        height: 12
-    },
-    
-    progress: {
-        backgroundColor: 'linear-gradient(90deg, #ff6b6b, #feca57)',
-        borderRadius: '6px',
-        boxShadow: '0 4px 15px rgba(255, 107, 107, 0.4)'
-    }
-    ,
-    variation: [
-        { color: '#0099ff', position: { x: '0%' } },    // Froid (bleu)
-        { color: '#00ff99', position: { x: '30%' } },   // Frais (vert)
-        { color: '#ffff00', position: { x: '60%' } },   // Tiède (jaune)
-        { color: '#ff6600', position: { x: '80%' } },   // Chaud (orange)
-        { color: '#ff0000', position: { x: '100%' } }   // Très chaud (rouge)
+    // Connecteurs d'entrée
+    inputs: [
+        { id: 'audio_in_1', name: 'Audio L', type: 'audio' },
+        { id: 'audio_in_2', name: 'Audio R', type: 'audio' },
+        { id: 'volume_ctrl', name: 'Volume', type: 'control' }
     ],
+    
+    // Connecteurs de sortie
+    outputs: [
+        { id: 'mixed_out', name: 'Mixed Output', type: 'audio' },
+        { id: 'level_meter', name: 'Level', type: 'data' }
+    ],
+    
+    // Style du module
+    style: {
+        backgroundColor: '#2c3e50',
+        borderRadius: '8px',
+        border: '2px solid #34495e',
+        color: 'white'
+    },
+    
+    // Style des connecteurs
+    connectors: {
+        input: {
+            backgroundColor: '#e74c3c',
+            size: 12,
+            position: 'left'
+        },
+        output: {
+            backgroundColor: '#27ae60',
+            size: 12,
+            position: 'right'
+        }
+    },
+    
+    // Callbacks
     callbacks: {
-        onChange: (value) => console.log(`Brightness: ${value}%`)
+        onMove: (module, x, y) => console.log(`Module ${module.name} moved to ${x}, ${y}`),
+        onConnect: (fromModule, fromConnector, toModule, toConnector) => 
+            console.log(`Connected ${fromModule.name}.${fromConnector} to ${toModule.name}.${toConnector}`),
+        onDisconnect: (connection) => console.log('Connection removed')
     }
 });
 
-// Exemple 3: Slider de température avec variation de couleurs
-const tempSlider = new Slider({
-    attach: 'body',
-    id: 'temperature_slider',
-    type: 'horizontal',
+// Exemple 2: Module synthétiseur
+const synthesizer = new Module({
+    id: 'synth_01',
+    name: 'Synthesizer',
+    x: 50, 
+    y: 100,
+    width: 180, 
+    height: 100,
+    outputs: [
+        { id: 'osc_out', name: 'Oscillator', type: 'audio' },
+        { id: 'freq_out', name: 'Frequency', type: 'control' }
+    ],
+    style: { 
+        backgroundColor: '#8e44ad',
+        color: 'white' 
+    }
+});
+
+// Exemple 3: Module filtre
+const filter = new Module({
+    id: 'filter_01', 
+    name: 'Low Pass Filter',
+    x: 350, 
+    y: 100,
+    width: 160, 
+    height: 120,
+    inputs: [
+        { id: 'audio_in', name: 'Audio In', type: 'audio' },
+        { id: 'cutoff', name: 'Cutoff', type: 'control' }
+    ],
+    outputs: [
+        { id: 'filtered_out', name: 'Filtered', type: 'audio' }
+    ],
+    style: { 
+        backgroundColor: '#e67e22',
+        color: 'white' 
+    }
+});
+
+// Exemple 4: Module complexe avec configuration avancée
+const complexModule = new Module({
+    id: 'complex_processor',
+    name: 'Audio Processor',
+    x: 500, 
+    y: 200,
+    width: 250, 
+    height: 180,
+    
+    inputs: [
+        { id: 'main_in', name: 'Main Input', type: 'audio' },
+        { id: 'aux_in', name: 'Aux Input', type: 'audio' }
+    ],
+    
+    outputs: [
+        { id: 'main_out', name: 'Main Output', type: 'audio' },
+        { id: 'monitor_out', name: 'Monitor', type: 'audio' }
+    ],
+    
+    // Types de connecteurs personnalisés
+    connectorTypes: {
+        audio: { color: '#e74c3c', shape: 'circle' },
+        control: { color: '#3498db', shape: 'square' },
+        data: { color: '#f39c12', shape: 'triangle' }
+    },
+    
+    // Drag & Drop
+    draggable: true,
+    
+    // Snap to grid
+    grid: {
+        enabled: true,
+        size: 20
+    },
+    
+    style: {
+        backgroundColor: '#34495e',
+        color: 'white'
+    }
+});
+
+console.log('✅ Modules créés avec succès!');
+
+// Test des fonctionnalités après création
+setTimeout(() => {
+    console.log('\n🔧 Test des fonctionnalités des modules...\n');
+    
+    // Test 1: Gestion des connecteurs
+    console.log('📌 Test 1: Ajout/suppression de connecteurs');
+    audioMixer.addInput({ id: 'new_input', name: 'New Input', type: 'audio' });
+    audioMixer.addOutput({ id: 'new_output', name: 'New Output', type: 'data' });
+    
+    setTimeout(() => {
+        audioMixer.removeInput('audio_in_1');
+        console.log('✅ Test des connecteurs terminé');
+    }, 1000);
+    
+    // Test 2: Connexions entre modules
+    console.log('\n📌 Test 2: Connexions entre modules');
+    const connection1 = synthesizer.connectTo(filter, 'osc_out', 'audio_in');
+    const connection2 = filter.connectTo(audioMixer, 'filtered_out', 'audio_in_2');
+    console.log('✅ Connexions créées');
+    
+    // Test 3: Déplacement des modules
+    console.log('\n📌 Test 3: Déplacement des modules');
+    setTimeout(() => {
+        audioMixer.moveTo(300, 200);
+        synthesizer.moveTo(100, 50);
+        console.log('✅ Modules déplacés');
+    }, 2000);
+    
+    // Test 4: Gestion de la position et du dragging
+    console.log('\n📌 Test 4: Configuration du dragging');
+    audioMixer.setDraggable(true);
+    complexModule.setDraggable(false);
+    console.log('✅ Configuration du dragging mise à jour');
+    
+    // Test 5: Informations sur les modules
+    console.log('\n📌 Test 5: Informations sur les modules');
+    setTimeout(() => {
+        console.log('🔍 Connexions de audioMixer:', audioMixer.getConnections());
+        console.log('🔍 Inputs de filter:', filter.getInputs());
+        console.log('🔍 Outputs de synthesizer:', synthesizer.getOutputs());
+        
+        console.log('\n📊 Statistiques globales:');
+        console.log('- Modules totaux:', Module.getAllModules().length);
+        console.log('- Connexions totales:', Module.getAllConnections().length);
+    }, 3000);
+    
+    // Test 6: Déconnexion (optionnel - après 10 secondes)
+    setTimeout(() => {
+        console.log('\n📌 Test 6: Déconnexion des modules');
+        if (connection1) {
+            synthesizer.disconnect(connection1);
+            console.log('✅ Connexion synthé -> filtre supprimée');
+        }
+    }, 10000);
+    
+}, 1000);
+
+// Interface utilisateur simple pour tester
+setTimeout(() => {
+    console.log('\n🎮 Interface de test disponible!');
+    console.log('📝 Instructions:');
+    console.log('  - Cliquez et glissez les modules pour les déplacer');
+    console.log('  - Cliquez sur les connecteurs pour créer des connexions');
+    console.log('  - Cliquez sur un connecteur de sortie puis sur un connecteur d\'entrée');
+    console.log('  - Les connexions apparaissent comme des lignes bleues');
+    console.log('  - Consultez la console pour les logs détaillés');
+    
+    // Ajouter des boutons de test
+    const controlPanel = document.createElement('div');
+    controlPanel.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        font-family: Arial, sans-serif;
+        z-index: 10000;
+    `;
+    
+    controlPanel.innerHTML = `
+        <h3>🔧 Module Control Panel</h3>
+        <button id="addModule">➕ Add Module</button><br><br>
+        <button id="clearAll">🗑️ Clear All</button><br><br>
+        <button id="showInfo">📊 Show Info</button><br><br>
+        <div id="moduleInfo" style="font-size: 12px; margin-top: 10px;"></div>
+    `;
+    
+    // Styles pour les boutons
+    controlPanel.querySelectorAll('button').forEach(btn => {
+        btn.style.cssText = `
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 150px;
+            margin: 2px 0;
+        `;
+    });
+    
+    document.body.appendChild(controlPanel);
+    
+    // Event handlers
+    document.getElementById('addModule').addEventListener('click', () => {
+        const newModule = new Module({
+            id: `module_${Date.now()}`,
+            name: `Module ${Module.getAllModules().length + 1}`,
+            x: Math.random() * 400 + 50,
+            y: Math.random() * 300 + 100,
+            inputs: [{ id: 'in1', name: 'Input', type: 'audio' }],
+            outputs: [{ id: 'out1', name: 'Output', type: 'audio' }],
+            style: {
+                backgroundColor: `hsl(${Math.random() * 360}, 70%, 50%)`,
+                color: 'white'
+            }
+        });
+        console.log(`➕ Module ajouté: ${newModule.name}`);
+    });
+    
+    document.getElementById('clearAll').addEventListener('click', () => {
+        Module.clearAll();
+        console.log('🗑️ Tous les modules supprimés');
+    });
+    
+    document.getElementById('showInfo').addEventListener('click', () => {
+        const info = document.getElementById('moduleInfo');
+        info.innerHTML = `
+            Modules: ${Module.getAllModules().length}<br>
+            Connexions: ${Module.getAllConnections().length}<br>
+            <small>Voir console pour détails</small>
+        `;
+        
+        console.log('📊 État actuel des modules:');
+        Module.getAllModules().forEach(module => {
+            console.log(`  - ${module.name} (${module.inputs.length}→${module.outputs.length})`);
+        });
+    });
+    
+}, 2000);
+
+// 🎯 Test spécifique du Drag & Drop des connecteurs
+console.log('🎯 Configuration test Drag & Drop des connecteurs');
+
+// Module source - Générateur de signal
+const signalGenerator = new Module({
+    id: 'signal_gen',
+    name: 'Signal Generator',
     x: 50,
     y: 300,
-    width: 350,
+    width: 180,
     height: 100,
-    trackWidth: 300,
-    trackHeight: 12,
-    value: 21,
-    min: -10,
-    max: 40,
-    step: 0.5,
-    theme: 'material',
-    variation: [
-        { color: 'red', position: { x: '0%' } },    // Froid (bleu)
-        { color: 'yellow', position: { x: '30%' } },   // Frais (vert)
-        { color: 'green', position: { x: '60%' } },   // Tiède (jaune)
-        { color: 'black', position: { x: '80%' } },   // Chaud (orange)
-        { color: 'white', position: { x: '100%' } }   // Très chaud (rouge)
+    outputs: [
+        { id: 'wave_out', name: 'Wave', type: 'audio' },
+        { id: 'sync_out', name: 'Sync', type: 'control' }
     ],
-    callbacks: {
-        onChange: (value) => {
-            console.log(`Temperature: ${value}°C`);
-        }
-    }
+    style: { backgroundColor: '#8e44ad' }
 });
 
-// Exemple 4: Slider de volume avec design flat
-const bassSlider = new Slider({
-    attach: 'body',
-    id: 'bass_slider',
-    type: 'horizontal',
-    x: 50,
-    y: 450,
-    width: 250,
-    height: 80,
-    trackWidth: 200,
-    trackHeight: 4,
-    thumbSize: 20,
-    value: 50,
-    min: 0,
-    max: 100,
-    step: 5,
-    theme: 'flat',
-    colors: {
-        container: '#2c3e50',
-        track: '#34495e',
-        progress: '#e74c3c',
-        thumb: '#c0392b',
-        text: '#ecf0f1'
-    },
-    animations: {
-        enabled: true,
-        duration: 0.3,
-        easing: 'ease-out'
-    }
-});
-
-console.log('🎚️ Sliders paramétriques créés avec succès!');
-
-// Exemple 5: Slider avec variation de couleurs avancée
-const radialSlider = new Slider({
-    attach: 'body',
-    id: 'radial_gradient_slider',
-    type: 'horizontal',
+// Module cible - Filtre
+const audioFilter = new Module({
+    id: 'audio_filter',
+    name: 'Audio Filter',
     x: 350,
-    y: 450,
-    width: 300,
-    height: 100,
-    trackWidth: 250,
-    trackHeight: 10,
-    thumbSize: 26,
-    value: 60,
-    min: 0,
-    max: 100,
-    step: 2,
-    theme: 'material',
-    colors: {
-        container: '#ffffff',
-        track: '#f0f0f0',
-        text: '#424242'
-    },
-    variation: [
-        { color: '#6200ea', position: { x: '0%' } },
-        { color: '#3700b3', position: { x: '50%' } },
-        { color: '#03dac6', position: { x: '100%' } }
+    y: 300,
+    width: 180,
+    height: 120,
+    inputs: [
+        { id: 'audio_in', name: 'Audio In', type: 'audio' },
+        { id: 'cutoff', name: 'Cutoff', type: 'control' }
     ],
-    animations: {
-        enabled: true,
-        duration: 0.15,
-        easing: 'cubic-bezier(0.4, 0.0, 0.2, 1)'
-    },
-    callbacks: {
-        onChange: (value) => {
-            console.log(`🌀 Radial Effect: ${value}%`);
-        },
-        onStart: () => console.log('🎯 Radial adjustment started'),
-        onEnd: () => console.log('✅ Radial adjustment completed')
-    }
+    outputs: [
+        { id: 'filtered_out', name: 'Filtered', type: 'audio' }
+    ],
+    style: { backgroundColor: '#2980b9' }
 });
 
-// Test de mise à jour programmée des valeurs
-setTimeout(() => {
-    console.log('📊 Test de mise à jour programmée des sliders...');
-    
-    // Changer la valeur du volume
-    if (volumeSlider.setValue) {
-        volumeSlider.setValue(85);
-        console.log('🔊 Volume mis à jour à 85%');
-    }
-    
-    // Changer la température
-    if (tempSlider.setValue) {
-        tempSlider.setValue(25);
-        console.log('🌡️ Température mise à jour à 25°C');
-    }
-    
-    // Tester l'effet radial
-    if (radialSlider.setValue) {
-        radialSlider.setValue(90);
-        console.log('🌀 Effet radial mis à jour à 90%');
-    }
-    
-}, 3000);
-
-// Exemple 6: Slider circulaire - NOUVEAU TYPE!
-const circularVolumeSlider = new Slider({
-    attach: 'body',
-    id: 'circular_volume_slider',
-    type: 'circular',
-    x: 700,
-    y: 100,
-    value: 45,
-    min: 0,
-    max: 100,
-    step: 1,
-    circular: {
-        radius: 60,
-        strokeWidth: 12,
-        startAngle: -135,  // Commence à 7h30
-        endAngle: 135      // Finit à 4h30 (270° de rotation)
-    },
-    colors: {
-        container: '#ffffff',
-        track: '#e3f2fd',
-        progress: '#2196f3',
-        thumb: '#1976d2'
-    },
-    variation: [
-        { color: '#4caf50', position: { x: '0%' } },   // Vert (faible volume)
-        { color: '#ff9800', position: { x: '70%' } },  // Orange (volume moyen)
-        { color: '#f44336', position: { x: '100%' } }  // Rouge (volume élevé)
+// Module analyseur - Destination
+const analyzer = new Module({
+    id: 'analyzer',
+    name: 'Spectrum Analyzer',
+    x: 600,
+    y: 280,
+    width: 200,
+    height: 160,
+    inputs: [
+        { id: 'signal_in', name: 'Signal', type: 'audio' },
+        { id: 'window_size', name: 'Window', type: 'data' },
+        { id: 'resolution', name: 'Resolution', type: 'control' }
     ],
-    callbacks: {
-        onChange: (value) => {
-            console.log(`🎛️ Volume circulaire: ${Math.round(value)}%`);
-            // Exemple d'effet visuel basé sur la valeur
-            if (value > 80) {
-                console.log('⚠️ Volume élevé détecté!');
-            }
-        },
-        onStart: () => console.log('🎚️ Ajustement du volume circulaire commencé'),
-        onEnd: () => console.log('✅ Ajustement du volume circulaire terminé')
-    }
+    outputs: [
+        { id: 'spectrum_data', name: 'Spectrum', type: 'data' }
+    ],
+    style: { backgroundColor: '#27ae60' }
 });
 
-// Exemple 7: Slider circulaire pour température avec demi-cercle
-const circularTempSlider = new Slider({
-    attach: 'body',
-    id: 'circular_temp_slider',
-    type: 'circular',
-    x: 900,
-    y: 100,
-    value: 22,
-    min: 10,
-    max: 35,
-    step: 0.5,
-    circular: {
-        radius: 80,
-        strokeWidth: 16,
-        startAngle: -180,  // Demi-cercle gauche
-        endAngle: 0        // Demi-cercle droit
-    },
-    colors: {
-        container: '#ffffff',
-        track: '#f5f5f5',
-        progress: '#ff5722',
-        thumb: '#d84315'
-    },
-    variation: [
-        { color: '#2196f3', position: { x: '0%' } },   // Bleu (froid)
-        { color: '#4caf50', position: { x: '40%' } },  // Vert (tempéré)
-        { color: '#ff9800', position: { x: '70%' } },  // Orange (chaud)
-        { color: '#f44336', position: { x: '100%' } }  // Rouge (très chaud)
-    ],
-    callbacks: {
-        onChange: (value) => {
-            console.log(`🌡️ Température: ${value}°C`);
-            if (value < 15) console.log('🥶 Il fait froid!');
-            else if (value > 28) console.log('🔥 Il fait chaud!');
-            else console.log('😊 Température agréable');
-        }
-    }
-});
+// Ajouter instructions visuelles sur la page
+const instructions = document.createElement('div');
+instructions.innerHTML = `
+    <div style="
+        position: fixed; 
+        top: 10px; 
+        left: 10px; 
+        background: rgba(0,0,0,0.8); 
+        color: white; 
+        padding: 15px; 
+        border-radius: 8px; 
+        font-family: monospace; 
+        z-index: 10001;
+        max-width: 400px;
+        font-size: 12px;
+    ">
+        <h3 style="margin: 0 0 10px 0; color: #3498db;">🎯 Tests Drag & Drop Connecteurs</h3>
+        
+        <h4 style="margin: 10px 0 5px 0; color: #e74c3c;">Méthode 1: Clic (existant)</h4>
+        <div>• Clic sur connecteur de sortie → clic sur connecteur d'entrée</div>
+        <div>• Clic sur connecteur connecté = déconnexion instantanée</div>
+        
+        <h4 style="margin: 10px 0 5px 0; color: #2ecc71;">Méthode 2: Drag & Drop (nouveau)</h4>
+        <div>• <strong>Glisser</strong> depuis un connecteur vers un autre</div>
+        <div>• <strong>Ligne verte</strong> suit la souris pendant le drag</div>
+        <div>• <strong>Connecteurs valides</strong> s'illuminent en vert</div>
+        <div>• <strong>Relâcher</strong> sur un connecteur valide = connexion</div>
+        
+        <h4 style="margin: 10px 0 5px 0; color: #f39c12;">Règles de validation</h4>
+        <div>• Output → Input uniquement</div>
+        <div>• Modules différents</div>
+        <div>• Pas de connexion existante</div>
+        
+        <h4 style="margin: 10px 0 5px 0; color: #9b59b6;">Actions spéciales</h4>
+        <div>• <strong>Clic droit</strong> ou <strong>Escape</strong> = annule la connexion</div>
+        <div>• <strong>Clic long (600ms)</strong> sur module = menu contextuel</div>
+        
+        <div style="margin-top: 10px; padding: 5px; background: rgba(52, 73, 94, 0.5); border-radius: 4px;">
+            <strong>🎮 Essayez:</strong> Connecter Signal Generator → Filter → Analyzer
+        </div>
+    </div>
+`;
 
-console.log('🎚️ Sliders paramétriques créés avec succès!');
-console.log('📋 Types de sliders disponibles:');
-console.log('   - Slider horizontal classique (Volume)');
-console.log('   - Slider vertical avec gradient (Brightness)'); 
-console.log('   - Slider avec gradient complexe (Temperature)');
-console.log('   - Slider avec thème flat (Bass)');
-console.log('   - Slider avec gradient radial (Radial Effect)');
-console.log('   🆕 - Slider circulaire - Volume (270°)');
-console.log('   🆕 - Slider circulaire - Température (180°)');
+document.body.appendChild(instructions);
 
-// ...existing code...
+// Rendre les modules accessibles globalement pour debug
+window.audioMixer = audioMixer;
+window.synthesizer = synthesizer;
+window.filter = filter;
+window.complexModule = complexModule;
+window.Module = Module;
 
+console.log('\n🚀 Test du composant Module lancé!');
+console.log('🔗 Variables globales disponibles: audioMixer, synthesizer, filter, complexModule, Module');
