@@ -205,7 +205,7 @@ export class WaveSurferV7 extends Module {
     async _loadWaveSurfer() {
         try {
             // Load main WaveSurfer library via ES6 import
-            const WaveSurferModule = await import('./../../js/wavesurfer.esm.js');
+            const WaveSurferModule = await import('./../../js/wavesurfer-v7/core/wavesurfer.esm.js');
             this.WaveSurfer = WaveSurferModule.default;
             
             console.log('✅ WaveSurfer.js v7.9.5 main library loaded');

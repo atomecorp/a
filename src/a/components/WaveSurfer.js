@@ -21,7 +21,7 @@ async function loadWaveSurfer() {
         // Load v6.x plugin loader first
         if (!PluginLoader && !window.WaveSurferPluginLoader) {
             const loaderScript = document.createElement('script');
-            loaderScript.src = './js/wavesurfer-v6-plugins.js';
+            loaderScript.src = './js/wavesurfer-v6/wavesurfer-v6-plugins.js';
             loaderScript.type = 'text/javascript';
             document.head.appendChild(loaderScript);
             
@@ -35,7 +35,7 @@ async function loadWaveSurfer() {
         
         // Load WaveSurfer v6.x from local file (UMD format)
         const script = document.createElement('script');
-        script.src = './js/wavesurfer.min.js';
+        script.src = './js/wavesurfer-v6/core/wavesurfer.min.js';
         script.type = 'text/javascript';
         document.head.appendChild(script);
         

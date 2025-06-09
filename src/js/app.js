@@ -166,8 +166,6 @@ class SquirrelApp {
     listModules() {
         return Array.from(this.modules.keys());
     }
-    
-
 }
 
 // Instance globale
@@ -183,6 +181,7 @@ if (document.readyState === 'loading') {
 // Export pour utilisation externe
 export default squirrel;
 
+// Import des composants essentiels
 import Module from '../a/components/Module.js';
 import Slider from '../a/components/Slider.js';
 import Matrix from '../a/components/Matrix.js';

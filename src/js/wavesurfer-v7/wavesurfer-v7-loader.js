@@ -7,7 +7,7 @@ class WaveSurferV7Loader {
     constructor() {
         this.loadedPlugins = new Set();
         this.pluginCache = new Map();
-        this.baseUrl = './js/';
+        this.baseUrl = './js/wavesurfer-v7/';
     }
 
     /**
@@ -15,7 +15,7 @@ class WaveSurferV7Loader {
      */
     async loadWaveSurfer() {
         try {
-            const module = await import(`${this.baseUrl}wavesurfer.esm.js`);
+            const module = await import(`${this.baseUrl}core/wavesurfer.esm.js`);
             window.WaveSurfer = module.default;
             console.log('✅ WaveSurfer.js v7.9.5 loaded successfully');
             return module.default;

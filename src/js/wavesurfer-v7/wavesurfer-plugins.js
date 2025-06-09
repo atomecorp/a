@@ -10,21 +10,21 @@
 
 // ES6 Import pour les plugins (pour Tauri)
 const pluginModules = {
-    regions: () => import('./regions.esm.js'),
-    timeline: () => import('./timeline.esm.js'),
-    minimap: () => import('./minimap.esm.js'),
-    zoom: () => import('./zoom.esm.js'),
-    hover: () => import('./hover.esm.js'),
-    spectrogram: () => import('./spectrogram.esm.js'),
-    record: () => import('./record.esm.js'),
-    envelope: () => import('./envelope.esm.js')
+    regions: () => import('./plugins/regions.esm.js'),
+    timeline: () => import('./plugins/timeline.esm.js'),
+    minimap: () => import('./plugins/minimap.esm.js'),
+    zoom: () => import('./plugins/zoom.esm.js'),
+    hover: () => import('./plugins/hover.esm.js'),
+    spectrogram: () => import('./plugins/spectrogram.esm.js'),
+    record: () => import('./plugins/record.esm.js'),
+    envelope: () => import('./plugins/envelope.esm.js')
 };
 
 class WaveSurferPluginLoader {
     constructor() {
         this.plugins = new Map();
         this.loadedPlugins = new Set();
-        this.baseUrl = './js/';
+        this.baseUrl = './js/wavesurfer-v7/';
         this.isES6Environment = true; // Tauri supporte ES6
         
         // Définition des plugins disponibles
