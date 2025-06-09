@@ -14,6 +14,7 @@ class Module {
     static connections = new Map(); // Registry of all connections
     static draggedModule = null;
     static connectionInProgress = null;
+    static selectedConnector = null;
 
     constructor(config = {}) {
         // Default configuration
@@ -92,8 +93,6 @@ class Module {
         
         // Register module
         Module.modules.set(this.id, this);
-        
-        console.log(`🔧 Module created: ${this.name} (${this.id})`);
     }
 
     _createModule() {
@@ -243,89 +242,71 @@ class Module {
     }
 
     _setupConnectorDragDrop(connector) {
-        let isDragging = false;
-        let dragLine = null;
-        let startConnector = null;
-
-        connector.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return; // Only left click
-            
-            // Start global selection prevention for drag operation
-            
-            // Check if connector is already connected - if so, allow disconnection click
-            const connectorId = connector.dataset.connectorId;
-            const connectorType = connector.dataset.connectorType;
-            const existingConnections = this._getConnectorConnections(connectorId, connectorType);
-            
-            if (existingConnections.length > 0 && !e.shiftKey) {
-                // Normal click on connected connector = disconnect
-                return; // Let the normal click handler deal with it
-            }
-            
-            // Start drag for new connection
+        connector.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             
-            isDragging = true;
-            startConnector = {
+            const connectorId = connector.dataset.connectorId;
+            const connectorType = connector.dataset.connectorType;
+            
+            const connectorInfo = {
                 element: connector,
                 module: this,
                 id: connectorId,
                 type: connectorType
             };
             
-            // Visual feedback
-            connector.classList.add('dragging');
-            connector.style.transform = 'scale(1.3)';
-            connector.style.boxShadow = '0 0 15px #00ff00, 0 0 25px #00ff00';
-            
-            // Create temporary drag line
-            dragLine = this._createDragLine(connector);
-            
-            console.log(`🎯 Starting drag connection from ${this.name}.${connectorId}`);
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging || !startConnector) return;
-            
-            // Update drag line to follow mouse
-            this._updateDragLine(dragLine, startConnector.element, { x: e.clientX, y: e.clientY });
-            
-            // Highlight valid drop targets
-            this._highlightDropTargets(startConnector, e);
-        });
-
-        document.addEventListener('mouseup', (e) => {
-            if (!isDragging || !startConnector) return;
-            
-            isDragging = false;
-            
-            // Stop global selection prevention
-    
-            
-            // Clean up visual feedback
-            startConnector.element.classList.remove('dragging');
-            startConnector.element.style.transform = 'scale(1)';
-            startConnector.element.style.boxShadow = '';
-            
-            // Remove drag line
-            if (dragLine) {
-                dragLine.remove();
-                dragLine = null;
-            }
-            
-            // Clear all highlights
-            this._clearDropTargetHighlights();
-            
-            // Check if we dropped on a valid target
-            const dropTarget = this._findDropTarget(e);
-            if (dropTarget && this._isValidConnection(startConnector, dropTarget)) {
-                this._createDragConnection(startConnector, dropTarget);
+            if (!Module.selectedConnector) {
+                // First selection
+                Module.selectedConnector = connectorInfo;
+                connector.style.border = '3px solid #00ff00';
+                connector.style.boxShadow = '0 0 10px #00ff00';
             } else {
-                console.log('❌ Invalid drop target or connection');
+                // Second selection
+                const first = Module.selectedConnector;
+                const second = connectorInfo;
+                
+                // Clear first connector highlight
+                first.element.style.border = '2px solid white';
+                first.element.style.boxShadow = '';
+                
+                // Check if valid connection (opposite types, different modules)
+                if (first.type !== second.type && first.module !== second.module) {
+                    // Check if already connected
+                    const connectionKey = this._getConnectionKey(first, second);
+                    const existingConnection = Module.connections.get(connectionKey);
+                    
+                    if (existingConnection) {
+                        // Disconnect
+                        existingConnection.line.remove();
+                        Module.connections.delete(connectionKey);
+                        first.module.connections.delete(connectionKey);
+                        second.module.connections.delete(connectionKey);
+                        
+                        // Trigger disconnect callbacks
+                        if (first.module.config.callbacks.onDisconnect) {
+                            first.module.config.callbacks.onDisconnect(existingConnection);
+                        }
+                        if (second.module.config.callbacks.onDisconnect) {
+                            second.module.config.callbacks.onDisconnect(existingConnection);
+                        }
+                    } else {
+                        // Connect
+                        this._createDragConnection(first, second);
+                    }
+                }
+                
+                Module.selectedConnector = null;
             }
-            
-            startConnector = null;
+        });
+        
+        // Clear selection when clicking elsewhere
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.module-connector') && Module.selectedConnector) {
+                Module.selectedConnector.element.style.border = '2px solid white';
+                Module.selectedConnector.element.style.boxShadow = '';
+                Module.selectedConnector = null;
+            }
         });
     }
 
@@ -458,8 +439,6 @@ class Module {
         // Trigger callbacks
         startConnector.module.config.callbacks.onConnect(connection);
         endConnector.module.config.callbacks.onConnect(connection);
-        
-        console.log(`🔗 Connection created: ${startConnector.module.name}.${startConnector.id} → ${endConnector.module.name}.${endConnector.id}`);
         
         return connection;
     }
