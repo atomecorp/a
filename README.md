@@ -1,15 +1,23 @@
-# 🐿️ Squirrel Framework + Svelte Integration
+# 🐿️ Squirrel Framework + Audio Integration
 
 ## 🎯 Overview
 
-Modern hybrid framework combining the flexibility of an ES6 module system, Svelte reactivity, and Rust performance via Tauri.
+Modern hybrid framework combining the flexibility of an ES6 module system, audio processing capabilities with WaveSurfer.js, and Rust performance via Tauri.
 
 ## 🏗️ Architecture
 
-### **Frontend (JavaScript + Svelte)**
+### **Frontend (JavaScript + Audio)**
 - **Squirrel Framework** - ES6 modular system with dynamic loading
-- **Svelte Components** - Reactive user interface compiled locally
+- **WaveSurfer.js Integration** - Professional audio waveform visualization
+- **Audio Components** - Module, Slider, Matrix, WaveSurfer
 - **Tauri Integration** - Native desktop application
+
+### **Audio Features**
+- **WaveSurfer Component** - Complete audio player with waveform display
+- **Audio Controls** - Play, pause, stop, volume, mute, seek
+- **Regions Support** - Audio editing with visual regions
+- **Real-time Visualization** - Dynamic waveform rendering
+- **Audio Processing** - EQ, effects, speed control
 
 ### **Backend (Rust)**
 - **Axum Server** - High-performance API
@@ -23,32 +31,101 @@ Modern hybrid framework combining the flexibility of an ES6 module system, Svelt
 ./dev.sh
 
 # Or step by step
-npm run build:svelte    # Compile Svelte
+npm install             # Install dependencies (includes WaveSurfer.js)
 npm run start:server    # Fastify server
 npm run tauri dev       # Tauri application
+```
+
+## 🎵 Audio Integration Examples
+
+```bash
+# Basic demos
+http://localhost:9000/demo-wavesurfer.html        # Interactive demo
+http://localhost:9000/audio-workstation.html     # Advanced workstation
+http://localhost:9000/test-wavesurfer.html       # Integration tests
 ```
 
 ## 📁 Structure
 
 ```
 src/
-├── js/app.js           # Point d'entrée Squirrel
-├── svelte/             # Intégration Svelte
-│   ├── index.js        # Export et intégration
-│   ├── components/     # Composants Svelte
-│   └── build/          # Bundle compilé
-├── a/                  # Modules Squirrel
-├── native/             # Utilitaires natifs
-└── index.html          # Interface principale
+├── application/
+│   ├── index.js        # Framework exports (includes WaveSurfer)
+│   └── examples/
+│       ├── wavesurfer.js    # 5 WaveSurfer examples
+│       └── audio-workstation.js  # Advanced integration
+├── a/
+│   └── components/
+│       ├── Module.js   # Draggable modules
+│       ├── Slider.js   # Interactive sliders
+│       ├── Matrix.js   # Grid components
+│       └── WaveSurfer.js    # Audio waveform component ✨
+├── assets/audios/      # Audio files for testing
+└── index.html          # Main interface
 
-src-tauri/              # Configuration Tauri
-fastify-server.mjs      # Serveur statique
-rollup.config.js        # Configuration Svelte
+demos:
+├── demo-wavesurfer.html      # Interactive demonstration
+├── audio-workstation.html    # Professional audio interface
+└── test-wavesurfer.html      # Integration validation
 ```
 
 * **Performance**: Rust handles critical tasks, JavaScript manages the UI—resulting in high overall performance.
 * **Flexibility**: The scripting language enables intuitive, powerful code with advanced metaprogramming capabilities.
 * **Interoperability**: A performant bridge between frontend and backend leverages each technology’s strengths.
+
+## Minimal DSL Example (Editable Text Inline, Events, Metaprogramming)
+
+```text
+page = box(id: :main, width: :full, height: :full, attach: :body)
+
+## 🎵 WaveSurfer Usage Examples
+
+### Basic Audio Player
+```javascript
+import { WaveSurfer } from './src/application/index.js';
+
+const player = new WaveSurfer({
+    container: document.getElementById('waveform'),
+    waveColor: '#4A90E2',
+    progressColor: '#2ECC71',
+    height: 80,
+    showControls: true
+});
+
+await player.loadAudio('./audio/song.mp3');
+player.play();
+```
+
+### Advanced Audio Workstation
+```javascript
+// Create multiple components working together
+const wavePlayer = new WaveSurfer({...});
+const volumeSlider = new Slider({...});
+const eqModule = new Module({...});
+
+// Connect components with callbacks
+volumeSlider.callback = (value) => {
+    wavePlayer.setVolume(value / 100);
+};
+```
+
+### Audio Regions for Editing
+```javascript
+// Add regions for audio editing
+const intro = player.addRegion({
+    start: 0,
+    end: 30,
+    color: 'rgba(255, 255, 0, 0.3)',
+    content: 'Intro'
+});
+
+// Loop a specific region
+player.playRegion(intro);
+```
+
+* **Audio Performance**: WaveSurfer.js handles audio processing efficiently, while Squirrel manages the UI components.
+* **Component Integration**: Audio components seamlessly integrate with existing Module, Slider, and Matrix components.
+* **Real-time Visualization**: Dynamic waveform rendering with customizable styling and effects.
 
 ## Minimal DSL Example (Editable Text Inline, Events, Metaprogramming)
 

@@ -44,8 +44,8 @@ class SquirrelApp {
     async loadFrameworkModules() {
         const frameworkModules = [
             { name: 'core', path: '../a/a.js' },
-            { name: 'apis', path: '../a/apis.js' },
-            { name: 'particles', path: '../a/particles/all.js' }
+            { name: 'apis', path: '../a/apis.js', optional: true },
+            { name: 'particles', path: '../a/particles/all.js', optional: true }
         ];
 
         await this.loadModulesParallel(frameworkModules);
@@ -54,7 +54,7 @@ class SquirrelApp {
     async loadApplicationModules() {
         // Chargement conditionnel selon les besoins
         if (this.shouldLoadApplication()) {
-            await this.loadModule('application', '../application/index.js');
+            await this.loadModule('application', '../application/index.js', true);
         }
     }
 
@@ -101,7 +101,18 @@ class SquirrelApp {
             return false;
         }
         
-        // Charger l'application par défaut
+        // Ne pas charger si on est dans un contexte de test spécifique
+        if (window.location.pathname.includes('test-') && 
+            !window.location.search.includes('app=true')) {
+            return false;
+        }
+        
+        // Ne pas charger si explicitement désactivé
+        if (window.location.search.includes('app=false')) {
+            return false;
+        }
+        
+        // ARCHITECTURE SQUIRREL: Par défaut, charger l'application systématiquement
         return true;
     }
 
@@ -171,4 +182,9 @@ if (document.readyState === 'loading') {
 
 // Export pour utilisation externe
 export default squirrel;
+
+import Module from '../a/components/Module.js';
+import Slider from '../a/components/Slider.js';
+import Matrix from '../a/components/Matrix.js';
+import WaveSurfer from '../a/components/WaveSurfer.js';
 
