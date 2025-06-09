@@ -3,9 +3,19 @@
  * Eliminates all code redundancy across the framework
  */
 
+// Wait for defineParticle to be available before defining particles
+function initializeParticles() {
+    if (typeof defineParticle === 'undefined' && typeof window?.defineParticle === 'undefined') {
+        setTimeout(initializeParticles, 10);
+        return;
+    }
+    
+    // Use global defineParticle if local is not available
+    const defineParticleFunc = typeof defineParticle !== 'undefined' ? defineParticle : window.defineParticle;
+
 // === STRUCTURAL PARTICLES ===
 
-defineParticle({
+defineParticleFunc({
     name: 'id',
     type: 'string',
     category: 'structural',
@@ -15,7 +25,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'markup',
     type: 'string',
     category: 'structural',
@@ -30,7 +40,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'attach',
     type: 'any',
     category: 'structural',
@@ -41,7 +51,7 @@ defineParticle({
 
 // === DIMENSION PARTICLES ===
 
-defineParticle({
+defineParticleFunc({
     name: 'width',
     type: 'number',
     category: 'dimension',
@@ -50,7 +60,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'height',
     type: 'number',
     category: 'dimension',
@@ -59,7 +69,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'padding',
     type: 'number',
     category: 'dimension',
@@ -68,7 +78,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'margin',
     type: 'number',
     category: 'dimension',
@@ -79,7 +89,7 @@ defineParticle({
 
 // === POSITION PARTICLES ===
 
-defineParticle({
+defineParticleFunc({
     name: 'x',
     type: 'number',
     category: 'position',
@@ -88,7 +98,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'y',
     type: 'number',
     category: 'position',
@@ -97,7 +107,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'position',
     type: 'string',
     category: 'position',
@@ -106,7 +116,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'zIndex',
     type: 'number',
     category: 'position',
@@ -127,7 +137,7 @@ function formatColorValue(value) {
     return 'transparent'; // Default fallback
 }
 
-defineParticle({
+defineParticleFunc({
     name: 'backgroundColor',
     type: 'string|object',
     category: 'appearance',
@@ -138,7 +148,7 @@ defineParticle({
 });
 
 
-defineParticle({
+defineParticleFunc({
     name: 'color',
     type: 'string|object',
     category: 'appearance',
@@ -150,7 +160,7 @@ defineParticle({
 });
 
 
-defineParticle({
+defineParticleFunc({
     name: 'smooth',
     type: 'number',
     category: 'appearance',
@@ -159,7 +169,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'borderRadius',
     type: 'number',
     category: 'appearance',
@@ -168,7 +178,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'opacity',
     type: 'number',
     category: 'appearance',
@@ -177,7 +187,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'display',
     type: 'string',
     category: 'appearance',
@@ -186,7 +196,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'overflow',
     type: 'string',
     category: 'appearance',
@@ -195,7 +205,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'transform',
     type: 'string',
     category: 'appearance',
@@ -204,7 +214,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'transition',
     type: 'string',
     category: 'appearance',
@@ -213,7 +223,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'boxShadow',
     type: 'string',
     category: 'appearance',
@@ -222,7 +232,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'shadow',
     type: 'object',
     category: 'appearance',
@@ -242,7 +252,7 @@ defineParticle({
 
 // === TEXT PARTICLES ===
 
-defineParticle({
+defineParticleFunc({
     name: 'text',
     type: 'string',
     category: 'content',
@@ -251,7 +261,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'fontSize',
     type: 'number',
     category: 'text',
@@ -260,7 +270,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'fontWeight',
     type: 'string',
     category: 'text',
@@ -269,7 +279,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'textAlign',
     type: 'string',
     category: 'text',
@@ -278,7 +288,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'lineHeight',
     type: 'string',
     category: 'text',
@@ -289,7 +299,7 @@ defineParticle({
 
 // === BEHAVIOR PARTICLES ===
 
-defineParticle({
+defineParticleFunc({
     name: 'contenteditable',
     type: 'boolean',
     category: 'behavior',
@@ -298,7 +308,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'cursor',
     type: 'string',
     category: 'behavior',
@@ -309,7 +319,7 @@ defineParticle({
 
 // === EVENT PARTICLES ===
 
-defineParticle({
+defineParticleFunc({
     name: 'onclick',
     type: 'function',
     category: 'event',
@@ -318,7 +328,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'onmouseover',
     type: 'function',
     category: 'event',
@@ -327,7 +337,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'keyboard',
     type: 'function',
     category: 'event',
@@ -351,7 +361,7 @@ defineParticle({
     }
 });
 
-defineParticle({
+defineParticleFunc({
     name: 'touch',
     type: 'function',
     category: 'event',
@@ -366,7 +376,7 @@ defineParticle({
 
 // === UNIT PARTICLE ===
 
-defineParticle({
+defineParticleFunc({
     name: 'unit',
     type: 'object',
     category: 'dimension',
@@ -413,6 +423,11 @@ defineParticle({
         }, 10);
     }
 });
+
+}
+
+// Initialize particles when the script loads
+initializeParticles();
 
 // Export for ES6 modules
 export default {};

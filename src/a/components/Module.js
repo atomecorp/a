@@ -242,6 +242,7 @@ class Module {
     }
 
     _setupConnectorDragDrop(connector) {
+        // Click system for connection/disconnection
         connector.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -298,6 +299,97 @@ class Module {
                 
                 Module.selectedConnector = null;
             }
+        });
+
+        // Drag and drop system for connections
+        let isDragging = false;
+        let dragLine = null;
+        let startConnector = null;
+
+        connector.addEventListener('mousedown', (e) => {
+            // Only start drag if not a click (right button or long press)
+            if (e.button !== 0) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const dragTimer = setTimeout(() => {
+                // Start drag after a short delay to distinguish from click
+                isDragging = true;
+                startConnector = {
+                    element: connector,
+                    module: this,
+                    id: connector.dataset.connectorId,
+                    type: connector.dataset.connectorType
+                };
+                
+                // Create drag line
+                dragLine = this._createDragLine(connector);
+                
+                // Add visual feedback
+                connector.classList.add('dragging');
+                connector.style.transform = 'scale(1.3)';
+                connector.style.border = '3px solid #00ff00';
+                
+                // Highlight valid drop targets
+                this._highlightDropTargets(startConnector, e);
+                
+                Module.connectionInProgress = {
+                    startConnector,
+                    dragLine
+                };
+            }, 150); // 150ms delay to distinguish from click
+
+            const handleMouseMove = (e) => {
+                if (isDragging && dragLine) {
+                    // Update drag line position
+                    this._updateDragLine(dragLine, connector, {
+                        x: e.clientX,
+                        y: e.clientY
+                    });
+                    
+                    // Update drop target highlights
+                    this._highlightDropTargets(startConnector, e);
+                }
+            };
+
+            const handleMouseUp = (e) => {
+                clearTimeout(dragTimer);
+                
+                if (isDragging) {
+                    // Find drop target
+                    const dropTarget = this._findDropTarget(e);
+                    
+                    if (dropTarget && this._isValidConnection(startConnector, dropTarget)) {
+                        // Create connection
+                        this._createDragConnection(startConnector, dropTarget);
+                    }
+                    
+                    // Clean up
+                    if (dragLine) {
+                        dragLine.remove();
+                        dragLine = null;
+                    }
+                    
+                    connector.classList.remove('dragging');
+                    connector.style.transform = 'scale(1)';
+                    connector.style.border = '2px solid white';
+                    
+                    this._clearDropTargetHighlights();
+                    
+                    Module.connectionInProgress = null;
+                    isDragging = false;
+                    startConnector = null;
+                }
+                
+                // Remove event listeners
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+
+            // Add global event listeners
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
         });
         
         // Clear selection when clicking elsewhere
