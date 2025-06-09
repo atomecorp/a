@@ -24,9 +24,9 @@ const synthesizer = new Module({
     },
     
     callbacks: {
-        onMove: (module, x, y) => console.log(`📍 ${module.name} moved to (${x}, ${y})`),
-        onConnect: (fromModule, fromConnector, toModule, toConnector) => 
-            console.log(`🔗 ${fromModule.name}.${fromConnector} → ${toModule.name}.${toConnector}`)
+        onMove: (module) => console.log(`📍 ${module.name} moved to (${module.config.x}, ${module.config.y})`),
+        onConnect: (connection) => 
+            console.log(`🔗 ${connection.from.module.name}.${connection.from.connector} → ${connection.to.module.name}.${connection.to.connector}`)
     }
 });
 
