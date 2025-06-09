@@ -6,12 +6,22 @@
   "description": "🐿️ Framework hybride moderne avec Vanilla JS + Tauri + Axum",
   "scripts": {
     "dev": "./dev.sh",
+    "build": "rollup -c --environment BUILD:production",
+    "build:dev": "rollup -c --environment BUILD:development", 
+    "build:prod": "rollup -c --environment BUILD:production",
+    "build:analyze": "rollup -c --environment BUILD:production,ANALYZE:true",
     "start:server": "node fastify-server.mjs",
+    "serve": "python -m http.server 8000",
+    "perf": "rollup -c --environment BUILD:development && python -m http.server 8000",
     "tauri": "tauri",
     "tauri:dev": "tauri dev"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.4.0"
+    "@tauri-apps/cli": "^2.4.0",
+    "rollup": "^4.0.0",
+    "@rollup/plugin-node-resolve": "^15.2.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "rollup-plugin-filesize": "^10.0.0"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",

@@ -1,10 +1,27 @@
 /**
- * 🔥 FINAL CLASS A - ORIGINAL ARCHITECTURE + SMART PROXY
- * FIXED VERSION - Without problematic ES6 exports
+ * 🚀 FINAL CLASS A - OPTIMIZED ARCHITECTURE + SMART PROXY
+ * PERFORMANCE ENHANCED VERSION with caching, lazy loading, and monitoring
  */
 
 (function() {
     'use strict';
+
+    // Import optimizations
+    let DOMCache, EventManager, aInstanceCache, perfMonitor, moduleLoader;
+    
+    // Try to import optimizations if available
+    try {
+        if (typeof window !== 'undefined') {
+            DOMCache = window.DOMCache;
+            EventManager = window.EventManager;
+            aInstanceCache = window.aInstanceCache;
+            perfMonitor = window.perfMonitor;
+            moduleLoader = window.moduleLoader;
+        }
+    } catch (e) {
+        // Fallback if optimizations not loaded
+        console.warn('Performance optimizations not loaded, using basic implementation');
+    }
 
     // Export main variables for ES6
     let A, defineParticle;
@@ -12,44 +29,88 @@
     // Variables to expose for external particle definitions
     let _formatSize, _isNumber, _registry, _particles;
 
-    // Isolated isNumber function
+    // Global cache instances
+    const domCache = DOMCache ? new DOMCache() : null;
+    const eventManager = EventManager ? new EventManager() : null;
+
+    // Performance-optimized isNumber function
     _isNumber = (function () {
+        const cache = new Map();
         return function (v) {
-            return typeof v === 'number';
+            if (cache.has(v)) return cache.get(v);
+            const result = typeof v === 'number';
+            if (cache.size < 1000) cache.set(v, result); // Limit cache size
+            return result;
         };
     })();
     window._isNumber = _isNumber;
 
-    // Isolated formatSize function
+    // Performance-optimized formatSize function
     _formatSize = (function () {
         const cache = new Map();
         return function (v) {
             if (!_isNumber(v)) return v;
-            if (v >= 0 && v <= 1000 && v === Math.floor(v)) {
-                if (!cache.has(v)) {
-                    cache.set(v, `${v}px`);
-                }
-                return cache.get(v);
-            }
-            return `${v}px`;
+            
+            // Use cache for common values
+            if (cache.has(v)) return cache.get(v);
+            
+            const result = v >= 0 && v <= 1000 && v === Math.floor(v) 
+                ? `${v}px` 
+                : `${v}px`;
+                
+            if (cache.size < 1000) cache.set(v, result); // Limit cache size
+            return result;
         };
     })();
     window._formatSize = _formatSize;
 
-    // Global registry for instances
+    // Global registry for instances with performance tracking
     _registry = {};
     window._registry = _registry;
 
-    // Registry for particles
-    _particles = {};
+    // Registry for particles with lazy loading support
+    _particles = new Proxy({}, {
+        get(target, prop) {
+            if (!(prop in target) && moduleLoader) {
+                // Try to lazy load particle
+                moduleLoader.loadParticles(prop).catch(() => {
+                    console.warn(`Particle category '${prop}' not found`);
+                });
+            }
+            return target[prop];
+        }
+    });
     window._particles = _particles;
 
-    // Isolated defineParticle function
+    // Performance-optimized defineParticle function
     defineParticle = function (config) {
         if (!config || !config.name || !config.process || typeof config.process !== 'function') {
             console.error("Invalid particle definition:", config);
             return null;
         }
+        
+        // Track particle creation for performance monitoring
+        if (perfMonitor) {
+            perfMonitor.trackParticleCreation(config.name);
+        }
+        
+        // Optimize particle process function for frequent calls
+        const originalProcess = config.process;
+        config.process = function(el, v, data, instance) {
+            const startTime = performance.now();
+            try {
+                return originalProcess.call(this, el, v, data, instance);
+            } finally {
+                // Track particle execution time
+                if (perfMonitor) {
+                    const duration = performance.now() - startTime;
+                    if (duration > 1) { // Only track slow operations
+                        perfMonitor.trackOperation(`particle:${config.name}`, () => {}, duration);
+                    }
+                }
+            }
+        };
+        
         _particles[config.name] = config;
         return config;
     };
@@ -68,25 +129,59 @@
         background: 'transparent'
     };
 
-    // 🔥 CLASS A - ORIGINAL ARCHITECTURE + SMART PROXY
+    // 🚀 CLASS A - OPTIMIZED ARCHITECTURE + SMART PROXY
     A = class {
         constructor(config = {}) {
+            const startTime = performance.now();
+            
+            // Check instance cache first
+            if (aInstanceCache) {
+                const cached = aInstanceCache.getByElement(config.element);
+                if (cached) {
+                    perfMonitor?.trackInstanceOperation('constructor', performance.now() - startTime, true);
+                    return cached;
+                }
+            }
+            
             this.particles = {...config};
-            this.html_object = document.createElement(config.markup || 'div');
+            this.html_object = config.element || document.createElement(config.markup || 'div');
             this._fastened = config.fasten || [];
             this.style = this.html_object.style;
             this.dataset = this.html_object.dataset;
+            this._observers = []; // Track observers for cleanup
+            this._bindings = new Map(); // Track bindings for performance
 
-            // Apply base styles
-            if (config.reset !== false) {
-                Object.assign(this.style, baseStyles);
+            // Use cached DOM operations
+            if (domCache) {
+                this._domCache = domCache;
             }
 
-            // 🎯 ORIGINAL ARCHITECTURE: Prepare all methods dynamically
+            // Apply base styles with batching
+            if (config.reset !== false) {
+                this._applyBaseStyles();
+            }
+
+            // 🎯 OPTIMIZED ARCHITECTURE: Prepare all methods dynamically with caching
             this._preparePropertyMethods();
 
-            // Process all properties
-            this._processConfig(config);
+            // Process all properties with performance tracking
+            if (perfMonitor) {
+                perfMonitor.trackRender('A.constructor', () => {
+                    this._processConfig(config);
+                });
+            } else {
+                this._processConfig(config);
+            }
+            
+            // Register with instance cache
+            if (aInstanceCache && this.html_object) {
+                aInstanceCache.registerWithElement(this.html_object, this);
+            }
+            
+            // Track construction time
+            if (perfMonitor) {
+                perfMonitor.trackInstanceOperation('constructor', performance.now() - startTime, false);
+            }
 
             // Attach element if needed
             if (config.attach) {
@@ -321,6 +416,53 @@
             }
 
             parent.appendChild(this.html_object);
+        }
+
+        // Optimized base styles application
+        _applyBaseStyles() {
+            if (this._domCache) {
+                this._domCache.batchUpdate(this.html_object, () => {
+                    Object.assign(this.style, baseStyles);
+                });
+            } else {
+                Object.assign(this.style, baseStyles);
+            }
+        }
+
+        // Enhanced cleanup for memory management
+        destroy() {
+            // Cleanup observers
+            this._observers.forEach(observer => {
+                if (observer && typeof observer.disconnect === 'function') {
+                    observer.disconnect();
+                }
+            });
+            this._observers = [];
+
+            // Cleanup event listeners
+            if (eventManager) {
+                eventManager.cleanupElement(this.html_object);
+            }
+
+            // Clear bindings
+            this._bindings.clear();
+
+            // Remove from registry
+            Object.keys(_registry).forEach(key => {
+                if (_registry[key] === this) {
+                    delete _registry[key];
+                }
+            });
+
+            // Return to instance cache if possible
+            if (aInstanceCache) {
+                aInstanceCache.returnToPool(this);
+            }
+
+            // Remove from DOM
+            if (this.html_object && this.html_object.parentNode) {
+                this.html_object.parentNode.removeChild(this.html_object);
+            }
         }
 
         // === EVENT METHODS ===

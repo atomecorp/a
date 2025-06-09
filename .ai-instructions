@@ -20,6 +20,7 @@ This project maintains a **MINIMAL ESSENTIAL ARCHITECTURE** that must be preserv
 - ✅ Modify existing file content (but never delete files)
 - ✅ Extend existing configurations
 - ✅ Create new directories
+- ✅ use only the current running server on port 3000
 
 ### FORBIDDEN ACTIONS:
 - ❌ Delete any existing files
@@ -27,6 +28,8 @@ This project maintains a **MINIMAL ESSENTIAL ARCHITECTURE** that must be preserv
 - ❌ Remove any existing npm scripts
 - ❌ Restructure the core architecture
 - ❌ Replace existing build system components
+- ❌ do not add any concole.log
+- ❌ do not start any new server
 
 ### Core Architecture Components:
 - **Svelte Frontend**: Rollup-based build system with custom configuration

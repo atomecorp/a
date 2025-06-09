@@ -17,6 +17,10 @@ html, body {
   height: 100%;
   color: lightgray;
   touch-action: manipulation;
+   user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-tap-highlight-color: transparent !important;
 }
 
 /* Polices personnalisées */
@@ -30,7 +34,10 @@ pre {
   margin: 0;
   padding: 0;
 }
-
+/* input, textarea {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+} */
 /* Vue principale */
 #view {
   position: absolute;
