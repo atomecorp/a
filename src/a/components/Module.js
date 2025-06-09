@@ -655,6 +655,7 @@ class Module {
         // Menu items
         const items = [
             { text: 'Duplicate', action: () => this.duplicate() },
+            { text: 'Disconnect All', action: () => this.disconnectAll() },
             { text: 'Delete', action: () => this.delete() },
             { text: 'Properties', action: () => this.showProperties() }
         ];
@@ -766,6 +767,27 @@ class Module {
             outputs: this.outputs,
             connections: this.connections.size
         });
+    }
+
+    disconnectAll() {
+        const connectionsToRemove = [...this.connections];
+        connectionsToRemove.forEach(connectionKey => {
+            const connection = Module.connections.get(connectionKey);
+            if (connection) {
+                connection.line.remove();
+                Module.connections.delete(connectionKey);
+                
+                // Remove from other module's connections set
+                if (connection.from.module !== this) {
+                    connection.from.module.connections.delete(connectionKey);
+                }
+                if (connection.to.module !== this) {
+                    connection.to.module.connections.delete(connectionKey);
+                }
+            }
+        });
+        
+        this.connections.clear();
     }
 
     // Static methods
