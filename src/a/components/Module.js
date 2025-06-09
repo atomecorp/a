@@ -155,6 +155,12 @@ class Module {
             borderRadius: '6px 6px 0 0'
         });
 
+        this.header.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this._enableRename();
+        });
+
         this.element.appendChild(this.header);
     }
 
@@ -698,6 +704,49 @@ class Module {
         document.body.appendChild(menu);
     }
 
+    _enableRename() {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = this.name;
+        
+        Object.assign(input.style, {
+            background: 'transparent',
+            border: '1px solid #3498db',
+            color: 'white',
+            padding: '4px 8px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            width: 'calc(100% - 16px)',
+            borderRadius: '3px'
+        });
+
+        this.header.innerHTML = '';
+        this.header.appendChild(input);
+        
+        input.focus();
+        input.select();
+
+        const finishRename = () => {
+            const newName = input.value.trim();
+            if (newName && newName !== this.name) {
+                this.name = newName;
+                this.config.name = newName;
+            }
+            this.header.innerHTML = '';
+            this.header.textContent = this.name;
+        };
+
+        input.addEventListener('blur', finishRename);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') finishRename();
+            if (e.key === 'Escape') {
+                this.header.innerHTML = '';
+                this.header.textContent = this.name;
+            }
+        });
+    }
+
+    // ...existing code...
     // Public API methods
     select() {
         // Deselect all other modules
