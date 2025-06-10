@@ -30,15 +30,6 @@ The Squirrel Framework Slider component offers a complete solution for creating 
 
 ---
 
-## Installation and Import
-
-```javascript
-// Component import
-import { Slider } from './src/a/components/Slider.js';
-
-// Or direct inclusion
-<script src="./src/a/components/Slider.js"></script>
-```
 
 ---
 
