@@ -206,11 +206,22 @@ window.Slider = Slider;
 window.Matrix = Matrix;
 window.List = List;
 window.Table = Table;
-window.SquirrelWaveSurfer = SquirrelWaveSurfer; // Nom différent pour éviter le conflit
-window.WaveSurferComponent = SquirrelWaveSurfer; // Alias plus explicite
+window.SquirrelWaveSurfer = SquirrelWaveSurfer; // Composant Squirrel pour WaveSurfer
 
-// Exposer WaveSurfer et ses plugins globalement (avec préfixes pour éviter les conflits)
+// Exposer WaveSurfer et ses plugins globalement avec les noms standards
 window.WaveSurfer = WaveSurferLib; // Core WaveSurfer
+
+// Noms standards pour compatibilité avec le code existant
+window.RegionsPlugin = RegionsPlugin;
+window.TimelinePlugin = TimelinePlugin;
+window.MinimapPlugin = MinimapPlugin;
+window.ZoomPlugin = ZoomPlugin;
+window.HoverPlugin = HoverPlugin;
+window.SpectrogramPlugin = SpectrogramPlugin;
+window.RecordPlugin = RecordPlugin;
+window.EnvelopePlugin = EnvelopePlugin;
+
+// Alias préfixés pour éviter les conflits (optionnel)
 window.WaveSurferRegions = RegionsPlugin;
 window.WaveSurferTimeline = TimelinePlugin;
 window.WaveSurferMinimap = MinimapPlugin;
@@ -220,7 +231,7 @@ window.WaveSurferSpectrogram = SpectrogramPlugin;
 window.WaveSurferRecord = RecordPlugin;
 window.WaveSurferEnvelope = EnvelopePlugin;
 
-// Alias groupés pour faciliter l'utilisation
+// Objet groupé pour faciliter l'utilisation
 window.WaveSurferPlugins = {
     Regions: RegionsPlugin,
     Timeline: TimelinePlugin,
@@ -231,5 +242,9 @@ window.WaveSurferPlugins = {
     Record: RecordPlugin,
     Envelope: EnvelopePlugin
 };
+
+console.log('🎵 WaveSurfer.js v7.9.5 + ALL PLUGINS loaded globally!');
+console.log('📦 Available as: WaveSurfer, RegionsPlugin, TimelinePlugin, etc.');
+console.log('📦 Also available as: WaveSurferPlugins.Regions, etc.');
 
 
