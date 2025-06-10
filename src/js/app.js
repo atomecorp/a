@@ -182,6 +182,7 @@ if (document.readyState === 'loading') {
 export default squirrel;
 
 // Import des composants essentiels
+import Button from '../a/components/button.js';
 import Module from '../a/components/Module.js';
 import Slider from '../a/components/Slider.js';
 import Matrix from '../a/components/Matrix.js';
@@ -200,7 +201,10 @@ import SpectrogramPlugin from './wavesurfer-v7/plugins/spectrogram.esm.js';
 import RecordPlugin from './wavesurfer-v7/plugins/record.esm.js';
 import EnvelopePlugin from './wavesurfer-v7/plugins/envelope.esm.js';
 
+
+
 // Exposer les composants dans le scope global pour éviter les imports manuels
+window.Button = Button
 window.Module = Module;
 window.Slider = Slider;
 window.Matrix = Matrix;
