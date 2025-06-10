@@ -1,9 +1,12 @@
 // ===============================================
-// SQUIRREL FRAMEWORK - EXEMPLES TABLEAUX ENTIÈREMENT CORRIGÉS
+// SQUIRREL FRAMEWORK - EXEMPLES LISTES ENTIÈREMENT CORRIGÉES
 // ===============================================
 
-// Pour tester les TABLEAUX (version entièrement corrigée), décommentez la ligne suivante :
-import './examples/tables.js';
+// Pour tester les LISTES (version entièrement corrigée), décommentez la ligne suivante :
+import './examples/lists.js';
+
+// OU pour tester les tableaux corrigés :
+// import './examples/tables-fully-fixed.js';
 
 // OU pour tester la version partiellement corrigée :
 // import './examples/tables-fixed.js';
@@ -11,9 +14,6 @@ import './examples/tables.js';
 // OU pour tester les tableaux originaux (avec problèmes) :
 // import './examples/tables.js';
 
-// OU pour tester les listes :
-// import './examples/lists.js';
-
 console.log("🐿️ Squirrel Framework - Exemples chargés !");
-console.log("📊 Exemples de TABLEAUX CORRIGÉS actifs");
+console.log("📋 Exemples de LISTES CORRIGÉES actives");
 console.log("💡 Pour changer, modifiez les imports ci-dessus");

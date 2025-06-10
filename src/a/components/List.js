@@ -135,7 +135,7 @@ class List {
         // Register list
         List.lists.set(this.id, this);
         
-        console.log(`📋 List created: ${this.id} (${this.config.type})`);
+        console.log(`📋 List FIXED created: ${this.id} (${this.config.type}) - ${this.config.items.length} items`);
     }
     
     _createList() {
@@ -148,16 +148,19 @@ class List {
             throw new Error(`Container not found: ${this.config.attach}`);
         }
 
-        // Create main list element
-        this.element = new A({
-            attach: container,
-            id: this.id,
-            x: this.config.x,
-            y: this.config.y,
-            width: this.config.width,
-            height: this.config.height,
-            ...this.config.style
-        });
+        // Create main list element using standard HTML
+        this.element = document.createElement('div');
+        this.element.id = this.id;
+        this.element.style.position = 'absolute';
+        this.element.style.left = this.config.x + 'px';
+        this.element.style.top = this.config.y + 'px';
+        this.element.style.width = this.config.width + 'px';
+        this.element.style.height = this.config.height === 'auto' ? 'auto' : this.config.height + 'px';
+        
+        // Apply all config styles
+        Object.assign(this.element.style, this.config.style);
+        
+        container.appendChild(this.element);
 
         // Create header if needed
         if (this.config.searchable || this.config.sortable) {
@@ -172,64 +175,73 @@ class List {
     }
     
     _createHeader() {
-        this.header = new A({
-            attach: this.element,
+        this.header = document.createElement('div');
+        Object.assign(this.header.style, {
             width: '100%',
             height: 'auto',
             ...this.config.headerStyle
         });
+        this.element.appendChild(this.header);
 
         // Search input
         if (this.config.searchable) {
-            this.searchInput = new A({
-                attach: this.header,
-                tag: 'input',
-                type: 'text',
-                placeholder: this.config.searchSettings.placeholder,
+            this.searchInput = document.createElement('input');
+            this.searchInput.type = 'text';
+            this.searchInput.placeholder = this.config.searchSettings.placeholder;
+            Object.assign(this.searchInput.style, {
                 width: '100%',
                 padding: '8px 12px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '14px',
                 outline: 'none',
-                marginBottom: '8px'
+                marginBottom: '8px',
+                boxSizing: 'border-box'
             });
+            this.header.appendChild(this.searchInput);
         }
 
         // Sort controls
         if (this.config.sortable) {
-            this.sortContainer = new A({
-                attach: this.header,
+            this.sortContainer = document.createElement('div');
+            Object.assign(this.sortContainer.style, {
                 display: 'flex',
                 gap: '8px',
                 alignItems: 'center'
             });
+            this.header.appendChild(this.sortContainer);
 
-            this.sortSelect = new A({
-                attach: this.sortContainer,
-                tag: 'select',
+            this.sortSelect = document.createElement('select');
+            Object.assign(this.sortSelect.style, {
                 padding: '4px 8px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '12px'
             });
+            
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Sort by...';
+            this.sortSelect.appendChild(defaultOption);
+            
+            this.sortContainer.appendChild(this.sortSelect);
         }
     }
     
     _createListContainer() {
-        this.listContainer = new A({
-            attach: this.element,
+        this.listContainer = document.createElement('div');
+        Object.assign(this.listContainer.style, {
             width: '100%',
             height: this.config.searchable || this.config.sortable ? 'calc(100% - 60px)' : '100%',
             overflow: 'auto'
         });
+        this.element.appendChild(this.listContainer);
     }
     
     _renderItems() {
         // Clear existing items
-        if (this.listContainer.getElement) {
-            this.listContainer.getElement().innerHTML = '';
-        }
+        this.listContainer.innerHTML = '';
         
         this.itemElements = new Map();
         
@@ -242,13 +254,15 @@ class List {
     _createListItem(item, index) {
         const itemId = item.id || `item_${index}`;
         
-        // Create item container
-        const itemElement = new A({
-            attach: this.listContainer,
-            id: `${this.id}_${itemId}`,
-            ...this.config.itemStyle,
-            'data-item-id': itemId
-        });
+        // Create item container using standard HTML
+        const itemElement = document.createElement('div');
+        itemElement.id = `${this.id}_${itemId}`;
+        itemElement.dataset.itemId = itemId;
+        
+        // Apply item styles
+        Object.assign(itemElement.style, this.config.itemStyle);
+        
+        this.listContainer.appendChild(itemElement);
 
         // Add content based on type
         switch (this.config.type) {
@@ -275,55 +289,56 @@ class List {
     }
     
     _createSimpleItem(container, item) {
-        new A({
-            attach: container,
-            text: item.text || item.title || item.content || '',
-            flex: '1'
-        });
+        const textElement = document.createElement('div');
+        textElement.textContent = item.text || item.title || item.content || '';
+        textElement.style.flex = '1';
+        container.appendChild(textElement);
     }
     
     _createIconItem(container, item) {
         // Icon
         if (item.icon) {
-            new A({
-                attach: container,
-                text: item.icon,
+            const iconElement = document.createElement('div');
+            iconElement.textContent = item.icon;
+            Object.assign(iconElement.style, {
                 fontSize: `${this.config.iconSettings.size}px`,
                 color: this.config.iconSettings.color,
                 marginRight: `${this.config.iconSettings.marginRight}px`,
                 flexShrink: '0'
             });
+            container.appendChild(iconElement);
         }
 
         // Text content
-        const textContainer = new A({
-            attach: container,
+        const textContainer = document.createElement('div');
+        Object.assign(textContainer.style, {
             flex: '1',
             display: 'flex',
             flexDirection: 'column'
         });
+        container.appendChild(textContainer);
 
-        new A({
-            attach: textContainer,
-            text: item.text || item.title || '',
-            fontWeight: item.subtitle ? 'bold' : 'normal'
-        });
+        const mainText = document.createElement('div');
+        mainText.textContent = item.text || item.title || '';
+        mainText.style.fontWeight = item.subtitle ? 'bold' : 'normal';
+        textContainer.appendChild(mainText);
 
         if (item.subtitle) {
-            new A({
-                attach: textContainer,
-                text: item.subtitle,
+            const subtitleElement = document.createElement('div');
+            subtitleElement.textContent = item.subtitle;
+            Object.assign(subtitleElement.style, {
                 fontSize: '12px',
                 color: '#666',
                 marginTop: '2px'
             });
+            textContainer.appendChild(subtitleElement);
         }
 
         // Badge/status
         if (item.badge) {
-            new A({
-                attach: container,
-                text: item.badge,
+            const badgeElement = document.createElement('div');
+            badgeElement.textContent = item.badge;
+            Object.assign(badgeElement.style, {
                 backgroundColor: item.badgeColor || '#ff4444',
                 color: 'white',
                 padding: '2px 8px',
@@ -332,14 +347,15 @@ class List {
                 fontWeight: 'bold',
                 marginLeft: 'auto'
             });
+            container.appendChild(badgeElement);
         }
     }
     
     _createAvatarItem(container, item) {
         // Avatar
         if (item.avatar) {
-            new A({
-                attach: container,
+            const avatarElement = document.createElement('div');
+            Object.assign(avatarElement.style, {
                 width: `${this.config.avatarSettings.size}px`,
                 height: `${this.config.avatarSettings.size}px`,
                 backgroundImage: `url(${item.avatar})`,
@@ -349,9 +365,11 @@ class List {
                 marginRight: `${this.config.avatarSettings.marginRight}px`,
                 flexShrink: '0'
             });
+            container.appendChild(avatarElement);
         } else if (item.avatarText) {
-            new A({
-                attach: container,
+            const avatarElement = document.createElement('div');
+            avatarElement.textContent = item.avatarText;
+            Object.assign(avatarElement.style, {
                 width: `${this.config.avatarSettings.size}px`,
                 height: `${this.config.avatarSettings.size}px`,
                 backgroundColor: item.avatarColor || '#2196f3',
@@ -362,10 +380,10 @@ class List {
                 justifyContent: 'center',
                 fontSize: '12px',
                 fontWeight: 'bold',
-                text: item.avatarText,
                 marginRight: `${this.config.avatarSettings.marginRight}px`,
                 flexShrink: '0'
             });
+            container.appendChild(avatarElement);
         }
 
         // Content
@@ -377,35 +395,37 @@ class List {
 
         // Arrow for submenu
         if (item.submenu) {
-            new A({
-                attach: container,
-                text: '▶',
+            const arrowElement = document.createElement('div');
+            arrowElement.textContent = '▶';
+            Object.assign(arrowElement.style, {
                 color: '#999',
                 fontSize: '12px',
                 marginLeft: 'auto'
             });
+            container.appendChild(arrowElement);
         }
     }
     
     _createTodoItem(container, item) {
         // Checkbox
-        const checkbox = new A({
-            attach: container,
-            tag: 'input',
-            type: 'checkbox',
-            checked: item.completed || false,
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = item.completed || false;
+        Object.assign(checkbox.style, {
             marginRight: '12px',
             cursor: 'pointer'
         });
+        container.appendChild(checkbox);
 
         // Text with strikethrough if completed
-        new A({
-            attach: container,
-            text: item.text || '',
+        const textElement = document.createElement('div');
+        textElement.textContent = item.text || '';
+        Object.assign(textElement.style, {
             flex: '1',
             textDecoration: item.completed ? 'line-through' : 'none',
             color: item.completed ? '#999' : 'inherit'
         });
+        container.appendChild(textElement);
 
         // Priority indicator
         if (item.priority) {
@@ -415,14 +435,15 @@ class List {
                 low: '#44ff44'
             };
 
-            new A({
-                attach: container,
+            const priorityElement = document.createElement('div');
+            Object.assign(priorityElement.style, {
                 width: '8px',
                 height: '8px',
                 backgroundColor: priorityColors[item.priority] || '#ccc',
                 borderRadius: '50%',
                 marginLeft: '8px'
             });
+            container.appendChild(priorityElement);
         }
     }
     
@@ -431,22 +452,24 @@ class List {
 
         // Expand/collapse for children
         if (item.children && item.children.length > 0) {
-            const expandIcon = new A({
-                attach: container,
-                text: item.expanded ? '▼' : '▶',
+            const expandIcon = document.createElement('div');
+            expandIcon.textContent = item.expanded ? '▼' : '▶';
+            Object.assign(expandIcon.style, {
                 color: '#666',
                 fontSize: '12px',
                 cursor: 'pointer',
                 marginLeft: 'auto'
             });
+            container.appendChild(expandIcon);
 
             // Children container (initially hidden if not expanded)
             if (item.expanded) {
-                const childrenContainer = new A({
-                    attach: this.listContainer,
+                const childrenContainer = document.createElement('div');
+                Object.assign(childrenContainer.style, {
                     width: '100%',
                     paddingLeft: '24px'
                 });
+                this.listContainer.appendChild(childrenContainer);
 
                 item.children.forEach((child, index) => {
                     this._createListItem(child, `${item.id}_${index}`);
@@ -458,20 +481,20 @@ class List {
     _setupEventHandlers() {
         // Search functionality
         if (this.searchInput) {
-            this.searchInput.getElement().addEventListener('input', (e) => {
+            this.searchInput.addEventListener('input', (e) => {
                 this._handleSearch(e.target.value);
             });
         }
 
         // Sort functionality
         if (this.sortSelect) {
-            this.sortSelect.getElement().addEventListener('change', (e) => {
+            this.sortSelect.addEventListener('change', (e) => {
                 this._handleSort(e.target.value);
             });
         }
 
         // Item click handling
-        this.listContainer.getElement().addEventListener('click', (e) => {
+        this.listContainer.addEventListener('click', (e) => {
             const itemElement = e.target.closest('[data-item-id]');
             if (itemElement) {
                 this._handleItemClick(itemElement, e);
@@ -479,14 +502,14 @@ class List {
         });
 
         // Item hover handling
-        this.listContainer.getElement().addEventListener('mouseover', (e) => {
+        this.listContainer.addEventListener('mouseover', (e) => {
             const itemElement = e.target.closest('[data-item-id]');
             if (itemElement) {
                 this._applyItemStyle(itemElement, this.config.itemHoverStyle);
             }
         });
 
-        this.listContainer.getElement().addEventListener('mouseout', (e) => {
+        this.listContainer.addEventListener('mouseout', (e) => {
             const itemElement = e.target.closest('[data-item-id]');
             if (itemElement && !this.selectedItems.has(itemElement.dataset.itemId)) {
                 this._applyItemStyle(itemElement, this.config.itemStyle);
@@ -552,16 +575,15 @@ class List {
         
         this.config.callbacks.onItemClick(item, itemId, event);
     }
-    
-    _selectItem(itemId, itemElement) {
+     _selectItem(itemId, itemElement) {
         // Clear previous selections
         this.selectedItems.forEach(id => {
             const element = this.itemElements.get(id);
             if (element) {
-                this._applyItemStyle(element.getElement(), this.config.itemStyle);
+                this._applyItemStyle(element, this.config.itemStyle);
             }
         });
-        
+
         this.selectedItems.clear();
         this.selectedItems.add(itemId);
         this._applyItemStyle(itemElement, this.config.itemSelectedStyle);
@@ -675,8 +697,8 @@ class List {
     
     destroy() {
         List.lists.delete(this.id);
-        if (this.element && this.element.getElement) {
-            this.element.getElement().remove();
+        if (this.element) {
+            this.element.remove();
         }
     }
     
