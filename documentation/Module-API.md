@@ -1,668 +1,590 @@
-# Module Component API Documentation
+# 🧩 Module API - Module System and Plugins
 
-## Overview
+## 🚀 Basic Usage
 
-The Module component is a comprehensive solution for creating draggable modules with input/output connectors that can be connected together to build visual programming interfaces. It provides a flexible and extensible framework for node-based editors, audio mixers, synthesizers, and other visual programming tools.
-
-## Table of Contents
-
-1. [Constructor & Configuration](#constructor--configuration)
-2. [Instance Methods](#instance-methods)
-3. [Static Methods](#static-methods)
-4. [Event System](#event-system)
-5. [Connector Management](#connector-management)
-6. [Connection System](#connection-system)
-7. [Styling & Theming](#styling--theming)
-8. [Examples](#examples)
-
----
-
-## Constructor & Configuration
-
-### `new Module(config)`
-
-Creates a new module instance with the specified configuration.
-
-#### Parameters
-
-- **config** `Object` - Configuration object with the following properties:
-
-##### Basic Properties
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `id` | `string` | `module_${Date.now()}` | Unique identifier for the module |
-| `name` | `string` | `'Untitled Module'` | Display name for the module |
-| `attach` | `string|Element` | `'body'` | CSS selector or DOM element to attach to |
-| `x` | `number` | `100` | Initial X position in pixels |
-| `y` | `number` | `100` | Initial Y position in pixels |
-| `width` | `number` | `200` | Module width in pixels |
-| `height` | `number` | `120` | Module height in pixels |
-
-##### Connectors
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `inputs` | `Array<ConnectorConfig>` | `[]` | Array of input connector configurations |
-| `outputs` | `Array<ConnectorConfig>` | `[]` | Array of output connector configurations |
-
-**ConnectorConfig Object:**
+### Loading a Module
 ```javascript
-{
-  id: 'unique_id',        // Unique identifier
-  name: 'Connector Name', // Display name
-  type: 'audio'           // Type: 'audio', 'control', 'data'
-}
+// Load a module dynamically
+const myModule = await loadModule('path/to/module.js');
+
+// Use the module
+myModule.init();
+myModule.doSomething();
 ```
 
-##### Styling
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `style` | `Object` | See below | CSS styles for the module |
-| `connectors` | `Object` | See below | Connector-specific styling |
-| `connectorTypes` | `Object` | See below | Type-based connector styling |
-
-**Default Style Object:**
+### Creating a Simple Module
 ```javascript
-{
-  backgroundColor: '#2c3e50',
-  borderRadius: '8px',
-  border: '2px solid #34495e',
-  color: 'white',
-  fontSize: '14px',
-  fontFamily: 'Roboto, sans-serif',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-}
-```
-
-**Connector Configuration:**
-```javascript
-connectors: {
-  input: {
-    backgroundColor: '#e74c3c',
-    size: 12,
-    position: 'left'
-  },
-  output: {
-    backgroundColor: '#27ae60',
-    size: 12,
-    position: 'right'
-  }
-}
-```
-
-**Connector Types:**
-```javascript
-connectorTypes: {
-  audio: { color: '#e74c3c', shape: 'circle' },
-  control: { color: '#3498db', shape: 'square' },
-  data: { color: '#f39c12', shape: 'triangle' }
-}
-```
-
-##### Behavior
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `draggable` | `boolean` | `true` | Whether the module can be dragged |
-| `grid` | `Object` | `{ enabled: false, size: 20 }` | Grid snapping configuration |
-
-##### Callbacks
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `callbacks.onMove` | `Function` | `() => {}` | Called when module is moved |
-| `callbacks.onConnect` | `Function` | `() => {}` | Called when connection is made |
-| `callbacks.onDisconnect` | `Function` | `() => {}` | Called when connection is removed |
-| `callbacks.onClick` | `Function` | `() => {}` | Called when module is clicked |
-| `callbacks.onSelect` | `Function` | `() => {}` | Called when module selection changes |
-
-#### Example
-
-```javascript
-const module = new Module({
-  name: 'Audio Mixer',
-  x: 150,
-  y: 200,
-  width: 250,
-  height: 180,
-  inputs: [
-    { id: 'audioIn1', name: 'Audio In 1', type: 'audio' },
-    { id: 'audioIn2', name: 'Audio In 2', type: 'audio' },
-    { id: 'volume', name: 'Volume', type: 'control' }
-  ],
-  outputs: [
-    { id: 'mixedOut', name: 'Mixed Output', type: 'audio' }
-  ],
-  style: {
-    backgroundColor: '#34495e'
-  },
-  callbacks: {
-    onConnect: (fromModule, fromConnector, toModule, toConnector) => {
-      console.log(`Connected: ${fromModule.name} → ${toModule.name}`);
+// my-module.js
+export default {
+    name: 'MyModule',
+    version: '1.0.0',
+    
+    init() {
+        console.log('Module initialized');
+    },
+    
+    createButton(text, onClick) {
+        return new A({
+            markup: 'button',
+            text: text,
+            onClick: onClick,
+            backgroundColor: '#007bff',
+            color: 'white',
+            padding: '10px 20px',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer'
+        });
     }
-  }
+};
+```
+
+## 🏗️ Module Structure
+
+### Standard Module Format
+```javascript
+export default {
+    // Module metadata
+    name: 'ModuleName',
+    version: '1.0.0',
+    description: 'Module description',
+    author: 'Your Name',
+    dependencies: ['otherModule'],
+    
+    // Module configuration
+    config: {
+        defaultSettings: {
+            theme: 'light',
+            autoInit: true
+        }
+    },
+    
+    // Initialization
+    init(options = {}) {
+        this.settings = { ...this.config.defaultSettings, ...options };
+        this._setupModule();
+        return this;
+    },
+    
+    // Private methods (convention: prefix with _)
+    _setupModule() {
+        // Internal setup logic
+    },
+    
+    // Public API methods
+    publicMethod() {
+        // Public functionality
+    },
+    
+    // Cleanup
+    destroy() {
+        // Cleanup logic when module is unloaded
+    }
+};
+```
+
+## 📦 Module Types
+
+### UI Component Module
+```javascript
+// ui-component-module.js
+export default {
+    name: 'UIComponents',
+    version: '1.0.0',
+    
+    init() {
+        this.components = new Map();
+        return this;
+    },
+    
+    createCard(config) {
+        const card = new A({
+            attach: config.attach || 'body',
+            width: config.width || 300,
+            height: config.height || 200,
+            backgroundColor: config.backgroundColor || '#fff',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            padding: '20px',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+            
+            // Add title if provided
+            ...(config.title && {
+                innerHTML: `<h3>${config.title}</h3>${config.content || ''}`
+            })
+        });
+        
+        if (config.id) {
+            this.components.set(config.id, card);
+        }
+        
+        return card;
+    },
+    
+    createModal(config) {
+        const overlay = new A({
+            attach: 'body',
+            position: 'fixed',
+            top: 0, left: 0,
+            width: '100vw', height: '100vh',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+        });
+        
+        const modal = new A({
+            attach: overlay,
+            width: config.width || 400,
+            height: config.height || 300,
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '20px',
+            position: 'relative'
+        });
+        
+        // Close button
+        const closeBtn = new A({
+            attach: modal,
+            position: 'absolute',
+            top: '10px', right: '10px',
+            width: 30, height: 30,
+            text: '×',
+            fontSize: '20px',
+            textAlign: 'center',
+            lineHeight: '30px',
+            cursor: 'pointer',
+            onClick: () => overlay.getElement().remove()
+        });
+        
+        return { overlay, modal, close: () => overlay.getElement().remove() };
+    }
+};
+```
+
+### Utility Module
+```javascript
+// utils-module.js
+export default {
+    name: 'Utils',
+    version: '1.0.0',
+    
+    // String utilities
+    formatText: {
+        capitalize(text) {
+            return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+        },
+        
+        truncate(text, length = 50, suffix = '...') {
+            return text.length > length ? text.substring(0, length) + suffix : text;
+        },
+        
+        slugify(text) {
+            return text.toLowerCase()
+                      .replace(/[^\w\s-]/g, '')
+                      .replace(/[\s_-]+/g, '-')
+                      .replace(/^-+|-+$/g, '');
+        }
+    },
+    
+    // DOM utilities
+    dom: {
+        fadeIn(element, duration = 300) {
+            element.style.opacity = '0';
+            element.style.transition = `opacity ${duration}ms ease`;
+            requestAnimationFrame(() => {
+                element.style.opacity = '1';
+            });
+        },
+        
+        fadeOut(element, duration = 300) {
+            element.style.transition = `opacity ${duration}ms ease`;
+            element.style.opacity = '0';
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, duration);
+        },
+        
+        slideDown(element, duration = 300) {
+            element.style.height = '0';
+            element.style.overflow = 'hidden';
+            element.style.transition = `height ${duration}ms ease`;
+            const targetHeight = element.scrollHeight + 'px';
+            requestAnimationFrame(() => {
+                element.style.height = targetHeight;
+            });
+        }
+    },
+    
+    // Color utilities
+    color: {
+        hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        },
+        
+        rgbToHex(r, g, b) {
+            return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        },
+        
+        lighten(color, percent) {
+            const rgb = this.hexToRgb(color);
+            if (!rgb) return color;
+            
+            const factor = 1 + (percent / 100);
+            return this.rgbToHex(
+                Math.min(255, Math.round(rgb.r * factor)),
+                Math.min(255, Math.round(rgb.g * factor)),
+                Math.min(255, Math.round(rgb.b * factor))
+            );
+        }
+    }
+};
+```
+
+## 🔄 Module Loader
+
+### Loading Modules
+```javascript
+// Basic module loading
+const module = await loadModule('./modules/my-module.js');
+
+// Load module with configuration
+const configuredModule = await loadModule('./modules/ui-module.js', {
+    theme: 'dark',
+    autoInit: true
+});
+
+// Load multiple modules
+const modules = await Promise.all([
+    loadModule('./modules/utils.js'),
+    loadModule('./modules/ui-components.js'),
+    loadModule('./modules/data-handler.js')
+]);
+```
+
+### Module Registry
+```javascript
+// Register a module globally
+registerModule('utils', utilsModule);
+registerModule('ui', uiModule);
+
+// Get registered module
+const utils = getModule('utils');
+const formattedText = utils.formatText.capitalize('hello world');
+
+// List all registered modules
+const moduleList = listModules();
+console.log('Available modules:', moduleList);
+
+// Unregister module
+unregisterModule('oldModule');
+```
+
+## 🎯 Plugin System
+
+### Creating a Plugin
+```javascript
+// theme-plugin.js
+export default {
+    name: 'ThemePlugin',
+    version: '1.0.0',
+    type: 'plugin',
+    
+    themes: {
+        light: {
+            backgroundColor: '#ffffff',
+            textColor: '#333333',
+            borderColor: '#dddddd'
+        },
+        dark: {
+            backgroundColor: '#2c3e50',
+            textColor: '#ecf0f1',
+            borderColor: '#34495e'
+        },
+        blue: {
+            backgroundColor: '#3498db',
+            textColor: '#ffffff',
+            borderColor: '#2980b9'
+        }
+    },
+    
+    currentTheme: 'light',
+    
+    init() {
+        this.applyTheme(this.currentTheme);
+        return this;
+    },
+    
+    applyTheme(themeName) {
+        if (!this.themes[themeName]) {
+            console.warn(`Theme '${themeName}' not found`);
+            return;
+        }
+        
+        this.currentTheme = themeName;
+        const theme = this.themes[themeName];
+        
+        // Apply theme to document
+        document.documentElement.style.setProperty('--bg-color', theme.backgroundColor);
+        document.documentElement.style.setProperty('--text-color', theme.textColor);
+        document.documentElement.style.setProperty('--border-color', theme.borderColor);
+        
+        // Emit theme change event
+        this.emitEvent('themeChanged', { theme: themeName, colors: theme });
+    },
+    
+    createThemedElement(config) {
+        const theme = this.themes[this.currentTheme];
+        
+        return new A({
+            ...config,
+            backgroundColor: config.backgroundColor || theme.backgroundColor,
+            color: config.color || theme.textColor,
+            border: config.border || `1px solid ${theme.borderColor}`
+        });
+    },
+    
+    // Event system for plugins
+    listeners: new Map(),
+    
+    on(event, callback) {
+        if (!this.listeners.has(event)) {
+            this.listeners.set(event, []);
+        }
+        this.listeners.get(event).push(callback);
+    },
+    
+    emitEvent(event, data) {
+        if (this.listeners.has(event)) {
+            this.listeners.get(event).forEach(callback => callback(data));
+        }
+    }
+};
+```
+
+### Using Plugins
+```javascript
+// Load and use the theme plugin
+const themePlugin = await loadModule('./plugins/theme-plugin.js');
+themePlugin.init();
+
+// Create themed elements
+const themedCard = themePlugin.createThemedElement({
+    attach: 'body',
+    width: 300, height: 200,
+    text: 'Themed Card',
+    padding: '20px'
+});
+
+// Switch themes
+themePlugin.applyTheme('dark');
+
+// Listen to theme changes
+themePlugin.on('themeChanged', (data) => {
+    console.log('Theme changed to:', data.theme);
 });
 ```
 
----
+## 🔧 Advanced Module Features
 
-## Instance Methods
-
-### Movement & Positioning
-
-#### `moveTo(x, y)`
-
-Moves the module to the specified coordinates and updates all connected lines.
-
-- **x** `number` - X coordinate in pixels
-- **y** `number` - Y coordinate in pixels
-
+### Module with Dependencies
 ```javascript
-module.moveTo(300, 150);
+// advanced-module.js
+export default {
+    name: 'AdvancedModule',
+    version: '2.0.0',
+    dependencies: ['utils', 'ui-components'],
+    
+    async init() {
+        // Load dependencies
+        this.utils = await loadModule('./modules/utils.js');
+        this.ui = await loadModule('./modules/ui-components.js');
+        
+        this._setupModule();
+        return this;
+    },
+    
+    _setupModule() {
+        this.initialized = true;
+        console.log('Advanced module ready with dependencies');
+    },
+    
+    createAdvancedCard(config) {
+        // Use utility functions
+        const title = this.utils.formatText.capitalize(config.title || 'untitled');
+        
+        // Use UI components
+        return this.ui.createCard({
+            ...config,
+            title: title,
+            content: this.utils.formatText.truncate(config.content || '', 100)
+        });
+    }
+};
 ```
 
-#### `setDraggable(draggable)`
-
-Enables or disables module dragging.
-
-- **draggable** `boolean` - Whether the module should be draggable
-
+### Hot-Reloadable Module
 ```javascript
-module.setDraggable(false); // Disable dragging
+// hot-reload-module.js
+export default {
+    name: 'HotReloadModule',
+    version: '1.0.0',
+    
+    init() {
+        this.setupHotReload();
+        return this;
+    },
+    
+    setupHotReload() {
+        if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+            // Development mode hot reload
+            this.watchForChanges();
+        }
+    },
+    
+    watchForChanges() {
+        // Simple file watcher for development
+        setInterval(async () => {
+            try {
+                const response = await fetch(`${window.location.origin}/api/module-version`);
+                const { version } = await response.json();
+                
+                if (version !== this.version) {
+                    console.log('Module update detected, reloading...');
+                    await this.reload();
+                }
+            } catch (error) {
+                // Silently fail in case server is not available
+            }
+        }, 1000);
+    },
+    
+    async reload() {
+        this.destroy();
+        const freshModule = await loadModule('./modules/hot-reload-module.js?' + Date.now());
+        Object.assign(this, freshModule);
+        this.init();
+    },
+    
+    destroy() {
+        // Cleanup before reload
+        console.log('Cleaning up module before reload');
+    }
+};
 ```
 
-### Connector Management
-
-#### `addInput(config)`
-
-Dynamically adds a new input connector to the module.
-
-- **config** `ConnectorConfig` - Input connector configuration
+## 🎨 Complete Example: Dashboard Module
 
 ```javascript
-module.addInput({
-  id: 'newInput',
-  name: 'New Input',
-  type: 'control'
-});
-```
-
-#### `addOutput(config)`
-
-Dynamically adds a new output connector to the module.
-
-- **config** `ConnectorConfig` - Output connector configuration
-
-```javascript
-module.addOutput({
-  id: 'newOutput',
-  name: 'New Output',
-  type: 'data'
-});
-```
-
-#### `removeInput(connectorId)`
-
-Removes an input connector and all its connections.
-
-- **connectorId** `string` - ID of the connector to remove
-
-```javascript
-module.removeInput('oldInput');
-```
-
-#### `removeOutput(connectorId)`
-
-Removes an output connector and all its connections.
-
-- **connectorId** `string` - ID of the connector to remove
-
-```javascript
-module.removeOutput('oldOutput');
-```
-
-### Connection Management
-
-#### `connectTo(targetModule, fromConnectorId, toConnectorId)`
-
-Programmatically creates a connection between modules.
-
-- **targetModule** `Module` - Target module to connect to
-- **fromConnectorId** `string` - ID of the output connector on this module
-- **toConnectorId** `string` - ID of the input connector on target module
-- **Returns** `string|null` - Connection ID or null if failed
-
-```javascript
-const connectionId = sourceModule.connectTo(targetModule, 'output1', 'input1');
-```
-
-#### `disconnect(connectionId)`
-
-Removes a specific connection.
-
-- **connectionId** `string` - ID of the connection to remove
-
-```javascript
-module.disconnect('module1.output1_to_module2.input1');
-```
-
-#### `disconnectAll()`
-
-Removes all connections from this module.
-
-```javascript
-module.disconnectAll();
-```
-
-### Selection & State
-
-#### `select()`
-
-Marks the module as selected and applies visual selection styling.
-
-```javascript
-module.select();
-```
-
-#### `deselect()`
-
-Removes selection from the module.
-
-```javascript
-module.deselect();
-```
-
-### Information & Queries
-
-#### `getConnections()`
-
-Returns all connections associated with this module.
-
-- **Returns** `Array<Connection>` - Array of connection objects
-
-```javascript
-const connections = module.getConnections();
-```
-
-#### `getInputs()`
-
-Returns a copy of all input connectors.
-
-- **Returns** `Array<ConnectorConfig>` - Array of input configurations
-
-```javascript
-const inputs = module.getInputs();
-```
-
-#### `getOutputs()`
-
-Returns a copy of all output connectors.
-
-- **Returns** `Array<ConnectorConfig>` - Array of output configurations
-
-```javascript
-const outputs = module.getOutputs();
-```
-
-### Lifecycle
-
-#### `destroy()`
-
-Removes the module, all its connections, and cleans up resources.
-
-```javascript
-module.destroy();
-```
-
----
-
-## Static Methods
-
-### `Module.getModule(id)`
-
-Retrieves a module by its ID.
-
-- **id** `string` - Module ID
-- **Returns** `Module|undefined` - Module instance or undefined
-
-```javascript
-const module = Module.getModule('audio_mixer_1');
-```
-
-### `Module.getAllModules()`
-
-Returns all active modules.
-
-- **Returns** `Array<Module>` - Array of all module instances
-
-```javascript
-const allModules = Module.getAllModules();
-```
-
-### `Module.getAllConnections()`
-
-Returns all active connections across all modules.
-
-- **Returns** `Array<Connection>` - Array of all connection objects
-
-```javascript
-const allConnections = Module.getAllConnections();
-```
-
-### `Module.clearAll()`
-
-Destroys all modules and cleans up the entire system.
-
-```javascript
-Module.clearAll(); // Clean slate
-```
-
----
-
-## Event System
-
-### User Interactions
-
-#### Click Interactions
-
-- **Single Click on Connector**: 
-  - If connected: Disconnects all connections from that connector
-  - If not connected: Starts connection process
-  - Second click on valid target: Completes connection
-
-- **Long Press (600ms)**: Opens context menu with options:
-  - Disconnect All
-  - Rename Module
-  - Change Color
-  - Delete Module
-
-#### Drag & Drop
-
-- **Module Dragging**: Click and drag the header to move modules
-- **Connector Dragging**: Click and drag connectors to create connections
-  - Visual feedback with green line following mouse
-  - Valid targets highlighted in green
-  - Cancel with right-click or Escape key
-
-#### Keyboard Shortcuts
-
-- **Escape**: Cancels connection in progress
-- **Escape**: Closes context menu
-
-### Connection Validation
-
-Connections are automatically validated with the following rules:
-
-1. **Different Modules**: Cannot connect module to itself
-2. **Compatible Types**: Output → Input only
-3. **No Duplicates**: Prevents duplicate connections
-4. **Type Compatibility**: Based on connector types (future extensibility)
-
----
-
-## Connector Management
-
-### Connector Types
-
-The system supports three built-in connector types:
-
-#### Audio Connectors
-- **Color**: Red (`#e74c3c`)
-- **Shape**: Circle
-- **Usage**: Audio signal flow
-
-#### Control Connectors
-- **Color**: Blue (`#3498db`)
-- **Shape**: Square
-- **Usage**: Control parameters, automation
-
-#### Data Connectors
-- **Color**: Orange (`#f39c12`)
-- **Shape**: Triangle
-- **Usage**: Generic data flow
-
-### Custom Connector Types
-
-You can define custom connector types in the configuration:
-
-```javascript
-const module = new Module({
-  connectorTypes: {
-    midi: { color: '#9b59b6', shape: 'circle' },
-    video: { color: '#1abc9c', shape: 'square' },
-    custom: { color: '#e67e22', shape: 'triangle' }
-  }
-});
-```
-
-### Visual States
-
-Connectors have different visual states:
-
-- **Default**: Standard appearance
-- **Hover**: Scale up (1.2x) with transition
-- **Connected**: Golden border with glow effect
-- **Dragging**: Scale up (1.3x) with green glow
-- **Valid Drop Target**: Green glow when dragging over
-
----
-
-## Connection System
-
-### Connection Object Structure
-
-```javascript
-{
-  id: 'module1.output1_to_module2.input1',
-  from: {
-    fromModule: Module,     // Source module instance
-    fromConnector: 'output1', // Source connector ID
-    fromType: 'output',     // Connector type
-    fromElement: Element    // DOM element
-  },
-  to: {
-    toModule: Module,       // Target module instance
-    toConnector: 'input1',  // Target connector ID
-    toType: 'input',        // Connector type
-    toElement: Element      // DOM element
-  },
-  element: SVGLineElement   // Visual connection line
-}
-```
-
-### Connection Management
-
-Connections are managed through a global registry (`Module.connections`) that tracks all active connections. Each module maintains a local set of connection IDs for quick lookup.
-
-### Visual Representation
-
-Connections are rendered as SVG lines with:
-- **Color**: Blue (`#3498db`)
-- **Width**: 2px
-- **Style**: Round line caps
-- **Updates**: Automatically repositioned when modules move
-
----
-
-## Styling & Theming
-
-### CSS Classes
-
-The module system uses structured CSS classes for easy styling:
-
-```css
-.squirrel-module {
-  /* Main module container */
-}
-
-.module-header {
-  /* Module title header */
-}
-
-.module-content {
-  /* Content area */
-}
-
-.module-connector {
-  /* Base connector styling */
-}
-
-.module-input {
-  /* Input-specific styling */
-}
-
-.module-output {
-  /* Output-specific styling */
-}
-```
-
-### Custom Themes
-
-You can create custom themes by providing style overrides:
-
-```javascript
-const darkTheme = {
-  backgroundColor: '#1a1a1a',
-  border: '2px solid #333',
-  color: '#fff'
+// dashboard-module.js
+export default {
+    name: 'Dashboard',
+    version: '1.0.0',
+    dependencies: ['ui-components', 'utils'],
+    
+    widgets: new Map(),
+    
+    async init(containerSelector = 'body') {
+        this.container = containerSelector;
+        this.ui = await loadModule('./modules/ui-components.js');
+        this.utils = await loadModule('./modules/utils.js');
+        
+        this.createDashboard();
+        return this;
+    },
+    
+    createDashboard() {
+        this.dashboardContainer = new A({
+            attach: this.container,
+            id: 'dashboard',
+            width: '100%',
+            height: '100vh',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: '20px',
+            padding: '20px',
+            backgroundColor: '#f8f9fa'
+        });
+    },
+    
+    addWidget(config) {
+        const widget = this.ui.createCard({
+            attach: this.dashboardContainer,
+            ...config,
+            id: config.id || `widget_${Date.now()}`
+        });
+        
+        this.widgets.set(widget.id, widget);
+        return widget;
+    },
+    
+    removeWidget(widgetId) {
+        const widget = this.widgets.get(widgetId);
+        if (widget) {
+            widget.getElement().remove();
+            this.widgets.delete(widgetId);
+        }
+    },
+    
+    createStatsWidget(title, value, change) {
+        return this.addWidget({
+            title: title,
+            content: `
+                <div style="text-align: center;">
+                    <div style="font-size: 2rem; font-weight: bold; color: #2c3e50;">${value}</div>
+                    <div style="color: ${change >= 0 ? '#27ae60' : '#e74c3c'};">
+                        ${change >= 0 ? '↑' : '↓'} ${Math.abs(change)}%
+                    </div>
+                </div>
+            `,
+            height: 150
+        });
+    },
+    
+    createChartWidget(title, data) {
+        const chartContainer = this.addWidget({
+            title: title,
+            height: 300
+        });
+        
+        // Simple bar chart visualization
+        const chartElement = new A({
+            attach: chartContainer,
+            display: 'flex',
+            alignItems: 'flex-end',
+            height: '200px',
+            padding: '20px',
+            gap: '5px'
+        });
+        
+        data.forEach((value, index) => {
+            new A({
+                attach: chartElement,
+                width: '30px',
+                height: `${(value / Math.max(...data)) * 100}%`,
+                backgroundColor: `hsl(${index * 30}, 70%, 50%)`,
+                title: `Value: ${value}`
+            });
+        });
+        
+        return chartContainer;
+    }
 };
 
-const module = new Module({
-  style: darkTheme
-});
+// Usage example
+(async () => {
+    const dashboard = await loadModule('./modules/dashboard-module.js');
+    await dashboard.init('#app');
+    
+    // Add some widgets
+    dashboard.createStatsWidget('Total Users', '1,234', 12.5);
+    dashboard.createStatsWidget('Revenue', '$45,678', -3.2);
+    dashboard.createChartWidget('Monthly Sales', [120, 150, 180, 200, 165, 190]);
+})();
 ```
-
-### Grid System
-
-Enable grid snapping for precise module positioning:
-
-```javascript
-const module = new Module({
-  grid: {
-    enabled: true,
-    size: 25 // 25px grid
-  }
-});
-```
-
----
-
-## Examples
-
-### Basic Audio Mixer
-
-```javascript
-const mixer = new Module({
-  name: 'Audio Mixer',
-  x: 100,
-  y: 100,
-  inputs: [
-    { id: 'ch1', name: 'Channel 1', type: 'audio' },
-    { id: 'ch2', name: 'Channel 2', type: 'audio' },
-    { id: 'volume', name: 'Master Volume', type: 'control' }
-  ],
-  outputs: [
-    { id: 'master', name: 'Master Out', type: 'audio' }
-  ]
-});
-```
-
-### Synthesizer Module
-
-```javascript
-const synth = new Module({
-  name: 'Synthesizer',
-  x: 400,
-  y: 150,
-  width: 300,
-  height: 200,
-  inputs: [
-    { id: 'freq', name: 'Frequency', type: 'control' },
-    { id: 'amp', name: 'Amplitude', type: 'control' },
-    { id: 'gate', name: 'Gate', type: 'control' }
-  ],
-  outputs: [
-    { id: 'audio', name: 'Audio Out', type: 'audio' },
-    { id: 'env', name: 'Envelope', type: 'control' }
-  ],
-  style: {
-    backgroundColor: '#8e44ad'
-  }
-});
-```
-
-### Complex Processing Module
-
-```javascript
-const processor = new Module({
-  name: 'Signal Processor',
-  x: 250,
-  y: 300,
-  width: 280,
-  height: 160,
-  inputs: [
-    { id: 'audioIn', name: 'Audio In', type: 'audio' },
-    { id: 'dry_wet', name: 'Dry/Wet', type: 'control' },
-    { id: 'feedback', name: 'Feedback', type: 'control' }
-  ],
-  outputs: [
-    { id: 'audioOut', name: 'Processed Out', type: 'audio' },
-    { id: 'sidechain', name: 'Sidechain', type: 'audio' }
-  ],
-  callbacks: {
-    onConnect: (from, fromConn, to, toConn) => {
-      console.log(`Audio routed: ${from.name} → ${to.name}`);
-    },
-    onMove: (module, x, y) => {
-      console.log(`${module.name} moved to (${x}, ${y})`);
-    }
-  }
-});
-```
-
-### Programmatic Connections
-
-```javascript
-// Create connections between modules
-const connection1 = synth.connectTo(mixer, 'audio', 'ch1');
-const connection2 = processor.connectTo(mixer, 'audioOut', 'ch2');
-
-// Query connections
-console.log('Synth connections:', synth.getConnections());
-console.log('All connections:', Module.getAllConnections());
-
-// Disconnect specific connection
-mixer.disconnect(connection1);
-
-// Clean up everything
-Module.clearAll();
-```
-
----
-
-## Browser Compatibility
-
-- **Chrome**: 70+
-- **Firefox**: 65+
-- **Safari**: 12+
-- **Edge**: 79+
-
-## Dependencies
-
-- No external dependencies
-- Uses modern ES6+ features
-- Requires SVG support for connection lines
-- Uses CSS transforms and transitions
-
-## Performance Notes
-
-- Connection lines update only when modules move
-- Event delegation used for connector interactions
-- Efficient DOM manipulation with minimal reflows
-- Memory cleanup on module destruction
-
-## License
-
-Part of the Squirrel Framework - See project license for details.
