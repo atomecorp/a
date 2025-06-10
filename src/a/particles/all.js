@@ -62,7 +62,7 @@ function initOptimizedParticles() {
 
     // === POSITION PARTICLES ===
     ParticleFactory.createCSSProperties([
-        'position', 'top', 'right', 'bottom', 'left', 'zIndex'
+        'position', 'top', 'right', 'bottom', 'left', 
     ], 'position', true);
 
     // Custom position mapping (x → left, y → top)

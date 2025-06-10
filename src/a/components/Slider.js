@@ -19,6 +19,7 @@ class Slider {
             step: 1,
             value: 50,
             type: 'horizontal', // 'horizontal', 'vertical', 'circular'
+            zIndex: 1, // Valeur par défaut pour le z-index
             
             // ===== NOUVELLE API DE STYLING AVANCÉ =====
             grip: {
@@ -199,6 +200,7 @@ class Slider {
             y: this.config.y,
             width: this.config.width,
             height: this.config.height,
+            zIndex: this.config.zIndex, // Ajouter le zIndex
             // Utiliser une couleur de base pour éviter les conflits avec la particle backgroundColor
             backgroundColor: '#ffffff', // Couleur temporaire
             border: this.config.support.border,
@@ -867,6 +869,7 @@ class Slider {
             y: this.config.y,
             width: size,
             height: size,
+            zIndex: this.config.zIndex, // Ajouter le zIndex
             backgroundColor: this.config.colors.container,
             smooth: 12,
             padding: 10,
