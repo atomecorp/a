@@ -19,12 +19,12 @@ async function loadWaveSurfer() {
     
     try {
         // Load WaveSurfer v7 ES module
-        const WaveSurferModule = await import('../../../js/wavesurfer-v7/core/wavesurfer.esm.js');
+        const WaveSurferModule = await import('../../js/wavesurfer-v7/core/wavesurfer.esm.js');
         WaveSurferLib = WaveSurferModule.default;
         
         // Load plugin loader for v7
         try {
-            const LoaderModule = await import('../../../js/wavesurfer-v7/wavesurfer-v7-loader.js');
+            const LoaderModule = await import('../../js/wavesurfer-v7/wavesurfer-v7-loader.js');
             PluginLoader = LoaderModule.default || LoaderModule.WaveSurferV7Loader;
             if (PluginLoader && typeof PluginLoader === 'function') {
                 PluginLoader = new PluginLoader();
@@ -321,7 +321,7 @@ class WaveSurfer extends EventTarget {
         // Load all required plugins for v7
         for (const pluginName of pluginsToLoad) {
             try {
-                const pluginModule = await import(`../../../js/wavesurfer-v7/plugins/${pluginName}.esm.js`);
+                const pluginModule = await import(`../../js/wavesurfer-v7/plugins/${pluginName}.esm.js`);
                 this.plugins.set(pluginName, pluginModule.default);
                 console.log(`✅ Plugin ${pluginName} loaded for v7`);
             } catch (error) {

@@ -478,11 +478,82 @@ window.optimizeBatch = (els) => window.SQUIRREL_OPTIMIZATIONS.optimizeBatch(els)
                 }
             }
 
+            // 🎯 ENHANCED: Smart property handling for DOM properties and events
+            
+            // Handle event handlers (onclick, onmouseover, etc.)
+            if (key.startsWith('on') && typeof value === 'function') {
+                this.html_object[key] = value;
+                return;
+            }
+            
+            // Handle event handlers as strings (inline)
+            if (key.startsWith('on') && typeof value === 'string') {
+                this.html_object.setAttribute(key, value);
+                return;
+            }
+
+            // Handle contentEditable specifically
+            if (key === 'contentEditable') {
+                this.html_object.contentEditable = value;
+                return;
+            }
+
+            // Handle draggable specifically
+            if (key === 'draggable') {
+                this.html_object.draggable = Boolean(value);
+                return;
+            }
+
+            // Handle common DOM properties
+            const domProperties = new Set([
+                'innerHTML', 'innerText', 'textContent', 'className', 'id', 'title', 
+                'tabIndex', 'hidden', 'lang', 'dir', 'accessKey', 'spellcheck'
+            ]);
+            
+            if (domProperties.has(key)) {
+                this.html_object[key] = value;
+                return;
+            }
+
+            // Handle CSS properties (including zIndex, position, etc.)
+            const cssProperties = new Set([
+                'zIndex', 'position', 'display', 'visibility', 'overflow', 'cursor',
+                'userSelect', 'pointerEvents', 'boxSizing', 'outline'
+            ]);
+            
+            if (cssProperties.has(key) || key.includes('transform') || key.includes('transition')) {
+                if (typeof value === 'number' && (key === 'zIndex' || key === 'tabIndex')) {
+                    styleUpdates[key] = value.toString();
+                } else if (typeof value === 'number') {
+                    styleUpdates[key] = _formatSize(value);
+                } else {
+                    styleUpdates[key] = value;
+                }
+                return;
+            }
+
+            // Handle data-* attributes
+            if (key.startsWith('data-')) {
+                this.html_object.setAttribute(key, value);
+                return;
+            }
+
+            // Handle aria-* attributes
+            if (key.startsWith('aria-')) {
+                this.html_object.setAttribute(key, value);
+                return;
+            }
+
             // Generic handling for non-particle properties
             if (typeof value === 'number') {
                 styleUpdates[key] = _formatSize(value);
             } else if (typeof value === 'string') {
-                styleUpdates[key] = value;
+                // Try setting as CSS property first, then as attribute if it fails
+                try {
+                    styleUpdates[key] = value;
+                } catch (e) {
+                    this.html_object.setAttribute(key, value);
+                }
             } else if (Array.isArray(value)) {
                 datasetUpdates[key] = value.join(',');
             } else if (value instanceof HTMLElement) {
