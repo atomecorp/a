@@ -1,7 +1,4 @@
 // Import des composants
-import Module from '../../a/components/Module.js';
-
-console.log('🔧 Initialisation des modules et matrices de test...');
 
 // Exemple 1: Module Synthétiseur
 const synthesizer = new Module({

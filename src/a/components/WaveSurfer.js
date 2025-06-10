@@ -3,9 +3,9 @@
  * 
  * Component for creating interactive audio waveform visualizations
  * with playback controls, regions, and audio analysis features.
- * Compatible with WaveSurfer.js v6.x for complete offline functionality.
+ * Compatible with WaveSurfer.js v7.x for complete offline functionality.
  * 
- * @version 3.0.0 - Offline Compatible
+ * @version 3.0.0 - Offline Compatible (v7)
  * @author Squirrel Framework Team
  */
 
@@ -18,41 +18,28 @@ async function loadWaveSurfer() {
     if (WaveSurferLib) return WaveSurferLib;
     
     try {
-        // Load v6.x plugin loader first
-        if (!PluginLoader && !window.WaveSurferPluginLoader) {
-            const loaderScript = document.createElement('script');
-            loaderScript.src = './js/wavesurfer-v6/wavesurfer-v6-plugins.js';
-            loaderScript.type = 'text/javascript';
-            document.head.appendChild(loaderScript);
-            
-            await new Promise((resolve, reject) => {
-                loaderScript.onload = resolve;
-                loaderScript.onerror = reject;
-            });
+        // Load WaveSurfer v7 ES module
+        const WaveSurferModule = await import('../../../js/wavesurfer-v7/core/wavesurfer.esm.js');
+        WaveSurferLib = WaveSurferModule.default;
+        
+        // Load plugin loader for v7
+        try {
+            const LoaderModule = await import('../../../js/wavesurfer-v7/wavesurfer-v7-loader.js');
+            PluginLoader = LoaderModule.default || LoaderModule.WaveSurferV7Loader;
+            if (PluginLoader && typeof PluginLoader === 'function') {
+                PluginLoader = new PluginLoader();
+            }
+        } catch (loaderError) {
+            console.warn('⚠️ Plugin loader not available, using basic WaveSurfer:', loaderError);
+            PluginLoader = null;
         }
         
-        PluginLoader = window.WaveSurferPluginLoader;
-        
-        // Load WaveSurfer v6.x from local file (UMD format)
-        const script = document.createElement('script');
-        script.src = './js/wavesurfer-v6/core/wavesurfer.min.js';
-        script.type = 'text/javascript';
-        document.head.appendChild(script);
-        
-        await new Promise((resolve, reject) => {
-            script.onload = () => {
-                WaveSurferLib = window.WaveSurfer;
-                resolve(WaveSurferLib);
-            };
-            script.onerror = reject;
-        });
-        
-        console.log('🎵 WaveSurfer.js v6.6.4 loaded successfully from local file (offline compatible)');
+        console.log('🎵 WaveSurfer.js v7.9.5 loaded successfully (ES modules)');
         return WaveSurferLib;
         
     } catch (error) {
-        console.error('❌ Failed to load WaveSurfer.js locally (offline mode):', error);
-        throw new Error('WaveSurfer.js could not be loaded. Ensure wavesurfer.min.js is available in ./js/ directory');
+        console.error('❌ Failed to load WaveSurfer.js v7:', error);
+        throw new Error('WaveSurfer.js v7 could not be loaded. Ensure wavesurfer files are available in ./js/wavesurfer-v7/ directory');
     }
 }
 
@@ -315,8 +302,6 @@ class WaveSurfer extends EventTarget {
     }
     
     async _loadRequiredPlugins() {
-        if (!PluginLoader) return;
-        
         // Determine which plugins to load based on configuration
         const pluginsToLoad = new Set();
         
@@ -333,10 +318,12 @@ class WaveSurfer extends EventTarget {
         // Add explicitly enabled plugins
         this.config.enabledPlugins.forEach(name => pluginsToLoad.add(name));
         
-        // Load all required plugins
+        // Load all required plugins for v7
         for (const pluginName of pluginsToLoad) {
             try {
-                await PluginLoader.loadPlugin(pluginName);
+                const pluginModule = await import(`../../../js/wavesurfer-v7/plugins/${pluginName}.esm.js`);
+                this.plugins.set(pluginName, pluginModule.default);
+                console.log(`✅ Plugin ${pluginName} loaded for v7`);
             } catch (error) {
                 console.warn(`⚠️ Failed to load plugin ${pluginName}:`, error);
             }
@@ -344,89 +331,87 @@ class WaveSurfer extends EventTarget {
     }
     
     async _addEnabledPlugins(plugins) {
-        if (!PluginLoader) return;
-        
         // Add regions plugin
-        if (this.config.regions.enabled && PluginLoader.isPluginLoaded('regions')) {
-            const RegionsPlugin = PluginLoader.getPlugin('regions');
+        if (this.config.regions.enabled && this.plugins.has('regions')) {
+            const RegionsPlugin = this.plugins.get('regions');
             if (RegionsPlugin) {
                 plugins.push(RegionsPlugin.create({
                     dragSelection: this.config.regions.dragSelection
                 }));
-                console.log('🎯 Regions plugin ajouté');
+                console.log('🎯 Regions plugin ajouté (v7)');
             }
         }
         
         // Add timeline plugin
-        if (this.config.timeline.enabled && PluginLoader.isPluginLoaded('timeline')) {
-            const TimelinePlugin = PluginLoader.getPlugin('timeline');
+        if (this.config.timeline.enabled && this.plugins.has('timeline')) {
+            const TimelinePlugin = this.plugins.get('timeline');
             if (TimelinePlugin) {
                 plugins.push(TimelinePlugin.create({
                     height: this.config.timeline.height
                 }));
-                console.log('⏰ Timeline plugin ajouté');
+                console.log('⏰ Timeline plugin ajouté (v7)');
             }
         }
         
         // Add minimap plugin
-        if (this.config.minimap.enabled && PluginLoader.isPluginLoaded('minimap')) {
-            const MinimapPlugin = PluginLoader.getPlugin('minimap');
+        if (this.config.minimap.enabled && this.plugins.has('minimap')) {
+            const MinimapPlugin = this.plugins.get('minimap');
             if (MinimapPlugin) {
                 plugins.push(MinimapPlugin.create({
                     height: this.config.minimap.height
                 }));
-                console.log('🗺️ Minimap plugin ajouté');
+                console.log('🗺️ Minimap plugin ajouté (v7)');
             }
         }
         
         // Add zoom plugin
-        if (this.config.zoom.enabled && PluginLoader.isPluginLoaded('zoom')) {
-            const ZoomPlugin = PluginLoader.getPlugin('zoom');
+        if (this.config.zoom.enabled && this.plugins.has('zoom')) {
+            const ZoomPlugin = this.plugins.get('zoom');
             if (ZoomPlugin) {
                 plugins.push(ZoomPlugin.create({
                     scale: this.config.zoom.scale
                 }));
-                console.log('🔍 Zoom plugin ajouté');
+                console.log('🔍 Zoom plugin ajouté (v7)');
             }
         }
         
         // Add hover plugin
-        if (this.config.hover.enabled && PluginLoader.isPluginLoaded('hover')) {
-            const HoverPlugin = PluginLoader.getPlugin('hover');
+        if (this.config.hover.enabled && this.plugins.has('hover')) {
+            const HoverPlugin = this.plugins.get('hover');
             if (HoverPlugin) {
                 plugins.push(HoverPlugin.create({
                     formatTimeCallback: this.config.hover.formatTimeCallback
                 }));
-                console.log('👆 Hover plugin ajouté');
+                console.log('👆 Hover plugin ajouté (v7)');
             }
         }
         
         // Add spectrogram plugin
-        if (this.config.spectrogram.enabled && PluginLoader.isPluginLoaded('spectrogram')) {
-            const SpectrogramPlugin = PluginLoader.getPlugin('spectrogram');
+        if (this.config.spectrogram.enabled && this.plugins.has('spectrogram')) {
+            const SpectrogramPlugin = this.plugins.get('spectrogram');
             if (SpectrogramPlugin) {
                 plugins.push(SpectrogramPlugin.create({
                     height: this.config.spectrogram.height
                 }));
-                console.log('📊 Spectrogram plugin ajouté');
+                console.log('📊 Spectrogram plugin ajouté (v7)');
             }
         }
         
         // Add record plugin
-        if (this.config.record.enabled && PluginLoader.isPluginLoaded('record')) {
-            const RecordPlugin = PluginLoader.getPlugin('record');
+        if (this.config.record.enabled && this.plugins.has('record')) {
+            const RecordPlugin = this.plugins.get('record');
             if (RecordPlugin) {
                 plugins.push(RecordPlugin.create(this.config.record));
-                console.log('🎙️ Record plugin ajouté');
+                console.log('🎙️ Record plugin ajouté (v7)');
             }
         }
         
         // Add envelope plugin
-        if (this.config.envelope.enabled && PluginLoader.isPluginLoaded('envelope')) {
-            const EnvelopePlugin = PluginLoader.getPlugin('envelope');
+        if (this.config.envelope.enabled && this.plugins.has('envelope')) {
+            const EnvelopePlugin = this.plugins.get('envelope');
             if (EnvelopePlugin) {
                 plugins.push(EnvelopePlugin.create(this.config.envelope));
-                console.log('📈 Envelope plugin ajouté');
+                console.log('📈 Envelope plugin ajouté (v7)');
             }
         }
     }

@@ -5,18 +5,6 @@
  * Utilise l'API native ES6 modules pour Tauri
  */
 
-// Import de WaveSurfer.js v7.9.5 et tous les plugins
-import WaveSurfer from '../js/wavesurfer-v7/core/wavesurfer.esm.js';
-import RegionsPlugin from '../js/wavesurfer-v7/plugins/regions.esm.js';
-import TimelinePlugin from '../js/wavesurfer-v7/plugins/timeline.esm.js';
-import MinimapPlugin from '../js/wavesurfer-v7/plugins/minimap.esm.js';
-import ZoomPlugin from '../js/wavesurfer-v7/plugins/zoom.esm.js';
-import HoverPlugin from '../js/wavesurfer-v7/plugins/hover.esm.js';
-import SpectrogramPlugin from '../js/wavesurfer-v7/plugins/spectrogram.esm.js';
-import RecordPlugin from '../js/wavesurfer-v7/plugins/record.esm.js';
-import EnvelopePlugin from '../js/wavesurfer-v7/plugins/envelope.esm.js';
-
-console.log('🎵 WaveSurfer.js v7.9.5 - Initialisation avec tous les plugins...');
 
 // ==========================================
 // Example 1: Professional Audio Workstation

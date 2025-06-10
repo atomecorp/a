@@ -185,5 +185,47 @@ export default squirrel;
 import Module from '../a/components/Module.js';
 import Slider from '../a/components/Slider.js';
 import Matrix from '../a/components/Matrix.js';
-import WaveSurfer from '../a/components/WaveSurfer.js';
+import SquirrelWaveSurfer from '../a/components/WaveSurfer.js';
+
+// Import de WaveSurfer.js v7.9.5 et tous les plugins
+import WaveSurferLib from './wavesurfer-v7/core/wavesurfer.esm.js';
+import RegionsPlugin from './wavesurfer-v7/plugins/regions.esm.js';
+import TimelinePlugin from './wavesurfer-v7/plugins/timeline.esm.js';
+import MinimapPlugin from './wavesurfer-v7/plugins/minimap.esm.js';
+import ZoomPlugin from './wavesurfer-v7/plugins/zoom.esm.js';
+import HoverPlugin from './wavesurfer-v7/plugins/hover.esm.js';
+import SpectrogramPlugin from './wavesurfer-v7/plugins/spectrogram.esm.js';
+import RecordPlugin from './wavesurfer-v7/plugins/record.esm.js';
+import EnvelopePlugin from './wavesurfer-v7/plugins/envelope.esm.js';
+
+// Exposer les composants dans le scope global pour éviter les imports manuels
+window.Module = Module;
+window.Slider = Slider;
+window.Matrix = Matrix;
+window.SquirrelWaveSurfer = SquirrelWaveSurfer; // Nom différent pour éviter le conflit
+window.WaveSurferComponent = SquirrelWaveSurfer; // Alias plus explicite
+
+// Exposer WaveSurfer et ses plugins globalement (avec préfixes pour éviter les conflits)
+window.WaveSurfer = WaveSurferLib; // Core WaveSurfer
+window.WaveSurferRegions = RegionsPlugin;
+window.WaveSurferTimeline = TimelinePlugin;
+window.WaveSurferMinimap = MinimapPlugin;
+window.WaveSurferZoom = ZoomPlugin;
+window.WaveSurferHover = HoverPlugin;
+window.WaveSurferSpectrogram = SpectrogramPlugin;
+window.WaveSurferRecord = RecordPlugin;
+window.WaveSurferEnvelope = EnvelopePlugin;
+
+// Alias groupés pour faciliter l'utilisation
+window.WaveSurferPlugins = {
+    Regions: RegionsPlugin,
+    Timeline: TimelinePlugin,
+    Minimap: MinimapPlugin,
+    Zoom: ZoomPlugin,
+    Hover: HoverPlugin,
+    Spectrogram: SpectrogramPlugin,
+    Record: RecordPlugin,
+    Envelope: EnvelopePlugin
+};
+
 

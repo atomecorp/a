@@ -1,5 +1,4 @@
-// Import des composants
-import Matrix from '../a/components/Matrix.js';
+
 
 
 // ========================================

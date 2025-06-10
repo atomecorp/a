@@ -1,5 +1,4 @@
 // Import de la classe Slider paramétrée
-import Slider from '../../a/components/Slider.js';
 
 // Exemple 1: Slider horizontal classique
 const volumeSlider = new Slider({
