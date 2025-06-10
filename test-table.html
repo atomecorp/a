@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Table Component</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        #test-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #e7f3ff;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Table Component</h1>
+    
+    <div class="controls">
+        <h3>Contrôles de Test</h3>
+        <button class="button" onclick="testFilter()">Filtrer (Salaire > 50000)</button>
+        <button class="button" onclick="testClearFilter()">Effacer Filtre</button>
+        <button class="button" onclick="testSearch()">Rechercher "Alice"</button>
+        <button class="button" onclick="testSort()">Trier par Salaire (DESC)</button>
+        <button class="button" onclick="testReset()">Tout Réinitialiser</button>
+        <button class="button" onclick="testGetData()">Obtenir Données Filtrées</button>
+        <button class="button" onclick="testAddRow()">Ajouter Ligne</button>
+        
+        <div id="test-info">
+            <strong>Statut:</strong> <span id="status">Prêt</span><br>
+            <strong>Lignes filtrées:</strong> <span id="filtered-count">-</span><br>
+            <strong>Dernière action:</strong> <span id="last-action">Aucune</span>
+        </div>
+    </div>
+
+    <!-- Inclusion des scripts -->
+    <script src="/src/a/a.js"></script>
+    <script src="/src/a/components/Table.js"></script>
+    
+    <script>
+        // Données de test
+        const testData = [
+            { id: 1, name: 'Alice Martin', position: 'Développeur', salary: 60000, department: 'IT' },
+            { id: 2, name: 'Bob Dupont', position: 'Manager', salary: 75000, department: 'IT' },
+            { id: 3, name: 'Claire Moreau', position: 'Designer', salary: 45000, department: 'Marketing' },
+            { id: 4, name: 'David Leroy', position: 'Analyst', salary: 55000, department: 'Finance' },
+            { id: 5, name: 'Emma Bernard', position: 'Tester', salary: 48000, department: 'IT' }
+        ];
+
+        // Créer la table de test
+        let testTable;
+        
+        function initTable() {
+            testTable = new Table({
+                attach: 'body',
+                id: 'test_table',
+                x: 20, y: 200,
+                width: 900, height: 400,
+                columns: [
+                    { key: 'id', title: 'ID', width: 60, sortable: true },
+                    { key: 'name', title: 'Nom', width: 180, sortable: true, editable: true },
+                    { key: 'position', title: 'Poste', width: 120, sortable: true },
+                    { key: 'salary', title: 'Salaire', width: 100, sortable: true, 
+                      render: (value) => `€${value.toLocaleString()}` },
+                    { key: 'department', title: 'Département', width: 120, sortable: true }
+                ],
+                data: testData,
+                sortable: true,
+                searchable: true,
+                selectable: true,
+                pagination: {
+                    enabled: true,
+                    pageSize: 10
+                },
+                callbacks: {
+                    onFilter: (data) => updateStatus(`Filtrage appliqué (${data.length} lignes)`),
+                    onRowClick: (row) => updateStatus(`Ligne cliquée: ${row.name}`),
+                    onSort: (column, direction) => updateStatus(`Tri: ${column} ${direction}`)
+                }
+            });
+            
+            updateStatus('Table initialisée avec succès');
+            updateFilteredCount();
+        }
+
+        function testFilter() {
+            try {
+                testTable.filter(row => row.salary > 50000);
+                updateStatus('Filtre appliqué: salaire > 50000');
+                updateFilteredCount();
+                updateLastAction('Filtrage par salaire > 50000');
+            } catch (error) {
+                updateStatus(`ERREUR: ${error.message}`);
+            }
+        }
+
+        function testClearFilter() {
+            try {
+                testTable.filter(null);
+                updateStatus('Filtre effacé');
+                updateFilteredCount();
+                updateLastAction('Effacement du filtre');
+            } catch (error) {
+                updateStatus(`ERREUR: ${error.message}`);
+            }
+        }
+
+        function testSearch() {
+            try {
+                testTable.search('Alice');
+                updateStatus('Recherche "Alice" appliquée');
+                updateFilteredCount();
+                updateLastAction('Recherche "Alice"');
+            } catch (error) {
+                updateStatus(`ERREUR: ${error.message}`);
+            }
+        }
+
+        function testSort() {
+            try {
+                testTable.sort('salary', 'desc');
+                updateStatus('Tri par salaire (DESC) appliqué');
+                updateFilteredCount();
+                updateLastAction('Tri par salaire décroissant');
+            } catch (error) {
+                updateStatus(`ERREUR: ${error.message}`);
+            }
+        }
+
+        function testReset() {
+            try {
+                testTable.reset();
+                updateStatus('Table réinitialisée');
+                updateFilteredCount();
+                updateLastAction('Réinitialisation complète');
+            } catch (error) {
+                updateStatus(`ERREUR: ${error.message}`);
+            }
+        }
+
+        function testGetData() {
+            try {
+                const filteredData = testTable.getFilteredData();
+                updateStatus(`Données récupérées: ${filteredData.length} lignes`);
+                updateLastAction(`Récupération de ${filteredData.length} lignes`);
+                console.log('Données filtrées:', filteredData);
+            } catch (error) {
+                updateStatus(`ERREUR: ${error.message}`);
+            }
+        }
+
+        function testAddRow() {
+            try {
+                const newRow = {
+                    id: testData.length + 1,
+                    name: 'François Nouveau',
+                    position: 'Développeur',
+                    salary: 58000,
+                    department: 'IT'
+                };
+                testTable.addRow(newRow);
+                testData.push(newRow);
+                updateStatus('Nouvelle ligne ajoutée');
+                updateFilteredCount();
+                updateLastAction('Ajout d\'une nouvelle ligne');
+            } catch (error) {
+                updateStatus(`ERREUR: ${error.message}`);
+            }
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        function updateFilteredCount() {
+            try {
+                const count = testTable.getFilteredData().length;
+                document.getElementById('filtered-count').textContent = count;
+            } catch (error) {
+                document.getElementById('filtered-count').textContent = 'Erreur';
+            }
+        }
+
+        function updateLastAction(action) {
+            document.getElementById('last-action').textContent = action;
+        }
+
+        // Initialiser quand la page est chargée
+        window.addEventListener('load', () => {
+            setTimeout(initTable, 100); // Petit délai pour s'assurer que tout est chargé
+        });
+    </script>
+</body>
+</html>

@@ -185,6 +185,8 @@ export default squirrel;
 import Module from '../a/components/Module.js';
 import Slider from '../a/components/Slider.js';
 import Matrix from '../a/components/Matrix.js';
+import List from '../a/components/List.js';
+import Table from '../a/components/Table.js';
 import SquirrelWaveSurfer from '../a/components/WaveSurfer.js';
 
 // Import de WaveSurfer.js v7.9.5 et tous les plugins
@@ -202,6 +204,8 @@ import EnvelopePlugin from './wavesurfer-v7/plugins/envelope.esm.js';
 window.Module = Module;
 window.Slider = Slider;
 window.Matrix = Matrix;
+window.List = List;
+window.Table = Table;
 window.SquirrelWaveSurfer = SquirrelWaveSurfer; // Nom différent pour éviter le conflit
 window.WaveSurferComponent = SquirrelWaveSurfer; // Alias plus explicite
 

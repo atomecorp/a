@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Validation Complète - Framework Squirrel</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            background: #fafafa;
+        }
+        
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.pending { background: #fff3cd; color: #856404; }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .btn:hover { transform: translateY(-1px); }
+        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #1e7e34; }
+        
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover { background: #bd2130; }
+        
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-warning:hover { background: #e0a800; }
+        
+        .btn-info { background: #17a2b8; color: white; }
+        .btn-info:hover { background: #117a8b; }
+        
+        .results {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #007bff;
+            min-height: 40px;
+        }
+        
+        .log {
+            font-family: 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            color: #333;
+        }
+        
+        .error-log {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .success-log {
+            color: #28a745;
+        }
+        
+        .table-container {
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .summary-card h4 {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        
+        .summary-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .summary-card.success .value { color: #28a745; }
+        .summary-card.error .value { color: #dc3545; }
+        .summary-card.warning .value { color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Validation Complète</h1>
+        <p class="subtitle">Framework Squirrel - Tests des Composants List et Table</p>
+        
+        <!-- Résumé des tests -->
+        <div class="summary">
+            <div class="summary-card success">
+                <h4>Tests Réussis</h4>
+                <div class="value" id="success-count">0</div>
+            </div>
+            <div class="summary-card error">
+                <h4>Tests Échoués</h4>
+                <div class="value" id="error-count">0</div>
+            </div>
+            <div class="summary-card warning">
+                <h4>Total Tests</h4>
+                <div class="value" id="total-count">0</div>
+            </div>
+            <div class="summary-card">
+                <h4>Temps d'Exécution</h4>
+                <div class="value" id="execution-time">0ms</div>
+            </div>
+        </div>
+
+        <!-- Test du composant Table -->
+        <div class="test-section">
+            <h3>📊 Test Composant Table <span class="status pending" id="table-status">En attente</span></h3>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="runAllTableTests()">🚀 Lancer Tous les Tests</button>
+                <button class="btn btn-success" onclick="testTableFilter()">🔍 Test Filtrage</button>
+                <button class="btn btn-info" onclick="testTableSearch()">🔎 Test Recherche</button>
+                <button class="btn btn-warning" onclick="testTableSort()">⬆️ Test Tri</button>
+                <button class="btn btn-danger" onclick="testTableReset()">🔄 Test Reset</button>
+            </div>
+            
+            <div class="results" id="table-results">
+                <div class="log">Cliquez sur "Lancer Tous les Tests" pour commencer...</div>
+            </div>
+            
+            <div class="table-container" id="table-demo"></div>
+        </div>
+
+        <!-- Test du composant List -->
+        <div class="test-section">
+            <h3>📋 Test Composant List <span class="status pending" id="list-status">En attente</span></h3>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="runAllListTests()">🚀 Lancer Tous les Tests</button>
+                <button class="btn btn-success" onclick="testListFilter()">🔍 Test Filtrage</button>
+                <button class="btn btn-info" onclick="testListSearch()">🔎 Test Recherche</button>
+                <button class="btn btn-warning" onclick="testListSort()">⬆️ Test Tri</button>
+                <button class="btn btn-danger" onclick="testListAdd()">➕ Test Ajout</button>
+            </div>
+            
+            <div class="results" id="list-results">
+                <div class="log">Cliquez sur "Lancer Tous les Tests" pour commencer...</div>
+            </div>
+            
+            <div class="table-container" id="list-demo"></div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/src/a/a.js"></script>
+    <script src="/src/a/components/Table.js"></script>
+    <script src="/src/a/components/List.js"></script>
+    
+    <script>
+        // Variables globales
+        let testTable, testList;
+        let testResults = { success: 0, error: 0, total: 0 };
+        let startTime;
+        
+        // Données de test
+        const tableTestData = [
+            { id: 1, name: 'Alice Martin', position: 'Développeur', salary: 60000, department: 'IT', status: 'Actif' },
+            { id: 2, name: 'Bob Dupont', position: 'Manager', salary: 75000, department: 'IT', status: 'Actif' },
+            { id: 3, name: 'Claire Moreau', position: 'Designer', salary: 45000, department: 'Marketing', status: 'Inactif' },
+            { id: 4, name: 'David Leroy', position: 'Analyst', salary: 55000, department: 'Finance', status: 'Actif' },
+            { id: 5, name: 'Emma Bernard', position: 'Tester', salary: 48000, department: 'IT', status: 'Actif' }
+        ];
+        
+        const listTestData = [
+            { id: 1, text: 'Tâche 1', priority: 'Haute', completed: false },
+            { id: 2, text: 'Tâche 2', priority: 'Moyenne', completed: true },
+            { id: 3, text: 'Tâche 3', priority: 'Basse', completed: false },
+            { id: 4, text: 'Tâche 4', priority: 'Haute', completed: false }
+        ];
+
+        // Utilitaires
+        function log(message, type = 'info', containerId = 'table-results') {
+            const container = document.getElementById(containerId);
+            const logClass = type === 'error' ? 'error-log' : type === 'success' ? 'success-log' : '';
+            container.innerHTML += `<div class="log ${logClass}">[${new Date().toLocaleTimeString()}] ${message}</div>`;
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function updateStatus(statusId, status, message) {
+            const element = document.getElementById(statusId);
+            element.className = `status ${status}`;
+            element.textContent = message;
+        }
+        
+        function updateCounters() {
+            document.getElementById('success-count').textContent = testResults.success;
+            document.getElementById('error-count').textContent = testResults.error;
+            document.getElementById('total-count').textContent = testResults.total;
+            document.getElementById('execution-time').textContent = `${Date.now() - startTime}ms`;
+        }
+        
+        function runTest(testName, testFunction, resultContainer = 'table-results') {
+            testResults.total++;
+            try {
+                testFunction();
+                testResults.success++;
+                log(`✅ ${testName} - RÉUSSI`, 'success', resultContainer);
+                return true;
+            } catch (error) {
+                testResults.error++;
+                log(`❌ ${testName} - ÉCHEC: ${error.message}`, 'error', resultContainer);
+                return false;
+            }
+        }
+
+        // Tests Table
+        function initTable() {
+            testTable = new Table({
+                attach: document.getElementById('table-demo'),
+                id: 'validation_table',
+                width: '100%',
+                height: 300,
+                columns: [
+                    { key: 'id', title: 'ID', width: 60, sortable: true },
+                    { key: 'name', title: 'Nom', width: 180, sortable: true },
+                    { key: 'position', title: 'Poste', width: 120, sortable: true },
+                    { key: 'salary', title: 'Salaire', width: 100, sortable: true },
+                    { key: 'department', title: 'Département', width: 120 },
+                    { key: 'status', title: 'Statut', width: 80 }
+                ],
+                data: [...tableTestData],
+                sortable: true,
+                searchable: true,
+                pagination: { enabled: true, pageSize: 10 }
+            });
+        }
+        
+        function testTableFilter() {
+            return runTest('Filtrage Table', () => {
+                const initialCount = testTable.getFilteredData().length;
+                testTable.filter(row => row.salary > 50000);
+                const filteredCount = testTable.getFilteredData().length;
+                if (filteredCount >= initialCount) throw new Error('Le filtrage n\'a pas réduit les données');
+                if (filteredCount === 0) throw new Error('Le filtrage a supprimé toutes les données');
+            });
+        }
+        
+        function testTableSearch() {
+            return runTest('Recherche Table', () => {
+                testTable.reset();
+                const initialCount = testTable.getFilteredData().length;
+                testTable.search('Alice');
+                const searchCount = testTable.getFilteredData().length;
+                if (searchCount >= initialCount) throw new Error('La recherche n\'a pas réduit les données');
+                if (searchCount === 0) throw new Error('La recherche n\'a trouvé aucun résultat');
+            });
+        }
+        
+        function testTableSort() {
+            return runTest('Tri Table', () => {
+                testTable.reset();
+                const beforeSort = testTable.getFilteredData().map(row => row.salary);
+                testTable.sort('salary', 'desc');
+                const afterSort = testTable.getFilteredData().map(row => row.salary);
+                
+                // Vérifier que le tri est appliqué
+                for (let i = 0; i < afterSort.length - 1; i++) {
+                    if (afterSort[i] < afterSort[i + 1]) {
+                        throw new Error('Le tri décroissant n\'est pas appliqué correctement');
+                    }
+                }
+            });
+        }
+        
+        function testTableReset() {
+            return runTest('Reset Table', () => {
+                testTable.filter(row => row.salary > 70000);
+                testTable.search('Manager');
+                testTable.sort('name', 'asc');
+                
+                const beforeReset = testTable.getFilteredData().length;
+                testTable.reset();
+                const afterReset = testTable.getFilteredData().length;
+                
+                if (afterReset <= beforeReset) throw new Error('Reset n\'a pas restauré toutes les données');
+                if (afterReset !== tableTestData.length) throw new Error('Reset n\'a pas restauré le nombre initial de données');
+            });
+        }
+        
+        async function runAllTableTests() {
+            startTime = Date.now();
+            log('🚀 Démarrage des tests Table...', 'info', 'table-results');
+            updateStatus('table-status', 'pending', 'En cours...');
+            
+            // Initialiser la table
+            log('📊 Initialisation de la table de test...', 'info', 'table-results');
+            initTable();
+            
+            // Attendre que la table soit prête
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Lancer tous les tests
+            const tests = [
+                () => testTableFilter(),
+                () => testTableSearch(), 
+                () => testTableSort(),
+                () => testTableReset()
+            ];
+            
+            let allPassed = true;
+            for (const test of tests) {
+                if (!test()) allPassed = false;
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            
+            // Résultats finaux
+            updateStatus('table-status', allPassed ? 'success' : 'error', 
+                        allPassed ? 'Tous les tests réussis' : 'Certains tests ont échoué');
+            updateCounters();
+            
+            log(`🏁 Tests Table terminés - ${testResults.success}/${testResults.total} réussis`, 
+                allPassed ? 'success' : 'error', 'table-results');
+        }
+
+        // Tests List  
+        function initList() {
+            testList = new List({
+                attach: document.getElementById('list-demo'),
+                id: 'validation_list',
+                width: '100%',
+                height: 300,
+                type: 'simple',
+                data: [...listTestData],
+                searchable: true,
+                sortable: true
+            });
+        }
+        
+        function testListFilter() {
+            return runTest('Filtrage List', () => {
+                const initialCount = testList.getItems().length;
+                testList.filter(item => item.priority === 'Haute');
+                const filteredCount = testList.getItems().length; 
+                if (filteredCount >= initialCount) throw new Error('Le filtrage n\'a pas réduit les éléments');
+            }, 'list-results');
+        }
+        
+        function testListSearch() {
+            return runTest('Recherche List', () => {
+                testList.reset();
+                const initialCount = testList.getItems().length;
+                testList.search('Tâche 1');
+                const searchCount = testList.getItems().length;
+                if (searchCount >= initialCount) throw new Error('La recherche n\'a pas réduit les éléments');
+            }, 'list-results');
+        }
+        
+        function testListSort() {
+            return runTest('Tri List', () => {
+                testList.reset();
+                testList.sort((a, b) => a.text.localeCompare(b.text));
+                const items = testList.getItems();
+                if (items.length === 0) throw new Error('Le tri a vidé la liste');
+            }, 'list-results');
+        }
+        
+        function testListAdd() {
+            return runTest('Ajout List', () => {
+                const initialCount = testList.getItems().length;
+                testList.addItem({ id: 5, text: 'Nouvelle tâche', priority: 'Moyenne', completed: false });
+                const newCount = testList.getItems().length;
+                if (newCount !== initialCount + 1) throw new Error('L\'ajout n\'a pas augmenté le nombre d\'éléments');
+            }, 'list-results');
+        }
+        
+        async function runAllListTests() {
+            log('🚀 Démarrage des tests List...', 'info', 'list-results');
+            updateStatus('list-status', 'pending', 'En cours...');
+            
+            // Initialiser la liste
+            log('📋 Initialisation de la liste de test...', 'info', 'list-results');
+            initList();
+            
+            // Attendre que la liste soit prête
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Lancer tous les tests
+            const tests = [
+                () => testListFilter(),
+                () => testListSearch(),
+                () => testListSort(),
+                () => testListAdd()
+            ];
+            
+            let allPassed = true;
+            for (const test of tests) {
+                if (!test()) allPassed = false;
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            
+            // Résultats finaux
+            updateStatus('list-status', allPassed ? 'success' : 'error',
+                        allPassed ? 'Tous les tests réussis' : 'Certains tests ont échoué');
+            updateCounters();
+            
+            log(`🏁 Tests List terminés - ${testResults.success}/${testResults.total} réussis`,
+                allPassed ? 'success' : 'error', 'list-results');
+        }
+        
+        // Initialisation automatique
+        window.addEventListener('load', () => {
+            log('✨ Page de validation chargée - Prêt pour les tests !', 'success', 'table-results');
+            log('✨ Page de validation chargée - Prêt pour les tests !', 'success', 'list-results');
+        });
+    </script>
+</body>
+</html>
