@@ -129,7 +129,7 @@ const iconList = new List({
         onItemClick: (item, id, event) => {
             console.log(`Contact clicked: ${item.text}`, item.data);
             // Simuler l'ouverture d'un profil
-            alert(`Contacter ${item.text}\nEmail: ${item.data.email}\nTél: ${item.data.phone}`);
+            console.log(`Contacter ${item.text}\nEmail: ${item.data.email}\nTél: ${item.data.phone}`);
         },
         onItemHover: (item, id, event) => {
             console.log(`Hovering: ${item.text}`);
@@ -219,7 +219,7 @@ const todoList = new List({
         onItemClick: (item, id, event) => {
             // Afficher les détails de la tâche
             const details = `Tâche: ${item.text}\nPriorité: ${item.priority}\nÉchéance: ${item.dueDate}\nStatut: ${item.completed ? 'Terminée' : 'En cours'}`;
-            alert(details);
+            console.log(details);
         }
     }
 });
@@ -312,7 +312,7 @@ const avatarList = new List({
         onItemClick: (item, id, event) => {
             console.log(`Team member clicked: ${item.text} (${item.status})`);
             const profile = `Membre: ${item.text}\nRôle: ${item.subtext}\nStatut: ${item.status}\nExpérience: ${item.data.experience}`;
-            alert(profile);
+            console.log(profile);
         }
     }
 });

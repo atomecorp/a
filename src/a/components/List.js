@@ -247,17 +247,20 @@ class List {
         
         this.filteredItems.forEach((item, index) => {
             const itemElement = this._createListItem(item, index);
-            this.itemElements.set(item.id || index, itemElement);
+            const itemId = item.id !== undefined ? item.id : index;
+            this.itemElements.set(String(itemId), itemElement);
         });
     }
     
     _createListItem(item, index) {
-        const itemId = item.id || `item_${index}`;
+        // Utilise l'ID de l'item ou l'index, mais toujours en string pour dataset
+        const itemId = item.id !== undefined ? item.id : index;
+        const itemIdString = String(itemId);
         
         // Create item container using standard HTML
         const itemElement = document.createElement('div');
-        itemElement.id = `${this.id}_${itemId}`;
-        itemElement.dataset.itemId = itemId;
+        itemElement.id = `${this.id}_${itemIdString}`;
+        itemElement.dataset.itemId = itemIdString;
         
         // Apply item styles
         Object.assign(itemElement.style, this.config.itemStyle);
@@ -563,7 +566,17 @@ class List {
     
     _handleItemClick(itemElement, event) {
         const itemId = itemElement.dataset.itemId;
-        const item = this.config.items.find(i => (i.id || i) === itemId);
+        
+        // Recherche plus robuste de l'item - on compare en string et en number
+        const item = this.config.items.find(i => {
+            const itemKey = i.id || i;
+            return String(itemKey) === String(itemId) || itemKey === itemId || itemKey === Number(itemId);
+        });
+        
+        if (!item) {
+            console.error('Item not found for ID:', itemId, 'Available items:', this.config.items);
+            return;
+        }
         
         if (this.config.selectable) {
             if (this.config.multiSelect && event.ctrlKey) {
