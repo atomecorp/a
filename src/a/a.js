@@ -226,6 +226,11 @@
             });
         }
 
+        box(params){
+           const id = params.id || 'my_box_'+crypto.randomUUID();;
+    console.log("box says: " + id);
+        }
+
         // Check if it's a Ruby-style property
         _isRubyProperty(prop) {
             const rubyProps = ['width', 'height', 'x', 'y', 'color', 'id', 'text', 'backgroundColor'];
