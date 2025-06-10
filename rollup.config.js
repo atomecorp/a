@@ -2,7 +2,7 @@
 // Build configuration for framework A and application bundling
 
 import { defineConfig } from 'rollup';
-import { terser } from '@rollup/plugin-terser';
+import terser from '@rollup/plugin-terser';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 
 export default defineConfig([

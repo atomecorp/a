@@ -3,6 +3,98 @@
  * PERFORMANCE ENHANCED VERSION with caching, lazy loading, and monitoring
  */
 
+// 🚀 NOUVELLES OPTIMISATIONS V2.0 - Import des systèmes avancés  
+import { DOMCache } from './utils/dom-cache.js';
+import animationOptimizer from './utils/animation-optimizer.js';
+
+// Initialiser les systèmes d'optimisation avancés
+const advancedDOMCache = new DOMCache();
+
+// Configuration globale des optimisations
+window.SQUIRREL_OPTIMIZATIONS = {
+    domCache: advancedDOMCache,
+    animationOptimizer: animationOptimizer,
+    
+    // API unifiée d'optimisation
+    async optimizeElement(element) {
+        // Cache DOM optimisé
+        const cachedElement = this.domCache.predictiveGet(`#${element.id}`);
+        
+        // Animation optimisée si nécessaire
+        if (element.dataset.animate) {
+            return this.animationOptimizer.animate(element, 
+                JSON.parse(element.dataset.keyframes || '[]'),
+                JSON.parse(element.dataset.options || '{}')
+            );
+        }
+        return Promise.resolve(element);
+    },
+    
+    // Optimisation batch pour plusieurs éléments
+    async optimizeBatch(elements) {
+        const operations = elements.map(el => () => this.optimizeElement(el));
+        return this.domCache.batchDOMOperations(operations);
+    },
+    
+    // Rapport global des optimisations
+    getOptimizationReport() {
+        return {
+            timestamp: new Date().toISOString(),
+            domCache: this.domCache.getAdvancedMetrics(),
+            animations: this.animationOptimizer.getPerformanceReport(),
+            summary: {
+                totalOptimizations: this.getTotalOptimizations(),
+                memoryOptimization: this.getMemoryOptimization()
+            }
+        };
+    },
+    
+    getTotalOptimizations() {
+        const dom = this.domCache.getAdvancedMetrics();
+        const anim = this.animationOptimizer.getPerformanceReport();
+        
+        return (dom.cacheHits || 0) + 
+               (anim.metrics?.totalAnimations || 0);
+    },
+    
+    getMemoryOptimization() {
+        const dom = this.domCache.getAdvancedMetrics();
+        
+        return {
+            domCache: dom.memoryUsage?.compressionSaving || '0 KB',
+            total: `${(parseFloat(dom.memoryUsage?.compressionSaving) || 0).toFixed(2)} KB`
+        };
+    },
+    
+    // Démarrage automatique des optimisations
+    start() {
+        
+        // Activer les optimisations DOM
+        this.domCache.startPeriodicCleanup();
+        
+    },
+    
+    // Arrêt propre
+    stop() {
+        this.domCache.destroy();
+        this.animationOptimizer.destroy();
+    }
+};
+
+// Démarrage automatique
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => window.SQUIRREL_OPTIMIZATIONS.start(), 1000);
+    });
+} else {
+    setTimeout(() => window.SQUIRREL_OPTIMIZATIONS.start(), 1000);
+}
+
+// API globale pour le développement
+window.getOptimizationReport = () => window.SQUIRREL_OPTIMIZATIONS.getOptimizationReport();
+window.optimizeElement = (el) => window.SQUIRREL_OPTIMIZATIONS.optimizeElement(el);
+window.optimizeBatch = (els) => window.SQUIRREL_OPTIMIZATIONS.optimizeBatch(els);
+
 (function() {
     'use strict';
 
