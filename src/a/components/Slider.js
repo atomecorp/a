@@ -145,6 +145,7 @@ class Slider {
     _init() {
         if (this.config.type === 'circular') {
             this._createCircularSlider();
+            this._attachCircularEvents();
         } else {
             this._createLinearSlider();
             this._attachEvents();
@@ -507,6 +508,61 @@ class Slider {
         this._attachKeyboardEvents();
     }
 
+    _attachCircularEvents() {
+        this._attachCircularHoverEvents();
+        this._attachCircularKeyboardEvents();
+    }
+
+    _attachCircularHoverEvents() {
+        if (!this.elements.thumb) return;
+        
+        this.elements.thumb.html_object.addEventListener('mouseenter', () => {
+            if (!this.isDragging) {
+                this.elements.thumb.html_object.style.transform = 'scale(1.2)';
+            }
+        });
+
+        this.elements.thumb.html_object.addEventListener('mouseleave', () => {
+            if (!this.isDragging) {
+                this.elements.thumb.html_object.style.transform = 'scale(1)';
+            }
+        });
+    }
+
+    _attachCircularKeyboardEvents() {
+        if (!this.elements.thumb) return;
+        
+        this.elements.thumb.html_object.setAttribute('tabindex', '0');
+        this.elements.thumb.html_object.classList.add('slider-thumb');
+        
+        this.elements.thumb.html_object.addEventListener('keydown', (e) => {
+            let newValue = this.currentValue;
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                case 'ArrowDown':
+                    newValue -= this.config.step;
+                    break;
+                case 'ArrowRight':
+                case 'ArrowUp':
+                    newValue += this.config.step;
+                    break;
+                case 'Home':
+                    newValue = this.config.min;
+                    break;
+                case 'End':
+                    newValue = this.config.max;
+                    break;
+                default:
+                    return;
+            }
+            
+            this.setValue(newValue);
+            this._triggerCallback('onChange', newValue);
+            e.preventDefault();
+        });
+    }
+
     _attachHoverEvents() {
         this.elements.thumb.html_object.addEventListener('mouseenter', () => {
             if (!this.isDragging) {
@@ -677,11 +733,12 @@ class Slider {
 
     // API publique
     setValue(value) {
+        const oldValue = this.currentValue;
         this.currentValue = Math.max(this.config.min, Math.min(this.config.max, value));
         
         if (this.config.type === 'circular') {
             this._setCircularValue(this.currentValue);
-            return;
+            return this;
         }
         
         const isVertical = this.config.type === 'vertical';
@@ -703,6 +760,8 @@ class Slider {
 
         // Appliquer la variation de couleur basée sur la position
         this._updateVariationColors(percentage);
+        
+        return this;
     }
 
     getValue() {
@@ -768,7 +827,13 @@ class Slider {
         if (!this.elements.track) return;
         
         const track = this.elements.track.html_object;
-        if (this.config.rail.backgroundColor) track.style.backgroundColor = this.config.rail.backgroundColor;
+        
+        // Pour les sliders circulaires, ne pas appliquer backgroundColor au SVG
+        // car la couleur du track est gérée par l'attribut stroke du path
+        if (this.config.type !== 'circular') {
+            if (this.config.rail.backgroundColor) track.style.backgroundColor = this.config.rail.backgroundColor;
+        }
+        
         if (this.config.rail.borderRadius) track.style.borderRadius = this.config.rail.borderRadius;
     }
     
@@ -798,7 +863,7 @@ class Slider {
             id: this.config.id + '_container',
             markup: 'div',
             role: 'circular-slider-container',
-            x: this.config.x,
+            x: this.config.x-200,
             y: this.config.y,
             width: size,
             height: size,
@@ -831,6 +896,13 @@ class Slider {
         svg.style.pointerEvents = 'auto';
         svg.style.cursor = 'pointer';
         svg.style.zIndex = '5';  // Z-index plus bas que le thumb
+        
+        // Force la visibilité du SVG (même solution que pour les thumbs)
+        svg.style.display = 'block';
+        svg.style.visibility = 'visible';
+        svg.style.opacity = '1';
+        svg.style.backgroundColor = 'transparent';  // SVG totalement transparent
+        svg.style.setProperty('border-radius', '0', 'important');  // Force la suppression du border-radius
 
         const centerX = radius + strokeWidth / 2 + 10;
         const centerY = radius + strokeWidth / 2 + 10;
@@ -856,6 +928,11 @@ class Slider {
         trackArc.setAttribute('stroke', this.config.colors.track);
         trackArc.setAttribute('stroke-width', strokeWidth);
         trackArc.setAttribute('stroke-linecap', 'round');
+        
+        // Force la visibilité du track path (même solution que pour les thumbs)
+        trackArc.style.display = 'block';
+        trackArc.style.visibility = 'visible';
+        trackArc.style.opacity = '1';
         
         // Ajouter un événement de clic sur le track pour click-to-position
         trackArc.addEventListener('click', (e) => {
@@ -930,17 +1007,21 @@ class Slider {
         const angleRange = endAngle - startAngle;
         const currentAngle = startAngle + (percentage * angleRange);
         
-        // SIMPLIFICATION: utiliser les dimensions du conteneur
-        const containerSize = this.config.circular.radius * 2 + this.config.thumbSize + 20;
-        const centerX = containerSize / 2;
-        const centerY = containerSize / 2;
+        // Coordonnées cohérentes avec le SVG
+        const svgSize = radius * 2 + strokeWidth + 20;
+        const containerSize = radius * 2 + this.config.thumbSize + 20;
+        const centerOffset = (containerSize - svgSize) / 2;
         
-        // Convertir l'angle en radians avec la même correction que dans _setCircularValue
+        // Centre dans le SVG (pas dans le conteneur)
+        const svgCenterX = radius + strokeWidth / 2 + 10;
+        const svgCenterY = radius + strokeWidth / 2 + 10;
+        
+        // Convertir l'angle en radians
         const radians = (currentAngle - 90) * Math.PI / 180;
         
-        // Position du thumb exactement sur la track (même rayon que le path SVG)
-        const thumbX = centerX + radius * Math.cos(radians) - this.config.thumbSize / 2;
-        const thumbY = centerY + radius * Math.sin(radians) - this.config.thumbSize / 2;
+        // Position du thumb sur la track SVG
+        const thumbX = centerOffset + svgCenterX + radius * Math.cos(radians) - this.config.thumbSize / 2;
+        const thumbY = centerOffset + svgCenterY + radius * Math.sin(radians) - this.config.thumbSize / 2;
         
         this.elements.thumb = new A({
             attach: `#${this.config.id}_container`,
@@ -958,9 +1039,17 @@ class Slider {
             border: '3px solid white',
             transition: this.config.animations.enabled ? 
                        `transform ${this.config.animations.duration}s ${this.config.animations.easing}` : 'none',
-            zIndex: 20,  // Z-index plus élevé que le SVG
-            pointerEvents: 'auto'  // S'assurer que le thumb capture les événements
+            zIndex: 25,  // Z-index plus élevé que le SVG
+            display: 'block',
+            visibility: 'visible',
+            pointerEvents: 'auto'
         });
+
+        // Force la visibilité du thumb
+        this.elements.thumb.html_object.style.display = 'block';
+        this.elements.thumb.html_object.style.visibility = 'visible';
+        this.elements.thumb.html_object.style.position = 'absolute';
+        this.elements.thumb.html_object.style.zIndex = '25';
 
         // Empêcher que les clics sur le thumb se propagent au track
         this.elements.thumb.html_object.addEventListener('click', (e) => {
@@ -1136,16 +1225,30 @@ class Slider {
         const thumbY = centerY + radius * Math.sin(radians) - this.config.thumbSize / 2;
         
         // Mettre à jour la position du thumb de manière fluide
-        if (this.elements.thumb) {
-            this.elements.thumb.x(thumbX);
-            this.elements.thumb.y(thumbY);
+        if (this.elements.thumb && this.elements.thumb.html_object) {
+            // Utilisation directe du style pour s'assurer que les changements sont appliqués
+            this.elements.thumb.html_object.style.left = thumbX + 'px';
+            this.elements.thumb.html_object.style.top = thumbY + 'px';
+            
+            // S'assurer que le thumb est visible
+            this.elements.thumb.html_object.style.display = 'block';
+            this.elements.thumb.html_object.style.position = 'absolute';
+            this.elements.thumb.html_object.style.zIndex = '20';
+            
+            // Fallback avec les méthodes A
+            try {
+                this.elements.thumb.x(thumbX);
+                this.elements.thumb.y(thumbY);
+            } catch(e) {
+                console.warn('Fallback pour position thumb:', e);
+            }
         }
         
         // Mettre à jour l'arc de progression
         this._updateCircularProgress(percentage);
         
-        // Appliquer la variation de couleur
-        this._updateVariationColors(percentage);
+        // Appliquer la variation de couleur circulaire
+        this._updateCircularVariationColors(percentage);
     }
 
     _updateCircularProgress(percentage) {
@@ -1180,6 +1283,61 @@ class Slider {
         }
         
         this.elements.progress.html_object.setAttribute('d', pathData);
+    }
+
+    _updateCircularVariationColors(percentage) {
+        if (!this.config.variation || !Array.isArray(this.config.variation)) {
+            return;
+        }
+
+        const colors = this.config.variation;
+        if (colors.length === 0) return;
+
+        // Si on a qu'une couleur, l'utiliser
+        if (colors.length === 1) {
+            if (this.elements.progress && this.elements.progress.html_object) {
+                this.elements.progress.html_object.setAttribute('stroke', colors[0].color);
+            }
+            if (this.elements.thumb && this.elements.thumb.html_object) {
+                this.elements.thumb.html_object.style.backgroundColor = colors[0].color;
+            }
+            return;
+        }
+
+        // Trouver les deux couleurs entre lesquelles interpoler
+        let color1 = colors[0];
+        let color2 = colors[colors.length - 1];
+        
+        for (let i = 0; i < colors.length - 1; i++) {
+            const pos1 = this._parsePosition(colors[i].position) / 100;
+            const pos2 = this._parsePosition(colors[i + 1].position) / 100;
+            
+            if (percentage >= pos1 && percentage <= pos2) {
+                color1 = colors[i];
+                color2 = colors[i + 1];
+                break;
+            }
+        }
+
+        // Calculer le facteur d'interpolation entre les deux couleurs
+        const pos1 = this._parsePosition(color1.position) / 100;
+        const pos2 = this._parsePosition(color2.position) / 100;
+        const factor = pos1 === pos2 ? 0 : (percentage - pos1) / (pos2 - pos1);
+
+        // Interpoler entre les deux couleurs
+        const interpolatedColor = this._interpolateColors(color1.color, color2.color, factor);
+        
+        // Appliquer aux éléments circulaires
+        if (this.elements.progress && this.elements.progress.html_object) {
+            this.elements.progress.html_object.setAttribute('stroke', interpolatedColor);
+        }
+        
+        if (this.elements.thumb && this.elements.thumb.html_object) {
+            this.elements.thumb.html_object.style.backgroundColor = interpolatedColor;
+            // Ajouter une ombre avec la même couleur
+            const shadowColor = this._addAlphaToColor(interpolatedColor, 0.4);
+            this.elements.thumb.html_object.style.boxShadow = `0 4px 12px ${shadowColor}`;
+        }
     }
 }
 
