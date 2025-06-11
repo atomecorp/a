@@ -182,9 +182,9 @@ if (document.readyState === 'loading') {
 export default squirrel;
 
 // Import des composants essentiels
-import Button from '../a/components/button.js';
+import Button from '../a/components/Button.js';
 import Module from '../a/components/Module.js';
-import Slider from '../a/components/Slider.js';
+import SliderCompatible, { Slider } from '../a/components/Slider.js';
 import Matrix from '../a/components/Matrix.js';
 import List from '../a/components/List.js';
 import Table from '../a/components/Table.js';
@@ -204,9 +204,10 @@ import EnvelopePlugin from './wavesurfer-v7/plugins/envelope.esm.js';
 
 
 // Exposer les composants dans le scope global pour éviter les imports manuels
-window.Button = Button
+window.Button = Button;
 window.Module = Module;
 window.Slider = Slider;
+window.SliderCompatible = SliderCompatible;
 window.Matrix = Matrix;
 window.List = List;
 window.Table = Table;
@@ -247,8 +248,5 @@ window.WaveSurferPlugins = {
     Envelope: EnvelopePlugin
 };
 
-console.log('🎵 WaveSurfer.js v7.9.5 + ALL PLUGINS loaded globally!');
-console.log('📦 Available as: WaveSurfer, RegionsPlugin, TimelinePlugin, etc.');
-console.log('📦 Also available as: WaveSurferPlugins.Regions, etc.');
 
 

@@ -1,1 +1,1 @@
-// import   './examples/buttons.js';
+import   './examples/sliders.js';
