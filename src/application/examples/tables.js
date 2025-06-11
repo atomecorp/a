@@ -1,7 +1,7 @@
 /**
  * 🔧 EXEMPLES TABLEAUX - VERSION CORRIGÉE
  * 
- * Ce fichier utilise TableFixed au lieu de Table pour corriger 
+ * Ce fichier utilise Table Web Component au lieu de l'ancien Table pour corriger 
  * le problème de génération excessive de divs
  * 
  * RÉSOLUTION DU BUG :
@@ -11,7 +11,7 @@
  * ✅ Positionnement CSS standard au lieu d'absolus multiples
  */
 
-import TableFixed from '../../a/components/Table.js';
+// import Table from '../../a/components/Table.js';
 
 console.log('🔧 CHARGEMENT DES EXEMPLES TABLEAUX CORRIGÉS');
 
@@ -30,7 +30,7 @@ const basicTableData = [
     { id: 8, name: 'Henry Clark', email: 'henry@example.com', department: 'Sales', salary: 72000, status: 'Active' }
 ];
 
-const basicTable = new TableFixed({
+const basicTable = new Table({
     id: 'basic_table_fixed',
     attach: 'body',
     x: 50,
@@ -112,7 +112,7 @@ const compactTableData = [
     { code: 'AMZN', name: 'Amazon.com Inc.', price: 3200.00, change: +8.75, volume: '2.5M' }
 ];
 
-const compactTable = new TableFixed({
+const compactTable = new Table({
     id: 'compact_table_fixed',
     attach: 'body',
     x: 50,
@@ -173,7 +173,7 @@ const compactTable = new TableFixed({
 // 📊 EXEMPLE 3: TABLEAU AVEC DONNÉES DYNAMIQUES
 // ===============================================
 
-const dynamicTable = new TableFixed({
+const dynamicTable = new Table({
     id: 'dynamic_table_fixed',
     attach: 'body',
     x: 700,
@@ -368,4 +368,4 @@ console.log(`
 ╚══════════════════════════════════════════════════════════════╝
 `);
 
-export { basicTable, compactTable, dynamicTable, TableFixed };
+export { basicTable, compactTable, dynamicTable, Table };

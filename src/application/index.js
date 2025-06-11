@@ -4,4 +4,6 @@
 // import './examples/lists_debug.js'; // Debug simple
 
 // Import des exemples avancés qui fonctionnent
-import './examples/lists.js';
+// import './examples/tables.js';
+// import './examples/tables_advanced.js';
+import './examples/tables_bombe.js';
