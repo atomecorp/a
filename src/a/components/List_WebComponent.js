@@ -252,6 +252,7 @@ class List extends HTMLElement {
     async initializeComponent() {
         try {
             this.createShadowStructure();
+            this.applyPositioning();
             this.setupEventHandlers();
             this.renderItems();
             
@@ -298,26 +299,19 @@ class List extends HTMLElement {
     createStyles() {
         const style = document.createElement('style');
         
-        // Convert style objects to CSS, separating positioning from appearance
-        const { hostStyles, containerStyles } = this.separateStyles(this.config.style);
-        const containerCSS = this.objectToCSS(containerStyles);
+        // Convert style objects to CSS
+        const containerCSS = this.objectToCSS(this.config.style);
         const headerCSS = this.objectToCSS(this.config.headerStyle);
         const itemCSS = this.objectToCSS(this.config.itemStyle);
         const hoverCSS = this.objectToCSS(this.config.itemHoverStyle);
         const selectedCSS = this.objectToCSS(this.config.itemSelectedStyle);
         const searchCSS = this.objectToCSS(this.config.searchSettings.style);
         
-        // Apply host styles (positioning) to the Web Component
-        Object.entries(hostStyles).forEach(([property, value]) => {
-            const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
-            this.style.setProperty(cssProperty, Array.isArray(value) ? value.join(', ') : value);
-        });
-        
         style.textContent = `
             :host {
                 display: block;
-                width: ${hostStyles.width || this.config.width || 'auto'};
-                height: ${hostStyles.height || this.config.height || 'auto'};
+                width: ${this.config.width}px;
+                height: ${this.config.height === 'auto' ? 'auto' : this.config.height + 'px'};
                 font-family: 'Roboto', Arial, sans-serif;
                 box-sizing: border-box;
                 outline: none;
@@ -555,31 +549,6 @@ class List extends HTMLElement {
         return pxProperties.includes(cssProperty);
     }
     
-    /**
-     * Separate styles into host styles (positioning) and container styles (appearance)
-     */
-    separateStyles(styleObj) {
-        if (!styleObj) return { hostStyles: {}, containerStyles: {} };
-        
-        const hostStyleProps = [
-            'position', 'left', 'top', 'right', 'bottom', 
-            'width', 'height', 'zIndex', 'transform'
-        ];
-        
-        const hostStyles = {};
-        const containerStyles = {};
-        
-        Object.entries(styleObj).forEach(([key, value]) => {
-            if (hostStyleProps.includes(key)) {
-                hostStyles[key] = value;
-            } else {
-                containerStyles[key] = value;
-            }
-        });
-        
-        return { hostStyles, containerStyles };
-    }
-
     createHeader() {
         this.header = document.createElement('div');
         this.header.className = 'list-header';
@@ -612,6 +581,14 @@ class List extends HTMLElement {
         }
         
         this.container.appendChild(this.header);
+    }
+    
+    applyPositioning() {
+        if (this.config.x !== undefined && this.config.y !== undefined) {
+            this.style.position = 'absolute';
+            this.style.left = `${this.config.x}px`;
+            this.style.top = `${this.config.y}px`;
+        }
     }
     
     renderItems() {
@@ -1125,35 +1102,247 @@ class List extends HTMLElement {
         this.config.callbacks.onSelectionChange([...this.selectedItems]);
     }
     
+    // =====================
+    // PUBLIC API METHODS
+    // =====================
+    
     /**
-     * Separate styles into host styles (positioning) and container styles (appearance)
+     * Attach list to DOM element
      */
-    separateStyles(styleObj) {
-        if (!styleObj) return { hostStyles: {}, containerStyles: {} };
+    async attachTo(selector) {
+        const container = typeof selector === 'string' 
+            ? document.querySelector(selector)
+            : selector;
+            
+        if (!container) {
+            throw new Error(`Container not found: ${selector}`);
+        }
         
-        const hostStyleProps = [
-            'position', 'left', 'top', 'right', 'bottom', 
-            'width', 'height', 'zIndex', 'transform'
-        ];
+        container.appendChild(this);
         
-        const hostStyles = {};
-        const containerStyles = {};
+        // Wait for connection if needed
+        if (!this.initialized) {
+            await new Promise(resolve => {
+                this.addEventListener('list-ready', resolve, { once: true });
+            });
+        }
         
-        Object.entries(styleObj).forEach(([key, value]) => {
-            if (hostStyleProps.includes(key)) {
-                hostStyles[key] = value;
-            } else {
-                containerStyles[key] = value;
-            }
+        return this;
+    }
+    
+    /**
+     * Add item to list
+     */
+    addItem(item) {
+        this.config.items.push(item);
+        this.filteredItems = [...this.config.items];
+        this.renderItems();
+        
+        // Dispatch add event
+        this.dispatchEvent(new CustomEvent('list-item-add', {
+            detail: { item, list: this }
+        }));
+        
+        return this;
+    }
+    
+    /**
+     * Remove item from list
+     */
+    removeItem(itemId) {
+        this.config.items = this.config.items.filter(item => {
+            const id = this.getItemId(item, this.config.items.indexOf(item));
+            return String(id) !== String(itemId);
+        });
+        this.filteredItems = [...this.config.items];
+        this.selectedItems.delete(String(itemId));
+        this.renderItems();
+        
+        // Dispatch remove event
+        this.dispatchEvent(new CustomEvent('list-item-remove', {
+            detail: { itemId, list: this }
+        }));
+        
+        return this;
+    }
+    
+    /**
+     * Update item in list
+     */
+    updateItem(itemId, newData) {
+        const index = this.config.items.findIndex(item => {
+            const id = this.getItemId(item, this.config.items.indexOf(item));
+            return String(id) === String(itemId);
         });
         
-        return { hostStyles, containerStyles };
+        if (index !== -1) {
+            this.config.items[index] = { ...this.config.items[index], ...newData };
+            this.filteredItems = [...this.config.items];
+            this.renderItems();
+            
+            // Dispatch update event
+            this.dispatchEvent(new CustomEvent('list-item-update', {
+                detail: { itemId, newData, item: this.config.items[index], list: this }
+            }));
+        }
+        
+        return this;
+    }
+    
+    /**
+     * Get selected items
+     */
+    getSelectedItems() {
+        return [...this.selectedItems].map(id => this.findItemById(id)).filter(Boolean);
+    }
+    
+    /**
+     * Clear selection
+     */
+    clearSelection() {
+        this.selectedItems.forEach(id => {
+            const element = this.itemElements.get(id);
+            if (element) {
+                element.classList.remove('selected');
+            }
+        });
+        this.selectedItems.clear();
+        
+        // Dispatch selection change event
+        this.dispatchEvent(new CustomEvent('list-selection-change', {
+            detail: { selectedItems: [], list: this }
+        }));
+        
+        this.config.callbacks.onSelectionChange([]);
+        return this;
+    }
+    
+    /**
+     * Filter items
+     */
+    filter(filterFn) {
+        if (typeof filterFn === 'function') {
+            this.filteredItems = this.config.items.filter(filterFn);
+        } else {
+            this.filteredItems = [...this.config.items];
+        }
+        this.renderItems();
+        return this;
+    }
+    
+    /**
+     * Search items
+     */
+    search(searchTerm) {
+        if (this.searchInput) {
+            this.searchInput.value = searchTerm;
+        }
+        this.handleSearch(searchTerm);
+        return this;
+    }
+    
+    /**
+     * Sort items
+     */
+    sort(sortFn) {
+        if (typeof sortFn === 'function') {
+            this.filteredItems.sort(sortFn);
+        } else {
+            // Default sort by text
+            this.filteredItems.sort((a, b) => {
+                const textA = (a.text || a).toString().toLowerCase();
+                const textB = (b.text || b).toString().toLowerCase();
+                return textA.localeCompare(textB);
+            });
+        }
+        this.renderItems();
+        return this;
+    }
+    
+    /**
+     * Reset filter/search
+     */
+    reset() {
+        this.filteredItems = [...this.config.items];
+        if (this.searchInput) {
+            this.searchInput.value = '';
+        }
+        this.renderItems();
+        return this;
+    }
+    
+    /**
+     * Refresh list display
+     */
+    refresh() {
+        this.renderItems();
+        return this;
+    }
+    
+    /**
+     * Show list
+     */
+    show() {
+        this.style.display = 'block';
+        this.style.visibility = 'visible';
+        this.style.opacity = '1';
+        return this;
+    }
+    
+    /**
+     * Hide list
+     */
+    hide() {
+        this.style.display = 'none';
+        return this;
+    }
+    
+    /**
+     * Destroy list
+     */
+    destroy() {
+        List.instances.delete(this.id);
+        this.remove();
+        return this;
+    }
+    
+    /**
+     * Get current configuration
+     */
+    getConfig() {
+        return { ...this.config };
+    }
+    
+    /**
+     * Update configuration
+     */
+    updateConfig(newConfig) {
+        this.config = this.mergeConfig({ ...this.config, ...newConfig });
+        this.renderItems();
+        return this;
+    }
+    
+    // =====================
+    // STATIC METHODS
+    // =====================
+    
+    static getList(id) {
+        return List.instances.get(id);
+    }
+    
+    static getAllLists() {
+        return Array.from(List.instances.values());
+    }
+    
+    static destroyAll() {
+        List.instances.forEach(list => list.destroy());
+        List.instances.clear();
     }
 }
 
-// Register the Web Component
+// Define custom element
 customElements.define('squirrel-list', List);
 
-// Export for module imports (both named and default for compatibility)
-export { List };
+// Export for global use
+window.List = List;
 export default List;

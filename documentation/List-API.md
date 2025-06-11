@@ -1,5 +1,152 @@
 # 📋 List API - Interactive List Component
 
+## 🚀 NEW: Web Component Version (2.0)
+
+> **Note:** Cette documentation couvre la nouvelle version Web Component du composant List, qui remplace la version basée sur les classes traditionnelles.
+
+### Quick Start - Web Component
+
+```javascript
+// 1. Création d'une liste simple
+const list = new List({
+    id: 'my-list',
+    items: [
+        { id: 1, text: 'Premier élément' },
+        { id: 2, text: 'Deuxième élément' },
+        { id: 3, text: 'Troisième élément' }
+    ],
+    style: {
+        position: 'absolute',
+        left: '50px',
+        top: '50px',
+        width: '300px',
+        backgroundColor: '#ffffff',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px'
+    }
+});
+
+// 2. Event listeners avec CustomEvents
+list.addEventListener('list-item-click', (event) => {
+    const { item, itemId } = event.detail;
+    console.log(`Clicked: ${item.text} (ID: ${itemId})`);
+});
+
+// 3. Attachement au DOM
+await list.attachTo('body');
+```
+
+### Advanced Styling with CSS Properties
+
+```javascript
+const modernList = new List({
+    id: 'modern-list',
+    items: [
+        { 
+            id: 1, 
+            text: 'Item with custom style',
+            style: { fontWeight: 'bold' },
+            hoverStyle: { color: '#2196f3' },
+            selectedStyle: { backgroundColor: '#e3f2fd' }
+        }
+    ],
+    style: {
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '15px',
+        boxShadow: [
+            '0 10px 25px rgba(0,0,0,0.2)',
+            '0 0 0 1px rgba(255,255,255,0.1) inset'
+        ],
+        backdropFilter: 'blur(10px)'
+    },
+    itemStyle: {
+        padding: '16px 20px',
+        color: '#ffffff',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+    },
+    itemHoverStyle: {
+        transform: 'scale(1.02)',
+        filter: 'brightness(1.1)'
+    }
+});
+```
+
+### Web Component Features
+
+#### 🌟 Enhanced CSS Support
+- **Complete CSS Properties**: Support for all CSS properties including gradients, shadows, transforms
+- **Array Values**: Support for multiple values (e.g., multiple box-shadows)
+- **Individual Item Styling**: Each item can have its own `style`, `hoverStyle`, and `selectedStyle`
+
+#### 🎯 Shadow DOM Architecture
+- **Encapsulation**: Styles are isolated within Shadow DOM
+- **Performance**: Improved rendering performance
+- **Maintainability**: Clean separation of concerns
+
+#### 🚀 Modern Events System
+- **CustomEvents**: Modern event system with detailed event objects
+- **Event Types**: `list-ready`, `list-item-click`, `list-selection-change`, `list-item-hover`
+
+#### 🔗 Fluent API
+- **Method Chaining**: `list.attachTo().then()` for clean async operations
+- **Promise-based**: All async operations return promises
+
+### Web Component Configuration
+
+```javascript
+const config = {
+    // Identification
+    id: 'unique-list-id',
+    
+    // Data
+    items: [
+        {
+            id: 1,
+            text: 'Item text',
+            icon: '🎯',           // Optional icon
+            subtext: 'Subtitle',  // Optional subtitle
+            data: { /* custom data */ },
+            
+            // Individual styling
+            style: { /* base styles */ },
+            hoverStyle: { /* hover styles */ },
+            selectedStyle: { /* selected styles */ }
+        }
+    ],
+    
+    // Behavior
+    searchable: true,
+    selectable: true,
+    sortable: true,
+    
+    // Styling
+    style: {
+        // Complete CSS support
+        backgroundColor: '#ffffff',
+        background: 'linear-gradient(...)',
+        boxShadow: ['shadow1', 'shadow2'], // Array support
+        borderRadius: '8px',
+        transform: 'scale(1.02)',
+        filter: 'blur(2px)',
+        backdropFilter: 'blur(10px)',
+        // ... all CSS properties
+    },
+    
+    // Item styling
+    itemStyle: { /* base item styles */ },
+    itemHoverStyle: { /* item hover styles */ },
+    itemSelectedStyle: { /* item selected styles */ }
+};
+```
+
+---
+
+## 🚀 Legacy API (Version 1.0)
+
+> **Deprecated:** La documentation ci-dessous concerne l'ancienne version basée sur les classes. Utilisez la version Web Component ci-dessus pour les nouveaux projets.
+
+# 📋 List API - Interactive List Component
+
 ## 🚀 Basic Usage
 
 ### Simple List

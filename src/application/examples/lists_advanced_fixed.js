@@ -1,4 +1,86 @@
- // =====================
+/**
+ * 📋 List Web Component - Advanced Styling Demo
+ * 
+ * Demonstration of the new List Web Component with full CSS properties support
+ * including gradients, shadows, transforms, and individual item styling.
+ */
+
+// Import the new List Web Component
+import { List } from '../../a/components/List.js';
+
+console.log('🎨 Loading Advanced List Web Component Demo...');
+
+// Function to initialize all advanced lists
+export async function initAdvancedLists() {
+    try {
+        console.log('🎨 Initializing Advanced List Demos...');
+        
+        // Add global styles for the demo
+        const globalStyles = document.createElement('style');
+        globalStyles.textContent = `
+            @keyframes pulse {
+                0% { opacity: 1; }
+                50% { opacity: 0.7; }
+                100% { opacity: 1; }
+            }
+            
+            body {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                margin: 0;
+                padding: 20px;
+                font-family: 'Roboto', Arial, sans-serif;
+                position: relative;
+                overflow-x: auto;
+            }
+            
+            .demo-title {
+                position: absolute;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: white;
+                font-size: 32px;
+                font-weight: 700;
+                text-align: center;
+                text-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+                margin: 0;
+                z-index: 1000;
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                padding: 15px 30px;
+                border-radius: 15px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                white-space: nowrap;
+            }
+            
+            .demo-subtitle {
+                position: absolute;
+                top: 120px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 16px;
+                text-align: center;
+                margin: 0;
+                z-index: 1000;
+            }
+        `;
+        document.head.appendChild(globalStyles);
+
+        // Add title elements
+        const title = document.createElement('h1');
+        title.className = 'demo-title';
+        title.textContent = '🎨 Advanced List Web Component Demo';
+
+        const subtitle = document.createElement('p');
+        subtitle.className = 'demo-subtitle';
+        subtitle.textContent = 'Glassmorphism • Gaming Style • Material Design';
+
+        document.body.appendChild(title);
+        document.body.appendChild(subtitle);
+
+        // =====================
         // DEMO 1: Glassmorphism List
         // =====================
         const glassmorphismList = new List({
@@ -338,3 +420,68 @@
                 }
             ]
         });
+
+        // Create labels for each demo
+        const createLabel = (text, left, top) => {
+            const label = document.createElement('div');
+            label.style.cssText = `
+                position: absolute;
+                left: ${left};
+                top: ${top};
+                color: white;
+                font-size: 18px;
+                font-weight: 600;
+                text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                padding: 8px 16px;
+                border-radius: 8px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                z-index: 1000;
+            `;
+            label.textContent = text;
+            document.body.appendChild(label);
+        };
+        
+        // Add labels
+        createLabel('🌟 Glassmorphism Style', '50px', '150px');
+        createLabel('🎮 Gaming Style', '480px', '150px');
+        createLabel('📱 Material Design', '860px', '150px');
+        
+        // Attach lists to body
+        document.body.appendChild(glassmorphismList);
+        document.body.appendChild(gamingList);
+        document.body.appendChild(materialList);
+        
+        console.log('✅ All advanced list demos initialized successfully!');
+        
+        // Add global event listeners for debugging
+        document.addEventListener('list-item-click', (e) => {
+            console.log('🎯 Global item click:', e.detail);
+        });
+        
+        document.addEventListener('list-selection-change', (e) => {
+            console.log('📋 Global selection change:', e.detail);
+        });
+
+        console.log('🎨 Advanced List Web Component Demo Ready!');
+
+        // Export for debugging
+        window.glassmorphismList = glassmorphismList;
+        window.gamingList = gamingList;
+        window.materialList = materialList;
+        
+        return { glassmorphismList, gamingList, materialList };
+        
+    } catch (error) {
+        console.error('❌ Failed to initialize advanced lists:', error);
+        throw error;
+    }
+}
+
+// Auto-initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdvancedLists);
+} else {
+    initAdvancedLists();
+}
