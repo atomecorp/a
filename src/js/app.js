@@ -188,7 +188,7 @@ import SliderCompatible, { Slider } from '../a/components/Slider.js';
 import Matrix from '../a/components/Matrix.js';
 import List from '../a/components/List.js';
 import Table from '../a/components/Table.js';
-import SquirrelWaveSurfer from '../a/components/WaveSurfer.js';
+import WaveSurferCompatible from '../a/components/WaveSurfer.js';
 
 // Import de WaveSurfer.js v7.9.5 et tous les plugins
 import WaveSurferLib from './wavesurfer-v7/core/wavesurfer.esm.js';
@@ -211,7 +211,7 @@ window.SliderCompatible = SliderCompatible;
 window.Matrix = Matrix;
 window.List = List;
 window.Table = Table;
-window.SquirrelWaveSurfer = SquirrelWaveSurfer; // Composant Squirrel pour WaveSurfer
+window.WaveSurferCompatible = WaveSurferCompatible; // Composant WaveSurfer Web Component
 
 // Exposer WaveSurfer et ses plugins globalement avec les noms standards
 window.WaveSurfer = WaveSurferLib; // Core WaveSurfer

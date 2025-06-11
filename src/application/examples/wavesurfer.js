@@ -18,7 +18,7 @@ proContainer.style.cssText = `
     top: 100px;
     left: 50px;
     width: 1000px;
-    height: 250px;
+    height: 380px;
     background: rgba(255,255,255,0.95);
     border-radius: 10px;
     padding: 20px;
@@ -28,46 +28,25 @@ proContainer.style.cssText = `
 
 // Ajouter un titre
 const title = document.createElement('h3');
-title.textContent = '🎵 Professional Audio Workstation - WaveSurfer.js v7.9.5';
+title.textContent = '🎵 Professional Audio Workstation - WaveSurfer Web Component';
 title.style.cssText = 'margin: 0 0 15px 0; color: #333; font-family: Arial, sans-serif;';
 proContainer.appendChild(title);
 
-// Conteneur pour la waveform
-const waveContainer = document.createElement('div');
-waveContainer.id = 'waveform-container';
-waveContainer.style.cssText = 'width: 100%; height: 120px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 10px;';
-proContainer.appendChild(waveContainer);
-
-// Conteneur pour les contrôles
-const controlsContainer = document.createElement('div');
-controlsContainer.style.cssText = 'display: flex; gap: 10px; align-items: center;';
-
-const playBtn = document.createElement('button');
-playBtn.textContent = '▶️ Play';
-playBtn.style.cssText = 'padding: 8px 16px; border: none; border-radius: 5px; background: #667eea; color: white; cursor: pointer;';
-
-const pauseBtn = document.createElement('button');
-pauseBtn.textContent = '⏸️ Pause';
-pauseBtn.style.cssText = 'padding: 8px 16px; border: none; border-radius: 5px; background: #764ba2; color: white; cursor: pointer;';
-
-const stopBtn = document.createElement('button');
-stopBtn.textContent = '⏹️ Stop';
-stopBtn.style.cssText = 'padding: 8px 16px; border: none; border-radius: 5px; background: #f093fb; color: white; cursor: pointer;';
-
+// Status div pour les informations
 const statusDiv = document.createElement('div');
-statusDiv.style.cssText = 'margin-left: auto; font-family: monospace; color: #666;';
-
-controlsContainer.appendChild(playBtn);
-controlsContainer.appendChild(pauseBtn);
-controlsContainer.appendChild(stopBtn);
-controlsContainer.appendChild(statusDiv);
-proContainer.appendChild(controlsContainer);
+statusDiv.style.cssText = 'position: absolute; bottom: 10px; right: 20px; font-family: monospace; color: #666; font-size: 12px;';
+proContainer.appendChild(statusDiv);
 
 document.body.appendChild(proContainer);
 
-// Créer l'instance WaveSurfer avec tous les plugins
-const professionalWorkstation = WaveSurfer.create({
-    container: waveContainer,
+// Créer l'instance WaveSurfer avec tous les plugins - NOUVELLE VERSION WEB COMPONENT
+const professionalWorkstation = new WaveSurferCompatible({
+    attach: proContainer,
+    x: 0,
+    y: 55, // Position après le titre
+    width: 960, // Largeur du container - padding
+    height: 320, // Hauteur généreuse pour tous les plugins + contrôles
+    url: './assets/audios/riff.m4a',
     
     // Enhanced waveform styling
     waveColor: '#667eea',
@@ -75,99 +54,91 @@ const professionalWorkstation = WaveSurfer.create({
     cursorColor: '#f093fb',
     barWidth: 2,
     barRadius: 1,
-    height: 120,
     normalize: true,
     
     // Enable plugins
-    plugins: [
-        RegionsPlugin.create({
-            enableDragSelection: true,
-            regionLabelFormatter: (region, index) => `Region ${index + 1}`
-        }),
-        TimelinePlugin.create({
-            height: 20,
-            timeInterval: 0.2,
-            primaryLabelInterval: 5,
-            style: {
-                fontSize: '10px',
-                color: '#666'
-            }
-        }),
-        MinimapPlugin.create({
-            height: 30,
-            waveColor: '#ddd',
-            progressColor: '#999'
-        }),
-        ZoomPlugin.create({
-            scale: 0.5
-        }),
-        HoverPlugin.create({
-            formatTimeCallback: (seconds) => [seconds / 60, seconds % 60].map(v => `0${Math.floor(v)}`.slice(-2)).join(':')
-        })
-    ]
-});
-
-// Événements et callbacks
-professionalWorkstation.on('ready', () => {
-    console.log('🎵 Professional Workstation - Station audio professionnelle prête!');
-    statusDiv.textContent = `Ready - Duration: ${Math.floor(professionalWorkstation.getDuration())}s`;
+    regions: {
+        enabled: true,
+        dragSelection: true
+    },
+    timeline: {
+        enabled: true,
+        height: 20
+    },
+    minimap: {
+        enabled: true,
+        height: 30
+    },
+    zoom: {
+        enabled: true,
+        scale: 0.5
+    },
+    hover: {
+        enabled: true,
+        formatTimeCallback: (seconds) => [seconds / 60, seconds % 60].map(v => `0${Math.floor(v)}`.slice(-2)).join(':')
+    },
     
-    // Ajouter quelques régions d'exemple
-    setTimeout(() => {
-        // Get regions plugin instance
-        const regionsPlugin = professionalWorkstation.getActivePlugins().find(plugin => plugin.constructor.name === 'RegionsPlugin');
-        if (regionsPlugin) {
-            regionsPlugin.addRegion({
-                start: 0,
-                end: 10,
-                color: 'rgba(255, 0, 0, 0.3)',
-                content: 'Intro'
-            });
+    // Activer les contrôles intégrés
+    controls: {
+        enabled: true,
+        play: true,
+        pause: true,
+        stop: true,
+        volume: true,
+        mute: true,
+        download: false
+    },
+    
+    callbacks: {
+        onReady: () => {
+            console.log('🎵 Professional Workstation - Station audio professionnelle prête!');
+            statusDiv.textContent = `Ready - Duration: ${Math.floor(professionalWorkstation.getDuration())}s`;
             
-            regionsPlugin.addRegion({
-                start: 30,
-                end: 60,
-                color: 'rgba(0, 255, 0, 0.3)',
-                content: 'Chorus'
-            });
-            
-            regionsPlugin.addRegion({
-                start: 120,
-                end: 140,
-                color: 'rgba(0, 0, 255, 0.3)',
-                content: 'Outro'
-            });
-        }
-    }, 1000);
-});
-
-professionalWorkstation.on('play', () => {
-    console.log('▶️ Station: Lecture démarrée');
-    statusDiv.textContent = 'Playing...';
-});
-
-professionalWorkstation.on('pause', () => {
-    console.log('⏸️ Station: Lecture en pause');
-    statusDiv.textContent = 'Paused';
-});
-
-professionalWorkstation.on('timeupdate', (currentTime) => {
-    // Update status every second
-    if (Math.floor(currentTime) % 1 === 0) {
-        statusDiv.textContent = `Playing: ${Math.floor(currentTime)}s / ${Math.floor(professionalWorkstation.getDuration())}s`;
+            // Ajouter quelques régions d'exemple
+            setTimeout(() => {
+                professionalWorkstation.addRegion({
+                    start: 0,
+                    end: 10,
+                    color: 'rgba(255, 0, 0, 0.3)',
+                    content: 'Intro'
+                });
+                
+                professionalWorkstation.addRegion({
+                    start: 30,
+                    end: 60,
+                    color: 'rgba(0, 255, 0, 0.3)',
+                    content: 'Chorus'
+                });
+                
+                professionalWorkstation.addRegion({
+                    start: 120,
+                    end: 140,
+                    color: 'rgba(0, 0, 255, 0.3)',
+                    content: 'Outro'
+                });
+            }, 1000);
+        },
+        onPlay: () => {
+            console.log('▶️ Station: Lecture démarrée');
+            statusDiv.textContent = 'Playing...';
+        },
+        onPause: () => {
+            console.log('⏸️ Station: Lecture en pause');
+            statusDiv.textContent = 'Paused';
+        },
+        onTimeUpdate: (currentTime) => {
+            // Update status every second
+            if (Math.floor(currentTime) % 1 === 0) {
+                statusDiv.textContent = `Playing: ${Math.floor(currentTime)}s / ${Math.floor(professionalWorkstation.getDuration())}s`;
+            }
+        },
+        onRegionCreate: (region) => console.log('🎯 Région créée:', region)
     }
 });
 
-// Contrôles
-playBtn.onclick = () => professionalWorkstation.play();
-pauseBtn.onclick = () => professionalWorkstation.pause();
-stopBtn.onclick = () => {
-    professionalWorkstation.stop();
-    statusDiv.textContent = 'Stopped';
-};
-
-// Charger un fichier audio de test
-professionalWorkstation.load('./assets/audios/riff.m4a');
+// Les contrôles sont maintenant intégrés dans le Web Component WaveSurfer
+// Plus besoin de contrôles externes - utilisez les boutons intégrés du component
+// L'audio est chargé automatiquement via la propriété 'url' dans la configuration
 
 // ==========================================
 // Example 2: Stylized Audio Visualizer
@@ -178,7 +149,7 @@ const vizContainer = document.createElement('div');
 vizContainer.id = 'visualizer-container';
 vizContainer.style.cssText = `
     position: fixed;
-    top: 380px;
+    top: 520px;
     left: 50px;
     width: 600px;
     height: 200px;
@@ -194,45 +165,52 @@ vizTitle.textContent = '🎨 Audio Visualizer';
 vizTitle.style.cssText = 'margin: 0 0 15px 0; color: white; font-family: Arial, sans-serif;';
 vizContainer.appendChild(vizTitle);
 
-const vizWaveContainer = document.createElement('div');
-vizWaveContainer.id = 'viz-waveform';
-vizWaveContainer.style.cssText = 'width: 100%; height: 120px; border-radius: 10px; overflow: hidden;';
-vizContainer.appendChild(vizWaveContainer);
-
 document.body.appendChild(vizContainer);
 
-// Créer l'instance visualizer
-const visualizer = WaveSurfer.create({
-    container: vizWaveContainer,
+// Créer l'instance visualizer avec le Web Component
+const visualizer = new WaveSurferCompatible({
+    attach: vizContainer,
+    x: 0,
+    y: 40, // Position après le titre
+    width: 560, // Largeur du container - padding
+    height: 120,
+    url: './assets/audios/riff.m4a',
     waveColor: '#ffffff',
     progressColor: '#f093fb',
     cursorColor: '#ffffff',
     barWidth: 3,
     barRadius: 2,
-    height: 120,
     normalize: true,
     
-    plugins: [
-        HoverPlugin.create({
-            formatTimeCallback: (seconds) => {
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return `${mins}:${secs.toString().padStart(2, '0')}`;
-            }
-        })
-    ]
+    // Activer les contrôles pour ce visualizer
+    controls: {
+        enabled: true,
+        play: true,
+        pause: true,
+        stop: true,
+        volume: true,
+        mute: true
+    },
+    
+    // Activer hover plugin
+    hover: {
+        enabled: true,
+        formatTimeCallback: (seconds) => {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    },
+    
+    callbacks: {
+        onReady: () => {
+            console.log('🎨 Visualizer initialized');
+            console.log(`   Duration: ${Math.floor(visualizer.getDuration())}s`);
+        },
+        onPlay: () => console.log('🎨 Visualizer playing'),
+        onFinish: () => console.log('🎨 Visualizer finished playing')
+    }
 });
-
-visualizer.on('ready', () => {
-    console.log('🎨 Visualizer initialized');
-    console.log(`   Duration: ${Math.floor(visualizer.getDuration())}s`);
-});
-
-visualizer.on('play', () => console.log('🎨 Visualizer playing'));
-visualizer.on('finish', () => console.log('🎨 Visualizer finished playing'));
-
-// Charger le même fichier
-visualizer.load('./assets/audios/riff.m4a');
 
 // ==========================================
 // Example 3: Professional Audio Editor
@@ -243,7 +221,7 @@ const editorContainer = document.createElement('div');
 editorContainer.id = 'editor-container';
 editorContainer.style.cssText = `
     position: fixed;
-    top: 610px;
+    top: 760px;
     left: 50px;
     width: 900px;
     height: 220px;
@@ -260,56 +238,66 @@ editorTitle.textContent = '🎛️ Professional Audio Editor';
 editorTitle.style.cssText = 'margin: 0 0 15px 0; color: white; font-family: Arial, sans-serif;';
 editorContainer.appendChild(editorTitle);
 
-const editorWaveContainer = document.createElement('div');
-editorWaveContainer.id = 'editor-waveform';
-editorWaveContainer.style.cssText = 'width: 100%; height: 140px; border-radius: 5px;';
-editorContainer.appendChild(editorWaveContainer);
-
 document.body.appendChild(editorContainer);
 
-// Créer l'instance éditeur avec régions
-const audioEditor = WaveSurfer.create({
-    container: editorWaveContainer,
+// Créer l'instance éditeur avec régions et Web Component
+const audioEditor = new WaveSurferCompatible({
+    attach: editorContainer,
+    x: 0,
+    y: 40, // Position après le titre
+    width: 860, // Largeur du container - padding
+    height: 160,
+    url: './assets/audios/kick.wav',
     waveColor: '#8B9DC3',
     progressColor: '#3B82F6',
     cursorColor: '#EF4444',
     barWidth: 1,
     barRadius: 0,
-    height: 140,
     
-    plugins: [
-        RegionsPlugin.create({
-            enableDragSelection: true
-        }),
-        ZoomPlugin.create()
-    ]
-});
-
-audioEditor.on('ready', () => {
-    console.log('🎛️ Audio Editor ready');
+    // Activer les régions
+    regions: {
+        enabled: true,
+        dragSelection: true
+    },
     
-    // Add some example regions
-    setTimeout(() => {
-        const regionsPlugin = audioEditor.getActivePlugins().find(plugin => plugin.constructor.name === 'RegionsPlugin');
-        if (regionsPlugin) {
-            regionsPlugin.addRegion({
-                start: 0.5,
-                end: 2.0,
-                color: 'rgba(255, 193, 7, 0.3)'
-            });
+    // Activer le zoom
+    zoom: {
+        enabled: true,
+        scale: 1
+    },
+    
+    // Activer les contrôles
+    controls: {
+        enabled: true,
+        play: true,
+        pause: true,
+        stop: true,
+        volume: true,
+        mute: true
+    },
+    
+    callbacks: {
+        onReady: () => {
+            console.log('🎛️ Audio Editor ready');
             
-            regionsPlugin.addRegion({
-                start: 3.0,
-                end: 5.5,
-                color: 'rgba(40, 167, 69, 0.3)'
-            });
-            
-            console.log('🎯 Example regions added to audio editor');
+            // Add some example regions
+            setTimeout(() => {
+                audioEditor.addRegion({
+                    start: 0.5,
+                    end: 2.0,
+                    color: 'rgba(255, 193, 7, 0.3)'
+                });
+                
+                audioEditor.addRegion({
+                    start: 3.0,
+                    end: 5.5,
+                    color: 'rgba(40, 167, 69, 0.3)'
+                });
+                
+                console.log('🎯 Example regions added to audio editor');
+            }, 1000);
         }
-    }, 1000);
+    }
 });
-
-// Charger un fichier différent pour l'éditeur
-audioEditor.load('./assets/audios/kick.wav');
 
 console.log('🎵 Tous les exemples WaveSurfer.js v7.9.5 ont été initialisés avec succès!');

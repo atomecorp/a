@@ -1,11 +1,11 @@
 /**
- * 🎵 WaveSurfer Component - Squirrel Framework
+ * 🎵 WaveSurfer Web Component - Squirrel Framework
  * 
  * Component for creating interactive audio waveform visualizations
  * with playback controls, regions, and audio analysis features.
  * Compatible with WaveSurfer.js v7.x for complete offline functionality.
  * 
- * @version 3.0.0 - Offline Compatible (v7)
+ * @version 4.0.0 - Web Component Architecture
  * @author Squirrel Framework Team
  */
 
@@ -44,11 +44,12 @@ async function loadWaveSurfer() {
 }
 
 /**
- * 🎵 WaveSurfer Component Class
+ * 🎵 WaveSurfer Web Component Class
  * 
  * Creates interactive audio waveform visualizations with full plugin support
+ * Now extends HTMLElement for true Web Component architecture
  */
-class WaveSurfer extends EventTarget {
+class WaveSurfer extends HTMLElement {
     static instances = new Map(); // Registry of all WaveSurfer instances
     
     constructor(config = {}) {
@@ -57,124 +58,8 @@ class WaveSurfer extends EventTarget {
         // Generate unique ID
         this.id = config.id || `wavesurfer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Default configuration
-        this.config = {
-            // Container and positioning
-            attach: config.attach || 'body',
-            x: config.x || 100,
-            y: config.y || 100,
-            width: config.width || 800,
-            height: config.height || 120,
-            
-            // Audio source
-            url: config.url || null,
-            peaks: config.peaks || null,
-            
-            // Visual styling
-            waveColor: config.waveColor || '#4A90E2',
-            progressColor: config.progressColor || '#2ECC71',
-            cursorColor: config.cursorColor || '#E74C3C',
-            barWidth: config.barWidth || 2,
-            barRadius: config.barRadius || 1,
-            responsive: config.responsive !== false,
-            interact: config.interact !== false,
-            dragToSeek: config.dragToSeek !== false,
-            hideScrollbar: config.hideScrollbar !== false,
-            normalize: config.normalize !== false,
-            backend: config.backend || 'WebAudio',
-            mediaControls: config.mediaControls || false,
-            
-            // Visual styling
-            style: {
-                backgroundColor: '#FFFFFF',
-                border: '1px solid rgba(0,0,0,0.1)',
-                borderRadius: '8px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                overflow: 'hidden',
-                ...config.style
-            },
-            
-            // Control buttons
-            controls: {
-                enabled: config.controls?.enabled !== false,
-                play: config.controls?.play !== false,
-                pause: config.controls?.pause !== false,
-                stop: config.controls?.stop !== false,
-                mute: config.controls?.mute !== false,
-                volume: config.controls?.volume !== false,
-                download: config.controls?.download || false,
-                ...config.controls
-            },
-            
-            // Regions support
-            regions: {
-                enabled: config.regions?.enabled || false,
-                dragSelection: config.regions?.dragSelection !== false,
-                snapToGridPercentage: config.regions?.snapToGridPercentage || null,
-                ...config.regions
-            },
-            
-            // Plugins configuration
-            plugins: config.plugins || [],
-            enabledPlugins: config.enabledPlugins || ['regions'], // Default plugins to load
-            autoLoadPlugins: config.autoLoadPlugins !== false, // Auto-load recommended plugins
-            
-            // Plugin-specific configurations
-            timeline: {
-                enabled: config.timeline?.enabled || false,
-                height: config.timeline?.height || 20,
-                ...config.timeline
-            },
-            
-            minimap: {
-                enabled: config.minimap?.enabled || false,
-                height: config.minimap?.height || 50,
-                ...config.minimap
-            },
-            
-            zoom: {
-                enabled: config.zoom?.enabled || false,
-                scale: config.zoom?.scale || 1,
-                ...config.zoom
-            },
-            
-            hover: {
-                enabled: config.hover?.enabled || false,
-                formatTimeCallback: config.hover?.formatTimeCallback || null,
-                ...config.hover
-            },
-            
-            spectrogram: {
-                enabled: config.spectrogram?.enabled || false,
-                height: config.spectrogram?.height || 200,
-                ...config.spectrogram
-            },
-            
-            record: {
-                enabled: config.record?.enabled || false,
-                ...config.record
-            },
-            
-            envelope: {
-                enabled: config.envelope?.enabled || false,
-                ...config.envelope
-            },
-            
-            // Callbacks
-            callbacks: {
-                onReady: config.callbacks?.onReady || (() => {}),
-                onPlay: config.callbacks?.onPlay || (() => {}),
-                onPause: config.callbacks?.onPause || (() => {}),
-                onFinish: config.callbacks?.onFinish || (() => {}),
-                onSeek: config.callbacks?.onSeek || (() => {}),
-                onTimeUpdate: config.callbacks?.onTimeUpdate || (() => {}),
-                onRegionCreate: config.callbacks?.onRegionCreate || (() => {}),
-                onRegionUpdate: config.callbacks?.onRegionUpdate || (() => {}),
-                onRegionRemove: config.callbacks?.onRegionRemove || (() => {}),
-                onError: config.callbacks?.onError || ((error) => console.error('WaveSurfer error:', error)),
-                ...config.callbacks
-            }
-        };
+        // La config peut être fournie via le constructeur ou sera fournie plus tard
+        this.config = this.mergeConfig(config);
         
         // Internal state
         this.wavesurfer = null;
@@ -184,36 +69,193 @@ class WaveSurfer extends EventTarget {
         this.regions = new Map();
         this.plugins = new Map();
         
-        // Initialize
-        this._init();
+        // Create Shadow DOM
+        this.attachShadow({ mode: 'open' });
         
-        // Register instance
-        WaveSurfer.instances.set(this.id, this);
+        // Initialize flag
+        this.initialized = false;
     }
     
-    async _init() {
+    connectedCallback() {
+        if (!this.initialized) {
+            this.init();
+            this.initialized = true;
+        }
+    }
+    
+    mergeConfig(config) {
+        // Default configuration - same as before but simplified
+        const defaultConfig = {
+            // Container and positioning
+            attach: 'body',
+            x: 100, y: 100,
+            width: 800, height: 120,
+            
+            // Audio source
+            url: null,
+            peaks: null,
+            
+            // Visual styling
+            waveColor: '#4A90E2',
+            progressColor: '#2ECC71',
+            cursorColor: '#E74C3C',
+            barWidth: 2,
+            barRadius: 1,
+            responsive: true,
+            interact: true,
+            dragToSeek: true,
+            hideScrollbar: true,
+            normalize: false,
+            backend: 'WebAudio',
+            mediaControls: false,
+            
+            // Visual styling
+            style: {
+                backgroundColor: '#FFFFFF',
+                border: '1px solid rgba(0,0,0,0.1)',
+                borderRadius: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                overflow: 'hidden'
+            },
+            
+            // Control buttons
+            controls: {
+                enabled: true,
+                play: true,
+                pause: true,
+                stop: true,
+                mute: true,
+                volume: true,
+                download: false
+            },
+            
+            // Regions support
+            regions: {
+                enabled: false,
+                dragSelection: true,
+                snapToGridPercentage: null
+            },
+            
+            // Plugins configuration
+            plugins: [],
+            enabledPlugins: ['regions'], // Default plugins to load
+            autoLoadPlugins: true, // Auto-load recommended plugins
+            
+            // Plugin-specific configurations
+            timeline: { enabled: false, height: 20 },
+            minimap: { enabled: false, height: 50 },
+            zoom: { enabled: false, scale: 1 },
+            hover: { enabled: false, formatTimeCallback: null },
+            spectrogram: { enabled: false, height: 200 },
+            record: { enabled: false },
+            envelope: { enabled: false },
+            
+            // Callbacks
+            callbacks: {
+                onReady: () => {},
+                onPlay: () => {},
+                onPause: () => {},
+                onFinish: () => {},
+                onSeek: () => {},
+                onTimeUpdate: () => {},
+                onRegionCreate: () => {},
+                onRegionUpdate: () => {},
+                onRegionRemove: () => {},
+                onError: (error) => console.error('WaveSurfer error:', error)
+            }
+        };
+        
+        // Safer merge using Object.assign for shallow merge of top-level properties
+        // and manual merge for known safe nested objects
+        const mergedConfig = { ...defaultConfig };
+        
+        // Safely merge known safe properties
+        if (config) {
+            // Direct properties (no recursion risk)
+            const safeDirectProps = ['attach', 'x', 'y', 'width', 'height', 'url', 'peaks', 
+                'waveColor', 'progressColor', 'cursorColor', 'barWidth', 'barRadius', 
+                'responsive', 'interact', 'dragToSeek', 'hideScrollbar', 'normalize', 
+                'backend', 'mediaControls', 'plugins', 'enabledPlugins', 'autoLoadPlugins'];
+            
+            safeDirectProps.forEach(prop => {
+                if (config.hasOwnProperty(prop)) {
+                    mergedConfig[prop] = config[prop];
+                }
+            });
+            
+            // Manually merge nested objects (safer than deep merge)
+            if (config.style && typeof config.style === 'object') {
+                mergedConfig.style = { ...defaultConfig.style, ...config.style };
+            }
+            
+            if (config.controls && typeof config.controls === 'object') {
+                mergedConfig.controls = { ...defaultConfig.controls, ...config.controls };
+            }
+            
+            if (config.regions && typeof config.regions === 'object') {
+                mergedConfig.regions = { ...defaultConfig.regions, ...config.regions };
+            }
+            
+            // Plugin configurations
+            const pluginConfigs = ['timeline', 'minimap', 'zoom', 'hover', 'spectrogram', 'record', 'envelope'];
+            pluginConfigs.forEach(plugin => {
+                if (config[plugin] && typeof config[plugin] === 'object') {
+                    mergedConfig[plugin] = { ...defaultConfig[plugin], ...config[plugin] };
+                }
+            });
+            
+            // Callbacks - handle carefully to avoid circular references
+            if (config.callbacks && typeof config.callbacks === 'object') {
+                mergedConfig.callbacks = { ...defaultConfig.callbacks };
+                Object.keys(config.callbacks).forEach(callbackName => {
+                    if (typeof config.callbacks[callbackName] === 'function') {
+                        mergedConfig.callbacks[callbackName] = config.callbacks[callbackName];
+                    }
+                });
+            }
+        }
+        
+        return mergedConfig;
+    }
+    
+    init() {
+        this.initializeComponent();
+    }
+    
+    async initializeComponent() {
         try {
             // Load WaveSurfer.js library
             await loadWaveSurfer();
             
-            // Create container
-            this._createContainer();
+            // Create Shadow DOM structure
+            this.createShadowStructure();
+            
+            // Apply positioning if specified
+            this.applyPositioning();
             
             // Initialize WaveSurfer
-            await this._initWaveSurfer();
+            await this.initWaveSurfer();
             
             // Setup controls if enabled
             if (this.config.controls.enabled) {
-                this._createControls();
+                this.createControls();
             }
             
             // Setup event handlers
-            this._setupEventHandlers();
+            this.setupEventHandlers();
             
             // Load audio if URL provided
             if (this.config.url) {
                 await this.loadAudio(this.config.url);
             }
+            
+            // Force layout update after plugins are loaded
+            setTimeout(() => {
+                this.updatePluginLayout();
+            }, 500);
+            
+            // Register instance
+            WaveSurfer.instances.set(this.id, this);
             
         } catch (error) {
             console.error('❌ WaveSurfer initialization failed:', error);
@@ -221,46 +263,202 @@ class WaveSurfer extends EventTarget {
         }
     }
     
-    _createContainer() {
-        // Get parent element
-        const parent = typeof this.config.attach === 'string' 
-            ? document.querySelector(this.config.attach)
-            : this.config.attach;
-            
-        if (!parent) {
-            throw new Error(`Container not found: ${this.config.attach}`);
-        }
+    createShadowStructure() {
+        // Create CSS styles
+        const styles = this.createStyles();
         
         // Create main container
         this.container = document.createElement('div');
-        this.container.className = 'squirrel-wavesurfer';
-        this.container.id = this.id;
-        
-        // Apply styling
-        Object.assign(this.container.style, {
-            position: 'absolute',
-            left: `${this.config.x}px`,
-            top: `${this.config.y}px`,
-            width: `${this.config.width}px`,
-            height: `${this.config.height}px`,
-            zIndex: '1000',
-            ...this.config.style
-        });
+        this.container.className = 'wavesurfer-container';
         
         // Create waveform container
         this.waveformContainer = document.createElement('div');
-        this.waveformContainer.className = 'wavesurfer-waveform';
-        this.waveformContainer.style.cssText = `
-            width: 100%;
-            height: ${this.config.controls.enabled ? 'calc(100% - 50px)' : '100%'};
-            position: relative;
-        `;
+        this.waveformContainer.className = 'waveform-container';
         
         this.container.appendChild(this.waveformContainer);
-        parent.appendChild(this.container);
+        
+        // Add to Shadow DOM
+        this.shadowRoot.appendChild(styles);
+        this.shadowRoot.appendChild(this.container);
     }
     
-    async _initWaveSurfer() {
+    createStyles() {
+        const style = document.createElement('style');
+        style.textContent = `
+            :host {
+                display: block;
+                width: ${this.config.width}px;
+                height: ${this.config.height}px;
+                font-family: 'Roboto', Arial, sans-serif;
+                box-sizing: border-box;
+                outline: none;
+            }
+            
+            .wavesurfer-container {
+                position: relative;
+                width: 100%;
+                height: 100%;
+                background: var(--bg-color, ${this.config.style.backgroundColor});
+                border: var(--border, ${this.config.style.border});
+                border-radius: var(--border-radius, ${this.config.style.borderRadius});
+                box-shadow: var(--box-shadow, ${this.config.style.boxShadow});
+                overflow: var(--overflow, ${this.config.style.overflow});
+                box-sizing: border-box;
+            }
+            
+            .waveform-container {
+                width: 100%;
+                height: ${this.calculateWaveformHeight()}px;
+                position: relative;
+                z-index: 1;
+                overflow: visible; /* Permettre aux plugins de s'afficher */
+                min-height: 100px; /* Hauteur minimale pour les plugins */
+            }
+            
+            /* Allow WaveSurfer plugins to show properly */
+            .waveform-container > div {
+                position: relative !important;
+                z-index: 1 !important;
+                overflow: visible !important;
+            }
+            
+            /* Enhanced styles for WaveSurfer plugins */
+            .waveform-container div[data-id*="timeline"],
+            .waveform-container div[id*="timeline"] {
+                position: relative !important;
+                z-index: 10 !important;
+                margin-bottom: 5px !important;
+                height: ${this.config.timeline.height}px !important;
+                overflow: visible !important;
+            }
+            
+            .waveform-container div[data-id*="minimap"],
+            .waveform-container div[id*="minimap"] {
+                position: relative !important;
+                z-index: 10 !important;
+                margin-top: 5px !important;
+                height: ${this.config.minimap.height}px !important;
+                overflow: visible !important;
+            }
+            
+            /* General plugin visibility fixes */
+            .waveform-container > div:not([class*="control"]) {
+                position: relative !important;
+                overflow: visible !important;
+            }
+            
+            /* Ensure main waveform area is properly sized */
+            .waveform-container canvas,
+            .waveform-container svg {
+                max-width: 100% !important;
+                position: relative !important;
+                z-index: 1 !important;
+            }
+            
+            .controls-container {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                height: 50px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-top: 1px solid rgba(255,255,255,0.1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                padding: 0 15px;
+                border-radius: 0 0 8px 8px;
+                z-index: 100;
+                pointer-events: auto;
+            }
+            
+            .control-button {
+                background: rgba(255,255,255,0.2);
+                border: 1px solid rgba(255,255,255,0.3);
+                color: white;
+                padding: 8px 12px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: all 0.2s ease;
+                backdrop-filter: blur(10px);
+                z-index: 101;
+                position: relative;
+                pointer-events: auto;
+            }
+            
+            .control-button:hover {
+                background: rgba(255,255,255,0.3);
+                transform: scale(1.05);
+            }
+            
+            .time-display {
+                color: white;
+                font-family: 'Roboto Mono', monospace;
+                font-size: 12px;
+                margin: 0 10px;
+                min-width: 80px;
+                text-align: center;
+            }
+            
+            .volume-container {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                margin-left: 15px;
+                z-index: 101;
+                position: relative;
+            }
+            
+            .volume-slider {
+                width: 80px;
+                height: 4px;
+                background: rgba(255,255,255,0.3);
+                outline: none;
+                border-radius: 2px;
+                z-index: 102;
+                position: relative;
+                pointer-events: auto;
+            }
+        `;
+        return style;
+    }
+    
+    calculateWaveformHeight() {
+        let baseHeight = 80; // Hauteur de base pour la waveform
+        let additionalHeight = 0;
+        
+        // Ajouter de l'espace pour les plugins
+        if (this.config.timeline.enabled) {
+            additionalHeight += this.config.timeline.height + 10; // +10 pour les marges
+        }
+        
+        if (this.config.minimap.enabled) {
+            additionalHeight += this.config.minimap.height + 10; // +10 pour les marges
+        }
+        
+        if (this.config.zoom.enabled) {
+            additionalHeight += 30; // Espace pour le zoom
+        }
+        
+        // Calculer la hauteur finale en fonction de la hauteur totale disponible
+        const totalAvailableHeight = this.config.height - (this.config.controls.enabled ? 50 : 0);
+        const calculatedHeight = Math.min(baseHeight + additionalHeight, totalAvailableHeight - 20);
+        
+        return Math.max(calculatedHeight, 80); // Minimum 80px
+    }
+    
+    applyPositioning() {
+        // Apply positioning if x and y are specified
+        if (this.config.x !== undefined && this.config.y !== undefined) {
+            this.style.position = 'absolute';
+            this.style.left = `${this.config.x}px`;
+            this.style.top = `${this.config.y}px`;
+        }
+    }
+    
+    async initWaveSurfer() {
         if (!WaveSurferLib) {
             throw new Error('WaveSurfer.js library not loaded');
         }
@@ -297,8 +495,15 @@ class WaveSurfer extends EventTarget {
         // Initialize WaveSurfer instance
         this.wavesurfer = WaveSurferLib.create(options);
         
-        console.log(`🎵 WaveSurfer instance "${this.id}" created`);
+        console.log(`🎵 WaveSurfer Web Component "${this.id}" created`);
         console.log(`🔌 Plugins actifs: ${plugins.length}`);
+        console.log(`📋 Configuration plugins:`, {
+            regions: this.config.regions.enabled,
+            timeline: this.config.timeline.enabled,
+            minimap: this.config.minimap.enabled,
+            zoom: this.config.zoom.enabled,
+            hover: this.config.hover.enabled
+        });
     }
     
     async _loadRequiredPlugins() {
@@ -416,31 +621,16 @@ class WaveSurfer extends EventTarget {
         }
     }
     
-    _createControls() {
+    createControls() {
         const controls = this.config.controls;
         
         // Create controls container
         this.controlsContainer = document.createElement('div');
-        this.controlsContainer.className = 'wavesurfer-controls';
-        this.controlsContainer.style.cssText = `
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 50px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-top: 1px solid rgba(255,255,255,0.1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            padding: 0 15px;
-            border-radius: 0 0 8px 8px;
-        `;
+        this.controlsContainer.className = 'controls-container';
         
         // Play/Pause button
         if (controls.play || controls.pause) {
-            this.playPauseBtn = this._createButton('▶️', 'Play/Pause', () => {
+            this.playPauseBtn = this.createButton('▶️', 'Play/Pause', () => {
                 this.isPlaying ? this.pause() : this.play();
             });
             this.controlsContainer.appendChild(this.playPauseBtn);
@@ -448,7 +638,7 @@ class WaveSurfer extends EventTarget {
         
         // Stop button
         if (controls.stop) {
-            this.stopBtn = this._createButton('⏹️', 'Stop', () => {
+            this.stopBtn = this.createButton('⏹️', 'Stop', () => {
                 this.stop();
             });
             this.controlsContainer.appendChild(this.stopBtn);
@@ -457,30 +647,17 @@ class WaveSurfer extends EventTarget {
         // Time display
         this.timeDisplay = document.createElement('span');
         this.timeDisplay.className = 'time-display';
-        this.timeDisplay.style.cssText = `
-            color: white;
-            font-family: 'Roboto Mono', monospace;
-            font-size: 12px;
-            margin: 0 10px;
-            min-width: 80px;
-            text-align: center;
-        `;
         this.timeDisplay.textContent = '00:00 / 00:00';
         this.controlsContainer.appendChild(this.timeDisplay);
         
         // Volume control
         if (controls.volume) {
             this.volumeContainer = document.createElement('div');
-            this.volumeContainer.style.cssText = `
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                margin-left: 15px;
-            `;
+            this.volumeContainer.className = 'volume-container';
             
             // Mute button
             if (controls.mute) {
-                this.muteBtn = this._createButton('🔊', 'Mute', () => {
+                this.muteBtn = this.createButton('🔊', 'Mute', () => {
                     this.toggleMute();
                 });
                 this.volumeContainer.appendChild(this.muteBtn);
@@ -492,13 +669,7 @@ class WaveSurfer extends EventTarget {
             this.volumeSlider.min = '0';
             this.volumeSlider.max = '100';
             this.volumeSlider.value = '100';
-            this.volumeSlider.style.cssText = `
-                width: 80px;
-                height: 4px;
-                background: rgba(255,255,255,0.3);
-                outline: none;
-                border-radius: 2px;
-            `;
+            this.volumeSlider.className = 'volume-slider';
             
             this.volumeSlider.addEventListener('input', (e) => {
                 this.setVolume(parseInt(e.target.value) / 100);
@@ -510,7 +681,7 @@ class WaveSurfer extends EventTarget {
         
         // Download button
         if (controls.download) {
-            this.downloadBtn = this._createButton('💾', 'Download', () => {
+            this.downloadBtn = this.createButton('💾', 'Download', () => {
                 this.downloadAudio();
             });
             this.controlsContainer.appendChild(this.downloadBtn);
@@ -519,45 +690,26 @@ class WaveSurfer extends EventTarget {
         this.container.appendChild(this.controlsContainer);
     }
     
-    _createButton(text, title, onClick) {
+    createButton(text, title, onClick) {
         const button = document.createElement('button');
         button.textContent = text;
         button.title = title;
-        button.style.cssText = `
-            background: rgba(255,255,255,0.2);
-            border: 1px solid rgba(255,255,255,0.3);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s ease;
-            backdrop-filter: blur(10px);
-        `;
-        
-        button.addEventListener('mouseenter', () => {
-            button.style.background = 'rgba(255,255,255,0.3)';
-            button.style.transform = 'scale(1.05)';
-        });
-        
-        button.addEventListener('mouseleave', () => {
-            button.style.background = 'rgba(255,255,255,0.2)';
-            button.style.transform = 'scale(1)';
-        });
-        
+        button.className = 'control-button';
         button.addEventListener('click', onClick);
         return button;
     }
     
-    _setupEventHandlers() {
+    setupEventHandlers() {
         if (!this.wavesurfer) return;
         
         // Ready event
         this.wavesurfer.on('ready', () => {
             this.isReady = true;
-            this._updateTimeDisplay();
-            console.log(`🎵 WaveSurfer "${this.id}" is ready`);
+            this.updateTimeDisplay();
+            this.updatePluginLayout(); // Forcer la mise à jour de la mise en page des plugins
+            console.log(`🎵 WaveSurfer Web Component "${this.id}" is ready`);
             this.config.callbacks.onReady(this);
+            this.dispatchEvent(new CustomEvent('ready', { detail: { wavesurfer: this } }));
         });
         
         // Play event
@@ -567,6 +719,7 @@ class WaveSurfer extends EventTarget {
                 this.playPauseBtn.textContent = '⏸️';
             }
             this.config.callbacks.onPlay(this);
+            this.dispatchEvent(new CustomEvent('play', { detail: { wavesurfer: this } }));
         });
         
         // Pause event
@@ -576,6 +729,7 @@ class WaveSurfer extends EventTarget {
                 this.playPauseBtn.textContent = '▶️';
             }
             this.config.callbacks.onPause(this);
+            this.dispatchEvent(new CustomEvent('pause', { detail: { wavesurfer: this } }));
         });
         
         // Finish event
@@ -585,46 +739,52 @@ class WaveSurfer extends EventTarget {
                 this.playPauseBtn.textContent = '▶️';
             }
             this.config.callbacks.onFinish(this);
+            this.dispatchEvent(new CustomEvent('finish', { detail: { wavesurfer: this } }));
         });
         
         // Seek event
         this.wavesurfer.on('seeking', (currentTime) => {
             this.currentTime = currentTime;
-            this._updateTimeDisplay();
+            this.updateTimeDisplay();
             this.config.callbacks.onSeek(currentTime, this);
+            this.dispatchEvent(new CustomEvent('seek', { detail: { currentTime, wavesurfer: this } }));
         });
         
         // Time update event
         this.wavesurfer.on('timeupdate', (currentTime) => {
             this.currentTime = currentTime;
-            this._updateTimeDisplay();
+            this.updateTimeDisplay();
             this.config.callbacks.onTimeUpdate(currentTime, this);
+            this.dispatchEvent(new CustomEvent('timeupdate', { detail: { currentTime, wavesurfer: this } }));
         });
         
         // Error handling
         this.wavesurfer.on('error', (error) => {
-            console.error(`❌ WaveSurfer "${this.id}" error:`, error);
+            console.error(`❌ WaveSurfer Web Component "${this.id}" error:`, error);
             this.config.callbacks.onError(error);
+            this.dispatchEvent(new CustomEvent('error', { detail: { error, wavesurfer: this } }));
         });
         
         // Region events (if regions plugin is enabled)
         if (this.config.regions.enabled) {
-            this._setupRegionEvents();
+            this.setupRegionEvents();
         }
     }
     
-    _setupRegionEvents() {
+    setupRegionEvents() {
         // Region creation
         this.wavesurfer.on('region-created', (region) => {
             this.regions.set(region.id, region);
             console.log(`🎯 Region created: ${region.id}`);
             this.config.callbacks.onRegionCreate(region, this);
+            this.dispatchEvent(new CustomEvent('region-created', { detail: { region, wavesurfer: this } }));
         });
         
         // Region update
         this.wavesurfer.on('region-updated', (region) => {
             console.log(`🎯 Region updated: ${region.id}`);
             this.config.callbacks.onRegionUpdate(region, this);
+            this.dispatchEvent(new CustomEvent('region-updated', { detail: { region, wavesurfer: this } }));
         });
         
         // Region removal
@@ -632,18 +792,19 @@ class WaveSurfer extends EventTarget {
             this.regions.delete(region.id);
             console.log(`🎯 Region removed: ${region.id}`);
             this.config.callbacks.onRegionRemove(region, this);
+            this.dispatchEvent(new CustomEvent('region-removed', { detail: { region, wavesurfer: this } }));
         });
     }
     
-    _updateTimeDisplay() {
+    updateTimeDisplay() {
         if (!this.timeDisplay || !this.wavesurfer) return;
         
-        const current = this._formatTime(this.currentTime);
-        const total = this._formatTime(this.wavesurfer.getDuration() || 0);
+        const current = this.formatTime(this.currentTime);
+        const total = this.formatTime(this.wavesurfer.getDuration() || 0);
         this.timeDisplay.textContent = `${current} / ${total}`;
     }
     
-    _formatTime(seconds) {
+    formatTime(seconds) {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
@@ -828,10 +989,9 @@ class WaveSurfer extends EventTarget {
         this.config.x = x;
         this.config.y = y;
         
-        if (this.container) {
-            this.container.style.left = `${x}px`;
-            this.container.style.top = `${y}px`;
-        }
+        this.style.left = `${x}px`;
+        this.style.top = `${y}px`;
+        
         return this;
     }
     
@@ -839,10 +999,9 @@ class WaveSurfer extends EventTarget {
         this.config.width = width;
         this.config.height = height;
         
-        if (this.container) {
-            this.container.style.width = `${width}px`;
-            this.container.style.height = `${height}px`;
-        }
+        this.style.width = `${width}px`;
+        this.style.height = `${height}px`;
+        
         return this;
     }
     
@@ -859,17 +1018,12 @@ class WaveSurfer extends EventTarget {
     
     // Cleanup
     destroy() {
-        console.log(`🗑️ Destroying WaveSurfer instance "${this.id}"`);
+        console.log(`🗑️ Destroying WaveSurfer Web Component "${this.id}"`);
         
         // Stop playback
         if (this.wavesurfer) {
             this.wavesurfer.stop();
             this.wavesurfer.destroy();
-        }
-        
-        // Remove from DOM
-        if (this.container && this.container.parentNode) {
-            this.container.parentNode.removeChild(this.container);
         }
         
         // Remove from registry
@@ -881,6 +1035,36 @@ class WaveSurfer extends EventTarget {
         this.waveformContainer = null;
         this.controlsContainer = null;
         this.regions.clear();
+    }
+    
+    // Plugin layout management
+    updatePluginLayout() {
+        if (!this.wavesurfer || !this.isReady) return;
+        
+        // Force une mise à jour de la mise en page
+        setTimeout(() => {
+            // Recalculer les dimensions du container
+            const waveformHeight = this.calculateWaveformHeight();
+            if (this.waveformContainer) {
+                this.waveformContainer.style.height = `${waveformHeight}px`;
+                this.waveformContainer.style.overflow = 'visible';
+            }
+            
+            // Forcer la re-render des plugins
+            if (this.wavesurfer.drawer && typeof this.wavesurfer.drawer.fireEvent === 'function') {
+                this.wavesurfer.drawer.fireEvent('redraw');
+            }
+            
+            // Ajuster le z-index des éléments plugins
+            const pluginElements = this.waveformContainer.querySelectorAll('[data-plugin]');
+            pluginElements.forEach((element, index) => {
+                element.style.position = 'relative';
+                element.style.zIndex = `${10 + index}`;
+                element.style.overflow = 'visible';
+            });
+            
+            console.log(`🎨 Layout des plugins mis à jour pour ${this.id}`);
+        }, 100);
     }
     
     // Static methods
@@ -898,4 +1082,33 @@ class WaveSurfer extends EventTarget {
     }
 }
 
-export default WaveSurfer;
+// Register the Web Component
+customElements.define('squirrel-wavesurfer', WaveSurfer);
+
+/**
+ * Compatibility function for classe A syntax
+ * Permet d'utiliser l'ancienne syntaxe: new WaveSurferCompatible({ attach: 'body', ... })
+ */
+function WaveSurferCompatible(config = {}) {
+    // Créer le Web Component
+    const wavesurferElement = new WaveSurfer();
+    
+    // Merger la configuration
+    wavesurferElement.config = wavesurferElement.mergeConfig(config);
+    
+    // Attacher au parent spécifié
+    const parent = typeof config.attach === 'string' 
+        ? document.querySelector(config.attach)
+        : config.attach;
+        
+    if (!parent) {
+        throw new Error(`Container not found: ${config.attach}`);
+    }
+    
+    // Ajouter au DOM
+    parent.appendChild(wavesurferElement);
+    
+    return wavesurferElement;
+}
+
+export default WaveSurferCompatible;
