@@ -132,7 +132,8 @@ class WaveSurfer extends HTMLElement {
                 volume: true,
                 download: false,
                 modeToggle: true, // Add mode toggle control
-                loop: true // Add loop control
+                loop: true, // Add loop control
+                clearRegions: true // Add clear regions control
             },
             
             // Regions support
@@ -420,6 +421,18 @@ class WaveSurfer extends HTMLElement {
             
             .mode-toggle-btn:hover {
                 border-color: rgba(255,255,255,0.6) !important;
+                transform: scale(1.1);
+            }
+            
+            .clear-regions-btn {
+                background: rgba(231, 76, 60, 0.3) !important;
+                border: 1px solid rgba(231, 76, 60, 0.5) !important;
+                font-weight: bold;
+            }
+            
+            .clear-regions-btn:hover {
+                background: rgba(231, 76, 60, 0.5) !important;
+                border-color: rgba(231, 76, 60, 0.7) !important;
                 transform: scale(1.1);
             }
             
@@ -746,6 +759,15 @@ class WaveSurfer extends HTMLElement {
                 this.toggleLoop();
             });
             this.controlsContainer.appendChild(this.loopBtn);
+        }
+
+        // Clear Regions button
+        if (controls.clearRegions) {
+            this.clearRegionsBtn = this.createButton('🗑️', 'Clear All Regions', () => {
+                this.clearRegions();
+            });
+            this.clearRegionsBtn.className = 'control-button clear-regions-btn';
+            this.controlsContainer.appendChild(this.clearRegionsBtn);
         }
 
         this.container.appendChild(this.controlsContainer);
@@ -1126,9 +1148,55 @@ class WaveSurfer extends HTMLElement {
     }
     
     clearRegions() {
-        if (this.wavesurfer && this.config.regions.enabled) {
-            this.wavesurfer.clearRegions();
+        if (!this.wavesurfer || !this.config.regions.enabled) {
+            console.warn('🗑️ WaveSurfer not ready or regions not enabled');
+            return this;
         }
+
+        try {
+            // For WaveSurfer v7+, get the regions plugin
+            const plugins = this.wavesurfer.getActivePlugins ? this.wavesurfer.getActivePlugins() : [];
+            const regionsPlugin = plugins.find(plugin => 
+                plugin.constructor?.name === 'RegionsPlugin' || 
+                plugin.name === 'regions' ||
+                typeof plugin.addRegion === 'function' ||
+                plugin._name === 'regions'
+            );
+
+            if (regionsPlugin) {
+                // Clear all regions through the plugin
+                if (typeof regionsPlugin.clearRegions === 'function') {
+                    regionsPlugin.clearRegions();
+                    console.log('🗑️ ✅ All regions cleared via RegionsPlugin.clearRegions()');
+                } else {
+                    // Alternative: remove all regions individually
+                    const allRegions = Array.from(this.regions.values());
+                    allRegions.forEach(region => {
+                        if (region && typeof region.remove === 'function') {
+                            region.remove();
+                        }
+                    });
+                    console.log(`🗑️ ✅ Cleared ${allRegions.length} regions individually`);
+                }
+                
+                // Clear our internal regions map
+                this.regions.clear();
+                
+            } else {
+                // Fallback: try direct WaveSurfer method
+                if (this.wavesurfer.clearRegions && typeof this.wavesurfer.clearRegions === 'function') {
+                    this.wavesurfer.clearRegions();
+                    this.regions.clear();
+                    console.log('🗑️ ✅ All regions cleared via WaveSurfer.clearRegions() fallback');
+                } else {
+                    console.warn('🗑️ No clearRegions method available - regions plugin may not be loaded');
+                }
+            }
+
+        } catch (error) {
+            console.error('🗑️ Error clearing regions:', error);
+        }
+
         return this;
     }
     

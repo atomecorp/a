@@ -24,7 +24,8 @@ const testWave = new WaveSurferCompatible({
         play: true,
         pause: true,
         modeToggle: true, // Le bouton qui nous intéresse
-        loop: true
+        loop: true,
+        clearRegions: true // Bouton pour supprimer les régions
     }
 });
 
@@ -42,6 +43,7 @@ message.innerHTML = `
 🎯 TEST DES MODES:<br>
 • <strong>Mode SCRUB (🎯)</strong>: Clic = seek, Drag = scrub<br>
 • <strong>Mode SELECTION (✋)</strong>: Clic = position, Drag = créer région<br>
+• <strong>🗑️ Clear Regions</strong>: Supprimer toutes les régions<br>
 <br>
 👆 <strong>Cliquez sur le bouton 🎯/✋ pour changer de mode</strong>
 `;
@@ -57,6 +59,7 @@ testWave.addEventListener('mode-changed', (event) => {
 🎯 TEST DES MODES:<br>
 • <strong>Mode SCRUB (🎯)</strong>: Clic = seek, Drag = scrub<br>
 • <strong>Mode SELECTION (✋)</strong>: Clic = position, Drag = créer région<br>
+• <strong>🗑️ Clear Regions</strong>: Supprimer toutes les régions<br>
 <br>
 👆 <strong>MODE ACTUEL: ${newMode.toUpperCase()}</strong>
     `;
