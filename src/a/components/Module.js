@@ -33,6 +33,7 @@ class Module extends HTMLElement {
         this.connections = new Set();
         this.selected = false;
         this.isDragging = false;
+        this._isDragDisabled = false; // Flag to temporarily disable drag during rename
         this.dragOffset = { x: 0, y: 0 };
         
         // Create shadow DOM pour encapsulation
@@ -716,6 +717,11 @@ class Module extends HTMLElement {
         let startX, startY, startMouseX, startMouseY;
         
         this.header.addEventListener('mousedown', (e) => {
+            // Skip drag if rename mode is active
+            if (this._isDragDisabled) {
+                return;
+            }
+            
             if (e.button === 0) { // Left click only
                 this.isDragging = true;
                 
@@ -732,7 +738,7 @@ class Module extends HTMLElement {
                 this.config.callbacks.onModuleDragStart(this, e);
                 
                 const handleMouseMove = (e) => {
-                    if (this.isDragging) {
+                    if (this.isDragging && !this._isDragDisabled) {
                         const deltaX = e.clientX - startMouseX;
                         const deltaY = e.clientY - startMouseY;
                         
@@ -841,6 +847,11 @@ class Module extends HTMLElement {
     }
     
     _enableRename() {
+        // Temporarily disable drag functionality during rename
+        const originalPointerEvents = this.header.style.pointerEvents;
+        const originalCursor = this.header.style.cursor;
+        this._isDragDisabled = true;
+        
         const input = document.createElement('input');
         input.type = 'text';
         input.value = this.name;
@@ -853,7 +864,22 @@ class Module extends HTMLElement {
             font-family: inherit;
             color: #2c3e50;
             width: 100%;
+            cursor: text;
         `;
+        
+        // Prevent drag events from bubbling up from the input
+        input.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        });
+        
+        input.addEventListener('mousemove', (e) => {
+            e.stopPropagation();
+        });
+        
+        input.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
         
         this.header.textContent = '';
         this.header.appendChild(input);
@@ -865,6 +891,20 @@ class Module extends HTMLElement {
             this.name = newName;
             this.config.name = newName;
             this.header.textContent = newName;
+            
+            // Restore drag functionality
+            this._isDragDisabled = false;
+            this.header.style.pointerEvents = originalPointerEvents;
+            this.header.style.cursor = originalCursor;
+        };
+        
+        const cancelRename = () => {
+            this.header.textContent = this.name;
+            
+            // Restore drag functionality
+            this._isDragDisabled = false;
+            this.header.style.pointerEvents = originalPointerEvents;
+            this.header.style.cursor = originalCursor;
         };
         
         input.addEventListener('blur', finishRename);
@@ -872,7 +912,7 @@ class Module extends HTMLElement {
             if (e.key === 'Enter') {
                 finishRename();
             } else if (e.key === 'Escape') {
-                this.header.textContent = this.name;
+                cancelRename();
             }
         });
     }
