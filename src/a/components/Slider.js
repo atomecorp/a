@@ -31,7 +31,18 @@ class Slider extends HTMLElement {
                 boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
                 thumbSize: 20,
                 trackHeight: 8,
-                containerPadding: 8
+                containerPadding: 8,
+                
+                // Advanced styling features
+                progressVariation: null, // Function(percentage) or gradient string
+                thumbBoxShadow: null,
+                thumbHoverTransform: null,
+                thumbDragTransform: null,
+                progressDragTransform: null,
+                trackBackground: null,
+                progressBorderRadius: null,
+                trackBorderRadius: null,
+                thumbBorderRadius: null
             },
             
             callbacks: {}
@@ -96,13 +107,15 @@ class Slider extends HTMLElement {
             .track {
                 position: absolute;
                 background: var(--track-color, #e0e0e0);
-                border-radius: 4px;
+                border-radius: var(--track-border-radius, 4px);
+                transition: all 0.3s ease;
             }
             
             .progress {
                 position: absolute;
                 background: var(--progress-color, #2196f3);
-                border-radius: 4px;
+                border-radius: var(--progress-border-radius, 4px);
+                transition: background 0.2s ease;
             }
             
             .thumb {
@@ -110,15 +123,28 @@ class Slider extends HTMLElement {
                 width: var(--thumb-size, 20px);
                 height: var(--thumb-size, 20px);
                 background: var(--thumb-color, #2196f3);
-                border-radius: 50%;
+                border-radius: var(--thumb-border-radius, 50%);
                 cursor: grab;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+                box-shadow: var(--thumb-box-shadow, 0 2px 6px rgba(0,0,0,0.2));
                 transform: translate(-50%, -50%);
+                transition: box-shadow 0.2s ease;
+                transform-origin: center;
             }
             
-            .thumb:active {
+            .thumb:hover {
+                transform: translate(-50%, -50%) var(--thumb-hover-transform, scale(1.05));
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            
+            .thumb:active,
+            .thumb.dragging {
                 cursor: grabbing;
-                transform: translate(-50%, -50%) scale(1.1);
+                transform: translate(-50%, -50%) var(--thumb-drag-transform, scale(1.1));
+                transition: transform 0.1s ease;
+            }
+            
+            .progress.dragging {
+                /* Pas de transition pendant le drag pour éviter le lag */
             }
             
             /* Horizontal */
@@ -280,7 +306,7 @@ class Slider extends HTMLElement {
     _applyStyles() {
         const { styling } = this.config;
         
-        // S'assurer qu'aucune valeur undefined n'est appliquée
+        // Basic styling properties
         if (styling.backgroundColor) this.style.setProperty('--bg-color', styling.backgroundColor);
         if (styling.trackColor) this.style.setProperty('--track-color', styling.trackColor);
         if (styling.progressColor) this.style.setProperty('--progress-color', styling.progressColor);
@@ -290,6 +316,16 @@ class Slider extends HTMLElement {
         if (styling.thumbSize) this.style.setProperty('--thumb-size', `${styling.thumbSize}px`);
         if (styling.trackHeight) this.style.setProperty('--track-height', `${styling.trackHeight}px`);
         if (styling.containerPadding) this.style.setProperty('--container-padding', `${styling.containerPadding}px`);
+        
+        // Advanced styling properties
+        if (styling.thumbBoxShadow) this.style.setProperty('--thumb-box-shadow', styling.thumbBoxShadow);
+        if (styling.thumbHoverTransform) this.style.setProperty('--thumb-hover-transform', styling.thumbHoverTransform);
+        if (styling.thumbDragTransform) this.style.setProperty('--thumb-drag-transform', styling.thumbDragTransform);
+        if (styling.progressDragTransform) this.style.setProperty('--progress-drag-transform', styling.progressDragTransform);
+        if (styling.trackBackground) this.style.setProperty('--track-color', styling.trackBackground);
+        if (styling.progressBorderRadius) this.style.setProperty('--progress-border-radius', styling.progressBorderRadius);
+        if (styling.trackBorderRadius) this.style.setProperty('--track-border-radius', styling.trackBorderRadius);
+        if (styling.thumbBorderRadius) this.style.setProperty('--thumb-border-radius', styling.thumbBorderRadius);
         
         // Dimensions
         this.style.width = `${this.config.width}px`;
@@ -317,6 +353,7 @@ class Slider extends HTMLElement {
     _onStart(e) {
         e.preventDefault();
         this.isDragging = true;
+        this._addDragClass();
         this._updateFromEvent(e);
         this._triggerCallback('onStart');
     }
@@ -331,6 +368,7 @@ class Slider extends HTMLElement {
     _onEnd(e) {
         if (!this.isDragging) return;
         this.isDragging = false;
+        this._removeDragClass();
         this._triggerCallback('onEnd');
     }
 
@@ -488,11 +526,41 @@ class Slider extends HTMLElement {
     _updateDisplay() {
         const percentage = (this.currentValue - this.config.min) / (this.config.max - this.config.min);
         
+        // Apply progress variation if configured
+        this._applyProgressVariation(percentage);
+        
         if (this.config.type === 'circular') {
             this._updateCircularDisplay(percentage);
         } else {
             this._updateLinearDisplay(percentage);
         }
+    }
+
+    _applyProgressVariation(percentage) {
+        const { progressVariation } = this.config.styling;
+        if (!progressVariation) return;
+        
+        let color;
+        if (typeof progressVariation === 'function') {
+            color = progressVariation(percentage);
+        } else if (typeof progressVariation === 'string') {
+            // Support for gradient strings
+            color = progressVariation;
+        }
+        
+        if (color && this.progress) {
+            this.progress.style.background = color;
+        }
+    }
+
+    _addDragClass() {
+        if (this.thumb) this.thumb.classList.add('dragging');
+        if (this.progress) this.progress.classList.add('dragging');
+    }
+
+    _removeDragClass() {
+        if (this.thumb) this.thumb.classList.remove('dragging');
+        if (this.progress) this.progress.classList.remove('dragging');
     }
 
     _updateLinearDisplay(percentage) {
