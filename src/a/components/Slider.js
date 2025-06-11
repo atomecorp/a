@@ -34,7 +34,7 @@ class Slider extends HTMLElement {
                 containerPadding: 8,
                 
                 // Advanced styling features
-                progressVariation: null, // Function(percentage) or gradient string
+                progressVariation: null, // Array of {color, position: {x: '%'}} objects
                 thumbBoxShadow: null,
                 thumbHoverTransform: null,
                 thumbDragTransform: null,
@@ -538,19 +538,65 @@ class Slider extends HTMLElement {
 
     _applyProgressVariation(percentage) {
         const { progressVariation } = this.config.styling;
-        if (!progressVariation) return;
+        if (!progressVariation || !Array.isArray(progressVariation)) return;
+        
+        // Convertir les positions en pourcentages
+        const stops = progressVariation.map(item => ({
+            color: item.color,
+            position: parseFloat(item.position.x.replace('%', '')) / 100
+        })).sort((a, b) => a.position - b.position);
         
         let color;
-        if (typeof progressVariation === 'function') {
-            color = progressVariation(percentage);
-        } else if (typeof progressVariation === 'string') {
-            // Support for gradient strings
-            color = progressVariation;
+        
+        // Trouver les deux couleurs entre lesquelles interpoler
+        if (percentage <= stops[0].position) {
+            color = stops[0].color;
+        } else if (percentage >= stops[stops.length - 1].position) {
+            color = stops[stops.length - 1].color;
+        } else {
+            // Trouver les deux stops entre lesquels on se trouve
+            for (let i = 0; i < stops.length - 1; i++) {
+                if (percentage >= stops[i].position && percentage <= stops[i + 1].position) {
+                    const startStop = stops[i];
+                    const endStop = stops[i + 1];
+                    
+                    // Calculer le ratio d'interpolation
+                    const ratio = (percentage - startStop.position) / (endStop.position - startStop.position);
+                    
+                    // Interpoler entre les deux couleurs
+                    color = this._interpolateColors(startStop.color, endStop.color, ratio);
+                    break;
+                }
+            }
         }
         
         if (color && this.progress) {
             this.progress.style.background = color;
         }
+    }
+
+    _interpolateColors(color1, color2, ratio) {
+        // Convertir les couleurs hex en RGB
+        const rgb1 = this._hexToRgb(color1);
+        const rgb2 = this._hexToRgb(color2);
+        
+        if (!rgb1 || !rgb2) return color1;
+        
+        // Interpoler chaque composante RGB
+        const r = Math.round(rgb1.r + (rgb2.r - rgb1.r) * ratio);
+        const g = Math.round(rgb1.g + (rgb2.g - rgb1.g) * ratio);
+        const b = Math.round(rgb1.b + (rgb2.b - rgb1.b) * ratio);
+        
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    _hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
     }
 
     _addDragClass() {

@@ -153,16 +153,12 @@ function createAdvancedSliders() {
                 progressDragTransform: 'scaleY(1.2)',
                 trackBorderRadius: '6px',
                 
-                // Gradient progress variation based on position
-                progressVariation: (percentage) => {
-                    if (percentage < 0.33) {
-                        return `linear-gradient(90deg, #ff6b6b ${percentage * 300}%, #feca57 100%)`;
-                    } else if (percentage < 0.66) {
-                        return `linear-gradient(90deg, #feca57 0%, #48dbfb ${(percentage - 0.33) * 300}%, #0abde3 100%)`;
-                    } else {
-                        return `linear-gradient(90deg, #0abde3 0%, #006ba6 ${(percentage - 0.66) * 300}%, #1dd1a1 100%)`;
-                    }
-                }
+                // Progress variation simple basée sur la position
+                progressVariation: [
+                    { color: '#4caf50', position: { x: '0%' } },   // Vert (faible volume)
+                    { color: '#ff9800', position: { x: '70%' } },  // Orange (volume moyen)
+                    { color: '#f44336', position: { x: '100%' } }  // Rouge (volume élevé)
+                ]
             },
             callbacks: {
                 onChange: (value) => console.log('🎨 Ultra-stylé:', value + '%'),
