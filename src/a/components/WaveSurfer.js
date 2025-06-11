@@ -156,7 +156,7 @@ class WaveSurfer extends HTMLElement {
             autoLoadPlugins: true,
             
             // Plugin-specific configurations
-            timeline: { enabled: true, height: 25 },
+            timeline: { enabled: true, height: 25, insertPosition: 'beforebegin' },
             minimap: { enabled: false, height: 50 },
             zoom: { enabled: true, scale: 0.5, wheelZoom: true },
             hover: { enabled: false, formatTimeCallback: null },
@@ -515,14 +515,24 @@ class WaveSurfer extends HTMLElement {
             }
         }
         
-        // Add timeline plugin
+        // Add timeline plugin (ruler)
         if (this.config.timeline.enabled && this.plugins.has('timeline')) {
             const TimelinePlugin = this.plugins.get('timeline');
             if (TimelinePlugin) {
-                plugins.push(TimelinePlugin.create({
-                    height: this.config.timeline.height
-                }));
-                console.log('⏰ Timeline plugin added (v7)');
+                const timelineConfig = {
+                    height: this.config.timeline.height,
+                    insertPosition: this.config.timeline.insertPosition || 'beforebegin',
+                    timeInterval: 0.2,
+                    primaryLabelInterval: 5,
+                    secondaryLabelInterval: 1,
+                    style: {
+                        fontSize: '10px',
+                        color: '#2D3748'
+                    }
+                };
+                
+                plugins.push(TimelinePlugin.create(timelineConfig));
+                console.log('⏰ Timeline ruler plugin added (v7)');
             }
         }
         
