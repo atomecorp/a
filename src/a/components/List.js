@@ -32,13 +32,85 @@ class List extends HTMLElement {
         this.initialized = false;
         
         console.log(`📋 List Web Component "${this.id}" created (${this.config.type}) - ${this.config.items.length} items`);
+        
+        // Auto-attach to DOM if attach property is specified
+        if (this.config.attach) {
+            this.performAutoAttach();
+        }
+    }
+    
+    performAutoAttach() {
+        // Wait for DOM to be ready
+        if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            this._doAttach();
+        } else {
+            document.addEventListener('DOMContentLoaded', () => this._doAttach());
+        }
+    }
+    
+    _doAttach() {
+        console.log(`🔗 Auto-attaching ${this.id} with config:`, {
+            attach: this.config.attach,
+            x: this.config.x,
+            y: this.config.y,
+            width: this.config.width,
+            height: this.config.height
+        });
+        
+        let parent;
+        if (typeof this.config.attach === 'string') {
+            parent = document.querySelector(this.config.attach) || document.body;
+        } else if (this.config.attach instanceof HTMLElement) {
+            parent = this.config.attach;
+        } else {
+            parent = document.body;
+        }
+        
+        parent.appendChild(this);
+        
+        // Apply positioning after attachment
+        setTimeout(() => {
+            this.applyPositioning();
+        }, 0);
+    }
+    
+    applyPositioning() {
+        console.log(`🎯 applyPositioning called for ${this.id}:`, {
+            x: this.config.x,
+            y: this.config.y,
+            width: this.config.width,
+            height: this.config.height
+        });
+        
+        if (this.config.x !== undefined && this.config.y !== undefined) {
+            this.style.position = 'absolute';
+            this.style.left = `${this.config.x}px`;
+            this.style.top = `${this.config.y}px`;
+            this.style.zIndex = '1';
+            
+            // Force the positioning using setAttribute as backup
+            this.setAttribute('style', 
+                `position: absolute; z-index: 1; left: ${this.config.x}px; top: ${this.config.y}px;` +
+                (this.config.width ? ` width: ${typeof this.config.width === 'number' ? this.config.width + 'px' : this.config.width};` : '') +
+                (this.config.height && this.config.height !== 'auto' ? ` height: ${typeof this.config.height === 'number' ? this.config.height + 'px' : this.config.height};` : '')
+            );
+            
+            console.log(`✅ Position applied: ${this.config.x}px, ${this.config.y}px`);
+            console.log(`📐 Style attribute:`, this.getAttribute('style'));
+        }
     }
     
     connectedCallback() {
+        console.log(`🔌 ${this.id} connected to DOM`);
         if (!this.initialized) {
             this.init();
             this.initialized = true;
         }
+        
+        // Ensure positioning is applied when connected to DOM
+        setTimeout(() => {
+            this.applyPositioning();
+        }, 0);
     }
     
     mergeConfig(config) {
@@ -242,7 +314,27 @@ class List extends HTMLElement {
             }
         };
         
-        return defaultConfig;
+        // Merge user config over defaults, giving priority to user values
+        return {
+            ...defaultConfig,
+            ...config,
+            // Ensure specific overrides for positioning
+            x: config.x !== undefined ? config.x : defaultConfig.x,
+            y: config.y !== undefined ? config.y : defaultConfig.y,
+            width: config.width !== undefined ? config.width : defaultConfig.width,
+            height: config.height !== undefined ? config.height : defaultConfig.height,
+            // Deep merge style objects
+            style: { ...defaultConfig.style, ...config.style },
+            itemStyle: { ...defaultConfig.itemStyle, ...config.itemStyle },
+            itemHoverStyle: { ...defaultConfig.itemHoverStyle, ...config.itemHoverStyle },
+            itemSelectedStyle: { ...defaultConfig.itemSelectedStyle, ...config.itemSelectedStyle },
+            headerStyle: { ...defaultConfig.headerStyle, ...config.headerStyle },
+            iconSettings: { ...defaultConfig.iconSettings, ...config.iconSettings },
+            avatarSettings: { ...defaultConfig.avatarSettings, ...config.avatarSettings },
+            searchSettings: { ...defaultConfig.searchSettings, ...config.searchSettings },
+            animations: { ...defaultConfig.animations, ...config.animations },
+            callbacks: { ...defaultConfig.callbacks, ...config.callbacks }
+        };
     }
     
     init() {
