@@ -1086,13 +1086,6 @@ class WaveSurfer extends HTMLElement {
         return this;
     }
     
-    /**
-     * Get current interaction mode
-     */
-    getInteractionMode() {
-        return this.currentMode;
-    }
-    
     updateWaveSurferInteraction() {
         if (!this.wavesurfer || !this.isReady) return;
         
