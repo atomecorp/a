@@ -29,40 +29,40 @@ const testWave = new WaveSurferCompatible({
     }
 });
 
-// Message simple pour l'utilisateur
-const message = document.createElement('div');
-message.style.cssText = `
-    position: absolute;
-    top: 50px;
-    left: 100px;
-    font-size: 16px;
-    font-weight: bold;
-    color: #333;
-`;
-message.innerHTML = `
-🎯 TEST DES MODES:<br>
-• <strong>Mode SCRUB (🎯)</strong>: Clic = seek, Drag = scrub<br>
-• <strong>Mode SELECTION (✋)</strong>: Clic = position, Drag = créer région<br>
-• <strong>🗑️ Clear Regions</strong>: Supprimer toutes les régions<br>
-<br>
-👆 <strong>Cliquez sur le bouton 🎯/✋ pour changer de mode</strong>
-`;
-document.body.appendChild(message);
+// // Message simple pour l'utilisateur
+// const message = document.createElement('div');
+// message.style.cssText = `
+//     position: absolute;
+//     top: 50px;
+//     left: 100px;
+//     font-size: 16px;
+//     font-weight: bold;
+//     color: #333;
+// `;
+// message.innerHTML = `
+// 🎯 TEST DES MODES:<br>
+// • <strong>Mode SCRUB (🎯)</strong>: Clic = seek, Drag = scrub<br>
+// • <strong>Mode SELECTION (✋)</strong>: Clic = position, Drag = créer région<br>
+// • <strong>🗑️ Clear Regions</strong>: Supprimer toutes les régions<br>
+// <br>
+// 👆 <strong>Cliquez sur le bouton 🎯/✋ pour changer de mode</strong>
+// `;
+// document.body.appendChild(message);
 
-// Log les changements de mode
-testWave.addEventListener('mode-changed', (event) => {
-    const { newMode } = event.detail;
-    console.log(`🔄 MODE CHANGÉ VERS: ${newMode.toUpperCase()}`);
+// // Log les changements de mode
+// testWave.addEventListener('mode-changed', (event) => {
+//     const { newMode } = event.detail;
+//     console.log(`🔄 MODE CHANGÉ VERS: ${newMode.toUpperCase()}`);
     
-    // Mettre à jour le message
-    message.innerHTML = `
-🎯 TEST DES MODES:<br>
-• <strong>Mode SCRUB (🎯)</strong>: Clic = seek, Drag = scrub<br>
-• <strong>Mode SELECTION (✋)</strong>: Clic = position, Drag = créer région<br>
-• <strong>🗑️ Clear Regions</strong>: Supprimer toutes les régions<br>
-<br>
-👆 <strong>MODE ACTUEL: ${newMode.toUpperCase()}</strong>
-    `;
-});
+//     // Mettre à jour le message
+//     message.innerHTML = `
+// 🎯 TEST DES MODES:<br>
+// • <strong>Mode SCRUB (🎯)</strong>: Clic = seek, Drag = scrub<br>
+// • <strong>Mode SELECTION (✋)</strong>: Clic = position, Drag = créer région<br>
+// • <strong>🗑️ Clear Regions</strong>: Supprimer toutes les régions<br>
+// <br>
+// 👆 <strong>MODE ACTUEL: ${newMode.toUpperCase()}</strong>
+//     `;
+// });
 
-console.log('✅ Test mode créé - utilisez le bouton 🎯/✋ pour changer de mode');
+// console.log('✅ Test mode créé - utilisez le bouton 🎯/✋ pour changer de mode');
