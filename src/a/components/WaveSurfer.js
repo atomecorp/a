@@ -68,6 +68,10 @@ class WaveSurfer extends HTMLElement {
         this.currentTime = 0;
         this.regions = new Map();
         this.plugins = new Map();
+        this.currentMode = this.config.interactionMode || 'scrub'; // Track current interaction mode
+        this.isLooping = false; // Track loop state
+        this._dragSelectionDestroy = null; // Store drag selection cleanup function
+        this._originalDragSelection = null; // Store original dragSelection setting
         
         // Create Shadow DOM
         this.attachShadow({ mode: 'open' });
@@ -126,23 +130,28 @@ class WaveSurfer extends HTMLElement {
                 stop: true,
                 mute: true,
                 volume: true,
-                download: false
+                download: false,
+                modeToggle: true, // Add mode toggle control
+                loop: true // Add loop control
             },
             
             // Regions support
             regions: {
-                enabled: false,
+                enabled: true, // Activer par défaut
                 dragSelection: true,
                 snapToGridPercentage: null
             },
             
+            // Interaction modes
+            interactionMode: 'scrub', // 'scrub' or 'selection'
+            
             // Plugins configuration
             plugins: [],
-            enabledPlugins: ['regions'], // Default plugins to load
+            enabledPlugins: ['regions', 'timeline'], // Include timeline by default
             autoLoadPlugins: true, // Auto-load recommended plugins
             
             // Plugin-specific configurations
-            timeline: { enabled: false, height: 20 },
+            timeline: { enabled: true, height: 25 }, // Enable timeline by default with increased height
             minimap: { enabled: false, height: 50 },
             zoom: { enabled: false, scale: 1 },
             hover: { enabled: false, formatTimeCallback: null },
@@ -175,7 +184,8 @@ class WaveSurfer extends HTMLElement {
             const safeDirectProps = ['attach', 'x', 'y', 'width', 'height', 'url', 'peaks', 
                 'waveColor', 'progressColor', 'cursorColor', 'barWidth', 'barRadius', 
                 'responsive', 'interact', 'dragToSeek', 'hideScrollbar', 'normalize', 
-                'backend', 'mediaControls', 'plugins', 'enabledPlugins', 'autoLoadPlugins'];
+                'backend', 'mediaControls', 'plugins', 'enabledPlugins', 'autoLoadPlugins',
+                'interactionMode']; // ← AJOUT DE interactionMode !
             
             safeDirectProps.forEach(prop => {
                 if (config.hasOwnProperty(prop)) {
@@ -240,14 +250,16 @@ class WaveSurfer extends HTMLElement {
             if (this.config.controls.enabled) {
                 this.createControls();
             }
-            
-            // Setup event handlers
-            this.setupEventHandlers();
-            
-            // Load audio if URL provided
-            if (this.config.url) {
-                await this.loadAudio(this.config.url);
-            }
+                 // Setup event handlers
+        this.setupEventHandlers();
+        
+        // Initialize interaction mode
+        this.setInteractionMode(this.config.interactionMode);
+        
+        // Load audio if URL provided
+        if (this.config.url) {
+            await this.loadAudio(this.config.url);
+        }
             
             // Force layout update after plugins are loaded
             setTimeout(() => {
@@ -324,21 +336,28 @@ class WaveSurfer extends HTMLElement {
             
             /* Enhanced styles for WaveSurfer plugins */
             .waveform-container div[data-id*="timeline"],
-            .waveform-container div[id*="timeline"] {
+            .waveform-container div[id*="timeline"],
+            .waveform-container .wavesurfer-timeline {
                 position: relative !important;
                 z-index: 10 !important;
                 margin-bottom: 5px !important;
                 height: ${this.config.timeline.height}px !important;
                 overflow: visible !important;
+                background: rgba(255,255,255,0.9) !important;
+                border-bottom: 1px solid #ccc !important;
+                font-size: 10px !important;
+                line-height: ${this.config.timeline.height}px !important;
             }
             
             .waveform-container div[data-id*="minimap"],
-            .waveform-container div[id*="minimap"] {
+            .waveform-container div[id*="minimap"],
+            .waveform-container .wavesurfer-minimap {
                 position: relative !important;
                 z-index: 10 !important;
                 margin-top: 5px !important;
                 height: ${this.config.minimap.height}px !important;
                 overflow: visible !important;
+                border-top: 1px solid #ccc !important;
             }
             
             /* General plugin visibility fixes */
@@ -393,6 +412,17 @@ class WaveSurfer extends HTMLElement {
                 transform: scale(1.05);
             }
             
+            .mode-toggle-btn {
+                font-weight: bold;
+                border: 2px solid rgba(255,255,255,0.4) !important;
+                min-width: 60px;
+            }
+            
+            .mode-toggle-btn:hover {
+                border-color: rgba(255,255,255,0.6) !important;
+                transform: scale(1.1);
+            }
+            
             .time-display {
                 color: white;
                 font-family: 'Roboto Mono', monospace;
@@ -431,22 +461,26 @@ class WaveSurfer extends HTMLElement {
         
         // Ajouter de l'espace pour les plugins
         if (this.config.timeline.enabled) {
-            additionalHeight += this.config.timeline.height + 10; // +10 pour les marges
+            additionalHeight += this.config.timeline.height + 15; // +15 pour les marges et bordures
         }
         
         if (this.config.minimap.enabled) {
-            additionalHeight += this.config.minimap.height + 10; // +10 pour les marges
+            additionalHeight += this.config.minimap.height + 15; // +15 pour les marges et bordures
         }
         
         if (this.config.zoom.enabled) {
-            additionalHeight += 30; // Espace pour le zoom
+            additionalHeight += 35; // Espace pour le zoom
+        }
+        
+        if (this.config.spectrogram.enabled) {
+            additionalHeight += this.config.spectrogram.height + 10;
         }
         
         // Calculer la hauteur finale en fonction de la hauteur totale disponible
         const totalAvailableHeight = this.config.height - (this.config.controls.enabled ? 50 : 0);
         const calculatedHeight = Math.min(baseHeight + additionalHeight, totalAvailableHeight - 20);
         
-        return Math.max(calculatedHeight, 80); // Minimum 80px
+        return Math.max(calculatedHeight, baseHeight); // Minimum hauteur de base
     }
     
     applyPositioning() {
@@ -495,7 +529,11 @@ class WaveSurfer extends HTMLElement {
         // Initialize WaveSurfer instance
         this.wavesurfer = WaveSurferLib.create(options);
         
+        // Force initial mode setup after creation but before ready
+        this.currentMode = this.config.interactionMode;
+        
         console.log(`🎵 WaveSurfer Web Component "${this.id}" created`);
+        console.log(`🎯 Initial mode set to: ${this.currentMode}`);
         console.log(`🔌 Plugins actifs: ${plugins.length}`);
         console.log(`📋 Configuration plugins:`, {
             regions: this.config.regions.enabled,
@@ -515,8 +553,7 @@ class WaveSurfer extends HTMLElement {
         if (this.config.timeline.enabled) pluginsToLoad.add('timeline');
         if (this.config.minimap.enabled) pluginsToLoad.add('minimap');
         if (this.config.zoom.enabled) pluginsToLoad.add('zoom');
-        if (this.config.hover.enabled) pluginsToLoad.add('hover');
-        if (this.config.spectrogram.enabled) pluginsToLoad.add('spectrogram');
+        if (this.config.hover.enabled) pluginsToLoad.add('spectrogram');
         if (this.config.record.enabled) pluginsToLoad.add('record');
         if (this.config.envelope.enabled) pluginsToLoad.add('envelope');
         
@@ -540,10 +577,13 @@ class WaveSurfer extends HTMLElement {
         if (this.config.regions.enabled && this.plugins.has('regions')) {
             const RegionsPlugin = this.plugins.get('regions');
             if (RegionsPlugin) {
-                plugins.push(RegionsPlugin.create({
-                    dragSelection: this.config.regions.dragSelection
-                }));
-                console.log('🎯 Regions plugin ajouté (v7)');
+                // Configuration simple SANS dragSelection qui ne marche pas
+                const regionsConfig = {
+                    regionLabelFormatter: (region, index) => `Region ${index + 1}`
+                };
+                
+                plugins.push(RegionsPlugin.create(regionsConfig));
+                console.log('🎯 Regions plugin ajouté (v7) - dragSelection sera contrôlé manuellement');
             }
         }
         
@@ -687,6 +727,27 @@ class WaveSurfer extends HTMLElement {
             this.controlsContainer.appendChild(this.downloadBtn);
         }
         
+        // Mode toggle button (scrub vs selection)
+        if (controls.modeToggle) {
+            this.modeToggleBtn = this.createButton(
+                this.currentMode === 'scrub' ? '🎯' : '✋', 
+                `Current: ${this.currentMode.toUpperCase()} mode - Click to toggle`, 
+                () => {
+                    this.toggleInteractionMode();
+                }
+            );
+            this.modeToggleBtn.className = 'control-button mode-toggle-btn';
+            this.controlsContainer.appendChild(this.modeToggleBtn);
+        }
+
+        // Loop button
+        if (controls.loop) {
+            this.loopBtn = this.createButton('🔁', 'Toggle Loop', () => {
+                this.toggleLoop();
+            });
+            this.controlsContainer.appendChild(this.loopBtn);
+        }
+
         this.container.appendChild(this.controlsContainer);
     }
     
@@ -707,6 +768,35 @@ class WaveSurfer extends HTMLElement {
             this.isReady = true;
             this.updateTimeDisplay();
             this.updatePluginLayout(); // Forcer la mise à jour de la mise en page des plugins
+            
+            // Apply the initial interaction mode from config with delay to ensure plugins are ready
+            setTimeout(() => {
+                console.log(`🎯 Applying initial mode: ${this.config.interactionMode}`);
+                
+                // Store original dragSelection setting before applying mode
+                const plugins = this.wavesurfer.getActivePlugins ? this.wavesurfer.getActivePlugins() : [];
+                const regionsPlugin = plugins.find(plugin => 
+                    plugin.constructor?.name === 'RegionsPlugin' || 
+                    plugin.name === 'regions' ||
+                    typeof plugin.addRegion === 'function' ||
+                    plugin._name === 'regions'
+                );
+                
+                if (regionsPlugin) {
+                    // Check for enableDragSelection first, then dragSelection
+                    this._originalDragSelection = regionsPlugin.options?.enableDragSelection !== undefined ? 
+                        regionsPlugin.options.enableDragSelection : 
+                        (regionsPlugin.options?.dragSelection !== undefined ? 
+                            regionsPlugin.options.dragSelection : true);
+                    console.log(`🎯 Stored original dragSelection: ${this._originalDragSelection}`);
+                }
+                
+                this.setInteractionMode(this.config.interactionMode);
+                
+                // Ensure loop is properly configured
+                this.ensureLoopConfiguration();
+            }, 100);
+            
             console.log(`🎵 WaveSurfer Web Component "${this.id}" is ready`);
             this.config.callbacks.onReady(this);
             this.dispatchEvent(new CustomEvent('ready', { detail: { wavesurfer: this } }));
@@ -734,10 +824,30 @@ class WaveSurfer extends HTMLElement {
         
         // Finish event
         this.wavesurfer.on('finish', () => {
+            // Handle looping BEFORE setting isPlaying to false
+            if (this.isLooping) {
+                console.log('🔁 Loop enabled - restarting playback');
+                // Restart immediately without delay
+                this.wavesurfer.seekTo(0);
+                this.wavesurfer.play().then(() => {
+                    console.log('🔁 Loop restarted successfully');
+                }).catch(error => {
+                    console.error('🔁 Loop restart failed:', error);
+                    this.isPlaying = false;
+                    if (this.playPauseBtn) {
+                        this.playPauseBtn.textContent = '▶️';
+                    }
+                });
+                // Don't execute the rest if looping
+                return;
+            }
+            
+            // Only execute finish logic if not looping
             this.isPlaying = false;
             if (this.playPauseBtn) {
                 this.playPauseBtn.textContent = '▶️';
             }
+            
             this.config.callbacks.onFinish(this);
             this.dispatchEvent(new CustomEvent('finish', { detail: { wavesurfer: this } }));
         });
@@ -772,28 +882,64 @@ class WaveSurfer extends HTMLElement {
     }
     
     setupRegionEvents() {
-        // Region creation
-        this.wavesurfer.on('region-created', (region) => {
-            this.regions.set(region.id, region);
-            console.log(`🎯 Region created: ${region.id}`);
-            this.config.callbacks.onRegionCreate(region, this);
-            this.dispatchEvent(new CustomEvent('region-created', { detail: { region, wavesurfer: this } }));
-        });
+        if (!this.wavesurfer) return;
         
-        // Region update
-        this.wavesurfer.on('region-updated', (region) => {
-            console.log(`🎯 Region updated: ${region.id}`);
-            this.config.callbacks.onRegionUpdate(region, this);
-            this.dispatchEvent(new CustomEvent('region-updated', { detail: { region, wavesurfer: this } }));
-        });
-        
-        // Region removal
-        this.wavesurfer.on('region-removed', (region) => {
-            this.regions.delete(region.id);
-            console.log(`🎯 Region removed: ${region.id}`);
-            this.config.callbacks.onRegionRemove(region, this);
-            this.dispatchEvent(new CustomEvent('region-removed', { detail: { region, wavesurfer: this } }));
-        });
+        // For WaveSurfer v7+, we need to listen to region events from the regions plugin
+        try {
+            // Get regions plugin instance with better detection
+            const plugins = this.wavesurfer.getActivePlugins ? this.wavesurfer.getActivePlugins() : [];
+            const regionsPlugin = plugins.find(plugin => 
+                plugin.constructor?.name === 'RegionsPlugin' || 
+                plugin.name === 'regions' ||
+                typeof plugin.addRegion === 'function' ||
+                plugin._name === 'regions'
+            );
+            
+            if (regionsPlugin) {
+                console.log('🎯 Setting up region events for RegionsPlugin');
+                
+                // Region creation via drag selection or addRegion
+                regionsPlugin.on('region-created', (region) => {
+                    this.regions.set(region.id, region);
+                    console.log(`🎯 Region created: ${region.id}`, region);
+                    this.config.callbacks.onRegionCreate(region, this);
+                    this.dispatchEvent(new CustomEvent('region-created', { detail: { region, wavesurfer: this } }));
+                });
+                
+                // Region update (drag/resize)
+                regionsPlugin.on('region-updated', (region) => {
+                    console.log(`🎯 Region updated: ${region.id}`, region);
+                    this.config.callbacks.onRegionUpdate(region, this);
+                    this.dispatchEvent(new CustomEvent('region-updated', { detail: { region, wavesurfer: this } }));
+                });
+                
+                // Region removal
+                regionsPlugin.on('region-removed', (region) => {
+                    this.regions.delete(region.id);
+                    console.log(`🎯 Region removed: ${region.id}`);
+                    this.config.callbacks.onRegionRemove(region, this);
+                    this.dispatchEvent(new CustomEvent('region-removed', { detail: { region, wavesurfer: this } }));
+                });
+                
+                // Region click/select
+                regionsPlugin.on('region-clicked', (region, e) => {
+                    console.log(`🎯 Region clicked: ${region.id}`);
+                    this.dispatchEvent(new CustomEvent('region-clicked', { detail: { region, event: e, wavesurfer: this } }));
+                });
+                
+                // Double click on region
+                regionsPlugin.on('region-double-clicked', (region, e) => {
+                    console.log(`🎯 Region double-clicked: ${region.id}`);
+                    this.dispatchEvent(new CustomEvent('region-double-clicked', { detail: { region, event: e, wavesurfer: this } }));
+                });
+                
+            } else {
+                console.warn('🎯 No regions plugin found - region events not available');
+            }
+            
+        } catch (error) {
+            console.error('🎯 Error setting up region events:', error);
+        }
     }
     
     updateTimeDisplay() {
@@ -826,6 +972,11 @@ class WaveSurfer extends HTMLElement {
             
             this.config.url = url;
             this.config.peaks = peaks;
+            
+            // Ensure loop configuration is applied after loading
+            setTimeout(() => {
+                this.ensureLoopConfiguration();
+            }, 100);
             
             console.log(`🎵 Audio loaded: ${url}`);
             return this;
@@ -884,6 +1035,29 @@ class WaveSurfer extends HTMLElement {
             }
         }
         return this;
+    }
+    
+    toggleLoop() {
+        if (this.wavesurfer && this.isReady) {
+            // Toggle internal loop state
+            this.isLooping = !this.isLooping;
+            
+            console.log(`🔁 Loop ${this.isLooping ? 'enabled' : 'disabled'}`);
+            
+            // Update button appearance
+            if (this.loopBtn) {
+                this.loopBtn.textContent = this.isLooping ? '🔂' : '🔁';
+                this.loopBtn.style.background = this.isLooping ? 'rgba(46, 204, 113, 0.4)' : 'rgba(255,255,255,0.2)';
+                this.loopBtn.title = this.isLooping ? 'Loop enabled - Click to disable' : 'Loop disabled - Click to enable';
+            }
+        }
+        return this;
+    }
+    
+    ensureLoopConfiguration() {
+        // WaveSurfer v7 doesn't have built-in loop support
+        // Loop is handled manually in the 'finish' event
+        console.log(`🔁 Loop state: ${this.isLooping ? 'enabled' : 'disabled'} (manual implementation)`);
     }
     
     getCurrentTime() {
@@ -1037,6 +1211,113 @@ class WaveSurfer extends HTMLElement {
         this.regions.clear();
     }
     
+    // Interaction Mode Management
+    toggleInteractionMode() {
+        const newMode = this.currentMode === 'scrub' ? 'selection' : 'scrub';
+        this.setInteractionMode(newMode);
+        return this;
+    }
+    
+    setInteractionMode(mode) {
+        if (!['scrub', 'selection'].includes(mode)) {
+            console.warn(`Invalid interaction mode: ${mode}. Use 'scrub' or 'selection'.`);
+            return this;
+        }
+        
+        const oldMode = this.currentMode;
+        this.currentMode = mode;
+        
+        if (this.wavesurfer && this.isReady) {
+            this.updateWaveSurferInteraction();
+        }
+        
+        // Update mode toggle button
+        if (this.modeToggleBtn) {
+            this.modeToggleBtn.textContent = mode === 'scrub' ? '🎯' : '✋';
+            this.modeToggleBtn.title = `Current: ${mode.toUpperCase()} mode - Click to toggle`;
+            this.modeToggleBtn.style.background = mode === 'scrub' ? 
+                'rgba(46, 204, 113, 0.3)' : 'rgba(231, 76, 60, 0.3)';
+        }
+        
+        console.log(`🔄 Interaction mode changed: ${oldMode} → ${mode}`);
+        
+        // Dispatch mode change event
+        this.dispatchEvent(new CustomEvent('mode-changed', { 
+            detail: { oldMode, newMode: mode, wavesurfer: this } 
+        }));
+        
+        return this;
+    }
+    
+    getInteractionMode() {
+        return this.currentMode;
+    }
+    
+    updateWaveSurferInteraction() {
+        if (!this.wavesurfer || !this.isReady) return;
+        
+        console.log(`🎯 === UPDATING INTERACTION MODE TO: ${this.currentMode.toUpperCase()} ===`);
+        
+        // Get regions plugin with better detection
+        const plugins = this.wavesurfer.getActivePlugins ? this.wavesurfer.getActivePlugins() : [];
+        const regionsPlugin = plugins.find(plugin => 
+            plugin.constructor?.name === 'RegionsPlugin' || 
+            plugin.name === 'regions' ||
+            typeof plugin.addRegion === 'function' ||
+            plugin._name === 'regions'
+        );
+        
+        if (this.currentMode === 'scrub') {
+            // Enable seeking mode - wavesurfer handles clicks for seeking
+            this.wavesurfer.setOptions({ 
+                interact: true,
+                dragToSeek: true 
+            });
+            
+            // Disable region drag selection by calling the destroy function
+            if (this._dragSelectionDestroy && typeof this._dragSelectionDestroy === 'function') {
+                try {
+                    this._dragSelectionDestroy();
+                    this._dragSelectionDestroy = null;
+                    console.log('🎯 ✅ Scrub mode: Region drag selection DISABLED');
+                } catch (error) {
+                    console.warn('🎯 Error disabling drag selection:', error);
+                }
+            }
+            
+            console.log('🎯 Scrub mode: Click to seek, drag to scrub through audio');
+            
+        } else if (this.currentMode === 'selection') {
+            // Enable region creation mode - disable seeking temporarily
+            this.wavesurfer.setOptions({ 
+                interact: true,
+                dragToSeek: false 
+            });
+            
+            // Enable region drag selection
+            if (regionsPlugin && typeof regionsPlugin.enableDragSelection === 'function') {
+                try {
+                    // The enableDragSelection method returns a cleanup function
+                    this._dragSelectionDestroy = regionsPlugin.enableDragSelection({
+                        color: 'rgba(231, 76, 60, 0.3)'
+                    });
+                    console.log('🎯 ✅ Selection mode: Region drag selection ENABLED');
+                } catch (error) {
+                    console.warn('🎯 Error enabling drag selection:', error);
+                }
+            } else {
+                console.warn('🎯 RegionsPlugin not found or enableDragSelection not available');
+            }
+            
+            console.log('🎯 Selection mode: Click to position, drag to create regions');
+        }
+        
+        // Force layout update to ensure proper interaction
+        setTimeout(() => {
+            this.updatePluginLayout();
+        }, 100);
+    }
+    
     // Plugin layout management
     updatePluginLayout() {
         if (!this.wavesurfer || !this.isReady) return;
@@ -1063,22 +1344,141 @@ class WaveSurfer extends HTMLElement {
                 element.style.overflow = 'visible';
             });
             
+            // Vérifier et diagnostiquer les régions
+            this.checkRegionsStatus();
+            
             console.log(`🎨 Layout des plugins mis à jour pour ${this.id}`);
         }, 100);
     }
     
-    // Static methods
-    static getInstance(id) {
-        return WaveSurfer.instances.get(id);
+    // Méthode pour diagnostiquer les problèmes de régions
+    checkRegionsStatus() {
+        if (!this.config.regions.enabled) {
+            console.log('🎯 Regions disabled in config');
+            return;
+        }
+        
+        if (!this.wavesurfer) {
+            console.warn('🎯 WaveSurfer not initialized');
+            return;
+        }
+        
+        // Vérifier les plugins actifs
+        const plugins = this.wavesurfer.getActivePlugins ? this.wavesurfer.getActivePlugins() : [];
+        console.log('🔌 Active plugins:', plugins.map(p => p.constructor?.name || p.name || 'Unknown'));
+        
+        const regionsPlugin = plugins.find(plugin => 
+            plugin.constructor?.name === 'RegionsPlugin' || 
+            plugin.name === 'regions' ||
+            typeof plugin.addRegion === 'function' ||
+            plugin._name === 'regions'
+        );
+        
+        if (regionsPlugin) {
+            console.log('🎯 RegionsPlugin found and active');
+            console.log('🎯 Drag selection enabled:', regionsPlugin.options?.dragSelection || regionsPlugin.dragSelection);
+            
+            // Forcer l'activation de la sélection par glisser-déposer
+            if (this.config.regions.dragSelection && regionsPlugin.options) {
+                regionsPlugin.options.dragSelection = true;
+                regionsPlugin.options.enableDragSelection = true;
+                console.log('🎯 Forced enable drag selection');
+            }
+            
+            // Vérifier que le conteneur du plugin est bien configuré
+            const regionsContainer = this.waveformContainer.querySelector('[data-plugin="regions"]') ||
+                                   this.waveformContainer.querySelector('.wavesurfer-regions');
+            
+            if (regionsContainer) {
+                regionsContainer.style.pointerEvents = 'auto';
+                regionsContainer.style.position = 'relative';
+                regionsContainer.style.zIndex = '20';
+                console.log('🎯 Regions container configured for interaction');
+            }
+            
+            // Ajouter des instructions pour l'utilisateur
+            console.log('🎯 ✅ Drag selection is ready! Click and drag on the waveform to create regions.');
+            
+        } else {
+            console.warn('🎯 ❌ RegionsPlugin not found! Regions will not work.');
+            console.log('🎯 Available plugins:', plugins.length);
+            
+            // Essayer de recharger le plugin regions si pas trouvé
+            if (this.plugins.has('regions')) {
+                console.log('🎯 Attempting to reload regions plugin...');
+                this.forceEnableRegions();
+            }
+        }
     }
     
-    static getAllInstances() {
-        return Array.from(WaveSurfer.instances.values());
-    }
-    
-    static destroyAll() {
-        WaveSurfer.instances.forEach(instance => instance.destroy());
-        WaveSurfer.instances.clear();
+    // Méthode pour forcer l'activation des régions si elles ne marchent pas
+    async forceEnableRegions() {
+        try {
+            const RegionsPlugin = this.plugins.get('regions');
+            if (RegionsPlugin && this.wavesurfer) {
+                // Ajouter le plugin manuellement si ce n'est pas fait
+                const regionsInstance = RegionsPlugin.create({
+                    dragSelection: true,
+                    enableDragSelection: true,
+                    regionLabelFormatter: (region, index) => `Region ${index + 1}`
+                });
+                
+                this.wavesurfer.registerPlugin(regionsInstance);
+                
+                // Reconfigurer les événements
+                this.setupRegionEvents();
+                
+                console.log('🎯 ✅ Regions plugin force-enabled!');
+                return true;
+            }
+        } catch (error) {
+            console.error('🎯 ❌ Failed to force enable regions:', error);
+        }
+        return false;
+   }
+
+    // Debug method to inspect plugins
+    debugPlugins() {
+        if (!this.wavesurfer) {
+            console.log('🔌 No WaveSurfer instance');
+            return;
+        }
+        
+        const plugins = this.wavesurfer.getActivePlugins ? this.wavesurfer.getActivePlugins() : [];
+        console.log('🔌 === PLUGIN DIAGNOSIS ===');
+        console.log('🔌 Total active plugins:', plugins.length);
+        
+        plugins.forEach((plugin, index) => {
+            console.log(`🔌 Plugin ${index}:`, {
+                constructor: plugin.constructor?.name,
+                name: plugin.name,
+                _name: plugin._name,
+                type: typeof plugin,
+                hasAddRegion: typeof plugin.addRegion === 'function',
+                hasDragSelection: 'dragSelection' in plugin,
+                hasOptions: !!plugin.options,
+                optionsDragSelection: plugin.options?.dragSelection,
+                directDragSelection: plugin.dragSelection,
+                keys: Object.keys(plugin).slice(0, 10) // First 10 keys
+            });
+        });
+        
+        // Try to find regions plugin with all possible methods
+        const regionsPlugin = plugins.find(plugin => 
+            plugin.constructor?.name === 'RegionsPlugin' || 
+            plugin.name === 'regions' ||
+            typeof plugin.addRegion === 'function' ||
+            plugin._name === 'regions'
+        );
+        
+        console.log('🎯 Regions plugin found:', !!regionsPlugin);
+        if (regionsPlugin) {
+            console.log('🎯 Regions plugin details:', {
+                dragSelection: regionsPlugin.options?.dragSelection || regionsPlugin.dragSelection,
+                enableDragSelection: regionsPlugin.options?.enableDragSelection || regionsPlugin.enableDragSelection,
+                hasAddRegion: typeof regionsPlugin.addRegion === 'function'
+            });
+        }
     }
 }
 
