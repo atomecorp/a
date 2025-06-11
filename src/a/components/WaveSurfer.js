@@ -148,13 +148,13 @@ class WaveSurfer extends HTMLElement {
             
             // Plugins configuration
             plugins: [],
-            enabledPlugins: ['regions', 'timeline'], // Include timeline by default
+            enabledPlugins: ['regions', 'timeline', 'zoom'], // Include timeline and zoom by default
             autoLoadPlugins: true, // Auto-load recommended plugins
             
             // Plugin-specific configurations
             timeline: { enabled: true, height: 25 }, // Enable timeline by default with increased height
             minimap: { enabled: false, height: 50 },
-            zoom: { enabled: false, scale: 1 },
+            zoom: { enabled: true, scale: 0.5, wheelZoom: true }, // Enable zoom by default with wheel support
             hover: { enabled: false, formatTimeCallback: null },
             spectrogram: { enabled: false, height: 200 },
             record: { enabled: false },
@@ -317,15 +317,18 @@ class WaveSurfer extends HTMLElement {
                 box-shadow: var(--box-shadow, ${this.config.style.boxShadow});
                 overflow: var(--overflow, ${this.config.style.overflow});
                 box-sizing: border-box;
+                display: flex;
+                flex-direction: column;
             }
             
             .waveform-container {
                 width: 100%;
-                height: ${this.calculateWaveformHeight()}px;
+                flex: 1;
                 position: relative;
                 z-index: 1;
                 overflow: visible; /* Permettre aux plugins de s'afficher */
                 min-height: 100px; /* Hauteur minimale pour les plugins */
+                box-sizing: border-box;
             }
             
             /* Allow WaveSurfer plugins to show properly */
@@ -399,10 +402,8 @@ class WaveSurfer extends HTMLElement {
             }
             
             .controls-container {
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                right: 0;
+                position: relative;
+                width: 100%;
                 height: 50px;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 border-top: 1px solid rgba(255,255,255,0.1);
@@ -414,6 +415,8 @@ class WaveSurfer extends HTMLElement {
                 border-radius: 0 0 8px 8px;
                 z-index: 100;
                 pointer-events: auto;
+                flex-shrink: 0;
+                box-sizing: border-box;
             }
             
             .control-button {
@@ -492,31 +495,28 @@ class WaveSurfer extends HTMLElement {
     }
     
     calculateWaveformHeight() {
-        let baseHeight = 80; // Hauteur de base pour la waveform
-        let additionalHeight = 0;
+        // Avec le flexbox layout, la waveform container prend automatiquement l'espace disponible
+        // Nous calculons juste la hauteur minimale nécessaire pour les plugins
+        let minHeight = 80; // Hauteur de base pour la waveform
         
         // Ajouter de l'espace pour les plugins
         if (this.config.timeline.enabled) {
-            additionalHeight += this.config.timeline.height + 15; // +15 pour les marges et bordures
+            minHeight += this.config.timeline.height + 5; // +5 pour les marges
         }
         
         if (this.config.minimap.enabled) {
-            additionalHeight += this.config.minimap.height + 15; // +15 pour les marges et bordures
+            minHeight += this.config.minimap.height + 5;
         }
         
         if (this.config.zoom.enabled) {
-            additionalHeight += 35; // Espace pour le zoom
+            minHeight += 20; // Espace pour les contrôles de zoom
         }
         
         if (this.config.spectrogram.enabled) {
-            additionalHeight += this.config.spectrogram.height + 10;
+            minHeight += this.config.spectrogram.height + 5;
         }
         
-        // Calculer la hauteur finale en fonction de la hauteur totale disponible
-        const totalAvailableHeight = this.config.height - (this.config.controls.enabled ? 50 : 0);
-        const calculatedHeight = Math.min(baseHeight + additionalHeight, totalAvailableHeight - 20);
-        
-        return Math.max(calculatedHeight, baseHeight); // Minimum hauteur de base
+        return minHeight;
     }
     
     applyPositioning() {
@@ -667,10 +667,17 @@ class WaveSurfer extends HTMLElement {
         if (this.config.zoom.enabled && this.plugins.has('zoom')) {
             const ZoomPlugin = this.plugins.get('zoom');
             if (ZoomPlugin) {
-                plugins.push(ZoomPlugin.create({
+                const zoomConfig = {
                     scale: this.config.zoom.scale
-                }));
-                console.log('🔍 Zoom plugin ajouté (v7)');
+                };
+                
+                // Add wheel zoom support if enabled
+                if (this.config.zoom.wheelZoom) {
+                    zoomConfig.wheel = true;
+                }
+                
+                plugins.push(ZoomPlugin.create(zoomConfig));
+                console.log('🔍 Zoom plugin ajouté (v7) avec config:', zoomConfig);
             }
         }
         
