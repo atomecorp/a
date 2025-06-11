@@ -3,6 +3,7 @@
  * Test de la nouvelle architecture Web Component
  */
 
+import WaveSurferCompatible from '../../a/components/WaveSurfer.js';
 
         // 1. WaveSurfer basique avec contrôles
         console.log('Création WaveSurfer 1...');

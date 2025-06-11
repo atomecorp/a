@@ -338,16 +338,39 @@ class WaveSurfer extends HTMLElement {
             /* Enhanced styles for WaveSurfer plugins */
             .waveform-container div[data-id*="timeline"],
             .waveform-container div[id*="timeline"],
-            .waveform-container .wavesurfer-timeline {
+            .waveform-container .wavesurfer-timeline,
+            :host div[class*="timeline"],
+            div[class*="timeline"],
+            [class*="timeline"] {
+                display: block !important;
                 position: relative !important;
-                z-index: 10 !important;
+                z-index: 15 !important;
                 margin-bottom: 5px !important;
                 height: ${this.config.timeline.height}px !important;
+                min-height: ${this.config.timeline.height}px !important;
                 overflow: visible !important;
-                background: rgba(255,255,255,0.9) !important;
+                background: rgba(255,255,255,0.95) !important;
                 border-bottom: 1px solid #ccc !important;
                 font-size: 10px !important;
                 line-height: ${this.config.timeline.height}px !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                width: 100% !important;
+            }
+            
+            /* Force visibility for any timeline content */
+            .waveform-container * {
+                overflow: visible !important;
+            }
+            
+            /* Timeline labels and markers */
+            .waveform-container div[class*="timeline"] > *,
+            div[class*="timeline"] > * {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                font-size: 10px !important;
+                color: #666 !important;
             }
             
             .waveform-container div[data-id*="minimap"],
@@ -548,6 +571,7 @@ class WaveSurfer extends HTMLElement {
         console.log(`🎵 WaveSurfer Web Component "${this.id}" created`);
         console.log(`🎯 Initial mode set to: ${this.currentMode}`);
         console.log(`🔌 Plugins actifs: ${plugins.length}`);
+        console.log(`📋 Plugins array:`, plugins.map(p => p.constructor?.name || 'Unknown'));
         console.log(`📋 Configuration plugins:`, {
             regions: this.config.regions.enabled,
             timeline: this.config.timeline.enabled,
@@ -604,11 +628,28 @@ class WaveSurfer extends HTMLElement {
         if (this.config.timeline.enabled && this.plugins.has('timeline')) {
             const TimelinePlugin = this.plugins.get('timeline');
             if (TimelinePlugin) {
-                plugins.push(TimelinePlugin.create({
-                    height: this.config.timeline.height
-                }));
-                console.log('⏰ Timeline plugin ajouté (v7)');
+                // Configuration complète comme dans l'exemple avec ruler
+                const timelineConfig = {
+                    height: this.config.timeline.height,
+                    timeInterval: 0.2,
+                    primaryLabelInterval: 5,
+                    style: {
+                        fontSize: '10px',
+                        color: '#666'
+                    }
+                };
+                
+                console.log('⏰ Creating timeline plugin with config:', timelineConfig);
+                const timelineInstance = TimelinePlugin.create(timelineConfig);
+                console.log('⏰ Timeline plugin instance created:', timelineInstance);
+                
+                plugins.push(timelineInstance);
+                console.log('⏰ Timeline plugin ajouté (v7) avec config complète:', timelineConfig);
+            } else {
+                console.warn('⏰ Timeline plugin class not found');
             }
+        } else {
+            console.log('⏰ Timeline plugin skipped - enabled:', this.config.timeline.enabled, 'loaded:', this.plugins.has('timeline'));
         }
         
         // Add minimap plugin
@@ -790,6 +831,16 @@ class WaveSurfer extends HTMLElement {
             this.isReady = true;
             this.updateTimeDisplay();
             this.updatePluginLayout(); // Forcer la mise à jour de la mise en page des plugins
+            
+            // DIAGNOSTIC TIMELINE - Vérifier si le timeline est présent
+            this.diagnosticTimeline();
+            
+            // Try to force timeline visibility after ready
+            setTimeout(() => {
+                this.forceTimelineVisibility();
+                // Additional timeline rendering attempt
+                this.renderTimelineManually();
+            }, 200);
             
             // Apply the initial interaction mode from config with delay to ensure plugins are ready
             setTimeout(() => {
@@ -1546,6 +1597,283 @@ class WaveSurfer extends HTMLElement {
                 enableDragSelection: regionsPlugin.options?.enableDragSelection || regionsPlugin.enableDragSelection,
                 hasAddRegion: typeof regionsPlugin.addRegion === 'function'
             });
+        }
+    }
+
+    // DIAGNOSTIC method for timeline
+    diagnosticTimeline() {
+        console.log('⏰ === TIMELINE DIAGNOSTIC ===');
+        
+        const results = {
+            enabled: this.config.timeline.enabled,
+            pluginFound: false,
+            domElementsCount: 0,
+            containerInfo: {},
+            timelineElements: [],
+            activePlugins: []
+        };
+        
+        if (!this.config.timeline.enabled) {
+            console.log('⏰ Timeline disabled in config');
+            results.enabled = false;
+            return results;
+        }
+
+        // Check if timeline plugin is loaded
+        const plugins = this.wavesurfer.getActivePlugins ? this.wavesurfer.getActivePlugins() : [];
+        const timelinePlugin = plugins.find(plugin => 
+            plugin.constructor?.name === 'TimelinePlugin' || 
+            plugin.name === 'timeline' ||
+            plugin._name === 'timeline'
+        );
+
+        results.pluginFound = !!timelinePlugin;
+        results.activePlugins = plugins.map(p => p.constructor?.name || p.name || 'Unknown');
+        
+        // Add detailed plugin information
+        if (timelinePlugin) {
+            results.timelinePluginDetails = {
+                constructorName: timelinePlugin.constructor?.name,
+                name: timelinePlugin.name,
+                _name: timelinePlugin._name,
+                options: timelinePlugin.options,
+                keys: Object.keys(timelinePlugin).slice(0, 15)
+            };
+        }
+        
+        console.log('⏰ Timeline plugin found:', !!timelinePlugin);
+        console.log('⏰ Active plugins:', results.activePlugins);
+        
+        if (timelinePlugin) {
+            console.log('⏰ Timeline plugin details:', results.timelinePluginDetails);
+        }
+
+        // Check DOM elements with more comprehensive selectors
+        const timelineElements = this.waveformContainer.querySelectorAll(
+            '[data-id*="timeline"], [id*="timeline"], .wavesurfer-timeline, [class*="timeline"], div[style*="timeline"]'
+        );
+        
+        // Also check the shadow root and any nested containers
+        const allTimelineElements = [
+            ...timelineElements,
+            ...this.shadowRoot.querySelectorAll('[data-id*="timeline"], [id*="timeline"], .wavesurfer-timeline, [class*="timeline"]'),
+            ...this.waveformContainer.querySelectorAll('div'), // Check all divs for timeline content
+        ].filter((el, index, arr) => arr.indexOf(el) === index); // Remove duplicates
+        results.domElementsCount = allTimelineElements.length;
+        
+        console.log('⏰ Timeline DOM elements found:', allTimelineElements.length);
+        
+        if (allTimelineElements.length > 0) {
+            allTimelineElements.forEach((el, idx) => {
+                const elementInfo = {
+                    tagName: el.tagName,
+                    className: el.className,
+                    style: el.style.cssText,
+                    visible: el.offsetHeight > 0,
+                    height: el.offsetHeight,
+                    width: el.offsetWidth
+                };
+                
+                results.timelineElements.push(elementInfo);
+                console.log(`⏰ Timeline element ${idx}:`, elementInfo);
+            });
+        }
+
+        // Check container dimensions
+        results.containerInfo = {
+            waveformHeight: this.calculateWaveformHeight(),
+            containerHeight: this.config.height,
+            timelineConfigHeight: this.config.timeline.height,
+            waveformContainerHeight: this.waveformContainer.offsetHeight
+        };
+        
+        console.log('⏰ Container info:', results.containerInfo);
+        
+        return results;
+    }
+    
+    // Method to force timeline visibility
+    forceTimelineVisibility() {
+        console.log('⏰ === FORCING TIMELINE VISIBILITY ===');
+        
+        // Look for all possible timeline elements
+        const allContainers = [
+            this.waveformContainer,
+            this.shadowRoot,
+            this.container
+        ];
+        
+        let timelineFound = false;
+        
+        allContainers.forEach(container => {
+            if (!container) return;
+            
+            // Search for timeline elements with various selectors
+            const timelineSelectors = [
+                'div[class*="timeline"]',
+                'div[id*="timeline"]', 
+                '.wavesurfer-timeline',
+                'div[style*="timeline"]',
+                'div', // Check all divs as fallback
+            ];
+            
+            timelineSelectors.forEach(selector => {
+                const elements = container.querySelectorAll(selector);
+                elements.forEach(el => {
+                    // Check if this looks like a timeline element
+                    if (this.isTimelineElement(el)) {
+                        console.log('⏰ Found potential timeline element:', el);
+                        this.makeTimelineVisible(el);
+                        timelineFound = true;
+                    }
+                });
+            });
+        });
+        
+        if (!timelineFound) {
+            console.warn('⏰ No timeline elements found to make visible');
+            // Try to force timeline creation
+            this.attemptTimelineRecreation();
+        }
+    }
+    
+    // Check if an element looks like a timeline
+    isTimelineElement(el) {
+        const text = el.textContent || '';
+        const className = el.className || '';
+        const style = el.style.cssText || '';
+        
+        // Timeline elements typically contain time markers or have timeline-related classes/styles
+        return (
+            text.match(/\d+:\d+/) || // Contains time format
+            text.match(/\d+\.\d+s/) || // Contains seconds format
+            className.includes('timeline') ||
+            style.includes('timeline') ||
+            (el.children.length > 5 && text.match(/\d/)) // Many children with numbers (time markers)
+        );
+    }
+    
+    // Make timeline element visible
+    makeTimelineVisible(el) {
+        console.log('⏰ Making timeline element visible:', el);
+        
+        // Apply visibility styles
+        el.style.display = 'block';
+        el.style.visibility = 'visible';
+        el.style.opacity = '1';
+        el.style.position = 'relative';
+        el.style.zIndex = '15';
+        el.style.height = `${this.config.timeline.height}px`;
+        el.style.minHeight = `${this.config.timeline.height}px`;
+        el.style.overflow = 'visible';
+        el.style.background = 'rgba(255,255,255,0.9)';
+        el.style.borderBottom = '1px solid #ccc';
+        el.style.fontSize = '10px';
+        el.style.color = '#666';
+        
+        // Ensure parent containers are also visible
+        let parent = el.parentElement;
+        while (parent && parent !== this.shadowRoot) {
+            parent.style.overflow = 'visible';
+            parent = parent.parentElement;
+        }
+    }
+    
+    // Attempt to recreate timeline if not found
+    attemptTimelineRecreation() {
+        console.log('⏰ Attempting timeline recreation...');
+        
+        // This is a last resort - try to reinitialize just the timeline plugin
+        if (this.plugins.has('timeline') && this.wavesurfer && this.isReady) {
+            try {
+                const TimelinePlugin = this.plugins.get('timeline');
+                const timelineConfig = {
+                    height: this.config.timeline.height,
+                    timeInterval: 0.2,
+                    primaryLabelInterval: 5,
+                    style: {
+                        fontSize: '10px',
+                        color: '#666'
+                    }
+                };
+                
+                // Try to add timeline plugin dynamically
+                const timelineInstance = TimelinePlugin.create(timelineConfig);
+                if (this.wavesurfer.registerPlugin) {
+                    this.wavesurfer.registerPlugin(timelineInstance);
+                    console.log('⏰ Timeline plugin recreated successfully');
+                }
+            } catch (error) {
+                console.error('⏰ Failed to recreate timeline:', error);
+            }
+        }
+    }
+    
+    // Manual timeline rendering as last resort
+    renderTimelineManually() {
+        console.log('⏰ === MANUAL TIMELINE RENDERING ===');
+        
+        if (!this.wavesurfer || !this.isReady) {
+            console.warn('⏰ WaveSurfer not ready for manual timeline rendering');
+            return;
+        }
+        
+        const duration = this.wavesurfer.getDuration();
+        if (!duration || duration <= 0) {
+            console.warn('⏰ No audio duration available for timeline');
+            return;
+        }
+        
+        // Create a manual timeline element if none exists
+        const existingTimeline = this.waveformContainer.querySelector('[class*="timeline"]');
+        if (!existingTimeline) {
+            console.log('⏰ Creating manual timeline element');
+            
+            const timelineContainer = document.createElement('div');
+            timelineContainer.className = 'manual-timeline-container';
+            timelineContainer.style.cssText = `
+                position: relative;
+                width: 100%;
+                height: ${this.config.timeline.height}px;
+                background: rgba(255,255,255,0.95);
+                border-bottom: 1px solid #ccc;
+                font-size: 10px;
+                color: #666;
+                z-index: 15;
+                overflow: visible;
+                display: flex;
+                align-items: center;
+                margin-bottom: 5px;
+            `;
+            
+            // Add time markers
+            const timeInterval = 0.2; // Every 0.2 seconds
+            const primaryInterval = 5; // Major markers every 5 seconds
+            const containerWidth = this.waveformContainer.offsetWidth;
+            
+            for (let time = 0; time <= duration; time += timeInterval) {
+                const position = (time / duration) * containerWidth;
+                const isPrimary = time % primaryInterval === 0;
+                
+                if (isPrimary) {
+                    const marker = document.createElement('span');
+                    marker.style.cssText = `
+                        position: absolute;
+                        left: ${position}px;
+                        font-size: 10px;
+                        color: #666;
+                        background: rgba(255,255,255,0.9);
+                        padding: 1px 3px;
+                        border-radius: 2px;
+                    `;
+                    marker.textContent = this.formatTime(time);
+                    timelineContainer.appendChild(marker);
+                }
+            }
+            
+            // Insert timeline at the top of the waveform container
+            this.waveformContainer.insertBefore(timelineContainer, this.waveformContainer.firstChild);
+            console.log('⏰ Manual timeline created and inserted');
         }
     }
 }

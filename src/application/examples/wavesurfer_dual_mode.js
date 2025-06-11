@@ -5,6 +5,8 @@
  * with visible timeline ruler and enhanced controls.
  */
 
+import WaveSurferCompatible from '../../a/components/WaveSurfer.js';
+
 export function createWaveSurferDualModeDemo() {
     console.log('🎵 Creating WaveSurfer Dual Mode Demo...');
     

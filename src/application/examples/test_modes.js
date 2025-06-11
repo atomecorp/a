@@ -3,6 +3,8 @@
  * JUSTE pour tester le switching entre scrub et selection
  */
 
+import WaveSurferCompatible from '../../a/components/WaveSurfer.js';
+
 console.log('🎯 === TEST SIMPLE DES MODES ===');
 
 // UN SEUL exemple pour tester

@@ -5,6 +5,7 @@
  * Utilise l'API native ES6 modules pour Tauri
  */
 
+import WaveSurferCompatible from '../../a/components/WaveSurfer.js';
 
 // ==========================================
 // Example 1: Professional Audio Workstation

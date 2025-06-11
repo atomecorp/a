@@ -12,6 +12,7 @@ import TimelinePlugin from '../../js/wavesurfer-v7/plugins/timeline.esm.js';
 import MinimapPlugin from '../../js/wavesurfer-v7/plugins/minimap.esm.js';
 import ZoomPlugin from '../../js/wavesurfer-v7/plugins/zoom.esm.js';
 import HoverPlugin from '../../js/wavesurfer-v7/plugins/hover.esm.js';
+import WaveSurferCompatible from '../../a/components/WaveSurfer.js';
 
 // ==========================================
 // Professional Audio Workstation avec Sélection et Ruler
