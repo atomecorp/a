@@ -1,23 +1,31 @@
 /**
  * 📊 Table Web Component - Squirrel Framework
  * 
- * Modern Web Component with full CSS properties support including:
- * - Multiple shadows (boxShadow arrays)
- * - CSS gradients for backgrounds
- * - Advanced animations and transitions
- * - Auto-attachment and positioning
+ * Modern Web Component avec système de particules modernes:
+ * - Particules partagées pour propriétés communes (x, y, width, height, etc.)
+ * - Multiple shadows (boxShadow arrays) pour effets relief
+ * - CSS gradients pour backgrounds sophistiqués
+ * - Advanced animations and transitions avec particules
+ * - Auto-attachment et positioning avec particules
  * - Interactive callbacks and cell-level styling
  * - Bombé effects with internal/external shadows
+ * - Performance ultra-moderne avec batch processing
  * 
- * @version 2.0.0 - WEB COMPONENT
+ * @version 3.0.0 - MODERN PARTICLE SYSTEM
  * @author Squirrel Framework Team
  */
 
-class Table extends HTMLElement {
+// Import du système centralisé
+import BaseComponent from './BaseComponent.js';
+
+class Table extends BaseComponent {
     static tables = new Map(); // Registry of all tables
     
     constructor(config = {}) {
-        super();
+        super(); // Appeler le constructeur de BaseComponent
+        
+        // Traiter d'abord la configuration commune via BaseComponent
+        this.processCommonConfig(config);
         
         // Default configuration with full CSS properties support
         this.config = this.mergeConfig(config);
@@ -43,13 +51,13 @@ class Table extends HTMLElement {
             this.performAutoAttach();
         }
         
-        // Apply positioning
-        this.applyPositioning();
+        // Apply positioning with modern particles
+        this.applyModernPositioning();
         
         // Register table
         Table.tables.set(this.id, this);
         
-        console.log(`📊 Table Web Component created: ${this.id} (${this.config.data.length} rows)`);
+        console.log(`📊 Table Web Component created: ${this.id} (${this.config.data.length} rows) - MODERN PARTICLES ENABLED`);
     }
     
     mergeConfig(config) {
@@ -155,6 +163,34 @@ class Table extends HTMLElement {
                 cellSelect: {
                     duration: '0.3s',
                     easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+                }
+            },
+            
+            // 🚀 CONFIGURATION MODERNE DES PARTICULES
+            modernParticles: {
+                // Activer le système moderne
+                enabled: true,
+                batchUpdates: true,
+                performanceMonitoring: false,
+                
+                // Particules communes par défaut
+                defaultParticles: {
+                    smooth: true,
+                    responsive: true,
+                    optimize: true,
+                    glow: false,
+                    animate: {
+                        type: 'smooth',
+                        duration: 300,
+                        easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+                    }
+                },
+                
+                // Configuration de fallback
+                fallback: {
+                    enableFrameworkA: true,
+                    enableCSSDirect: true,
+                    logErrors: true
                 }
             },
             
@@ -1025,6 +1061,198 @@ class Table extends HTMLElement {
     _renderTable() {
         // Alias for refresh method for backward compatibility
         this.refresh();
+    }
+
+    // ==========================================
+    // 🚀 MODERN PARTICLE SYSTEM INTEGRATION
+    // ==========================================
+
+    /**
+     * 🎯 APPLICATION DU POSITIONNEMENT MODERNE
+     */
+    applyModernPositioning() {
+        if (this.config.x !== undefined && this.config.y !== undefined) {
+            // Utiliser les particules modernes pour le positionnement
+            this.setParticles({
+                x: this.config.x,
+                y: this.config.y,
+                width: this.config.width,
+                height: this.config.height
+            });
+        } else {
+            // Juste les dimensions
+            this.setParticles({
+                width: this.config.width,
+                height: this.config.height
+            });
+        }
+    }
+
+    /**
+     * 🌟 MISE À JOUR CONFIGURATION MODERNE
+     */
+    updateModernConfig(newConfig) {
+        const oldConfig = { ...this.config };
+        this.config = this.mergeConfig({ ...this.config, ...newConfig });
+        
+        // Détecter les changements de propriétés communes
+        const commonProps = ['x', 'y', 'width', 'height', 'backgroundColor', 'opacity'];
+        const changedProps = {};
+        
+        commonProps.forEach(prop => {
+            if (oldConfig[prop] !== this.config[prop]) {
+                changedProps[prop] = this.config[prop];
+            }
+        });
+        
+        // Appliquer les changements via le système moderne
+        if (Object.keys(changedProps).length > 0) {
+            this.setParticles(changedProps, { force: true });
+        }
+        
+        // Régénérer le tableau si nécessaire
+        this._updateTableStructure();
+        
+        console.log(`📊 Table ${this.id} - Configuration moderne mise à jour:`, changedProps);
+    }
+
+    /**
+     * 🎨 APPLICATION STYLING MODERNE
+     */
+    applyModernStyling(styleConfig) {
+        // Appliquer les particules de style communes
+        const modernParticles = {};
+        
+        if (styleConfig.backgroundColor) modernParticles.backgroundColor = styleConfig.backgroundColor;
+        if (styleConfig.opacity !== undefined) modernParticles.opacity = styleConfig.opacity;
+        if (styleConfig.borderRadius) modernParticles.borderRadius = styleConfig.borderRadius;
+        if (styleConfig.boxShadow) modernParticles.boxShadow = styleConfig.boxShadow;
+        if (styleConfig.gradient) modernParticles.gradient = styleConfig.gradient;
+        if (styleConfig.glow) modernParticles.glow = styleConfig.glow;
+        
+        // Appliquer via le système moderne
+        this.setParticles(modernParticles);
+        
+        // Mettre à jour la configuration
+        this.config.style = { ...this.config.style, ...styleConfig };
+        this._updateTableStyles();
+    }
+
+    /**
+     * ⚡ OPTIMISATIONS MODERNES
+     */
+    enableModernOptimizations() {
+        // Activer le rendu optimisé
+        this.batchUpdates = true;
+        
+        // Optimisations CSS
+        this.setParticles({
+            smooth: true,
+            responsive: true,
+            animate: { 
+                type: 'smooth',
+                duration: 300,
+                easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+            }
+        });
+        
+        // Performance monitoring
+        this._enableTablePerformanceMonitoring();
+        
+        console.log(`📊 Table ${this.id} - Optimisations modernes activées`);
+    }
+
+    /**
+     * 🎭 ANIMATION D'ENTRÉE MODERNE
+     */
+    animateModernEntry() {
+        return this.animateParticle('opacity', 
+            { from: 0, to: 1 },
+            { 
+                duration: 500,
+                easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+                callback: () => {
+                    console.log(`📊 Table ${this.id} - Animation d'entrée terminée`);
+                    // Animer les lignes une par une
+                    this._animateRowsSequence();
+                }
+            }
+        );
+    }
+
+    /**
+     * 🌊 ANIMATION SÉQUENTIELLE DES LIGNES
+     */
+    _animateRowsSequence() {
+        const rows = this.tbody.querySelectorAll('tr');
+        rows.forEach((row, index) => {
+            setTimeout(() => {
+                row.style.opacity = '0';
+                row.style.transform = 'translateY(20px)';
+                row.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+                
+                requestAnimationFrame(() => {
+                    row.style.opacity = '1';
+                    row.style.transform = 'translateY(0)';
+                });
+            }, index * 50);
+        });
+    }
+
+    /**
+     * 🔄 MISE À JOUR STRUCTURE TABLEAU
+     */
+    _updateTableStructure() {
+        // Régénérer headers et rows
+        this._generateHeaders();
+        this._generateRows();
+        
+        // Mettre à jour pagination si activée
+        if (this.config.pagination.enabled) {
+            this._updatePagination();
+        }
+    }
+
+    /**
+     * 🎨 MISE À JOUR DES STYLES TABLEAU
+     */
+    _updateTableStyles() {
+        if (this.shadowRoot) {
+            const existingStyle = this.shadowRoot.querySelector('style');
+            if (existingStyle) {
+                existingStyle.remove();
+            }
+            const newStyle = this._generateStyles();
+            this.shadowRoot.insertBefore(newStyle, this.shadowRoot.firstChild);
+        }
+    }
+
+    /**
+     * 📊 MONITORING PERFORMANCE TABLE
+     */
+    _enableTablePerformanceMonitoring() {
+        let lastUpdate = performance.now();
+        let frameCount = 0;
+        let dataLength = this.config.data.length;
+        
+        const monitor = () => {
+            frameCount++;
+            const now = performance.now();
+            
+            if (now - lastUpdate >= 2000) {
+                const fps = Math.round((frameCount * 1000) / (now - lastUpdate));
+                const memoryUsage = performance.memory ? 
+                    Math.round(performance.memory.usedJSHeapSize / 1024 / 1024) : 'N/A';
+                
+                console.log(`📊 Table ${this.id} - Performance: ${fps}fps, Data: ${dataLength} rows, Memory: ${memoryUsage}MB`);
+                frameCount = 0;
+                lastUpdate = now;
+            }
+            
+            requestAnimationFrame(monitor);
+        };
+        
+        requestAnimationFrame(monitor);
     }
 }
 

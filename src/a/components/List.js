@@ -5,15 +5,21 @@
  * with support for icons, avatars, nested items, advanced CSS styling, and various list types.
  * Enhanced with complete CSS properties support including gradients, shadows, transforms, etc.
  * 
- * @version 2.0.0 - Web Component Edition
+ * @version 2.0.0 - Web Component Edition + BASE COMPONENT
  * @author Squirrel Framework Team
  */
 
-class List extends HTMLElement {
+// Import du système centralisé
+import BaseComponent from './BaseComponent.js';
+
+class List extends BaseComponent {
     static instances = new Map(); // Registry of all List instances
     
     constructor(config = {}) {
-        super();
+        super(); // Appeler le constructeur de BaseComponent
+        
+        // Traiter d'abord la configuration commune via BaseComponent
+        this.processCommonConfig(config);
         
         // Generate unique ID
         this.id = config.id || `list_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -133,7 +139,7 @@ class List extends HTMLElement {
             sortable: config.sortable || false,
             draggable: config.draggable || false,
             
-            // Main container styling with full CSS support
+            // Container style with full CSS support
             style: {
                 backgroundColor: '#ffffff',
                 background: null, // Support for gradients
@@ -1217,30 +1223,6 @@ class List extends HTMLElement {
         this.config.callbacks.onSelectionChange([...this.selectedItems]);
     }
     
-    /**
-     * Separate styles into host styles (positioning) and container styles (appearance)
-     */
-    separateStyles(styleObj) {
-        if (!styleObj) return { hostStyles: {}, containerStyles: {} };
-        
-        const hostStyleProps = [
-            'position', 'left', 'top', 'right', 'bottom', 
-            'width', 'height', 'zIndex', 'transform'
-        ];
-        
-        const hostStyles = {};
-        const containerStyles = {};
-        
-        Object.entries(styleObj).forEach(([key, value]) => {
-            if (hostStyleProps.includes(key)) {
-                hostStyles[key] = value;
-            } else {
-                containerStyles[key] = value;
-            }
-        });
-        
-        return { hostStyles, containerStyles };
-    }
 }
 
 // Register the Web Component

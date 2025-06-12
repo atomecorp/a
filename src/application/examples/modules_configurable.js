@@ -39,6 +39,7 @@ const moduleStatique = new Module({
     containerStyle: {
         backgroundColor: '#34495e',
         border: '2px solid #7f8c8d',
+
         borderRadius: '8px',
         boxShadow: [
             '0 4px 8px rgba(0, 0, 0, 0.1)'

@@ -1,7 +1,6 @@
 // import   './examples/sliders.js';
 // import './examples/lists.js'; // Temporairement désactivé à cause d'erreurs
 // import './examples/lists_test.js'; // Temporairement désactivé pour debug
-// import './examples/lists_debug.js'; // Debug simple
 
 // Import des exemples avancés qui fonctionnent
 // import './examples/tables.js';
@@ -17,5 +16,5 @@
 
 // Exemples Module avec Web Components
 // import './examples/modules_connections.js'; // Version avec système de liaisons complet - NOUVEAU !
-import './examples/modules_configurable.js'; // Version avec animations configurables
+ import './examples/modules_configurable.js'; // Version avec animations configurables
 

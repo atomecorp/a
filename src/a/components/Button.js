@@ -2,16 +2,21 @@
  * 🔘 Toggle Button Web Component - Squirrel Framework
  * 
  * Bouton ON/OFF totalement skinnable avec syntaxe classe A
- * ✅ Web Component natif avec Shadow DOM
+ * ✅ Web Component natif avec Shadow DOM et système de particules modernes
  * ✅ Même API que la classe A
  * ✅ Styling complet personnalisable
  * 
- * @version 1.0.0 - Web Component Edition
+ * @version 2.0.0 - Modern Particle System Edition
  */
 
-class SquirrelToggleButton extends HTMLElement {
+import { BaseComponent } from './BaseComponent.js';
+
+class SquirrelToggleButton extends BaseComponent {
     constructor(config = {}) {
-        super();
+        super(); // Appeler le constructeur de BaseComponent
+        
+        // Traiter d'abord la configuration commune via BaseComponent
+        this.processCommonConfig(config);
         
         // 🎯 MÊME SYNTAXE QUE LA CLASSE A
         this.config = {
@@ -53,7 +58,6 @@ class SquirrelToggleButton extends HTMLElement {
     }
     
     _init() {
-        this._applyPositioning();
         this._createButtonStructure();
         this._applyClassAStyling();
         this._attachToTarget();
@@ -61,16 +65,6 @@ class SquirrelToggleButton extends HTMLElement {
         this._updateDisplay();
         
         console.log(`🔘 Toggle Button Web Component created - State: ${this.isOn ? 'ON' : 'OFF'}`);
-    }
-    
-    _applyPositioning() {
-        // 🎯 MÊME LOGIQUE DE POSITIONNEMENT QUE LA CLASSE A
-        this.style.position = 'absolute';
-        this.style.left = `${this.config.x}px`;
-        this.style.top = `${this.config.y}px`;
-        this.style.width = `${this.config.width}px`;
-        this.style.height = `${this.config.height}px`;
-        this.style.zIndex = this.config.zIndex || 'auto';
     }
     
     _createButtonStructure() {
@@ -195,21 +189,9 @@ class SquirrelToggleButton extends HTMLElement {
     }
     
     _attachToTarget() {
-        // 🎯 MÊME LOGIQUE D'ATTACHEMENT QUE LA CLASSE A
-        let target;
-        
-        if (typeof this.config.attach === 'string') {
-            if (this.config.attach === 'body') {
-                target = document.body;
-            } else {
-                target = document.querySelector(this.config.attach);
-            }
-        } else {
-            target = this.config.attach;
-        }
-        
-        if (target) {
-            target.appendChild(this);
+        // Auto-attachment si spécifié via BaseComponent
+        if (this.config.attach && !this.parentElement) {
+            this._performAttachment();
         }
     }
     
