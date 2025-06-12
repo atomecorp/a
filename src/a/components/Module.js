@@ -19,6 +19,7 @@ class Module extends HTMLElement {
     static draggedModule = null;
     static connectionInProgress = null;
     static selectedConnector = null;
+    static selectedModules = new Set(); // Track selected modules
     
     constructor(config = {}) {
         super();
@@ -39,6 +40,10 @@ class Module extends HTMLElement {
         // Initialize mouse coordinates for Shadow DOM search
         this._lastMouseX = 0;
         this._lastMouseY = 0;
+        
+        // Initialize interaction tracking
+        this._lastInteraction = Date.now();
+        this._interactionCount = 0;
         
         // Create shadow DOM pour encapsulation
         this.attachShadow({ mode: 'open' });
@@ -69,6 +74,7 @@ class Module extends HTMLElement {
             y: undefined,
             width: 200,
             height: 120,
+            created: new Date().toISOString(), // Add creation timestamp
             
             // Inputs/Outputs avec types visuels
             inputs: [],
@@ -1570,25 +1576,35 @@ class Module extends HTMLElement {
         
         console.log(`📱 Module clicked: ${this.name}`);
         
-        // Toggle selection
-        this.selected = !this.selected;
+        // Track interaction
+        this._updateInteraction();
         
-        if (this.selected) {
-            this.container.classList.add('selected');
-            if (this.config.animations.enabled && this.config.animations.moduleSelected.enabled) {
-                // L'animation sera gérée par CSS
-            }
-        } else {
-            this.container.classList.remove('selected');
-        }
+        // Check for modifier keys for multi-selection
+        const addToSelection = event.ctrlKey || event.metaKey || event.shiftKey;
+        
+        // Toggle selection with multi-selection support
+        this.toggleSelection(addToSelection);
         
         // Callbacks et événements
         this.config.callbacks.onModuleClick(this, event);
         
         this.dispatchEvent(new CustomEvent('moduleClick', {
-            detail: { module: this, selected: this.selected },
+            detail: { 
+                module: this, 
+                selected: this.selected,
+                totalSelected: Module.selectedModules.size,
+                multiSelect: addToSelection
+            },
             bubbles: true
         }));
+    }
+
+    /**
+     * Update interaction tracking
+     */
+    _updateInteraction() {
+        this._lastInteraction = Date.now();
+        this._interactionCount = (this._interactionCount || 0) + 1;
     }
     
     /**
@@ -1690,6 +1706,567 @@ class Module extends HTMLElement {
                 this._updateConnectionLinePosition(connection.line, connection.source, connection.target);
             }
         }
+    }
+
+    /**
+     * Get connection statistics for this module
+     * @returns {Object} - Connection statistics
+     */
+    getConnectionStats() {
+        const stats = {
+            totalConnections: this.connections.size,
+            inputConnections: 0,
+            outputConnections: 0,
+            connectedInputs: new Set(),
+            connectedOutputs: new Set(),
+            connectionsByType: {},
+            connectedModules: new Set(),
+            connections: []
+        };
+
+        // Analyze each connection
+        for (const connectionId of this.connections) {
+            const connection = Module.connections.get(connectionId);
+            if (!connection) continue;
+
+            const connectionInfo = {
+                id: connectionId,
+                source: {
+                    module: connection.source.module.name,
+                    connector: connection.source.config.name || connection.source.config.id,
+                    type: connection.source.config.type
+                },
+                target: {
+                    module: connection.target.module.name,
+                    connector: connection.target.config.name || connection.target.config.id,
+                    type: connection.target.config.type
+                },
+                dataType: connection.source.config.type,
+                created: connection.created
+            };
+
+            stats.connections.push(connectionInfo);
+
+            // Count input vs output connections for this module
+            if (connection.source.module.id === this.id) {
+                stats.outputConnections++;
+                stats.connectedOutputs.add(connection.source.config.id);
+                stats.connectedModules.add(connection.target.module.id);
+            }
+
+            if (connection.target.module.id === this.id) {
+                stats.inputConnections++;
+                stats.connectedInputs.add(connection.target.config.id);
+                stats.connectedModules.add(connection.source.module.id);
+            }
+
+            // Count by data type
+            const dataType = connection.source.config.type;
+            if (!stats.connectionsByType[dataType]) {
+                stats.connectionsByType[dataType] = 0;
+            }
+            stats.connectionsByType[dataType]++;
+        }
+
+        // Calculate ratios
+        stats.inputRatio = this.inputs.length > 0 ? stats.connectedInputs.size / this.inputs.length : 0;
+        stats.outputRatio = this.outputs.length > 0 ? stats.connectedOutputs.size / this.outputs.length : 0;
+        stats.connectedModulesCount = stats.connectedModules.size;
+
+        return stats;
+    }
+
+    /**
+     * Get detailed connector information
+     * @returns {Object} - Detailed connector info
+     */
+    getConnectorInfo() {
+        return {
+            inputs: this.inputs.map(input => ({
+                id: input.id,
+                name: input.name || input.id,
+                type: input.type,
+                connected: this._isConnectorConnected('input', input.id),
+                connections: this._getConnectorConnections({ module: this, config: input, type: 'input' }).length
+            })),
+            outputs: this.outputs.map(output => ({
+                id: output.id,
+                name: output.name || output.id,
+                type: output.type,
+                connected: this._isConnectorConnected('output', output.id),
+                connections: this._getConnectorConnections({ module: this, config: output, type: 'output' }).length
+            }))
+        };
+    }
+
+    /**
+     * Check if a specific connector is connected
+     * @param {string} type - 'input' or 'output'
+     * @param {string} connectorId - ID of the connector
+     * @returns {boolean} - True if connector has connections
+     */
+    _isConnectorConnected(type, connectorId) {
+        for (const connectionId of this.connections) {
+            const connection = Module.connections.get(connectionId);
+            if (!connection) continue;
+
+            if (type === 'input' && connection.target.module.id === this.id && connection.target.config.id === connectorId) {
+                return true;
+            }
+            if (type === 'output' && connection.source.module.id === this.id && connection.source.config.id === connectorId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Get module performance metrics
+     * @returns {Object} - Performance metrics
+     */
+    getPerformanceMetrics() {
+        const now = Date.now();
+        const createdTime = new Date(this.config.created || now).getTime();
+        const age = now - createdTime;
+
+        return {
+            age: age,
+            ageFormatted: this._formatDuration(age),
+            memoryUsage: this._estimateMemoryUsage(),
+            connectionCount: this.connections.size,
+            connectorCount: this.inputs.length + this.outputs.length,
+            lastInteraction: this._lastInteraction || createdTime,
+            interactionCount: this._interactionCount || 0
+        };
+    }
+
+    /**
+     * Estimate memory usage of this module
+     * @returns {Object} - Memory usage estimate
+     */
+    _estimateMemoryUsage() {
+        // Basic estimation based on module components
+        let bytes = 0;
+        
+        // Base module overhead
+        bytes += 1024; // Base object
+        
+        // Shadow DOM overhead
+        bytes += 512;
+        
+        // Connectors
+        bytes += (this.inputs.length + this.outputs.length) * 256;
+        
+        // Connections
+        bytes += this.connections.size * 128;
+        
+        // Configuration
+        bytes += JSON.stringify(this.config).length;
+
+        return {
+            bytes: bytes,
+            formatted: this._formatBytes(bytes)
+        };
+    }
+
+    /**
+     * Format duration in milliseconds to human readable
+     * @param {number} ms - Duration in milliseconds
+     * @returns {string} - Formatted duration
+     */
+    _formatDuration(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (days > 0) return `${days}d ${hours % 24}h`;
+        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+        return `${seconds}s`;
+    }
+
+    /**
+     * Format bytes to human readable
+     * @param {number} bytes - Bytes
+     * @returns {string} - Formatted bytes
+     */
+    _formatBytes(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    // === MODULE SELECTION MANAGEMENT ===
+    
+    /**
+     * Select this module
+     * @param {boolean} addToSelection - If true, adds to current selection instead of replacing it
+     */
+    select(addToSelection = false) {
+        if (!addToSelection) {
+            // Deselect all other modules first
+            Module.deselectAll();
+        }
+        
+        if (!this.selected) {
+            this.selected = true;
+            this.container.classList.add('selected');
+            Module.selectedModules.add(this);
+            
+            console.log(`📌 Module selected: ${this.name} (Total selected: ${Module.selectedModules.size})`);
+            
+            // Callback
+            this.config.callbacks.onModuleSelect(this);
+            
+            // Emit event
+            this.dispatchEvent(new CustomEvent('moduleSelected', {
+                detail: { module: this, totalSelected: Module.selectedModules.size },
+                bubbles: true
+            }));
+        }
+    }
+    
+    /**
+     * Deselect this module
+     */
+    deselect() {
+        if (this.selected) {
+            this.selected = false;
+            this.container.classList.remove('selected');
+            Module.selectedModules.delete(this);
+            
+            console.log(`📌 Module deselected: ${this.name} (Total selected: ${Module.selectedModules.size})`);
+            
+            // Callback
+            this.config.callbacks.onModuleDeselect(this);
+            
+            // Emit event
+            this.dispatchEvent(new CustomEvent('moduleDeselected', {
+                detail: { module: this, totalSelected: Module.selectedModules.size },
+                bubbles: true
+            }));
+        }
+    }
+    
+    /**
+     * Toggle selection state of this module
+     * @param {boolean} addToSelection - If true, adds to current selection instead of replacing it
+     */
+    toggleSelection(addToSelection = false) {
+        if (this.selected) {
+            this.deselect();
+        } else {
+            this.select(addToSelection);
+        }
+    }
+    
+    /**
+     * Delete this module and all its connections
+     * @returns {boolean} - True if module was successfully deleted
+     */
+    delete() {
+        console.log(`🗑️ Deleting module: ${this.name}`);
+        
+        // Disconnect all connections first
+        const disconnectedCount = this.disconnectAll();
+        console.log(`🔗 Disconnected ${disconnectedCount} connections`);
+        
+        // Remove from selection if selected
+        if (this.selected) {
+            this.deselect();
+        }
+        
+        // Remove from DOM
+        if (this.parentElement) {
+            this.parentElement.removeChild(this);
+        }
+        
+        // Remove from registry
+        Module.modules.delete(this.id);
+        
+        // Emit deletion event
+        this.dispatchEvent(new CustomEvent('moduleDeleted', {
+            detail: { module: this },
+            bubbles: true
+        }));
+        
+        console.log(`✅ Module deleted: ${this.name}`);
+        return true;
+    }
+    
+    /**
+     * Duplicate this module
+     * @param {number} offsetX - X offset for the duplicate
+     * @param {number} offsetY - Y offset for the duplicate
+     * @returns {Module} - The new duplicated module
+     */
+    duplicate(offsetX = 20, offsetY = 20) {
+        console.log(`📋 Duplicating module: ${this.name}`);
+        
+        // Create new config based on current module
+        const newConfig = JSON.parse(JSON.stringify(this.config));
+        
+        // Update ID and name
+        newConfig.id = `module_${Date.now()}`;
+        newConfig.name = `${this.name} Copy`;
+        
+        // Update position
+        if (newConfig.x !== undefined) newConfig.x += offsetX;
+        if (newConfig.y !== undefined) newConfig.y += offsetY;
+        
+        // Create new module
+        const duplicate = new Module(newConfig);
+        
+        // Auto-attach if original was attached
+        if (this.parentElement) {
+            this.parentElement.appendChild(duplicate);
+        }
+        
+        console.log(`✅ Module duplicated: ${this.name} → ${duplicate.name}`);
+        
+        return duplicate;
+    }
+    
+    // === STATIC SELECTION METHODS ===
+    
+    /**
+     * Get all currently selected modules
+     * @returns {Array<Module>} - Array of selected modules
+     */
+    static getSelectedModules() {
+        return Array.from(Module.selectedModules);
+    }
+    
+    /**
+     * Get the first selected module (if any)
+     * @returns {Module|null} - First selected module or null
+     */
+    static getFirstSelectedModule() {
+        return Module.selectedModules.size > 0 ? Module.selectedModules.values().next().value : null;
+    }
+    
+    /**
+     * Check if any modules are selected
+     * @returns {boolean} - True if at least one module is selected
+     */
+    static hasSelectedModules() {
+        return Module.selectedModules.size > 0;
+    }
+    
+    /**
+     * Get the number of selected modules
+     * @returns {number} - Number of selected modules
+     */
+    static getSelectedCount() {
+        return Module.selectedModules.size;
+    }
+    
+    /**
+     * Select all modules
+     */
+    static selectAll() {
+        console.log(`📌 Selecting all modules (${Module.modules.size} modules)`);
+        
+        Module.modules.forEach(module => {
+            module.select(true); // Add to selection
+        });
+    }
+    
+    /**
+     * Deselect all modules
+     */
+    static deselectAll() {
+        if (Module.selectedModules.size > 0) {
+            console.log(`📌 Deselecting all modules (${Module.selectedModules.size} modules)`);
+            
+            // Create a copy to avoid modification during iteration
+            const selectedCopy = Array.from(Module.selectedModules);
+            selectedCopy.forEach(module => {
+                module.deselect();
+            });
+        }
+    }
+    
+    /**
+     * Delete all selected modules
+     * @returns {number} - Number of modules deleted
+     */
+    static deleteSelected() {
+        const selectedModules = Array.from(Module.selectedModules);
+        
+        if (selectedModules.length === 0) {
+            console.log(`❌ No modules selected for deletion`);
+            return 0;
+        }
+        
+        console.log(`🗑️ Deleting ${selectedModules.length} selected modules`);
+        
+        let deletedCount = 0;
+        selectedModules.forEach(module => {
+            if (module.delete()) {
+                deletedCount++;
+            }
+        });
+        
+       
+        
+        console.log(`✅ Deleted ${deletedCount} modules`);
+        return deletedCount;
+    }
+    
+    /**
+     * Disconnect all connections from selected modules
+     * @returns {number} - Total number of connections removed
+     */
+    static disconnectSelected() {
+        const selectedModules = Array.from(Module.selectedModules);
+        
+        if (selectedModules.length === 0) {
+            console.log(`❌ No modules selected for disconnection`);
+            return 0;
+        }
+        
+        console.log(`🔗 Disconnecting all connections from ${selectedModules.length} selected modules`);
+        
+        let totalDisconnected = 0;
+        selectedModules.forEach(module => {
+            totalDisconnected += module.disconnectAll();
+        });
+        
+        console.log(`✅ Disconnected ${totalDisconnected} connections from selected modules`);
+        return totalDisconnected;
+    }
+    
+    /**
+     * Duplicate all selected modules
+     * @param {number} offsetX - X offset for duplicates
+     * @param {number} offsetY - Y offset for duplicates
+     * @returns {Array<Module>} - Array of duplicated modules
+     */
+    static duplicateSelected(offsetX = 20, offsetY = 20) {
+        const selectedModules = Array.from(Module.selectedModules);
+        
+        if (selectedModules.length === 0) {
+            console.log(`❌ No modules selected for duplication`);
+            return [];
+        }
+        
+        console.log(`📋 Duplicating ${selectedModules.length} selected modules`);
+        
+        const duplicates = [];
+        selectedModules.forEach(module => {
+            const duplicate = module.duplicate(offsetX, offsetY);
+            duplicates.push(duplicate);
+        });
+        
+        // Deselect original modules and select duplicates
+        Module.deselectAll();
+        duplicates.forEach(duplicate => {
+            duplicate.select(true);
+        });
+        
+        console.log(`✅ Duplicated ${duplicates.length} modules`);
+        return duplicates;
+    }
+    
+    /**
+     * Get modules by selection state
+     * @param {boolean} selected - True to get selected modules, false for unselected
+     * @returns {Array<Module>} - Array of modules matching selection state
+     */
+    static getModulesBySelection(selected = true) {
+        const allModules = Array.from(Module.modules.values());
+        return allModules.filter(module => module.selected === selected);
+    }
+    
+    /**
+     * Select modules by name pattern
+     * @param {string|RegExp} pattern - Name pattern to match
+     * @param {boolean} addToSelection - If true, adds to current selection
+     * @returns {Array<Module>} - Array of modules that were selected
+     */
+    static selectByName(pattern, addToSelection = false) {
+        if (!addToSelection) {
+            Module.deselectAll();
+        }
+        
+        const regex = pattern instanceof RegExp ? pattern : new RegExp(pattern, 'i');
+        const matchingModules = [];
+        
+        Module.modules.forEach(module => {
+            if (regex.test(module.name)) {
+                module.select(true);
+                matchingModules.push(module);
+            }
+        });
+        
+        console.log(`📌 Selected ${matchingModules.length} modules matching pattern: ${pattern}`);
+        return matchingModules;
+    }
+    
+    /**
+     * Setup keyboard shortcuts for module management
+     * Call this once to enable keyboard shortcuts
+     */
+    static setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Only handle shortcuts when no input field is focused
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            // Ctrl/Cmd + A: Select all modules
+            if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+                e.preventDefault();
+                Module.selectAll();
+                console.log('⌨️ Keyboard shortcut: Select All');
+            }
+            
+            // Delete/Backspace: Delete selected modules
+            else if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (Module.hasSelectedModules()) {
+                    e.preventDefault();
+                    const count = Module.deleteSelected();
+                    console.log(`⌨️ Keyboard shortcut: Deleted ${count} modules`);
+                }
+            }
+            
+            // Ctrl/Cmd + D: Duplicate selected modules
+            else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+                if (Module.hasSelectedModules()) {
+                    e.preventDefault();
+                    const duplicates = Module.duplicateSelected();
+                    console.log(`⌨️ Keyboard shortcut: Duplicated ${duplicates.length} modules`);
+                }
+            }
+            
+            // Ctrl/Cmd + Shift + D: Disconnect selected modules
+            else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+                if (Module.hasSelectedModules()) {
+                    e.preventDefault();
+                    const count = Module.disconnectSelected();
+                    console.log(`⌨️ Keyboard shortcut: Disconnected ${count} connections`);
+                }
+            }
+            
+            // Escape: Deselect all
+            else if (e.key === 'Escape') {
+                if (Module.hasSelectedModules()) {
+                    Module.deselectAll();
+                    console.log('⌨️ Keyboard shortcut: Deselect All');
+                }
+            }
+        });
+        
+        console.log('⌨️ Keyboard shortcuts enabled for module management');
+        console.log('   Ctrl/Cmd + A: Select All');
+        console.log('   Delete/Backspace: Delete Selected');
+        console.log('   Ctrl/Cmd + D: Duplicate Selected');
+        console.log('   Ctrl/Cmd + Shift + D: Disconnect Selected');
+        console.log('   Escape: Deselect All');
     }
     
     // === DEBUG AND TESTING METHODS ===
@@ -1801,7 +2378,30 @@ class Module extends HTMLElement {
         console.log('🐛 END DEBUG\n');
     }
 
-    // ...existing code...
+    /**
+     * Check if this module is connected to another module
+     * @param {Module} otherModule - The module to check connection with
+     * @returns {boolean} True if there's a connection between the modules
+     */
+    isConnectedTo(otherModule) {
+        if (!(otherModule instanceof Module)) {
+            return false;
+        }
+        
+        // Check all connections involving this module
+        for (const connectionId of this.connections) {
+            const connection = Module.connections.get(connectionId);
+            if (!connection) continue;
+            
+            // Check if this connection involves the other module
+            if ((connection.source.module === this && connection.target.module === otherModule) ||
+                (connection.source.module === otherModule && connection.target.module === this)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
 }
 
 // Register Web Component

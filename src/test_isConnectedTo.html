@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module isConnectedTo() Test</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Arial', sans-serif;
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .test-results {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-line;
+        }
+        
+        .success { color: #27ae60; }
+        .error { color: #e74c3c; }
+        .info { color: #3498db; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔗 Module isConnectedTo() Method Test</h1>
+        <p>Testing the isConnectedTo() method implementation and edge cases</p>
+        
+        <div id="testResults" class="test-results">
+            Running tests...
+        </div>
+    </div>
+
+    <script type="module">
+        import Module from './a/components/Module.js';
+        
+        function runTests() {
+            const results = [];
+            
+            results.push('🧪 === isConnectedTo() METHOD TESTS ===\n');
+            
+            try {
+                // Create test modules
+                const moduleA = new Module({
+                    id: 'test_a',
+                    name: 'Test Module A',
+                    x: 50,
+                    y: 50,
+                    outputs: [
+                        { id: 'out1', type: 'audio', name: 'Output 1' }
+                    ],
+                    inputs: [
+                        { id: 'in1', type: 'audio', name: 'Input 1' }
+                    ]
+                });
+                
+                const moduleB = new Module({
+                    id: 'test_b', 
+                    name: 'Test Module B',
+                    x: 300,
+                    y: 50,
+                    inputs: [
+                        { id: 'in1', type: 'audio', name: 'Input 1' }
+                    ],
+                    outputs: [
+                        { id: 'out1', type: 'audio', name: 'Output 1' }
+                    ]
+                });
+                
+                const moduleC = new Module({
+                    id: 'test_c',
+                    name: 'Test Module C', 
+                    x: 550,
+                    y: 50,
+                    inputs: [
+                        { id: 'in1', type: 'audio', name: 'Input 1' }
+                    ]
+                });
+                
+                document.body.appendChild(moduleA);
+                document.body.appendChild(moduleB);
+                document.body.appendChild(moduleC);
+                
+                results.push('✅ Created 3 test modules');
+                
+                // Test 1: No connections initially
+                results.push('\n📋 Test 1: No connections initially');
+                const test1a = moduleA.isConnectedTo(moduleB);
+                const test1b = moduleB.isConnectedTo(moduleA);
+                const test1c = moduleA.isConnectedTo(moduleC);
+                
+                if (!test1a && !test1b && !test1c) {
+                    results.push('✅ PASS: No connections detected when none exist');
+                } else {
+                    results.push('❌ FAIL: False connections detected');
+                }
+                
+                // Test 2: Create a connection A -> B
+                results.push('\n📋 Test 2: Create connection A -> B');
+                const connected = moduleA.connectTo(moduleB, 'out1', 'in1');
+                
+                if (connected) {
+                    results.push('✅ Connection created successfully');
+                    
+                    // Test bidirectional detection
+                    const test2a = moduleA.isConnectedTo(moduleB);
+                    const test2b = moduleB.isConnectedTo(moduleA);
+                    
+                    if (test2a && test2b) {
+                        results.push('✅ PASS: Bidirectional connection detected');
+                    } else {
+                        results.push(`❌ FAIL: Bidirectional detection failed (A->B: ${test2a}, B->A: ${test2b})`);
+                    }
+                    
+                    // Test non-connected module
+                    const test2c = moduleA.isConnectedTo(moduleC);
+                    const test2d = moduleC.isConnectedTo(moduleA);
+                    
+                    if (!test2c && !test2d) {
+                        results.push('✅ PASS: Non-connected module correctly detected');
+                    } else {
+                        results.push('❌ FAIL: False connection to non-connected module');
+                    }
+                } else {
+                    results.push('❌ FAIL: Could not create connection');
+                }
+                
+                // Test 3: Create second connection B -> C
+                results.push('\n📋 Test 3: Create second connection B -> C');
+                const connected2 = moduleB.connectTo(moduleC, 'out1', 'in1');
+                
+                if (connected2) {
+                    results.push('✅ Second connection created successfully');
+                    
+                    // Test all connections
+                    const testAB = moduleA.isConnectedTo(moduleB);
+                    const testBC = moduleB.isConnectedTo(moduleC);
+                    const testAC = moduleA.isConnectedTo(moduleC); // Should be false (no direct connection)
+                    
+                    if (testAB && testBC && !testAC) {
+                        results.push('✅ PASS: Multiple connections correctly detected');
+                        results.push(`   A-B: ${testAB}, B-C: ${testBC}, A-C: ${testAC}`);
+                    } else {
+                        results.push(`❌ FAIL: Multiple connection detection failed`);
+                        results.push(`   A-B: ${testAB}, B-C: ${testBC}, A-C: ${testAC}`);
+                    }
+                } else {
+                    results.push('❌ FAIL: Could not create second connection');
+                }
+                
+                // Test 4: Edge cases
+                results.push('\n📋 Test 4: Edge cases');
+                
+                // Test with null/undefined
+                const testNull = moduleA.isConnectedTo(null);
+                const testUndefined = moduleA.isConnectedTo(undefined);
+                const testNonModule = moduleA.isConnectedTo({});
+                
+                if (!testNull && !testUndefined && !testNonModule) {
+                    results.push('✅ PASS: Edge cases handled correctly (null, undefined, non-module)');
+                } else {
+                    results.push('❌ FAIL: Edge cases not handled correctly');
+                }
+                
+                // Test self-connection
+                const testSelf = moduleA.isConnectedTo(moduleA);
+                if (!testSelf) {
+                    results.push('✅ PASS: Self-connection correctly returns false');
+                } else {
+                    results.push('❌ FAIL: Self-connection incorrectly returns true');
+                }
+                
+                // Show connection stats
+                results.push('\n📊 Final Connection Stats:');
+                results.push(`Module A connections: ${moduleA.connections.size}`);
+                results.push(`Module B connections: ${moduleB.connections.size}`);
+                results.push(`Module C connections: ${moduleC.connections.size}`);
+                results.push(`Total system connections: ${Module.connections.size}`);
+                
+                results.push('\n🎉 === ALL TESTS COMPLETED ===');
+                
+            } catch (error) {
+                results.push(`\n❌ ERROR during testing: ${error.message}`);
+                results.push(`Stack: ${error.stack}`);
+            }
+            
+            return results.join('\n');
+        }
+        
+        // Run tests when page loads
+        setTimeout(() => {
+            const testResults = runTests();
+            document.getElementById('testResults').innerHTML = testResults;
+        }, 100);
+    </script>
+</body>
+</html>
