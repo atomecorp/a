@@ -12,6 +12,7 @@ const html_container = new A({
     height: 300,
     color: 'orange',
     display: 'block',
+    backgroundColor: 'orange',
     smooth: 10,
     shadow: [
         {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
@@ -199,6 +200,7 @@ const container = new A({
     width: 400,
     height: 300,
     color: 'orange',
+    backgroundColor: 'orange',
     display: 'block',
     smooth: 10,
     shadow: [
@@ -209,94 +211,18 @@ const container = new A({
     fasten: [] // will contain the IDs of children
 });
 
+setTimeout(() => {
+    // Show the main container after 2 seconds
+    container.display('block');
+container.style.width = '800px';
+ container.style.left = '800px';
+}, 3000);
 
 
 
-// Update fasten list for the container
-container._fastened.push('header');
-container.element.dataset.fasten = container._fastened.join(',');
 
-// Update fasten for the main container
-container._fastened.push('content');
-container.element.dataset.fasten = container._fastened.join(',');
 
-// 4. Dynamically create and add a new child to content
-const infoButton = content.addChild({
-    id: 'info_button',
-    markup: 'div',
-    type: 'button',
-    x: 140,
-    y: 150,
-    width: 120,
-    height: 40,
-    backgroundColor: '#ffa000',
-    smooth: 20,
-    textAlign: 'center',
-    lineHeight: '40px',
-    color: 'white',
-    fontWeight: 'bold',
-    text: 'Info',
-    cursor: 'pointer',
-    events: {
-        click: () => {
-            // Get all children of content
-            const children = content.getFastened();
-            console.log(`There are ${children.length} children in content`);
-        }
-    }
-});
 
-// 5. Example of animation on an element with fasten update
-const greenCircle = A.getById('green_circle');
-if (greenCircle) {
-    greenCircle.element.addEventListener('click', function () {
-        const popup = new A({
-            attach: '#content',
-            id: 'popup',
-            markup: 'div',
-            type: 'popup',
-            x: 80,
-            y: 80,
-            width: 0,
-            height: 0,
-            backgroundColor: 'rgba(0,0,0,0.7)',
-            smooth: 10,
-            color: 'white',
-            textAlign: 'center',
-            lineHeight: '140px',
-            opacity: 0,
-            text: 'Animation in progress!',
-            zIndex: 100,
-            animate: {
-                duration: 0.5,
-                easing: 'ease-out',
-                properties: {
-                    width: 240,
-                    height: 140,
-                    opacity: 1
-                }
-            },
-            events: {
-                click: function () {
-                    // Exit animation
-                    this.style.transition = 'all 0.3s ease-in';
-                    this.style.opacity = '0';
-                    this.style.transform = 'scale(0.5)';
-                    setTimeout(() => {
-                        this.parentNode.removeChild(this);
-                        // Update fasten
-                        content._fastened = content._fastened.filter(id => id !== 'popup');
-                        content.element.dataset.fasten = content._fastened.join(',');
-                    }, 300);
-                }
-            }
-        });
-
-        // Update fasten list for content
-        content._fastened.push('popup');
-        content.element.dataset.fasten = content._fastened.join(',');
-    });
-}
 
 // Simple example of using fasten property
 const simpleExample = new A({

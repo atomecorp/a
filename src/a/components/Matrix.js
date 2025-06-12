@@ -1,576 +1,272 @@
 /**
- * 🔲 Matrix Web Component - Squirrel Framework
+ * 🔲 Matrix Web Component - Version Propre From Scratch
  * 
- * Modern Web Component avec système de particules modernes:
- * - Particules partagées pour propriétés communes (x, y, width, height, etc.)
- * - Multiple shadows (boxShadow arrays) pour effets relief
- * - CSS gradients pour backgrounds sophistiqués
- * - Animations avancées avec changements de taille au toucher
- * - Auto-attachment et positioning avec particules
- * - Propriétés CSS personnalisées pour chaque élément
- * - Effets bombé avec ombres internes/externes
- * - Performance ultra-moderne avec batch processing
+ * Web Component moderne et simple pour créer des grilles interactives
+ * ✅ Shadow DOM pour isolation complète
+ * ✅ Configuration simple et intuitive
+ * ✅ CellStyle avec borderRadius qui fonctionne
+ * ✅ Événements clairs et performants
+ * ✅ CSS moderne et optimisé
  * 
- * @version 3.0.0 - MODERN PARTICLE SYSTEM
+ * @version 1.0.0 - CLEAN VERSION
  * @author Squirrel Framework Team
  */
 
-// Import du système centralisé
-import BaseComponent from './BaseComponent.js';
-
-class Matrix extends BaseComponent {
-    static matrices = new Map(); // Registry of all matrices
-    static resizeObserver = null; // Global resize observer
-    
-    constructor(config = {}) {
-        super(); // Appeler le constructeur de BaseComponent
+class Matrix extends HTMLElement {
+    constructor() {
+        super();
         
-        // Traiter d'abord la configuration commune via BaseComponent
-        this.processCommonConfig(config);
-        
-        // Configuration avancée avec propriétés CSS complètes
-        this.config = this.mergeConfig(config);
-        
-        this.id = this.config.id;
-        this.cells = new Map(); // Stockage des cellules
-        this.selectedCells = new Set(); // Cellules sélectionnées
-        this.hoveredCell = null; // Cellule survolée
-        
-        // Create shadow DOM pour encapsulation
-        this.attachShadow({ mode: 'open' });
-        
-        this._createMatrix();
-        this._setupEventHandlers();
-        
-        // Auto-attachment si spécifié
-        if (this.config.attach) {
-            this.performAutoAttach();
-        }
-        
-        // Apply positioning with modern particles
-        this.applyModernPositioning();
-        
-        // Register matrix
-        Matrix.matrices.set(this.id, this);
-        
-        console.log(`🔲 Matrix Web Component created: ${this.id} (${this.config.grid.x}x${this.config.grid.y}) - MODERN PARTICLES ENABLED`);
-    }
-    
-    mergeConfig(config) {
-        const defaultConfig = {
-            id: `matrix_${Date.now()}`,
-            attach: null,
-            x: undefined,
-            y: undefined,
-            
-            // Grid dimensions
-            grid: {
-                x: 3,
-                y: 3
-            },
-            
-            // Size
-            size: {
-                width: 400,
-                height: 400
-            },
-            
-            // Spacing avancé
-            spacing: {
-                horizontal: 4,
-                vertical: 4,
-                outer: 8
-            },
-            
-            // Style du container avec effet relief
-            containerStyle: {
-                backgroundColor: '#ffffff',
-                border: '2px solid #e0e0e0',
-                borderRadius: '16px',
-                padding: '16px',
-                // Multiple shadows pour effet relief du container
-                boxShadow: [
-                    '0 8px 24px rgba(0, 0, 0, 0.12)', // Ombre externe pour élévation
-                    'inset 0 2px 4px rgba(255, 255, 255, 0.8)', // Highlight interne
-                    'inset 0 -2px 4px rgba(0, 0, 0, 0.1)' // Ombre interne pour depth
-                ],
-                background: 'linear-gradient(145deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%)',
-                fontFamily: '"SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-            },
-            
-            // Style des cellules avec effet bombé
+        // Configuration par défaut
+        this.config = {
+            id: 'matrix-' + Date.now(),
+            grid: { x: 3, y: 3 },
+            size: { width: '300px', height: '300px' },
             cellStyle: {
                 backgroundColor: '#f8f9fa',
                 border: '1px solid #dee2e6',
-                borderRadius: '12px',
+                borderRadius: '8px',
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '14px',
-                fontWeight: '500',
-                color: '#495057',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                userSelect: 'none',
-                // Effet bombé avec ombres multiples
-                boxShadow: [
-                    '0 2px 8px rgba(0, 0, 0, 0.08)', // Ombre externe subtile
-                    'inset 0 1px 0 rgba(255, 255, 255, 0.8)', // Highlight interne
-                    'inset 0 -1px 0 rgba(0, 0, 0, 0.05)' // Ombre interne subtile
-                ],
-                background: 'linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%)'
+                transition: 'all 0.3s ease'
             },
-            
-            // Style au survol avec animation de taille
             cellHoverStyle: {
                 backgroundColor: '#e3f2fd',
-                color: '#1976d2',
-                // Changement de taille animé
-                transform: 'scale(1.05) translateZ(0)',
-                borderColor: '#2196f3',
-                // Effet relief prononcé au survol
-                boxShadow: [
-                    '0 12px 28px rgba(33, 150, 243, 0.15)', // Ombre externe colorée
-                    '0 4px 12px rgba(33, 150, 243, 0.1)',
-                    'inset 0 2px 4px rgba(255, 255, 255, 0.9)', // Highlight interne fort
-                    'inset 0 -2px 4px rgba(33, 150, 243, 0.1)' // Ombre interne colorée
-                ],
-                background: 'linear-gradient(145deg, #e3f2fd 0%, #bbdefb 50%, #e3f2fd 100%)'
+                transform: 'scale(1.05)'
             },
-            
-            // Style des cellules sélectionnées
-            cellSelectedStyle: {
-                backgroundColor: '#1976d2',
-                color: '#ffffff',
-                borderColor: '#0d47a1',
-                // Taille agrandie pour l'état sélectionné
-                transform: 'scale(1.08) translateZ(0)',
-                // Effet relief fort avec couleur
-                boxShadow: [
-                    '0 16px 32px rgba(25, 118, 210, 0.25)', // Ombre externe forte
-                    '0 6px 16px rgba(25, 118, 210, 0.15)',
-                    'inset 0 2px 6px rgba(255, 255, 255, 0.3)', // Highlight interne
-                    'inset 0 -2px 6px rgba(13, 71, 161, 0.3)' // Ombre interne forte
-                ],
-                background: 'linear-gradient(145deg, #2196f3 0%, #1976d2 50%, #1565c0 100%)'
-            },
-            
-            // Style des cellules actives (touch/click)
-            cellActiveStyle: {
-                // Animation d'impulsion au touch
-                transform: 'scale(1.12) translateZ(0)',
-                boxShadow: [
-                    '0 20px 40px rgba(25, 118, 210, 0.3)',
-                    'inset 0 3px 8px rgba(255, 255, 255, 0.4)',
-                    'inset 0 -3px 8px rgba(13, 71, 161, 0.4)'
-                ]
-            },
-            
-            // Configuration des animations
-            animations: {
-                cellHover: {
-                    duration: '0.3s',
-                    easing: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)' // Bounce effect
-                },
-                cellSelect: {
-                    duration: '0.4s',
-                    easing: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)' // Back effect
-                },
-                cellActive: {
-                    duration: '0.2s',
-                    easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' // Ease out
-                }
-            },
-            
-            // 🚀 CONFIGURATION MODERNE DES PARTICULES
-            modernParticles: {
-                // Activer le système moderne
-                enabled: true,
-                batchUpdates: true,
-                performanceMonitoring: false,
-                
-                // Particules communes par défaut
-                defaultParticles: {
-                    smooth: true,
-                    responsive: true,
-                    optimize: true,
-                    glow: false,
-                    animate: {
-                        type: 'smooth',
-                        duration: 300,
-                        easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
-                    }
-                },
-                
-                // Configuration de fallback
-                fallback: {
-                    enableFrameworkA: true,
-                    enableCSSDirect: true,
-                    logErrors: true
-                }
-            },
-            
-            // Callbacks interactifs
             callbacks: {
-                onCellClick: () => {},
-                onCellDoubleClick: () => {},
-                onCellLongClick: () => {},
-                onCellHover: () => {},
-                onCellLeave: () => {},
-                onCellTouch: () => {},
-                onSelectionChange: () => {},
-                onMatrixResize: () => {}
+                onClick: () => {}
             }
         };
         
-        // Deep merge avec configuration utilisateur
-        return {
-            ...defaultConfig,
-            ...config,
-            x: config.x !== undefined ? config.x : defaultConfig.x,
-            y: config.y !== undefined ? config.y : defaultConfig.y,
-            grid: { ...defaultConfig.grid, ...config.grid },
-            size: { ...defaultConfig.size, ...config.size },
-            spacing: { ...defaultConfig.spacing, ...config.spacing },
-            containerStyle: { ...defaultConfig.containerStyle, ...config.containerStyle },
-            cellStyle: { ...defaultConfig.cellStyle, ...config.cellStyle },
-            cellHoverStyle: { ...defaultConfig.cellHoverStyle, ...config.cellHoverStyle },
-            cellSelectedStyle: { ...defaultConfig.cellSelectedStyle, ...config.cellSelectedStyle },
-            cellActiveStyle: { ...defaultConfig.cellActiveStyle, ...config.cellActiveStyle },
-            animations: { ...defaultConfig.animations, ...config.animations },
-            callbacks: { ...defaultConfig.callbacks, ...config.callbacks }
-        };
+        // État interne
+        this.cells = new Map();
+        this.selectedCells = new Set();
+        
+        // Créer Shadow DOM
+        this.attachShadow({ mode: 'open' });
+        
+        // Initialiser
+        this._init();
     }
     
-    performAutoAttach() {
-        if (!this.config.attach) return;
+    /**
+     * 🚀 INITIALISATION
+     */
+    _init() {
+        // Merger la configuration depuis les attributs
+        this._parseAttributes();
         
-        this._doAttach();
+        // Créer la structure
+        this._createStructure();
+        this._createStyles();
+        this._createCells();
+        this._setupEvents();
+        
+        console.log(`🔲 Matrix créée: ${this.config.grid.x}x${this.config.grid.y}`);
     }
     
-    _doAttach() {
-        let container;
-        
-        if (this.config.attach === 'body') {
-            container = document.body;
-        } else if (typeof this.config.attach === 'string') {
-            container = document.querySelector(this.config.attach);
-        } else if (this.config.attach instanceof HTMLElement) {
-            container = this.config.attach;
+    /**
+     * 📝 PARSER LES ATTRIBUTS HTML
+     */
+    _parseAttributes() {
+        // Grid depuis attributs
+        if (this.hasAttribute('grid-x')) {
+            this.config.grid.x = parseInt(this.getAttribute('grid-x'));
+        }
+        if (this.hasAttribute('grid-y')) {
+            this.config.grid.y = parseInt(this.getAttribute('grid-y'));
         }
         
-        if (container && !this.parentElement) {
-            container.appendChild(this);
+        // Taille depuis attributs
+        if (this.hasAttribute('width')) {
+            this.config.size.width = this.getAttribute('width');
         }
-    }
-    
-    applyPositioning() {
-        if (this.config.x !== undefined && this.config.y !== undefined) {
-            this.style.position = 'absolute';
-            this.style.left = `${this.config.x}px`;
-            this.style.top = `${this.config.y}px`;
-            this.style.width = `${this.config.size.width}px`;
-            this.style.height = `${this.config.size.height}px`;
-        } else {
-            this.style.width = `${this.config.size.width}px`;
-            this.style.height = `${this.config.size.height}px`;
+        if (this.hasAttribute('height')) {
+            this.config.size.height = this.getAttribute('height');
         }
-    }
-    
-    _createMatrix() {
-        // Create styles pour shadow DOM
-        const styles = this._generateStyles();
         
-        // Create container principal
+        // ID depuis attribut
+        if (this.hasAttribute('id')) {
+            this.config.id = this.getAttribute('id');
+        }
+    }
+    
+    /**
+     * 🏗️ CRÉER LA STRUCTURE HTML
+     */
+    _createStructure() {
         this.container = document.createElement('div');
         this.container.className = 'matrix-container';
-        this.container.id = this.id;
+        this.container.id = this.config.id;
         
-        // Create grid container
-        this.gridContainer = document.createElement('div');
-        this.gridContainer.className = 'matrix-grid';
+        this.grid = document.createElement('div');
+        this.grid.className = 'matrix-grid';
         
-        // Generate cells
-        this._generateCells();
-        
-        this.container.appendChild(this.gridContainer);
-        
-        // Append to shadow DOM
-        this.shadowRoot.appendChild(styles);
+        this.container.appendChild(this.grid);
         this.shadowRoot.appendChild(this.container);
     }
     
-    _generateStyles() {
+    /**
+     * 🎨 CRÉER LES STYLES CSS
+     */
+    _createStyles() {
         const style = document.createElement('style');
         
-        // Helper function pour gérer les boxShadow multiples
-        const formatShadow = (shadow) => {
-            if (Array.isArray(shadow)) {
-                return shadow.join(', ');
-            }
-            return shadow || '';
-        };
-        
-        // Helper function pour générer CSS depuis objet style
+        // Helper pour convertir un objet en CSS
         const objectToCSS = (obj) => {
-            return Object.entries(obj).map(([key, value]) => {
-                // Convert camelCase to kebab-case
-                const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-                
-                // Handle special cases
-                if (key === 'boxShadow') {
-                    value = formatShadow(value);
-                }
-                
-                return `${cssKey}: ${value};`;
-            }).join('\\n    ');
+            if (!obj || typeof obj !== 'object') return '';
+            
+            return Object.entries(obj)
+                .filter(([key, value]) => value !== null && value !== undefined)
+                .map(([key, value]) => {
+                    // Convertir camelCase en kebab-case
+                    const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                    return `${cssKey}: ${value};`;
+                })
+                .join('\n    '); // ← FIX PRINCIPAL: single backslash
         };
         
         style.textContent = `
+            :host {
+                display: block;
+                width: ${this.config.size.width};
+                height: ${this.config.size.height};
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            }
+            
             .matrix-container {
-                ${objectToCSS(this.config.containerStyle)}
                 width: 100%;
                 height: 100%;
-                display: flex;
-                flex-direction: column;
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 12px;
+                padding: 8px;
                 box-sizing: border-box;
-                position: relative;
-                overflow: hidden;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
             }
             
             .matrix-grid {
                 display: grid;
                 grid-template-columns: repeat(${this.config.grid.x}, 1fr);
                 grid-template-rows: repeat(${this.config.grid.y}, 1fr);
-                gap: ${this.config.spacing.vertical}px ${this.config.spacing.horizontal}px;
-                flex: 1;
-                padding: ${this.config.spacing.outer}px;
+                gap: 4px;
+                width: 100%;
+                height: 100%;
             }
             
             .matrix-cell {
                 ${objectToCSS(this.config.cellStyle)}
-                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                user-select: none;
+                font-size: 12px;
+                font-weight: 500;
+                color: #495057;
                 box-sizing: border-box;
-                overflow: hidden;
+                outline: none;
             }
             
             .matrix-cell:hover {
                 ${objectToCSS(this.config.cellHoverStyle)}
-                animation: cellHover ${this.config.animations.cellHover.duration} ${this.config.animations.cellHover.easing};
             }
             
             .matrix-cell.selected {
-                ${objectToCSS(this.config.cellSelectedStyle)}
-                animation: cellSelect ${this.config.animations.cellSelect.duration} ${this.config.animations.cellSelect.easing};
+                background-color: #007bff !important;
+                color: white !important;
+                border-color: #0056b3 !important;
             }
             
-            .matrix-cell.active {
-                ${objectToCSS(this.config.cellActiveStyle)}
-                animation: cellActive ${this.config.animations.cellActive.duration} ${this.config.animations.cellActive.easing};
+            .matrix-cell:focus {
+                outline: 2px solid #007bff;
+                outline-offset: 2px;
             }
             
-            .matrix-cell .cell-content {
-                width: 100%;
-                height: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                position: relative;
-                z-index: 1;
+            .matrix-cell:active {
+                transform: scale(0.95);
             }
             
+            /* Animation de ripple */
             .matrix-cell .ripple {
                 position: absolute;
                 border-radius: 50%;
-                background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.1) 70%, transparent 100%);
-                transform: scale(0);
-                animation: ripple 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+                background: rgba(255, 255, 255, 0.6);
                 pointer-events: none;
-                z-index: 2;
-            }
-            
-            /* Animations avancées */
-            @keyframes cellHover {
-                0% { transform: scale(1); }
-                50% { transform: scale(1.02); }
-                100% { transform: scale(1.05); }
-            }
-            
-            @keyframes cellSelect {
-                0% { transform: scale(1); }
-                30% { transform: scale(1.15); }
-                100% { transform: scale(1.08); }
-            }
-            
-            @keyframes cellActive {
-                0% { transform: scale(1.08); }
-                50% { transform: scale(1.12); }
-                100% { transform: scale(1.08); }
+                transform: scale(0);
+                animation: ripple 0.6s linear;
             }
             
             @keyframes ripple {
-                0% {
-                    transform: scale(0);
-                    opacity: 1;
-                }
-                50% {
-                    transform: scale(0.8);
-                    opacity: 0.7;
-                }
-                100% {
+                to {
                     transform: scale(2);
                     opacity: 0;
                 }
             }
-            
-            /* Responsive design */
-            @media (max-width: 768px) {
-                .matrix-container {
-                    font-size: 12px;
-                }
-                
-                .matrix-grid {
-                    gap: ${Math.max(1, this.config.spacing.vertical - 1)}px ${Math.max(1, this.config.spacing.horizontal - 1)}px;
-                    padding: ${Math.max(4, this.config.spacing.outer - 4)}px;
-                }
-                
-                .matrix-cell {
-                    min-height: 32px;
-                }
-            }
-            
-            /* Effets de focus pour accessibilité */
-            .matrix-cell:focus {
-                outline: 2px solid #2196f3;
-                outline-offset: 2px;
-            }
-            
-            /* States pour debugging */
-            .matrix-container.debug .matrix-cell {
-                border: 2px dashed rgba(255, 0, 0, 0.3) !important;
-            }
-            
-            .matrix-container.debug .matrix-cell::before {
-                content: attr(data-position);
-                position: absolute;
-                top: 2px;
-                left: 2px;
-                font-size: 10px;
-                color: red;
-                background: rgba(255, 255, 255, 0.8);
-                padding: 1px 3px;
-                border-radius: 2px;
-            }
         `;
         
-        return style;
+        this.shadowRoot.appendChild(style);
     }
     
-    _generateCells() {
+    /**
+     * 🔲 CRÉER LES CELLULES
+     */
+    _createCells() {
         for (let y = 0; y < this.config.grid.y; y++) {
             for (let x = 0; x < this.config.grid.x; x++) {
-                const cellId = `${x}_${y}`;
-                const cell = this._createCell(x, y, cellId);
-                this.cells.set(cellId, cell);
-                this.gridContainer.appendChild(cell);
+                const cell = this._createCell(x, y);
+                this.grid.appendChild(cell);
             }
         }
     }
     
-    _createCell(x, y, cellId) {
+    /**
+     * 🔲 CRÉER UNE CELLULE
+     */
+    _createCell(x, y) {
+        const cellId = `${x}_${y}`;
+        
         const cell = document.createElement('div');
         cell.className = 'matrix-cell';
-        cell.id = `${this.id}_cell_${cellId}`;
-        cell.dataset.position = `${x},${y}`;
+        cell.dataset.x = x;
+        cell.dataset.y = y;
         cell.dataset.cellId = cellId;
+        cell.textContent = `${x+1},${y+1}`;
         cell.tabIndex = 0; // Pour accessibilité
         
-        // Content container
-        const content = document.createElement('div');
-        content.className = 'cell-content';
-        content.textContent = `${x},${y}`;
-        cell.appendChild(content);
-        
-        // Event handlers avec effets avancés
-        this._setupCellEvents(cell, x, y, cellId);
+        // Stocker la cellule
+        this.cells.set(cellId, cell);
         
         return cell;
     }
     
-    _setupCellEvents(cell, x, y, cellId) {
-        let longClickTimer = null;
-        let isLongClick = false;
-        
-        // Click events
-        cell.addEventListener('click', (e) => {
-            if (isLongClick) {
-                isLongClick = false;
-                return;
-            }
-            
-            this._handleCellClick(cell, x, y, cellId, e);
-        });
-        
-        cell.addEventListener('dblclick', (e) => {
-            this._handleCellDoubleClick(cell, x, y, cellId, e);
-        });
-        
-        // Long click detection
-        cell.addEventListener('mousedown', (e) => {
-            longClickTimer = setTimeout(() => {
-                isLongClick = true;
-                this._handleCellLongClick(cell, x, y, cellId, e);
-            }, 500);
-        });
-        
-        cell.addEventListener('mouseup', () => {
-            if (longClickTimer) {
-                clearTimeout(longClickTimer);
-                longClickTimer = null;
+    /**
+     * 🎯 SETUP DES ÉVÉNEMENTS
+     */
+    _setupEvents() {
+        // Délégation d'événements sur le grid
+        this.grid.addEventListener('click', (e) => {
+            if (e.target.classList.contains('matrix-cell')) {
+                this._handleCellClick(e.target, e);
             }
         });
         
-        // Hover effects
-        cell.addEventListener('mouseenter', (e) => {
-            this.hoveredCell = cellId;
-            this._handleCellHover(cell, x, y, cellId, e);
-        });
-        
-        cell.addEventListener('mouseleave', (e) => {
-            this.hoveredCell = null;
-            this._handleCellLeave(cell, x, y, cellId, e);
-        });
-        
-        // Touch events pour mobile
-        cell.addEventListener('touchstart', (e) => {
-            this._addActiveState(cell);
-            this._handleCellTouch(cell, x, y, cellId, e);
-        });
-        
-        cell.addEventListener('touchend', () => {
-            this._removeActiveState(cell);
-        });
-        
-        // Keyboard support
-        cell.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+        // Support clavier
+        this.grid.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('matrix-cell')) {
                 e.preventDefault();
-                this._handleCellClick(cell, x, y, cellId, e);
+                this._handleCellClick(e.target, e);
             }
         });
     }
     
-    _setupEventHandlers() {
-        // Global event handlers
-        window.addEventListener('resize', () => {
-            this._handleResize();
-        });
-    }
-    
-    // Event Handlers
-    _handleCellClick(cell, x, y, cellId, event) {
-        // Toggle selection
+    /**
+     * 👆 GÉRER LE CLIC SUR UNE CELLULE
+     */
+    _handleCellClick(cell, event) {
+        const x = parseInt(cell.dataset.x);
+        const y = parseInt(cell.dataset.y);
+        const cellId = cell.dataset.cellId;
+        
+        // Toggle sélection
         if (this.selectedCells.has(cellId)) {
             this.selectedCells.delete(cellId);
             cell.classList.remove('selected');
@@ -579,61 +275,22 @@ class Matrix extends BaseComponent {
             cell.classList.add('selected');
         }
         
-        // Add ripple effect
-        this._addRippleEffect(cell, event);
+        // Effet ripple
+        this._addRipple(cell, event);
         
-        // Call user callback
-        this.config.callbacks.onCellClick(cell, x, y, cellId, event);
+        // Callback utilisateur
+        this.config.callbacks.onClick(cellId, x, y, cell, event);
         
-        // Trigger selection change
-        this.config.callbacks.onSelectionChange(Array.from(this.selectedCells));
+        // Dispatcher un événement personnalisé
+        this.dispatchEvent(new CustomEvent('cell-click', {
+            detail: { x, y, cellId, cell, selected: this.selectedCells.has(cellId) }
+        }));
     }
     
-    _handleCellDoubleClick(cell, x, y, cellId, event) {
-        // Pulse effect pour double click
-        cell.style.animation = 'none';
-        cell.offsetHeight; // Force reflow
-        cell.style.animation = `cellActive ${this.config.animations.cellActive.duration} ${this.config.animations.cellActive.easing} 2`;
-        
-        this.config.callbacks.onCellDoubleClick(cell, x, y, cellId, event);
-    }
-    
-    _handleCellLongClick(cell, x, y, cellId, event) {
-        // Effet spécial pour long click
-        cell.style.transform = 'scale(1.15) rotateZ(2deg)';
-        cell.style.transition = 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
-        
-        setTimeout(() => {
-            cell.style.transform = '';
-            cell.style.transition = '';
-        }, 300);
-        
-        this.config.callbacks.onCellLongClick(cell, x, y, cellId, event);
-    }
-    
-    _handleCellHover(cell, x, y, cellId, event) {
-        this.config.callbacks.onCellHover(cell, x, y, cellId, event);
-    }
-    
-    _handleCellLeave(cell, x, y, cellId, event) {
-        this.config.callbacks.onCellLeave(cell, x, y, cellId, event);
-    }
-    
-    _handleCellTouch(cell, x, y, cellId, event) {
-        // Vibration pour mobile si supporté
-        if (navigator.vibrate) {
-            navigator.vibrate(50);
-        }
-        
-        this.config.callbacks.onCellTouch(cell, x, y, cellId, event);
-    }
-    
-    _handleResize() {
-        this.config.callbacks.onMatrixResize(this.config.size.width, this.config.size.height);
-    }
-    
-    // Utility methods
-    _addRippleEffect(cell, event) {
+    /**
+     * 💫 AJOUTER EFFET RIPPLE
+     */
+    _addRipple(cell, event) {
         const ripple = document.createElement('div');
         ripple.className = 'ripple';
         
@@ -646,248 +303,137 @@ class Matrix extends BaseComponent {
         ripple.style.height = size + 'px';
         ripple.style.left = x + 'px';
         ripple.style.top = y + 'px';
+        ripple.style.position = 'absolute';
+        
+        const cellPosition = getComputedStyle(cell).position;
+        if (cellPosition === 'static') {
+            cell.style.position = 'relative';
+        }
         
         cell.appendChild(ripple);
         
-        setTimeout(() => ripple.remove(), 600);
+        setTimeout(() => {
+            if (ripple.parentNode) {
+                ripple.parentNode.removeChild(ripple);
+            }
+        }, 600);
     }
     
-    _addActiveState(cell) {
-        cell.classList.add('active');
+    // ==========================================
+    // 🔧 API PUBLIQUE
+    // ==========================================
+    
+    /**
+     * 📝 CONFIGURER LA MATRIX
+     */
+    configure(newConfig) {
+        // Merger la nouvelle config
+        this.config = {
+            ...this.config,
+            ...newConfig,
+            grid: { ...this.config.grid, ...newConfig.grid },
+            size: { ...this.config.size, ...newConfig.size },
+            cellStyle: { ...this.config.cellStyle, ...newConfig.cellStyle },
+            cellHoverStyle: { ...this.config.cellHoverStyle, ...newConfig.cellHoverStyle },
+            callbacks: { ...this.config.callbacks, ...newConfig.callbacks }
+        };
+        
+        // Recréer si nécessaire
+        this._recreate();
     }
     
-    _removeActiveState(cell) {
-        cell.classList.remove('active');
+    /**
+     * 🔄 RECRÉER LA MATRIX
+     */
+    _recreate() {
+        // Vider le shadow DOM
+        this.shadowRoot.innerHTML = '';
+        this.cells.clear();
+        this.selectedCells.clear();
+        
+        // Recréer
+        this._createStructure();
+        this._createStyles();
+        this._createCells();
+        this._setupEvents();
     }
     
-    // Public API methods
-    getCell(x, y) {
-        const cellId = `${x}_${y}`;
-        return this.cells.get(cellId);
-    }
-    
+    /**
+     * 🎯 SÉLECTIONNER UNE CELLULE
+     */
     selectCell(x, y) {
         const cellId = `${x}_${y}`;
         const cell = this.cells.get(cellId);
+        
         if (cell && !this.selectedCells.has(cellId)) {
             this.selectedCells.add(cellId);
             cell.classList.add('selected');
-            this.config.callbacks.onSelectionChange(Array.from(this.selectedCells));
         }
     }
     
+    /**
+     * ❌ DÉSÉLECTIONNER UNE CELLULE
+     */
     deselectCell(x, y) {
         const cellId = `${x}_${y}`;
         const cell = this.cells.get(cellId);
+        
         if (cell && this.selectedCells.has(cellId)) {
             this.selectedCells.delete(cellId);
             cell.classList.remove('selected');
-            this.config.callbacks.onSelectionChange(Array.from(this.selectedCells));
         }
     }
     
+    /**
+     * 🧹 VIDER LA SÉLECTION
+     */
     clearSelection() {
         this.selectedCells.forEach(cellId => {
             const cell = this.cells.get(cellId);
             if (cell) cell.classList.remove('selected');
         });
         this.selectedCells.clear();
-        this.config.callbacks.onSelectionChange([]);
     }
     
-    setCellContent(x, y, content) {
-        const cell = this.getCell(x, y);
-        if (cell) {
-            const contentEl = cell.querySelector('.cell-content');
-            if (typeof content === 'string') {
-                contentEl.textContent = content;
-            } else if (content instanceof HTMLElement) {
-                contentEl.innerHTML = '';
-                contentEl.appendChild(content);
-            }
-        }
-    }
-    
-    setCellStyle(x, y, styles) {
-        const cell = this.getCell(x, y);
-        if (cell) {
-            Object.assign(cell.style, styles);
-        }
-    }
-    
+    /**
+     * 📦 OBTENIR LES CELLULES SÉLECTIONNÉES
+     */
     getSelectedCells() {
         return Array.from(this.selectedCells);
     }
     
-    resize(width, height) {
-        this.config.size.width = width;
-        this.config.size.height = height;
-        this.style.width = `${width}px`;
-        this.style.height = `${height}px`;
-        this._handleResize();
-    }
-
-    // ==========================================
-    // 🚀 MODERN PARTICLE SYSTEM INTEGRATION
-    // ==========================================
-
     /**
-     * 🎯 APPLICATION DU POSITIONNEMENT MODERNE
+     * 📝 MODIFIER LE CONTENU D'UNE CELLULE
      */
-    applyModernPositioning() {
-        if (this.config.x !== undefined && this.config.y !== undefined) {
-            // Utiliser les particules modernes pour le positionnement
-            this.setParticles({
-                x: this.config.x,
-                y: this.config.y,
-                width: this.config.size.width,
-                height: this.config.size.height
-            });
-        } else {
-            // Juste les dimensions
-            this.setParticles({
-                width: this.config.size.width,
-                height: this.config.size.height
-            });
+    setCellContent(x, y, content) {
+        const cellId = `${x}_${y}`;
+        const cell = this.cells.get(cellId);
+        
+        if (cell) {
+            cell.textContent = content;
         }
     }
-
+    
     /**
-     * 🌟 MISE À JOUR CONFIGURATION MODERNE
+     * 🎨 MODIFIER LE STYLE D'UNE CELLULE
      */
-    updateModernConfig(newConfig) {
-        const oldConfig = { ...this.config };
-        this.config = this.mergeConfig({ ...this.config, ...newConfig });
+    setCellStyle(x, y, styles) {
+        const cellId = `${x}_${y}`;
+        const cell = this.cells.get(cellId);
         
-        // Détecter les changements de propriétés communes
-        const commonProps = ['x', 'y', 'width', 'height', 'backgroundColor', 'opacity'];
-        const changedProps = {};
-        
-        commonProps.forEach(prop => {
-            if (oldConfig[prop] !== this.config[prop]) {
-                changedProps[prop] = this.config[prop];
-            }
-        });
-        
-        // Appliquer les changements via le système moderne
-        if (Object.keys(changedProps).length > 0) {
-            this.setParticles(changedProps, { force: true });
+        if (cell) {
+            Object.assign(cell.style, styles);
         }
-        
-        // Régénérer les styles si nécessaire
-        this._updateMatrixStyles();
-        
-        console.log(`🔲 Matrix ${this.id} - Configuration moderne mise à jour:`, changedProps);
-    }
-
-    /**
-     * 🎨 APPLICATION STYLING MODERNE
-     */
-    applyModernStyling(styleConfig) {
-        // Appliquer les particules de style communes
-        const modernParticles = {};
-        
-        if (styleConfig.backgroundColor) modernParticles.backgroundColor = styleConfig.backgroundColor;
-        if (styleConfig.opacity !== undefined) modernParticles.opacity = styleConfig.opacity;
-        if (styleConfig.borderRadius) modernParticles.borderRadius = styleConfig.borderRadius;
-        if (styleConfig.boxShadow) modernParticles.boxShadow = styleConfig.boxShadow;
-        if (styleConfig.gradient) modernParticles.gradient = styleConfig.gradient;
-        if (styleConfig.glow) modernParticles.glow = styleConfig.glow;
-        
-        // Appliquer via le système moderne
-        this.setParticles(modernParticles);
-        
-        // Mettre à jour la configuration
-        this.config.containerStyle = { ...this.config.containerStyle, ...styleConfig };
-        this._updateMatrixStyles();
-    }
-
-    /**
-     * ⚡ OPTIMISATIONS MODERNES
-     */
-    enableModernOptimizations() {
-        // Activer le rendu optimisé
-        this.batchUpdates = true;
-        
-        // Optimisations CSS
-        this.setParticles({
-            smooth: true,
-            responsive: true,
-            animate: { 
-                type: 'smooth',
-                duration: 300,
-                easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
-            }
-        });
-        
-        // Performance monitoring
-        this._enablePerformanceMonitoring();
-        
-        console.log(`🔲 Matrix ${this.id} - Optimisations modernes activées`);
-    }
-
-    /**
-     * 🎭 ANIMATION D'ENTRÉE MODERNE
-     */
-    animateModernEntry() {
-        return this.animateParticle('opacity', 
-            { from: 0, to: 1 },
-            { 
-                duration: 500,
-                easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-                callback: () => {
-                    console.log(`🔲 Matrix ${this.id} - Animation d'entrée terminée`);
-                }
-            }
-        );
-    }
-
-    /**
-     * 🔄 MISE À JOUR DES STYLES MATRIX
-     */
-    _updateMatrixStyles() {
-        if (this.shadowRoot) {
-            const existingStyle = this.shadowRoot.querySelector('style');
-            if (existingStyle) {
-                existingStyle.remove();
-            }
-            const newStyle = this._generateStyles();
-            this.shadowRoot.insertBefore(newStyle, this.shadowRoot.firstChild);
-        }
-    }
-
-    /**
-     * 📊 MONITORING PERFORMANCE
-     */
-    _enablePerformanceMonitoring() {
-        let lastUpdate = performance.now();
-        let frameCount = 0;
-        
-        const monitor = () => {
-            frameCount++;
-            const now = performance.now();
-            
-            if (now - lastUpdate >= 1000) {
-                const fps = Math.round((frameCount * 1000) / (now - lastUpdate));
-                console.log(`🔲 Matrix ${this.id} - Performance: ${fps}fps`);
-                frameCount = 0;
-                lastUpdate = now;
-            }
-            
-            requestAnimationFrame(monitor);
-        };
-        
-        requestAnimationFrame(monitor);
     }
 }
 
-// Register Web Component
+// 🚀 Enregistrer le Web Component
 customElements.define('squirrel-matrix', Matrix);
 
-// Export pour ES6 modules et usage direct
+// Export pour modules ES6
 export default Matrix;
 
-// Disponible globalement pour compatibilité
+// Global pour compatibilité
 if (typeof window !== 'undefined') {
-    window.SquirrelMatrix = Matrix;
+    window.Matrix = Matrix;
 }

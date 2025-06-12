@@ -1,371 +1,460 @@
 /**
- * 🔧 EXEMPLES TABLEAUX - VERSION CORRIGÉE
+ * 📊 Table Web Component Advanced Demo
  * 
- * Ce fichier utilise Table Web Component au lieu de l'ancien Table pour corriger 
- * le problème de génération excessive de divs
- * 
- * RÉSOLUTION DU BUG :
- * ✅ Utilisation d'une structure HTML standard cohérente
- * ✅ Pas de mélange entre API A et éléments HTML natifs
- * ✅ Structure table/thead/tbody appropriée
- * ✅ Positionnement CSS standard au lieu d'absolus multiples
+ * Demonstrating:
+ * - Bombé effects with multiple shadows
+ * - Animated cell interactions
+ * - CSS gradients and advanced styling
+ * - Interactive callbacks
+ * - Auto-attachment and positioning
  */
 
+// Import the new Table Web Component
 // import Table from '../../a/components/Table.js';
 
-console.log('🔧 CHARGEMENT DES EXEMPLES TABLEAUX CORRIGÉS');
+// console.log('🎯 Loading Table Web Component Advanced Demo...');
 
-// ===============================================
-// 📊 EXEMPLE 1: TABLEAU BASIC CORRIGÉ
-// ===============================================
-
-const basicTableData = [
-    { id: 1, name: 'Alice Johnson', email: 'alice@example.com', department: 'Engineering', salary: 75000, status: 'Active' },
-    { id: 2, name: 'Bob Smith', email: 'bob@example.com', department: 'Marketing', salary: 65000, status: 'Active' },
-    { id: 3, name: 'Carol Davis', email: 'carol@example.com', department: 'Sales', salary: 70000, status: 'Inactive' },
-    { id: 4, name: 'David Wilson', email: 'david@example.com', department: 'Engineering', salary: 85000, status: 'Active' },
-    { id: 5, name: 'Eva Brown', email: 'eva@example.com', department: 'HR', salary: 60000, status: 'Active' },
-    { id: 6, name: 'Frank Miller', email: 'frank@example.com', department: 'Engineering', salary: 90000, status: 'Active' },
-    { id: 7, name: 'Grace Lee', email: 'grace@example.com', department: 'Marketing', salary: 68000, status: 'Inactive' },
-    { id: 8, name: 'Henry Clark', email: 'henry@example.com', department: 'Sales', salary: 72000, status: 'Active' }
+// Sample data for demonstrations
+const sampleData = [
+    { id: 1, name: 'Alice Johnson', role: 'Senior Developer', department: 'Engineering', salary: 95000, status: 'Active' },
+    { id: 2, name: 'Bob Smith', role: 'Product Manager', department: 'Product', salary: 105000, status: 'Active' },
+    { id: 3, name: 'Carol Williams', role: 'UX Designer', department: 'Design', salary: 80000, status: 'Active' },
+    { id: 4, name: 'David Brown', role: 'DevOps Engineer', department: 'Engineering', salary: 90000, status: 'Away' },
+    { id: 5, name: 'Eva Davis', role: 'Data Scientist', department: 'Analytics', salary: 110000, status: 'Active' },
+    { id: 6, name: 'Frank Miller', role: 'QA Engineer', department: 'Engineering', salary: 75000, status: 'Active' },
+    { id: 7, name: 'Grace Wilson', role: 'Marketing Lead', department: 'Marketing', salary: 85000, status: 'Inactive' },
+    { id: 8, name: 'Henry Garcia', role: 'Sales Rep', department: 'Sales', salary: 70000, status: 'Active' }
 ];
 
-const basicTable = new Table({
-    id: 'basic_table_fixed',
+// Column configuration with custom renderers
+const columns = [
+    { 
+        key: 'id', 
+        title: 'ID', 
+        width: '60px', 
+        align: 'center',
+        render: (value) => `<strong>#${value}</strong>`
+    },
+    { 
+        key: 'name', 
+        title: 'Employee Name', 
+        width: '180px',
+        render: (value, row) => {
+            const statusColor = row.status === 'Active' ? '#4caf50' : 
+                              row.status === 'Away' ? '#ff9800' : '#f44336';
+            return `
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></div>
+                    <span>${value}</span>
+                </div>
+            `;
+        }
+    },
+    { key: 'role', title: 'Role', width: '150px' },
+    { 
+        key: 'department', 
+        title: 'Department', 
+        width: '120px',
+        render: (value) => {
+            const colors = {
+                'Engineering': '#2196f3',
+                'Product': '#9c27b0',
+                'Design': '#e91e63',
+                'Analytics': '#00bcd4',
+                'Marketing': '#ff5722',
+                'Sales': '#4caf50'
+            };
+            const color = colors[value] || '#757575';
+            return `<span style="color: ${color}; font-weight: 500;">${value}</span>`;
+        }
+    },
+    { 
+        key: 'salary', 
+        title: 'Salary', 
+        width: '100px', 
+        align: 'right',
+        render: (value) => `$${value.toLocaleString()}`
+    },
+    { 
+        key: 'status', 
+        title: 'Status', 
+        width: '80px', 
+        align: 'center',
+        render: (value) => {
+            const colors = {
+                'Active': '#4caf50',
+                'Away': '#ff9800',
+                'Inactive': '#f44336'
+            };
+            return `<span style="color: ${colors[value]}; font-weight: bold;">${value}</span>`;
+        }
+    }
+];
+
+// 1. Glassmorphism Table with Bombé Effects
+console.log('🎨 Creating Glassmorphism Table...');
+const glassmorphismTable = new Table({
+    id: 'glassmorphism-table',
     attach: 'body',
     x: 50,
-    y: 50,
+    y: 100,
     width: 900,
-    height: 500,
+    height: 400,
     
-    columns: [
-        { key: 'id', title: 'ID', width: '60px', align: 'center' },
-        { key: 'name', title: 'Name', width: '150px' },
-        { key: 'email', title: 'Email', width: '200px' },
-        { key: 'department', title: 'Department', width: '120px', align: 'center' },
-        { 
-            key: 'salary', 
-            title: 'Salary', 
-            width: '120px', 
-            align: 'right',
-            formatter: (value) => `$${value.toLocaleString()}`
-        },
-        { 
-            key: 'status', 
-            title: 'Status', 
-            width: '100px', 
-            align: 'center',
-            formatter: (value) => ({
-                type: 'html',
-                content: `<span style="
-                    padding: 4px 8px; 
-                    border-radius: 12px; 
-                    font-size: 12px; 
-                    background-color: ${value === 'Active' ? '#d4edda' : '#f8d7da'}; 
-                    color: ${value === 'Active' ? '#155724' : '#721c24'};
-                ">${value}</span>`
-            })
-        }
-    ],
+    columns: columns,
+    data: sampleData,
     
-    data: basicTableData,
-    
-    // Features activées
     sortable: true,
     searchable: true,
-    filterable: true,
     selectable: true,
     multiSelect: true,
     
     pagination: {
         enabled: true,
-        pageSize: 5,
-        showInfo: true,
-        showControls: true
+        pageSize: 5
     },
     
-    callbacks: {
-        onRowClick: (row, index) => {
-            console.log('🖱️ Row clicked:', row.name);
-        },
-        onCellClick: (value, row, index, columnKey) => {
-            console.log('📱 Cell clicked:', { columnKey, value, employee: row.name });
-        },
-        onSort: (column, direction) => {
-            console.log('🔄 Sort:', { column, direction });
-        },
-        onSelectionChange: (selectedRows) => {
-            console.log('✅ Selection changed:', selectedRows);
-        }
-    }
-});
-
-// ===============================================
-// 📊 EXEMPLE 2: TABLEAU COMPACT CORRIGÉ  
-// ===============================================
-
-const compactTableData = [
-    { code: 'AAPL', name: 'Apple Inc.', price: 150.25, change: +2.15, volume: '45.2M' },
-    { code: 'GOOGL', name: 'Alphabet Inc.', price: 2750.80, change: -15.30, volume: '1.8M' },
-    { code: 'MSFT', name: 'Microsoft Corp.', price: 305.50, change: +5.25, volume: '32.1M' },
-    { code: 'TSLA', name: 'Tesla Inc.', price: 850.75, change: -12.50, volume: '28.9M' },
-    { code: 'AMZN', name: 'Amazon.com Inc.', price: 3200.00, change: +8.75, volume: '2.5M' }
-];
-
-const compactTable = new Table({
-    id: 'compact_table_fixed',
-    attach: 'body',
-    x: 50,
-    y: 600,
-    width: 600,
-    height: 300,
-    
-    columns: [
-        { key: 'code', title: 'Symbol', width: '80px', align: 'center' },
-        { key: 'name', title: 'Company', width: '200px' },
-        { 
-            key: 'price', 
-            title: 'Price', 
-            width: '100px', 
-            align: 'right',
-            formatter: (value) => `$${value.toFixed(2)}`
-        },
-        { 
-            key: 'change', 
-            title: 'Change', 
-            width: '100px', 
-            align: 'right',
-            formatter: (value) => ({
-                type: 'html',
-                content: `<span style="
-                    color: ${value >= 0 ? '#28a745' : '#dc3545'};
-                    font-weight: bold;
-                ">${value >= 0 ? '+' : ''}${value.toFixed(2)}</span>`
-            })
-        },
-        { key: 'volume', title: 'Volume', width: '80px', align: 'right' }
-    ],
-    
-    data: compactTableData,
-    
-    sortable: true,
-    searchable: true,
-    
+    // Glassmorphism styling with bombé effects
     style: {
-        fontSize: '13px',
-        border: '2px solid #007bff',
-        borderRadius: '6px'
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        borderRadius: '16px',
+        boxShadow: [
+            '0 8px 32px rgba(0, 0, 0, 0.1)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+            'inset 0 -1px 0 rgba(0, 0, 0, 0.1)'
+        ],
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)'
     },
     
     headerStyle: {
-        backgroundColor: '#007bff',
-        color: 'white'
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.1) 100%)',
+        backdropFilter: 'blur(10px)',
+        fontWeight: 'bold',
+        color: '#333',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+        boxShadow: [
+            'inset 0 1px 0 rgba(255, 255, 255, 0.3)',
+            '0 1px 3px rgba(0, 0, 0, 0.1)'
+        ]
+    },
+    
+    cellStyle: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        backdropFilter: 'blur(5px)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: [
+            '0 1px 3px rgba(0, 0, 0, 0.1)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.2)'
+        ]
+    },
+    
+    cellHoverStyle: {
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+        transform: 'scale(1.02) translateZ(0)',
+        boxShadow: [
+            '0 8px 25px rgba(0, 0, 0, 0.15)',
+            'inset 0 2px 4px rgba(255, 255, 255, 0.3)',
+            'inset 0 -2px 4px rgba(0, 0, 0, 0.1)'
+        ]
+    },
+    
+    cellSelectedStyle: {
+        backgroundColor: 'rgba(33, 150, 243, 0.2)',
+        background: 'linear-gradient(135deg, rgba(33,150,243,0.3) 0%, rgba(33,150,243,0.15) 100%)',
+        boxShadow: [
+            '0 8px 25px rgba(33, 150, 243, 0.3)',
+            'inset 0 2px 4px rgba(33, 150, 243, 0.4)',
+            'inset 0 -1px 2px rgba(0, 0, 0, 0.1)'
+        ]
+    },
+    
+    animations: {
+        cellHover: {
+            duration: '0.3s',
+            easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+        },
+        cellSelect: {
+            duration: '0.4s',
+            easing: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+        }
     },
     
     callbacks: {
-        onRowClick: (row) => {
-            console.log(`📈 Stock selected: ${row.code} - ${row.name}`);
+        onCellClick: (cell, row, column, rowIndex, colIndex, event) => {
+            console.log(`🎯 Glassmorphism Cell clicked: [${rowIndex}, ${colIndex}] = ${row[column.key]}`);
+            
+            // Add ripple effect
+            const ripple = document.createElement('div');
+            ripple.style.cssText = `
+                position: absolute;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.6);
+                transform: scale(0);
+                animation: ripple 0.6s linear;
+                pointer-events: none;
+                left: ${event.offsetX - 10}px;
+                top: ${event.offsetY - 10}px;
+                width: 20px;
+                height: 20px;
+            `;
+            
+            cell.style.position = 'relative';
+            cell.appendChild(ripple);
+            
+            setTimeout(() => ripple.remove(), 600);
+        },
+        
+        onCellHover: (cell, row, column, rowIndex, colIndex, event) => {
+            console.log(`🎯 Glassmorphism Cell hover: ${row[column.key]}`);
+        },
+        
+        onRowClick: (tr, row, rowIndex, event) => {
+            console.log(`🎯 Glassmorphism Row clicked: ${row.name} (${row.role})`);
+        },
+        
+        onSelectionChange: (selectedRows) => {
+            console.log(`🎯 Glassmorphism Selection changed: ${selectedRows.length} rows selected`);
         }
     }
 });
 
-// ===============================================
-// 📊 EXEMPLE 3: TABLEAU AVEC DONNÉES DYNAMIQUES
-// ===============================================
-
-const dynamicTable = new Table({
-    id: 'dynamic_table_fixed',
+// 2. Gaming-Style Table with Neon Effects
+console.log('🎮 Creating Gaming-Style Table...');
+const gamingTable = new Table({
+    id: 'gaming-table',
     attach: 'body',
-    x: 700,
-    y: 600,
-    width: 500,
-    height: 300,
+    x: 50,
+    y: 550,
+    width: 900,
+    height: 400,
     
-    columns: [
-        { key: 'timestamp', title: 'Time', width: '120px' },
-        { key: 'metric', title: 'Metric', width: '150px' },
-        { 
-            key: 'value', 
-            title: 'Value', 
-            width: '100px', 
-            align: 'right',
-            formatter: (value) => value.toFixed(2)
-        },
-        { 
-            key: 'status', 
-            title: 'Status', 
-            width: '80px', 
-            align: 'center',
-            formatter: (value) => ({
-                type: 'html',
-                content: `<div style="
-                    width: 12px; 
-                    height: 12px; 
-                    border-radius: 50%; 
-                    background-color: ${value === 'ok' ? '#28a745' : '#dc3545'};
-                    margin: 0 auto;
-                "></div>`
-            })
-        }
-    ],
-    
-    data: [], // Vide au départ
+    columns: columns,
+    data: sampleData,
     
     sortable: true,
+    searchable: true,
+    selectable: true,
+    multiSelect: false,
     
+    // Gaming-style with neon effects
     style: {
-        backgroundColor: '#f8f9fa',
-        border: '1px solid #6c757d'
+        backgroundColor: '#0a0a0a',
+        border: '2px solid #00ff41',
+        borderRadius: '12px',
+        boxShadow: [
+            '0 0 20px rgba(0, 255, 65, 0.5)',
+            'inset 0 1px 0 rgba(0, 255, 65, 0.2)',
+            '0 8px 32px rgba(0, 0, 0, 0.8)'
+        ],
+        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)',
+        color: '#00ff41',
+        fontFamily: '"Courier New", monospace'
+    },
+    
+    headerStyle: {
+        backgroundColor: '#1a1a1a',
+        background: 'linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%)',
+        color: '#00ff41',
+        fontWeight: 'bold',
+        borderBottom: '2px solid #00ff41',
+        textShadow: '0 0 10px rgba(0, 255, 65, 0.8)',
+        boxShadow: [
+            'inset 0 1px 0 rgba(0, 255, 65, 0.3)',
+            '0 2px 10px rgba(0, 255, 65, 0.2)'
+        ]
+    },
+    
+    cellStyle: {
+        backgroundColor: '#0f0f0f',
+        borderBottom: '1px solid rgba(0, 255, 65, 0.3)',
+        color: '#00ff41',
+        transition: 'all 0.2s ease',
+        boxShadow: [
+            'inset 0 1px 0 rgba(0, 255, 65, 0.1)',
+            '0 1px 3px rgba(0, 0, 0, 0.5)'
+        ]
+    },
+    
+    cellHoverStyle: {
+        backgroundColor: '#1a3d1a',
+        background: 'linear-gradient(135deg, #1a3d1a 0%, #0d2a0d 100%)',
+        color: '#ffffff',
+        textShadow: '0 0 5px rgba(0, 255, 65, 1)',
+        transform: 'scale(1.03)',
+        boxShadow: [
+            '0 0 15px rgba(0, 255, 65, 0.6)',
+            'inset 0 2px 4px rgba(0, 255, 65, 0.2)',
+            'inset 0 -2px 4px rgba(0, 0, 0, 0.3)'
+        ]
+    },
+    
+    cellSelectedStyle: {
+        backgroundColor: '#2d5a2d',
+        background: 'linear-gradient(135deg, #2d5a2d 0%, #1a3d1a 100%)',
+        color: '#ffffff',
+        textShadow: '0 0 10px rgba(0, 255, 65, 1)',
+        boxShadow: [
+            '0 0 20px rgba(0, 255, 65, 0.8)',
+            'inset 0 2px 6px rgba(0, 255, 65, 0.3)',
+            'inset 0 -2px 6px rgba(0, 0, 0, 0.5)'
+        ]
+    },
+    
+    callbacks: {
+        onCellClick: (cell, row, column, rowIndex, colIndex, event) => {
+            console.log(`🎮 Gaming Cell clicked: [${rowIndex}, ${colIndex}] = ${row[column.key]}`);
+            
+            // Add glitch effect
+            cell.style.animation = 'glitch 0.3s ease';
+            setTimeout(() => {
+                cell.style.animation = '';
+            }, 300);
+        },
+        
+        onRowClick: (tr, row, rowIndex, event) => {
+            console.log(`🎮 Gaming Row clicked: ${row.name} - ${row.role}`);
+        }
     }
 });
 
-// Simulation de données en temps réel
-const metricsNames = ['CPU Usage', 'Memory', 'Disk I/O', 'Network', 'Temperature'];
-let dataCounter = 0;
-
-function addRandomData() {
-    const now = new Date();
-    const timestamp = now.toLocaleTimeString();
-    const metric = metricsNames[Math.floor(Math.random() * metricsNames.length)];
-    const value = Math.random() * 100;
-    const status = value < 80 ? 'ok' : 'warning';
+// 3. Material Design Table with Elevation Effects
+console.log('🎨 Creating Material Design Table...');
+const materialTable = new Table({
+    id: 'material-table',
+    attach: 'body',
+    x: 1000,
+    y: 100,
+    width: 900,
+    height: 850,
     
-    const newRow = { 
-        id: dataCounter++,
-        timestamp, 
-        metric, 
-        value, 
-        status 
-    };
+    columns: columns,
+    data: sampleData,
     
-    // Ajouter la nouvelle ligne
-    dynamicTable.config.data.unshift(newRow);
+    sortable: true,
+    searchable: true,
+    selectable: true,
+    multiSelect: true,
     
-    // Garder seulement les 10 dernières entrées
-    if (dynamicTable.config.data.length > 10) {
-        dynamicTable.config.data = dynamicTable.config.data.slice(0, 10);
+    pagination: {
+        enabled: true,
+        pageSize: 4
+    },
+    
+    // Material Design styling
+    style: {
+        backgroundColor: '#ffffff',
+        border: 'none',
+        borderRadius: '8px',
+        boxShadow: [
+            '0 2px 4px rgba(0, 0, 0, 0.1)',
+            '0 8px 16px rgba(0, 0, 0, 0.1)'
+        ],
+        background: 'linear-gradient(135deg, #ffffff 0%, #fafafa 100%)',
+        fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif'
+    },
+    
+    headerStyle: {
+        backgroundColor: '#f5f5f5',
+        background: 'linear-gradient(135deg, #f5f5f5 0%, #eeeeee 100%)',
+        color: '#424242',
+        fontWeight: '500',
+        borderBottom: '1px solid #e0e0e0',
+        letterSpacing: '0.5px',
+        textTransform: 'uppercase',
+        fontSize: '12px',
+        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)'
+    },
+    
+    cellStyle: {
+        backgroundColor: '#ffffff',
+        borderBottom: '1px solid #e0e0e0',
+        color: '#424242',
+        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+    },
+    
+    cellHoverStyle: {
+        backgroundColor: '#f5f5f5',
+        background: 'linear-gradient(135deg, #f5f5f5 0%, #eeeeee 100%)',
+        transform: 'translateY(-1px)',
+        boxShadow: [
+            '0 4px 8px rgba(0, 0, 0, 0.12)',
+            '0 2px 4px rgba(0, 0, 0, 0.08)'
+        ]
+    },
+    
+    cellSelectedStyle: {
+        backgroundColor: '#e3f2fd',
+        background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+        color: '#1976d2',
+        boxShadow: [
+            '0 4px 12px rgba(25, 118, 210, 0.2)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.6)'
+        ]
+    },
+    
+    animations: {
+        cellHover: {
+            duration: '0.2s',
+            easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+        },
+        cellSelect: {
+            duration: '0.3s',
+            easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+        }
+    },
+    
+    callbacks: {
+        onCellClick: (cell, row, column, rowIndex, colIndex, event) => {
+            console.log(`🎨 Material Cell clicked: [${rowIndex}, ${colIndex}] = ${row[column.key]}`);
+        },
+        
+        onCellHover: (cell, row, column, rowIndex, colIndex, event) => {
+            console.log(`🎨 Material Cell hover: ${row[column.key]}`);
+        },
+        
+        onRowClick: (tr, row, rowIndex, event) => {
+            console.log(`🎨 Material Row clicked: ${row.name}`);
+        },
+        
+        onSelectionChange: (selectedRows) => {
+            console.log(`🎨 Material Selection: ${selectedRows.length} rows`);
+        },
+        
+        onSort: (column, direction) => {
+            console.log(`🎨 Material Sort: ${column} ${direction}`);
+        }
     }
-    
-    // Recharger les données filtrées et re-render
-    dynamicTable.filteredData = [...dynamicTable.config.data];
-    dynamicTable._renderTable();
-}
-
-// Ajouter des données toutes les 3 secondes
-setInterval(addRandomData, 3000);
-
-// Ajouter quelques données initiales
-for (let i = 0; i < 5; i++) {
-    addRandomData();
-}
-
-// ===============================================
-// 📊 CONTRÔLES ET DÉMONSTRATIONS
-// ===============================================
-
-// Créer un panneau de contrôle
-const controlPanel = document.createElement('div');
-Object.assign(controlPanel.style, {
-    position: 'fixed',
-    top: '10px',
-    right: '10px',
-    background: 'white',
-    border: '1px solid #ccc',
-    borderRadius: '8px',
-    padding: '15px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-    zIndex: '9999',
-    fontFamily: 'Arial, sans-serif',
-    fontSize: '14px',
-    width: '250px'
 });
 
-controlPanel.innerHTML = `
-    <h3 style="margin: 0 0 15px 0; color: #333;">🔧 Contrôles Tables FIXED</h3>
+// Add CSS for additional animations
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes ripple {
+        to {
+            transform: scale(4);
+            opacity: 0;
+        }
+    }
     
-    <div style="margin-bottom: 10px;">
-        <button id="searchDemo" style="width: 100%; padding: 8px; margin-bottom: 5px; border: 1px solid #007bff; background: #007bff; color: white; border-radius: 4px; cursor: pointer;">
-            🔍 Demo Search "Alice"
-        </button>
-    </div>
-    
-    <div style="margin-bottom: 10px;">
-        <button id="sortDemo" style="width: 100%; padding: 8px; margin-bottom: 5px; border: 1px solid #28a745; background: #28a745; color: white; border-radius: 4px; cursor: pointer;">
-            🔄 Demo Sort by Salary
-        </button>
-    </div>
-    
-    <div style="margin-bottom: 10px;">
-        <button id="resetDemo" style="width: 100%; padding: 8px; margin-bottom: 5px; border: 1px solid #6c757d; background: #6c757d; color: white; border-radius: 4px; cursor: pointer;">
-            🔄 Reset All Tables
-        </button>
-    </div>
-    
-    <div style="margin-bottom: 10px;">
-        <button id="addDataDemo" style="width: 100%; padding: 8px; margin-bottom: 5px; border: 1px solid #ffc107; background: #ffc107; color: black; border-radius: 4px; cursor: pointer;">
-            ➕ Add Random Employee
-        </button>
-    </div>
-    
-    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; font-size: 12px; color: #666;">
-        <strong>Status:</strong><br/>
-        ✅ HTML Structure Standard<br/>
-        ✅ No Excessive Divs<br/>
-        ✅ Proper Table Elements<br/>
-        ✅ Performance Optimized
-    </div>
+    @keyframes glitch {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-2px); }
+        40% { transform: translateX(2px); }
+        60% { transform: translateX(-1px); }
+        80% { transform: translateX(1px); }
+    }
 `;
+document.head.appendChild(style);
 
-document.body.appendChild(controlPanel);
-
-// Event handlers pour les contrôles
-document.getElementById('searchDemo').addEventListener('click', () => {
-    basicTable.search('Alice');
-    console.log('🔍 Search demo: "Alice" applied to basic table');
-});
-
-document.getElementById('sortDemo').addEventListener('click', () => {
-    basicTable.sort('salary', 'desc');
-    console.log('🔄 Sort demo: Salary descending applied to basic table');
-});
-
-document.getElementById('resetDemo').addEventListener('click', () => {
-    basicTable.reset();
-    compactTable.reset();
-    console.log('🔄 Reset demo: All tables reset');
-});
-
-document.getElementById('addDataDemo').addEventListener('click', () => {
-    const newEmployee = {
-        id: basicTableData.length + 1,
-        name: `Employee ${Math.floor(Math.random() * 1000)}`,
-        email: `emp${Math.floor(Math.random() * 1000)}@example.com`,
-        department: ['Engineering', 'Marketing', 'Sales', 'HR'][Math.floor(Math.random() * 4)],
-        salary: Math.floor(Math.random() * 50000) + 50000,
-        status: Math.random() > 0.3 ? 'Active' : 'Inactive'
-    };
-    
-    basicTableData.push(newEmployee);
-    basicTable.config.data = basicTableData;
-    basicTable.filteredData = [...basicTableData];
-    basicTable._renderTable();
-    
-    console.log('➕ New employee added:', newEmployee.name);
-});
-
-console.log(`
-╔══════════════════════════════════════════════════════════════╗
-║                    🔧 TABLES FIXED LOADED                   ║
-║                                                              ║
-║  ✅ Problem: Excessive div generation RESOLVED              ║
-║  ✅ Structure: Standard HTML table elements                 ║
-║  ✅ Performance: Optimized rendering                        ║
-║  ✅ Features: All original functionality preserved          ║
-║                                                              ║
-║  🎯 3 example tables created successfully                   ║
-║  🎮 Control panel available (top-right corner)             ║
-║                                                              ║
-╚══════════════════════════════════════════════════════════════╝
-`);
-
-export { basicTable, compactTable, dynamicTable, Table };
+console.log('🎉 Table Web Component Advanced Demo loaded with:');
+console.log('  - Glassmorphism table with bombé effects');
+console.log('  - Gaming-style table with neon glow');
+console.log('  - Material Design table with elevation');
+console.log('  - Interactive callbacks and animations');
+console.log('  - Auto-attachment and positioning');

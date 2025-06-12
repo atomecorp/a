@@ -1,33 +1,4 @@
-/**
- * 🎚️ Démo Sliders Ultra Simple - Squirrel Framework
- */
-
-
-function createAdvancedSliders() {
-    console.log('🚀 Création des 6 sliders avancés...');
-    
-    try {
-        // 1. Slider horizontal basique (0-100)
-        console.log('Création slider 1...');
-        const slider1 = new SliderCompatible({
-            attach: 'body',
-            x: 50,
-            y: 50,
-            width: 300,
-            height: 60,
-            min: 0,
-            max: 100,
-            value: 50,
-            type: 'horizontal',
-            callbacks: {
-                onChange: (value) => console.log('Horizontal 1:', value)
-            }
-        });
-        console.log('✅ Slider horizontal 1 créé:', slider1);
-
-        // 2. Slider horizontal -100 à +100
-        console.log('Création slider 2...');
-        const slider2 = new SliderCompatible({
+ const slider2 = new SliderCompatible({
             attach: 'body',
             x: 50,
             y: 130,
@@ -180,25 +151,3 @@ function createAdvancedSliders() {
                 console.log(`Slider ${index + 1}:`, slider, 'Visible:', slider.offsetParent !== null);
             });
         }, 100);
-        
-    } catch (error) {
-        console.error('❌ Erreur lors de la création des sliders:', error);
-    }
-}
-
-// Lancer directement la création des sliders
-if (typeof SliderCompatible !== 'undefined') {
-    createAdvancedSliders();
-} else {
-    console.error('❌ Impossible de créer les sliders: SliderCompatible non disponible');
-    // Essayer de nouveau dans 100ms
-    setTimeout(() => {
-        if (typeof SliderCompatible !== 'undefined') {
-            console.log('✅ SliderCompatible maintenant disponible, création des sliders...');
-            createAdvancedSliders();
-        } else {
-            console.error('❌ SliderCompatible toujours pas disponible après délai');
-        }
-    }, 100);
-}
-

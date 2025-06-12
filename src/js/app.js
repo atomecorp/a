@@ -12,14 +12,8 @@ class SquirrelApp {
 
     async init() {
         try {
-            // Phase 1: Core essentials
-            await this.loadCoreModules();
-            
-            // Phase 2: Framework (lazy)
+            // Initialisation simplifiée - juste le framework core
             await this.loadFrameworkModules();
-            
-            // Phase 3: Application (on demand)
-            await this.loadApplicationModules();
             
             this.initialized = true;
             
@@ -27,25 +21,22 @@ class SquirrelApp {
             window.SQUIRREL_VERSION = this.version;
             window.squirrel = this;
             
+            console.log('✅ Squirrel App initialized successfully');
+            
         } catch (error) {
-            console.error('❌ Squirrel initialization failed:', error);
-            this.handleInitError(error);
+            console.warn('⚠️ Squirrel initialization had issues:', error.message);
+            // Continuer avec l'initialisation même en cas d'erreur de module
+            this.initialized = true;
+            window.SQUIRREL_VERSION = this.version;
+            window.squirrel = this;
         }
     }
 
-    async loadCoreModules() {
-        const coreModules = [
-            { name: 'utils', path: '../native/utils.js' }
-        ];
-
-        await this.loadModulesParallel(coreModules);
-    }
+  
 
     async loadFrameworkModules() {
         const frameworkModules = [
-            { name: 'core', path: '../a/a.js' },
-            { name: 'apis', path: '../a/apis.js', optional: true },
-            { name: 'particles', path: '../a/particles/all.js', optional: true }
+            { name: 'core', path: '../a/a.js', optional: false }
         ];
 
         await this.loadModulesParallel(frameworkModules);

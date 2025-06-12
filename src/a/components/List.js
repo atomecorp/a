@@ -18,24 +18,24 @@ class List extends BaseComponent {
     constructor(config = {}) {
         super(); // Appeler le constructeur de BaseComponent
         
-        // Traiter d'abord la configuration commune via BaseComponent
-        this.processCommonConfig(config);
-        
         // Generate unique ID
         this.id = config.id || `list_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Merge configuration with defaults
+        // Create Shadow DOM BEFORE any processing that might trigger connectedCallback
+        this.attachShadow({ mode: 'open' });
+        this.initialized = false;
+        
+        // Merge configuration with defaults AVANT processCommonConfig
         this.config = this.mergeConfig(config);
         
-        // Internal state
+        // Initialize internal state BEFORE processCommonConfig
         this.selectedItems = new Set();
         this.filteredItems = [...this.config.items];
         this.sortOrder = { field: null, direction: 'asc' };
         this.itemElements = new Map();
         
-        // Create Shadow DOM
-        this.attachShadow({ mode: 'open' });
-        this.initialized = false;
+        // Traiter la configuration commune via BaseComponent (peut déclencher l'attachement)
+        this.processCommonConfig(config);
         
         console.log(`📋 List Web Component "${this.id}" created (${this.config.type}) - ${this.config.items.length} items`);
         

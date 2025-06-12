@@ -3,9 +3,22 @@
  * PERFORMANCE ENHANCED VERSION with caching, lazy loading, and monitoring
  */
 
-// 🚀 NOUVELLES OPTIMISATIONS V2.0 - Import des systèmes avancés  
-import { DOMCache } from './utils/dom-cache.js';
-import animationOptimizer from './utils/animation-optimizer.js';
+// Import des composants essentiels
+import Matrix from './components/Matrix.js';
+
+// 🚀 OPTIMISATIONS V2.0 - Chargement conditionnel des systèmes avancés
+let DOMCache, animationOptimizer;
+
+// Essayer de charger les optimisations si disponibles
+try {
+    DOMCache = (await import('./utils/dom-cache.js')).DOMCache;
+    animationOptimizer = (await import('./utils/animation-optimizer.js')).default;
+} catch (e) {
+    console.warn('⚠️ Advanced optimizations not available, using basic implementation');
+    // Fallback basique
+    DOMCache = class { constructor() {} };
+    animationOptimizer = { animate: () => Promise.resolve() };
+}
 
 // Initialiser les systèmes d'optimisation avancés
 const advancedDOMCache = new DOMCache();
@@ -684,10 +697,11 @@ window.optimizeBatch = (els) => window.SQUIRREL_OPTIMIZATIONS.optimizeBatch(els)
     // Export to global scope
     window.A = A;
     window.defineParticle = defineParticle;
+    window.Matrix = Matrix; // ← Ajouter Matrix globalement
 
     // Export for ES6 modules
     if (typeof module !== 'undefined' && module.exports) {
-        module.exports = { A, defineParticle };
+        module.exports = { A, defineParticle, Matrix };
     }
 
     // Notify that A framework is loaded

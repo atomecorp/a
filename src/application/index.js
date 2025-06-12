@@ -1,20 +1,11 @@
 // import   './examples/sliders.js';
-// import './examples/lists.js'; // Temporairement désactivé à cause d'erreurs
-// import './examples/lists_test.js'; // Temporairement désactivé pour debug
-
-// Import des exemples avancés qui fonctionnent
+// import './examples/lists.js';
 // import './examples/tables.js';
-// import './examples/tables_advanced.js';
-// import './examples/tables_bombe.js';
+// import './examples/matrix.js'; 
+// import './examples/wavesurfer.js'; 
+// import './examples/buttons.js'; 
+//  import './examples/modules.js'; 
+//  import './examples/basic.js'; 
+ import './examples/demos.js';
 
-// Exemples Matrix avec Web Components
-// import './examples/matrix.js'; // Version ancienne
-// import './examples/matrices_test.js'; // Test simple pour validation
-// import './examples/matrices_validation.js'; // Test complet de validation
-// import './examples/matrices_advanced.js'; // Version Web Component avancée
-// import './examples/matrices_bombe.js'; // Version avec effets bombé ultra-premium
-
-// Exemples Module avec Web Components
-// import './examples/modules_connections.js'; // Version avec système de liaisons complet - NOUVEAU !
- import './examples/modules_configurable.js'; // Version avec animations configurables
 

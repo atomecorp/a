@@ -417,9 +417,3 @@ const materialList = new List({
         }
     }
 });
-
-// 🎉 Message de confirmation
-console.log('✅ Démo interactive des 3 listes chargée !');
-console.log('🖱️  Cliquez sur les éléments pour voir les callbacks en action');
-console.log('🔍 Utilisez la recherche sur les listes Glassmorphism et Material');
-console.log('📊 Utilisez le tri sur la liste Material Design');

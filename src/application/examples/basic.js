@@ -8,11 +8,15 @@ const html_container = new A({
     markup: 'span',
     role: 'container',
     position: 'absolute',
-    y: 50,
-    width: 400,
-    height: 300,
+    text: 'HTML Container Example',
+    left: 56,
+    top: 120,
+    width: 333,
+    height: 234,
+    text: 'This is a main HTML container',
     color: 'orange',
     display: 'block',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     smooth: 10,
     shadow: [
         {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
@@ -24,7 +28,7 @@ const html_container = new A({
 
 
 
-const volumeSlider = new Slider({
+const volumeSlider = new SliderCompatible({
     attach: '#main_html_container',
     id: 'volume_slider',
     type: 'horizontal',
@@ -47,22 +51,8 @@ const volumeSlider = new Slider({
 // 🔍 ANALYSE APPROFONDIE DE LA CLASSE A - RÉPONSE À VOTRE QUESTION
 // =======================================================================
 
-console.log('\n' + '='.repeat(80));
-console.log('🔍 ANALYSE APPROFONDIE: CLASSE A ET APIS JAVASCRIPT');
-console.log('='.repeat(80));
-
-console.log('\n📋 ANALYSE DE VOTRE EXEMPLE:');
-console.log('✅ html_container créé avec succès!');
-console.log('   • Element HTML:', html_container.html_object.tagName);
-console.log('   • ID:', html_container.id());
-console.log('   • Position Y:', html_container.y());
-console.log('   • Largeur:', html_container.width());
-console.log('   • Couleur:', html_container.color());
-console.log('   • Shadow array:', Array.isArray(html_container.particles.shadow));
-console.log('   • Smooth value:', html_container.particles.smooth);
-
-// === TEST 1: PROPRIÉTÉS CSS STANDARD ===
-console.log('\n📊 TEST 1: Propriétés CSS standard comme clés');
+// // === TEST 1: PROPRIÉTÉS CSS STANDARD ===
+// console.log('\n📊 TEST 1: Propriétés CSS standard comme clés');
 
 const cssTest = new A({
     attach: '#main_html_container',
