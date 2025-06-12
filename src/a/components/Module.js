@@ -36,6 +36,10 @@ class Module extends HTMLElement {
         this._isDragDisabled = false; // Flag to temporarily disable drag during rename
         this.dragOffset = { x: 0, y: 0 };
         
+        // Initialize mouse coordinates for Shadow DOM search
+        this._lastMouseX = 0;
+        this._lastMouseY = 0;
+        
         // Create shadow DOM pour encapsulation
         this.attachShadow({ mode: 'open' });
         
@@ -261,6 +265,7 @@ class Module extends HTMLElement {
                 onModuleLeave: () => {},
                 onModuleSelect: () => {},
                 onModuleDeselect: () => {},
+                onModuleRename: () => {},
                 onModuleDragStart: () => {},
                 onModuleDragMove: () => {},
                 onModuleDragEnd: () => {},
@@ -500,6 +505,27 @@ class Module extends HTMLElement {
                 z-index: 2;
             }
             
+            .module-rename-input {
+                background: rgba(52, 152, 219, 0.1) !important;
+                border: 1px solid #3498db !important;
+                color: #ecf0f1 !important;
+                font-family: inherit !important;
+                font-size: inherit !important;
+                font-weight: inherit !important;
+                padding: 2px 4px !important;
+                margin: -2px -4px !important;
+                border-radius: 3px !important;
+                outline: none !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+                box-shadow: 0 0 8px rgba(52, 152, 219, 0.5) !important;
+            }
+            
+            .module-rename-input:focus {
+                background: rgba(52, 152, 219, 0.2) !important;
+                box-shadow: 0 0 12px rgba(52, 152, 219, 0.8) !important;
+            }
+            
             .module-content {
                 ${objectToCSS(this.config.contentStyle)}
                 flex: 1;
@@ -594,6 +620,110 @@ class Module extends HTMLElement {
         
         this.container.appendChild(this.header);
     }
+
+    /**
+     * Enable rename mode for the module
+     * Disables drag during rename and creates an input field
+     */
+    _enableRename() {
+        console.log(`📝 Enabling rename mode for module: ${this.name}`);
+        
+        // Disable drag during rename
+        this._isDragDisabled = true;
+        
+        // Store original text
+        const originalName = this.name;
+        
+        // Create input element
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = this.name;
+        input.className = 'module-rename-input';
+        
+        // Style the input to match header
+        input.style.cssText = `
+            background: transparent;
+            border: 1px solid #3498db;
+            color: #ecf0f1;
+            font-family: inherit;
+            font-size: inherit;
+            font-weight: inherit;
+            padding: 2px 4px;
+            margin: -2px -4px;
+            border-radius: 3px;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+        `;
+        
+        // Replace header text with input
+        this.header.textContent = '';
+        this.header.appendChild(input);
+        
+        // Focus and select all text
+        input.focus();
+        input.select();
+        
+        // Handle input events
+        const finishRename = (newName = null) => {
+            // Re-enable drag
+            this._isDragDisabled = false;
+            
+            // Get final name
+            const finalName = newName || input.value.trim() || originalName;
+            
+            // Update module name
+            if (finalName !== originalName) {
+                this.name = finalName;
+                console.log(`✅ Module renamed from "${originalName}" to "${finalName}"`);
+                
+                // Emit rename event
+                this.dispatchEvent(new CustomEvent('moduleRenamed', {
+                    detail: { 
+                        module: this, 
+                        oldName: originalName, 
+                        newName: finalName 
+                    },
+                    bubbles: true
+                }));
+                
+                // Call callback if provided
+                if (this.config.callbacks.onModuleRename) {
+                    this.config.callbacks.onModuleRename(this, originalName, finalName);
+                }
+            } else {
+                console.log(`🔄 Module rename cancelled or unchanged: ${originalName}`);
+            }
+            
+            // Restore header text
+            this.header.textContent = this.name;
+        };
+        
+        // Handle Enter key (confirm)
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                finishRename();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                finishRename(originalName); // Cancel with original name
+            }
+        });
+        
+        // Handle blur (finish rename)
+        input.addEventListener('blur', () => {
+            finishRename();
+        });
+        
+        // Prevent input events from bubbling to module
+        input.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        });
+        
+        input.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
     
     _createContent() {
         this.content = document.createElement('div');
@@ -662,11 +792,53 @@ class Module extends HTMLElement {
             }, 100);
         });
         
-        // Click events pour connexions
-        connector.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this._handleConnectorClick(connector, config, type, e);
+        // Gestion unifiée click/drag pour éviter les conflits
+        let isDragging = false;
+        let dragStarted = false;
+        let startX, startY;
+        
+        connector.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left click only
+                isDragging = false;
+                dragStarted = false;
+                startX = e.clientX;
+                startY = e.clientY;
+                
+                // Délai pour distinguer click vs drag
+                const dragThreshold = 5; // pixels
+                
+                const handleMouseMove = (moveEvent) => {
+                    const deltaX = moveEvent.clientX - startX;
+                    const deltaY = moveEvent.clientY - startY;
+                    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                    
+                    if (distance > dragThreshold && !dragStarted) {
+                        // C'est un drag, pas un click
+                        dragStarted = true;
+                        isDragging = true;
+                        document.removeEventListener('mousemove', handleMouseMove);
+                        document.removeEventListener('mouseup', handleMouseUp);
+                        
+                        // Commencer le drag
+                        this._startConnectionDrag(connector, config, type, e);
+                    }
+                };
+                
+                const handleMouseUp = (upEvent) => {
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                    
+                    if (!dragStarted) {
+                        // C'était un click simple
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this._handleConnectorClick(connector, config, type, upEvent);
+                    }
+                };
+                
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            }
         });
         
         // Touch events pour mobile avec animation conditionnelle
@@ -754,6 +926,9 @@ class Module extends HTMLElement {
                         this.style.left = `${this.config.x}px`;
                         this.style.top = `${this.config.y}px`;
                         
+                        // Mettre à jour les lignes de connexion pendant le drag
+                        this._updateConnectionLines();
+                        
                         this.config.callbacks.onModuleDragMove(this, e);
                     }
                 };
@@ -778,295 +953,855 @@ class Module extends HTMLElement {
         });
     }
     
-    // Event handlers
-    _handleModuleClick(event) {
-        this.select();
-        this.config.callbacks.onModuleClick(this, event);
-    }
+    // Système de drag & drop pour créer des connexions
     
-    _handleModuleDoubleClick(event) {
-        this.config.callbacks.onModuleDoubleClick(this, event);
-    }
-    
-    _handleConnectorClick(connector, config, type, event) {
-        if (this.config.animations.enabled && this.config.animations.connectorActive.enabled) {
-            connector.classList.add('active');
-        }
+    _startConnectionDrag(connector, config, type, event) {
+        console.log(`🎯 Début du drag de connexion: ${this.name}.${config.name}`);
         
-        if (Module.selectedConnector) {
-            // Try to create connection
-            this._attemptConnection(Module.selectedConnector, { connector, config, type, module: this });
-            if (Module.selectedConnector.connector) {
-                Module.selectedConnector.connector.classList.remove('active', 'connecting');
+        const sourceConnector = { connector, config, type, module: this };
+        
+        // Créer une ligne temporaire pour visualiser la connexion en cours
+        const tempLine = this._createTempConnectionLine(sourceConnector, event);
+        
+        // Marquer le connecteur comme étant en cours de connexion
+        this._selectConnector(sourceConnector);
+        
+        // Gestionnaires d'événements pour le drag
+        const handleMouseMove = (e) => {
+            // Store mouse coordinates for Shadow DOM search
+            this._lastMouseX = e.clientX;
+            this._lastMouseY = e.clientY;
+            
+            this._updateTempConnectionLine(tempLine, sourceConnector, e);
+            
+            // Debug drag state
+            if (Math.random() < 0.1) { // Log 10% of move events to avoid spam
+                this._debugDragState(e, 'MOVE');
             }
-            Module.selectedConnector = null;
-        } else {
-            // Select this connector
-            Module.selectedConnector = { connector, config, type, module: this };
-            if (this.config.animations.enabled) {
-                connector.classList.add('connecting');
+            
+            // Détecter le connecteur cible sous la souris using improved method
+            // Pass tempLine as element to exclude from detection
+            const targetConnector = this._findConnectorAtPosition(e.clientX, e.clientY, [tempLine]);
+            
+            if (targetConnector && !this._isSameConnector(sourceConnector, targetConnector)) {
+                // Highlight du connecteur cible potentiel
+                this._highlightTargetConnector(targetConnector);
+                console.log(`🎯 Target highlighted: ${targetConnector.module.name}.${targetConnector.config.name}`);
+            } else {
+                // Supprimer tous les highlights
+                this._clearTargetHighlights();
             }
-        }
-        
-        this.config.callbacks.onConnectorClick(connector, config, type, event);
-    }
-    
-    _attemptConnection(source, target) {
-        // Validate connection (inputs can only connect to outputs)
-        if (source.type === target.type) {
-            console.warn('Cannot connect same type connectors');
-            return false;
-        }
-        
-        // Create visual connection
-        const connectionId = `${source.module.id}_${source.config.id}_to_${target.module.id}_${target.config.id}`;
-        
-        const connection = {
-            id: connectionId,
-            source: source,
-            target: target,
-            element: this._createConnectionLine(source, target)
         };
         
-        Module.connections.set(connectionId, connection);
+        const handleMouseUp = (e) => {
+            // Store final mouse coordinates for Shadow DOM search
+            this._lastMouseX = e.clientX;
+            this._lastMouseY = e.clientY;
+            
+            // Debug drag state at end
+            this._debugDragState(e, 'END');
+            
+            // Trouver le connecteur cible using improved method BEFORE removing temp line
+            const targetConnector = this._findConnectorAtPosition(e.clientX, e.clientY, [tempLine]);
+            
+            // Supprimer la ligne temporaire
+            if (tempLine && tempLine.parentNode) {
+                tempLine.parentNode.removeChild(tempLine);
+            }
+            
+            if (targetConnector && !this._isSameConnector(sourceConnector, targetConnector)) {
+                console.log(`🎯 Connecteur cible trouvé: ${targetConnector.module.name}.${targetConnector.config.name}`);
+                // Tenter de créer la connexion
+                if (this._attemptConnection(sourceConnector, targetConnector)) {
+                    console.log(`🔗 Connexion créée par drag: ${sourceConnector.module.name}.${sourceConnector.config.name} → ${targetConnector.module.name}.${targetConnector.config.name}`);
+                }
+            } else {
+                console.log(`❌ Aucun connecteur cible valide trouvé`);
+            }
+            
+            // Nettoyer les états visuels
+            this._deselectConnector(sourceConnector);
+            this._clearTargetHighlights();
+            
+            // Supprimer les gestionnaires d'événements
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            
+            console.log('🏁 Fin du drag de connexion');
+        };
         
-        // Remove connecting state
-        source.connector.classList.remove('connecting', 'active');
-        target.connector.classList.remove('active');
+        // Ajouter les gestionnaires d'événements
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    }
+    
+    _createTempConnectionLine(sourceConnector, event) {
+        const container = this._getOrCreateConnectionContainer();
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         
-        this.config.callbacks.onConnectionCreate(connection);
+        // Style de la ligne temporaire
+        line.setAttribute('stroke', '#3498db');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('stroke-dasharray', '5,5');
+        line.setAttribute('stroke-linecap', 'round');
+        line.setAttribute('fill', 'none');
+        line.style.opacity = '0.7';
+        line.style.pointerEvents = 'none'; // Important: ne pas interférer avec elementFromPoint
+        line.classList.add('temp-connection-line');
+        
+        // Position initiale
+        const sourcePos = this._getConnectorPosition(sourceConnector);
+        line.setAttribute('x1', sourcePos.x);
+        line.setAttribute('y1', sourcePos.y);
+        line.setAttribute('x2', event.clientX);
+        line.setAttribute('y2', event.clientY);
+        
+        container.appendChild(line);
+        return line;
+    }
+    
+    _updateTempConnectionLine(line, sourceConnector, event) {
+        if (!line) return;
+        
+        const sourcePos = this._getConnectorPosition(sourceConnector);
+        line.setAttribute('x1', sourcePos.x);
+        line.setAttribute('y1', sourcePos.y);
+        line.setAttribute('x2', event.clientX);
+        line.setAttribute('y2', event.clientY);
+    }
+    
+    _findConnectorFromElement(element) {
+        if (!element) {
+            console.log(`❌ Element is null`);
+            return null;
+        }
+        
+        console.log(`🔍 Searching for connector in element:`, element.tagName, element.className, element.id);
+        
+        // Si c'est un module (SQUIRREL-MODULE), chercher dans son Shadow DOM
+        if (element.tagName === 'SQUIRREL-MODULE') {
+            console.log(`🔍 Searching inside Shadow DOM of module: ${element.id}`);
+            
+            // Accéder directement au module via son ID
+            const module = Module.modules.get(element.id);
+            if (module && module.shadowRoot) {
+                // Chercher tous les connecteurs dans le Shadow DOM
+                const connectors = module.shadowRoot.querySelectorAll('.module-connector');
+                console.log(`🔍 Found ${connectors.length} connectors in Shadow DOM`);
+                
+                // Pour chaque connecteur, vérifier s'il est à la position de la souris
+                for (const connector of connectors) {
+                    const rect = connector.getBoundingClientRect();
+                    // On utilise les coordonnées de la dernière position de la souris
+                    // (stockées dans une variable globale pour ce debug)
+                    if (this._lastMouseX >= rect.left && this._lastMouseX <= rect.right &&
+                        this._lastMouseY >= rect.top && this._lastMouseY <= rect.bottom) {
+                        
+                        console.log(`✅ Found connector at mouse position!`, connector);
+                        
+                        const connectorId = connector.dataset.connectorId;
+                        const connectorType = connector.dataset.connectorType;
+                        const dataType = connector.dataset.dataType;
+                        
+                        console.log(`🔍 Connecteur trouvé: ${module.name}.${connectorId} (${connectorType})`);
+                        
+                        // Trouver la configuration du connecteur
+                        const connectors = connectorType === 'input' ? module.inputs : module.outputs;
+                        const config = connectors.find(c => c.id === connectorId);
+                        
+                        if (config) {
+                            return {
+                                connector: connector,
+                                config: config,
+                                type: connectorType,
+                                module: module
+                            };
+                        } else {
+                            console.warn(`⚠️ Configuration du connecteur ${connectorId} introuvable`);
+                        }
+                    }
+                }
+                
+                console.log(`❌ No connector found at mouse position in Shadow DOM`);
+                return null;
+            }
+        }
+        
+        // Fallback: remonter l'arbre DOM classique pour les autres éléments
+        let current = element;
+        let depth = 0;
+        while (current && current !== document.body && depth < 10) {
+            console.log(`  └─ Level ${depth}: ${current.tagName}.${current.className} [${current.id}]`);
+            
+            if (current.classList && current.classList.contains('module-connector')) {
+                console.log(`  ✅ Found connector element!`);
+                
+                // Trouver le module propriétaire
+                const moduleElement = current.closest('squirrel-module');
+                if (moduleElement) {
+                    const module = moduleElement;
+                    const connectorId = current.dataset.connectorId;
+                    const connectorType = current.dataset.connectorType;
+                    const dataType = current.dataset.dataType;
+                    
+                    console.log(`🔍 Connecteur trouvé: ${module.name}.${connectorId} (${connectorType})`);
+                    
+                    // Trouver la configuration du connecteur
+                    const connectors = connectorType === 'input' ? module.inputs : module.outputs;
+                    const config = connectors.find(c => c.id === connectorId);
+                    
+                    if (config) {
+                        return {
+                            connector: current,
+                            config: config,
+                            type: connectorType,
+                            module: module
+                        };
+                    } else {
+                        console.warn(`⚠️ Configuration du connecteur ${connectorId} introuvable`);
+                    }
+                } else {
+                    console.warn(`⚠️ Module parent introuvable pour le connecteur`);
+                }
+            }
+            current = current.parentNode;
+            depth++;
+        }
+        
+        console.log(`❌ Aucun connecteur trouvé à cette position (searched ${depth} levels)`);
+        return null;
+    }
+    
+    /**
+     * Enhanced connector detection for drag operations
+     * Temporarily hides interfering elements to get accurate elementFromPoint results
+     */
+    _findConnectorAtPosition(x, y, excludeElements = []) {
+        // Store mouse coordinates for Shadow DOM search
+        this._lastMouseX = x;
+        this._lastMouseY = y;
+        
+        // Store original states of elements to hide
+        const elementsToHide = [
+            document.getElementById('module-connections-svg'),
+            ...excludeElements
+        ].filter(el => el); // Remove null elements
+        
+        const originalStates = elementsToHide.map(el => ({
+            element: el,
+            pointerEvents: el.style.pointerEvents,
+            visibility: el.style.visibility
+        }));
+        
+        // Temporarily hide interfering elements
+        elementsToHide.forEach(el => {
+            el.style.pointerEvents = 'none';
+            el.style.visibility = 'hidden';
+        });
+        
+        // Get element at position
+        const element = document.elementFromPoint(x, y);
+        console.log(`🎯 Element at position (${x}, ${y}):`, element?.tagName, element?.className);
+        
+        // Restore original states
+        originalStates.forEach(state => {
+            state.element.style.pointerEvents = state.pointerEvents;
+            state.element.style.visibility = state.visibility;
+        });
+        
+        // Find connector from element with Shadow DOM support
+        return this._findConnectorFromElement(element);
+    }
+    
+    _highlightTargetConnector(connectorInfo) {
+        // Supprimer les anciens highlights
+        this._clearTargetHighlights();
+        
+        // Ajouter le highlight au connecteur cible
+        if (connectorInfo && connectorInfo.connector) {
+            connectorInfo.connector.classList.add('drag-target');
+            connectorInfo.connector.style.boxShadow = '0 0 12px rgba(46, 204, 113, 0.8)';
+        }
+    }
+    
+    _clearTargetHighlights() {
+        // Supprimer tous les highlights de drag
+        const highlightedConnectors = document.querySelectorAll('.module-connector.drag-target');
+        highlightedConnectors.forEach(connector => {
+            connector.classList.remove('drag-target');
+            connector.style.boxShadow = '';
+        });
+    }
+    
+    _getOrCreateConnectionContainer() {
+        let container = document.getElementById('module-connections-svg');
+        if (!container) {
+            container = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            container.id = 'module-connections-svg';
+            container.style.position = 'fixed';
+            container.style.top = '0';
+            container.style.left = '0';
+            container.style.width = '100%';
+            container.style.height = '100%';
+            container.style.pointerEvents = 'none'; // Important: ne pas bloquer les interactions
+            container.style.zIndex = '999'; // Plus bas que les modules (1000)
+            container.classList.add('connections-layer');
+            
+            console.log('📦 Created SVG container with pointer-events: none and z-index: 999');
+            
+            document.body.appendChild(container);
+        }
+        return container;
+    }
+    
+    _getConnectionColor(source, target) {
+        // Couleur basée sur le type de données
+        const sourceType = source.config.type;
+        const targetType = target.config.type;
+        
+        // Si les types correspondent, utiliser la couleur du type
+        if (sourceType === targetType) {
+            const typeColors = {
+                audio: '#e74c3c',
+                control: '#3498db', 
+                data: '#f39c12',
+                midi: '#9b59b6',
+                video: '#e67e22'
+            };
+            return typeColors[sourceType] || '#ffffff';
+        }
+        
+        // Sinon, couleur neutre
+        return '#95a5a6';
+    }
+    
+    _updateConnectionLinePosition(line, source, target) {
+        // Obtenir les positions des connecteurs
+        const sourcePos = this._getConnectorPosition(source);
+        const targetPos = this._getConnectorPosition(target);
+        
+        line.setAttribute('x1', sourcePos.x);
+        line.setAttribute('y1', sourcePos.y);
+        line.setAttribute('x2', targetPos.x);
+        line.setAttribute('y2', targetPos.y);
+        
+        // Mettre à jour aussi la ligne visible si elle existe
+        if (line._visibleLine) {
+            line._visibleLine.setAttribute('x1', sourcePos.x);
+            line._visibleLine.setAttribute('y1', sourcePos.y);
+            line._visibleLine.setAttribute('x2', targetPos.x);
+            line._visibleLine.setAttribute('y2', targetPos.y);
+        }
+    }
+    
+    _getConnectorPosition(connectorInfo) {
+        const connector = connectorInfo.connector;
+        const rect = connector.getBoundingClientRect();
+        
+        return {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+        };
+    }
+    
+    // Méthodes utilitaires pour les connexions (manquantes)
+    
+    _isSameConnector(connector1, connector2) {
+        return (
+            connector1.module.id === connector2.module.id &&
+            connector1.config.id === connector2.config.id &&
+            connector1.type === connector2.type
+        );
+    }
+    
+    _findExistingConnection(source, target) {
+        // Chercher une connexion existante entre ces deux connecteurs (dans les deux sens)
+        const id1 = `${source.module.id}_${source.config.id}_to_${target.module.id}_${target.config.id}`;
+        const id2 = `${target.module.id}_${target.config.id}_to_${source.module.id}_${source.config.id}`;
+        
+        if (Module.connections.has(id1)) return id1;
+        if (Module.connections.has(id2)) return id2;
+        
+        return null;
+    }
+    
+    _getConnectorConnections(connectorInfo) {
+        const connections = [];
+        for (const [id, connection] of Module.connections.entries()) {
+            if (this._isSameConnector(connection.source, connectorInfo) ||
+                this._isSameConnector(connection.target, connectorInfo)) {
+                connections.push(connection);
+            }
+        }
+        return connections;
+    }
+    
+    _selectConnector(connectorInfo) {
+        if (this.config.animations.enabled) {
+            connectorInfo.connector.classList.add('connecting', 'selected');
+        }
+        
+        // Ajouter un effet visuel
+        connectorInfo.connector.style.boxShadow = '0 0 12px rgba(52, 152, 219, 0.8)';
+    }
+    
+    _deselectConnector(connectorInfo) {
+        if (connectorInfo && connectorInfo.connector) {
+            connectorInfo.connector.classList.remove('connecting', 'selected', 'active');
+            connectorInfo.connector.style.boxShadow = '';
+        }
+    }
+    
+    _removeConnection(connectionId) {
+        const connection = Module.connections.get(connectionId);
+        if (!connection) return false;
+        
+        // Supprimer la ligne visuelle et sa ligne visible associée
+        if (connection.line && connection.line.parentNode) {
+            if (connection.line._visibleLine && connection.line._visibleLine.parentNode) {
+                connection.line._visibleLine.parentNode.removeChild(connection.line._visibleLine);
+            }
+            connection.line.parentNode.removeChild(connection.line);
+        }
+        
+        // Supprimer des registres des modules
+        connection.source.module.connections.delete(connectionId);
+        connection.target.module.connections.delete(connectionId);
+        
+        // Supprimer de la map globale
+        Module.connections.delete(connectionId);
+        
+        // Événements
+        this.config.callbacks.onConnectionDelete(connection);
+        
+        // Émettre un événement personnalisé
+        this.dispatchEvent(new CustomEvent('connectionDeleted', {
+            detail: { connection, connectionId },
+            bubbles: true
+        }));
+        
+        console.log(`🗑️ Connexion supprimée: ${connection.source.module.name}.${connection.source.config.name} ↔ ${connection.target.module.name}.${connection.target.config.name}`);
         
         return true;
     }
     
     _createConnectionLine(source, target) {
-        // Create SVG line for visual connection
+        console.log(`📏 Création ligne de connexion: ${source.module.name}.${source.config.name} → ${target.module.name}.${target.config.name}`);
+        
+        // Créer un conteneur SVG si nécessaire
+        const container = this._getOrCreateConnectionContainer();
+        
+        // Créer une ligne SVG pour la connexion visuelle
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        // Implementation would depend on your connection rendering system
+        
+        // Style de base de la ligne
+        line.setAttribute('stroke', this._getConnectionColor(source, target));
+        line.setAttribute('stroke-width', '3');
+        line.setAttribute('stroke-linecap', 'round');
+        line.setAttribute('fill', 'none');
+        line.style.pointerEvents = 'auto';
+        line.style.cursor = 'pointer';
+        
+        // Ajouter une classe pour le styling CSS
+        line.classList.add('connection-line');
+        line.dataset.sourceModule = source.module.id;
+        line.dataset.targetModule = target.module.id;
+        line.dataset.sourceConnector = source.config.id;
+        line.dataset.targetConnector = target.config.id;
+        
+        // Calculer et appliquer les positions
+        this._updateConnectionLinePosition(line, source, target);
+        
+        // Ajouter un événement click pour supprimer la connexion
+        line.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const connectionId = `${source.module.id}_${source.config.id}_to_${target.module.id}_${target.config.id}`;
+            this._removeConnection(connectionId);
+            console.log('🗑️ Connexion supprimée par click sur la ligne');
+        });
+        
+        // Effet hover
+        line.addEventListener('mouseenter', () => {
+            line.setAttribute('stroke-width', '5');
+            line.style.filter = 'drop-shadow(0 0 4px rgba(255, 255, 255, 0.8))';
+        });
+        
+        line.addEventListener('mouseleave', () => {
+            line.setAttribute('stroke-width', '3');
+            line.style.filter = 'none';
+        });
+        
+        // Important: permettre les interactions uniquement sur les lignes finales
+        line.style.pointerEvents = 'stroke';
+        line.style.strokeWidth = '8'; // Zone de clic plus large
+        line.style.stroke = 'transparent'; // Stroke invisible pour la zone de clic
+        
+        // Ligne visible par-dessus
+        const visibleLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        visibleLine.setAttribute('stroke', this._getConnectionColor(source, target));
+        visibleLine.setAttribute('stroke-width', '3');
+        visibleLine.setAttribute('stroke-linecap', 'round');
+        visibleLine.setAttribute('fill', 'none');
+        visibleLine.style.pointerEvents = 'none';
+        visibleLine.classList.add('connection-line-visible');
+        
+        // Copier les attributs de position
+        this._updateConnectionLinePosition(visibleLine, source, target);
+        container.appendChild(visibleLine);
+        
+        // Stocker la référence à la ligne visible
+        line._visibleLine = visibleLine;
+        
+        console.log(`✅ Ligne de connexion créée et stylée`);
         return line;
     }
     
-    _enableRename() {
-        // Temporarily disable drag functionality during rename
-        const originalPointerEvents = this.header.style.pointerEvents;
-        const originalCursor = this.header.style.cursor;
-        this._isDragDisabled = true;
-        
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = this.name;
-        input.style.cssText = `
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid #3498db;
-            border-radius: 4px;
-            padding: 4px 8px;
-            font-size: inherit;
-            font-family: inherit;
-            color: #2c3e50;
-            width: 100%;
-            cursor: text;
-        `;
-        
-        // Prevent drag events from bubbling up from the input
-        input.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-        });
-        
-        input.addEventListener('mousemove', (e) => {
-            e.stopPropagation();
-        });
-        
-        input.addEventListener('dragstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        });
-        
-        this.header.textContent = '';
-        this.header.appendChild(input);
-        input.focus();
-        input.select();
-        
-        const finishRename = () => {
-            const newName = input.value.trim() || this.name;
-            this.name = newName;
-            this.config.name = newName;
-            this.header.textContent = newName;
-            
-            // Restore drag functionality
-            this._isDragDisabled = false;
-            this.header.style.pointerEvents = originalPointerEvents;
-            this.header.style.cursor = originalCursor;
-        };
-        
-        const cancelRename = () => {
-            this.header.textContent = this.name;
-            
-            // Restore drag functionality
-            this._isDragDisabled = false;
-            this.header.style.pointerEvents = originalPointerEvents;
-            this.header.style.cursor = originalCursor;
-        };
-        
-        input.addEventListener('blur', finishRename);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                finishRename();
-            } else if (e.key === 'Escape') {
-                cancelRename();
-            }
-        });
-    }
+    // === CONNECTION SYSTEM METHODS ===
     
-    // Public API methods
-    select() {
-        if (!this.selected) {
-            this.selected = true;
-            if (this.config.animations.enabled && this.config.animations.moduleSelected.enabled) {
-                this.container.classList.add('selected');
+    /**
+     * Handle connector click events (simple clicks, not drags)
+     */
+    _handleConnectorClick(connector, config, type, event) {
+        console.log(`🔌 Click sur connecteur: ${this.name}.${config.name} (${type})`);
+        
+        const clickedConnector = { connector, config, type, module: this };
+        
+        if (Module.selectedConnector) {
+            // Il y a déjà un connecteur sélectionné - tenter une connexion
+            if (this._isSameConnector(Module.selectedConnector, clickedConnector)) {
+                // Clic sur le même connecteur - désélectionner
+                this._deselectConnector(Module.selectedConnector);
+                Module.selectedConnector = null;
+                console.log('🔄 Connecteur désélectionné');
+            } else {
+                // Tenter de créer une connexion
+                if (this._attemptConnection(Module.selectedConnector, clickedConnector)) {
+                    console.log(`🔗 Connexion créée: ${Module.selectedConnector.module.name}.${Module.selectedConnector.config.name} → ${clickedConnector.module.name}.${clickedConnector.config.name}`);
+                }
+                
+                // Nettoyer la sélection
+                this._deselectConnector(Module.selectedConnector);
+                Module.selectedConnector = null;
             }
-            this.config.callbacks.onModuleSelect(this);
+        } else {
+            // Aucun connecteur sélectionné - sélectionner celui-ci
+            this._selectConnector(clickedConnector);
+            Module.selectedConnector = clickedConnector;
+            console.log(`📌 Connecteur sélectionné: ${this.name}.${config.name}`);
         }
+        
+        // Callback utilisateur
+        this.config.callbacks.onConnectorClick(connector, config, type, event);
     }
     
-    deselect() {
+    /**
+     * Attempt to create a connection between two connectors
+     */
+    _attemptConnection(source, target) {
+        console.log(`🔍 Tentative de connexion: ${source.module.name}.${source.config.name} → ${target.module.name}.${target.config.name}`);
+        
+        // Validation de base
+        if (this._isSameConnector(source, target)) {
+            console.log('❌ Cannot connect a connector to itself');
+            return false;
+        }
+        
+        // Vérifier si une connexion existe déjà
+        const existingConnectionId = this._findExistingConnection(source, target);
+        if (existingConnectionId) {
+            console.log('🗑️ Connection already exists, removing it');
+            this._removeConnection(existingConnectionId);
+            return false; // On a supprimé au lieu de créer
+        }
+        
+        // Validation type (input ne peut pas se connecter à input, etc.)
+        if (source.type === target.type) {
+            console.log('❌ Cannot connect same connector types (input-input or output-output)');
+            return false;
+        }
+        
+        // Créer l'ID de connexion
+        const connectionId = `${source.module.id}_${source.config.id}_to_${target.module.id}_${target.config.id}`;
+        
+        // Créer la ligne visuelle
+        const line = this._createConnectionLine(source, target);
+        
+        // Créer l'objet de connexion
+        const connection = {
+            id: connectionId,
+            source: source,
+            target: target,
+            line: line,
+            created: new Date().toISOString()
+        };
+        
+        // Enregistrer la connexion
+        Module.connections.set(connectionId, connection);
+        source.module.connections.add(connectionId);
+        target.module.connections.add(connectionId);
+        
+        // Ajouter la ligne au DOM
+        const container = this._getOrCreateConnectionContainer();
+        container.appendChild(line);
+        
+        // Callbacks et événements
+        this.config.callbacks.onConnectionCreate(connection);
+        
+        // Émettre un événement personnalisé
+        this.dispatchEvent(new CustomEvent('connectionCreated', {
+            detail: { connection, connectionId },
+            bubbles: true
+        }));
+        
+        console.log(`✅ Connexion créée: ${source.module.name}.${source.config.name} ↔ ${target.module.name}.${target.config.name}`);
+        
+        return true;
+    }
+    
+    /**
+     * Handle module click events
+     */
+    _handleModuleClick(event) {
+        // Ne pas traiter si c'est un clic sur un connecteur
+        if (event.target.classList.contains('module-connector')) {
+            return;
+        }
+        
+        console.log(`📱 Module clicked: ${this.name}`);
+        
+        // Toggle selection
+        this.selected = !this.selected;
+        
         if (this.selected) {
-            this.selected = false;
+            this.container.classList.add('selected');
+            if (this.config.animations.enabled && this.config.animations.moduleSelected.enabled) {
+                // L'animation sera gérée par CSS
+            }
+        } else {
             this.container.classList.remove('selected');
-            this.config.callbacks.onModuleDeselect(this);
         }
+        
+        // Callbacks et événements
+        this.config.callbacks.onModuleClick(this, event);
+        
+        this.dispatchEvent(new CustomEvent('moduleClick', {
+            detail: { module: this, selected: this.selected },
+            bubbles: true
+        }));
     }
     
-    setPosition(x, y) {
-        this.config.x = x;
-        this.config.y = y;
-        this.style.left = `${x}px`;
-        this.style.top = `${y}px`;
+    /**
+     * Handle module double click events
+     */
+    _handleModuleDoubleClick(event) {
+        console.log(`🖱️ Module double-clicked: ${this.name}`);
+        
+        this.config.callbacks.onModuleDoubleClick(this, event);
+        
+        this.dispatchEvent(new CustomEvent('moduleDoubleClick', {
+            detail: { module: this },
+            bubbles: true
+        }));
     }
     
-    setSize(width, height) {
-        this.config.width = width;
-        this.config.height = height;
-        this.style.width = `${width}px`;
-        this.style.height = `${height}px`;
-        this._updateConnectorPositions();
-    }
+    // === PUBLIC API METHODS ===
     
-    // API pour contrôler les animations dynamiquement
-    enableAnimations() {
-        this.config.animations.enabled = true;
-        this.setupAnimations(this.config);
-        this._regenerateStyles();
-        console.log('🎬 Animations activées pour module:', this.id);
-    }
-    
-    disableAnimations() {
-        this.config.animations.enabled = false;
-        this._regenerateStyles();
-        console.log('🚫 Animations désactivées pour module:', this.id);
-    }
-    
-    setAnimationConfig(animationName, config) {
-        if (this.config.animations[animationName]) {
-            this.config.animations[animationName] = { ...this.config.animations[animationName], ...config };
-            this._regenerateStyles();
-            console.log(`🎯 Animation ${animationName} mise à jour pour module:`, this.id);
+    /**
+     * Connect this module's output to another module's input
+     * @param {Module} targetModule - Target module to connect to
+     * @param {string} outputId - ID of output connector on this module
+     * @param {string} inputId - ID of input connector on target module
+     * @returns {boolean} - True if connection was successful
+     */
+    connectTo(targetModule, outputId, inputId) {
+        console.log(`🔗 API connectTo: ${this.name}.${outputId} → ${targetModule.name}.${inputId}`);
+        
+        // Find source output
+        const outputConfig = this.outputs.find(o => o.id === outputId);
+        if (!outputConfig) {
+            console.error(`❌ Output connector '${outputId}' not found on module '${this.name}'`);
+            return false;
         }
-    }
-    
-    _regenerateStyles() {
-        // Régénère les styles dans le Shadow DOM
-        const oldStyles = this.shadowRoot.querySelector('style');
-        if (oldStyles) {
-            oldStyles.remove();
+        
+        // Find target input
+        const inputConfig = targetModule.inputs.find(i => i.id === inputId);
+        if (!inputConfig) {
+            console.error(`❌ Input connector '${inputId}' not found on module '${targetModule.name}'`);
+            return false;
         }
-        const newStyles = this._generateStyles();
-        this.shadowRoot.insertBefore(newStyles, this.shadowRoot.firstChild);
-    }
-    
-    _updateConnectorPositions() {
-        // Recalculate connector positions after resize
-        [...this.inputElements.values(), ...this.outputElements.values()].forEach((connector, index) => {
-            const type = connector.classList.contains('connector-input') ? 'input' : 'output';
-            const connectors = type === 'input' ? this.inputs : this.outputs;
-            const spacing = this.config.connectorConfig.spacing === 'auto' 
-                ? (this.config.height - 60) / Math.max(1, connectors.length - 1)
-                : this.config.connectorConfig.spacing;
-            
-            const connectorIndex = type === 'input' 
-                ? this.inputs.findIndex(c => c.id === connector.dataset.connectorId)
-                : this.outputs.findIndex(c => c.id === connector.dataset.connectorId);
-            
-            const y = 40 + (connectorIndex * spacing);
-            connector.style.top = `${y}px`;
-        });
-    }
-    
-    addInput(config) {
-        const input = { id: `input_${Date.now()}`, type: 'data', name: 'Input', ...config };
-        this.inputs.push(input);
-        const connector = this._createConnector(input, 'input', this.inputs.length - 1);
-        this.inputElements.set(input.id, connector);
-        this.container.appendChild(connector);
-        this._updateConnectorPositions();
-        return input;
-    }
-    
-    addOutput(config) {
-        const output = { id: `output_${Date.now()}`, type: 'data', name: 'Output', ...config };
-        this.outputs.push(output);
-        const connector = this._createConnector(output, 'output', this.outputs.length - 1);
-        this.outputElements.set(output.id, connector);
-        this.container.appendChild(connector);
-        this._updateConnectorPositions();
-        return output;
-    }
-    
-    setContent(content) {
-        if (typeof content === 'string') {
-            this.content.textContent = content;
-        } else if (content instanceof HTMLElement) {
-            this.content.innerHTML = '';
-            this.content.appendChild(content);
+        
+        // Get DOM elements
+        const outputElement = this.outputElements.get(outputId);
+        const inputElement = targetModule.inputElements.get(inputId);
+        
+        if (!outputElement || !inputElement) {
+            console.error(`❌ Could not find DOM elements for connectors`);
+            return false;
         }
-    }
-    
-    getConnections() {
-        return Array.from(Module.connections.values()).filter(conn => 
-            conn.source.module === this || conn.target.module === this
-        );
-    }
-    
-    getPosition() {
-        return {
-            x: this.config.position?.x || 0,
-            y: this.config.position?.y || 0
+        
+        // Create connector objects
+        const source = { 
+            connector: outputElement, 
+            config: outputConfig, 
+            type: 'output', 
+            module: this 
         };
+        const target = { 
+            connector: inputElement, 
+            config: inputConfig, 
+            type: 'input', 
+            module: targetModule 
+        };
+        
+        // Attempt connection
+        return this._attemptConnection(source, target);
     }
     
-    setPosition(x, y) {
-        this.config.position = { x, y };
-        this.style.left = `${x}px`;
-        this.style.top = `${y}px`;
-        this._updateConnectionLines();
+    /**
+     * Disconnect all connections from this module
+     * @returns {number} - Number of connections removed
+     */
+    disconnectAll() {
+        console.log(`🗑️ Disconnecting all connections from module: ${this.name}`);
+        
+        let disconnectedCount = 0;
+        
+        // Get copy of connections to avoid modification during iteration
+        const connectionIds = Array.from(this.connections);
+        
+        for (const connectionId of connectionIds) {
+            if (this._removeConnection(connectionId)) {
+                disconnectedCount++;
+            }
+        }
+        
+        console.log(`✅ Disconnected ${disconnectedCount} connections from ${this.name}`);
+        return disconnectedCount;
     }
     
-    destroy() {
-        // Remove all connections
-        this.getConnections().forEach(conn => {
-            Module.connections.delete(conn.id);
-            if (conn.element && conn.element.parentElement) {
-                conn.element.parentElement.removeChild(conn.element);
+    /**
+     * Update connection line positions (called during module drag)
+     */
+    _updateConnectionLines() {
+        for (const connectionId of this.connections) {
+            const connection = Module.connections.get(connectionId);
+            if (connection && connection.line) {
+                this._updateConnectionLinePosition(connection.line, connection.source, connection.target);
+            }
+        }
+    }
+    
+    // === DEBUG AND TESTING METHODS ===
+    
+    /**
+     * Test method to debug drag connection issues
+     */
+    static testDragConnection() {
+        console.log('\n🧪 === TEST DRAG CONNECTION ===');
+        
+        // Find all modules
+        const modules = Array.from(Module.modules.values());
+        console.log(`📊 Found ${modules.length} modules:`, modules.map(m => m.name));
+        
+        if (modules.length < 2) {
+            console.error('❌ Need at least 2 modules to test drag connections');
+            return;
+        }
+        
+        const sourceModule = modules[0];
+        const targetModule = modules[1];
+        
+        console.log(`🎯 Testing drag from ${sourceModule.name} to ${targetModule.name}`);
+        
+        // Test connector detection
+        if (sourceModule.outputs.length > 0 && targetModule.inputs.length > 0) {
+            const outputId = sourceModule.outputs[0].id;
+            const inputId = targetModule.inputs[0].id;
+            
+            const outputElement = sourceModule.outputElements.get(outputId);
+            const inputElement = targetModule.inputElements.get(inputId);
+            
+            console.log('🔌 Source output element:', outputElement);
+            console.log('🔌 Target input element:', inputElement);
+            
+            if (outputElement && inputElement) {
+                // Test positions
+                const outputRect = outputElement.getBoundingClientRect();
+                const inputRect = inputElement.getBoundingClientRect();
+                
+                console.log('📍 Output position:', {
+                    x: outputRect.left + outputRect.width / 2,
+                    y: outputRect.top + outputRect.height / 2,
+                    rect: outputRect
+                });
+                
+                console.log('📍 Input position:', {
+                    x: inputRect.left + inputRect.width / 2,
+                    y: inputRect.top + inputRect.height / 2,
+                    rect: inputRect
+                });
+                
+                // Test element detection at input position
+                const testX = inputRect.left + inputRect.width / 2;
+                const testY = inputRect.top + inputRect.height / 2;
+                
+                console.log(`🎯 Testing element detection at (${testX}, ${testY})`);
+                
+                const elementAtPosition = document.elementFromPoint(testX, testY);
+                console.log('🔍 Element found at position:', elementAtPosition);
+                
+                const connectorFound = sourceModule._findConnectorFromElement(elementAtPosition);
+                console.log('🔗 Connector found:', connectorFound);
+                
+                // Test API connection
+                console.log('🚀 Testing API connection...');
+                const apiResult = sourceModule.connectTo(targetModule, outputId, inputId);
+                console.log('✅ API connection result:', apiResult);
+            }
+        }
+        
+        console.log('🧪 === TEST COMPLETE ===\n');
+    }
+    
+    /**
+     * Debug method to show detailed drag state
+     */
+    _debugDragState(event, phase) {
+        console.log(`\n🐛 DRAG DEBUG [${phase}] at (${event.clientX}, ${event.clientY})`);
+        
+        // Test element detection with different methods
+        const methods = [
+            { name: 'direct', fn: () => document.elementFromPoint(event.clientX, event.clientY) },
+            { name: 'with SVG hidden', fn: () => {
+                const svg = document.getElementById('module-connections-svg');
+                const originalPointer = svg?.style.pointerEvents;
+                if (svg) svg.style.pointerEvents = 'none';
+                const element = document.elementFromPoint(event.clientX, event.clientY);
+                if (svg) svg.style.pointerEvents = originalPointer;
+                return element;
+            }},
+            { name: 'enhanced method', fn: () => this._findConnectorAtPosition(event.clientX, event.clientY) }
+        ];
+        
+        methods.forEach(method => {
+            try {
+                const result = method.fn();
+                console.log(`  ${method.name}:`, result?.tagName, result?.className, result);
+                
+                if (method.name !== 'enhanced method') {
+                    const connector = this._findConnectorFromElement(result);
+                    console.log(`    └─ connector found:`, connector?.module?.name, connector?.config?.name);
+                }
+            } catch (error) {
+                console.error(`  ${method.name} failed:`, error);
             }
         });
         
-        // Remove from registry
-        Module.modules.delete(this.id);
-        
-        // Remove from DOM
-        if (this.parentElement) {
-            this.parentElement.removeChild(this);
-        }
+        console.log('🐛 END DEBUG\n');
     }
+
+    // ...existing code...
 }
 
 // Register Web Component

@@ -16,6 +16,7 @@
 // import './examples/matrices_bombe.js'; // Version avec effets bombé ultra-premium
 
 // Exemples Module avec Web Components
-import './examples/modules_configurable.js'; // Version avec animations configurables - NOUVEAU !
+import './examples/modules_connections.js'; // Version avec système de liaisons complet - NOUVEAU !
+// import './examples/modules_configurable.js'; // Version avec animations configurables
 // import './examples/modules_validation.js'; // Test de validation finale
 // import './examples/modules_test.js'; // Test simple pour validation
