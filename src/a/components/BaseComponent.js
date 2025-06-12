@@ -12,6 +12,7 @@
 
 // Import du système de particules modernes
 import { sharedParticles } from '../utils/shared-particles.js';
+import { universalProcessor, processParticle, processContainerStyle } from '../utils/universal-particle-processor.js';
 
 export class BaseComponent extends HTMLElement {
     static observedAttributes = ['x', 'y', 'width', 'height', 'backgroundColor', 'opacity', 'smooth'];
@@ -121,6 +122,40 @@ export class BaseComponent extends HTMLElement {
         });
         return results;
     }
+
+    /**
+     * 🎨 API SPÉCIALISÉE POUR CONTAINER STYLE
+     * Traite directement les styles complexes avec le processeur universel
+     */
+    setContainerStyle(containerStyle, options = {}) {
+        // Trouver l'élément cible approprié selon le type de Web Component
+        let target;
+        
+        if (this.shadowRoot) {
+            // Priorité : élément avec classe .module-container, .list-container, etc.
+            target = this.shadowRoot.querySelector('.module-container') ||
+                    this.shadowRoot.querySelector('.list-container') ||
+                    this.shadowRoot.querySelector('.table-wrapper') ||
+                    this.shadowRoot.querySelector('.matrix-container') ||
+                    this.shadowRoot.querySelector('.slider-container') ||
+                    this.shadowRoot.querySelector('.particle-container') ||
+                    this.shadowRoot.firstElementChild;
+        }
+        
+        // Fallback sur l'élément lui-même
+        if (!target) {
+            target = this;
+        }
+        
+        const extendedOptions = {
+            ...options,
+            webComponent: true,
+            shadowRoot: this.shadowRoot,
+            baseElement: this
+        };
+
+        return processContainerStyle(target, containerStyle, extendedOptions);
+    }
     
     /**
      * ⚡ PROCESSEUR BATCH MODERNE
@@ -147,40 +182,26 @@ export class BaseComponent extends HTMLElement {
     }
     
     /**
-     * ⚡ PROCESSEUR CORE DE PARTICULES
+     * ⚡ PROCESSEUR CORE DE PARTICULES - VERSION UNIVERSELLE
+     * Utilise le processeur universel pour tous les types de particles
      */
     _processParticle(name, value, options = {}) {
-        // Vérifier le cache
-        const cacheKey = `${name}_${JSON.stringify(value)}`;
-        if (this._particleCache.has(cacheKey) && !options.force) {
-            return this._particleCache.get(cacheKey);
-        }
+        // Élément cible (Shadow DOM ou élément principal)
+        const target = this.shadowRoot?.querySelector('.particle-container') || 
+                      this.shadowRoot?.firstElementChild || 
+                      this;
+        
+        // Options étendues pour Web Components
+        const extendedOptions = {
+            ...options,
+            webComponent: true,
+            shadowRoot: this.shadowRoot,
+            baseElement: this,
+            withTransition: options.withTransition !== false
+        };
 
-        let result;
-
-        try {
-            // 1. Essayer les particules partagées modernes
-            if (this._sharedParticles.has(name)) {
-                result = this._applySharedParticle(name, value, options);
-            }
-            // 2. Essayer le système Framework A traditionnel
-            else if (this._tryFrameworkA(name, value, options)) {
-                result = true;
-            }
-            // 3. Fallback CSS direct
-            else {
-                result = this._applyFallback(name, value, options);
-            }
-
-            // Mettre en cache
-            this._particleCache.set(cacheKey, result);
-            
-        } catch (error) {
-            console.error(`Error processing particle '${name}':`, error);
-            result = this._applyFallback(name, value, options);
-        }
-
-        return result;
+        // 🚀 UTILISER LE PROCESSEUR UNIVERSEL
+        return universalProcessor.process(target, name, value, extendedOptions);
     }
 
     /**
