@@ -371,15 +371,31 @@ class Module extends BaseComponent {
         };
         
         const objectToCSS = (obj) => {
-            return Object.entries(obj).map(([key, value]) => {
-                const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-                
-                if (key === 'boxShadow') {
-                    value = formatShadow(value);
-                }
-                
-                return `${cssKey}: ${value};`;
-            }).join('\\n    ');
+            if (!obj) return '';
+            
+            return Object.entries(obj)
+                .filter(([key, value]) => value !== null && value !== undefined)
+                .map(([key, value]) => {
+                    // Convert camelCase to kebab-case
+                    const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                    
+                    // Handle array values (like multiple box-shadows)
+                    if (Array.isArray(value)) {
+                        return `${cssKey}: ${value.join(', ')};`;
+                    }
+                    
+                    // Handle special cases
+                    if (key === 'boxShadow') {
+                        value = formatShadow(value);
+                    }
+                    
+                    // Handle number values that need 'px'
+                    if (typeof value === 'number' && this.needsPx(cssKey)) {
+                        return `${cssKey}: ${value}px;`;
+                    }
+                    
+                    return `${cssKey}: ${value};`;
+                }).join('\n    ');
         };
         
         style.textContent = `
@@ -1300,6 +1316,21 @@ class Module extends BaseComponent {
         connectors.forEach(connector => {
             connector.style.transition = `all ${animations.connectorHover.duration} ${animations.connectorHover.timing}`;
         });
+    }
+    
+    /**
+     * Check if CSS property needs 'px' unit
+     */
+    needsPx(cssProperty) {
+        const pxProperties = new Set([
+            'width', 'height', 'top', 'left', 'right', 'bottom',
+            'margin', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+            'padding', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
+            'border-width', 'border-top-width', 'border-right-width', 'border-bottom-width', 'border-left-width',
+            'border-radius', 'font-size', 'line-height', 'text-indent',
+            'max-width', 'max-height', 'min-width', 'min-height'
+        ]);
+        return pxProperties.has(cssProperty);
     }
 }
 
