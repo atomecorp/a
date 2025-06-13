@@ -9,7 +9,6 @@
 
 // Import du système moderne centralisé
 import { BaseComponent } from './BaseComponent.js';
-import { UniversalParticleProcessor } from '../utils/universal-particle-processor.js';
 
 class Module extends BaseComponent {
     static modules = new Map(); // Registry of all modules
@@ -361,9 +360,7 @@ class Module extends BaseComponent {
         this.shadowRoot.appendChild(this.container);
         
         // 🚀 APPLIQUER CONTAINER STYLE AVEC LE PROCESSEUR UNIVERSEL
-        if (this.config.containerStyle) {
-            this.setContainerStyle(this.config.containerStyle);
-        }
+       
     }
     
     _generateStyles() {

@@ -11,7 +11,7 @@
 
 import { BaseComponent } from './BaseComponent.js';
 
-class SquirrelToggleButton extends BaseComponent {
+class Button extends BaseComponent {
     constructor(config = {}) {
         super(); // Appeler le constructeur de BaseComponent
         
@@ -322,6 +322,6 @@ class SquirrelToggleButton extends BaseComponent {
 }
 
 // Enregistrement du Web Component
-customElements.define('squirrel-toggle-button', SquirrelToggleButton);
+customElements.define('squirrel-toggle-button', Button);
 
-export default SquirrelToggleButton;
+export default Button;

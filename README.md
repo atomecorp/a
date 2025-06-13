@@ -1,4 +1,4 @@
-# 🐿️ Squirrel Framework + Audio Integration
+# 🐿️ Squirrel Framework
 
 ## 🎯 Overview
 
@@ -9,7 +9,7 @@ Modern hybrid framework combining the flexibility of an ES6 module system, audio
 ### **Frontend (JavaScript + Audio)**
 - **Squirrel Framework** - ES6 modular system with dynamic loading
 - **WaveSurfer.js Integration** - Professional audio waveform visualization
-- **Audio Components** - Module, Slider, Matrix, WaveSurfer
+- **WebComponent** -  WaveSurfer Module, Slider, Matrix,
 - **Tauri Integration** - Native desktop application
 
 ### **Audio Features**
