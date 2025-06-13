@@ -290,6 +290,63 @@ const createOutlineButton = (config) => createButton({
   }
 });
 
+// === SYSTÈME DE PRESETS ===
+const buttonPresets = {
+  materialSwitch: (config = {}) => {
+    const baseSkin = {
+      container: {
+        position: 'relative',
+        width: '60px',
+        height: '34px',
+        padding: '0',
+        borderRadius: '17px',
+        backgroundColor: '#ccc',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        fontFamily: 'Roboto, Arial, sans-serif',
+        fontSize: '0px'
+      },
+      icon: {
+        position: 'absolute',
+        left: '2px',
+        top: '2px',
+        width: '30px',
+        height: '30px',
+        borderRadius: '50%',
+        backgroundColor: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '0px',
+        transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        transform: 'translateX(0px)'
+      }
+    };
+    return {
+      ...config,
+      skin: {
+        ...baseSkin,
+        ...(config.skin || {})
+      },
+      icon: config.icon || '○',
+      text: config.text || 'OFF',
+      id: config.id || 'material-toggle',
+    };
+  }
+};
+
+// Ajout d'une méthode utilitaire sur Button pour le preset
+function materialSwitch(config) {
+  return createButton(buttonPresets.materialSwitch(config));
+}
+
 // === EXPORT ===
 export {
   createButton,
@@ -313,5 +370,6 @@ export default {
   danger: createDangerButton,
   warning: createWarningButton,
   icon: createIconButton,
-  outline: createOutlineButton
+  outline: createOutlineButton,
+  materialSwitch,
 };
