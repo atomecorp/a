@@ -1,4 +1,14 @@
 // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
+
+const creator = (element, props) => {
+  // Génération automatique d'ID si absent
+  if (!element.id) {
+    element.id = `el_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  }
+  
+  // Logging simple
+};
+
 // Cache pour templates et conversions de styles
 const body = document.body;
 const createElement = document.createElement.bind(document);
@@ -173,6 +183,9 @@ const $ = (id, props = {}) => {
   
   // Alias pour le style
   element._ = element.style;
+
+   // 🎯 APPEL DU CREATOR ICI
+  creator(element, merged);
   
   // Parent (support des sélecteurs)
   const parent = merged.parent || body;
