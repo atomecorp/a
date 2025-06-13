@@ -5,44 +5,44 @@
 
 (async () => {
   try {
-    // Import silencieux
+    // Import silencieux des APIs et du core Squirrel
     await import('../squirrel/apis.js');
     const { $, define, observeMutations } = await import('../squirrel/squirrel.js');
 
-    // Exposition globale
+    // Exposition globale des utilitaires
     window.$ = $;
     window.define = define;
     window.observeMutations = observeMutations;
     window.body = document.body;
     window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
-    // Chargement application
+    // Import des composants
+  const ButtonModule = await import('../squirrel/components/Buttons.js');
+window.Button = ButtonModule.default; //
+  
+
+    // Chargement de l'application principale
     await import('../application/index.js');
 
   } catch (error) {
-    // SEULE erreur affichée si problème
-    console.error('❌ Erreur:', error.message);
-    console.error(error.stack);
+    // Gestion centralisée des erreurs
+    console.error('❌ Erreur lors de l\'initialisation:', error.message);
+    console.error('📍 Stack:', error.stack);
   }
 })();
 
-// Capture erreurs globales (silencieuse)
+// Capture des erreurs globales non gérées
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('❌ Erreur:', event.reason);
+  console.error('❌ Erreur Promise non gérée:', event.reason);
   event.preventDefault();
 });
-try {
-  const { $, define, observeMutations } = await import('../squirrel/squirrel.js');
-  window.$ = $;
-  window.define = define;
-  window.observeMutations = observeMutations;
-  window.body = document.body;
-  window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
-  await import('../application/index.js');
-} catch (error) {
-  console.error('❌ Erreur import:', error);
-  console.error('📍 Stack:', error.stack);
-}
+
+// import Button from '../squirrel/components/Buttons.js';
+
+
+
+
+// import('../application/index.js');
 
 // import Button from '../squirrel/components/Button.js';
 // import Module from '../squirrel/components/Module.js';

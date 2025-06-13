@@ -1,171 +1,118 @@
+// / === 🎉 Démonstrations ===
 
-// // 1 - standard version
-// const A = p => {
-//   const el = document.createElement(p.markup || 'div');
-//   const styles = [];
+// 1. Template basique
+define('box', {
+  tag: 'div',
+  class: 'box',
+  css: {
+    width: '100px',
+    height: '100px',
+    backgroundColor: '#f00',
+    transition: 'all 0.5s ease',
+    margin: '10px'
+  }
+});
+
+// 2. Animation avec CSS
+const animatedBox = $('box', {
+  parent: document.body,
+  onmouseover: () => animatedBox.$({
+    css: {
+      width: '200px',
+      height: '200px',
+      backgroundColor: '#0f0'
+    }
+  }),
+  onmouseout: () => animatedBox.$({
+    css: {
+      width: '100px',
+      height: '100px',
+      backgroundColor: '#f00'
+    }
+  })
+});
+
+// 3. Animation JS personnalisée
+const jsAnimatedBox = $('box', {
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0'
+  },
+  text: 'Cliquez-moi !',
+  onclick: () => {
+    jsAnimatedBox.animate(
+      { marginLeft: '200' },
+      { duration: 500, easing: 'ease-in-out' }
+    );
+  },
+  parent: body
+});
+
+// Ajouter une méthode animate() personnalisée
+jsAnimatedBox.animate = (keyframes, options = {}) => {
+  const {
+    duration = 300,
+    easing = 'linear',
+    delay = 0
+  } = options;
+
+  let start = null;
+  const computedStyle = window.getComputedStyle(jsAnimatedBox);
   
-//   for (const [k, v] of Object.entries(p)) {
-//     if (k === 'attach' || k === 'markup') continue;
+  const initial = {}, target = {};
+  
+  for (const prop in keyframes) {
+    initial[prop] = parseFloat(computedStyle[toKebabCase(prop)]);
+    target[prop] = parseFloat(keyframes[prop]);
+  }
+
+  const step = (timestamp) => {
+    if (!start) start = timestamp;
+    const progress = Math.min((timestamp - start) / duration, 1);
     
-//     if (k === 'id') el.id = v;
-//     else if (k === 'text') el.textContent = v;
-//     else if (k === 'backgroundcolor') styles.push(`background-color:${v}`);
-//     else if (k in el.style) styles.push(`${k.replace(/([A-Z])/g, '-$1').toLowerCase()}:${v}`);
-//     else el.setAttribute(k, v);
-//   }
+    for (const prop in keyframes) {
+      const value = initial[prop] + (target[prop] - initial[prop]) * progress;
+      jsAnimatedBox.style.setProperty(toKebabCase(prop), value + 'px');
+    }
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    }
+  };
   
-//   // Une seule assignation CSS
-//   if (styles.length) el.style.cssText = styles.join(';');
-  
-//   (p.attach === 'body' ? body : document.querySelector(p.attach) || body).appendChild(el);
-//   return el;
-// };
+  setTimeout(() => requestAnimationFrame(step), delay);
+};
 
-// // Test avec vos nouveaux attributs
-// const html_container = A({
-//   attach: 'body',
-//   id: 'main_html_container',
-//   position: 'absolute',
-//   text: 'This is a main HTML container',
-//   left: "56px",
-//   top: "120px",
-//   width: '333px',
-//   height: '234px',
-//   color: 'white',
-//   backgroundcolor: 'rgba(255, 0, 255, 0.8)',
-//   overflow: 'hidden',
-//   filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))',
-//   draggable: true
-// });
+// 4. Observation des mutations
+const logArea = $('log', {
+  tag: 'div',
+  css: {
+    marginTop: '20px',
+    padding: '10px',
+    border: '1px solid #ccc',
+    minHeight: '100px'
+  },
+  parent: body
+});
 
-// html_container.style.left = '356px';
+observeMutations(animatedBox, (mutation) => {
+  logArea.$({
+    text: `Mutation détectée : ${mutation.type} - ${new Date().toLocaleTimeString()}`
+  });
+});
 
+// 5. Bouton pour déclencher une mutation
+$('btn', {
+  text: 'Modifier le DOM',
+  css: {
+    padding: '10px 20px',
+    cursor: 'pointer',
+    backgroundColor: '#eee'
+  },
+  onclick: () => {
+    animatedBox.textContent = 'Contenu modifié !';
+  },
+  parent: body
+});
 
-
-
-// /// 2  version WebComponents
-
-// class AElement extends HTMLElement {
-//   connectedCallback() {
-//     const styles = [];
-    
-//     for (const {name, value} of this.attributes) {
-//       if (name === 'text') this.textContent = value;
-//       else if (name === 'backgroundcolor') styles.push(`background-color:${value}`);
-//       else if (name in this.style) styles.push(`${name.replace(/([A-Z])/g, '-$1').toLowerCase()}:${value}`);
-//     }
-    
-//     if (styles.length) this.style.cssText = styles.join(';');
-//   }
-// }
-
-// // Enregistrement du Web Component
-// customElements.define('a-element', AElement);
-
-// // Factory qui crée le Web Component
-// const A = p => {
-//   const el = document.createElement('a-element');
-  
-//   for (const [k, v] of Object.entries(p)) {
-//     if (k === 'attach') continue;
-//     el.setAttribute(k, v);
-//   }
-  
-//   (p.attach === 'body' ? document.body : document.querySelector(p.attach) || document.body).appendChild(el);
-//   return el;
-// };
-
-// // Usage - crée maintenant un VRAI Web Component
-// const html_container = A({
-//   attach: 'body',
-//   id: 'main_html_container',
-//   position: 'absolute',
-//   text: 'This is a main HTML container',
-//   left: "56px",
-//   top: "120px",
-//   width: '333px',
-//   height: '234px',
-//   color: 'white',
-//   backgroundcolor: 'rgba(255, 0, 255, 0.8)',
-//   overflow: 'hidden',
-//   filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))',
-//   draggable: true
-// });
-
-// console.log(html_container.tagName); // "A-ELEMENT" = Web Component
-// html_container.style.left = '356px';
-
-
-
-
-// // 3 version external function to convert custom syntax to standard syntax for Web Components
-
-// function convertToWebComponentProps(props) {
-//   const { attach, markup, ...rest } = props;
-//   const converted = {};
-  
-//   for (const [key, value] of Object.entries(rest)) {
-//     if (key === 'backgroundcolor' || key === 'backgroundColor') {
-//       converted['background-color'] = value;
-//     } else if (key in document.createElement('div').style) {
-//       // Convertir camelCase → kebab-case
-//       converted[key.replace(/([A-Z])/g, '-$1').toLowerCase()] = value;
-//     } else {
-//       converted[key] = value;
-//     }
-//   }
-  
-//   return { converted, attach };
-// }
-
-// // Web Component ultra-simple
-// class AElement extends HTMLElement {
-//   connectedCallback() {
-//     const styles = [];
-    
-//     for (const {name, value} of this.attributes) {
-//       if (name === 'text') {
-//         this.textContent = value;
-//       } else if (name.includes('-') || name in this.style) {
-//         styles.push(`${name}:${value}`);
-//       }
-//     }
-    
-//     if (styles.length) this.style.cssText = styles.join(';');
-//   }
-// }
-
-// customElements.define('a-element', AElement);
-
-// // Factory utilisant le convertisseur
-// const A = (props) => {
-//   const { converted, attach } = convertToWebComponentProps(props);
-//   const el = document.createElement('a-element');
-  
-//   for (const [key, value] of Object.entries(converted)) {
-//     el.setAttribute(key, value);
-//   }
-  
-//   (attach === 'body' ? document.body : document.querySelector(attach) || document.body).appendChild(el);
-//   return el;
-// };
-
-// // Usage identique
-// const html_container = A({
-//   attach: 'body',
-//   id: 'main_html_container',  
-//   position: 'absolute',
-//   text: 'This is a main HTML container',
-//   left: "56px",
-//   top: "120px",
-//   width: '333px',
-//   height: '234px',
-//   color: 'white',
-//   backgroundColor: 'rgba(255, 0, 255, 0.8)', // Marche avec les deux
-//   backgroundcolor: 'rgba(255, 0, 255, 0.8)', // syntaxes
-//   overflow: 'hidden',
-//   filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.2))',
-//   draggable: true
-// });
-
-// html_container.style.left = '356px';
+puts('hello');
