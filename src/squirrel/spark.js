@@ -18,10 +18,14 @@
 
     // Import des composants
   const ButtonModule = await import('./components/button_builder.js');
-window.Button = ButtonModule.default; //
+  window.Button = ButtonModule.default;
 
   const SliderModule = await import('./components/slider_builder.js');
-  window.Slider = SliderModule.default; //
+  window.Slider = SliderModule.default;
+
+  const DraggableModule = await import('./components/draggable_builder.js');
+  window.draggable = DraggableModule.draggable;
+  window.makeDraggable = DraggableModule.makeDraggable;
 
 
     // Chargement de l'application principale
