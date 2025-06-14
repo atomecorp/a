@@ -33,10 +33,10 @@ define('slider-track', {
   }
 });
 
-// Template pour la partie remplie du slider
-define('slider-fill', {
+// Template pour la partie progression du slider
+define('slider-progression', {
   tag: 'div',
-  class: 'hs-slider-fill',
+  class: 'hs-slider-progression',
   css: {
     position: 'absolute',
     backgroundColor: '#007bff',
@@ -92,15 +92,15 @@ const sliderVariants = {
   horizontal: {
     container: { width: '200px', height: '20px' },
     track: { width: '100%', height: '4px', top: '50%', transform: 'translateY(-50%)' },
-    fill: { height: '100%', left: '0', top: '0', borderTopLeftRadius: '4px', borderBottomLeftRadius: '4px' },
+    progression: { height: '100%', left: '0', top: '0', borderTopLeftRadius: '4px', borderBottomLeftRadius: '4px' },
     handle: { width: '16px', height: '16px', top: '50%', transform: 'translateY(-50%)', marginLeft: '-8px' },
     label: { top: '25px', transform: 'translateX(-50%)' }
   },
   vertical: {
     container: { width: '20px', height: '200px' },
-    track: { width: '4px', height: '100%', left: '8px' },
-    fill: { width: '100%', bottom: '0', left: '0' },
-    handle: { width: '16px', height: '16px', left: '-6px', marginTop: '-8px' },
+    track: { width: '4px', height: '100%', left: '50%', transform: 'translateX(-50%)' },
+    progression: { width: '100%', bottom: '0', left: '0', borderBottomLeftRadius: '4px', borderBottomRightRadius: '4px' },
+    handle: { width: '16px', height: '16px', left: '50%', transform: 'translateX(-50%)', marginTop: '-8px' },
     label: { left: '25px', transform: 'translateY(-50%)' }
   },
   circular: {
@@ -295,14 +295,14 @@ const createSlider = (config = {}) => {
   // Styles de base selon type et taille
   let containerStyles = { ...sliderVariants[type]?.container || {}, ...sliderSizes[size] || {} };
   let trackStyles = { ...sliderVariants[type]?.track || {} };
-  let fillStyles = { ...sliderVariants[type]?.fill || {} };
+  let progressionStyles = { ...sliderVariants[type]?.progression || {} };
   let handleStyles = { ...sliderVariants[type]?.handle || {} };
   let labelStyles = { ...sliderVariants[type]?.label || {} };
 
   // Application des styles personnalisés
   if (skin.container) containerStyles = { ...containerStyles, ...skin.container };
   if (skin.track) trackStyles = { ...trackStyles, ...skin.track };
-  if (skin.fill) fillStyles = { ...fillStyles, ...skin.fill };
+  if (skin.progression) progressionStyles = { ...progressionStyles, ...skin.progression };
   if (skin.handle) handleStyles = { ...handleStyles, ...skin.handle };
   if (skin.label) labelStyles = { ...labelStyles, ...skin.label };
 
@@ -325,14 +325,14 @@ const createSlider = (config = {}) => {
     css: trackStyles
   });
 
-  // Création du remplissage (fill)
-  let fill;
+  // Création de la progression
+  let progression;
   if (!isCircular) {
-    fill = $('slider-fill', {
-      id: `${sliderId}_fill`,
-      css: fillStyles
+    progression = $('slider-progression', {
+      id: `${sliderId}_progression`,
+      css: progressionStyles
     });
-    track.appendChild(fill);
+    track.appendChild(progression);
   }
 
   // Création du handle
@@ -378,7 +378,7 @@ const createSlider = (config = {}) => {
 
   // Assemblage des éléments
   container.appendChild(track);
-  if (!isCircular) track.appendChild(fill);
+  if (!isCircular) track.appendChild(progression);
   container.appendChild(handle);  // Handle au même niveau que track
   if (label) container.appendChild(label);
 
@@ -394,14 +394,15 @@ const createSlider = (config = {}) => {
     if (isCircular) {
       // Slider circulaire : position sur le cercle
       const angle = (percentage / 100) * 2 * Math.PI - Math.PI / 2;
-      const radius = 50; // 50% du conteneur
+      const radius = 42; // 42% du conteneur pour laisser place au handle
       const x = 50 + radius * Math.cos(angle);
       const y = 50 + radius * Math.sin(angle);
       
       handle.$({
         css: {
           left: `${x}%`,
-          top: `${y}%`
+          top: `${y}%`,
+          transform: 'translate(-50%, -50%)'
         }
       });
       
@@ -409,7 +410,7 @@ const createSlider = (config = {}) => {
       if (track.querySelector('svg')) {
         const circle = track.querySelector('circle');
         if (circle) {
-          const circumference = 2 * Math.PI * 45; // rayon 45% pour laisser la place au handle
+          const circumference = 2 * Math.PI * 42; // même rayon que le handle
           const offset = circumference - (percentage / 100) * circumference;
           circle.style.strokeDashoffset = offset;
         }
@@ -423,21 +424,25 @@ const createSlider = (config = {}) => {
           width: 100%;
           height: 100%;
           transform: rotate(-90deg);
+          pointer-events: none;
         `;
         
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        const circumference = 2 * Math.PI * 45;
+        const circumference = 2 * Math.PI * 42;
+        const svgStyles = skin.svg || {};
         circle.style.cssText = `
           fill: none;
-          stroke: ${fillStyles.backgroundColor || '#007bff'};
-          stroke-width: 6;
+          stroke: ${svgStyles.stroke || progressionStyles.backgroundColor || '#007bff'};
+          stroke-width: ${svgStyles.strokeWidth || '8'};
           stroke-dasharray: ${circumference};
           stroke-dashoffset: ${circumference - (percentage / 100) * circumference};
-          transition: stroke-dashoffset 0.1s ease;
+          stroke-linecap: ${svgStyles.strokeLinecap || 'round'};
+          transition: ${svgStyles.transition || 'stroke-dashoffset 0.1s ease'};
+          opacity: ${svgStyles.opacity || '1'};
         `;
         circle.setAttribute('cx', '50%');
         circle.setAttribute('cy', '50%');
-        circle.setAttribute('r', '45%');
+        circle.setAttribute('r', '42%');
         
         svg.appendChild(circle);
         track.appendChild(svg);
@@ -451,8 +456,8 @@ const createSlider = (config = {}) => {
         }
       });
       
-      if (fill) {
-        fill.$({
+      if (progression) {
+        progression.$({
           css: {
             height: `${percentage}%`
           }
@@ -467,8 +472,8 @@ const createSlider = (config = {}) => {
         }
       });
       
-      if (fill) {
-        fill.$({
+      if (progression) {
+        progression.$({
           css: {
             width: `${percentage}%`
           }

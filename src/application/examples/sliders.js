@@ -1,4 +1,10 @@
 
+
+
+
+
+// better design
+
 const insetSlider = Slider.create({
   type: 'horizontal',
   min: 0,
@@ -92,22 +98,103 @@ handleStyle.textContent = `
 `;
 document.head.appendChild(handleStyle);
 
-// Container pour présenter le slider
-const demoContainer = document.createElement('div');
-demoContainer.style.cssText = `
-  padding: 4px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  border-radius: 20px;
-  box-shadow: 
-	0 10px 30px rgba(0,0,0,0.1),
-	inset 0 1px 0 rgba(255,255,255,0.6);
-  text-align: center;
-  font-family: system-ui, sans-serif;
-`;
+// // Container pour présenter le slider
+// const demoContainer = document.createElement('div');
+// demoContainer.style.cssText = `
+//   padding: 4px;
+//   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+//   border-radius: 20px;
+//   box-shadow: 
+// 	0 10px 30px rgba(0,0,0,0.1),
+// 	inset 0 1px 0 rgba(255,255,255,0.6);
+//   text-align: center;
+//   font-family: system-ui, sans-serif;
+// `;
 
-// Assemblage
-demoContainer.appendChild(insetSlider);
+// // Assemblage
+// demoContainer.appendChild(insetSlider);
+
+// // Ajout au DOM
+// document.body.appendChild(demoContainer);
+
+
+
+
+// Slider simple
+const simpleSlider = Slider.create({
+  type: 'horizontal',
+  min: 0,
+  max: 100,
+  showLabel: false,
+  onInput: (value) => console.log('Slider value:', value)
+});
 
 // Ajout au DOM
-document.body.appendChild(demoContainer);
+document.body.appendChild(simpleSlider);
 
+// Slider vertical simple
+const verticalSlider = Slider.create({
+  type: 'vertical',
+  min: 0,
+  max: 100,
+  showLabel: false,
+  skin: {
+	container: {
+	  width: '40px',
+	  height: '300px'
+	},
+	track: {
+	  width: '18px'
+	},
+	progression: {
+	  backgroundColor: 'orange',
+	//   borderBottomLeftRadius: '9px',
+	//   borderBottomRightRadius: '9px'
+	},
+	handle: {
+	  width: '24px',
+	  height: '24px'
+	}
+  },
+  onInput: (value) => console.log('Slider value:', value)
+});
+
+// Ajout au DOM
+document.body.appendChild(verticalSlider);
+
+
+
+
+
+// Slider circulaire simple avec SVG personnalisé
+const circularSlider = Slider.create({
+  type: 'circular',
+  min: 0,
+  max: 100,
+  showLabel: false,
+  skin: {
+	container: {
+	  width: '150px',
+	  height: '150px'
+	},
+	track: {
+	  border: '8px solid #e0e0e0'
+	},
+	handle: {
+	  width: '20px',
+	  height: '20px',
+	  backgroundColor: '#ff6b6b',
+	  border: '2px solid #ffffff'
+	},
+	svg: {
+	  stroke: '#ff6b6b',
+	  strokeWidth: '6',
+	  strokeLinecap: 'round',
+	  opacity: '0.8'
+	}
+  },
+  onInput: (value) => console.log('Circular slider value:', value)
+});
+
+// Ajout au DOM
+document.body.appendChild(circularSlider);
