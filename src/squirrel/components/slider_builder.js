@@ -592,13 +592,15 @@ const createSlider = (config = {}) => {
       return value;
       
     } else if (type === 'vertical') {
-      // Slider vertical
+      // Slider vertical - utiliser le rect du track
+      const rect = track.getBoundingClientRect();
       const relativeY = clientY - rect.top;
       const percentage = 1 - (relativeY / rect.height);
       return min + Math.max(0, Math.min(1, percentage)) * (max - min);
       
     } else {
-      // Slider horizontal
+      // Slider horizontal - utiliser le rect du track
+      const rect = track.getBoundingClientRect();
       const relativeX = clientX - rect.left;
       const percentage = relativeX / rect.width;
       return min + Math.max(0, Math.min(1, percentage)) * (max - min);

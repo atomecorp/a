@@ -402,6 +402,221 @@ verticalContainer.appendChild(verticalSlider);
 verticalSection.appendChild(verticalContainer);
 demoContainer.appendChild(verticalSection);
 
+// === EXEMPLES DE LABELS ===
+const labelsSection = $('div', {
+  css: {
+    backgroundColor: '#ffffff',
+    padding: '30px',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    marginBottom: '40px'
+  }
+});
+
+const labelsTitle = $('h2', {
+  text: 'Exemples avec Labels',
+  css: {
+    color: '#495057',
+    marginBottom: '20px',
+    textAlign: 'center',
+	fontSize: '24px'
+  }
+});
+labelsSection.appendChild(labelsTitle);
+
+const labelsDescription = $('p', {
+  text: 'showLabel: true/false pour afficher/masquer les labels + skinning complet avec skin.label',
+  css: {
+    color: '#6c757d',
+    textAlign: 'center',
+    marginBottom: '30px',
+    fontStyle: 'italic',
+	fontSize: '24px'
+  }
+});
+labelsSection.appendChild(labelsDescription);
+
+const labelsContainer = $('div', {
+  css: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gap: '30px',
+    padding: '20px'
+  }
+});
+
+// Exemple 1: Slider horizontal avec label personnalisé
+const labelExample1Container = $('div', {
+  css: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '15px'
+  }
+});
+
+const labelExample1Title = $('h4', {
+  text: 'Horizontal avec Label Skinné',
+  css: { color: '#e74c3c', margin: '0', textAlign: 'center', fontSize: '14px' }
+});
+
+const labelExample1Slider = window.Slider.create({
+  type: 'horizontal',
+  width: 200,
+  height: 6,
+  value: 65,
+  min: 0,
+  max: 100,
+  showLabel: true, // Activer l'affichage du label
+  skin: {
+    track: {
+      backgroundColor: '#fadbd8',
+      borderRadius: '3px'
+    },
+    progression: {
+      background: 'linear-gradient(90deg, #e74c3c, #c0392b)',
+      borderRadius: '3px'
+    },
+    handle: {
+      width: '18px',
+      height: '18px',
+      backgroundColor: '#ffffff',
+      border: '2px solid #e74c3c',
+      borderRadius: '50%',
+      cursor: 'pointer'
+    },
+    label: {
+      fontSize: '14px',
+      fontWeight: 'bold',
+      color: '#e74c3c',
+      backgroundColor: '#fadbd8',
+      padding: '4px 8px',
+      borderRadius: '4px',
+      border: '1px solid #e74c3c',
+      top: '-35px', // Position au-dessus du slider
+      left: '50%',
+      transform: 'translateX(-50%)'
+    }
+  }
+});
+
+labelExample1Container.appendChild(labelExample1Title);
+labelExample1Container.appendChild(labelExample1Slider);
+labelsContainer.appendChild(labelExample1Container);
+
+// Exemple 2: Slider vertical sans label
+const labelExample2Container = $('div', {
+  css: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '15px'
+  }
+});
+
+const labelExample2Title = $('h4', {
+  text: 'Vertical sans Label',
+  css: { color: '#8e44ad', margin: '0', textAlign: 'center', fontSize: '14px' }
+});
+
+const labelExample2Slider = window.Slider.create({
+  type: 'vertical',
+  width: 8,
+  height: 150,
+  value: 30,
+  min: 0,
+  max: 100,
+  showLabel: false, // Désactiver l'affichage du label
+  skin: {
+    track: {
+      backgroundColor: '#f4ecf7',
+      borderRadius: '4px'
+    },
+    progression: {
+      background: 'linear-gradient(180deg, #8e44ad, #6c3483)',
+      borderRadius: '4px'
+    },
+    handle: {
+      width: '20px',
+      height: '20px',
+      backgroundColor: '#8e44ad',
+      borderRadius: '50%',
+      cursor: 'pointer'
+    }
+  }
+});
+
+labelExample2Container.appendChild(labelExample2Title);
+labelExample2Container.appendChild(labelExample2Slider);
+labelsContainer.appendChild(labelExample2Container);
+
+// Exemple 3: Slider circulaire avec label stylé
+const labelExample3Container = $('div', {
+  css: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '15px'
+  }
+});
+
+const labelExample3Title = $('h4', {
+  text: 'Circulaire avec Label Central',
+  css: { color: '#f39c12', margin: '0', textAlign: 'center', fontSize: '14px' }
+});
+
+const labelExample3Slider = window.Slider.create({
+  type: 'circular',
+  radius: 70,
+  value: 85,
+  min: 0,
+  max: 100,
+  handleOffset: -5,
+  showLabel: true, // Activer l'affichage du label
+  skin: {
+    track: {
+      backgroundColor: 'transparent',
+      border: '5px solid #fdeaa7',
+      borderRadius: '50%'
+    },
+    progression: {
+      stroke: '#f39c12',
+      strokeWidth: '5',
+      fill: 'none'
+    },
+    handle: {
+      width: '16px',
+      height: '16px',
+      backgroundColor: '#f39c12',
+      border: '2px solid #ffffff',
+      borderRadius: '50%',
+      cursor: 'pointer'
+    },
+    label: {
+      fontSize: '18px',
+      fontWeight: 'bold',
+      color: '#f39c12',
+      backgroundColor: '#ffffff',
+      padding: '8px 12px',
+      borderRadius: '50%',
+      border: '2px solid #f39c12',
+      boxShadow: '0 2px 8px rgba(243, 156, 18, 0.3)',
+      top: '50%', // Centrer le label
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      minWidth: '40px',
+      textAlign: 'center'
+    }
+  }
+});
+
+labelExample3Container.appendChild(labelExample3Title);
+labelExample3Container.appendChild(labelExample3Slider);
+labelsContainer.appendChild(labelExample3Container);
+
+labelsSection.appendChild(labelsContainer);
+demoContainer.appendChild(labelsSection);
+
 // Ajout du conteneur principal au DOM
 document.body.appendChild(demoContainer);
 

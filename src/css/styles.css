@@ -21,6 +21,7 @@ html, body {
     -webkit-user-select: none !important;
     -webkit-touch-callout: none !important;
     -webkit-tap-highlight-color: transparent !important;
+overflow: auto;
 }
 
 /* Polices personnalisées */
