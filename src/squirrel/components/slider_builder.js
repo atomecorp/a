@@ -25,10 +25,11 @@ define('slider-track', {
   tag: 'div',
   class: 'hs-slider-track',
   css: {
-    position: 'relative',
+    position: 'absolute',
     backgroundColor: '#e0e0e0',
     borderRadius: '4px',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    zIndex: '1'
   }
 });
 
@@ -39,8 +40,9 @@ define('slider-fill', {
   css: {
     position: 'absolute',
     backgroundColor: '#007bff',
-    borderRadius: '4px',
-    transition: 'all 0.1s ease'
+    borderRadius: '0',
+    zIndex: '2',
+    // transition: 'all 0.1s ease'
   }
 });
 
@@ -54,8 +56,9 @@ define('slider-handle', {
     border: '2px solid #007bff',
     borderRadius: '50%',
     cursor: 'pointer',
-    transition: 'all 0.1s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+    zIndex: '10',
+    // transition: 'all 0.1s ease',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
   }
 });
 
@@ -88,9 +91,9 @@ define('slider-tick', {
 const sliderVariants = {
   horizontal: {
     container: { width: '200px', height: '20px' },
-    track: { width: '100%', height: '4px', top: '8px' },
-    fill: { height: '100%', left: '0', top: '0' },
-    handle: { width: '16px', height: '16px', top: '-6px', marginLeft: '-8px' },
+    track: { width: '100%', height: '4px', top: '50%', transform: 'translateY(-50%)' },
+    fill: { height: '100%', left: '0', top: '0', borderTopLeftRadius: '4px', borderBottomLeftRadius: '4px' },
+    handle: { width: '16px', height: '16px', top: '50%', transform: 'translateY(-50%)', marginLeft: '-8px' },
     label: { top: '25px', transform: 'translateX(-50%)' }
   },
   vertical: {
@@ -376,7 +379,7 @@ const createSlider = (config = {}) => {
   // Assemblage des éléments
   container.appendChild(track);
   if (!isCircular) track.appendChild(fill);
-  track.appendChild(handle);
+  container.appendChild(handle);  // Handle au même niveau que track
   if (label) container.appendChild(label);
 
   // Variables de state
