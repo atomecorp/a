@@ -497,7 +497,7 @@ const createSlider = (config = {}) => {
           stroke-width: ${circularProgressionStyles.strokeWidth || '6'};
           stroke-dasharray: ${circumference};
           stroke-dashoffset: ${circumference - (percentage / 100) * circumference};
-          stroke-linecap: butt;
+          stroke-linecap: ${circularProgressionStyles.strokeLinecap || 'butt'};
           opacity: ${circularProgressionStyles.opacity || '1'};
         `;
         progressCircle.setAttribute('cx', '50');

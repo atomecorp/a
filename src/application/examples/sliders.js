@@ -68,6 +68,7 @@ const circularSlider = window.Slider.create({
     },
     progression: {
       stroke: '#4ecdc4',
+	     strokeLinecap: 'round',
       strokeWidth: '6',
       fill: 'none'
     },
@@ -616,6 +617,245 @@ labelsContainer.appendChild(labelExample3Container);
 
 labelsSection.appendChild(labelsContainer);
 demoContainer.appendChild(labelsSection);
+
+// === EXEMPLE PROGRESSION CIRCULAIRE AVEC ARRONDIS ===
+const roundedProgressSection = $('div', {
+  css: {
+    backgroundColor: '#ffffff',
+    padding: '30px',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    marginBottom: '40px'
+  }
+});
+
+const roundedProgressTitle = $('h2', {
+  text: 'Progression Circulaire avec Arrondis',
+  css: {
+    color: '#495057',
+    marginBottom: '20px',
+    textAlign: 'center'
+  }
+});
+roundedProgressSection.appendChild(roundedProgressTitle);
+
+const roundedProgressDescription = $('p', {
+  text: 'strokeLinecap: "round" ou "square" pour arrondir le début et la fin de la progression',
+  css: {
+    color: '#6c757d',
+    textAlign: 'center',
+    marginBottom: '30px',
+    fontStyle: 'italic'
+  }
+});
+roundedProgressSection.appendChild(roundedProgressDescription);
+
+const roundedProgressContainer = $('div', {
+  css: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '30px',
+    padding: '20px'
+  }
+});
+
+// Exemple 1: strokeLinecap "round"
+const roundExample1Container = $('div', {
+  css: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '15px'
+  }
+});
+
+const roundExample1Title = $('h4', {
+  text: 'strokeLinecap: "round"',
+  css: { color: '#e67e22', margin: '0', textAlign: 'center', fontSize: '14px' }
+});
+
+const roundExample1Slider = window.Slider.create({
+  type: 'circular',
+  radius: 70,
+  value: 70,
+  min: 0,
+  max: 100,
+  handleOffset: -5,
+  showLabel: true,
+  skin: {
+    track: {
+      backgroundColor: 'transparent',
+      border: '8px solid #fdeaa7',
+      borderRadius: '50%'
+    },
+    progression: {
+      stroke: '#e67e22',
+      strokeWidth: '8',
+      fill: 'none',
+      strokeLinecap: 'round' // ✨ Arrondis aux extrémités
+    },
+    handle: {
+      width: '18px',
+      height: '18px',
+      backgroundColor: '#ffffff',
+      border: '3px solid #e67e22',
+      borderRadius: '50%',
+      boxShadow: '0 2px 8px rgba(230, 126, 34, 0.4)',
+      cursor: 'pointer'
+    },
+    label: {
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: '#e67e22',
+      backgroundColor: '#ffffff',
+      padding: '6px 10px',
+      borderRadius: '50%',
+      border: '2px solid #e67e22',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      minWidth: '35px',
+      textAlign: 'center'
+    }
+  }
+});
+
+roundExample1Container.appendChild(roundExample1Title);
+roundExample1Container.appendChild(roundExample1Slider);
+roundedProgressContainer.appendChild(roundExample1Container);
+
+// Exemple 2: strokeLinecap "square" 
+const roundExample2Container = $('div', {
+  css: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '15px'
+  }
+});
+
+const roundExample2Title = $('h4', {
+  text: 'strokeLinecap: "square"',
+  css: { color: '#9b59b6', margin: '0', textAlign: 'center', fontSize: '14px' }
+});
+
+const roundExample2Slider = window.Slider.create({
+  type: 'circular',
+  radius: 70,
+  value: 45,
+  min: 0,
+  max: 100,
+  handleOffset: -5,
+  showLabel: true,
+  skin: {
+    track: {
+      backgroundColor: 'transparent',
+      border: '8px solid #e8daef',
+      borderRadius: '50%'
+    },
+    progression: {
+      stroke: '#9b59b6',
+      strokeWidth: '8',
+      fill: 'none',
+      strokeLinecap: 'square' // ✨ Extrémités carrées (légèrement saillantes)
+    },
+    handle: {
+      width: '18px',
+      height: '18px',
+      backgroundColor: '#ffffff',
+      border: '3px solid #9b59b6',
+      borderRadius: '50%',
+      boxShadow: '0 2px 8px rgba(155, 89, 182, 0.4)',
+      cursor: 'pointer'
+    },
+    label: {
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: '#9b59b6',
+      backgroundColor: '#ffffff',
+      padding: '6px 10px',
+      borderRadius: '50%',
+      border: '2px solid #9b59b6',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      minWidth: '35px',
+      textAlign: 'center'
+    }
+  }
+});
+
+roundExample2Container.appendChild(roundExample2Title);
+roundExample2Container.appendChild(roundExample2Slider);
+roundedProgressContainer.appendChild(roundExample2Container);
+
+// Exemple 3: strokeLinecap "butt" (défaut, pas d'arrondis)
+const roundExample3Container = $('div', {
+  css: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '15px'
+  }
+});
+
+const roundExample3Title = $('h4', {
+  text: 'strokeLinecap: "butt" (défaut)',
+  css: { color: '#34495e', margin: '0', textAlign: 'center', fontSize: '14px' }
+});
+
+const roundExample3Slider = window.Slider.create({
+  type: 'circular',
+  radius: 70,
+  value: 25,
+  min: 0,
+  max: 100,
+  handleOffset: -5,
+  showLabel: true,
+  skin: {
+    track: {
+      backgroundColor: 'transparent',
+      border: '8px solid #ecf0f1',
+      borderRadius: '50%'
+    },
+    progression: {
+      stroke: '#34495e',
+      strokeWidth: '8',
+      fill: 'none',
+      strokeLinecap: 'butt' // ✨ Pas d'arrondis (défaut)
+    },
+    handle: {
+      width: '18px',
+      height: '18px',
+      backgroundColor: '#ffffff',
+      border: '3px solid #34495e',
+      borderRadius: '50%',
+      boxShadow: '0 2px 8px rgba(52, 73, 94, 0.4)',
+      cursor: 'pointer'
+    },
+    label: {
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: '#34495e',
+      backgroundColor: '#ffffff',
+      padding: '6px 10px',
+      borderRadius: '50%',
+      border: '2px solid #34495e',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      minWidth: '35px',
+      textAlign: 'center'
+    }
+  }
+});
+
+roundExample3Container.appendChild(roundExample3Title);
+roundExample3Container.appendChild(roundExample3Slider);
+roundedProgressContainer.appendChild(roundExample3Container);
+
+roundedProgressSection.appendChild(roundedProgressContainer);
+demoContainer.appendChild(roundedProgressSection);
 
 // Ajout du conteneur principal au DOM
 document.body.appendChild(demoContainer);
