@@ -3,7 +3,7 @@
 // 1. Template basique
 
 
-define('div', {
+define('view', {
     tag: 'div',
     class: 'atome',
     id: 'view',
@@ -11,7 +11,7 @@ define('div', {
 });
 
 // 2. Animation avec CSS
-$('div', {
+$('view', {
     parent: document.body,
     css: {
         background: '#272727',

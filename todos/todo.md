@@ -1,5 +1,5 @@
 # ✅ atome Framework – Full Technical Roadmap & Priority Tracker (with Descriptions)
-
+Urgent : debug - simplify - factorise - optimise 
 ---
 
 ## 🧠 Project Vision & Philosophy
