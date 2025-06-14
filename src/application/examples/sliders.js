@@ -1,5 +1,4 @@
 // Import des utilitaires nécessaires
-import { $ } from '../../squirrel/squirrel.js';
 
 // Création d'un conteneur principal pour organiser les exemples
 const demoContainer = $('div', {
@@ -7,240 +6,209 @@ const demoContainer = $('div', {
     padding: '40px',
     fontFamily: 'system-ui, sans-serif',
     backgroundColor: '#f8f9fa',
-    minHeight: '100vh'
+    minHeight: '100vh',
+	overflow: 'auto',
   }
 });
 
 // Titre principal
 const title = $('h1', {
-  text: '🎯 Debug Précis - Alignement Handle sur Track',
+  text: '🎯 Sliders Demo - Tous Types',
   css: {
-    color: '#dc3545',
+    color: '#333',
     marginBottom: '40px',
     textAlign: 'center'
   }
 });
 demoContainer.appendChild(title);
 
-// === DEBUG AVEC REPÈRES VISUELS ===
-const debugSection = $('div', {
-  css: { marginBottom: '50px', textAlign: 'center' }
-});
-
-const debugTitle = $('h2', {
-  text: 'Slider avec repères pour vérifier l\'alignement',
-  css: { color: '#198754', marginBottom: '20px' }
-});
-debugSection.appendChild(debugTitle);
-
-// Container avec repères visuels
-const debugContainer = $('div', {
+// === SLIDER HORIZONTAL ===
+const horizontalSection = $('div', {
   css: {
-    position: 'relative',
-    width: '300px',
-    height: '300px',
-    margin: '40px auto',
-    border: '2px solid #007bff'
+    backgroundColor: '#ffffff',
+    padding: '30px',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    marginBottom: '40px'
   }
 });
 
-// Ajouter des repères visuels (croix au centre et points cardinaux)
-const centerCross = $('div', {
+const horizontalTitle = $('h2', {
+  text: 'Slider Horizontal',
   css: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: '20px',
-    height: '20px',
-    transform: 'translate(-50%, -50%)',
-    backgroundColor: 'red',
-    borderRadius: '50%',
-    zIndex: '100'
+    color: '#495057',
+    marginBottom: '30px',
+    textAlign: 'center'
   }
 });
-debugContainer.appendChild(centerCross);
+horizontalSection.appendChild(horizontalTitle);
 
-// Points cardinaux
-const cardinalPoints = [
-  { top: '5px', left: '50%', transform: 'translateX(-50%)', label: 'N' }, // Nord (haut)
-  { top: '50%', right: '5px', transform: 'translateY(-50%)', label: 'E' }, // Est (droite)
-  { bottom: '5px', left: '50%', transform: 'translateX(-50%)', label: 'S' }, // Sud (bas)
-  { top: '50%', left: '5px', transform: 'translateY(-50%)', label: 'W' }  // Ouest (gauche)
-];
-
-cardinalPoints.forEach(point => {
-  const marker = $('div', {
-    text: point.label,
-    css: {
-      position: 'absolute',
-      ...point,
-      width: '20px',
-      height: '20px',
-      backgroundColor: '#007bff',
-      color: 'white',
-      borderRadius: '50%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '12px',
-      fontWeight: 'bold',
-      zIndex: '100'
-    }
-  });
-  debugContainer.appendChild(marker);
+const horizontalContainer = $('div', {
+  css: {
+    display: 'flex',
+    justifyContent: 'center',
+    padding: '20px'
+  }
 });
 
-// Slider de debug
-const debugSlider = Slider.create({
-  type: 'circular',
+const horizontalSlider = window.Slider.create({
+  type: 'horizontal',
+  width: 400,
+  height: 8,
+  value: 60,
   min: 0,
   max: 100,
-  value: 0,
-  showLabel: false,
   skin: {
-    container: {
-      width: '100%',
-      height: '100%',
-      position: 'absolute',
-      top: '0',
-      left: '0'
-    },
     track: {
-      border: '8px solid rgba(0,123,255,0.3)',
-      backgroundColor: 'transparent'
+      backgroundColor: '#e9ecef',
+      borderRadius: '4px'
+    },
+    progression: {
+      background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+      borderRadius: '4px'
     },
     handle: {
       width: '24px',
       height: '24px',
-      backgroundColor: '#dc3545',
-      border: '3px solid #ffffff',
-      boxShadow: '0 4px 8px rgba(220,53,69,0.8)',
-      zIndex: '50'
-    },
-    progression: {
-      stroke: '#007bff',
-      strokeWidth: '4',
-      opacity: '0.7'
+      backgroundColor: '#ffffff',
+      border: '3px solid #667eea',
+      borderRadius: '50%',
+      boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
+      cursor: 'pointer'
     }
-  },
-  onInput: (value) => {
-    valueDisplay.textContent = `Valeur: ${Math.round(value)}%`;
-    // Afficher les coordonnées calculées
-    const angle = (value / 100) * 2 * Math.PI - Math.PI / 2;
-    const x = 50 + 46 * Math.cos(angle);
-    const y = 50 + 46 * Math.sin(angle);
-    coordsDisplay.textContent = `Coords: x=${x.toFixed(1)}%, y=${y.toFixed(1)}%`;
   }
 });
 
-debugContainer.appendChild(debugSlider);
-debugSection.appendChild(debugContainer);
+horizontalContainer.appendChild(horizontalSlider);
+horizontalSection.appendChild(horizontalContainer);
+demoContainer.appendChild(horizontalSection);
 
-// Contrôles pour tester différentes positions
-const controlsContainer = $('div', {
+// === SLIDER VERTICAL ===
+const verticalSection = $('div', {
+  css: {
+    backgroundColor: '#ffffff',
+    padding: '30px',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    marginBottom: '40px'
+  }
+});
+
+const verticalTitle = $('h2', {
+  text: 'Slider Vertical',
+  css: {
+    color: '#495057',
+    marginBottom: '30px',
+    textAlign: 'center'
+  }
+});
+verticalSection.appendChild(verticalTitle);
+
+const verticalContainer = $('div', {
   css: {
     display: 'flex',
-    gap: '10px',
     justifyContent: 'center',
-    marginTop: '20px'
+    alignItems: 'center',
+    height: '300px',
+    padding: '20px'
   }
 });
 
-const testPositions = [
-  { value: 0, label: '0% (Haut)', color: '#dc3545' },
-  { value: 25, label: '25% (Droite)', color: '#fd7e14' },
-  { value: 50, label: '50% (Bas)', color: '#198754' },
-  { value: 75, label: '75% (Gauche)', color: '#6f42c1' }
-];
-
-testPositions.forEach(pos => {
-  const button = $('button', {
-    text: pos.label,
-    css: {
-      padding: '8px 16px',
-      backgroundColor: pos.color,
-      color: 'white',
-      border: 'none',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      fontSize: '14px'
+const verticalSlider = window.Slider.create({
+  type: 'vertical',
+  width: 8,
+  height: 250,
+  value: 40,
+  min: 0,
+  max: 100,
+  skin: {
+    track: {
+      backgroundColor: '#e9ecef',
+      borderRadius: '4px'
+    },
+    progression: {
+      background: 'linear-gradient(180deg, #f093fb 0%, #f5576c 100%)',
+      borderRadius: '4px'
+    },
+    handle: {
+      width: '24px',
+      height: '24px',
+      backgroundColor: '#ffffff',
+      border: '3px solid #f5576c',
+      borderRadius: '50%',
+      boxShadow: '0 2px 8px rgba(245, 87, 108, 0.3)',
+      cursor: 'pointer'
     }
-  });
-  
-  button.addEventListener('click', () => {
-    debugSlider.setValue(pos.value);
-  });
-  
-  controlsContainer.appendChild(button);
-});
-
-debugSection.appendChild(controlsContainer);
-
-// Affichage des infos
-const valueDisplay = $('div', {
-  text: 'Valeur: 0%',
-  css: {
-    fontSize: '18px',
-    fontWeight: 'bold',
-    color: '#dc3545',
-    marginTop: '20px'
-  }
-});
-debugSection.appendChild(valueDisplay);
-
-const coordsDisplay = $('div', {
-  text: 'Coords: x=50.0%, y=4.0%',
-  css: {
-    fontSize: '14px',
-    color: '#666',
-    marginTop: '10px'
-  }
-});
-debugSection.appendChild(coordsDisplay);
-
-// Instructions
-const instructions = $('div', {
-  css: {
-    backgroundColor: '#fff3cd',
-    border: '1px solid #ffeaa7',
-    borderRadius: '8px',
-    padding: '20px',
-    marginTop: '30px',
-    textAlign: 'left'
   }
 });
 
-const instructionsTitle = $('h3', {
-  text: '🔍 Vérification visuelle :',
-  css: { color: '#856404', marginBottom: '15px' }
-});
-instructions.appendChild(instructionsTitle);
+verticalContainer.appendChild(verticalSlider);
+verticalSection.appendChild(verticalContainer);
+demoContainer.appendChild(verticalSection);
 
-const checkList = $('ul', {
-  css: { color: '#856404', lineHeight: '1.8' }
-});
-
-const checks = [
-  'Le handle rouge doit être exactement sur la ligne bleue de la track',
-  'À 0% : Le handle doit toucher le point N (nord/haut)',
-  'À 25% : Le handle doit toucher le point E (est/droite)',
-  'À 50% : Le handle doit toucher le point S (sud/bas)',
-  'À 75% : Le handle doit toucher le point W (ouest/gauche)',
-  'Utilisez les boutons pour tester chaque position rapidement'
-];
-
-checks.forEach(check => {
-  const li = $('li', {
-    text: check,
-    css: { marginBottom: '10px' }
-  });
-  checkList.appendChild(li);
+// === SLIDER CIRCULAIRE ===
+const circularSection = $('div', {
+  css: {
+    backgroundColor: '#ffffff',
+    padding: '30px',
+    borderRadius: '12px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    marginBottom: '40px'
+  }
 });
 
-instructions.appendChild(checkList);
-debugSection.appendChild(instructions);
+const circularTitle = $('h2', {
+  text: 'Slider Circulaire',
+  css: {
+    color: '#495057',
+    marginBottom: '30px',
+    textAlign: 'center'
+  }
+});
+circularSection.appendChild(circularTitle);
 
-demoContainer.appendChild(debugSection);
+const circularContainer = $('div', {
+  css: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '250px',
+    padding: '20px'
+  }
+});
+
+const circularSlider = window.Slider.create({
+  type: 'circular',
+  radius: 80,
+  value: 75,
+  min: 0,
+  max: 100,
+  skin: {
+    track: {
+      backgroundColor: 'transparent',
+      border: '6px solid #e9ecef',
+      borderRadius: '50%'
+    },
+    progression: {
+      stroke: '#4ecdc4',
+      strokeWidth: '6',
+      fill: 'none'
+    },
+    handle: {
+      width: '20px',
+      height: '20px',
+      backgroundColor: '#ffffff',
+      border: '3px solid #4ecdc4',
+      borderRadius: '50%',
+      boxShadow: '0 2px 8px rgba(78, 205, 196, 0.4)',
+      cursor: 'pointer'
+    }
+  }
+});
+
+circularContainer.appendChild(circularSlider);
+circularSection.appendChild(circularContainer);
+demoContainer.appendChild(circularSection);
 
 // Ajout du conteneur principal au DOM
 document.body.appendChild(demoContainer);
