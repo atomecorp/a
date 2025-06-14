@@ -1,5 +1,5 @@
 // Import du système de sliders
-import Slider from '../../squirrel/components/Sliders.js';
+
 
 // === EXEMPLES DE SLIDERS ===
 
