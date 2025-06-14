@@ -17,10 +17,10 @@
     window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
     // Import des composants
-  const ButtonModule = await import('./components/button.js');
+  const ButtonModule = await import('./components/button_builder.js');
 window.Button = ButtonModule.default; //
 
-  const SliderModule = await import('./components/slider.js');
+  const SliderModule = await import('./components/slider_builder.js');
   window.Slider = SliderModule.default; //
 
 
