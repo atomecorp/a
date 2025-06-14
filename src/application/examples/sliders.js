@@ -1,7 +1,11 @@
 // Import des utilitaires nécessaires
 
+// define('div', {
+//   tag: 'div',
+// });
+
 // Création d'un conteneur principal pour organiser les exemples
-const demoContainer = $('div', {
+const demoContainer = $( {
   css: {
 	padding: '40px',
 	fontFamily: 'system-ui, sans-serif',
@@ -59,7 +63,7 @@ const circularSlider = window.Slider.create({
   value: 75,
   min: 0,
   max: 100,
-  handleOffset: -38, // Décalage du handle : négatif = vers l'intérieur, positif = vers l'extérieur
+  handleOffset: -30, // Décalage du handle : négatif = vers l'intérieur, positif = vers l'extérieur
   skin: {
 	track: {
 	  backgroundColor: 'transparent',
