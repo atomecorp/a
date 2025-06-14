@@ -1,6 +1,11 @@
 # ✅ atome Framework – Full Technical Roadmap & Priority Tracker (with Descriptions)
 
 ---
+## urgent :
+#tags like H1 doesnt works
+#create view object intuition and blackhole
+#add start and stop to cirular sliders
+
 
 ## 🧠 Project Vision & Philosophy
 
