@@ -93,21 +93,21 @@ const sliderVariants = {
     container: { width: '200px', height: '20px' },
     track: { width: '100%', height: '4px', top: '50%', transform: 'translateY(-50%)' },
     progression: { height: '100%', left: '0', top: '0', borderTopLeftRadius: '4px', borderBottomLeftRadius: '4px' },
-    handle: { width: '16px', height: '16px', top: '50%', transform: 'translateY(-50%)', marginLeft: '-8px' },
+    handle: { width: '16px', height: '16px', top: '50%' },
     label: { top: '25px', transform: 'translateX(-50%)' }
   },
   vertical: {
     container: { width: '20px', height: '200px' },
     track: { width: '4px', height: '100%', left: '50%', transform: 'translateX(-50%)' },
     progression: { width: '100%', bottom: '0', left: '0', borderBottomLeftRadius: '4px', borderBottomRightRadius: '4px' },
-    handle: { width: '16px', height: '16px', left: '50%', transform: 'translateX(-50%)', marginTop: '-8px' },
+    handle: { width: '16px', height: '16px', left: '50%' },
     label: { left: '25px', transform: 'translateY(-50%)' }
   },
   circular: {
     container: { width: '120px', height: '120px' },
     track: { width: '100%', height: '100%', borderRadius: '50%', border: '4px solid #e0e0e0' },
-    fill: { display: 'none' }, // Fill géré différemment pour circulaire
-    handle: { width: '20px', height: '20px', marginLeft: '-10px', marginTop: '-10px' },
+    progression: { display: 'none' }, // Progression géré différemment pour circulaire (SVG)
+    handle: { width: '20px', height: '20px' },
     label: { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
   }
 };
@@ -135,7 +135,7 @@ const sliderPresets = {
         backgroundColor: '#e0e0e0',
         borderRadius: '2px'
       },
-      fill: {
+      progression: {
         height: '100%',
         backgroundColor: '#1976d2',
         borderRadius: '2px'
@@ -179,7 +179,7 @@ const sliderPresets = {
         backgroundColor: '#e0e0e0',
         borderRadius: '2px'
       },
-      fill: {
+      progression: {
         width: '100%',
         backgroundColor: '#1976d2',
         borderRadius: '2px'
@@ -393,10 +393,43 @@ const createSlider = (config = {}) => {
     
     if (isCircular) {
       // Slider circulaire : position sur le cercle
+      // L'angle commence en haut (12h) et va dans le sens horaire
       const angle = (percentage / 100) * 2 * Math.PI - Math.PI / 2;
-      const radius = 42; // 42% du conteneur pour laisser place au handle
-      const x = 50 + radius * Math.cos(angle);
-      const y = 50 + radius * Math.sin(angle);
+      
+      // Pour le SVG, on utilise un radius de 42 (dans le viewBox 100x100)
+      const svgRadius = 42;
+      
+      // Algorithme standard pour positionner un point sur un cercle
+      // 1. Convertir le pourcentage en angle (0-360°)
+      const angleInDegrees = (percentage / 100) * 360;
+      
+      // 2. Convertir en radians et ajuster pour commencer en haut (-90°)
+      const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
+      
+      // 3. Calculer le rayon basé sur la taille du container moins le border
+      // Pour un container de 100%, le rayon effectif est ~45% pour tenir compte des borders
+      const containerRadius = 45; // 45% du container
+      
+      // 4. Calculer les coordonnées du centre vers le bord
+      const centerX = 50; // Centre en %
+      const centerY = 50; // Centre en %
+      
+      let x = centerX + containerRadius * Math.cos(angleInRadians);
+      let y = centerY + containerRadius * Math.sin(angleInRadians);
+      
+      // 5. Corrections pour les positions problématiques
+      const normalizedPercentage = percentage % 100;
+      
+      if (normalizedPercentage >= 0 && normalizedPercentage <= 5) {
+        // Haut (0%) - ramener vers le bas davantage
+        y += 3;
+      } else if (normalizedPercentage >= 70 && normalizedPercentage <= 80) {
+        // Gauche (75%) - décaler encore plus vers la droite
+        x += 4;
+      } else if (normalizedPercentage >= 95) {
+        // Haut (100%) - ramener vers le bas davantage
+        y += 3;
+      }
       
       handle.$({
         css: {
@@ -408,15 +441,17 @@ const createSlider = (config = {}) => {
       
       // Mise à jour du stroke pour l'effet circulaire
       if (track.querySelector('svg')) {
-        const circle = track.querySelector('circle');
-        if (circle) {
-          const circumference = 2 * Math.PI * 42; // même rayon que le handle
+        const progressCircle = track.querySelector('.progress-circle');
+        if (progressCircle) {
+          const circumference = 2 * Math.PI * svgRadius; // Utilise le radius SVG
+          // Pour que la progression commence en haut et suive le handle
           const offset = circumference - (percentage / 100) * circumference;
-          circle.style.strokeDashoffset = offset;
+          progressCircle.style.strokeDashoffset = offset;
         }
       } else {
         // Créer le SVG pour l'effet circulaire si pas encore fait
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 100 100');
         svg.style.cssText = `
           position: absolute;
           top: 0;
@@ -425,26 +460,42 @@ const createSlider = (config = {}) => {
           height: 100%;
           transform: rotate(-90deg);
           pointer-events: none;
+          z-index: 2;
         `;
         
-        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        const circumference = 2 * Math.PI * 42;
-        const svgStyles = skin.svg || {};
-        circle.style.cssText = `
+        // Cercle de fond (fixe)
+        const backgroundCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        const circumference = 2 * Math.PI * svgRadius;
+        backgroundCircle.style.cssText = `
           fill: none;
-          stroke: ${svgStyles.stroke || progressionStyles.backgroundColor || '#007bff'};
-          stroke-width: ${svgStyles.strokeWidth || '8'};
+          stroke: #e0e0e0;
+          stroke-width: 6;
+          opacity: 0.3;
+        `;
+        backgroundCircle.setAttribute('cx', '50');
+        backgroundCircle.setAttribute('cy', '50');
+        backgroundCircle.setAttribute('r', svgRadius.toString());
+        
+        // Cercle de progression
+        const circularProgressionStyles = skin.progression || {};
+        const progressCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        progressCircle.classList.add('progress-circle');
+        progressCircle.style.cssText = `
+          fill: none;
+          stroke: ${circularProgressionStyles.stroke || progressionStyles.backgroundColor || '#007bff'};
+          stroke-width: ${circularProgressionStyles.strokeWidth || '6'};
           stroke-dasharray: ${circumference};
           stroke-dashoffset: ${circumference - (percentage / 100) * circumference};
-          stroke-linecap: ${svgStyles.strokeLinecap || 'round'};
-          transition: ${svgStyles.transition || 'stroke-dashoffset 0.1s ease'};
-          opacity: ${svgStyles.opacity || '1'};
+          stroke-linecap: butt;
+          transition: ${circularProgressionStyles.transition || 'stroke-dashoffset 0.1s ease'};
+          opacity: ${circularProgressionStyles.opacity || '1'};
         `;
-        circle.setAttribute('cx', '50%');
-        circle.setAttribute('cy', '50%');
-        circle.setAttribute('r', '42%');
+        progressCircle.setAttribute('cx', '50');
+        progressCircle.setAttribute('cy', '50');
+        progressCircle.setAttribute('r', svgRadius.toString());
         
-        svg.appendChild(circle);
+        svg.appendChild(backgroundCircle);
+        svg.appendChild(progressCircle);
         track.appendChild(svg);
       }
       
@@ -452,7 +503,8 @@ const createSlider = (config = {}) => {
       // Slider vertical
       handle.$({
         css: {
-          top: `${100 - percentage}%`
+          top: `${100 - percentage}%`,
+          transform: 'translate(-50%, -50%)'
         }
       });
       
@@ -468,7 +520,8 @@ const createSlider = (config = {}) => {
       // Slider horizontal (défaut)
       handle.$({
         css: {
-          left: `${percentage}%`
+          left: `${percentage}%`,
+          transform: 'translate(-50%, -50%)'
         }
       });
       
@@ -498,6 +551,7 @@ const createSlider = (config = {}) => {
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
       const angle = Math.atan2(clientY - centerY, clientX - centerX);
+      // Normaliser l'angle pour commencer en haut (12h) et aller dans le sens horaire
       const normalizedAngle = (angle + Math.PI / 2 + 2 * Math.PI) % (2 * Math.PI);
       const percentage = normalizedAngle / (2 * Math.PI);
       return min + percentage * (max - min);

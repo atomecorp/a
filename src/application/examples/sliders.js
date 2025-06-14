@@ -1,200 +1,246 @@
+// Import des utilitaires nécessaires
+import { $ } from '../../squirrel/squirrel.js';
 
-
-
-
-
-// better design
-
-const insetSlider = Slider.create({
-  type: 'horizontal',
-  min: 0,
-  max: 100,
-  showLabel: false,
-  skin: {
-	container: {
-	  width: '300px',
-	  height: '30px',
-	  background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
-	  borderRadius: '15px',
-	  boxShadow: `
-		inset 0 3px 6px rgba(0,0,0,0.15),
-		inset 0 1px 3px rgba(0,0,0,0.1),
-		0 1px 0 rgba(255,255,255,0.8)
-	  `,
-	  border: '1px solid rgba(0,0,0,0.1)',
-	  position: 'relative',
-	//   margin: '50px auto',
-	  padding: '0'
-	},
-	track: {
-	  width: '100%',
-	  height: '100%',
-	  borderRadius: '15px',
-	  background: 'transparent',
-	  position: 'relative',
-	  overflow: 'hidden'
-	},
-	fill: {
-	  height: '100%',
-	  background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
-	  borderTopLeftRadius: '15px',
-	  borderBottomLeftRadius: '15px',
-	  borderTopRightRadius: '0',
-	  borderBottomRightRadius: '0',
-	  boxShadow: `
-		inset 0 1px 3px rgba(255,255,255,0.3),
-		0 1px 2px rgba(0,0,0,0.1)
-	  `,
-	//   transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)'
-	},
-	handle: {
-	  width: '30px',
-	  height: '30px',
-	  background: 'linear-gradient(135deg, #ffffff 0%, #e8eaf6 100%)',
-	  border: '2px solid #667eea',
-	  borderRadius: '50%',
-	  top: '50%',
-	  transform: 'translateY(-50%) scale(1)',
-	  marginLeft: '-15px',
-	  boxShadow: `
-		0 2px 8px rgba(102, 126, 234, 0.3),
-		inset 0 1px 0 rgba(255,255,255,0.8),
-		inset 0 -1px 0 rgba(0,0,0,0.1)
-	  `,
-	  cursor: 'grab'
-	//   transition: 'all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1)',
-	}
-  },
-  onInput: (value) => console.log('Slider value:', value)
+// Création d'un conteneur principal pour organiser les exemples
+const demoContainer = $('div', {
+  css: {
+    padding: '40px',
+    fontFamily: 'system-ui, sans-serif',
+    backgroundColor: '#f8f9fa',
+    minHeight: '100vh'
+  }
 });
 
-// Style pour l'effet grab/grabbing sur le handle
-const handleStyle = document.createElement('style');
-handleStyle.textContent = `
-  .hs-slider-handle {
-	transform: translateY(-50%) scale(1) !important;
+// Titre principal
+const title = $('h1', {
+  text: '🎯 Debug Précis - Alignement Handle sur Track',
+  css: {
+    color: '#dc3545',
+    marginBottom: '40px',
+    textAlign: 'center'
   }
-  
-  .hs-slider-handle:active {
-	cursor: grabbing !important;
-	transform: translateY(-50%) scale(1.05) !important;
-	box-shadow: 
-	  0 4px 12px rgba(102, 126, 234, 0.4),
-	  inset 0 1px 0 rgba(255,255,255,0.9),
-	  inset 0 -1px 0 rgba(0,0,0,0.15) !important;
-  }
-  
-  .hs-slider-handle:hover {
-	transform: translateY(-50%) scale(1.02) !important;
-	box-shadow: 
-	  0 3px 10px rgba(102, 126, 234, 0.35),
-	  inset 0 1px 0 rgba(255,255,255,0.85),
-	  inset 0 -1px 0 rgba(0,0,0,0.12) !important;
-  }
-  
-  .hs-slider-fill {
-	background: linear-gradient(90deg, #667eea 0%, #764ba2 100%) !important;
-  }
-`;
-document.head.appendChild(handleStyle);
+});
+demoContainer.appendChild(title);
 
-// // Container pour présenter le slider
-// const demoContainer = document.createElement('div');
-// demoContainer.style.cssText = `
-//   padding: 4px;
-//   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-//   border-radius: 20px;
-//   box-shadow: 
-// 	0 10px 30px rgba(0,0,0,0.1),
-// 	inset 0 1px 0 rgba(255,255,255,0.6);
-//   text-align: center;
-//   font-family: system-ui, sans-serif;
-// `;
-
-// // Assemblage
-// demoContainer.appendChild(insetSlider);
-
-// // Ajout au DOM
-// document.body.appendChild(demoContainer);
-
-
-
-
-// Slider simple
-const simpleSlider = Slider.create({
-  type: 'horizontal',
-  min: 0,
-  max: 100,
-  showLabel: false,
-  onInput: (value) => console.log('Slider value:', value)
+// === DEBUG AVEC REPÈRES VISUELS ===
+const debugSection = $('div', {
+  css: { marginBottom: '50px', textAlign: 'center' }
 });
 
-// Ajout au DOM
-document.body.appendChild(simpleSlider);
+const debugTitle = $('h2', {
+  text: 'Slider avec repères pour vérifier l\'alignement',
+  css: { color: '#198754', marginBottom: '20px' }
+});
+debugSection.appendChild(debugTitle);
 
-// Slider vertical simple
-const verticalSlider = Slider.create({
-  type: 'vertical',
-  min: 0,
-  max: 100,
-  showLabel: false,
-  skin: {
-	container: {
-	  width: '40px',
-	  height: '300px'
-	},
-	track: {
-	  width: '18px'
-	},
-	progression: {
-	  backgroundColor: 'orange',
-	//   borderBottomLeftRadius: '9px',
-	//   borderBottomRightRadius: '9px'
-	},
-	handle: {
-	  width: '24px',
-	  height: '24px'
-	}
-  },
-  onInput: (value) => console.log('Slider value:', value)
+// Container avec repères visuels
+const debugContainer = $('div', {
+  css: {
+    position: 'relative',
+    width: '300px',
+    height: '300px',
+    margin: '40px auto',
+    border: '2px solid #007bff'
+  }
 });
 
-// Ajout au DOM
-document.body.appendChild(verticalSlider);
+// Ajouter des repères visuels (croix au centre et points cardinaux)
+const centerCross = $('div', {
+  css: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: '20px',
+    height: '20px',
+    transform: 'translate(-50%, -50%)',
+    backgroundColor: 'red',
+    borderRadius: '50%',
+    zIndex: '100'
+  }
+});
+debugContainer.appendChild(centerCross);
 
+// Points cardinaux
+const cardinalPoints = [
+  { top: '5px', left: '50%', transform: 'translateX(-50%)', label: 'N' }, // Nord (haut)
+  { top: '50%', right: '5px', transform: 'translateY(-50%)', label: 'E' }, // Est (droite)
+  { bottom: '5px', left: '50%', transform: 'translateX(-50%)', label: 'S' }, // Sud (bas)
+  { top: '50%', left: '5px', transform: 'translateY(-50%)', label: 'W' }  // Ouest (gauche)
+];
 
+cardinalPoints.forEach(point => {
+  const marker = $('div', {
+    text: point.label,
+    css: {
+      position: 'absolute',
+      ...point,
+      width: '20px',
+      height: '20px',
+      backgroundColor: '#007bff',
+      color: 'white',
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '12px',
+      fontWeight: 'bold',
+      zIndex: '100'
+    }
+  });
+  debugContainer.appendChild(marker);
+});
 
-
-
-// Slider circulaire simple avec SVG personnalisé
-const circularSlider = Slider.create({
+// Slider de debug
+const debugSlider = Slider.create({
   type: 'circular',
   min: 0,
   max: 100,
+  value: 0,
   showLabel: false,
   skin: {
-	container: {
-	  width: '150px',
-	  height: '150px'
-	},
-	track: {
-	  border: '8px solid #e0e0e0'
-	},
-	handle: {
-	  width: '20px',
-	  height: '20px',
-	  backgroundColor: '#ff6b6b',
-	  border: '2px solid #ffffff'
-	},
-	svg: {
-	  stroke: '#ff6b6b',
-	  strokeWidth: '6',
-	  strokeLinecap: 'round',
-	  opacity: '0.8'
-	}
+    container: {
+      width: '100%',
+      height: '100%',
+      position: 'absolute',
+      top: '0',
+      left: '0'
+    },
+    track: {
+      border: '8px solid rgba(0,123,255,0.3)',
+      backgroundColor: 'transparent'
+    },
+    handle: {
+      width: '24px',
+      height: '24px',
+      backgroundColor: '#dc3545',
+      border: '3px solid #ffffff',
+      boxShadow: '0 4px 8px rgba(220,53,69,0.8)',
+      zIndex: '50'
+    },
+    progression: {
+      stroke: '#007bff',
+      strokeWidth: '4',
+      opacity: '0.7'
+    }
   },
-  onInput: (value) => console.log('Circular slider value:', value)
+  onInput: (value) => {
+    valueDisplay.textContent = `Valeur: ${Math.round(value)}%`;
+    // Afficher les coordonnées calculées
+    const angle = (value / 100) * 2 * Math.PI - Math.PI / 2;
+    const x = 50 + 46 * Math.cos(angle);
+    const y = 50 + 46 * Math.sin(angle);
+    coordsDisplay.textContent = `Coords: x=${x.toFixed(1)}%, y=${y.toFixed(1)}%`;
+  }
 });
 
-// Ajout au DOM
-document.body.appendChild(circularSlider);
+debugContainer.appendChild(debugSlider);
+debugSection.appendChild(debugContainer);
+
+// Contrôles pour tester différentes positions
+const controlsContainer = $('div', {
+  css: {
+    display: 'flex',
+    gap: '10px',
+    justifyContent: 'center',
+    marginTop: '20px'
+  }
+});
+
+const testPositions = [
+  { value: 0, label: '0% (Haut)', color: '#dc3545' },
+  { value: 25, label: '25% (Droite)', color: '#fd7e14' },
+  { value: 50, label: '50% (Bas)', color: '#198754' },
+  { value: 75, label: '75% (Gauche)', color: '#6f42c1' }
+];
+
+testPositions.forEach(pos => {
+  const button = $('button', {
+    text: pos.label,
+    css: {
+      padding: '8px 16px',
+      backgroundColor: pos.color,
+      color: 'white',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
+  button.addEventListener('click', () => {
+    debugSlider.setValue(pos.value);
+  });
+  
+  controlsContainer.appendChild(button);
+});
+
+debugSection.appendChild(controlsContainer);
+
+// Affichage des infos
+const valueDisplay = $('div', {
+  text: 'Valeur: 0%',
+  css: {
+    fontSize: '18px',
+    fontWeight: 'bold',
+    color: '#dc3545',
+    marginTop: '20px'
+  }
+});
+debugSection.appendChild(valueDisplay);
+
+const coordsDisplay = $('div', {
+  text: 'Coords: x=50.0%, y=4.0%',
+  css: {
+    fontSize: '14px',
+    color: '#666',
+    marginTop: '10px'
+  }
+});
+debugSection.appendChild(coordsDisplay);
+
+// Instructions
+const instructions = $('div', {
+  css: {
+    backgroundColor: '#fff3cd',
+    border: '1px solid #ffeaa7',
+    borderRadius: '8px',
+    padding: '20px',
+    marginTop: '30px',
+    textAlign: 'left'
+  }
+});
+
+const instructionsTitle = $('h3', {
+  text: '🔍 Vérification visuelle :',
+  css: { color: '#856404', marginBottom: '15px' }
+});
+instructions.appendChild(instructionsTitle);
+
+const checkList = $('ul', {
+  css: { color: '#856404', lineHeight: '1.8' }
+});
+
+const checks = [
+  'Le handle rouge doit être exactement sur la ligne bleue de la track',
+  'À 0% : Le handle doit toucher le point N (nord/haut)',
+  'À 25% : Le handle doit toucher le point E (est/droite)',
+  'À 50% : Le handle doit toucher le point S (sud/bas)',
+  'À 75% : Le handle doit toucher le point W (ouest/gauche)',
+  'Utilisez les boutons pour tester chaque position rapidement'
+];
+
+checks.forEach(check => {
+  const li = $('li', {
+    text: check,
+    css: { marginBottom: '10px' }
+  });
+  checkList.appendChild(li);
+});
+
+instructions.appendChild(checkList);
+debugSection.appendChild(instructions);
+
+demoContainer.appendChild(debugSection);
+
+// Ajout du conteneur principal au DOM
+document.body.appendChild(demoContainer);
