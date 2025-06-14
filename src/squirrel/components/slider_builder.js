@@ -285,6 +285,9 @@ const createSlider = (config = {}) => {
     size = 'md',
     radius,  // Ajout du paramètre radius
     handleOffset = 0,  // Nouveau paramètre pour ajuster la position du handle
+    // Nouveaux paramètres pour zone de drag limitée
+    dragMin = null,  // Zone de drag minimum (null = utilise min)
+    dragMax = null,  // Zone de drag maximum (null = utilise max)
     ...otherProps
   } = config;
 
@@ -412,15 +415,32 @@ const createSlider = (config = {}) => {
   // Fonction de mise à jour de position
   const updatePosition = (newValue) => {
     const clampedValue = Math.max(min, Math.min(max, newValue));
-    const percentage = ((clampedValue - min) / (max - min)) * 100;
     
     if (isCircular) {
-      // Slider circulaire : position sur le cercle
+      // POSITION DU HANDLE : Toujours basée sur la plage totale (min-max)
+      const handlePercentage = ((clampedValue - min) / (max - min)) * 100;
+      
+      // PROGRESSION : Basée sur la zone de drag si définie
+      let progressionPercentage = 0;
+      if (dragMin !== null || dragMax !== null) {
+        // Zone de drag définie : progression selon la zone de drag
+        if (clampedValue >= effectiveDragMin && clampedValue <= effectiveDragMax) {
+          progressionPercentage = ((clampedValue - effectiveDragMin) / (effectiveDragMax - effectiveDragMin)) * 100;
+        } else if (clampedValue > effectiveDragMax) {
+          progressionPercentage = 100;
+        }
+        // Si clampedValue < effectiveDragMin, progressionPercentage reste 0
+      } else {
+        // Pas de zone de drag : progression suit le handle
+        progressionPercentage = handlePercentage;
+      }
+      
+      // Slider circulaire : position sur le cercle (handle)
       // Convertir le pourcentage en angle (0-360°)
-      const angleInDegrees = (percentage / 100) * 360;
+      const handleAngleInDegrees = (handlePercentage / 100) * 360;
       
       // Convertir en radians et ajuster pour commencer en haut (-90°)
-      const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
+      const handleAngleInRadians = ((handleAngleInDegrees - 90) * Math.PI) / 180;
       
       // Obtenir la largeur du border pour calculer le bon rayon
       const trackStyle = window.getComputedStyle(track);
@@ -436,8 +456,8 @@ const createSlider = (config = {}) => {
       // handleOffset positif = vers l'extérieur, négatif = vers l'intérieur
       const radiusPercent = 50 - borderPercent + currentHandleOffset;
       
-      const x = 50 + radiusPercent * Math.cos(angleInRadians);
-      const y = 50 + radiusPercent * Math.sin(angleInRadians);
+      const x = 50 + radiusPercent * Math.cos(handleAngleInRadians);
+      const y = 50 + radiusPercent * Math.sin(handleAngleInRadians);
       
       handle.$({
         css: {
@@ -454,9 +474,26 @@ const createSlider = (config = {}) => {
         if (progressCircle) {
           const svgRadius = 42; // Radius dans le viewBox SVG
           const circumference = 2 * Math.PI * svgRadius;
-          // Pour que la progression commence en haut et suive le handle
-          const offset = circumference - (percentage / 100) * circumference;
-          progressCircle.style.strokeDashoffset = offset;
+          
+          if (dragMin !== null || dragMax !== null) {
+            // Zone de drag limitée : arc qui grandit depuis dragMin
+            const dragRangePercent = (effectiveDragMax - effectiveDragMin) / (max - min);
+            const maxDragArcLength = circumference * dragRangePercent;
+            const progressArcLength = (progressionPercentage / 100) * maxDragArcLength;
+            
+            // Décaler le cercle pour que l'arc commence à dragMin
+            const dragStartPercent = (effectiveDragMin - min) / (max - min);
+            const startAngleOffset = circumference * dragStartPercent;
+            
+            // L'arc commence à dragMin et grandit selon la progression
+            progressCircle.style.strokeDasharray = `${progressArcLength} ${circumference - progressArcLength}`;
+            progressCircle.style.strokeDashoffset = -startAngleOffset;
+          } else {
+            // Pas de zone de drag : comportement normal
+            const offset = circumference - (progressionPercentage / 100) * circumference;
+            progressCircle.style.strokeDasharray = circumference;
+            progressCircle.style.strokeDashoffset = offset;
+          }
         }
       } else {
         // Créer le SVG pour l'effet circulaire si pas encore fait
@@ -487,19 +524,43 @@ const createSlider = (config = {}) => {
         backgroundCircle.setAttribute('cy', '50');
         backgroundCircle.setAttribute('r', svgRadius.toString());
         
-        // Cercle de progression
+        // Cercle de progression - différent selon zone de drag
         const circularProgressionStyles = skin.progression || {};
         const progressCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         progressCircle.classList.add('progress-circle');
-        progressCircle.style.cssText = `
-          fill: none;
-          stroke: ${circularProgressionStyles.stroke || progressionStyles.backgroundColor || '#007bff'};
-          stroke-width: ${circularProgressionStyles.strokeWidth || '6'};
-          stroke-dasharray: ${circumference};
-          stroke-dashoffset: ${circumference - (percentage / 100) * circumference};
-          stroke-linecap: ${circularProgressionStyles.strokeLinecap || 'butt'};
-          opacity: ${circularProgressionStyles.opacity || '1'};
-        `;
+        
+        if (dragMin !== null || dragMax !== null) {
+          // Zone de drag limitée : arc qui grandit depuis dragMin
+          const dragRangePercent = (effectiveDragMax - effectiveDragMin) / (max - min);
+          const maxDragArcLength = circumference * dragRangePercent;
+          const progressArcLength = (progressionPercentage / 100) * maxDragArcLength;
+          
+          // Décaler le cercle pour que l'arc commence à dragMin
+          const dragStartPercent = (effectiveDragMin - min) / (max - min);
+          const startAngleOffset = circumference * dragStartPercent;
+          
+          progressCircle.style.cssText = `
+            fill: none;
+            stroke: ${circularProgressionStyles.stroke || progressionStyles.backgroundColor || '#007bff'};
+            stroke-width: ${circularProgressionStyles.strokeWidth || '6'};
+            stroke-dasharray: ${progressArcLength} ${circumference - progressArcLength};
+            stroke-dashoffset: ${-startAngleOffset};
+            stroke-linecap: ${circularProgressionStyles.strokeLinecap || 'butt'};
+            opacity: ${circularProgressionStyles.opacity || '1'};
+          `;
+        } else {
+          // Pas de zone de drag : comportement normal (cercle complet)
+          progressCircle.style.cssText = `
+            fill: none;
+            stroke: ${circularProgressionStyles.stroke || progressionStyles.backgroundColor || '#007bff'};
+            stroke-width: ${circularProgressionStyles.strokeWidth || '6'};
+            stroke-dasharray: ${circumference};
+            stroke-dashoffset: ${circumference - (progressionPercentage / 100) * circumference};
+            stroke-linecap: ${circularProgressionStyles.strokeLinecap || 'butt'};
+            opacity: ${circularProgressionStyles.opacity || '1'};
+          `;
+        }
+        
         progressCircle.setAttribute('cx', '50');
         progressCircle.setAttribute('cy', '50');
         progressCircle.setAttribute('r', svgRadius.toString());
@@ -509,38 +570,43 @@ const createSlider = (config = {}) => {
         track.appendChild(svg);
       }
       
-    } else if (type === 'vertical') {
-      // Slider vertical
-      handle.$({
-        css: {
-          top: `${100 - percentage}%`,
-          transform: 'translate(-50%, -50%)'
-        }
-      });
-      
-      if (progression) {
-        progression.$({
-          css: {
-            height: `${percentage}%`
-          }
-        });
-      }
-      
     } else {
-      // Slider horizontal (défaut)
-      handle.$({
-        css: {
-          left: `${percentage}%`,
-          transform: 'translate(-50%, -50%)'
-        }
-      });
+      // Sliders horizontaux et verticaux - utiliser la plage totale
+      const handlePercentage = ((clampedValue - min) / (max - min)) * 100;
       
-      if (progression) {
-        progression.$({
+      if (type === 'vertical') {
+        // Slider vertical
+        handle.$({
           css: {
-            width: `${percentage}%`
+            top: `${100 - handlePercentage}%`,
+            transform: 'translate(-50%, -50%)'
           }
         });
+        
+        if (progression) {
+          progression.$({
+            css: {
+              height: `${handlePercentage}%`
+            }
+          });
+        }
+        
+      } else {
+        // Slider horizontal (défaut)
+        handle.$({
+          css: {
+            left: `${handlePercentage}%`,
+            transform: 'translate(-50%, -50%)'
+          }
+        });
+        
+        if (progression) {
+          progression.$({
+            css: {
+              width: `${handlePercentage}%`
+            }
+          });
+        }
       }
     }
     
@@ -589,6 +655,11 @@ const createSlider = (config = {}) => {
       // Convertir en valeur selon min/max
       const value = min + percentage * (max - min);
       
+      // Pour les sliders circulaires, appliquer les limites de drag
+      if (isCircular) {
+        return Math.max(effectiveDragMin, Math.min(effectiveDragMax, value));
+      }
+      
       return value;
       
     } else if (type === 'vertical') {
@@ -606,6 +677,18 @@ const createSlider = (config = {}) => {
       return min + Math.max(0, Math.min(1, percentage)) * (max - min);
     }
   };
+
+  // Calcul des zones de drag effectives
+  const effectiveDragMin = dragMin !== null ? dragMin : min;
+  const effectiveDragMax = dragMax !== null ? dragMax : max;
+  
+  // Validation des zones de drag
+  if (effectiveDragMin < min) {
+    console.warn(`dragMin (${effectiveDragMin}) ne peut pas être inférieur à min (${min})`);
+  }
+  if (effectiveDragMax > max) {
+    console.warn(`dragMax (${effectiveDragMax}) ne peut pas être supérieur à max (${max})`);
+  }
 
   // Gestionnaires d'événements
   const handleMouseDown = (e) => {
