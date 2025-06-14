@@ -188,7 +188,7 @@ const $ = (id, props = {}) => {
   creator(element, merged);
   
   // Parent (support des sélecteurs)
-  const parent = merged.parent || body;
+  const parent = merged.parent || '#view';  // ← Votre changement
   if (typeof parent === 'string') {
     const target = document.querySelector(parent);
     if (target) target.appendChild(element);

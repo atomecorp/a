@@ -1,17 +1,17 @@
 // // / === 🎉 Démonstrations ===
 
 // // 1. Template basique
-// define('box', {
-//   tag: 'div',
-//   class: 'box',
-//   css: {
-//     width: '100px',
-//     height: '100px',
-//     backgroundColor: '#f00',
-//     transition: 'all 0.5s ease',
-//     margin: '10px'
-//   }
-// });
+define('box', {
+  tag: 'div',
+  class: 'box',
+  css: {
+    width: '100px',
+    height: '100px',
+    backgroundColor: '#f00',
+    transition: 'all 0.5s ease',
+    margin: '10px'
+  }
+});
 
 // define('span', {
 //   tag: 'div',
@@ -138,7 +138,7 @@
 
 
 // 2. Animation avec CSS
- $('div', {
+ $('box', {
    css: {
     width: '100px',
     height: '100px',
