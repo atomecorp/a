@@ -284,7 +284,7 @@ const createSlider = (config = {}) => {
     ticks = [],
     size = 'md',
     radius,  // Ajout du paramètre radius
-    handleOffset = -8,  // Nouveau paramètre pour ajuster la position du handle
+    handleOffset = 0,  // Nouveau paramètre pour ajuster la position du handle
     ...otherProps
   } = config;
 
