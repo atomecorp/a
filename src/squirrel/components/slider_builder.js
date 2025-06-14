@@ -29,7 +29,8 @@ define('slider-track', {
     backgroundColor: '#e0e0e0',
     borderRadius: '4px',
     overflow: 'hidden',
-    zIndex: '1'
+    zIndex: '1',
+    boxSizing: 'border-box'  // Ajout important
   }
 });
 
@@ -42,7 +43,6 @@ define('slider-progression', {
     backgroundColor: '#007bff',
     borderRadius: '0',
     zIndex: '2',
-    // transition: 'all 0.1s ease'
   }
 });
 
@@ -56,8 +56,7 @@ define('slider-handle', {
     border: '2px solid #007bff',
     borderRadius: '50%',
     cursor: 'pointer',
-    zIndex: '10',
-    // transition: 'all 0.1s ease',
+    zIndex: '20',  // Augmenté pour être sûr qu'il est au-dessus
     boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
   }
 });
@@ -265,6 +264,8 @@ const sliderPresets = {
  * @param {boolean} config.showLabel - Afficher la valeur (défaut: true)
  * @param {boolean} config.showTicks - Afficher les graduations
  * @param {Array} config.ticks - Positions des graduations
+ * @param {number} config.radius - Rayon personnalisé pour slider circulaire
+ * @param {number} config.handleOffset - Décalage du handle (en %) : positif = extérieur, négatif = intérieur
  */
 const createSlider = (config = {}) => {
   const {
@@ -282,6 +283,8 @@ const createSlider = (config = {}) => {
     showTicks = false,
     ticks = [],
     size = 'md',
+    radius,  // Ajout du paramètre radius
+    handleOffset = -8,  // Nouveau paramètre pour ajuster la position du handle
     ...otherProps
   } = config;
 
@@ -298,6 +301,13 @@ const createSlider = (config = {}) => {
   let progressionStyles = { ...sliderVariants[type]?.progression || {} };
   let handleStyles = { ...sliderVariants[type]?.handle || {} };
   let labelStyles = { ...sliderVariants[type]?.label || {} };
+
+  // Si un radius est fourni pour un slider circulaire, l'utiliser
+  if (isCircular && radius) {
+    const diameter = radius * 2;
+    containerStyles.width = `${diameter}px`;
+    containerStyles.height = `${diameter}px`;
+  }
 
   // Application des styles personnalisés
   if (skin.container) containerStyles = { ...containerStyles, ...skin.container };
@@ -324,6 +334,18 @@ const createSlider = (config = {}) => {
     id: `${sliderId}_track`,
     css: trackStyles
   });
+
+  // Pour un slider circulaire, s'assurer que le track remplit le conteneur
+  if (isCircular) {
+    track.$({
+      css: {
+        width: '100%',
+        height: '100%',
+        top: '0',
+        left: '0'
+      }
+    });
+  }
 
   // Création de la progression
   let progression;
@@ -378,13 +400,14 @@ const createSlider = (config = {}) => {
 
   // Assemblage des éléments
   container.appendChild(track);
-  if (!isCircular) track.appendChild(progression);
-  container.appendChild(handle);  // Handle au même niveau que track
+  if (!isCircular && progression) track.appendChild(progression);
+  container.appendChild(handle);  // Handle toujours au niveau du conteneur
   if (label) container.appendChild(label);
 
   // Variables de state
   let isDragging = false;
   let currentVal = currentValue;
+  let currentHandleOffset = handleOffset;  // Stocker l'offset actuel
 
   // Fonction de mise à jour de position
   const updatePosition = (newValue) => {
@@ -393,49 +416,35 @@ const createSlider = (config = {}) => {
     
     if (isCircular) {
       // Slider circulaire : position sur le cercle
-      // L'angle commence en haut (12h) et va dans le sens horaire
-      const angle = (percentage / 100) * 2 * Math.PI - Math.PI / 2;
-      
-      // Pour le SVG, on utilise un radius de 42 (dans le viewBox 100x100)
-      const svgRadius = 42;
-      
-      // Algorithme standard pour positionner un point sur un cercle
-      // 1. Convertir le pourcentage en angle (0-360°)
+      // Convertir le pourcentage en angle (0-360°)
       const angleInDegrees = (percentage / 100) * 360;
       
-      // 2. Convertir en radians et ajuster pour commencer en haut (-90°)
+      // Convertir en radians et ajuster pour commencer en haut (-90°)
       const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
       
-      // 3. Calculer le rayon basé sur la taille du container moins le border
-      // Pour un container de 100%, le rayon effectif est ~45% pour tenir compte des borders
-      const containerRadius = 45; // 45% du container
+      // Obtenir la largeur du border pour calculer le bon rayon
+      const trackStyle = window.getComputedStyle(track);
+      const borderWidth = parseFloat(trackStyle.borderWidth) || parseFloat(trackStyle.borderTopWidth) || 6;
       
-      // 4. Calculer les coordonnées du centre vers le bord
-      const centerX = 50; // Centre en %
-      const centerY = 50; // Centre en %
+      // Calculer le rayon pour que le handle soit SUR le track
+      // Le track a un border, on veut que le handle soit au milieu de ce border
+      // Si le conteneur fait 100%, le track intérieur fait 100% - 2*borderWidth
+      // Le milieu du border est donc à (100% - borderWidth) / 2
+      const borderPercent = (borderWidth / container.offsetWidth) * 100;
       
-      let x = centerX + containerRadius * Math.cos(angleInRadians);
-      let y = centerY + containerRadius * Math.sin(angleInRadians);
+      // Appliquer l'offset personnalisé
+      // handleOffset positif = vers l'extérieur, négatif = vers l'intérieur
+      const radiusPercent = 50 - borderPercent + currentHandleOffset;
       
-      // 5. Corrections pour les positions problématiques
-      const normalizedPercentage = percentage % 100;
-      
-      if (normalizedPercentage >= 0 && normalizedPercentage <= 5) {
-        // Haut (0%) - ramener vers le bas davantage
-        y += 3;
-      } else if (normalizedPercentage >= 70 && normalizedPercentage <= 80) {
-        // Gauche (75%) - décaler encore plus vers la droite
-        x += 4;
-      } else if (normalizedPercentage >= 95) {
-        // Haut (100%) - ramener vers le bas davantage
-        y += 3;
-      }
+      const x = 50 + radiusPercent * Math.cos(angleInRadians);
+      const y = 50 + radiusPercent * Math.sin(angleInRadians);
       
       handle.$({
         css: {
           left: `${x}%`,
           top: `${y}%`,
-          transform: 'translate(-50%, -50%)'
+          transform: 'translate(-50%, -50%)',
+          zIndex: '15'  // S'assurer que le handle est au-dessus du track
         }
       });
       
@@ -443,7 +452,8 @@ const createSlider = (config = {}) => {
       if (track.querySelector('svg')) {
         const progressCircle = track.querySelector('.progress-circle');
         if (progressCircle) {
-          const circumference = 2 * Math.PI * svgRadius; // Utilise le radius SVG
+          const svgRadius = 42; // Radius dans le viewBox SVG
+          const circumference = 2 * Math.PI * svgRadius;
           // Pour que la progression commence en haut et suive le handle
           const offset = circumference - (percentage / 100) * circumference;
           progressCircle.style.strokeDashoffset = offset;
@@ -464,8 +474,9 @@ const createSlider = (config = {}) => {
         `;
         
         // Cercle de fond (fixe)
-        const backgroundCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        const svgRadius = 42;
         const circumference = 2 * Math.PI * svgRadius;
+        const backgroundCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         backgroundCircle.style.cssText = `
           fill: none;
           stroke: #e0e0e0;
@@ -487,7 +498,6 @@ const createSlider = (config = {}) => {
           stroke-dasharray: ${circumference};
           stroke-dashoffset: ${circumference - (percentage / 100) * circumference};
           stroke-linecap: butt;
-          transition: ${circularProgressionStyles.transition || 'stroke-dashoffset 0.1s ease'};
           opacity: ${circularProgressionStyles.opacity || '1'};
         `;
         progressCircle.setAttribute('cx', '50');
@@ -544,17 +554,42 @@ const createSlider = (config = {}) => {
 
   // Fonction de calcul de valeur depuis position
   const getValueFromPosition = (clientX, clientY) => {
-    const rect = track.getBoundingClientRect();
-    
     if (isCircular) {
-      // Calcul de l'angle pour slider circulaire
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const angle = Math.atan2(clientY - centerY, clientX - centerX);
-      // Normaliser l'angle pour commencer en haut (12h) et aller dans le sens horaire
-      const normalizedAngle = (angle + Math.PI / 2 + 2 * Math.PI) % (2 * Math.PI);
-      const percentage = normalizedAngle / (2 * Math.PI);
-      return min + percentage * (max - min);
+      // Utiliser getBoundingClientRect pour obtenir la position absolue
+      const containerRect = container.getBoundingClientRect();
+      
+      // Centre du conteneur en coordonnées absolues
+      const centerX = containerRect.left + containerRect.width / 2;
+      const centerY = containerRect.top + containerRect.height / 2;
+      
+      // Vecteur du centre vers la souris
+      const deltaX = clientX - centerX;
+      const deltaY = clientY - centerY;
+      
+      // Calcul de l'angle en utilisant atan2
+      // atan2(y, x) retourne l'angle en radians entre -PI et PI
+      // avec 0 pointant vers la droite (3h sur une horloge)
+      let angleRadians = Math.atan2(deltaY, deltaX);
+      
+      // Convertir en degrés
+      let angleDegrees = angleRadians * (180 / Math.PI);
+      
+      // Ajuster pour que 0° soit en haut (12h) au lieu de droite (3h)
+      // On ajoute 90° pour faire la rotation
+      angleDegrees = angleDegrees + 90;
+      
+      // Normaliser entre 0 et 360
+      if (angleDegrees < 0) {
+        angleDegrees += 360;
+      }
+      
+      // Convertir l'angle en pourcentage (0-1)
+      const percentage = angleDegrees / 360;
+      
+      // Convertir en valeur selon min/max
+      const value = min + percentage * (max - min);
+      
+      return value;
       
     } else if (type === 'vertical') {
       // Slider vertical
@@ -596,6 +631,8 @@ const createSlider = (config = {}) => {
     updatePosition(steppedValue);
     
     if (onInput) onInput(currentVal);
+    
+    e.preventDefault();
   };
 
   const handleMouseUp = () => {
@@ -621,8 +658,7 @@ const createSlider = (config = {}) => {
     if (!isDragging) return;
     
     const touch = e.touches[0];
-    handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
-    e.preventDefault();
+    handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => e.preventDefault() });
   };
 
   const handleTouchEnd = () => {
@@ -633,8 +669,8 @@ const createSlider = (config = {}) => {
   handle.addEventListener('mousedown', handleMouseDown);
   track.addEventListener('mousedown', handleMouseDown);
   
-  handle.addEventListener('touchstart', handleTouchStart);
-  track.addEventListener('touchstart', handleTouchStart);
+  handle.addEventListener('touchstart', handleTouchStart, { passive: false });
+  track.addEventListener('touchstart', handleTouchStart, { passive: false });
   document.addEventListener('touchmove', handleTouchMove, { passive: false });
   document.addEventListener('touchend', handleTouchEnd);
 
@@ -667,6 +703,16 @@ const createSlider = (config = {}) => {
     });
     return container;
   };
+
+  container.setHandleOffset = (offset) => {
+    if (isCircular) {
+      currentHandleOffset = offset;
+      updatePosition(currentVal);
+    }
+    return container;
+  };
+
+  container.getHandleOffset = () => currentHandleOffset;
 
   return container;
 };
