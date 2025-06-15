@@ -26,6 +26,9 @@
   const MatrixModule = await import('./components/matrix_builder.js');
   window.Matrix = MatrixModule.default;
 
+  const MenuModule = await import('./components/menu_builder.js');
+  window.Menu = MenuModule.default;
+
   const TableModule = await import('./components/table_builder.js');
   window.Table = TableModule.default;
 
