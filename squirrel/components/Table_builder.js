@@ -160,20 +160,50 @@ class Table {
       top: `${this.config.position.y}px`,
       width: `${this.config.size.width}px`,
       height: `${this.config.size.height}px`,
-      overflow: 'auto',
       background: '#ffffff',
       border: '1px solid #dee2e6',
       borderRadius: '8px',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
     };
 
     Object.assign(this.container.style, defaultStyles);
   }
 
   createTable() {
-    // Créer l'élément table
+    // Créer le conteneur d'en-tête fixe
+    this.headerContainer = document.createElement('div');
+    this.headerContainer.className = 'table-header-container';
+    this.headerContainer.style.cssText = `
+      flex-shrink: 0;
+      overflow: hidden;
+      border-bottom: 2px solid #dee2e6;
+    `;
+
+    // Créer la table d'en-tête
+    this.headerTable = document.createElement('table');
+    this.headerTable.className = 'professional-table-header';
+    this.headerTable.style.cssText = `
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: ${this.config.styling.borderSpacing}px;
+      margin: 0;
+    `;
+
+    // Créer le conteneur de corps avec scroll
+    this.bodyContainer = document.createElement('div');
+    this.bodyContainer.className = 'table-body-container';
+    this.bodyContainer.style.cssText = `
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    `;
+
+    // Créer la table de corps
     this.tableElement = document.createElement('table');
-    this.tableElement.className = 'professional-table';
+    this.tableElement.className = 'professional-table-body';
     this.tableElement.style.cssText = `
       width: 100%;
       border-collapse: separate;
@@ -181,13 +211,15 @@ class Table {
       margin: 0;
     `;
 
-    // Créer l'en-tête
+    // Créer l'en-tête et le corps
     this.createHeader();
-    
-    // Créer le corps
     this.createBody();
     
-    this.container.appendChild(this.tableElement);
+    // Assembler la structure
+    this.headerContainer.appendChild(this.headerTable);
+    this.bodyContainer.appendChild(this.tableElement);
+    this.container.appendChild(this.headerContainer);
+    this.container.appendChild(this.bodyContainer);
   }
 
   createHeader() {
@@ -199,6 +231,8 @@ class Table {
       th.id = `header-${column.id}`;
       th.textContent = column.header || column.id;
       th.style.width = `${column.width || 100}px`;
+      th.style.minWidth = `${column.width || 100}px`;
+      th.style.maxWidth = `${column.width || 100}px`;
       
       // Appliquer les styles d'en-tête
       Object.assign(th.style, this.config.styling.headerStyle);
@@ -223,7 +257,7 @@ class Table {
     });
     
     thead.appendChild(headerRow);
-    this.tableElement.appendChild(thead);
+    this.headerTable.appendChild(thead);
   }
 
   createBody() {
@@ -268,6 +302,11 @@ class Table {
     const td = document.createElement('td');
     const cellData = rowData.cells[column.id];
     
+    // Forcer la même largeur que l'en-tête
+    td.style.width = `${column.width || 100}px`;
+    td.style.minWidth = `${column.width || 100}px`;
+    td.style.maxWidth = `${column.width || 100}px`;
+    
     if (cellData) {
       // ID de la cellule
       td.id = cellData.id || `cell-${rowIndex}-${column.id}`;
@@ -296,16 +335,21 @@ class Table {
   }
 
   setupEventListeners() {
-    // Événements de clic sur les cellules
+    // Événements de clic sur les cellules (corps de table)
     this.tableElement.addEventListener('click', (e) => {
       if (e.target.tagName === 'TD') {
         this.handleCellClick(e.target, e);
-      } else if (e.target.tagName === 'TH' && e.target.dataset.columnId) {
+      }
+    });
+
+    // Événements de clic sur l'en-tête (table d'en-tête séparée)
+    this.headerTable.addEventListener('click', (e) => {
+      if (e.target.tagName === 'TH' && e.target.dataset.columnId) {
         this.handleHeaderClick(e.target, e);
       }
     });
 
-    // Événements de survol
+    // Événements de survol sur les cellules
     this.tableElement.addEventListener('mouseover', (e) => {
       if (e.target.tagName === 'TD') {
         this.handleCellHover(e.target);
@@ -348,16 +392,33 @@ class Table {
   }
 
   handleCellHover(cell) {
-    Object.assign(cell.style, this.config.styling.states.hover);
+    // Appliquer l'effet hover à toute la ligne
+    const row = cell.parentElement;
+    if (row && this.config.styling.states.hover) {
+      Object.assign(row.style, this.config.styling.states.hover);
+    }
   }
 
   handleCellLeave(cell) {
-    const cellData = this.cellsMap.get(cell.id);
-    
-    // Restaurer les styles originaux
-    Object.assign(cell.style, this.config.styling.cellStyle);
-    if (cellData && cellData.style) {
-      Object.assign(cell.style, cellData.style);
+    // Restaurer le style original de la ligne
+    const row = cell.parentElement;
+    if (row) {
+      const rowId = row.id;
+      const rowData = this.rowsMap.get(rowId);
+      const rowIndex = Array.from(this.bodyContainer.children).indexOf(row);
+      
+      // Réappliquer les styles de base
+      row.style.cssText = `
+        display: flex;
+        min-height: ${this.config.styling.rowHeight || 40}px;
+        border-bottom: 1px solid #e9ecef;
+        ${rowIndex % 2 === 1 ? `background-color: ${this.config.styling.alternateRowStyle?.backgroundColor || '#f8f9fa'};` : ''}
+      `;
+      
+      // Réappliquer le style spécifique de la ligne s'il existe
+      if (rowData && rowData.style) {
+        Object.assign(row.style, rowData.style);
+      }
     }
   }
 
@@ -366,12 +427,11 @@ class Table {
   // ========================================
 
   addRow(rowData) {
-    const tbody = this.tableElement.querySelector('tbody');
     const rowIndex = this.config.rows.length;
     
     this.config.rows.push(rowData);
-    const tr = this.createRow(rowData, rowIndex);
-    tbody.appendChild(tr);
+    const rowElement = this.createRow(rowData, rowIndex);
+    this.bodyContainer.appendChild(rowElement);
     
     if (this.callbacks.onRowAdd) {
       this.callbacks.onRowAdd(rowData);

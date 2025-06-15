@@ -160,160 +160,196 @@ class Table {
       top: `${this.config.position.y}px`,
       width: `${this.config.size.width}px`,
       height: `${this.config.size.height}px`,
-      overflow: 'auto',
       background: '#ffffff',
       border: '1px solid #dee2e6',
       borderRadius: '8px',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
     };
 
     Object.assign(this.container.style, defaultStyles);
   }
 
   createTable() {
-    // Créer l'élément table
-    this.tableElement = document.createElement('table');
-    this.tableElement.className = 'professional-table';
-    this.tableElement.style.cssText = `
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: ${this.config.styling.borderSpacing}px;
-      margin: 0;
+    // Créer l'en-tête fixe (div, pas table)
+    this.headerContainer = document.createElement('div');
+    this.headerContainer.className = 'table-header-container';
+    this.headerContainer.style.cssText = `
+      display: flex;
+      flex-shrink: 0;
+      border-bottom: 2px solid #dee2e6;
+      background: ${this.config.styling.headerStyle.backgroundColor || '#343a40'};
     `;
 
-    // Créer l'en-tête
+    // Créer le conteneur de corps avec scroll
+    this.bodyContainer = document.createElement('div');
+    this.bodyContainer.className = 'table-body-container';
+    this.bodyContainer.style.cssText = `
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      max-height: calc(100% - 50px);
+    `;
+
+    // Créer l'en-tête et le corps
     this.createHeader();
-    
-    // Créer le corps
     this.createBody();
     
-    this.container.appendChild(this.tableElement);
+    // Assembler la structure
+    this.container.appendChild(this.headerContainer);
+    this.container.appendChild(this.bodyContainer);
   }
 
   createHeader() {
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    
+    // Créer les colonnes d'en-tête comme des divs flexibles
     this.config.columns.forEach(column => {
-      const th = document.createElement('th');
-      th.id = `header-${column.id}`;
-      th.textContent = column.header || column.id;
-      th.style.width = `${column.width || 100}px`;
+      const headerCell = document.createElement('div');
+      headerCell.id = `header-${column.id}`;
+      headerCell.className = 'table-header-cell';
+      headerCell.textContent = column.header || column.id;
       
-      // Appliquer les styles d'en-tête
-      Object.assign(th.style, this.config.styling.headerStyle);
+      // Style de la cellule d'en-tête
+      headerCell.style.cssText = `
+        width: ${column.width || 100}px;
+        min-width: ${column.width || 100}px;
+        max-width: ${column.width || 100}px;
+        padding: ${this.config.styling.headerStyle.padding || '12px'};
+        font-size: ${this.config.styling.headerStyle.fontSize || '14px'};
+        font-weight: ${this.config.styling.headerStyle.fontWeight || '600'};
+        color: ${this.config.styling.headerStyle.color || '#ffffff'};
+        border-right: 1px solid rgba(255,255,255,0.1);
+        display: flex;
+        align-items: center;
+        justify-content: ${column.style?.textAlign === 'right' ? 'flex-end' : 
+                          column.style?.textAlign === 'center' ? 'center' : 'flex-start'};
+      `;
       
       // Styles spécifiques à la colonne
       if (column.style) {
-        Object.assign(th.style, column.style);
+        Object.assign(headerCell.style, column.style);
       }
       
       // Ajouter l'indicateur de tri si sortable
       if (this.config.options.sortable && column.sortable !== false) {
-        th.style.cursor = 'pointer';
-        th.style.userSelect = 'none';
-        th.dataset.columnId = column.id;
-        th.innerHTML += ' <span class="sort-indicator">⚌</span>';
+        headerCell.style.cursor = 'pointer';
+        headerCell.style.userSelect = 'none';
+        headerCell.dataset.columnId = column.id;
+        headerCell.innerHTML += ' <span class="sort-indicator">⚌</span>';
       }
       
-      headerRow.appendChild(th);
+      this.headerContainer.appendChild(headerCell);
       
       // Stocker la colonne
       this.columnsMap.set(column.id, column);
     });
-    
-    thead.appendChild(headerRow);
-    this.tableElement.appendChild(thead);
   }
 
   createBody() {
-    const tbody = document.createElement('tbody');
-    
     this.config.rows.forEach((rowData, rowIndex) => {
-      const tr = this.createRow(rowData, rowIndex);
-      tbody.appendChild(tr);
+      const rowElement = this.createRow(rowData, rowIndex);
+      this.bodyContainer.appendChild(rowElement);
     });
-    
-    this.tableElement.appendChild(tbody);
   }
 
   createRow(rowData, rowIndex) {
-    const tr = document.createElement('tr');
-    tr.id = rowData.id || `row-${rowIndex}`;
-    tr.className = 'table-row';
-    
-    // Appliquer le style de ligne alternée
-    if (rowIndex % 2 === 1) {
-      Object.assign(tr.style, this.config.styling.alternateRowStyle);
-    }
+    const row = document.createElement('div');
+    row.id = rowData.id || `row-${rowIndex}`;
+    row.className = 'table-row';
+    row.style.cssText = `
+      display: flex;
+      min-height: ${this.config.styling.rowHeight || 40}px;
+      border-bottom: 1px solid #e9ecef;
+      ${rowIndex % 2 === 1 ? `background-color: ${this.config.styling.alternateRowStyle?.backgroundColor || '#f8f9fa'};` : ''}
+    `;
     
     // Style spécifique à la ligne
     if (rowData.style) {
-      Object.assign(tr.style, rowData.style);
+      Object.assign(row.style, rowData.style);
     }
     
     // Créer les cellules
     this.config.columns.forEach(column => {
-      const td = this.createCell(rowData, column, rowIndex);
-      tr.appendChild(td);
+      const cell = this.createCell(rowData, column, rowIndex);
+      row.appendChild(cell);
     });
     
     // Stocker la ligne
-    this.rowsMap.set(tr.id, rowData);
+    this.rowsMap.set(row.id, rowData);
     
-    return tr;
+    return row;
   }
 
   createCell(rowData, column, rowIndex) {
-    const td = document.createElement('td');
+    const cell = document.createElement('div');
     const cellData = rowData.cells[column.id];
+    
+    // Style de base de la cellule
+    cell.style.cssText = `
+      width: ${column.width || 100}px;
+      min-width: ${column.width || 100}px;
+      max-width: ${column.width || 100}px;
+      padding: ${this.config.styling.cellStyle.padding || '8px 12px'};
+      display: flex;
+      align-items: center;
+      font-size: ${this.config.styling.cellStyle.fontSize || '13px'};
+      color: ${this.config.styling.cellStyle.color || '#212529'};
+      background-color: ${this.config.styling.cellStyle.backgroundColor || '#ffffff'};
+      border-right: 1px solid #e9ecef;
+      justify-content: ${column.style?.textAlign === 'right' ? 'flex-end' : 
+                        column.style?.textAlign === 'center' ? 'center' : 'flex-start'};
+    `;
     
     if (cellData) {
       // ID de la cellule
-      td.id = cellData.id || `cell-${rowIndex}-${column.id}`;
-      td.textContent = cellData.content || '';
-      
-      // Appliquer les styles par défaut
-      Object.assign(td.style, this.config.styling.cellStyle);
+      cell.id = cellData.id || `cell-${rowIndex}-${column.id}`;
+      cell.textContent = cellData.content || '';
       
       // Style spécifique à la cellule
       if (cellData.style) {
-        Object.assign(td.style, cellData.style);
+        Object.assign(cell.style, cellData.style);
       }
       
       // Stocker la cellule
-      this.cellsMap.set(td.id, {
+      this.cellsMap.set(cell.id, {
         ...cellData,
         rowId: rowData.id || `row-${rowIndex}`,
         columnId: column.id
       });
     }
     
-    td.dataset.rowId = rowData.id || `row-${rowIndex}`;
-    td.dataset.columnId = column.id;
+    cell.dataset.rowId = rowData.id || `row-${rowIndex}`;
+    cell.dataset.columnId = column.id;
+    cell.className = 'table-cell';
     
-    return td;
+    return cell;
   }
 
   setupEventListeners() {
-    // Événements de clic sur les cellules
-    this.tableElement.addEventListener('click', (e) => {
-      if (e.target.tagName === 'TD') {
-        this.handleCellClick(e.target, e);
-      } else if (e.target.tagName === 'TH' && e.target.dataset.columnId) {
+    // Événements de clic sur l'en-tête
+    this.headerContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('table-header-cell') && e.target.dataset.columnId) {
         this.handleHeaderClick(e.target, e);
       }
     });
 
-    // Événements de survol
-    this.tableElement.addEventListener('mouseover', (e) => {
-      if (e.target.tagName === 'TD') {
+    // Événements de clic sur les cellules du corps
+    this.bodyContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('table-cell')) {
+        this.handleCellClick(e.target, e);
+      }
+    });
+
+    // Événements de survol sur les lignes
+    this.bodyContainer.addEventListener('mouseover', (e) => {
+      if (e.target.classList.contains('table-cell')) {
         this.handleCellHover(e.target);
       }
     });
 
-    this.tableElement.addEventListener('mouseout', (e) => {
-      if (e.target.tagName === 'TD') {
+    this.bodyContainer.addEventListener('mouseout', (e) => {
+      if (e.target.classList.contains('table-cell')) {
         this.handleCellLeave(e.target);
       }
     });
@@ -348,16 +384,33 @@ class Table {
   }
 
   handleCellHover(cell) {
-    Object.assign(cell.style, this.config.styling.states.hover);
+    // Appliquer l'effet hover à toute la ligne
+    const row = cell.parentElement;
+    if (row && this.config.styling.states.hover) {
+      Object.assign(row.style, this.config.styling.states.hover);
+    }
   }
 
   handleCellLeave(cell) {
-    const cellData = this.cellsMap.get(cell.id);
-    
-    // Restaurer les styles originaux
-    Object.assign(cell.style, this.config.styling.cellStyle);
-    if (cellData && cellData.style) {
-      Object.assign(cell.style, cellData.style);
+    // Restaurer le style original de la ligne
+    const row = cell.parentElement;
+    if (row) {
+      const rowId = row.id;
+      const rowData = this.rowsMap.get(rowId);
+      const rowIndex = Array.from(this.bodyContainer.children).indexOf(row);
+      
+      // Réappliquer les styles de base
+      row.style.cssText = `
+        display: flex;
+        min-height: ${this.config.styling.rowHeight || 40}px;
+        border-bottom: 1px solid #e9ecef;
+        ${rowIndex % 2 === 1 ? `background-color: ${this.config.styling.alternateRowStyle?.backgroundColor || '#f8f9fa'};` : ''}
+      `;
+      
+      // Réappliquer le style spécifique de la ligne s'il existe
+      if (rowData && rowData.style) {
+        Object.assign(row.style, rowData.style);
+      }
     }
   }
 
@@ -366,12 +419,11 @@ class Table {
   // ========================================
 
   addRow(rowData) {
-    const tbody = this.tableElement.querySelector('tbody');
     const rowIndex = this.config.rows.length;
     
     this.config.rows.push(rowData);
-    const tr = this.createRow(rowData, rowIndex);
-    tbody.appendChild(tr);
+    const rowElement = this.createRow(rowData, rowIndex);
+    this.bodyContainer.appendChild(rowElement);
     
     if (this.callbacks.onRowAdd) {
       this.callbacks.onRowAdd(rowData);
@@ -458,9 +510,14 @@ class Table {
   }
 
   refreshTable() {
-    const tbody = this.tableElement.querySelector('tbody');
-    tbody.innerHTML = '';
-    this.createBody();
+    // Vider le conteneur de corps
+    this.bodyContainer.innerHTML = '';
+    
+    // Recréer toutes les lignes
+    this.config.rows.forEach((rowData, rowIndex) => {
+      const rowElement = this.createRow(rowData, rowIndex);
+      this.bodyContainer.appendChild(rowElement);
+    });
   }
 
   updateSortIndicators(activeColumn, direction) {

@@ -518,3 +518,157 @@ setTimeout(() => {
     
     console.log('✅ Nouvelles lignes ajoutées dynamiquement !');
 }, 2000);
+
+// 📜 Tableau Long avec En-tête Fixe (test scrolling)
+const longTable = new Table({
+    id: "long-table",
+    position: { x: 50, y: 800 },
+    size: { width: 800, height: 300 },  // Hauteur limitée pour forcer le scroll
+    attach: "#view",
+    
+    columns: [
+        { id: "id", header: "ID", width: 80, sortable: true },
+        { id: "name", header: "Nom Complet", width: 200, sortable: true },
+        { id: "email", header: "Email", width: 250, sortable: true },
+        { id: "department", header: "Département", width: 150, sortable: true },
+        { id: "salary", header: "Salaire", width: 120, sortable: true }
+    ],
+    
+    rows: [], // On va les générer dynamiquement
+    
+    styling: {
+        cellPadding: 12,
+        rowHeight: 45,
+        headerStyle: {
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            color: "#ffffff",
+            fontSize: "13px",
+            fontWeight: "700",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            position: "sticky",  // Pour s'assurer que l'en-tête reste fixe
+            top: "0",
+            zIndex: "10"
+        },
+        cellStyle: {
+            backgroundColor: "#ffffff",
+            color: "#333333",
+            fontSize: "14px",
+            border: "none",
+            borderBottom: "1px solid #e9ecef",
+            padding: "12px"
+        },
+        alternateRowStyle: {
+            backgroundColor: "#f8f9fa"
+        },
+        states: {
+            hover: {
+                backgroundColor: "#e3f2fd",
+                borderLeft: "4px solid #2196f3"
+            },
+            selected: {
+                backgroundColor: "#1976d2",
+                color: "#ffffff"
+            }
+        }
+    },
+    
+    onCellClick: (cell, row, col) => {
+        console.log(`📜 Long Table: ${cell.content} clicked (${row}/${col})`);
+    },
+    
+    onSort: (column, direction) => {
+        console.log(`📜 Long Table sorted by ${column} ${direction}`);
+    }
+});
+
+// Générer 50 lignes de données pour tester le scroll
+const departments = ['IT', 'Sales', 'Marketing', 'HR', 'Finance', 'Operations'];
+const firstNames = ['Alice', 'Bob', 'Carol', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Iris', 'Jack'];
+const lastNames = ['Smith', 'Johnson', 'Brown', 'Davis', 'Miller', 'Wilson', 'Moore', 'Taylor', 'Anderson', 'Thomas'];
+
+for (let i = 1; i <= 50; i++) {
+    const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+    const department = departments[Math.floor(Math.random() * departments.length)];
+    const salary = (Math.floor(Math.random() * 5000) + 3000) * 10; // Entre 30k et 80k
+    
+    longTable.addRow({
+        id: `employee-${i}`,
+        cells: {
+            id: { content: String(i).padStart(3, '0'), style: { fontFamily: "monospace", color: "#666" }},
+            name: { content: `${firstName} ${lastName}`, style: { fontWeight: "600" }},
+            email: { content: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@company.com`, style: { color: "#0066cc" }},
+            department: { content: department, style: { 
+                backgroundColor: department === 'IT' ? '#e3f2fd' : 
+                                department === 'Sales' ? '#fff3e0' : 
+                                department === 'Marketing' ? '#f3e5f5' : 
+                                department === 'HR' ? '#e8f5e8' : 
+                                department === 'Finance' ? '#fff8e1' : '#fce4ec',
+                color: department === 'IT' ? '#1976d2' : 
+                       department === 'Sales' ? '#f57c00' : 
+                       department === 'Marketing' ? '#7b1fa2' : 
+                       department === 'HR' ? '#388e3c' : 
+                       department === 'Finance' ? '#fbc02d' : '#c2185b',
+                borderRadius: "12px",
+                padding: "4px 12px",
+                fontWeight: "500",
+                textAlign: "center",
+                fontSize: "12px"
+            }},
+            salary: { content: `${salary.toLocaleString()}€`, style: { 
+                textAlign: "right", 
+                fontWeight: "bold",
+                color: salary > 60000 ? "#4caf50" : salary > 45000 ? "#ff9800" : "#757575"
+            }}
+        }
+    });
+}
+
+console.log('📜 Long Table créée avec 50 lignes !');
+console.log('🎯 Testez le scroll - l\'en-tête doit rester fixe !');
+console.log('💡 Cliquez sur les en-têtes pour trier les données.');
+
+// 📊 Résumé des exemples créés
+console.log('\n🎨 ========== RÉSUMÉ DES EXEMPLES DE TABLEAUX ==========');
+console.log('💎 1. Sexy Table - Élégant et professionnel');
+console.log('🎮 2. Gaming Table - Thème sombre cyberpunk');
+console.log('📊 3. Financial Table - Style financier sobre');
+console.log('🌈 4. Creative Table - Coloré et créatif');
+console.log('📱 5. Mobile Table - Style mobile optimisé');
+console.log('📜 6. Long Table - Test d\'en-tête fixe avec scroll');
+console.log('🎯 L\'en-tête ne scroll plus avec le contenu !');
+console.log('================================================\n');
+
+// 🧪 Test de débogage pour vérifier la structure
+setTimeout(() => {
+    console.log('\n🔧 Test de débogage de la structure...');
+    
+    try {
+        const testTable = document.getElementById('sexy-table');
+        if (testTable) {
+            const headerContainer = testTable.querySelector('.table-header-container');
+            const bodyContainer = testTable.querySelector('.table-body-container');
+            
+            console.log('✅ Container principal trouvé:', testTable);
+            console.log('✅ Header container trouvé:', headerContainer ? 'Oui' : 'Non');
+            console.log('✅ Body container trouvé:', bodyContainer ? 'Oui' : 'Non');
+            
+            if (headerContainer) {
+                const headers = headerContainer.querySelectorAll('.table-header-cell');
+                console.log(`✅ En-têtes trouvés: ${headers.length}`);
+            }
+            
+            if (bodyContainer) {
+                const rows = bodyContainer.querySelectorAll('.table-row');
+                const cells = bodyContainer.querySelectorAll('.table-cell');
+                console.log(`✅ Lignes trouvées: ${rows.length}`);
+                console.log(`✅ Cellules trouvées: ${cells.length}`);
+            }
+            
+            console.log('🎯 Test de tri - cliquez sur un en-tête pour tester !');
+        }
+    } catch (error) {
+        console.error('❌ Erreur de debug:', error);
+    }
+}, 3000);
