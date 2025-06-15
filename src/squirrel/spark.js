@@ -23,6 +23,9 @@
   const SliderModule = await import('./components/slider_builder.js');
   window.Slider = SliderModule.default;
 
+  const MatrixModule = await import('./components/matrix_builder.js');
+  window.Matrix = MatrixModule.default;
+
   const DraggableModule = await import('./components/draggable_builder.js');
   window.draggable = DraggableModule.draggable;
   window.makeDraggable = DraggableModule.makeDraggable;
