@@ -334,7 +334,7 @@ class ModuleBuilder {
         pointerEvents: 'auto',
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         transition: 'transform 0.2s ease',
-        zIndex: '1001',
+        zIndex: '1010',
         ...moduleConfig.styling[`${type}Connector`]
       },
       title: connectorConfig.label || connectorConfig.name || `${type} ${index + 1}`
