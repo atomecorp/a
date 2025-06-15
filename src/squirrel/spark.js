@@ -26,7 +26,7 @@
   const MatrixModule = await import('./components/matrix_builder.js');
   window.Matrix = MatrixModule.default;
 
-      const ListModule = await import('../../squirrel/components/List_builder.js');
+     const ListModule = await import('./components/List_builder.js');
   window.List = ListModule.default;
 
   const DraggableModule = await import('./components/draggable_builder.js');

@@ -1,3 +1,4 @@
+
 /**
  * 🎯 LIST COMPONENT - VERSION 2.0 MATERIAL DESIGN
  * Composant List avec styles Material Design et personnalisation complète
