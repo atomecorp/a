@@ -6,4 +6,4 @@
 // import('./examples/lists.js');
 // import('./examples/tables.js');
 // import('./examples/menus.js');
-// import('./examples/modules.js');
+import('./examples/modules.js');

@@ -8,6 +8,7 @@ class ModuleBuilder {
     this.connections = new Map();
     this.draggedConnector = null;
     this.selectedConnector = null; // Pour la connexion par clic
+    this.selectedModules = new Set(); // Pour la sélection de modules
     this.connectionCallbacks = {
       onConnect: [],
       onDisconnect: [],
@@ -57,6 +58,7 @@ class ModuleBuilder {
     // Ajouter les fonctionnalités
     this._addDragFunctionality(moduleContainer, moduleConfig);
     this._addConnectorFunctionality(moduleContainer, moduleConfig);
+    this._addSelectionFunctionality(moduleContainer, moduleConfig);
     
     // Stocker le module
     const moduleInstance = {
@@ -104,6 +106,10 @@ class ModuleBuilder {
 
   // Créer le header du module
   _createModuleHeader(config) {
+    // Calculer la couleur de texte appropriée selon le fond
+    const headerBg = config.styling?.header?.backgroundColor || '#e0e0e0';
+    const textColor = this._getTextColorForBackground(headerBg);
+    
     const header = $('div', {
       id: `${config.id}_header`,
       css: {
@@ -113,23 +119,142 @@ class ModuleBuilder {
         borderRadius: '6px 6px 0 0',
         fontWeight: 'bold',
         fontSize: '14px',
+        color: textColor, // Couleur adaptée au fond
         userSelect: 'none',
         ...config.styling.header
       },
       text: config.name
     });
+
+    // Ajouter la fonctionnalité de renommage par double-clic
+    header.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      this._startRenaming(header, config);
+    });
     
     return header;
   }
 
+  // Démarrer le mode renommage
+  _startRenaming(header, config) {
+    const currentText = header.textContent;
+    
+    // Désactiver le drag pendant l'édition
+    this._setModuleDraggable(config.id, false);
+    
+    // Activer contenteditable avec un style plus subtil
+    header.contentEditable = true;
+    header.style.outline = 'none'; // Supprimer le vilain contour bleu
+    header.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+    header.style.borderRadius = '4px';
+    header.style.userSelect = 'text';
+    header.style.boxShadow = 'inset 0 0 0 2px rgba(33, 150, 243, 0.3), 0 0 8px rgba(33, 150, 243, 0.2)';
+    header.style.transition = 'all 0.2s ease';
+    
+    // Focus et sélectionner le texte
+    header.focus();
+    
+    // Sélectionner tout le texte
+    const range = document.createRange();
+    range.selectNodeContents(header);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    
+    // Fonction pour terminer l'édition
+    const finishRenaming = (save = true) => {
+      const newName = save ? header.textContent.trim() : currentText;
+      
+      // Désactiver contenteditable et restaurer le style
+      header.contentEditable = false;
+      header.style.outline = '';
+      header.style.backgroundColor = '';
+      header.style.borderRadius = '';
+      header.style.userSelect = 'none';
+      header.style.boxShadow = '';
+      header.style.transition = '';
+      
+      if (save && newName && newName !== currentText) {
+        // Sauvegarder le nouveau nom
+        config.name = newName;
+        header.textContent = newName;
+        
+        // Callback de renommage si défini
+        if (config.callbacks && config.callbacks.onRename) {
+          config.callbacks.onRename(config.id, newName, currentText);
+        }
+        
+        console.log(`Module ${config.id} renommé: "${currentText}" → "${newName}"`);
+      } else {
+        // Restaurer l'ancien nom
+        header.textContent = currentText;
+      }
+      
+      // Réactiver le drag
+      this._setModuleDraggable(config.id, true);
+      
+      // Nettoyer la sélection
+      window.getSelection().removeAllRanges();
+    };
+    
+    // Gestion des événements clavier
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finishRenaming(true);
+        header.removeEventListener('keydown', handleKeyDown);
+        header.removeEventListener('blur', handleBlur);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        finishRenaming(false);
+        header.removeEventListener('keydown', handleKeyDown);
+        header.removeEventListener('blur', handleBlur);
+      }
+    };
+    
+    // Terminer l'édition si on perd le focus
+    const handleBlur = () => {
+      finishRenaming(true);
+      header.removeEventListener('keydown', handleKeyDown);
+      header.removeEventListener('blur', handleBlur);
+    };
+    
+    header.addEventListener('keydown', handleKeyDown);
+    header.addEventListener('blur', handleBlur);
+  }
+
+  // Activer/désactiver le drag d'un module
+  _setModuleDraggable(moduleId, draggable) {
+    const module = this.modules.get(moduleId);
+    if (module) {
+      const header = module.element.querySelector(`#${moduleId}_header`);
+      if (header) {
+        header.style.cursor = draggable ? 'move' : 'default';
+        module.config.draggable = draggable;
+        
+        // Mettre à jour visuellement l'état
+        if (draggable) {
+          header.style.opacity = '1';
+        } else {
+          header.style.opacity = '0.8';
+        }
+      }
+    }
+  }
+
   // Créer la zone de contenu
   _createContentArea(config) {
+    // Calculer la couleur de texte appropriée selon le fond du container
+    const containerBg = config.styling?.container?.backgroundColor || '#f0f0f0';
+    const textColor = this._getTextColorForBackground(containerBg);
+    
     const contentArea = $('div', {
       id: `${config.id}_content`,
       css: {
         padding: '12px',
         minHeight: '60px',
         position: 'relative',
+        color: textColor, // Couleur adaptée au fond du container
         ...config.styling.content
       }
     });
@@ -217,6 +342,10 @@ class ModuleBuilder {
 
     // Ajouter le label
     if (connectorConfig.label) {
+      // Calculer la couleur de texte pour le label selon le fond du module
+      const containerBg = moduleConfig.styling?.container?.backgroundColor || '#f0f0f0';
+      const labelColor = this._getTextColorForBackground(containerBg);
+      
       const label = $('span', {
         id: `${connectorId}_label`,
         css: {
@@ -224,7 +353,7 @@ class ModuleBuilder {
           top: '18px',
           left: isInput ? '20px' : '-60px',
           fontSize: '11px',
-          color: '#666',
+          color: labelColor, // Couleur adaptée au fond du module
           whiteSpace: 'nowrap',
           pointerEvents: 'none',
           ...moduleConfig.styling[`${type}Label`]
@@ -257,13 +386,20 @@ class ModuleBuilder {
     const header = moduleElement.querySelector(`#${config.id}_header`);
     
     header.addEventListener('mousedown', (e) => {
+      // Vérifier si le module est draggable (peut être désactivé pendant renommage)
+      if (!config.draggable) return;
+      
       if (e.target.closest('[data-connector]')) return; // Ne pas drag si on clique sur un connecteur
+      if (e.target.tagName === 'INPUT') return; // Ne pas drag si on édite le nom
       
       isDragging = true;
       startX = e.clientX;
       startY = e.clientY;
       initialX = parseInt(moduleElement.style.left);
       initialY = parseInt(moduleElement.style.top);
+      
+      // Supprimer les transitions pendant le drag pour des performances optimales
+      moduleElement.style.transition = 'none';
       
       moduleElement.style.zIndex = '1002';
       document.addEventListener('mousemove', onMouseMove);
@@ -280,14 +416,18 @@ class ModuleBuilder {
       moduleElement.style.left = `${initialX + deltaX}px`;
       moduleElement.style.top = `${initialY + deltaY}px`;
       
-      // Mettre à jour les connexions visuelles
-      this._updateConnections(config.id);
+      // Mettre à jour les connexions visuelles SANS transition
+      this._updateConnectionsImmediate(config.id);
     };
 
     const onMouseUp = () => {
       if (isDragging) {
         isDragging = false;
+        
+        // Restaurer les transitions après le drag
+        moduleElement.style.transition = '';
         moduleElement.style.zIndex = '1000';
+        
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
         
@@ -348,15 +488,45 @@ class ModuleBuilder {
       this.selectedConnector = connector;
       connector.style.boxShadow = '0 0 8px #FF5722';
       connector.style.borderColor = '#FF5722';
-      console.log('Connecteur sélectionné - cliquez sur un autre pour connecter');
+      console.log('Connecteur sélectionné - cliquez sur un autre pour connecter/déconnecter');
     } else if (this.selectedConnector === connector) {
       // Clic sur le même connecteur : désélectionner
       this._clearSelectedConnector();
       console.log('Sélection annulée');
     } else {
-      // Deuxième clic : créer la connexion
-      this._createConnection(this.selectedConnector, connector);
+      // Deuxième clic : vérifier s'il y a déjà une connexion
+      const existingConnection = this._findConnectionBetween(this.selectedConnector, connector);
+      
+      if (existingConnection) {
+        // Déconnecter si déjà connecté
+        this._removeConnectionById(existingConnection.id);
+        console.log('Connexion supprimée');
+      } else {
+        // Créer la connexion si pas encore connecté
+        this._createConnection(this.selectedConnector, connector);
+      }
+      
       this._clearSelectedConnector();
+    }
+  }
+
+  // Trouver une connexion existante entre deux connecteurs
+  _findConnectionBetween(connector1, connector2) {
+    const data1 = connector1.connectorData;
+    const data2 = connector2.connectorData;
+    
+    // Chercher dans les deux sens (A->B ou B->A)
+    const connectionId1 = `${data1.id}_to_${data2.id}`;
+    const connectionId2 = `${data2.id}_to_${data1.id}`;
+    
+    return this.connections.get(connectionId1) || this.connections.get(connectionId2);
+  }
+
+  // Supprimer une connexion par son ID
+  _removeConnectionById(connectionId) {
+    const connection = this.connections.get(connectionId);
+    if (connection) {
+      this._removeConnection(connection.element);
     }
   }
 
@@ -367,6 +537,94 @@ class ModuleBuilder {
       this.selectedConnector.style.borderColor = '';
       this.selectedConnector = null;
     }
+  }
+
+  // Ajouter la fonctionnalité de sélection des modules
+  _addSelectionFunctionality(moduleElement, config) {
+    // Clic simple sur le module pour sélection
+    moduleElement.addEventListener('click', (e) => {
+      // Ne pas sélectionner si on clique sur un connecteur ou pendant le drag
+      if (e.target.closest('[id*="_input_"], [id*="_output_"]')) return;
+      if (e.target.tagName === 'INPUT') return; // Pas pendant l'édition du nom
+      
+      e.stopPropagation();
+      this._toggleModuleSelection(config.id);
+    });
+    
+    // Double-clic sur la zone de contenu pour désélectionner tout
+    const contentArea = moduleElement.querySelector(`#${config.id}_content`);
+    if (contentArea) {
+      contentArea.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        this._clearAllSelections();
+      });
+    }
+  }
+
+  // Basculer la sélection d'un module
+  _toggleModuleSelection(moduleId) {
+    if (this.selectedModules.has(moduleId)) {
+      this._deselectModule(moduleId);
+    } else {
+      this._selectModule(moduleId);
+    }
+  }
+
+  // Sélectionner un module
+  _selectModule(moduleId) {
+    const module = this.modules.get(moduleId);
+    if (!module) return;
+    
+    // Désélectionner les autres modules (sélection unique)
+    this._clearAllSelections();
+    
+    // Sélectionner ce module
+    this.selectedModules.add(moduleId);
+    
+    // Appliquer le style de sélection
+    const container = module.element;
+    container.style.boxShadow = '0 0 0 3px rgba(33, 150, 243, 0.5), 0 4px 12px rgba(0,0,0,0.15)';
+    container.style.transform = 'scale(1.02)';
+    container.style.zIndex = '1001';
+    container.style.transition = 'all 0.2s ease';
+    
+    // Callback de sélection
+    if (module.config.callbacks && module.config.callbacks.onSelect) {
+      module.config.callbacks.onSelect(moduleId);
+    }
+    
+    console.log(`Module ${moduleId} sélectionné`);
+  }
+
+  // Désélectionner un module
+  _deselectModule(moduleId) {
+    const module = this.modules.get(moduleId);
+    if (!module) return;
+    
+    this.selectedModules.delete(moduleId);
+    
+    // Retirer le style de sélection
+    const container = module.element;
+    container.style.boxShadow = '';
+    container.style.transform = '';
+    container.style.zIndex = '1000';
+    container.style.transition = '';
+    
+    // Callback de désélection
+    if (module.config.callbacks && module.config.callbacks.onDeselect) {
+      module.config.callbacks.onDeselect(moduleId);
+    }
+    
+    console.log(`Module ${moduleId} désélectionné`);
+  }
+
+  // Désélectionner tous les modules
+  _clearAllSelections() {
+    const selectedIds = Array.from(this.selectedModules);
+    selectedIds.forEach(moduleId => {
+      this._deselectModule(moduleId);
+    });
+    console.log('Toutes les sélections effacées');
   }
 
   // Démarrer une connexion
@@ -455,7 +713,7 @@ class ModuleBuilder {
         position: 'fixed',
         backgroundColor: '#FF5722',
         height: '2px',
-        zIndex: '999',
+        zIndex: '985', // En dessous de tout
         pointerEvents: 'none',
         opacity: '0.7'
       }
@@ -514,7 +772,7 @@ class ModuleBuilder {
         position: 'fixed',
         backgroundColor: '#2196F3',
         height: '2px',
-        zIndex: '998',
+        zIndex: '990', // En dessous des connecteurs (1001) et modules (1000)
         pointerEvents: 'auto',
         cursor: 'pointer'
       }
@@ -565,6 +823,29 @@ class ModuleBuilder {
     });
   }
 
+  // Mettre à jour les connexions sans transition (pendant le drag)
+  _updateConnectionsImmediate(moduleId) {
+    this.connections.forEach(connection => {
+      if (connection.source.moduleId === moduleId || connection.target.moduleId === moduleId) {
+        const sourceElement = document.getElementById(connection.source.id);
+        const targetElement = document.getElementById(connection.target.id);
+        
+        if (sourceElement && targetElement) {
+          // Supprimer temporairement la transition pour performance
+          const originalTransition = connection.element.style.transition;
+          connection.element.style.transition = 'none';
+          
+          this._updateConnectionLine(connection.element, sourceElement, targetElement);
+          
+          // Force un reflow pour appliquer immédiatement
+          connection.element.offsetHeight;
+          
+          // Pas de restauration de transition - on veut que ça reste rapide
+        }
+      }
+    });
+  }
+
   // Supprimer une connexion
   _removeConnection(connectionElement) {
     const connectionId = Array.from(this.connections.entries())
@@ -608,6 +889,27 @@ class ModuleBuilder {
     this._clearSelectedConnector();
   }
 
+  // API publique pour la sélection
+  selectModule(moduleId) {
+    this._selectModule(moduleId);
+  }
+
+  deselectModule(moduleId) {
+    this._deselectModule(moduleId);
+  }
+
+  clearAllSelections() {
+    this._clearAllSelections();
+  }
+
+  getSelectedModules() {
+    return Array.from(this.selectedModules);
+  }
+
+  isModuleSelected(moduleId) {
+    return this.selectedModules.has(moduleId);
+  }
+
   // Obtenir un module par ID
   getModule(moduleId) {
     return this.modules.get(moduleId);
@@ -635,6 +937,11 @@ class ModuleBuilder {
       // Nettoyer la sélection si elle concerne ce module
       if (this.selectedConnector && this.selectedConnector.connectorData.moduleId === moduleId) {
         this._clearSelectedConnector();
+      }
+      
+      // Désélectionner le module si il était sélectionné
+      if (this.selectedModules.has(moduleId)) {
+        this._deselectModule(moduleId);
       }
       
       // Supprimer toutes les connexions du module
@@ -687,6 +994,70 @@ class ModuleBuilder {
     });
     
     return config;
+  }
+
+  // Calculer la luminosité d'une couleur et retourner la couleur de texte appropriée
+  _getTextColorForBackground(backgroundColor) {
+    // Si pas de couleur de fond définie, utiliser du texte foncé
+    if (!backgroundColor) return '#333';
+    
+    // Extraire la couleur RGB de différents formats
+    let r, g, b;
+    
+    if (backgroundColor.startsWith('#')) {
+      // Format hex
+      const hex = backgroundColor.replace('#', '');
+      if (hex.length === 3) {
+        r = parseInt(hex[0] + hex[0], 16);
+        g = parseInt(hex[1] + hex[1], 16);
+        b = parseInt(hex[2] + hex[2], 16);
+      } else {
+        r = parseInt(hex.substr(0, 2), 16);
+        g = parseInt(hex.substr(2, 2), 16);
+        b = parseInt(hex.substr(4, 2), 16);
+      }
+    } else if (backgroundColor.startsWith('rgb')) {
+      // Format rgb() ou rgba()
+      const matches = backgroundColor.match(/\d+/g);
+      if (matches && matches.length >= 3) {
+        r = parseInt(matches[0]);
+        g = parseInt(matches[1]);
+        b = parseInt(matches[2]);
+      } else {
+        return '#333'; // Fallback
+      }
+    } else {
+      // Couleurs nommées courantes
+      const colorMap = {
+        'white': [255, 255, 255],
+        'black': [0, 0, 0],
+        'red': [255, 0, 0],
+        'green': [0, 128, 0],
+        'blue': [0, 0, 255],
+        'yellow': [255, 255, 0],
+        'cyan': [0, 255, 255],
+        'magenta': [255, 0, 255],
+        'gray': [128, 128, 128],
+        'grey': [128, 128, 128],
+        'orange': [255, 165, 0],
+        'purple': [128, 0, 128],
+        'brown': [165, 42, 42],
+        'pink': [255, 192, 203]
+      };
+      
+      const color = colorMap[backgroundColor.toLowerCase()];
+      if (color) {
+        [r, g, b] = color;
+      } else {
+        return '#333'; // Fallback pour couleurs inconnues
+      }
+    }
+    
+    // Calculer la luminosité relative (formule W3C)
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Retourner couleur claire ou foncée selon la luminosité
+    return luminance > 0.5 ? '#333' : '#fff';
   }
 }
 

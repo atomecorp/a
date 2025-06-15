@@ -9,7 +9,18 @@ const simpleModule = $.module({
   title: 'Mon Premier Module',
   position: { x: 50, y: 50 },
   inputs: [{ label: 'Input' }],
-  outputs: [{ label: 'Output' }]
+  outputs: [{ label: 'Output' }],
+  callbacks: {
+    onRename: (id, newName, oldName) => {
+      console.log(`Module ${id} renommé: "${oldName}" → "${newName}"`);
+    },
+    onSelect: (id) => {
+      console.log(`Module ${id} sélectionné`);
+    },
+    onDeselect: (id) => {
+      console.log(`Module ${id} désélectionné`);
+    }
+  }
 });
 
 // === EXEMPLE AVEC CONTENU ===
@@ -54,11 +65,22 @@ const moduleTemplate = $.module({
   position: { x: 50, y: 250 }
 });
 
-// === EXEMPLE DE CONNEXION ===
-// Deux méthodes pour connecter les modules :
+// === INTERACTIONS DISPONIBLES ===
+// CONNEXIONS :
 // 1. DRAG & DROP : Maintenez enfoncé sur un connecteur et glissez vers un autre
 // 2. CLIC SIMPLE : Cliquez sur un connecteur, puis sur un autre pour les connecter
+//                  Si déjà connectés, cela les déconnecte !
 //                  (recliquez sur le même pour annuler la sélection)
+//
+// RENOMMAGE :
+// - Double-cliquez sur le titre d'un module pour le renommer
+// - Entrée pour valider, Échap pour annuler
+// - Le drag est désactivé pendant l'édition
+//
+// SÉLECTION :
+// - Clic simple sur un module pour le sélectionner (désélectionne les autres)
+// - Double-clic sur le contenu d'un module pour désélectionner tout
+// - Module sélectionné = contour bleu et légère mise à l'échelle
 
 console.log('Modules créés:', { simpleModule, moduleAvecContenu, moduleTemplate });
 
