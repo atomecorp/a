@@ -11,7 +11,7 @@ const creator = (element, props) => {
 
 // Cache pour templates et conversions de styles
 const body = document.body;
-const createElement = document.createElement.bind(document);
+const createElement = (tag) => document.createElement(tag);
 const templateRegistry = new Map();
 const cssCache = new Map();
 
@@ -71,13 +71,18 @@ const $ = (id, props = {}) => {
   merged.id && (element.id = merged.id);
   merged.text && (element.textContent = merged.text);
   
-  // Classes via classList
+  // Classes via classList (optimisé)
   if (merged.class) {
-    element.classList.add(...(
-      typeof merged.class === 'string' 
-        ? merged.class.split(' ') 
-        : merged.class
-    ));
+    if (typeof merged.class === 'string') {
+      // Éviter split si une seule classe
+      if (merged.class.indexOf(' ') === -1) {
+        element.classList.add(merged.class);
+      } else {
+        element.classList.add(...merged.class.split(' '));
+      }
+    } else if (Array.isArray(merged.class)) {
+      element.classList.add(...merged.class);
+    }
   }
   
   // Attributs personnalisés
@@ -98,11 +103,14 @@ const $ = (id, props = {}) => {
     if (typeof merged.css === 'string') {
       element.style.cssText = merged.css;
     } else {
-      for (const [key, value] of Object.entries(merged.css)) {
-        const kebabKey = toKebabCase(key);
-        value == null 
-          ? element.style.removeProperty(kebabKey)
-          : element.style.setProperty(kebabKey, value);
+      for (const key in merged.css) {
+        if (merged.css.hasOwnProperty(key)) {
+          const value = merged.css[key];
+          const kebabKey = toKebabCase(key);
+          value == null 
+            ? element.style.removeProperty(kebabKey)
+            : element.style.setProperty(kebabKey, value);
+        }
       }
     }
   }
@@ -131,33 +139,45 @@ const $ = (id, props = {}) => {
     if ('text' in updateProps) element.textContent = updateProps.text;
     
     if (updateProps.class) {
-      const classes = typeof updateProps.class === 'string' 
-        ? updateProps.class.split(' ') 
-        : updateProps.class;
-      element.classList.add(...classes);
+      if (typeof updateProps.class === 'string') {
+        // Éviter split si une seule classe
+        if (updateProps.class.indexOf(' ') === -1) {
+          element.classList.add(updateProps.class);
+        } else {
+          element.classList.add(...updateProps.class.split(' '));
+        }
+      } else if (Array.isArray(updateProps.class)) {
+        element.classList.add(...updateProps.class);
+      }
     }
     
     if (updateProps.css) {
       if (typeof updateProps.css === 'string') {
         element.style.cssText = updateProps.css;
       } else {
-        for (const [key, value] of Object.entries(updateProps.css)) {
-          const kebabKey = toKebabCase(key);
-          value == null 
-            ? element.style.removeProperty(kebabKey)
-            : element.style.setProperty(kebabKey, value);
+        for (const key in updateProps.css) {
+          if (updateProps.css.hasOwnProperty(key)) {
+            const value = updateProps.css[key];
+            const kebabKey = toKebabCase(key);
+            value == null 
+              ? element.style.removeProperty(kebabKey)
+              : element.style.setProperty(kebabKey, value);
+          }
         }
       }
     }
     
     if (updateProps.attrs) {
-      for (const [key, value] of Object.entries(updateProps.attrs)) {
-        if (value == null) {
-          element.removeAttribute(key);
-        } else if (booleanAttributes.has(key)) {
-          value ? element.setAttribute(key, '') : element.removeAttribute(key);
-        } else {
-          element.setAttribute(key, value);
+      for (const key in updateProps.attrs) {
+        if (updateProps.attrs.hasOwnProperty(key)) {
+          const value = updateProps.attrs[key];
+          if (value == null) {
+            element.removeAttribute(key);
+          } else if (booleanAttributes.has(key)) {
+            value ? element.setAttribute(key, '') : element.removeAttribute(key);
+          } else {
+            element.setAttribute(key, value);
+          }
         }
       }
     }
@@ -219,9 +239,11 @@ const $ = (id, props = {}) => {
     // Nettoyer les events
     const events = eventRegistry.get(element);
     if (events) {
-      Object.entries(events).forEach(([eventName, handler]) => {
-        element.removeEventListener(eventName, handler);
-      });
+      for (const eventName in events) {
+        if (events.hasOwnProperty(eventName)) {
+          element.removeEventListener(eventName, events[eventName]);
+        }
+      }
       eventRegistry.delete(element);
     }
     
