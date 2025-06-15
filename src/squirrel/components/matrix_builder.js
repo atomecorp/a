@@ -21,7 +21,9 @@ class Matrix {
       
       // Options avancées
       debug: options.debug || false,
-      responsive: options.responsive !== false
+      responsive: options.responsive !== false,
+      autoResize: options.autoResize !== false,
+      maintainAspectRatio: options.maintainAspectRatio || false
     };
 
     // Stockage interne
@@ -38,12 +40,14 @@ class Matrix {
       onCellHover: options.onCellHover || null,
       onCellLeave: options.onCellLeave || null,
       onCellStateChange: options.onCellStateChange || null,
-      onSelectionChange: options.onSelectionChange || null
+      onSelectionChange: options.onSelectionChange || null,
+      onResize: options.onResize || null
     };
 
     // État interne
     this.container = null;
     this.longClickTimer = null;
+    this.resizeObserver = null;
     this.isInitialized = false;
 
     // Initialisation
@@ -59,6 +63,7 @@ class Matrix {
       this.createContainer();
       this.createCells();
       this.setupEventListeners();
+      this.setupResizeObserver();
       this.applyInitialStates();
       this.isInitialized = true;
 
@@ -97,9 +102,6 @@ class Matrix {
       position: 'absolute',
       left: `${this.config.position.x}px`,
       top: `${this.config.position.y}px`,
-      width: `${this.config.size.width}px`,
-      height: `${this.config.size.height}px`,
-      padding: `${this.config.spacing.external}px`,
       display: 'grid',
       gridTemplateColumns: `repeat(${this.config.grid.x}, 1fr)`,
       gridTemplateRows: `repeat(${this.config.grid.y}, 1fr)`,
@@ -108,8 +110,29 @@ class Matrix {
       borderRadius: '12px',
       border: '1px solid #dee2e6',
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      userSelect: 'none'
+      userSelect: 'none',
+      boxSizing: 'border-box'
     };
+
+    // Gestion du redimensionnement automatique
+    if (this.config.autoResize) {
+      // Mode responsive : s'adapte au parent
+      Object.assign(defaultStyles, {
+        position: 'relative',
+        left: 'auto',
+        top: 'auto',
+        width: '100%',
+        height: '100%',
+        padding: `${this.config.spacing.external}px`
+      });
+    } else {
+      // Mode taille fixe
+      Object.assign(defaultStyles, {
+        width: `${this.config.size.width}px`,
+        height: `${this.config.size.height}px`,
+        padding: `${this.config.spacing.external}px`
+      });
+    }
 
     // Fusion avec les styles personnalisés
     const finalStyles = { ...defaultStyles, ...this.config.containerStyle };
@@ -463,6 +486,231 @@ class Matrix {
     });
   }
 
+  // ========================================
+  // 📐 MÉTHODES DE REDIMENSIONNEMENT
+  // ========================================
+
+  /**
+   * Force un redimensionnement manuel de la matrice
+   * @param {number} width - Nouvelle largeur (optionnel)
+   * @param {number} height - Nouvelle hauteur (optionnel)
+   */
+  resize(width, height) {
+    if (width !== undefined && height !== undefined) {
+      this.config.size.width = width;
+      this.config.size.height = height;
+      
+      if (!this.config.autoResize) {
+        this.container.style.width = `${width}px`;
+        this.container.style.height = `${height}px`;
+      }
+    }
+    
+    this.updateCellSizes();
+    
+    if (this.config.debug) {
+      console.log(`📐 Matrix "${this.config.id}" redimensionnée à ${this.config.size.width}x${this.config.size.height}px`);
+    }
+  }
+
+  /**
+   * Active ou désactive le redimensionnement automatique
+   * @param {boolean} enabled - Activer ou désactiver
+   */
+  setAutoResize(enabled) {
+    const wasEnabled = this.config.autoResize;
+    this.config.autoResize = enabled;
+
+    if (enabled && !wasEnabled) {
+      // Activation du redimensionnement automatique
+      this.applyContainerStyles();
+      this.setupResizeObserver();
+    } else if (!enabled && wasEnabled) {
+      // Désactivation du redimensionnement automatique
+      this.disconnectResizeObserver();
+      this.applyContainerStyles();
+    }
+  }
+
+  /**
+   * Déconnecte le ResizeObserver
+   */
+  disconnectResizeObserver() {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+  }
+
+  /**
+   * S'adapte à un élément parent spécifique
+   * @param {HTMLElement|string} parentElement - Élément parent ou sélecteur
+   */
+  fitToParent(parentElement) {
+    const parent = typeof parentElement === 'string' 
+      ? document.querySelector(parentElement) 
+      : parentElement;
+
+    if (!parent) {
+      console.error('❌ Élément parent non trouvé');
+      return;
+    }
+
+    // Déplacement vers le nouveau parent
+    parent.appendChild(this.container);
+    
+    // Activation du redimensionnement automatique
+    this.setAutoResize(true);
+    
+    // Force une mise à jour immédiate
+    const rect = parent.getBoundingClientRect();
+    this.handleResize({ contentRect: rect });
+  }
+
+  /**
+   * Ajuste automatiquement la taille des cellules en fonction de leur contenu
+   * @param {Object} options - Options d'ajustement
+   */
+  autoSizeCells(options = {}) {
+    const { 
+      minWidth = 40, 
+      minHeight = 40, 
+      padding = 8,
+      fontSize = null 
+    } = options;
+
+    this.cellsMap.forEach((cell, cellKey) => {
+      const element = cell.element;
+      const content = element.textContent || '';
+      
+      if (content.length > 0) {
+        // Créer un élément temporaire pour mesurer le texte
+        const measureEl = document.createElement('div');
+        measureEl.style.cssText = `
+          position: absolute;
+          top: -9999px;
+          left: -9999px;
+          visibility: hidden;
+          white-space: nowrap;
+          font-family: ${element.style.fontFamily || 'inherit'};
+          font-size: ${fontSize || element.style.fontSize || '14px'};
+          font-weight: ${element.style.fontWeight || 'inherit'};
+        `;
+        measureEl.textContent = content;
+        document.body.appendChild(measureEl);
+        
+        const textWidth = measureEl.offsetWidth;
+        const textHeight = measureEl.offsetHeight;
+        
+        document.body.removeChild(measureEl);
+        
+        // Appliquer les nouvelles dimensions
+        const newWidth = Math.max(textWidth + padding * 2, minWidth);
+        const newHeight = Math.max(textHeight + padding * 2, minHeight);
+        
+        element.style.width = `${newWidth}px`;
+        element.style.height = `${newHeight}px`;
+      }
+    });
+    
+    if (this.config.debug) {
+      console.log(`📏 Auto-dimensionnement des cellules effectué`);
+    }
+  }
+
+  /**
+   * Redimensionne la grille pour s'adapter au contenu
+   * @param {Object} options - Options de redimensionnement
+   */
+  fitToContent(options = {}) {
+    this.autoSizeCells(options);
+    
+    // Recalcul de la taille du container
+    let maxWidth = 0;
+    let maxHeight = 0;
+    
+    this.cellsMap.forEach((cell) => {
+      const rect = cell.element.getBoundingClientRect();
+      maxWidth = Math.max(maxWidth, rect.width);
+      maxHeight = Math.max(maxHeight, rect.height);
+    });
+    
+    const totalWidth = (maxWidth * this.config.grid.x) + 
+                      (this.config.spacing.horizontal * (this.config.grid.x - 1)) + 
+                      (this.config.spacing.external * 2);
+                      
+    const totalHeight = (maxHeight * this.config.grid.y) + 
+                       (this.config.spacing.vertical * (this.config.grid.y - 1)) + 
+                       (this.config.spacing.external * 2);
+    
+    this.resize(totalWidth, totalHeight);
+  }
+
+  setupResizeObserver() {
+    if (!this.config.autoResize || !window.ResizeObserver) return;
+
+    // Observer pour détecter les changements de taille du parent
+    this.resizeObserver = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        this.handleResize(entry);
+      }
+    });
+
+    // Observer le parent du container
+    const parent = this.container.parentElement;
+    if (parent) {
+      this.resizeObserver.observe(parent);
+    }
+  }
+
+  handleResize(entry) {
+    if (!this.config.autoResize) return;
+
+    const { width, height } = entry.contentRect;
+    
+    if (this.config.debug) {
+      console.log(`🔄 Matrix "${this.config.id}" - Redimensionnement détecté:`, { width, height });
+    }
+
+    // Mise à jour de la configuration interne
+    this.config.size.width = width;
+    this.config.size.height = height;
+
+    // Redimensionnement des cellules si nécessaire
+    this.updateCellSizes();
+
+    // Callback de redimensionnement si défini
+    if (this.callbacks.onResize) {
+      this.callbacks.onResize(width, height);
+    }
+  }
+
+  updateCellSizes() {
+    if (!this.config.autoResize) return;
+
+    // Les cellules se redimensionnent automatiquement grâce au CSS Grid
+    // Mais on peut ajuster certaines propriétés si nécessaire
+    
+    const containerRect = this.container.getBoundingClientRect();
+    const availableWidth = containerRect.width - (2 * this.config.spacing.external);
+    const availableHeight = containerRect.height - (2 * this.config.spacing.external);
+    
+    const cellWidth = (availableWidth - (this.config.spacing.horizontal * (this.config.grid.x - 1))) / this.config.grid.x;
+    const cellHeight = (availableHeight - (this.config.spacing.vertical * (this.config.grid.y - 1))) / this.config.grid.y;
+
+    // Maintien du ratio d'aspect si demandé
+    if (this.config.maintainAspectRatio) {
+      const minSize = Math.min(cellWidth, cellHeight);
+      this.cellsMap.forEach((cell) => {
+        cell.element.style.width = `${minSize}px`;
+        cell.element.style.height = `${minSize}px`;
+      });
+    }
+
+    if (this.config.debug) {
+      console.log(`📐 Taille des cellules: ${cellWidth.toFixed(1)}x${cellHeight.toFixed(1)}px`);
+    }
+  }
   // ========================================
   // 🎨 UTILITAIRES DE STYLES
   // ========================================
@@ -887,6 +1135,9 @@ class Matrix {
         this.longClickTimer = null;
       }
 
+      // Nettoyage du ResizeObserver
+      this.disconnectResizeObserver();
+
       // Suppression des event listeners
       if (this.container) {
         this.container.removeEventListener('click', this.handleCellClick);
@@ -925,7 +1176,47 @@ class Matrix {
 
 export default Matrix;
 
-// Factory function pour usage simplifié
+// Factory functions pour usage simplifié
 export function createMatrix(options) {
   return new Matrix(options);
+}
+
+/**
+ * Crée une matrix responsive qui s'adapte à son parent
+ * @param {HTMLElement|string} parent - Élément parent ou sélecteur
+ * @param {Object} options - Options de configuration
+ * @returns {Matrix} Instance de Matrix
+ */
+export function createResponsiveMatrix(parent, options = {}) {
+  const parentElement = typeof parent === 'string' ? document.querySelector(parent) : parent;
+  
+  if (!parentElement) {
+    throw new Error(`Élément parent "${parent}" non trouvé`);
+  }
+  
+  return new Matrix({
+    autoResize: true,
+    maintainAspectRatio: false,
+    attach: parentElement,
+    ...options
+  });
+}
+
+/**
+ * Crée une matrix avec auto-dimensionnement des cellules
+ * @param {Object} options - Options de configuration
+ * @returns {Matrix} Instance de Matrix
+ */
+export function createAutoSizedMatrix(options = {}) {
+  const matrix = new Matrix({
+    autoResize: false,
+    ...options
+  });
+  
+  // Auto-dimensionnement après création
+  setTimeout(() => {
+    matrix.fitToContent();
+  }, 0);
+  
+  return matrix;
 }
