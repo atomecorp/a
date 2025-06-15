@@ -1,460 +1,520 @@
 /**
- * 📊 Table Web Component Advanced Demo
- * 
- * Demonstrating:
- * - Bombé effects with multiple shadows
- * - Animated cell interactions
- * - CSS gradients and advanced styling
- * - Interactive callbacks
- * - Auto-attachment and positioning
+ * 📊 EXEMPLE TABLE SEXY - CODE MINIMALISTE
+ * Tableau professionnel avec styles modernes
  */
 
-// Import the new Table Web Component
-// import Table from '../../a/components/Table.js';
-
-// console.log('🎯 Loading Table Web Component Advanced Demo...');
-
-// Sample data for demonstrations
-const sampleData = [
-    { id: 1, name: 'Alice Johnson', role: 'Senior Developer', department: 'Engineering', salary: 95000, status: 'Active' },
-    { id: 2, name: 'Bob Smith', role: 'Product Manager', department: 'Product', salary: 105000, status: 'Active' },
-    { id: 3, name: 'Carol Williams', role: 'UX Designer', department: 'Design', salary: 80000, status: 'Active' },
-    { id: 4, name: 'David Brown', role: 'DevOps Engineer', department: 'Engineering', salary: 90000, status: 'Away' },
-    { id: 5, name: 'Eva Davis', role: 'Data Scientist', department: 'Analytics', salary: 110000, status: 'Active' },
-    { id: 6, name: 'Frank Miller', role: 'QA Engineer', department: 'Engineering', salary: 75000, status: 'Active' },
-    { id: 7, name: 'Grace Wilson', role: 'Marketing Lead', department: 'Marketing', salary: 85000, status: 'Inactive' },
-    { id: 8, name: 'Henry Garcia', role: 'Sales Rep', department: 'Sales', salary: 70000, status: 'Active' }
-];
-
-// Column configuration with custom renderers
-const columns = [
-    { 
-        key: 'id', 
-        title: 'ID', 
-        width: '60px', 
-        align: 'center',
-        render: (value) => `<strong>#${value}</strong>`
-    },
-    { 
-        key: 'name', 
-        title: 'Employee Name', 
-        width: '180px',
-        render: (value, row) => {
-            const statusColor = row.status === 'Active' ? '#4caf50' : 
-                              row.status === 'Away' ? '#ff9800' : '#f44336';
-            return `
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <div style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor};"></div>
-                    <span>${value}</span>
-                </div>
-            `;
-        }
-    },
-    { key: 'role', title: 'Role', width: '150px' },
-    { 
-        key: 'department', 
-        title: 'Department', 
-        width: '120px',
-        render: (value) => {
-            const colors = {
-                'Engineering': '#2196f3',
-                'Product': '#9c27b0',
-                'Design': '#e91e63',
-                'Analytics': '#00bcd4',
-                'Marketing': '#ff5722',
-                'Sales': '#4caf50'
-            };
-            const color = colors[value] || '#757575';
-            return `<span style="color: ${color}; font-weight: 500;">${value}</span>`;
-        }
-    },
-    { 
-        key: 'salary', 
-        title: 'Salary', 
-        width: '100px', 
-        align: 'right',
-        render: (value) => `$${value.toLocaleString()}`
-    },
-    { 
-        key: 'status', 
-        title: 'Status', 
-        width: '80px', 
-        align: 'center',
-        render: (value) => {
-            const colors = {
-                'Active': '#4caf50',
-                'Away': '#ff9800',
-                'Inactive': '#f44336'
-            };
-            return `<span style="color: ${colors[value]}; font-weight: bold;">${value}</span>`;
-        }
-    }
-];
-
-// 1. Glassmorphism Table with Bombé Effects
-console.log('🎨 Creating Glassmorphism Table...');
-const glassmorphismTable = new Table({
-    id: 'glassmorphism-table',
-    attach: 'body',
-    x: 50,
-    y: 100,
-    width: 900,
-    height: 400,
+// 🎨 Tableau simple mais élégant
+const sexyTable = new Table({
+    id: "sexy-table",
+    position: { x: 50, y: 50 },
+    size: { width: 700, height: 400 },
+    attach: "#view",
     
-    columns: columns,
-    data: sampleData,
-    
-    sortable: true,
-    searchable: true,
-    selectable: true,
-    multiSelect: true,
-    
-    pagination: {
-        enabled: true,
-        pageSize: 5
-    },
-    
-    // Glassmorphism styling with bombé effects
-    style: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.2)',
-        borderRadius: '16px',
-        boxShadow: [
-            '0 8px 32px rgba(0, 0, 0, 0.1)',
-            'inset 0 1px 0 rgba(255, 255, 255, 0.2)',
-            'inset 0 -1px 0 rgba(0, 0, 0, 0.1)'
-        ],
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%)'
-    },
-    
-    headerStyle: {
-        backgroundColor: 'rgba(255, 255, 255, 0.15)',
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.1) 100%)',
-        backdropFilter: 'blur(10px)',
-        fontWeight: 'bold',
-        color: '#333',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
-        boxShadow: [
-            'inset 0 1px 0 rgba(255, 255, 255, 0.3)',
-            '0 1px 3px rgba(0, 0, 0, 0.1)'
-        ]
-    },
-    
-    cellStyle: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        backdropFilter: 'blur(5px)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: [
-            '0 1px 3px rgba(0, 0, 0, 0.1)',
-            'inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-        ]
-    },
-    
-    cellHoverStyle: {
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-        background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
-        transform: 'scale(1.02) translateZ(0)',
-        boxShadow: [
-            '0 8px 25px rgba(0, 0, 0, 0.15)',
-            'inset 0 2px 4px rgba(255, 255, 255, 0.3)',
-            'inset 0 -2px 4px rgba(0, 0, 0, 0.1)'
-        ]
-    },
-    
-    cellSelectedStyle: {
-        backgroundColor: 'rgba(33, 150, 243, 0.2)',
-        background: 'linear-gradient(135deg, rgba(33,150,243,0.3) 0%, rgba(33,150,243,0.15) 100%)',
-        boxShadow: [
-            '0 8px 25px rgba(33, 150, 243, 0.3)',
-            'inset 0 2px 4px rgba(33, 150, 243, 0.4)',
-            'inset 0 -1px 2px rgba(0, 0, 0, 0.1)'
-        ]
-    },
-    
-    animations: {
-        cellHover: {
-            duration: '0.3s',
-            easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+    // Colonnes avec style
+    columns: [
+        {
+            id: "name",
+            header: "👤 Nom",
+            width: 180,
+            sortable: true,
+            style: { textAlign: "left", fontWeight: "500" }
         },
-        cellSelect: {
-            duration: '0.4s',
-            easing: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+        {
+            id: "role", 
+            header: "💼 Rôle",
+            width: 150,
+            sortable: true,
+            style: { textAlign: "center" }
+        },
+        {
+            id: "status",
+            header: "📊 Status", 
+            width: 120,
+            sortable: true,
+            style: { textAlign: "center" }
+        },
+        {
+            id: "score",
+            header: "⭐ Score",
+            width: 100,
+            sortable: true,
+            style: { textAlign: "right", fontWeight: "bold" }
+        },
+        {
+            id: "actions",
+            header: "🔧 Actions",
+            width: 150,
+            sortable: false,
+            style: { textAlign: "center" }
         }
-    },
+    ],
     
-    callbacks: {
-        onCellClick: (cell, row, column, rowIndex, colIndex, event) => {
-            console.log(`🎯 Glassmorphism Cell clicked: [${rowIndex}, ${colIndex}] = ${row[column.key]}`);
-            
-            // Add ripple effect
-            const ripple = document.createElement('div');
-            ripple.style.cssText = `
-                position: absolute;
-                border-radius: 50%;
-                background: rgba(255, 255, 255, 0.6);
-                transform: scale(0);
-                animation: ripple 0.6s linear;
-                pointer-events: none;
-                left: ${event.offsetX - 10}px;
-                top: ${event.offsetY - 10}px;
-                width: 20px;
-                height: 20px;
-            `;
-            
-            cell.style.position = 'relative';
-            cell.appendChild(ripple);
-            
-            setTimeout(() => ripple.remove(), 600);
+    // Données avec styles individuels
+    rows: [
+        {
+            id: "user-1",
+            cells: {
+                name: { content: "Alice Martin", style: { color: "#2c3e50", fontWeight: "600" }},
+                role: { content: "Designer", style: { color: "#8e44ad", backgroundColor: "#f4f0ff", borderRadius: "12px", padding: "4px 8px" }},
+                status: { content: "🟢 Actif", style: { color: "#27ae60" }},
+                score: { content: "95", style: { color: "#e74c3c", fontSize: "16px" }},
+                actions: { content: "✏️ 🗑️ 👁️", style: { fontSize: "18px" }}
+            }
+        },
+        {
+            id: "user-2", 
+            cells: {
+                name: { content: "Bob Wilson", style: { color: "#2c3e50", fontWeight: "600" }},
+                role: { content: "Dev", style: { color: "#3498db", backgroundColor: "#ebf5ff", borderRadius: "12px", padding: "4px 8px" }},
+                status: { content: "🟡 Pause", style: { color: "#f39c12" }},
+                score: { content: "87", style: { color: "#e74c3c", fontSize: "16px" }},
+                actions: { content: "✏️ 🗑️ 👁️", style: { fontSize: "18px" }}
+            }
+        },
+        {
+            id: "user-3",
+            cells: {
+                name: { content: "Carol Davis", style: { color: "#2c3e50", fontWeight: "600" }},
+                role: { content: "Manager", style: { color: "#e67e22", backgroundColor: "#fff7ed", borderRadius: "12px", padding: "4px 8px" }},
+                status: { content: "🔴 Occupé", style: { color: "#e74c3c" }},
+                score: { content: "92", style: { color: "#e74c3c", fontSize: "16px" }},
+                actions: { content: "✏️ 🗑️ 👁️", style: { fontSize: "18px" }}
+            }
+        }
+    ],
+    
+    // Styles sexy minimalistes
+    styling: {
+        cellPadding: 16,
+        rowHeight: 50,
+        
+        // En-tête moderne
+        headerStyle: {
+            backgroundColor: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            background: "#2c3e50",
+            color: "#ffffff",
+            fontSize: "14px",
+            fontWeight: "600",
+            padding: "16px",
+            textAlign: "center",
+            borderBottom: "3px solid #3498db"
         },
         
-        onCellHover: (cell, row, column, rowIndex, colIndex, event) => {
-            console.log(`🎯 Glassmorphism Cell hover: ${row[column.key]}`);
+        // Cellules élégantes
+        cellStyle: {
+            backgroundColor: "#ffffff", 
+            color: "#2c3e50",
+            fontSize: "14px",
+            border: "none",
+            borderBottom: "1px solid #ecf0f1",
+            padding: "12px 16px",
+            transition: "all 0.3s ease"
         },
         
-        onRowClick: (tr, row, rowIndex, event) => {
-            console.log(`🎯 Glassmorphism Row clicked: ${row.name} (${row.role})`);
+        // Lignes alternées
+        alternateRowStyle: {
+            backgroundColor: "#f8f9fa"
         },
         
-        onSelectionChange: (selectedRows) => {
-            console.log(`🎯 Glassmorphism Selection changed: ${selectedRows.length} rows selected`);
+        // États interactifs
+        states: {
+            hover: {
+                backgroundColor: "#e3f2fd",
+                transform: "scale(1.01)",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+            },
+            selected: {
+                backgroundColor: "#3498db",
+                color: "#ffffff",
+                transform: "scale(1.02)",
+                boxShadow: "0 4px 12px rgba(52,152,219,0.3)"
+            }
         }
-    }
+    },
+    
+    // Options
+    options: {
+        sortable: true,
+        selectable: true,
+        multiSelect: true
+    },
+    
+    // Callbacks minimalistes
+    onCellClick: (cell, row, col) => {
+        console.log(`💎 Sexy Table: Clicked ${cell.content} (${row}/${col})`);
+    },
+    
+    onSort: (column, direction) => {
+        console.log(`🔄 Sorted by ${column} ${direction}`);
+    },
+    
+    debug: true
 });
 
-// 2. Gaming-Style Table with Neon Effects
-console.log('🎮 Creating Gaming-Style Table...');
+console.log('✨ Sexy Table créée ! Cliquez sur les en-têtes pour trier, sur les cellules pour sélectionner.');
+
+// 🎮 Tableau Gaming/Dark Theme
 const gamingTable = new Table({
-    id: 'gaming-table',
-    attach: 'body',
-    x: 50,
-    y: 550,
-    width: 900,
-    height: 400,
+    id: "gaming-table",
+    position: { x: 800, y: 50 },
+    size: { width: 500, height: 300 },
+    attach: "#view",
     
-    columns: columns,
-    data: sampleData,
+    columns: [
+        { id: "player", header: "🎮 Player", width: 120, sortable: true },
+        { id: "level", header: "🏆 Level", width: 80, sortable: true },
+        { id: "score", header: "💯 Score", width: 100, sortable: true },
+        { id: "rank", header: "👑 Rank", width: 100, sortable: true }
+    ],
     
-    sortable: true,
-    searchable: true,
-    selectable: true,
-    multiSelect: false,
-    
-    // Gaming-style with neon effects
-    style: {
-        backgroundColor: '#0a0a0a',
-        border: '2px solid #00ff41',
-        borderRadius: '12px',
-        boxShadow: [
-            '0 0 20px rgba(0, 255, 65, 0.5)',
-            'inset 0 1px 0 rgba(0, 255, 65, 0.2)',
-            '0 8px 32px rgba(0, 0, 0, 0.8)'
-        ],
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)',
-        color: '#00ff41',
-        fontFamily: '"Courier New", monospace'
-    },
-    
-    headerStyle: {
-        backgroundColor: '#1a1a1a',
-        background: 'linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%)',
-        color: '#00ff41',
-        fontWeight: 'bold',
-        borderBottom: '2px solid #00ff41',
-        textShadow: '0 0 10px rgba(0, 255, 65, 0.8)',
-        boxShadow: [
-            'inset 0 1px 0 rgba(0, 255, 65, 0.3)',
-            '0 2px 10px rgba(0, 255, 65, 0.2)'
-        ]
-    },
-    
-    cellStyle: {
-        backgroundColor: '#0f0f0f',
-        borderBottom: '1px solid rgba(0, 255, 65, 0.3)',
-        color: '#00ff41',
-        transition: 'all 0.2s ease',
-        boxShadow: [
-            'inset 0 1px 0 rgba(0, 255, 65, 0.1)',
-            '0 1px 3px rgba(0, 0, 0, 0.5)'
-        ]
-    },
-    
-    cellHoverStyle: {
-        backgroundColor: '#1a3d1a',
-        background: 'linear-gradient(135deg, #1a3d1a 0%, #0d2a0d 100%)',
-        color: '#ffffff',
-        textShadow: '0 0 5px rgba(0, 255, 65, 1)',
-        transform: 'scale(1.03)',
-        boxShadow: [
-            '0 0 15px rgba(0, 255, 65, 0.6)',
-            'inset 0 2px 4px rgba(0, 255, 65, 0.2)',
-            'inset 0 -2px 4px rgba(0, 0, 0, 0.3)'
-        ]
-    },
-    
-    cellSelectedStyle: {
-        backgroundColor: '#2d5a2d',
-        background: 'linear-gradient(135deg, #2d5a2d 0%, #1a3d1a 100%)',
-        color: '#ffffff',
-        textShadow: '0 0 10px rgba(0, 255, 65, 1)',
-        boxShadow: [
-            '0 0 20px rgba(0, 255, 65, 0.8)',
-            'inset 0 2px 6px rgba(0, 255, 65, 0.3)',
-            'inset 0 -2px 6px rgba(0, 0, 0, 0.5)'
-        ]
-    },
-    
-    callbacks: {
-        onCellClick: (cell, row, column, rowIndex, colIndex, event) => {
-            console.log(`🎮 Gaming Cell clicked: [${rowIndex}, ${colIndex}] = ${row[column.key]}`);
-            
-            // Add glitch effect
-            cell.style.animation = 'glitch 0.3s ease';
-            setTimeout(() => {
-                cell.style.animation = '';
-            }, 300);
+    rows: [
+        {
+            id: "player-1",
+            cells: {
+                player: { content: "NoobMaster69", style: { color: "#00ff88", fontFamily: "monospace", fontWeight: "bold" }},
+                level: { content: "42", style: { color: "#ff6b35", textAlign: "center" }},
+                score: { content: "13,337", style: { color: "#ffd23f", textAlign: "right", fontWeight: "bold" }},
+                rank: { content: "🥇 Master", style: { color: "#ffdf00", textAlign: "center" }}
+            }
         },
-        
-        onRowClick: (tr, row, rowIndex, event) => {
-            console.log(`🎮 Gaming Row clicked: ${row.name} - ${row.role}`);
+        {
+            id: "player-2",
+            cells: {
+                player: { content: "xX_Pro_Xx", style: { color: "#00ff88", fontFamily: "monospace", fontWeight: "bold" }},
+                level: { content: "38", style: { color: "#ff6b35", textAlign: "center" }},
+                score: { content: "9,001", style: { color: "#ffd23f", textAlign: "right", fontWeight: "bold" }},
+                rank: { content: "🥈 Expert", style: { color: "#c0c0c0", textAlign: "center" }}
+            }
+        }
+    ],
+    
+    styling: {
+        cellPadding: 12,
+        rowHeight: 45,
+        headerStyle: {
+            background: "linear-gradient(45deg, #1a1a2e, #16213e)",
+            color: "#00ff88",
+            fontSize: "12px",
+            fontWeight: "bold",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            borderBottom: "2px solid #00ff88"
+        },
+        cellStyle: {
+            backgroundColor: "#0f0f23",
+            color: "#e0e6ed",
+            fontSize: "13px",
+            border: "1px solid #1a1a2e",
+            fontFamily: "monospace"
+        },
+        alternateRowStyle: {
+            backgroundColor: "#1a1a2e"
+        },
+        states: {
+            hover: {
+                backgroundColor: "#16213e",
+                boxShadow: "0 0 10px rgba(0,255,136,0.3)"
+            },
+            selected: {
+                backgroundColor: "#00ff88",
+                color: "#0f0f23",
+                fontWeight: "bold"
+            }
+        }
+    },
+    
+    onCellClick: (cell, row, col) => {
+        console.log(`🎮 Gaming Table: ${cell.content} clicked!`);
+    }
+});
+
+// 📊 Tableau Financial/Professional
+const financialTable = new Table({
+    id: "financial-table",
+    position: { x: 50, y: 500 },
+    size: { width: 600, height: 250 },
+    attach: "#view",
+    
+    columns: [
+        { id: "symbol", header: "Symbol", width: 80, sortable: true },
+        { id: "company", header: "Company", width: 160, sortable: true },
+        { id: "price", header: "Price", width: 90, sortable: true },
+        { id: "change", header: "Change", width: 80, sortable: true },
+        { id: "volume", header: "Volume", width: 100, sortable: true }
+    ],
+    
+    rows: [
+        {
+            id: "stock-1",
+            cells: {
+                symbol: { content: "AAPL", style: { fontFamily: "monospace", fontWeight: "bold", color: "#1d1d1f" }},
+                company: { content: "Apple Inc.", style: { color: "#333" }},
+                price: { content: "$150.25", style: { textAlign: "right", fontWeight: "600", color: "#1d1d1f" }},
+                change: { content: "+2.5%", style: { color: "#28a745", textAlign: "right", fontWeight: "bold" }},
+                volume: { content: "45.2M", style: { textAlign: "right", color: "#6c757d" }}
+            }
+        },
+        {
+            id: "stock-2",
+            cells: {
+                symbol: { content: "GOOGL", style: { fontFamily: "monospace", fontWeight: "bold", color: "#1d1d1f" }},
+                company: { content: "Alphabet Inc.", style: { color: "#333" }},
+                price: { content: "$2,750.80", style: { textAlign: "right", fontWeight: "600", color: "#1d1d1f" }},
+                change: { content: "-1.2%", style: { color: "#dc3545", textAlign: "right", fontWeight: "bold" }},
+                volume: { content: "1.8M", style: { textAlign: "right", color: "#6c757d" }}
+            }
+        }
+    ],
+    
+    styling: {
+        cellPadding: 14,
+        rowHeight: 48,
+        headerStyle: {
+            background: "linear-gradient(135deg, #f8f9fa, #e9ecef)",
+            color: "#495057",
+            fontSize: "13px",
+            fontWeight: "700",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+            borderBottom: "2px solid #dee2e6"
+        },
+        cellStyle: {
+            backgroundColor: "#ffffff",
+            color: "#212529",
+            fontSize: "14px",
+            border: "1px solid #e9ecef",
+            fontFamily: "system-ui"
+        },
+        alternateRowStyle: {
+            backgroundColor: "#f8f9fa"
+        },
+        states: {
+            hover: {
+                backgroundColor: "#e3f2fd",
+                borderLeft: "4px solid #2196f3"
+            },
+            selected: {
+                backgroundColor: "#1976d2",
+                color: "#ffffff"
+            }
         }
     }
 });
 
-// 3. Material Design Table with Elevation Effects
-console.log('🎨 Creating Material Design Table...');
-const materialTable = new Table({
-    id: 'material-table',
-    attach: 'body',
-    x: 1000,
-    y: 100,
-    width: 900,
-    height: 850,
+// 🌈 Tableau Colorful/Creative
+const creativeTable = new Table({
+    id: "creative-table", 
+    position: { x: 700, y: 400 },
+    size: { width: 450, height: 300 },
+    attach: "#view",
     
-    columns: columns,
-    data: sampleData,
+    columns: [
+        { id: "emoji", header: "😊", width: 60, sortable: false },
+        { id: "project", header: "Project", width: 150, sortable: true },
+        { id: "status", header: "Status", width: 120, sortable: true },
+        { id: "priority", header: "Priority", width: 120, sortable: true }
+    ],
     
-    sortable: true,
-    searchable: true,
-    selectable: true,
-    multiSelect: true,
-    
-    pagination: {
-        enabled: true,
-        pageSize: 4
-    },
-    
-    // Material Design styling
-    style: {
-        backgroundColor: '#ffffff',
-        border: 'none',
-        borderRadius: '8px',
-        boxShadow: [
-            '0 2px 4px rgba(0, 0, 0, 0.1)',
-            '0 8px 16px rgba(0, 0, 0, 0.1)'
-        ],
-        background: 'linear-gradient(135deg, #ffffff 0%, #fafafa 100%)',
-        fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif'
-    },
-    
-    headerStyle: {
-        backgroundColor: '#f5f5f5',
-        background: 'linear-gradient(135deg, #f5f5f5 0%, #eeeeee 100%)',
-        color: '#424242',
-        fontWeight: '500',
-        borderBottom: '1px solid #e0e0e0',
-        letterSpacing: '0.5px',
-        textTransform: 'uppercase',
-        fontSize: '12px',
-        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.8)'
-    },
-    
-    cellStyle: {
-        backgroundColor: '#ffffff',
-        borderBottom: '1px solid #e0e0e0',
-        color: '#424242',
-        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
-    },
-    
-    cellHoverStyle: {
-        backgroundColor: '#f5f5f5',
-        background: 'linear-gradient(135deg, #f5f5f5 0%, #eeeeee 100%)',
-        transform: 'translateY(-1px)',
-        boxShadow: [
-            '0 4px 8px rgba(0, 0, 0, 0.12)',
-            '0 2px 4px rgba(0, 0, 0, 0.08)'
-        ]
-    },
-    
-    cellSelectedStyle: {
-        backgroundColor: '#e3f2fd',
-        background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-        color: '#1976d2',
-        boxShadow: [
-            '0 4px 12px rgba(25, 118, 210, 0.2)',
-            'inset 0 1px 0 rgba(255, 255, 255, 0.6)'
-        ]
-    },
-    
-    animations: {
-        cellHover: {
-            duration: '0.2s',
-            easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+    rows: [
+        {
+            id: "project-1",
+            cells: {
+                emoji: { content: "🎨", style: { fontSize: "24px", textAlign: "center" }},
+                project: { content: "Design System", style: { fontWeight: "600", color: "#6f42c1" }},
+                status: { content: "In Progress", style: { 
+                    backgroundColor: "#fff3cd", 
+                    color: "#856404", 
+                    borderRadius: "15px", 
+                    padding: "4px 12px",
+                    textAlign: "center",
+                    fontSize: "12px",
+                    fontWeight: "500"
+                }},
+                priority: { content: "High", style: { 
+                    backgroundColor: "#f8d7da", 
+                    color: "#721c24",
+                    borderRadius: "15px",
+                    padding: "4px 12px", 
+                    textAlign: "center",
+                    fontSize: "12px",
+                    fontWeight: "500"
+                }}
+            }
         },
-        cellSelect: {
-            duration: '0.3s',
-            easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
+        {
+            id: "project-2",
+            cells: {
+                emoji: { content: "🚀", style: { fontSize: "24px", textAlign: "center" }},
+                project: { content: "Launch App", style: { fontWeight: "600", color: "#dc3545" }},
+                status: { content: "Done", style: { 
+                    backgroundColor: "#d1e7dd", 
+                    color: "#0f5132",
+                    borderRadius: "15px", 
+                    padding: "4px 12px",
+                    textAlign: "center",
+                    fontSize: "12px",
+                    fontWeight: "500"
+                }},
+                priority: { content: "Critical", style: { 
+                    backgroundColor: "#721c24", 
+                    color: "#ffffff",
+                    borderRadius: "15px",
+                    padding: "4px 12px", 
+                    textAlign: "center",
+                    fontSize: "12px",
+                    fontWeight: "500"
+                }}
+            }
         }
-    },
+    ],
     
-    callbacks: {
-        onCellClick: (cell, row, column, rowIndex, colIndex, event) => {
-            console.log(`🎨 Material Cell clicked: [${rowIndex}, ${colIndex}] = ${row[column.key]}`);
+    styling: {
+        cellPadding: 16,
+        rowHeight: 55,
+        headerStyle: {
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+            color: "#ffffff",
+            fontSize: "14px",
+            fontWeight: "600",
+            borderRadius: "8px 8px 0 0"
         },
-        
-        onCellHover: (cell, row, column, rowIndex, colIndex, event) => {
-            console.log(`🎨 Material Cell hover: ${row[column.key]}`);
+        cellStyle: {
+            backgroundColor: "#ffffff",
+            fontSize: "14px",
+            border: "none",
+            borderBottom: "1px solid #f0f0f0"
         },
-        
-        onRowClick: (tr, row, rowIndex, event) => {
-            console.log(`🎨 Material Row clicked: ${row.name}`);
+        alternateRowStyle: {
+            backgroundColor: "#fafbfc"
         },
-        
-        onSelectionChange: (selectedRows) => {
-            console.log(`🎨 Material Selection: ${selectedRows.length} rows`);
-        },
-        
-        onSort: (column, direction) => {
-            console.log(`🎨 Material Sort: ${column} ${direction}`);
+        states: {
+            hover: {
+                backgroundColor: "#f8f9ff",
+                transform: "translateX(4px)",
+                boxShadow: "4px 0 12px rgba(102,126,234,0.15)"
+            },
+            selected: {
+                backgroundColor: "#667eea",
+                color: "#ffffff",
+                transform: "scale(1.02)"
+            }
         }
     }
 });
 
-// Add CSS for additional animations
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes ripple {
-        to {
-            transform: scale(4);
-            opacity: 0;
-        }
-    }
+// 📱 Tableau Mobile/Card Style
+const mobileTable = new Table({
+    id: "mobile-table",
+    position: { x: 1200, y: 50 },
+    size: { width: 350, height: 400 },
+    attach: "#view",
     
-    @keyframes glitch {
-        0%, 100% { transform: translateX(0); }
-        20% { transform: translateX(-2px); }
-        40% { transform: translateX(2px); }
-        60% { transform: translateX(-1px); }
-        80% { transform: translateX(1px); }
+    columns: [
+        { id: "avatar", header: "", width: 50, sortable: false },
+        { id: "name", header: "Contact", width: 150, sortable: true },
+        { id: "action", header: "", width: 80, sortable: false }
+    ],
+    
+    rows: [
+        {
+            id: "contact-1",
+            cells: {
+                avatar: { content: "👩‍💼", style: { fontSize: "28px", textAlign: "center" }},
+                name: { content: "Sarah Connor", style: { fontWeight: "600", color: "#2c3e50" }},
+                action: { content: "📞 💬", style: { fontSize: "20px", textAlign: "center" }}
+            }
+        },
+        {
+            id: "contact-2", 
+            cells: {
+                avatar: { content: "👨‍💻", style: { fontSize: "28px", textAlign: "center" }},
+                name: { content: "John Doe", style: { fontWeight: "600", color: "#2c3e50" }},
+                action: { content: "📞 💬", style: { fontSize: "20px", textAlign: "center" }}
+            }
+        },
+        {
+            id: "contact-3",
+            cells: {
+                avatar: { content: "👩‍🎨", style: { fontSize: "28px", textAlign: "center" }},
+                name: { content: "Alice Design", style: { fontWeight: "600", color: "#2c3e50" }},
+                action: { content: "📞 💬", style: { fontSize: "20px", textAlign: "center" }}
+            }
+        }
+    ],
+    
+    styling: {
+        cellPadding: 18,
+        rowHeight: 65,
+        headerStyle: {
+            backgroundColor: "#ffffff",
+            color: "#6c757d",
+            fontSize: "12px",
+            fontWeight: "500",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+            borderBottom: "1px solid #e9ecef"
+        },
+        cellStyle: {
+            backgroundColor: "#ffffff",
+            fontSize: "16px",
+            border: "none",
+            borderBottom: "1px solid #f8f9fa",
+            borderRadius: "0"
+        },
+        alternateRowStyle: {
+            backgroundColor: "#ffffff"
+        },
+        states: {
+            hover: {
+                backgroundColor: "#f8f9fa",
+                borderLeft: "4px solid #007bff",
+                transform: "translateX(2px)"
+            },
+            selected: {
+                backgroundColor: "#e7f3ff",
+                borderLeft: "4px solid #007bff"
+            }
+        }
+    },
+    
+    onCellClick: (cell, row, col) => {
+        console.log(`📱 Mobile Table: Contact action for ${cell.content}`);
     }
-`;
-document.head.appendChild(style);
+});
 
-console.log('🎉 Table Web Component Advanced Demo loaded with:');
-console.log('  - Glassmorphism table with bombé effects');
-console.log('  - Gaming-style table with neon glow');
-console.log('  - Material Design table with elevation');
-console.log('  - Interactive callbacks and animations');
-console.log('  - Auto-attachment and positioning');
+console.log('🎨 Tous les tableaux d\'exemple créés !');
+console.log('💫 Sexy Table (basique élégant)');
+console.log('🎮 Gaming Table (thème sombre)'); 
+console.log('📊 Financial Table (professionnel)');
+console.log('🌈 Creative Table (coloré créatif)');
+console.log('📱 Mobile Table (style mobile/card)');
+
+// 🧪 Test des fonctionnalités avancées
+setTimeout(() => {
+    console.log('\n🧪 Test des fonctionnalités avancées...');
+    
+    // Test ajout de ligne au tableau sexy
+    sexyTable.addRow({
+        id: "user-4",
+        cells: {
+            name: { content: "Eva Green", style: { color: "#2c3e50", fontWeight: "600" }},
+            role: { content: "Lead", style: { color: "#16a085", backgroundColor: "#f0fff4", borderRadius: "12px", padding: "4px 8px" }},
+            status: { content: "🟢 En ligne", style: { color: "#27ae60" }},
+            score: { content: "98", style: { color: "#e74c3c", fontSize: "16px" }},
+            actions: { content: "✏️ 🗑️ 👁️", style: { fontSize: "18px" }}
+        }
+    });
+    
+    // Test ajout de donnée au tableau gaming
+    gamingTable.addRow({
+        id: "player-3",
+        cells: {
+            player: { content: "EliteSniper", style: { color: "#00ff88", fontFamily: "monospace", fontWeight: "bold" }},
+            level: { content: "50", style: { color: "#ff6b35", textAlign: "center" }},
+            score: { content: "15,999", style: { color: "#ffd23f", textAlign: "right", fontWeight: "bold" }},
+            rank: { content: "🏆 Legend", style: { color: "#ff4444", textAlign: "center" }}
+        }
+    });
+    
+    console.log('✅ Nouvelles lignes ajoutées dynamiquement !');
+}, 2000);

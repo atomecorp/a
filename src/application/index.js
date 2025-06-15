@@ -3,6 +3,7 @@
 // import('./examples/sliders.js');
 // import('./examples/drag.js');
 // import('./examples/matrix.js');
-import('./examples/lists.js');
+// import('./examples/lists.js');
+import('./examples/tables.js');
 
 
