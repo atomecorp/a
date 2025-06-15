@@ -719,7 +719,9 @@ class ModuleBuilder {
       }
     });
     
-    document.body.appendChild(this.tempLine);
+    // Ajouter à #view au lieu du body
+    const viewContainer = document.getElementById('view') || document.body;
+    viewContainer.appendChild(this.tempLine);
   }
 
   // Créer une connexion permanente
@@ -783,7 +785,9 @@ class ModuleBuilder {
       this._removeConnection(line);
     });
     
-    document.body.appendChild(line);
+    // Ajouter à #view au lieu du body
+    const viewContainer = document.getElementById('view') || document.body;
+    viewContainer.appendChild(line);
     this._updateConnectionLine(line, sourceConnector, targetConnector);
     
     return line;
