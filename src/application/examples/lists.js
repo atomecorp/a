@@ -1,419 +1,310 @@
-// =====================
-// DEMO 1: Glassmorphism List
-// =====================
-const glassmorphismList = new List({
-    id: 'glassmorphism-list',
-    type: 'avatar',
-    searchable: true,
-    selectable: true,
-    multiSelect: true,
-    attach: 'body',
-    x: 50,
-    y: 180,
-    width: 400,
-    height: 500,
-    
-    // Global glassmorphism style
-    style: {
-        background: 'rgba(255, 255, 255, 0.15)',
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.2)',
-        borderRadius: '20px',
-        padding: '20px',
-        boxShadow: [
-            '0 8px 32px rgba(0, 0, 0, 0.1)',
-            'inset 0 1px 0 rgba(255, 255, 255, 0.4)'
+/**
+ * 📋 EXEMPLES D'UTILISATION - COMPOSANT LIST MATERIAL DESIGN
+ * 
+ * @version 2.0
+ * @author Squirrel Framework
+ * @date 15 juin 2025
+ */
+console.log('📋 Chargement des exemples de listes Material Design...');
+
+// Attendre que List soit disponible via spark.js
+function waitForList() {
+    return new Promise((resolve) => {
+        if (window.List) {
+            console.log('✅ Classe List trouvée !');
+            resolve();
+        } else {
+            console.log('⏳ Attente de la classe List...');
+            setTimeout(() => waitForList().then(resolve), 100);
+        }
+    });
+}
+
+// ✅ EXEMPLE 1 : Liste Material Design ultra-personnalisée
+function createMaterialList() {
+    console.log('🎨 Création de la liste Material Design...');
+    const materialList = new window.List({
+        id: 'material-list',
+        position: { x: 50, y: 50 },
+        size: { width: 350, height: 500 },
+        attach: '#view',
+        
+        // Espacement ultra-fin
+        spacing: {
+            vertical: 2,          // Espace minimal entre éléments
+            horizontal: 0,        // Pas de marge horizontale
+            itemPadding: 12,      // Padding compact
+            marginTop: 0,         // Pas de marge avant
+            marginBottom: 0       // Pas de marge après
+        },
+        
+        // Style Material Design des éléments
+        itemStyle: {
+            fontSize: '14px',
+            fontWeight: '400',
+            lineHeight: '1.5',
+            textColor: '#212121',
+            backgroundColor: '#ffffff',
+            borderRadius: '6px'
+        },
+        
+        items: [
+            { 
+                id: 'item-1', 
+                content: '📧 Messages non lus',
+                style: { 
+                    backgroundColor: '#e3f2fd',
+                    color: '#1565c0',
+                    fontWeight: '500'
+                }
+            },
+            { 
+                id: 'item-2', 
+                content: '📅 Rendez-vous aujourd\'hui',
+                style: { 
+                    backgroundColor: '#f3e5f5',
+                    color: '#7b1fa2'
+                }
+            },
+            { 
+                id: 'item-3', 
+                content: '⚡ Tâches urgentes',
+                style: { 
+                    backgroundColor: '#fff3e0',
+                    color: '#ef6c00'
+                }
+            },
+            { 
+                id: 'item-4', 
+                content: '✅ Projets terminés',
+                style: { 
+                    backgroundColor: '#e8f5e8',
+                    color: '#2e7d32'
+                }
+            }
         ],
-        overflow: 'hidden'
-    },
-    
-    // Header glassmorphism style
-    headerStyle: {
-        background: 'rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(10px)',
-        borderRadius: '15px',
-        padding: '16px',
-        margin: '0 0 20px 0',
-        border: '1px solid rgba(255, 255, 255, 0.2)',
-        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.1)'
-    },
-    
-    // Default item style
-    itemStyle: {
-        background: 'rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(5px)',
-        border: '1px solid rgba(255, 255, 255, 0.2)',
-        borderRadius: '12px',
-        padding: '16px 20px',
-        margin: '8px 0',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        color: '#333'
-    },
-    
-    itemHoverStyle: {
-        background: 'rgba(255, 255, 255, 0.25)',
-        transform: 'translateY(-2px) scale(1.02)',
-        boxShadow: [
-            '0 8px 25px rgba(0, 0, 0, 0.15)',
-            'inset 0 1px 0 rgba(255, 255, 255, 0.5)'
-        ]
-    },
-    
-    itemSelectedStyle: {
-        background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.3), rgba(21, 101, 192, 0.3))',
-        borderLeft: '4px solid #2196f3',
-        boxShadow: [
-            '0 0 0 2px rgba(33, 150, 243, 0.3)',
-            '0 8px 25px rgba(33, 150, 243, 0.2)'
-        ]
-    },
-    
-    items: [
-        {
-            id: 1,
-            avatarText: 'AJ',
-            avatarColor: '#ff6b6b',
-            text: 'Alice Johnson',
-            subtitle: 'Senior Designer',
-            badge: 'Online',
-            badgeColor: '#4caf50',
-            
-            // Custom style override for this item
-            style: {
-                background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 193, 7, 0.2))',
-                borderLeft: '4px solid #ff6b6b',
-                color: '#2c3e50',
+        
+        containerStyle: {
+            background: '#fafafa',
+            borderRadius: '12px',
+            border: '1px solid #e0e0e0'
+        },
+        
+        states: {
+            hover: { 
+                backgroundColor: '#f5f5f5',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                transform: 'translateY(-1px)'
+            },
+            selected: { 
+                backgroundColor: '#1976d2', 
+                color: 'white',
+                boxShadow: '0 4px 12px rgba(25,118,210,0.4)',
                 fontWeight: '500'
+            }
+        },
+        
+        elevation: 2,
+        selectable: true,
+        multiSelect: true,
+        rippleEffect: true,
+        
+        onItemClick: (item, index) => {
+            console.log(`🖱️ Material clic: ${item.content}`);
+        },
+        
+        onItemSelect: (item, isSelected) => {
+            console.log(`${isSelected ? '✅' : '❌'} ${item.content}`);
+        },
+        
+        debug: true
+    });
+    
+    return materialList;
+}
+
+// ✅ EXEMPLE 2 : Liste compacte avec espacement minimal
+function createCompactList() {
+    console.log('📦 Création de la liste compacte...');
+    return new window.List({
+        id: 'compact-list',
+        position: { x: 450, y: 50 },
+        size: { width: 300, height: 400 },
+        attach: '#view',
+        
+        // Espacement ultra-compact
+        spacing: {
+            vertical: 1,          // Espacement minimal
+            itemPadding: 8,       // Padding très fin
+            marginTop: 0,
+            marginBottom: 0
+        },
+        
+        // Texte plus petit et compact
+        itemStyle: {
+            fontSize: '12px',
+            fontWeight: '400',
+            lineHeight: '1.3',
+            textColor: '#424242',
+            backgroundColor: '#ffffff',
+            borderRadius: '4px'
+        },
+        
+        items: [
+            { content: '🔧 Configuration' },
+            { content: '📊 Statistiques' },
+            { content: '🎨 Apparence' },
+            { content: '🔒 Sécurité' },
+            { content: '📱 Notifications' },
+            { content: '🌐 Réseau' },
+            { content: '💾 Sauvegarde' }
+        ],
+        
+        elevation: 1,
+        
+        states: {
+            hover: { 
+                backgroundColor: '#f8f9fa',
+                transform: 'translateX(2px)'
             },
-            
-            hoverStyle: {
-                background: 'linear-gradient(135deg, rgba(255, 107, 107, 0.3), rgba(255, 193, 7, 0.3))',
-                transform: 'translateX(8px) scale(1.05)',
-                boxShadow: [
-                    '0 8px 25px rgba(255, 107, 107, 0.3)',
-                    'inset 0 1px 0 rgba(255, 255, 255, 0.6)'
-                ]
-            },
-            
-            selectedStyle: {
-                background: 'linear-gradient(135deg, #ff6b6b, #feca57)',
-                color: 'white',
-                textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+            selected: { 
+                backgroundColor: '#e8f4fd',
+                color: '#1976d2',
+                borderLeft: '3px solid #1976d2'
+            }
+        }
+    });
+}
+
+// ✅ EXEMPLE 3 : Liste avec gros texte et espacement généreux
+function createLargeTextList() {
+    console.log('📝 Création de la liste avec gros texte...');
+    return new window.List({
+        id: 'large-text-list',
+        position: { x: 50, y: 600 },
+        size: { width: 400, height: 350 },
+        attach: '#view',
+        
+        // Espacement généreux
+        spacing: {
+            vertical: 8,          // Beaucoup d'espace entre éléments
+            itemPadding: 20,      // Padding généreux
+            marginTop: 4,
+            marginBottom: 4
+        },
+        
+        // Gros texte lisible
+        itemStyle: {
+            fontSize: '16px',
+            fontWeight: '500',
+            lineHeight: '1.6',
+            textColor: '#1a1a1a',
+            backgroundColor: '#ffffff',
+            borderRadius: '8px'
+        },
+        
+        items: [
+            { content: '🏠 Accueil' },
+            { content: '👤 Profil utilisateur' },
+            { content: '⚙️ Paramètres avancés' },
+            { content: '📈 Tableau de bord' },
+            { content: '💼 Gestion de projet' }
+        ],
+        
+        elevation: 3,
+        
+        states: {
+            hover: { 
+                backgroundColor: '#f0f7ff',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 transform: 'scale(1.02)'
-            }
-        },
-        
-        {
-            id: 2,
-            avatarText: 'BW',
-            avatarColor: '#9c27b0',
-            text: 'Bob Wilson',
-            subtitle: 'Product Manager',
-            badge: 'Busy',
-            badgeColor: '#ff9800',
-            
-            // Neon glow style
-            style: {
-                background: 'rgba(156, 39, 176, 0.1)',
-                border: '1px solid rgba(156, 39, 176, 0.3)',
-                borderRadius: '15px',
-                boxShadow: [
-                    '0 0 20px rgba(156, 39, 176, 0.2)',
-                    'inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-                ]
             },
-            
-            hoverStyle: {
-                background: 'rgba(156, 39, 176, 0.2)',
-                boxShadow: [
-                    '0 0 30px rgba(156, 39, 176, 0.4)',
-                    '0 8px 25px rgba(156, 39, 176, 0.3)'
-                ],
-                transform: 'scale(1.05)',
-                filter: 'brightness(1.1)'
-            }
-        },
-        
-        {
-            id: 3,
-            avatarText: 'CD',
-            avatarColor: '#00bcd4',
-            text: 'Charlie Davis',
-            subtitle: 'Developer',
-            badge: 'Away',
-            badgeColor: '#607d8b'
-        }
-    ],
-    
-    // 🎯 Callbacks interactifs
-    callbacks: {
-        onItemClick: (item, id, event) => {
-            console.log(`🔮 Glassmorphism - Élément cliqué: ${item.text} (ID: ${id})`);
-            console.log(`✨ Vous avez cliqué sur ${item.text} - ${item.subtitle}`);
-        },
-        
-        onItemHover: (item, id, event) => {
-            console.log(`👆 Glassmorphism - Survol: ${item.text}`);
-        },
-        
-        onSelectionChange: (selectedItems) => {
-            console.log(`🔄 Glassmorphism - Sélection changée:`, selectedItems);
-            if (selectedItems.length > 0) {
-                console.log(`📋 ${selectedItems.length} élément(s) sélectionné(s)`);
-            }
-        },
-        
-        onSearch: (query, filteredItems) => {
-            console.log(`🔍 Glassmorphism - Recherche: "${query}" - ${filteredItems.length} résultats`);
-        }
-    }
-});
-
-// =====================
-// DEMO 2: Gaming-Style List
-// =====================
-const gamingList = new List({
-    id: 'gaming-list',
-    type: 'icon',
-    selectable: true,
-    attach: 'body',
-    x: 480,
-    y: 180,
-    width: 350,
-    height: 450,
-    
-    // Dark gaming theme
-    style: {
-        background: 'linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 50%, #0c0c0c 100%)',
-        border: '2px solid #00ff88',
-        borderRadius: '15px',
-        padding: '15px',
-        boxShadow: [
-            '0 0 30px rgba(0, 255, 136, 0.3)',
-            'inset 0 1px 0 rgba(0, 255, 136, 0.1)'
-        ],
-        color: '#ffffff'
-    },
-    
-    itemStyle: {
-        background: 'linear-gradient(90deg, rgba(0, 255, 136, 0.1), transparent)',
-        border: '1px solid rgba(0, 255, 136, 0.2)',
-        borderRadius: '8px',
-        padding: '12px 16px',
-        margin: '4px 0',
-        transition: 'all 0.3s ease',
-        color: '#e0e0e0',
-        position: 'relative'
-    },
-    
-    itemHoverStyle: {
-        background: 'linear-gradient(90deg, rgba(0, 255, 136, 0.2), rgba(0, 255, 136, 0.1))',
-        borderColor: '#00ff88',
-        transform: 'translateX(5px)',
-        boxShadow: [
-            '0 0 15px rgba(0, 255, 136, 0.4)',
-            'inset 0 1px 0 rgba(0, 255, 136, 0.2)'
-        ],
-        color: '#ffffff'
-    },
-    
-    itemSelectedStyle: {
-        background: 'linear-gradient(90deg, #00ff88, rgba(0, 255, 136, 0.3))',
-        borderColor: '#00ff88',
-        color: '#000000',
-        fontWeight: 'bold',
-        boxShadow: [
-            '0 0 20px rgba(0, 255, 136, 0.6)',
-            'inset 0 1px 0 rgba(255, 255, 255, 0.3)'
-        ]
-    },
-    
-    items: [
-        {
-            id: 1,
-            icon: '🎮',
-            text: 'Start Game',
-            subtitle: 'Begin your adventure',
-            
-            style: {
-                background: 'linear-gradient(45deg, rgba(76, 175, 80, 0.2), rgba(139, 195, 74, 0.2))',
-                borderLeft: '4px solid #4caf50'
-            },
-            
-            hoverStyle: {
-                background: 'linear-gradient(45deg, #4caf50, #8bc34a)',
+            selected: { 
+                backgroundColor: '#1976d2',
                 color: 'white',
-                textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
-                transform: 'scale(1.05) rotate(1deg)'
-            }
-        },
-        
-        {
-            id: 2,
-            icon: '⚙️',
-            text: 'Settings',
-            subtitle: 'Configure options',
-            
-            style: {
-                background: 'linear-gradient(45deg, rgba(255, 152, 0, 0.2), rgba(255, 193, 7, 0.2))',
-                borderLeft: '4px solid #ff9800'
-            }
-        },
-        
-        {
-            id: 3,
-            icon: '🏆',
-            text: 'Achievements',
-            subtitle: 'View your progress',
-            
-            style: {
-                background: 'linear-gradient(45deg, rgba(255, 193, 7, 0.2), rgba(255, 235, 59, 0.2))',
-                borderLeft: '4px solid #ffc107'
-            }
-        },
-        
-        {
-            id: 4,
-            icon: '👥',
-            text: 'Multiplayer',
-            subtitle: 'Play with friends',
-            
-            style: {
-                background: 'linear-gradient(45deg, rgba(33, 150, 243, 0.2), rgba(3, 169, 244, 0.2))',
-                borderLeft: '4px solid #2196f3'
+                boxShadow: '0 6px 20px rgba(25,118,210,0.3)',
+                fontWeight: '600'
             }
         }
-    ],
-    
-    // 🎮 Callbacks gaming
-    callbacks: {
-        onItemClick: (item, id, event) => {
-            console.log(`🎮 Gaming - Action: ${item.text}`);
-            
-            // Actions spécifiques selon l'élément
-            switch(item.text) {
-                case 'Start Game':
-                    console.log('🎮 Lancement du jeu en cours...');
-                    break;
-                case 'Settings':
-                    console.log('⚙️ Ouverture des paramètres...');
-                    break;
-                case 'Achievements':
-                    console.log('🏆 Visualisation des succès...');
-                    break;
-                case 'Multiplayer':
-                    console.log('👥 Connexion au multijoueur...');
-                    break;
-            }
-        },
-        
-        onItemHover: (item, id, event) => {
-            console.log(`🎯 Gaming - Hover: ${item.text} - ${item.subtitle}`);
-        },
-        
-        onSelectionChange: (selectedItems) => {
-            console.log(`🎮 Gaming - Menu sélectionné:`, selectedItems);
-        }
-    }
-});
+    });
+}
 
-// =====================
-// DEMO 3: Material Design List
-// =====================
-const materialList = new List({
-    id: 'material-list',
-    type: 'avatar',
-    searchable: true,
-    sortable: true,
-    attach: 'body',
-    x: 860,
-    y: 180,
-    width: 380,
-    height: 400,
-    
-    style: {
-        background: '#ffffff',
-        borderRadius: '8px',
-        boxShadow: [
-            '0 4px 8px rgba(0, 0, 0, 0.12)',
-            '0 2px 4px rgba(0, 0, 0, 0.08)'
+// ✅ EXEMPLE 4 : API de mise à jour dynamique
+function createDynamicList() {
+    console.log('⚡ Création de la liste dynamique...');
+    const dynamicList = new window.List({
+        id: 'dynamic-list',
+        position: { x: 500, y: 600 },
+        size: { width: 250, height: 300 },
+        attach: '#view',
+        
+        items: [
+            { content: '📝 Élément initial' }
         ],
-        overflow: 'hidden'
-    },
-    
-    headerStyle: {
-        background: '#f5f5f5',
-        padding: '16px',
-        borderBottom: '1px solid #e0e0e0'
-    },
-    
-    itemStyle: {
-        padding: '16px',
-        borderBottom: '1px solid #f0f0f0',
-        transition: 'all 0.2s ease',
-        backgroundColor: 'transparent'
-    },
-    
-    itemHoverStyle: {
-        backgroundColor: '#f5f5f5',
-        transform: 'translateX(4px)'
-    },
-    
-    itemSelectedStyle: {
-        backgroundColor: '#e3f2fd',
-        borderLeft: '4px solid #2196f3'
-    },
-    
-    items: [
-        {
-            id: 1,
-            avatarText: 'MC',
-            avatarColor: '#f44336',
-            text: 'Material Contact 1',
-            subtitle: 'material@design.com',
-            badge: '2',
-            badgeColor: '#f44336'
-        },
-        {
-            id: 2,
-            avatarText: 'MD',
-            avatarColor: '#2196f3',
-            text: 'Material Contact 2',
-            subtitle: 'another@material.com'
-        },
-        {
-            id: 3,
-            avatarText: 'UI',
-            avatarColor: '#4caf50',
-            text: 'UI Designer',
-            subtitle: 'ui@company.com',
-            badge: 'New',
-            badgeColor: '#4caf50'
-        }
-    ],
-    
-    // 📱 Callbacks Material Design
-    callbacks: {
-        onItemClick: (item, id, event) => {
-            console.log(`📱 Material - Contact sélectionné: ${item.text}`);
-            console.log(`📧 Contacter ${item.text} à ${item.subtitle} ?`);
+        
+        itemStyle: {
+            fontSize: '13px',
+            textColor: '#333333',
+            backgroundColor: '#f9f9f9'
         },
         
-        onItemDoubleClick: (item, id, event) => {
-            console.log(`📱 Material - Double-clic: ${item.text}`);
-            console.log(`📞 Appel de ${item.text} en cours...`);
+        spacing: {
+            vertical: 3,
+            itemPadding: 10
         },
         
-        onSelectionChange: (selectedItems) => {
-            console.log(`📱 Material - Contacts sélectionnés:`, selectedItems);
-        },
-        
-        onSearch: (query, filteredItems) => {
-            console.log(`🔍 Material - Recherche contacts: "${query}" - ${filteredItems.length} trouvés`);
-        },
-        
-        onSort: (field, direction) => {
-            console.log(`📊 Material - Tri par ${field} (${direction})`);
-        }
-    }
+        elevation: 1
+    });
+    
+    // Test des APIs de mise à jour
+    setTimeout(() => {
+        console.log('🔄 Mise à jour de l\'espacement...');
+        dynamicList.updateSpacing({
+            vertical: 6,
+            itemPadding: 16
+        });
+    }, 2000);
+    
+    setTimeout(() => {
+        console.log('🎨 Mise à jour du style de texte...');
+        dynamicList.updateTextStyle({
+            fontSize: '15px',
+            fontWeight: '500',
+            textColor: '#1976d2'
+        });
+    }, 4000);
+    
+    return dynamicList;
+}
+
+// 🚀 INITIALISATION DES EXEMPLES
+async function initializeLists() {
+    console.log('🎯 Attente du chargement de la classe List...');
+    await waitForList();
+    
+    console.log('🚀 Initialisation des listes Material Design...');
+    
+    // Créer toutes les listes
+    const lists = {
+        material: createMaterialList(),
+        compact: createCompactList(),
+        largeText: createLargeTextList(),
+        dynamic: createDynamicList()
+    };
+    
+    console.log('✨ Toutes les listes sont créées !');
+    console.log('📋 Listes disponibles:', Object.keys(lists));
+    
+    // Rendre disponible globalement pour les tests
+    window.Lists = lists;
+    
+    return lists;
+}
+
+// Démarrer l'initialisation
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('📄 DOM chargé, démarrage de l\'initialisation...');
+    initializeLists().catch(error => {
+        console.error('❌ Erreur lors de l\'initialisation:', error);
+    });
 });
