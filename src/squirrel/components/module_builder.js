@@ -530,6 +530,47 @@ class ModuleBuilder {
     }
   }
 
+  // Supprimer une connexion par son élément DOM
+  _removeConnection(connectionElement) {
+    // Trouver la connexion correspondant à cet élément
+    let connectionToRemove = null;
+    for (const [id, connection] of this.connections) {
+      if (connection.element === connectionElement) {
+        connectionToRemove = { id, ...connection };
+        break;
+      }
+    }
+    
+    if (!connectionToRemove) return;
+    
+    // Supprimer l'élément du DOM
+    if (connectionElement && connectionElement.parentNode) {
+      connectionElement.parentNode.removeChild(connectionElement);
+    }
+    
+    // Retirer la connexion des connecteurs
+    if (connectionToRemove.source && connectionToRemove.source.connections) {
+      connectionToRemove.source.connections.delete(connectionToRemove.id);
+    }
+    if (connectionToRemove.target && connectionToRemove.target.connections) {
+      connectionToRemove.target.connections.delete(connectionToRemove.id);
+    }
+    
+    // Supprimer de la Map
+    this.connections.delete(connectionToRemove.id);
+    
+    // Callback de déconnexion
+    this.connectionCallbacks.onDisconnect.forEach(callback => {
+      callback({
+        id: connectionToRemove.id,
+        source: connectionToRemove.source,
+        target: connectionToRemove.target
+      });
+    });
+    
+    console.log(`Connexion supprimée: ${connectionToRemove.id}`);
+  }
+
   // Nettoyer la sélection de connecteur
   _clearSelectedConnector() {
     if (this.selectedConnector) {
@@ -537,6 +578,51 @@ class ModuleBuilder {
       this.selectedConnector.style.borderColor = '';
       this.selectedConnector = null;
     }
+  }
+
+  // Méthode utilitaire pour choisir la couleur de texte selon le fond
+  _getTextColorForBackground(backgroundColor) {
+    // Convertir la couleur en RGB si elle est en format hex
+    let r, g, b;
+    
+    if (backgroundColor.startsWith('#')) {
+      // Format hex
+      const hex = backgroundColor.substring(1);
+      r = parseInt(hex.substring(0, 2), 16);
+      g = parseInt(hex.substring(2, 4), 16);
+      b = parseInt(hex.substring(4, 6), 16);
+    } else if (backgroundColor.startsWith('rgb')) {
+      // Format rgb() ou rgba()
+      const values = backgroundColor.match(/\d+/g);
+      r = parseInt(values[0]);
+      g = parseInt(values[1]);
+      b = parseInt(values[2]);
+    } else {
+      // Couleurs nommées - approximation simple
+      const colorMap = {
+        'white': [255, 255, 255],
+        'black': [0, 0, 0],
+        'gray': [128, 128, 128],
+        'grey': [128, 128, 128],
+        'red': [255, 0, 0],
+        'green': [0, 128, 0],
+        'blue': [0, 0, 255],
+        'yellow': [255, 255, 0],
+        'purple': [128, 0, 128],
+        'orange': [255, 165, 0]
+      };
+      
+      const color = colorMap[backgroundColor.toLowerCase()] || [200, 200, 200];
+      r = color[0];
+      g = color[1];
+      b = color[2];
+    }
+    
+    // Calculer la luminosité perçue (formule W3C)
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Retourner noir pour fond clair, blanc pour fond sombre
+    return luminance > 0.5 ? '#000000' : '#ffffff';
   }
 
   // Ajouter la fonctionnalité de sélection des modules
@@ -548,10 +634,10 @@ class ModuleBuilder {
       if (e.target.tagName === 'INPUT') return; // Pas pendant l'édition du nom
       
       e.stopPropagation();
-      this._toggleModuleSelection(config.id);
+      this._selectModule(config.id);
     });
-    
-    // Double-clic sur la zone de contenu pour désélectionner tout
+
+    // Double-clic sur le contenu pour désélectionner tout
     const contentArea = moduleElement.querySelector(`#${config.id}_content`);
     if (contentArea) {
       contentArea.addEventListener('dblclick', (e) => {
@@ -561,80 +647,77 @@ class ModuleBuilder {
     }
   }
 
-  // Basculer la sélection d'un module
-  _toggleModuleSelection(moduleId) {
-    if (this.selectedModules.has(moduleId)) {
-      this._deselectModule(moduleId);
-    } else {
-      this._selectModule(moduleId);
-    }
-  }
-
   // Sélectionner un module
   _selectModule(moduleId) {
-    const module = this.modules.get(moduleId);
-    if (!module) return;
-    
-    // Désélectionner les autres modules (sélection unique)
+    // Désélectionner tous les autres modules
     this._clearAllSelections();
     
-    // Sélectionner ce module
+    // Sélectionner le module courant
     this.selectedModules.add(moduleId);
     
-    // Appliquer le style de sélection
-    const container = module.element;
-    container.style.boxShadow = '0 0 0 3px rgba(33, 150, 243, 0.5), 0 4px 12px rgba(0,0,0,0.15)';
-    container.style.transform = 'scale(1.02)';
-    container.style.zIndex = '1001';
-    container.style.transition = 'all 0.2s ease';
-    
-    // Callback de sélection
-    if (module.config.callbacks && module.config.callbacks.onSelect) {
-      module.config.callbacks.onSelect(moduleId);
+    const moduleData = this.modules.get(moduleId);
+    if (moduleData) {
+      const moduleElement = moduleData.element;
+      
+      // Style de sélection
+      moduleElement.style.zIndex = '1002';
+      moduleElement.style.boxShadow = '0 0 0 3px rgba(33, 150, 243, 0.5), 0 4px 12px rgba(0,0,0,0.15)';
+      moduleElement.style.transform = 'scale(1.02)';
+      moduleElement.style.transition = '0.2s';
+      
+      // Callback de sélection si défini
+      if (moduleData.config.callbacks && moduleData.config.callbacks.onSelect) {
+        moduleData.config.callbacks.onSelect(moduleId);
+      }
+      
+      console.log(`Module sélectionné: ${moduleId}`);
     }
-    
-    console.log(`Module ${moduleId} sélectionné`);
   }
 
   // Désélectionner un module
   _deselectModule(moduleId) {
-    const module = this.modules.get(moduleId);
-    if (!module) return;
-    
     this.selectedModules.delete(moduleId);
     
-    // Retirer le style de sélection
-    const container = module.element;
-    container.style.boxShadow = '';
-    container.style.transform = '';
-    container.style.zIndex = '1000';
-    container.style.transition = '';
-    
-    // Callback de désélection
-    if (module.config.callbacks && module.config.callbacks.onDeselect) {
-      module.config.callbacks.onDeselect(moduleId);
+    const moduleData = this.modules.get(moduleId);
+    if (moduleData) {
+      const moduleElement = moduleData.element;
+      
+      // Restaurer le style normal
+      moduleElement.style.zIndex = '1000';
+      moduleElement.style.boxShadow = '';
+      moduleElement.style.transform = '';
+      moduleElement.style.transition = '';
+      
+      // Callback de désélection si défini
+      if (moduleData.config.callbacks && moduleData.config.callbacks.onDeselect) {
+        moduleData.config.callbacks.onDeselect(moduleId);
+      }
+      
+      console.log(`Module désélectionné: ${moduleId}`);
     }
-    
-    console.log(`Module ${moduleId} désélectionné`);
   }
 
   // Désélectionner tous les modules
   _clearAllSelections() {
-    const selectedIds = Array.from(this.selectedModules);
-    selectedIds.forEach(moduleId => {
+    const selectedModules = Array.from(this.selectedModules);
+    selectedModules.forEach(moduleId => {
       this._deselectModule(moduleId);
     });
-    console.log('Toutes les sélections effacées');
   }
 
-  // Démarrer une connexion
-  _startConnection(sourceConnector) {
-    this.draggedConnector = sourceConnector;
+  // Démarrer une connexion par drag
+  _startConnection(connector) {
+    this.draggedConnector = connector;
+    this.isDraggingConnection = true;
     
-    // Créer une ligne temporaire pour la visualisation
-    this._createTempConnectionLine(sourceConnector);
+    // Feedback visuel
+    connector.style.boxShadow = '0 0 8px #FF5722';
+    connector.style.borderColor = '#FF5722';
     
-    // Bind des méthodes pour conserver le contexte
+    // Créer la ligne temporaire
+    this._createTempConnectionLine(connector);
+    
+    // Ajouter les événements de drag
     this.boundOnConnectionDrag = this._onConnectionDrag.bind(this);
     this.boundOnConnectionEnd = this._onConnectionEnd.bind(this);
     
@@ -642,59 +725,42 @@ class ModuleBuilder {
     document.addEventListener('mouseup', this.boundOnConnectionEnd);
   }
 
-  // Gérer le drag de connexion
-  _onConnectionDrag(e) {
-    if (!this.draggedConnector || !this.tempLine) return;
-    
-    const rect = this.draggedConnector.getBoundingClientRect();
-    const startX = rect.left + rect.width / 2;
-    const startY = rect.top + rect.height / 2;
-    
-    // Calculer la distance et l'angle pour créer une vraie ligne
-    const deltaX = e.clientX - startX;
-    const deltaY = e.clientY - startY;
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
-    
-    // Positionner la ligne
-    this.tempLine.style.left = `${startX}px`;
-    this.tempLine.style.top = `${startY}px`;
-    this.tempLine.style.width = `${distance}px`;
-    this.tempLine.style.height = '2px';
-    this.tempLine.style.transform = `rotate(${angle}deg)`;
-    this.tempLine.style.transformOrigin = '0 50%';
-  }
-
-  // Terminer une connexion (mouseup global)
-  _onConnectionEnd(e) {
-    // Vérifier si on est sur un connecteur valide
-    const targetConnector = e.target.closest('[id*="_input_"], [id*="_output_"]');
-    
-    if (this.draggedConnector && targetConnector && this.draggedConnector !== targetConnector) {
-      this._createConnection(this.draggedConnector, targetConnector);
-    }
-    
-    this._cleanupTempConnection();
-  }
-
-  // Terminer une connexion (mouseup sur connecteur spécifique)
+  // Terminer une connexion par drag
   _endConnection(targetConnector) {
-    if (this.draggedConnector && targetConnector && this.draggedConnector !== targetConnector) {
-      this._createConnection(this.draggedConnector, targetConnector);
+    if (!this.isDraggingConnection || !this.draggedConnector) return;
+    
+    // Vérifier si on peut créer la connexion
+    if (targetConnector && targetConnector !== this.draggedConnector) {
+      const sourceData = this.draggedConnector.connectorData;
+      const targetData = targetConnector.connectorData;
+      
+      // Vérifier que les connecteurs sont de types différents
+      if (sourceData.type !== targetData.type) {
+        this._createConnection(this.draggedConnector, targetConnector);
+      } else {
+        console.warn('Connexion invalide: même type de connecteur');
+      }
     }
     
-    this._cleanupTempConnection();
+    // Nettoyer
+    this._cleanupConnection();
   }
 
-  // Nettoyer la connexion temporaire
-  _cleanupTempConnection() {
+  // Nettoyer après une connexion
+  _cleanupConnection() {
+    // Nettoyer le style du connecteur dragué
+    if (this.draggedConnector) {
+      this.draggedConnector.style.boxShadow = '';
+      this.draggedConnector.style.borderColor = '';
+    }
+    
+    // Supprimer la ligne temporaire
     if (this.tempLine) {
       this.tempLine.remove();
       this.tempLine = null;
     }
     
-    this.draggedConnector = null;
-    
+    // Supprimer les événements
     if (this.boundOnConnectionDrag) {
       document.removeEventListener('mousemove', this.boundOnConnectionDrag);
       this.boundOnConnectionDrag = null;
@@ -704,16 +770,20 @@ class ModuleBuilder {
       document.removeEventListener('mouseup', this.boundOnConnectionEnd);
       this.boundOnConnectionEnd = null;
     }
+    
+    // Réinitialiser les variables
+    this.draggedConnector = null;
+    this.isDraggingConnection = false;
   }
 
-  // Créer une ligne de connexion temporaire
+  // Créer une ligne temporaire de connexion
   _createTempConnectionLine(connector) {
     this.tempLine = $('div', {
       css: {
         position: 'fixed',
         backgroundColor: '#FF5722',
         height: '2px',
-        zIndex: '985', // En dessous de tout
+        zIndex: '985',
         pointerEvents: 'none',
         opacity: '0.7'
       }
@@ -743,27 +813,27 @@ class ModuleBuilder {
       return;
     }
     
-    // Créer la ligne de connexion
+    // Créer la ligne de connexion visuelle
     const connectionLine = this._createConnectionLine(sourceConnector, targetConnector);
     
     // Stocker la connexion
-    const connection = {
+    this.connections.set(connectionId, {
       id: connectionId,
       source: sourceData,
       target: targetData,
       element: connectionLine
-    };
+    });
     
-    this.connections.set(connectionId, connection);
+    // Ajouter la connexion aux connecteurs
     sourceData.connections.add(connectionId);
     targetData.connections.add(connectionId);
     
     // Callbacks
     this.connectionCallbacks.onConnect.forEach(callback => {
-      callback(connection);
+      callback({ id: connectionId, source: sourceData, target: targetData });
     });
     
-    console.log(`Connexion créée: ${sourceData.moduleId} -> ${targetData.moduleId}`);
+    console.log(`Connexion créée: ${connectionId}`);
   }
 
   // Créer une ligne de connexion visuelle
@@ -774,7 +844,7 @@ class ModuleBuilder {
         position: 'fixed',
         backgroundColor: '#2196F3',
         height: '2px',
-        zIndex: '990', // En dessous des connecteurs (1001) et modules (1000)
+        zIndex: '990',
         pointerEvents: 'auto',
         cursor: 'pointer'
       }
@@ -813,69 +883,270 @@ class ModuleBuilder {
     line.style.transformOrigin = '0 50%';
   }
 
-  // Mettre à jour toutes les connexions d'un module
-  _updateConnections(moduleId) {
-    this.connections.forEach(connection => {
-      if (connection.source.moduleId === moduleId || connection.target.moduleId === moduleId) {
-        const sourceElement = document.getElementById(connection.source.id);
-        const targetElement = document.getElementById(connection.target.id);
-        
-        if (sourceElement && targetElement) {
-          this._updateConnectionLine(connection.element, sourceElement, targetElement);
-        }
-      }
-    });
-  }
-
-  // Mettre à jour les connexions sans transition (pendant le drag)
+  // Mettre à jour immédiatement toutes les connexions d'un module (pour le drag)
   _updateConnectionsImmediate(moduleId) {
-    this.connections.forEach(connection => {
-      if (connection.source.moduleId === moduleId || connection.target.moduleId === moduleId) {
-        const sourceElement = document.getElementById(connection.source.id);
-        const targetElement = document.getElementById(connection.target.id);
+    // Trouver toutes les connexions liées à ce module
+    for (const [connectionId, connection] of this.connections.entries()) {
+      const sourceModuleId = connection.source.moduleId;
+      const targetModuleId = connection.target.moduleId;
+      
+      // Si cette connexion implique le module en cours de drag
+      if (sourceModuleId === moduleId || targetModuleId === moduleId) {
+        const sourceConnector = document.getElementById(connection.source.id);
+        const targetConnector = document.getElementById(connection.target.id);
         
-        if (sourceElement && targetElement) {
-          // Supprimer temporairement la transition pour performance
+        if (sourceConnector && targetConnector) {
+          // Supprimer temporairement la transition pour une mise à jour fluide
           const originalTransition = connection.element.style.transition;
           connection.element.style.transition = 'none';
           
-          this._updateConnectionLine(connection.element, sourceElement, targetElement);
+          // Mettre à jour la position
+          this._updateConnectionLine(connection.element, sourceConnector, targetConnector);
           
-          // Force un reflow pour appliquer immédiatement
-          connection.element.offsetHeight;
-          
-          // Pas de restauration de transition - on veut que ça reste rapide
+          // Restaurer la transition après un court délai
+          setTimeout(() => {
+            if (connection.element && connection.element.style) {
+              connection.element.style.transition = originalTransition;
+            }
+          }, 0);
         }
       }
-    });
-  }
-
-  // Supprimer une connexion
-  _removeConnection(connectionElement) {
-    const connectionId = Array.from(this.connections.entries())
-      .find(([id, conn]) => conn.element === connectionElement)?.[0];
-    
-    if (connectionId) {
-      const connection = this.connections.get(connectionId);
-      
-      // Supprimer l'élément visuel
-      connectionElement.remove();
-      
-      // Nettoyer les références
-      connection.source.connections.delete(connectionId);
-      connection.target.connections.delete(connectionId);
-      this.connections.delete(connectionId);
-      
-      // Callbacks
-      this.connectionCallbacks.onDisconnect.forEach(callback => {
-        callback(connection);
-      });
-      
-      console.log(`Connexion supprimée: ${connectionId}`);
     }
   }
 
-  // API publique pour les callbacks
+  // Gérer le drag de la ligne temporaire
+  _onConnectionDrag(e) {
+    if (!this.tempLine || !this.draggedConnector) return;
+    
+    const sourceRect = this.draggedConnector.getBoundingClientRect();
+    const startX = sourceRect.left + sourceRect.width / 2;
+    const startY = sourceRect.top + sourceRect.height / 2;
+    const endX = e.clientX;
+    const endY = e.clientY;
+    
+    const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+    const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+    
+    this.tempLine.style.left = `${startX}px`;
+    this.tempLine.style.top = `${startY}px`;
+    this.tempLine.style.width = `${length}px`;
+    this.tempLine.style.transform = `rotate(${angle}deg)`;
+    this.tempLine.style.transformOrigin = '0 50%';
+  }
+
+  // Terminer le drag de connexion
+  _onConnectionEnd(e) {
+    if (!this.isDraggingConnection) return;
+    
+    // Trouver le connecteur cible sous la souris
+    const targetElement = document.elementFromPoint(e.clientX, e.clientY);
+    const targetConnector = targetElement?.closest('[id*="_input_"], [id*="_output_"]');
+    
+    if (targetConnector && targetConnector !== this.draggedConnector) {
+      this._createConnection(this.draggedConnector, targetConnector);
+    }
+    
+    // Nettoyer
+    this._cleanupConnection();
+  }
+
+  // =============================================
+  // API PUBLIQUE - Méthodes programmatiques
+  // =============================================
+
+  // Créer une connexion entre deux connecteurs
+  createConnection(sourceModuleId, sourceConnectorId, targetModuleId, targetConnectorId) {
+    const sourceModule = this.modules.get(sourceModuleId);
+    const targetModule = this.modules.get(targetModuleId);
+    
+    if (!sourceModule || !targetModule) {
+      console.warn('Module source ou cible introuvable');
+      return false;
+    }
+    
+    // Chercher le connecteur source (output en premier, puis input)
+    const sourceConnector = sourceModule.element.querySelector(`#${sourceModuleId}_output_${sourceConnectorId}`) || 
+                           sourceModule.element.querySelector(`#${sourceModuleId}_input_${sourceConnectorId}`);
+    
+    // Chercher le connecteur cible (input en premier, puis output)
+    const targetConnector = targetModule.element.querySelector(`#${targetModuleId}_input_${targetConnectorId}`) || 
+                           targetModule.element.querySelector(`#${targetModuleId}_output_${targetConnectorId}`);
+    
+    if (!sourceConnector || !targetConnector) {
+      console.warn('Connecteur source ou cible introuvable');
+      console.log('Connecteurs recherchés:', 
+        `${sourceModuleId}_output_${sourceConnectorId}`, 
+        `${targetModuleId}_input_${targetConnectorId}`);
+      return false;
+    }
+    
+    this._createConnection(sourceConnector, targetConnector);
+    return true;
+  }
+
+  // Supprimer une connexion entre deux connecteurs
+  removeConnection(sourceModuleId, sourceConnectorId, targetModuleId, targetConnectorId) {
+    // Format: moduleId_type_index
+    const sourceOutputId = `${sourceModuleId}_output_${sourceConnectorId}`;
+    const sourceInputId = `${sourceModuleId}_input_${sourceConnectorId}`;
+    const targetOutputId = `${targetModuleId}_output_${targetConnectorId}`;
+    const targetInputId = `${targetModuleId}_input_${targetConnectorId}`;
+    
+    // Essayer toutes les combinaisons possibles de connexions
+    const possibleConnectionIds = [
+      `${sourceOutputId}_to_${targetInputId}`,
+      `${sourceInputId}_to_${targetOutputId}`,
+      `${targetOutputId}_to_${sourceInputId}`,
+      `${targetInputId}_to_${sourceOutputId}`
+    ];
+    
+    for (const connectionId of possibleConnectionIds) {
+      if (this.connections.has(connectionId)) {
+        this._removeConnectionById(connectionId);
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  // Déconnecter tous les connecteurs d'un module
+  disconnectModule(moduleId) {
+    const module = this.modules.get(moduleId);
+    if (!module) return 0;
+    
+    let count = 0;
+    const connectionsToRemove = [];
+    
+    // Trouver toutes les connexions du module
+    for (const [connectionId, connection] of this.connections) {
+      if (connection.source.moduleId === moduleId || connection.target.moduleId === moduleId) {
+        connectionsToRemove.push(connectionId);
+      }
+    }
+    
+    // Supprimer les connexions
+    connectionsToRemove.forEach(connectionId => {
+      this._removeConnectionById(connectionId);
+      count++;
+    });
+    
+    return count;
+  }
+
+  // Supprimer un module et ses connexions
+  removeModule(moduleId) {
+    const module = this.modules.get(moduleId);
+    if (!module) return false;
+    
+    // Déconnecter d'abord
+    this.disconnectModule(moduleId);
+    
+    // Supprimer l'élément DOM
+    if (module.element && module.element.parentNode) {
+      module.element.parentNode.removeChild(module.element);
+    }
+    
+    // Supprimer de la Map
+    this.modules.delete(moduleId);
+    
+    return true;
+  }
+
+  // Vérifier si deux connecteurs sont connectés
+  areConnectorsConnected(sourceModuleId, sourceConnectorId, targetModuleId, targetConnectorId) {
+    // Format: moduleId_type_index
+    const sourceOutputId = `${sourceModuleId}_output_${sourceConnectorId}`;
+    const sourceInputId = `${sourceModuleId}_input_${sourceConnectorId}`;
+    const targetOutputId = `${targetModuleId}_output_${targetConnectorId}`;
+    const targetInputId = `${targetModuleId}_input_${targetConnectorId}`;
+    
+    // Essayer toutes les combinaisons possibles de connexions
+    const possibleConnectionIds = [
+      `${sourceOutputId}_to_${targetInputId}`,
+      `${sourceInputId}_to_${targetOutputId}`,
+      `${targetOutputId}_to_${sourceInputId}`,
+      `${targetInputId}_to_${sourceOutputId}`
+    ];
+    
+    return possibleConnectionIds.some(connectionId => this.connections.has(connectionId));
+  }
+
+  // Obtenir le nombre total de connexions
+  getConnectionCount() {
+    return this.connections.size;
+  }
+
+  // Obtenir les connexions d'un module spécifique
+  getModuleConnections(moduleId) {
+    const moduleConnections = [];
+    
+    for (const [connectionId, connection] of this.connections) {
+      if (connection.source.moduleId === moduleId || connection.target.moduleId === moduleId) {
+        moduleConnections.push({
+          id: connectionId,
+          source: connection.source,
+          target: connection.target
+        });
+      }
+    }
+    
+    return moduleConnections;
+  }
+
+  // Obtenir la liste des IDs de modules
+  getModuleIds() {
+    return Array.from(this.modules.keys());
+  }
+
+  // Vérifier si un module existe
+  moduleExists(moduleId) {
+    return this.modules.has(moduleId);
+  }
+
+  // Vérifier si un connecteur existe
+  connectorExists(moduleId, connectorId) {
+    const module = this.modules.get(moduleId);
+    if (!module) return false;
+    
+    const connector = module.element.querySelector(`#${moduleId}_input_${connectorId}, #${moduleId}_output_${connectorId}`);
+    return !!connector;
+  }
+
+  // Nettoyer la sélection
+  clearSelection() {
+    this._clearSelectedConnector();
+  }
+
+  // Obtenir les IDs des modules actuellement sélectionnés
+  getSelectedModuleIds() {
+    return Array.from(this.selectedModules);
+  }
+
+  // Déconnecter tous les modules sélectionnés
+  disconnectSelectedModules() {
+    const selectedIds = this.getSelectedModuleIds();
+    if (selectedIds.length === 0) {
+      return { count: 0, modules: [] };
+    }
+    
+    let totalConnections = 0;
+    const disconnectedModules = [];
+    
+    selectedIds.forEach(moduleId => {
+      const count = this.disconnectModule(moduleId);
+      totalConnections += count;
+      disconnectedModules.push({ id: moduleId, connectionsRemoved: count });
+    });
+    
+    return { 
+      count: totalConnections, 
+      modules: disconnectedModules,
+      moduleIds: selectedIds
+    };
+  }
+
+  // Gestion des callbacks
   onConnect(callback) {
     this.connectionCallbacks.onConnect.push(callback);
   }
@@ -887,365 +1158,189 @@ class ModuleBuilder {
   onConnectionAttempt(callback) {
     this.connectionCallbacks.onConnectionAttempt.push(callback);
   }
-
-  // API publique pour nettoyer la sélection
-  clearSelection() {
-    this._clearSelectedConnector();
-  }
-
-  // API publique pour la sélection
-  selectModule(moduleId) {
-    this._selectModule(moduleId);
-  }
-
-  deselectModule(moduleId) {
-    this._deselectModule(moduleId);
-  }
-
-  clearAllSelections() {
-    this._clearAllSelections();
-  }
-
-  getSelectedModules() {
-    return Array.from(this.selectedModules);
-  }
-
-  isModuleSelected(moduleId) {
-    return this.selectedModules.has(moduleId);
-  }
-
-  // Obtenir un module par ID
-  getModule(moduleId) {
-    return this.modules.get(moduleId);
-  }
-
-  // Obtenir tous les modules
-  getModules() {
-    return Array.from(this.modules.values());
-  }
-
-  // Obtenir toutes les connexions
-  getConnections() {
-    return Array.from(this.connections.values());
-  }
-
-  // Obtenir tous les modules
-  getModules() {
-    return Array.from(this.modules.values());
-  }
-
-  // Supprimer un module
-  removeModule(moduleId) {
-    const module = this.modules.get(moduleId);
-    if (module) {
-      // Nettoyer la sélection si elle concerne ce module
-      if (this.selectedConnector && this.selectedConnector.connectorData.moduleId === moduleId) {
-        this._clearSelectedConnector();
-      }
-      
-      // Désélectionner le module si il était sélectionné
-      if (this.selectedModules.has(moduleId)) {
-        this._deselectModule(moduleId);
-      }
-      
-      // Supprimer toutes les connexions du module
-      module.connections.forEach(connectionId => {
-        const connection = this.connections.get(connectionId);
-        if (connection) {
-          this._removeConnection(connection.element);
-        }
-      });
-      
-      // Supprimer l'élément DOM
-      module.element.remove();
-      
-      // Supprimer de la map
-      this.modules.delete(moduleId);
-    }
-  }
-
-  // Exporter la configuration actuelle
-  exportConfig() {
-    const config = {
-      modules: [],
-      connections: []
-    };
-    
-    this.modules.forEach(module => {
-      config.modules.push({
-        id: module.id,
-        config: module.config,
-        position: {
-          x: parseInt(module.element.style.left),
-          y: parseInt(module.element.style.top)
-        }
-      });
-    });
-    
-    this.connections.forEach(connection => {
-      config.connections.push({
-        source: {
-          moduleId: connection.source.moduleId,
-          type: connection.source.type,
-          index: connection.source.index
-        },
-        target: {
-          moduleId: connection.target.moduleId,
-          type: connection.target.type,
-          index: connection.target.index
-        }
-      });
-    });
-    
-    return config;
-  }
-
-  // Calculer la luminosité d'une couleur et retourner la couleur de texte appropriée
-  _getTextColorForBackground(backgroundColor) {
-    // Si pas de couleur de fond définie, utiliser du texte foncé
-    if (!backgroundColor) return '#333';
-    
-    // Extraire la couleur RGB de différents formats
-    let r, g, b;
-    
-    if (backgroundColor.startsWith('#')) {
-      // Format hex
-      const hex = backgroundColor.replace('#', '');
-      if (hex.length === 3) {
-        r = parseInt(hex[0] + hex[0], 16);
-        g = parseInt(hex[1] + hex[1], 16);
-        b = parseInt(hex[2] + hex[2], 16);
-      } else {
-        r = parseInt(hex.substr(0, 2), 16);
-        g = parseInt(hex.substr(2, 2), 16);
-        b = parseInt(hex.substr(4, 2), 16);
-      }
-    } else if (backgroundColor.startsWith('rgb')) {
-      // Format rgb() ou rgba()
-      const matches = backgroundColor.match(/\d+/g);
-      if (matches && matches.length >= 3) {
-        r = parseInt(matches[0]);
-        g = parseInt(matches[1]);
-        b = parseInt(matches[2]);
-      } else {
-        return '#333'; // Fallback
-      }
-    } else {
-      // Couleurs nommées courantes
-      const colorMap = {
-        'white': [255, 255, 255],
-        'black': [0, 0, 0],
-        'red': [255, 0, 0],
-        'green': [0, 128, 0],
-        'blue': [0, 0, 255],
-        'yellow': [255, 255, 0],
-        'cyan': [0, 255, 255],
-        'magenta': [255, 0, 255],
-        'gray': [128, 128, 128],
-        'grey': [128, 128, 128],
-        'orange': [255, 165, 0],
-        'purple': [128, 0, 128],
-        'brown': [165, 42, 42],
-        'pink': [255, 192, 203]
-      };
-      
-      const color = colorMap[backgroundColor.toLowerCase()];
-      if (color) {
-        [r, g, b] = color;
-      } else {
-        return '#333'; // Fallback pour couleurs inconnues
-      }
-    }
-    
-    // Calculer la luminosité relative (formule W3C)
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    
-    // Retourner couleur claire ou foncée selon la luminosité
-    return luminance > 0.5 ? '#333' : '#fff';
-  }
 }
 
 // Template prédéfinis
 const ModuleTemplates = {
-  // Template simple
-  simple: {
-    size: { width: 150, height: 100 },
-    inputs: [{ label: 'In', color: '#4CAF50' }],
-    outputs: [{ label: 'Out', color: '#2196F3' }],
-    content: () => $('div', {
-      text: 'Simple Module',
-      css: { textAlign: 'center', padding: '10px', fontSize: '12px' }
-    })
-  },
-  
-  // Template pour contrôles audio
-  audioControl: {
-    size: { width: 200, height: 120 },
-    inputs: [{ label: 'Audio In', color: '#FF5722' }],
-    outputs: [{ label: 'Audio Out', color: '#FF5722' }],
-    styling: {
-      container: { backgroundColor: '#2c2c2c', color: '#fff' },
-      header: { backgroundColor: '#1a1a1a' }
+    // Template simple
+    simple: {
+      size: { width: 150, height: 100 },
+      inputs: [{ label: 'In', color: '#4CAF50' }],
+      outputs: [{ label: 'Out', color: '#2196F3' }],
+      content: () => $('div', {
+        text: 'Simple Module',
+        css: { textAlign: 'center', padding: '10px', fontSize: '12px' }
+      })
     },
-    content: () => {
-      const container = $('div', { css: { padding: '5px' } });
-      
-      // Volume slider
-      const volumeSlider = $('input', {
-        type: 'range',
-        min: '0',
-        max: '100',
-        value: '50',
-        css: {
-          width: '100%',
-          margin: '5px 0'
-        }
-      });
-      
-      const volumeLabel = $('div', {
-        text: 'Volume: 50%',
-        css: { fontSize: '11px', textAlign: 'center' }
-      });
-      
-      volumeSlider.addEventListener('input', (e) => {
-        volumeLabel.textContent = `Volume: ${e.target.value}%`;
-      });
-      
-      container.appendChild(volumeLabel);
-      container.appendChild(volumeSlider);
-      
-      return container;
-    }
-  },
-  
-  // Template pour générateurs
-  generator: {
-    size: { width: 180, height: 100 },
-    inputs: [],
-    outputs: [
-      { label: 'Signal', color: '#4CAF50' },
-      { label: 'Trigger', color: '#FF9800' }
-    ],
-    content: () => {
-      const container = $('div', { css: { padding: '5px', textAlign: 'center' } });
-      
-      const button = $('button', {
-        text: 'Generate',
-        css: {
-          padding: '5px 10px',
-          background: '#4CAF50',
-          color: 'white',
-          border: 'none',
-          borderRadius: '3px',
-          cursor: 'pointer',
-          fontSize: '11px'
-        }
-      });
-      
-      button.addEventListener('click', () => {
-        console.log('Generator triggered!');
-      });
-      
-      container.appendChild(button);
-      return container;
-    }
-  },
-  
-  // Template pour processeurs
-  processor: {
-    size: { width: 160, height: 120 },
-    inputs: [
-      { label: 'Input', color: '#4CAF50' },
-      { label: 'Control', color: '#9C27B0' }
-    ],
-    outputs: [{ label: 'Output', color: '#4CAF50' }],
-    content: () => {
-      const container = $('div', { css: { padding: '5px' } });
-      
-      const typeSelect = $('select', {
-        css: {
-          width: '100%',
-          padding: '2px',
-          fontSize: '11px',
-          margin: '5px 0'
-        }
-      });
-      
-      ['Low Pass', 'High Pass', 'Band Pass', 'Notch'].forEach(option => {
-        const optionEl = $('option', {
-          value: option.toLowerCase().replace(' ', '_'),
-          text: option
+    
+    // Template pour contrôles audio
+    audioControl: {
+      size: { width: 200, height: 120 },
+      inputs: [{ label: 'Audio In', color: '#FF5722' }],
+      outputs: [{ label: 'Audio Out', color: '#FF5722' }],
+      styling: {
+        container: { backgroundColor: '#2c2c2c', color: '#fff' },
+        header: { backgroundColor: '#1a1a1a' }
+      },
+      content: () => {
+        const container = $('div', { css: { padding: '5px' } });
+        
+        // Volume slider
+        const volumeSlider = $('input', {
+          type: 'range',
+          min: '0',
+          max: '100',
+          value: '50',
+          css: {
+            width: '100%',
+            margin: '5px 0'
+          }
         });
-        typeSelect.appendChild(optionEl);
-      });
-      
-      const label = $('div', {
-        text: 'Filter Type:',
-        css: { fontSize: '10px', marginBottom: '3px' }
-      });
-      
-      container.appendChild(label);
-      container.appendChild(typeSelect);
-      
-      return container;
-    }
-  },
-  
-  // Template pour affichage de données
-  display: {
-    size: { width: 180, height: 140 },
-    inputs: [{ label: 'Data', color: '#2196F3' }],
-    outputs: [],
-    content: () => {
-      const container = $('div', { css: { padding: '5px' } });
-      
-      const display = $('div', {
-        css: {
-          backgroundColor: '#000',
-          color: '#0f0',
-          padding: '10px',
-          fontFamily: 'monospace',
-          fontSize: '10px',
-          height: '60px',
-          overflow: 'auto',
-          border: '1px solid #333'
-        },
-        text: 'Waiting for data...'
-      });
-      
-      container.appendChild(display);
-      return container;
-    }
-  },
-  
-  // Template pour contrôles MIDI
-  midiControl: {
-    size: { width: 200, height: 100 },
-    inputs: [{ label: 'MIDI', color: '#E91E63' }],
-    outputs: [{ label: 'Control', color: '#9C27B0' }],
-    styling: {
-      container: { backgroundColor: '#1a1a2e' },
-      header: { backgroundColor: '#16213e', color: '#fff' }
+        
+        const volumeLabel = $('div', {
+          text: 'Volume: 50%',
+          css: { fontSize: '11px', textAlign: 'center' }
+        });
+        
+        volumeSlider.addEventListener('input', (e) => {
+          volumeLabel.textContent = `Volume: ${e.target.value}%`;
+        });
+        
+        container.appendChild(volumeLabel);
+        container.appendChild(volumeSlider);
+        
+        return container;
+      }
     },
-    content: () => {
-      const container = $('div', { css: { padding: '5px', color: '#fff' } });
-      
-      const ccLabel = $('div', {
-        text: 'CC: 74',
-        css: { fontSize: '11px', marginBottom: '5px' }
-      });
-      
-      const valueLabel = $('div', {
-        text: 'Value: 0',
-        css: { fontSize: '11px', textAlign: 'center' }
-      });
-      
-      container.appendChild(ccLabel);
-      container.appendChild(valueLabel);
-      
-      return container;
+    
+    // Template pour générateurs
+    generator: {
+      size: { width: 180, height: 100 },
+      inputs: [],
+      outputs: [
+        { label: 'Signal', color: '#4CAF50' },
+        { label: 'Trigger', color: '#FF9800' }
+      ],
+      content: () => {
+        const container = $('div', { css: { padding: '5px', textAlign: 'center' } });
+        
+        const button = $('button', {
+          text: 'Generate',
+          css: {
+            padding: '5px 10px',
+            background: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            fontSize: '11px'
+          }
+        });
+        
+        button.addEventListener('click', () => {
+          console.log('Generator triggered!');
+        });
+        
+        container.appendChild(button);
+        return container;
+      }
+    },
+    
+    // Template pour processeurs
+    processor: {
+      size: { width: 160, height: 120 },
+      inputs: [
+        { label: 'Input', color: '#4CAF50' },
+        { label: 'Control', color: '#9C27B0' }
+      ],
+      outputs: [{ label: 'Output', color: '#4CAF50' }],
+      content: () => {
+        const container = $('div', { css: { padding: '5px' } });
+        
+        const typeSelect = $('select', {
+          css: {
+            width: '100%',
+            padding: '2px',
+            fontSize: '11px',
+            margin: '5px 0'
+          }
+        });
+        
+        ['Low Pass', 'High Pass', 'Band Pass', 'Notch'].forEach(option => {
+          const optionEl = $('option', {
+            value: option.toLowerCase().replace(' ', '_'),
+            text: option
+          });
+          typeSelect.appendChild(optionEl);
+        });
+        
+        const label = $('div', {
+          text: 'Filter Type:',
+          css: { fontSize: '10px', marginBottom: '3px' }
+        });
+        
+        container.appendChild(label);
+        container.appendChild(typeSelect);
+        
+        return container;
+      }
+    },
+    
+    // Template pour affichage de données
+    display: {
+      size: { width: 180, height: 140 },
+      inputs: [{ label: 'Data', color: '#2196F3' }],
+      outputs: [],
+      content: () => {
+        const container = $('div', { css: { padding: '5px' } });
+        
+        const display = $('div', {
+          css: {
+            backgroundColor: '#000',
+            color: '#0f0',
+            padding: '10px',
+            fontFamily: 'monospace',
+            fontSize: '10px',
+            height: '60px',
+            overflow: 'auto',
+            border: '1px solid #333'
+          },
+          text: 'Waiting for data...'
+        });
+        
+        container.appendChild(display);
+        return container;
+      }
+    },
+    
+    // Template pour contrôles MIDI
+    midiControl: {
+      size: { width: 200, height: 100 },
+      inputs: [{ label: 'MIDI', color: '#E91E63' }],
+      outputs: [{ label: 'Control', color: '#9C27B0' }],
+      styling: {
+        container: { backgroundColor: '#1a1a2e' },
+        header: { backgroundColor: '#16213e', color: '#fff' }
+      },
+      content: () => {
+        const container = $('div', { css: { padding: '5px', color: '#fff' } });
+        
+        const ccLabel = $('div', {
+          text: 'CC: 74',
+          css: { fontSize: '11px', marginBottom: '5px' }
+        });
+        
+        const valueLabel = $('div', {
+          text: 'Value: 0',
+          css: { fontSize: '11px', textAlign: 'center' }
+        });
+        
+        container.appendChild(ccLabel);
+        container.appendChild(valueLabel);
+        
+        return container;
+      }
     }
-  }
 };
 
 // Export pour utilisation
