@@ -26,6 +26,9 @@
   const MatrixModule = await import('./components/matrix_builder.js');
   window.Matrix = MatrixModule.default;
 
+  const ModuleModule = await import('./components/module_builder.js');
+  // Le module exporte ModuleBuilder et ModuleTemplates via window, pas besoin de les réexposer
+
   const MenuModule = await import('./components/menu_builder.js');
   window.Menu = MenuModule.default;
 
