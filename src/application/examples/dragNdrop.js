@@ -157,6 +157,12 @@ $('h2', {
   parent: dropSection
 });
 
+$('p', {
+  text: 'Glissez les éléments dans les zones appropriées selon leur type. Double-cliquez sur un élément déposé pour le supprimer.',
+  css: { color: '#6c757d', marginBottom: '20px' },
+  parent: dropSection
+});
+
 // Container pour les zones de dépôt
 const dropZonesContainer = $('div', {
   css: {
@@ -297,22 +303,58 @@ dropZones.forEach(zone => {
         });
         
         if (isAccepted) {
-          // Créer un élément représentant l'objet déposé
-          const droppedItem = $('span', {
+          // Retrouver l'élément original pour copier son style
+          const originalItem = draggableItems.find(item => 
+            item.data.type === transferData.type && item.data.value === transferData.value
+          );
+          
+          // Créer une copie visuelle de l'élément déposé
+          const droppedItem = $('div', {
             css: {
-              backgroundColor: '#27ae60',
+              width: '60px',
+              height: '40px',
+              backgroundColor: originalItem ? originalItem.color : '#27ae60',
               color: 'white',
-              padding: '4px 8px',
-              borderRadius: '12px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               fontSize: '10px',
-              margin: '2px'
+              margin: '3px',
+              border: '1px solid rgba(255,255,255,0.3)',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease',
+              position: 'relative',
+              fontWeight: 'bold',
+              textAlign: 'center'
             },
-            text: transferData.value || transferData.text || 'Objet',
+            text: originalItem ? originalItem.text : (transferData.value || 'Objet'),
             parent: droppedContainer
           });
 
+          // Ajouter un effet hover à l'élément déposé
+          droppedItem.addEventListener('mouseenter', () => {
+            droppedItem.style.transform = 'scale(1.1)';
+          });
+          
+          droppedItem.addEventListener('mouseleave', () => {
+            droppedItem.style.transform = 'scale(1)';
+          });
+          
+          // Permettre de supprimer l'élément avec un double-clic
+          droppedItem.addEventListener('dblclick', () => {
+            droppedItem.style.animation = 'fadeOut 0.3s ease-out forwards';
+            setTimeout(() => {
+              if (droppedItem.parentNode) {
+                droppedItem.parentNode.removeChild(droppedItem);
+              }
+            }, 300);
+            logActivity(`🗑️ Élément retiré de ${zone.title}`);
+          });
+
           console.log('✅ Élément déposé créé:', droppedItem);
-          logActivity(`✅ Dépôt réussi dans ${zone.title}: ${transferData.value || transferData.text}`);
+          logActivity(`✅ Dépôt réussi dans ${zone.title}: ${originalItem ? originalItem.text : transferData.value}`);
         } else {
           logActivity(`❌ Dépôt rejeté dans ${zone.title}: type non accepté`);
           
@@ -408,6 +450,11 @@ style.textContent = `
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-5px); }
     75% { transform: translateX(5px); }
+  }
+  
+  @keyframes fadeOut {
+    0% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.8); }
   }
   
   .dragging {
