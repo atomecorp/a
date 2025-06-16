@@ -11,6 +11,7 @@ import { $, define } from '../squirrel.js';
 define('button-container', {
   tag: 'button',
   class: 'hs-button',
+  text: 'hello',
   css: {
     position: 'relative',
     display: 'inline-flex',

@@ -57,7 +57,7 @@ const circularContainer = $('div', {
   }
 });
 
-const circularSlider = window.Slider.create({
+const circularSlider = Slider({
   type: 'circular',
   radius: 80,
   value: 75,
@@ -148,7 +148,7 @@ const example1Title = $('h4', {
   css: { color: '#dc3545', margin: '0', textAlign: 'center' }
 });
 
-const example1Slider = window.Slider.create({
+const example1Slider = Slider({
   type: 'circular',
   radius: 60,
   value: 50,
@@ -197,7 +197,7 @@ const example2Title = $('h4', {
   css: { color: '#00b894', margin: '0', textAlign: 'center' }
 });
 
-const example2Slider = window.Slider.create({
+const example2Slider = Slider({
   type: 'circular',
   radius: 60,
   value: 25,
@@ -246,7 +246,7 @@ const example3Title = $('h4', {
   css: { color: '#0984e3', margin: '0', textAlign: 'center' }
 });
 
-const example3Slider = window.Slider.create({
+const example3Slider = Slider({
   type: 'circular',
   radius: 60,
   value: 80,
@@ -312,7 +312,7 @@ const horizontalContainer = $('div', {
   }
 });
 
-const horizontalSlider = window.Slider.create({
+const horizontalSlider = Slider({
   type: 'horizontal',
   width: 400,
   height: 8,
@@ -375,7 +375,7 @@ const verticalContainer = $('div', {
   }
 });
 
-const verticalSlider = window.Slider.create({
+const verticalSlider = Slider({
   type: 'vertical',
   width: 8,
   height: 250,
@@ -465,7 +465,7 @@ const labelExample1Title = $('h4', {
   css: { color: '#e74c3c', margin: '0', textAlign: 'center', fontSize: '14px' }
 });
 
-const labelExample1Slider = window.Slider.create({
+const labelExample1Slider = Slider({
   type: 'horizontal',
   width: 200,
   height: 6,
@@ -524,7 +524,7 @@ const labelExample2Title = $('h4', {
   css: { color: '#8e44ad', margin: '0', textAlign: 'center', fontSize: '14px' }
 });
 
-const labelExample2Slider = window.Slider.create({
+const labelExample2Slider = Slider({
   type: 'vertical',
   width: 8,
   height: 150,
@@ -570,7 +570,7 @@ const labelExample3Title = $('h4', {
   css: { color: '#f39c12', margin: '0', textAlign: 'center', fontSize: '14px' }
 });
 
-const labelExample3Slider = window.Slider.create({
+const labelExample3Slider = Slider({
   type: 'circular',
   radius: 70,
   value: 85,
@@ -678,7 +678,7 @@ const roundExample1Title = $('h4', {
   css: { color: '#e67e22', margin: '0', textAlign: 'center', fontSize: '14px' }
 });
 
-const roundExample1Slider = window.Slider.create({
+const roundExample1Slider = Slider({
   type: 'circular',
   radius: 70,
   value: 70,
@@ -743,7 +743,7 @@ const roundExample2Title = $('h4', {
   css: { color: '#9b59b6', margin: '0', textAlign: 'center', fontSize: '14px' }
 });
 
-const roundExample2Slider = window.Slider.create({
+const roundExample2Slider = Slider({
   type: 'circular',
   radius: 70,
   value: 45,
@@ -808,7 +808,7 @@ const roundExample3Title = $('h4', {
   css: { color: '#34495e', margin: '0', textAlign: 'center', fontSize: '14px' }
 });
 
-const roundExample3Slider = window.Slider.create({
+const roundExample3Slider = Slider({
   type: 'circular',
   radius: 70,
   value: 25,
@@ -906,7 +906,7 @@ const limitedDragContainer = $('div', {
   }
 });
 
-const limitedDragSlider = window.Slider.create({
+const limitedDragSlider = Slider({
   type: 'circular',
   radius: 80,
   value: 450,         // Valeur initiale

@@ -1,88 +1,75 @@
-const btn = Button.primary({
-  text: 'Sauvegarder',
-  icon: '💾',
-  badge: 3,
-  skin: {
-    container: { borderRadius: '20px' },
-    text: { fontWeight: 'bold' },
-    badge: { backgroundColor: '#ff6b6b' }
-  }
-});
-
-// Bouton toggle on/off avec style Material Design
-let isToggleOn = false;
-
-const toggleButton = Button.materialSwitch({
-  onClick: () => {
-    isToggleOn = !isToggleOn;
-    if (isToggleOn) {
-      toggleButton.$({
-        css: {
-          backgroundColor: '#4CAF50',
-          boxShadow: '0 4px 8px rgba(76, 175, 80, 0.3)'
-        }
-      });
-      const iconEl = toggleButton.querySelector('.hs-button-icon');
-      if (iconEl) {
-        iconEl.style.transform = 'translateX(26px)';
-        iconEl.style.backgroundColor = '#fff';
-      }
-      // Effet ripple
-      const ripple = document.createElement('div');
-      ripple.style.cssText = `
-        position: absolute;
-        border-radius: 50%;
-        background: rgba(255,255,255,0.6);
-        transform: scale(0);
-        animation: ripple 0.6s linear;
-        pointer-events: none;
-        left: 50%;
-        top: 50%;
-        width: 20px;
-        height: 20px;
-        margin-left: -10px;
-        margin-top: -10px;
-      `;
-      toggleButton.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 600);
-      console.log('Toggle activé ✅');
-    } else {
-      toggleButton.$({
-        css: {
-          backgroundColor: '#ccc',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }
-      });
-      const iconEl = toggleButton.querySelector('.hs-button-icon');
-      if (iconEl) {
-        iconEl.style.transform = 'translateX(0px)';
-      }
-      console.log('Toggle désactivé ❌');
+function createMaterialToggle(initialState = false) {
+  let state = initialState;
+  
+  const container = document.createElement('div');
+  container.style.cssText = `
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+  `;
+  
+  const toggle = Button({
+    text: '',
+    onClick: () => {
+      state = !state;
+      updateVisualState();
+      console.log('Toggle:', state ? 'ON ✅' : 'OFF ❌');
+    },
+    style: {
+      width: '50px',
+      height: '24px',
+      borderRadius: '12px',
+      backgroundColor: state ? '#4CAF50' : '#ccc',
+      position: 'relative',
+      border: 'none',
+      cursor: 'pointer',
+      transition: 'background-color 0.3s ease'
     }
-  }
-});
-
-
-
-
-
-// Optionnal ripple Animation
- const style = document.createElement('style');
-style.textContent = `
-  @keyframes ripple {
-    to {
-      transform: scale(4);
-      opacity: 0;
-    }
+  });
+  
+  // const thumb = document.createElement('div');
+  // thumb.style.cssText = `
+  //   position: absolute;
+  //   top: 2px;
+  //   left: ${state ? '26px' : '2px'};
+  //   width: 20px;
+  //   height: 20px;
+  //   border-radius: 50%;
+  //   background: white;
+  //   transition: left 0.3s ease;
+  //   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  // `;
+  
+  // toggle.appendChild(thumb);
+  
+  const label = document.createElement('span');
+  label.textContent = state ? 'Activé' : 'Désactivé';
+  label.style.fontWeight = 'bold';
+  
+  function updateVisualState() {
+    toggle.style.backgroundColor = state ? '#4CAF50' : '#ccc';
+    // thumb.style.left = state ? '26px' : '2px';
+    label.textContent = state ? 'Activé' : 'Désactivé';
+    label.style.color = state ? '#4CAF50' : '#666';
   }
   
-  #material-toggle:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
-  }
+  container.appendChild(toggle);
+  container.appendChild(label);
   
-  #material-toggle:active {
-    transform: scale(0.98);
-  }
-`;
-document.head.appendChild(style);
+  return {
+    element: container,
+    getValue: () => state,
+    setValue: (newState) => {
+      state = newState;
+      updateVisualState();
+    }
+  };
+}
 
+// Utilisation
+const myToggle = createMaterialToggle(false);
+document.body.appendChild(myToggle.element);
+
+// Pour récupérer la valeur
+console.log('État actuel:', myToggle.getValue());

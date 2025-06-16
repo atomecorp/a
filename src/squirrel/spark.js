@@ -16,31 +16,50 @@
     window.body = document.body;
     window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
-    // Import des composants
-  const ButtonModule = await import('./components/button_builder.js');
-  window.Button = ButtonModule.default;
-
-  const SliderModule = await import('./components/slider_builder.js');
-  window.Slider = SliderModule.default;
-
-  const MatrixModule = await import('./components/matrix_builder.js');
-  window.Matrix = MatrixModule.default;
-
-  const ModuleModule = await import('./components/module_builder.js');
-  // Le module exporte ModuleBuilder et ModuleTemplates via window, pas besoin de les réexposer
-
-  const MenuModule = await import('./components/menu_builder.js');
-  window.Menu = MenuModule.default;
-
-  const TableModule = await import('./components/table_builder.js');
-  window.Table = TableModule.default;
-
-     const ListModule = await import('./components/List_builder.js');
-  window.List = ListModule.default;
-
-  const DraggableModule = await import('./components/draggable_builder.js');
-  window.draggable = DraggableModule.draggable;
-  window.makeDraggable = DraggableModule.makeDraggable;
+    // 🔌 SYSTÈME DE PLUGINS AUTO-DISCOVERY
+    // console.log('🔄 Initialisation du système de plugins...');
+    
+    // Import et initialisation du plugin manager
+    const PluginManagerModule = await import('./plugin-manager.js');
+    const pluginManager = new PluginManagerModule.default();
+    
+    // Découverte automatique des composants
+    const availablePlugins = await pluginManager.discover();
+    
+    // Import et initialisation de l'API des plugins
+    const PluginAPIModule = await import('./plugin-api.js');
+    const pluginAPI = new PluginAPIModule.default(pluginManager);
+    
+    // Exposition globale des APIs
+    window.pluginManager = pluginManager;
+    window.Squirrel = pluginAPI;
+    
+    // Chargement de tous les plugins découverts
+    // console.log('🚀 Chargement automatique de tous les plugins...');
+    await pluginManager.loadAll();
+    
+    // Affichage du statut
+    const status = pluginManager.getStatus();
+    // console.log('📊 Statut des plugins:', status);
+    // console.log(`✅ ${status.loaded}/${status.available} plugins chargés avec succès`);
+    
+    // APIs pour utilisation externe
+    window.loadPlugin = async (pluginName) => {
+      try {
+        const plugin = await pluginManager.load(pluginName);
+        // console.log(`✅ Plugin "${pluginName}" chargé manuellement`);
+        return plugin;
+      } catch (error) {
+        console.error(`❌ Erreur lors du chargement manuel de "${pluginName}":`, error);
+        return null;
+      }
+    };
+    
+    window.listPlugins = () => {
+      // console.log('📋 Plugins disponibles:', pluginManager.getAvailablePlugins());
+      // console.log('✅ Plugins chargés:', pluginManager.getLoadedPlugins());
+      return pluginManager.getStatus();
+    };
 
 
     // Chargement de l'application principale
