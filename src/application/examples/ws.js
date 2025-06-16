@@ -4,25 +4,7 @@
 // Variables globales pour WebSocket
 let websocket = null;
 let isConnected = false;
-
-// Définir le template 'box' pour les éléments animés
-define('box', {
-  tag: 'div',
-  css: {
-    width: '150px',
-    height: '60px',
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '20px',
-    borderRadius: '8px',
-    color: 'white',
-    cursor: 'pointer',
-    textAlign: 'center',
-    fontWeight: 'bold',
-    lineHeight: '60px',
-    transition: 'all 0.5s ease-in-out'
-  }
-});
+let messageInputElement = null;
 
 // Container principal
 const container = $('div', {
@@ -34,7 +16,7 @@ const container = $('div', {
     backgroundColor: '#f8f9fa',
     borderRadius: '10px'
   },
-  parent: document.body
+  parent: '#view'
 });
 
 // Titre
@@ -158,18 +140,20 @@ const disconnectBtn = $('button', {
   parent: wsSection
 });
 
-const messageInput = $('input', {
-  attrs: { type: 'text', placeholder: 'Message à envoyer...' },
-  css: {
-    width: '60%',
-    padding: '10px',
-    border: '1px solid #ced4da',
-    borderRadius: '6px',
-    marginTop: '15px',
-    marginRight: '10px'
-  },
-  parent: wsSection
-});
+// Créer l'input directement avec DOM natif car Squirrel crée des DIV
+messageInputElement = document.createElement('input');
+messageInputElement.type = 'text';
+messageInputElement.placeholder = 'Message à envoyer...';
+messageInputElement.id = 'message-input';
+messageInputElement.style.cssText = `
+  width: 60%;
+  padding: 10px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  margin-top: 15px;
+  margin-right: 10px;
+`;
+wsSection.appendChild(messageInputElement);
 
 const sendBtn = $('button', {
   text: '📤 Envoyer',
@@ -199,61 +183,6 @@ const messagesLog = $('div', {
   },
   text: 'Messages WebSocket...',
   parent: wsSection
-});
-
-// Section Animation avec l'API box
-$('h2', {
-  text: '🎮 Animation Box',
-  css: { color: '#495057', marginBottom: '15px', marginTop: '30px' },
-  parent: container
-});
-
-// Box animée utilisant exactement l'API demandée
-const jsAnimatedBox = $('box', {
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0'
-  },
-  text: 'Cliquez-moi !',
-  onclick: () => {
-    jsAnimatedBox.animate(
-      { marginLeft: '200' },
-      { duration: 500, easing: 'ease-in-out' }
-    );
-    
-    // Envoyer via WebSocket si connecté
-    if (isConnected && websocket) {
-      const msg = {
-        type: 'animation',
-        action: 'box_animated',
-        timestamp: new Date().toISOString()
-      };
-      websocket.send(JSON.stringify(msg));
-      logMessage('📤 Animation', JSON.stringify(msg));
-    }
-  },
-  parent: container
-});
-
-// Bouton reset animation
-$('button', {
-  text: '🔄 Reset Animation',
-  css: {
-    backgroundColor: '#6c757d',
-    color: 'white',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    marginTop: '15px'
-  },
-  onclick: () => {
-    jsAnimatedBox.animate(
-      { marginLeft: '0' },
-      { duration: 500, easing: 'ease-in-out' }
-    );
-  },
-  parent: container
 });
 
 // === FONCTIONS ===
@@ -320,7 +249,12 @@ function sendMessage() {
     return;
   }
   
-  const msg = messageInput.value.trim();
+  if (!messageInputElement || !messageInputElement.value) {
+    logMessage('❌ Erreur', 'Input de message non disponible');
+    return;
+  }
+  
+  const msg = messageInputElement.value.trim();
   if (!msg) return;
   
   const data = {
@@ -331,7 +265,7 @@ function sendMessage() {
   
   websocket.send(JSON.stringify(data));
   logMessage('📤 Envoyé', JSON.stringify(data));
-  messageInput.value = '';
+  messageInputElement.value = '';
 }
 
 function updateStatus(connected) {
@@ -375,7 +309,7 @@ function logMessage(type, content) {
 }
 
 // Event listener pour Enter dans l'input
-messageInput.addEventListener('keypress', (e) => {
+messageInputElement.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') sendMessage();
 });
 

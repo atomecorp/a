@@ -75,6 +75,24 @@ async function startServer() {
       };
     });
 
+    // Route de debug pour vérifier les fichiers statiques
+    server.get('/debug/files', async (request, reply) => {
+      const fs = await import('fs');
+      const wsPath = path.join(__dirname, '../src/application/examples/ws.js');
+      const squirrelPath = path.join(__dirname, '../src/squirrel/squirrel.js');
+      
+      return {
+        files: {
+          'ws.js': fs.existsSync(wsPath),
+          'squirrel.js': fs.existsSync(squirrelPath),
+          'ws.js_size': fs.existsSync(wsPath) ? fs.statSync(wsPath).size : 0,
+          'squirrel.js_size': fs.existsSync(squirrelPath) ? fs.statSync(squirrelPath).size : 0
+        },
+        static_root: path.join(__dirname, '../src'),
+        timestamp: new Date().toISOString()
+      };
+    });
+
     // ===========================
     // 3. WEBSOCKET NATIF
     // ===========================
