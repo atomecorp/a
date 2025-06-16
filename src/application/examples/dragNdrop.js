@@ -3,6 +3,18 @@
 
 console.log('🎯 Chargement de l\'exemple Drag & Drop...');
 
+// Détecter l'environnement d'exécution
+const isTauri = window.__TAURI__ !== undefined;
+const isWebView = /Tauri|Electron|WebView/i.test(navigator.userAgent);
+const useClassicDrag = isTauri || isWebView;
+
+console.log('🔍 Environnement détecté:', { 
+  isTauri, 
+  isWebView, 
+  useClassicDrag,
+  userAgent: navigator.userAgent 
+});
+
 // Container principal
 const container = $('div', {
   css: {
@@ -24,6 +36,22 @@ $('h1', {
     textAlign: 'center',
     marginBottom: '30px'
   },
+  parent: container
+});
+
+// Indicateur de mode drag & drop
+$('div', {
+  css: {
+    backgroundColor: useClassicDrag ? '#f39c12' : '#27ae60',
+    color: 'white',
+    padding: '10px 20px',
+    borderRadius: '20px',
+    textAlign: 'center',
+    marginBottom: '20px',
+    fontSize: '14px',
+    fontWeight: 'bold'
+  },
+  text: `🔧 Mode: ${useClassicDrag ? 'Drag Classique (Compatible Tauri)' : 'HTML5 Drag & Drop'}`,
   parent: container
 });
 
@@ -109,30 +137,54 @@ draggableItems.forEach(item => {
     parent: draggablesContainer
   });
 
-  // Appliquer le drag & drop avec HTML5
+  // Appliquer le drag & drop hybride (HTML5 + fallback classique)
   if (window.makeDraggableWithDrop) {
+    console.log(`🔧 Configuration drag pour ${item.text}:`, { 
+      enableHTML5: !useClassicDrag, 
+      transferData: item.data 
+    });
+    
     window.makeDraggableWithDrop(element, {
-      enableHTML5: true,
+      enableHTML5: !useClassicDrag, // Utiliser HTML5 sauf dans Tauri
       transferData: item.data,
       dragStartClass: 'dragging',
+      cursor: 'grab',
       onHTML5DragStart: (e, el) => {
         el.style.opacity = '0.5';
         el.style.transform = 'scale(0.9)';
-        logActivity(`🚀 Drag démarré: ${item.text}`);
+        logActivity(`🚀 Drag HTML5 démarré: ${item.text}`);
       },
       onHTML5DragEnd: (e, el) => {
         el.style.opacity = '1';
         el.style.transform = 'scale(1)';
-        logActivity(`🏁 Drag terminé: ${item.text}`);
+        logActivity(`🏁 Drag HTML5 terminé: ${item.text}`);
       },
-      // Drag classique pour les effets visuels
-      onDragStart: (el) => {
+      // Drag classique pour compatibilité universelle
+      onDragStart: (el, x, y) => {
         el.style.boxShadow = '0 8px 16px rgba(0,0,0,0.3)';
-        el.style.zIndex = '1000';
+        el.style.opacity = '0.8';
+        logActivity(`🚀 Drag classique démarré: ${item.text}`);
       },
       onDragEnd: (el) => {
         el.style.boxShadow = '';
-        el.style.zIndex = '';
+        el.style.opacity = '1';
+        logActivity(`🏁 Drag classique terminé: ${item.text}`);
+      },
+      // Callback pour détecter les drops sur les zones
+      onDropDetection: (el, x, y) => {
+        // Trouver l'élément sous la souris
+        const elementsBelow = document.elementsFromPoint(x, y);
+        const dropZone = elementsBelow.find(elem => 
+          elem.id && elem.id.startsWith('zone-')
+        );
+        
+        if (dropZone) {
+          // Simuler un drop sur la zone
+          const zone = dropZones.find(z => z.id === dropZone.id);
+          if (zone) {
+            handleClassicDrop(zone, dropZone, item.data);
+          }
+        }
       }
     });
   }
@@ -441,6 +493,99 @@ function logActivity(message) {
   logContainer.scrollTop = logContainer.scrollHeight;
 }
 
+// === FONCTION DE GESTION DU DROP CLASSIQUE ===
+
+function handleClassicDrop(zone, zoneElement, transferData) {
+  console.log('🔍 DEBUG handleClassicDrop:', {
+    zone: zone,
+    zoneElement: zoneElement,
+    transferData: transferData
+  });
+  
+  // Vérifier si l'élément est accepté
+  const isAccepted = zone.accepts.length === 0 || zone.accepts.includes(transferData.type);
+  
+  console.log('🔍 DEBUG validation classique:', {
+    accepts: zone.accepts,
+    transferType: transferData.type,
+    isAccepted: isAccepted
+  });
+  
+  if (isAccepted) {
+    // Trouver le container des éléments déposés dans cette zone
+    // Il s'agit du dernier div enfant de la zone
+    const droppedContainer = zoneElement.querySelector('div:last-child');
+    
+    console.log('🔍 DEBUG container recherche:', {
+      zoneElement: zoneElement,
+      droppedContainer: droppedContainer,
+      children: Array.from(zoneElement.children)
+    });
+    
+    if (droppedContainer) {
+      // Retrouver l'élément original pour copier son style
+      const originalItem = draggableItems.find(item => 
+        item.data.type === transferData.type && item.data.value === transferData.value
+      );
+      
+      // Créer une copie visuelle de l'élément déposé
+      const droppedItem = $('div', {
+        css: {
+          width: '60px',
+          height: '40px',
+          backgroundColor: originalItem ? originalItem.color : '#27ae60',
+          color: 'white',
+          borderRadius: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '10px',
+          margin: '3px',
+          border: '1px solid rgba(255,255,255,0.3)',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          cursor: 'pointer',
+          transition: 'transform 0.2s ease',
+          position: 'relative',
+          fontWeight: 'bold',
+          textAlign: 'center'
+        },
+        text: originalItem ? originalItem.text : (transferData.value || 'Objet'),
+        parent: droppedContainer
+      });
+
+      // Ajouter les interactions
+      droppedItem.addEventListener('mouseenter', () => {
+        droppedItem.style.transform = 'scale(1.1)';
+      });
+      
+      droppedItem.addEventListener('mouseleave', () => {
+        droppedItem.style.transform = 'scale(1)';
+      });
+      
+      droppedItem.addEventListener('dblclick', () => {
+        droppedItem.style.animation = 'fadeOut 0.3s ease-out forwards';
+        setTimeout(() => {
+          if (droppedItem.parentNode) {
+            droppedItem.parentNode.removeChild(droppedItem);
+          }
+        }, 300);
+        logActivity(`🗑️ Élément retiré de ${zone.title}`);
+      });
+
+      console.log('✅ Élément déposé créé (classique):', droppedItem);
+      logActivity(`✅ Dépôt réussi (classique) dans ${zone.title}: ${originalItem ? originalItem.text : transferData.value}`);
+    }
+  } else {
+    logActivity(`❌ Dépôt rejeté (classique) dans ${zone.title}: type non accepté`);
+    
+    // Animation de rejet
+    zoneElement.style.animation = 'shake 0.5s ease-in-out';
+    setTimeout(() => {
+      zoneElement.style.animation = '';
+    }, 500);
+  }
+}
+
 // === STYLES CSS ADDITIONNELS ===
 
 // Ajouter des styles CSS pour l'animation de rejet
@@ -461,6 +606,11 @@ style.textContent = `
     opacity: 0.7;
     transform: scale(0.95) rotate(5deg);
     z-index: 1000;
+    transition: none !important; /* Désactiver transitions pendant drag */
+  }
+  
+  .no-transition {
+    transition: none !important;
   }
   
   .drop-hover {

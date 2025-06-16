@@ -116,7 +116,8 @@ function makeDraggableWithDrop(element, options = {}) {
     ghostImage = null,
     dragStartClass = 'dragging',
     onHTML5DragStart = () => {},
-    onHTML5DragEnd = () => {}
+    onHTML5DragEnd = () => {},
+    onDropDetection = () => {} // Callback pour détecter les zones de drop en mode classique
   } = options;
 
   // Configuration CSS de base
@@ -128,9 +129,10 @@ function makeDraggableWithDrop(element, options = {}) {
     element.draggable = true;
   }
 
-  // Variables pour stocker la translation (drag classique)
-  let currentX = 0;
-  let currentY = 0;
+  // Variables pour stocker la position originale et le ghost
+  let originalPosition = null;
+  let ghostElement = null;
+  let isDraggingClassic = false;
 
   // === DRAG HTML5 ===
   if (enableHTML5) {
@@ -158,78 +160,149 @@ function makeDraggableWithDrop(element, options = {}) {
     });
   }
 
-  // === DRAG CLASSIQUE (conservé) ===
+  // === DRAG CLASSIQUE OPTIMISÉ (avec ghost) ===
   const onMouseDown = (e) => {
-    // Si HTML5 drag est activé et que c'est un clic gauche, laisser HTML5 gérer
-    if (enableHTML5 && e.button === 0) return;
+    // Si HTML5 drag est activé ET que c'est un clic gauche, laisser HTML5 gérer
+    if (enableHTML5 && e.button === 0 && e.target.draggable) return;
     
-    let isDragging = true;
-    let lastX = e.clientX;
-    let lastY = e.clientY;
-
-    const originalCursor = element.style.cursor;
-    element.style.cursor = cursor === 'grab' ? 'grabbing' : cursor;
-
-    onDragStart(element, lastX, lastY, currentX, currentY);
+    // Empêcher le comportement par défaut
+    e.preventDefault();
+    e.stopPropagation();
+    
+    isDraggingClassic = true;
+    
+    // Désactiver temporairement les transitions sur l'élément original
+    const originalTransition = element.style.transition;
+    element.style.transition = 'none';
+    
+    // Sauvegarder la position originale
+    const rect = element.getBoundingClientRect();
+    originalPosition = {
+      x: rect.left,
+      y: rect.top,
+      transform: element.style.transform || '',
+      transition: originalTransition
+    };
+    
+    // Créer un élément ghost qui suit la souris
+    createGhostElement(e.clientX, e.clientY);
+    
+    // Appliquer la classe de drag à l'original
+    if (dragStartClass) element.classList.add(dragStartClass);
+    
+    const startX = e.clientX;
+    const startY = e.clientY;
+    
+    // Callback de début
+    onDragStart(element, startX, startY, 0, 0);
 
     const onMouseMove = (e) => {
-      if (!isDragging) return;
-
-      const deltaX = e.clientX - lastX;
-      const deltaY = e.clientY - lastY;
-
-      currentX += deltaX;
-      currentY += deltaY;
-
-      let transformParts = [`translate(${currentX}px, ${currentY}px)`];
-
-      if (rotationFactor > 0) {
-        const totalDeltaX = currentX;
-        const totalDeltaY = currentY;
-        if (Math.abs(totalDeltaX) > 5 || Math.abs(totalDeltaY) > 5) {
-          const rotation = Math.atan2(totalDeltaY, totalDeltaX) * (180 / Math.PI) * rotationFactor;
-          transformParts.push(`rotate(${rotation}deg)`);
-        }
+      if (!isDraggingClassic) return;
+      
+      // Déplacer le ghost, pas l'élément original
+      if (ghostElement) {
+        ghostElement.style.left = (e.clientX - 30) + 'px'; // Offset pour centrer
+        ghostElement.style.top = (e.clientY - 20) + 'px';
       }
-
-      if (scaleFactor > 0) {
-        const distance = Math.sqrt(currentX * currentX + currentY * currentY);
-        const scale = 1 + (distance * scaleFactor * 0.001);
-        transformParts.push(`scale(${Math.min(scale, 1.5)})`);
-      }
-
-      element.style.transform = transformParts.join(' ');
-      onDragMove(element, currentX, currentY, deltaX, deltaY);
-
-      lastX = e.clientX;
-      lastY = e.clientY;
-      e.preventDefault();
+      
+      // Callback de mouvement
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      onDragMove(element, e.clientX, e.clientY, deltaX, deltaY);
     };
 
     const onMouseUp = (e) => {
-      isDragging = false;
-      element.style.cursor = originalCursor;
-      onDragEnd(element, currentX, currentY, currentX, currentY);
+      if (!isDraggingClassic) return;
+      
+      isDraggingClassic = false;
+      
+      // Supprimer la classe de drag
+      if (dragStartClass) element.classList.remove(dragStartClass);
+      
+      // Restaurer la transition originale
+      if (originalPosition) {
+        element.style.transition = originalPosition.transition;
+      }
+      
+      // Détection de drop
+      let dropSuccess = false;
+      if (onDropDetection) {
+        try {
+          onDropDetection(element, e.clientX, e.clientY);
+          dropSuccess = true;
+        } catch (err) {
+          console.log('Pas de zone de drop détectée');
+        }
+      }
+      
+      // Nettoyer le ghost
+      removeGhostElement();
+      
+      // Remettre l'élément à sa position originale (il n'a jamais bougé)
+      // L'élément reste à sa place, seul le ghost bougeait
+      
+      // Callback de fin
+      onDragEnd(element, e.clientX, e.clientY, e.clientX - startX, e.clientY - startY);
 
+      // Nettoyer les événements
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       document.removeEventListener('mouseleave', onMouseUp);
     };
 
+    // Attacher les événements globalement pour capturer même en dehors de l'élément
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
     document.addEventListener('mouseleave', onMouseUp);
-    e.preventDefault();
   };
+
+  // Fonction pour créer l'élément ghost
+  function createGhostElement(x, y) {
+    ghostElement = element.cloneNode(true);
+    ghostElement.style.position = 'fixed';
+    ghostElement.style.left = (x - 30) + 'px';
+    ghostElement.style.top = (y - 20) + 'px';
+    ghostElement.style.width = element.offsetWidth + 'px';
+    ghostElement.style.height = element.offsetHeight + 'px';
+    ghostElement.style.opacity = '0.7';
+    ghostElement.style.transform = 'scale(0.9) rotate(5deg)';
+    ghostElement.style.zIndex = '9999';
+    ghostElement.style.pointerEvents = 'none';
+    ghostElement.style.boxShadow = '0 8px 16px rgba(0,0,0,0.3)';
+    ghostElement.style.borderRadius = '8px';
+    ghostElement.style.transition = 'none'; // ← IMPORTANT: Pas de transition sur le ghost
+    
+    // Ajouter une bordure pour distinguer le ghost
+    ghostElement.style.border = '2px solid rgba(255,255,255,0.5)';
+    
+    document.body.appendChild(ghostElement);
+  }
+  
+  // Fonction pour supprimer l'élément ghost
+  function removeGhostElement() {
+    if (ghostElement && ghostElement.parentNode) {
+      ghostElement.parentNode.removeChild(ghostElement);
+      ghostElement = null;
+    }
+  }
 
   element.addEventListener('mousedown', onMouseDown);
 
+  // Fonction de nettoyage améliorée
   return () => {
     element.removeEventListener('mousedown', onMouseDown);
     element.style.cursor = '';
     element.style.userSelect = '';
-    element.style.transform = '';
     element.draggable = false;
+    
+    // Nettoyer le ghost s'il existe encore
+    removeGhostElement();
+    
+    // Remettre la position originale si nécessaire
+    if (originalPosition) {
+      element.style.transform = originalPosition.transform;
+      element.style.transition = originalPosition.transition;
+    }
   };
 }
 
