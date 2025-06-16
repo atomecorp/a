@@ -22,7 +22,7 @@ class PluginManager {
       'draggable_builder',
       'matrix_builder',
       'menu_builder',
-      'module_builder',
+      'unit_builder',
       'slider_builder',
       'table_builder',
       'waveSurfer_builder'
@@ -141,22 +141,24 @@ class PluginManager {
         }
         break;
         
-      case 'module_builder':
-        // Module builder exporte ModuleBuilder et templates via des variables globales
-        // Vérifier si ModuleBuilder est disponible dans le scope global après import
-        if (typeof ModuleBuilder !== 'undefined') {
-          window.ModuleBuilder = ModuleBuilder;
-          window.Module = ModuleBuilder; // Alias simple
-// console.log('  → window.ModuleBuilder = constructor (global)');
-// console.log('  → window.Module = alias');
-        } else if (module.ModuleBuilder) {
-          window.ModuleBuilder = module.ModuleBuilder;
-          window.Module = module.ModuleBuilder; // Alias simple
-// console.log('  → window.ModuleBuilder = constructor (export)');
-// console.log('  → window.Module = alias');
+      case 'unit_builder':
+        // Unit builder exporte UnitBuilder et templates via des variables globales
+        // Vérifier si UnitBuilder est disponible dans le scope global après import
+        if (typeof UnitBuilder !== 'undefined') {
+          window.UnitBuilder = UnitBuilder;
+          window.Unit = UnitBuilder; // Alias simple
+          window.Module = UnitBuilder; // Rétrocompatibilité
+// console.log('  → window.UnitBuilder = constructor (global)');
+// console.log('  → window.Unit = alias');
+        } else if (module.UnitBuilder) {
+          window.UnitBuilder = module.UnitBuilder;
+          window.Unit = module.UnitBuilder; // Alias simple
+          window.Module = module.UnitBuilder; // Rétrocompatibilité
+// console.log('  → window.UnitBuilder = constructor (export)');
+// console.log('  → window.Unit = alias');
         } else {
-          // Le module s'expose automatiquement via $ et window.moduleBuilderInstance
-// console.log('  → Module s\'expose automatiquement via $ et window.moduleBuilderInstance');
+          // Le unit s'expose automatiquement via $ et window.unitBuilderInstance
+// console.log('  → Unit s\'expose automatiquement via $ et window.unitBuilderInstance');
           
           // Essayer de récupérer ModuleBuilder du module importé
           const moduleKeys = Object.keys(module);
@@ -181,11 +183,24 @@ class PluginManager {
 // console.log('  → window.ModuleBuilder = wrapper vers instance globale');
           }
         }
+        // Support UnitTemplates (nouveau nom)
+        if (typeof UnitTemplates !== 'undefined') {
+          window.UnitTemplates = UnitTemplates;
+          window.ModuleTemplates = UnitTemplates; // Rétrocompatibilité
+// console.log('  → window.UnitTemplates = templates (global)');
+        } else if (module.UnitTemplates) {
+          window.UnitTemplates = module.UnitTemplates;
+          window.ModuleTemplates = module.UnitTemplates; // Rétrocompatibilité
+// console.log('  → window.UnitTemplates = templates (export)');
+        }
+        // Support ancien nom pour rétrocompatibilité
         if (typeof ModuleTemplates !== 'undefined') {
           window.ModuleTemplates = ModuleTemplates;
+          window.UnitTemplates = ModuleTemplates; // Migration vers nouveau nom
 // console.log('  → window.ModuleTemplates = templates (global)');
         } else if (module.ModuleTemplates) {
           window.ModuleTemplates = module.ModuleTemplates;
+          window.UnitTemplates = module.ModuleTemplates; // Migration vers nouveau nom
 // console.log('  → window.ModuleTemplates = templates (export)');
         }
         break;

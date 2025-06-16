@@ -1,32 +1,32 @@
 /**
- * Exemple minimaliste du Module Builder
+ * Exemple du Unit Builder (anciennement Module Builder)
  */
 
 // === EXEMPLE SIMPLE ===
-// Créer un module basique en une ligne
-const simpleModule = $.module({
-  id: 'mon-module',
-  title: 'Mon Premier Module',
+// Créer un unit basique en une ligne
+const simpleUnit = $.unit({
+  id: 'mon-unit',
+  title: 'Mon Premier Unit',
   position: { x: 50, y: 50 },
   inputs: [{ label: 'Input' }],
   outputs: [{ label: 'Output' }],
   callbacks: {
     onRename: (id, newName, oldName) => {
-      console.log(`Module ${id} renommé: "${oldName}" → "${newName}"`);
+      console.log(`Unit ${id} renommé: "${oldName}" → "${newName}"`);
     },
     onSelect: (id) => {
-      console.log(`Module ${id} sélectionné`);
+      console.log(`Unit ${id} sélectionné`);
     },
     onDeselect: (id) => {
-      console.log(`Module ${id} désélectionné`);
+      console.log(`Unit ${id} désélectionné`);
     }
   }
 });
 
 // === EXEMPLE AVEC CONTENU ===
-// Module avec contenu personnalisé
-const moduleAvecContenu = $.module({
-  id: 'module-slider',
+// Unit avec contenu personnalisé
+const unitAvecContenu = $.unit({
+  id: 'unit-slider',
   title: 'Volume Control',
   position: { x: 300, y: 50 },
   inputs: [{ label: 'Audio In', color: '#FF5722' }],
@@ -58,17 +58,17 @@ const moduleAvecContenu = $.module({
 
 // === EXEMPLE AVEC TEMPLATE ===
 // Utiliser un template prédéfini
-const moduleTemplate = $.module({
-  ...$.moduleTemplates.audioControl,
+const unitTemplate = $.unit({
+  ...$.unitTemplates.audioControl,
   id: 'audio-template',
   title: 'Audio Template',
   position: { x: 50, y: 250 }
 });
 
 // === EXEMPLE AVEC ICÔNE SVG ===
-// Module avec icône SVG centré et texte en dessous
-const moduleAvecIcone = $.module({
-  id: 'module-icone',
+// Unit avec icône SVG centré et texte en dessous
+const unitAvecIcone = $.unit({
+  id: 'unit-icone',
   title: 'Audio Processor',
   position: { x: 550, y: 50 },
   inputs: [{ label: 'Input', color: '#4CAF50' }],
@@ -121,9 +121,9 @@ const moduleAvecIcone = $.module({
 });
 
 // === EXEMPLE AVEC ICÔNE PLUS COMPLEXE ===
-// Module avec icône SVG personnalisé et interaction
-const moduleIconeAvance = $.module({
-  id: 'module-synth',
+// Unit avec icône SVG personnalisé et interaction
+const unitIconeAvance = $.unit({
+  id: 'unit-synth',
   title: 'Synthesizer',
   position: { x: 550, y: 250 },
   size: { width: 180, height: 140 },
@@ -202,9 +202,9 @@ const moduleIconeAvance = $.module({
 });
 
 // === EXEMPLE AVEC ICÔNE DEPUIS LE DISQUE ===
-// Module avec icône SVG chargée depuis un fichier
-const moduleAvecIconeDuDisque = $.module({
-  id: 'module-fichier-svg',
+// Unit avec icône SVG chargée depuis un fichier
+const unitAvecIconeDuDisque = $.unit({
+  id: 'unit-fichier-svg',
   title: 'File Icon',
   position: { x: 800, y: 50 },
   inputs: [{ label: 'Input', color: '#9C27B0' }],
@@ -248,9 +248,9 @@ const moduleAvecIconeDuDisque = $.module({
 });
 
 // === EXEMPLE AVEC ICÔNE PNG/JPG ===
-// Module avec icône bitmap depuis le disque
-const moduleAvecIconePng = $.module({
-  id: 'module-fichier-png',
+// Unit avec icône bitmap depuis le disque
+const unitAvecIconePng = $.unit({
+  id: 'unit-fichier-png',
   title: 'PNG Icon',
   position: { x: 800, y: 250 },
   inputs: [{ label: 'Input', color: '#795548' }],
@@ -313,9 +313,9 @@ const moduleAvecIconePng = $.module({
 });
 
 // === EXEMPLE AVEC SVG CHARGÉ DYNAMIQUEMENT ===
-// Module qui charge et affiche un SVG depuis le disque
-const moduleAvecSvgCharge = $.module({
-  id: 'module-svg-dynamique',
+// Unit qui charge et affiche un SVG depuis le disque
+const unitAvecSvgCharge = $.unit({
+  id: 'unit-svg-dynamique',
   title: 'Dynamic SVG',
   position: { x: 1000, y: 50 },
   inputs: [{ label: 'Input', color: '#3F51B5' }],
@@ -380,9 +380,9 @@ const moduleAvecSvgCharge = $.module({
 });
 
 // === SOLUTION SAFARI: ICÔNES INLINE ===
-// Module avec SVG inline (compatible Safari)
-const moduleSafariCompatible = $.module({
-  id: 'module-safari-svg',
+// Unit avec SVG inline (compatible Safari)
+const unitSafariCompatible = $.unit({
+  id: 'unit-safari-svg',
   title: 'Safari Compatible',
   position: { x: 1200, y: 50 },
   inputs: [{ label: 'Input', color: '#FF6B6B' }],
@@ -436,9 +436,9 @@ const moduleSafariCompatible = $.module({
 });
 
 // === SOLUTION SAFARI: BASE64 EMBEDDED ===
-// Module avec image encodée en base64 (compatible Safari)
-const moduleBase64 = $.module({
-  id: 'module-base64',
+// Unit avec image encodée en base64 (compatible Safari)
+const unitBase64 = $.unit({
+  id: 'unit-base64',
   title: 'Base64 Icon',
   position: { x: 1200, y: 250 },
   inputs: [{ label: 'Input', color: '#9B59B6' }],
@@ -461,7 +461,7 @@ const moduleBase64 = $.module({
     // Utiliser directement l'encodage URL au lieu de base64 (plus compatible)
     const encodedIcon = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
     
-    console.log('🔍 Debug module base64:', {
+    console.log('🔍 Debug unit base64:', {
       svgLength: svgString.length,
       encodedLength: encodedIcon.length,
       encodedStart: encodedIcon.substring(0, 50) + '...'
@@ -517,9 +517,9 @@ const moduleBase64 = $.module({
 });
 
 // === TEST SIMPLE: BASE64 MINIMAL ===
-// Module avec vraie image base64 ultra-simple pour test
-const moduleBase64Test = $.module({
-  id: 'module-base64-test',
+// Unit avec vraie image base64 ultra-simple pour test
+const unitBase64Test = $.unit({
+  id: 'unit-base64-test',
   title: 'Base64 Test',
   position: { x: 1200, y: 450 },
   inputs: [{ label: 'Input', color: '#FF4081' }],
@@ -575,9 +575,9 @@ const moduleBase64Test = $.module({
 });
 
 // === SOLUTION SAFARI: FONT ICONS ===
-// Module avec icônes de font/emoji (toujours compatible)
-const moduleFontIcon = $.module({
-  id: 'module-font-icon',
+// Unit avec icônes de font/emoji (toujours compatible)
+const unitFontIcon = $.unit({
+  id: 'unit-font-icon',
   title: 'Font Icons',
   position: { x: 1400, y: 50 },
   inputs: [{ label: 'Input', color: '#1ABC9C' }],
@@ -628,26 +628,26 @@ const moduleFontIcon = $.module({
 //                  (recliquez sur le même pour annuler la sélection)
 //
 // RENOMMAGE :
-// - Double-cliquez sur le titre d'un module pour le renommer
+// - Double-cliquez sur le titre d.un unit pour le renommer
 // - Entrée pour valider, Échap pour annuler
 // - Le drag est désactivé pendant l'édition
 //
 // SÉLECTION :
-// - Clic simple sur un module pour le sélectionner (désélectionne les autres)
-// - Double-clic sur le contenu d'un module pour désélectionner tout
-// - Module(s) sélectionné(s) = contour bleu et légère mise à l'échelle
-// - Utilisez le bouton "Déconnecter modules sélectionnés" pour supprimer toutes leurs connexions
+// - Clic simple sur un unit pour le sélectionner (désélectionne les autres)
+// - Double-clic sur le contenu d.un unit pour désélectionner tout
+// - Unit(s) sélectionné(s) = contour bleu et légère mise à l'échelle
+// - Utilisez le bouton "Déconnecter units sélectionnés" pour supprimer toutes leurs connexions
 //
 // API PROGRAMMATIVE :
 // - Consultez le panneau "🎛️ API Tests" en haut à droite de l'écran
 // - Testez toutes les fonctions d'API avec feedback console en temps réel
 
-console.log('Modules créés:', { simpleModule, moduleAvecContenu, moduleTemplate, moduleAvecIcone, moduleIconeAvance, moduleAvecIconeDuDisque, moduleAvecIconePng, moduleAvecSvgCharge, moduleSafariCompatible, moduleBase64, moduleBase64Test, moduleFontIcon });
+console.log('Units créés:', { simpleUnit, unitAvecContenu, unitTemplate, unitAvecIcone, unitIconeAvance, unitAvecIconeDuDisque, unitAvecIconePng, unitAvecSvgCharge, unitSafariCompatible, unitBase64, unitBase64Test, unitFontIcon });
 
-// Ajout d'un indicateur de statut pour le module builder
-console.log('🎛️ Module Builder initialized');
-console.log('📊 Status: Ready | Modules: 12 | API Panel: Visible (top-right)');
-console.log('💡 Interact with modules using drag&drop, click, or double-click for renaming');
+// Ajout d'un indicateur de statut pour le unit builder
+console.log('🎛️ Unit Builder initialized');
+console.log('📊 Status: Ready | Units: 12 | API Panel: Visible (top-right)');
+console.log('💡 Interact with units using drag&drop, click, or double-click for renaming');
 console.log('🔗 Use API panel buttons to test programmatic functions');
 console.log('📝 All actions are logged to this console for debugging');
 
@@ -767,7 +767,7 @@ const btnCreateConnection = $('button', {
   }
 });
 btnCreateConnection.addEventListener('click', () => {
-  const created = window.moduleBuilderInstance.createConnection('mon-module', '0', 'module-slider', '0');
+  const created = window.unitBuilderInstance.createConnection('mon-unit', '0', 'unit-slider', '0');
   console.log(created ? '✅ Connexion créée !' : '❌ Échec de la création (voir console)');
 });
 
@@ -783,7 +783,7 @@ controlsContainer.appendChild(btnCreateConnection);
 
 // Bouton pour supprimer une connexion spécifique
 const btnRemoveConnection = $('button', {
-  text: '❌ Supprimer connexion mon-module→module-slider',
+  text: '❌ Supprimer connexion mon-unit→unit-slider',
   css: {
     display: 'block',
     width: '240px',
@@ -799,14 +799,14 @@ const btnRemoveConnection = $('button', {
   }
 });
 btnRemoveConnection.addEventListener('click', () => {
-  const removed = window.moduleBuilderInstance.removeConnection('mon-module', '0', 'module-slider', '0');
+  const removed = window.unitBuilderInstance.removeConnection('mon-unit', '0', 'unit-slider', '0');
   console.log(removed ? '✅ Connexion supprimée !' : '⚠️ Connexion non trouvée');
 });
 controlsContainer.appendChild(btnRemoveConnection);
 
-// Bouton pour déconnecter un module
-const btnDisconnectModule = $('button', {
-  text: '🔌 Déconnecter module "mon-module"',
+// Bouton pour déconnecter un unit
+const btnDisconnectUnit = $('button', {
+  text: '🔌 Déconnecter unit "mon-unit"',
   css: {
     display: 'block',
     width: '240px',
@@ -821,15 +821,15 @@ const btnDisconnectModule = $('button', {
     transition: 'background-color 0.2s'
   }
 });
-btnDisconnectModule.addEventListener('click', () => {
-  const count = window.moduleBuilderInstance.disconnectModule('mon-module');
-  console.log(`🔌 Module "mon-module" déconnecté: ${count} connexion(s) supprimée(s)`);
+btnDisconnectUnit.addEventListener('click', () => {
+  const count = window.unitBuilderInstance.disconnectModule('mon-unit');
+  console.log(`🔌 Unit "mon-unit" déconnecté: ${count} connexion(s) supprimée(s)`);
 });
-controlsContainer.appendChild(btnDisconnectModule);
+controlsContainer.appendChild(btnDisconnectUnit);
 
-// Bouton pour supprimer un module
-const btnRemoveModule = $('button', {
-  text: '🗑️ Supprimer module "template"',
+// Bouton pour supprimer un unit
+const btnRemoveUnit = $('button', {
+  text: '🗑️ Supprimer unit "template"',
   css: {
     display: 'block',
     width: '240px',
@@ -844,15 +844,15 @@ const btnRemoveModule = $('button', {
     transition: 'background-color 0.2s'
   }
 });
-btnRemoveModule.addEventListener('click', () => {
-  window.moduleBuilderInstance.removeModule('audio-template');
-  console.log('🗑️ Module "audio-template" supprimé !');
+btnRemoveUnit.addEventListener('click', () => {
+  window.unitBuilderInstance.removeModule('audio-template');
+  console.log('🗑️ Unit "audio-template" supprimé !');
 });
-controlsContainer.appendChild(btnRemoveModule);
+controlsContainer.appendChild(btnRemoveUnit);
 
 // Bouton pour vérifier les connexions
 const btnCheckConnection = $('button', {
-  text: '✅ Vérifier connexion mon-module→module-slider',
+  text: '✅ Vérifier connexion mon-unit→unit-slider',
   css: {
     display: 'block',
     width: '240px',
@@ -868,14 +868,14 @@ const btnCheckConnection = $('button', {
   }
 });
 btnCheckConnection.addEventListener('click', () => {
-  const connected = window.moduleBuilderInstance.areConnectorsConnected('mon-module', '0', 'module-slider', '0');
+  const connected = window.unitBuilderInstance.areConnectorsConnected('mon-unit', '0', 'unit-slider', '0');
   console.log(connected ? '✅ Connecteurs connectés !' : '❌ Pas de connexion');
 });
 controlsContainer.appendChild(btnCheckConnection);
 
 // Bouton pour info sur les connexions
 const btnInfo = $('button', {
-  text: '📊 Info connexions & modules',
+  text: '📊 Info connexions & units',
   css: {
     display: 'block',
     width: '240px',
@@ -891,18 +891,18 @@ const btnInfo = $('button', {
   }
 });
 btnInfo.addEventListener('click', () => {
-  const totalConnections = window.moduleBuilderInstance.getConnectionCount();
-  const moduleConnections = window.moduleBuilderInstance.getModuleConnections('mon-module');
-  const modules = window.moduleBuilderInstance.getModuleIds();
+  const totalConnections = window.unitBuilderInstance.getConnectionCount();
+  const unitConnections = window.unitBuilderInstance.getModuleConnections('mon-unit');
+  const units = window.unitBuilderInstance.getModuleIds();
   
-  console.log('=== INFO CONNEXIONS & MODULES ===');
+  console.log('=== INFO CONNEXIONS & UNITS ===');
   console.log('Total connexions:', totalConnections);
-  console.log('Modules existants:', modules);
-  console.log('Connexions module "mon-module":', moduleConnections);
-  console.log('Module "mon-module" existe:', window.moduleBuilderInstance.moduleExists('mon-module'));
-  console.log('Connecteur "mon-module_output_0" existe:', window.moduleBuilderInstance.connectorExists('mon-module', '0'));
+  console.log('Units existants:', units);
+  console.log('Connexions unit "mon-unit":', unitConnections);
+  console.log('Unit "mon-unit" existe:', window.unitBuilderInstance.unitExists('mon-unit'));
+  console.log('Connecteur "mon-unit_output_0" existe:', window.unitBuilderInstance.connectorExists('mon-unit', '0'));
   
-  console.log(`📊 Résumé: ${totalConnections} connexions | Modules: ${modules.join(', ')}`);
+  console.log(`📊 Résumé: ${totalConnections} connexions | Units: ${units.join(', ')}`);
 });
 controlsContainer.appendChild(btnInfo);
 
@@ -934,15 +934,15 @@ let callbacksActive = false;
 btnTestCallbacks.addEventListener('click', () => {
   if (!callbacksActive) {
     // Ajouter des callbacks de test
-    window.moduleBuilderInstance.onConnect((connection) => {
+    window.unitBuilderInstance.onConnect((connection) => {
       console.log('🔗 Connexion créée:', connection);
     });
     
-    window.moduleBuilderInstance.onDisconnect((connection) => {
+    window.unitBuilderInstance.onDisconnect((connection) => {
       console.log('❌ Connexion supprimée:', connection);
     });
     
-    window.moduleBuilderInstance.onConnectionAttempt((data) => {
+    window.unitBuilderInstance.onConnectionAttempt((data) => {
       console.log('🔄 Tentative de connexion:', data);
     });
     
@@ -957,9 +957,9 @@ btnTestCallbacks.addEventListener('click', () => {
 });
 controlsContainer.appendChild(btnTestCallbacks);
 
-// Bouton pour déconnecter le module sélectionné
+// Bouton pour déconnecter le unit sélectionné
 const btnDisconnectSelected = $('button', {
-  text: '🎯 Déconnecter modules sélectionnés',
+  text: '🎯 Déconnecter units sélectionnés',
   css: {
     display: 'block',
     width: '240px',
@@ -975,16 +975,16 @@ const btnDisconnectSelected = $('button', {
   }
 });
 btnDisconnectSelected.addEventListener('click', () => {
-  const result = window.moduleBuilderInstance.disconnectSelectedModules();
+  const result = window.unitBuilderInstance.disconnectSelectedModules();
   if (result.count > 0) {
-    console.log(`🔌 Modules déconnectés:`, result.moduleIds);
+    console.log(`🔌 Units déconnectés:`, result.unitIds);
     console.log(`📊 Total: ${result.count} connexion(s) supprimée(s)`);
-    result.modules.forEach(module => {
-      console.log(`  - "${module.id}": ${module.connectionsRemoved} connexion(s)`);
+    result.modules.forEach(unit => {
+      console.log(`  - "${unit.id}": ${unit.connectionsRemoved} connexion(s)`);
     });
   } else {
-    console.log('⚠️ Aucun module sélectionné ou aucune connexion à supprimer');
-    console.log('💡 Cliquez sur un ou plusieurs modules pour les sélectionner');
+    console.log('⚠️ Aucun unit sélectionné ou aucune connexion à supprimer');
+    console.log('💡 Cliquez sur un ou plusieurs units pour les sélectionner');
   }
 });
 controlsContainer.appendChild(btnDisconnectSelected);

@@ -479,29 +479,29 @@ const initPluginDemo = async () => {
           }
           break;
           
-        case 'Module':
-          if (window.ModuleBuilder) {
+        case 'Unit':
+          if (window.UnitBuilder) {
             try {
-              const moduleBuilder = new window.ModuleBuilder();
-              const module = moduleBuilder.create({
-                id: `example-module-${Date.now()}`,
-                title: `Module ${pluginName}`,
+              const unitBuilder = new window.UnitBuilder();
+              const unit = unitBuilder.create({
+                id: `example-unit-${Date.now()}`,
+                title: `Unit ${pluginName}`,
                 position: { x: 0, y: 0 },
                 inputs: [{ label: 'In' }],
                 outputs: [{ label: 'Out' }]
               });
-              if (module && module.nodeType) {
-                module.style.cssText += 'transform: scale(0.8); transform-origin: top left;';
-                exampleContainer.appendChild(module);
+              if (unit && unit.nodeType) {
+                unit.style.cssText += 'transform: scale(0.8); transform-origin: top left;';
+                exampleContainer.appendChild(unit);
               } else {
                 const fallback = document.createElement('div');
-                fallback.textContent = `Module créé mais DOM non disponible`;
+                fallback.textContent = `Unit créé mais DOM non disponible`;
                 fallback.style.cssText = 'color: #f44336; font-size: 12px; padding: 10px; border: 1px dashed #ccc;';
                 exampleContainer.appendChild(fallback);
               }
             } catch (error) {
               const errorDiv = document.createElement('div');
-              errorDiv.textContent = `Erreur Module: ${error.message}`;
+              errorDiv.textContent = `Erreur Unit: ${error.message}`;
               errorDiv.style.cssText = 'color: #f44336; font-size: 12px;';
               exampleContainer.appendChild(errorDiv);
             }

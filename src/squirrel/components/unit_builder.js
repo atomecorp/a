@@ -1,14 +1,14 @@
-// Module Builder Component for Squirrel.js
-// Permet de créer des modules/nodes avec inputs/outputs connectables
+// Unit Builder Component for Squirrel.js
+// Permet de créer des units/nodes avec inputs/outputs connectables
 // Chaque élément est skinable avec un ID unique
 
-class ModuleBuilder {
+class UnitBuilder {
   constructor() {
-    this.modules = new Map();
+    this.units = new Map();
     this.connections = new Map();
     this.draggedConnector = null;
     this.selectedConnector = null; // Pour la connexion par clic
-    this.selectedModules = new Set(); // Pour la sélection de modules
+    this.selectedUnits = new Set(); // Pour la sélection de units
     this.connectionCallbacks = {
       onConnect: [],
       onDisconnect: [],
@@ -16,14 +16,14 @@ class ModuleBuilder {
     };
   }
 
-  // Créer un nouveau module
+  // Créer un nouveau unit
   create(config) {
-    const moduleId = config.id || `module_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const unitId = config.id || `unit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Configuration par défaut
     const defaultConfig = {
-      id: moduleId,
-      name: 'Module',
+      id: unitId,
+      name: 'Unit',
       position: { x: 100, y: 100 },
       size: { width: 200, height: 150 },
       inputs: [],
@@ -36,45 +36,45 @@ class ModuleBuilder {
       callbacks: {}
     };
 
-    const moduleConfig = { ...defaultConfig, ...config };
+    const unitConfig = { ...defaultConfig, ...config };
     
     // Créer le conteneur principal du module
-    const moduleContainer = this._createModuleContainer(moduleConfig);
+    const unitContainer = this._createModuleContainer(unitConfig);
     
     // Créer le header
-    const header = this._createModuleHeader(moduleConfig);
+    const header = this._createModuleHeader(unitConfig);
     
     // Créer la zone de contenu
-    const contentArea = this._createContentArea(moduleConfig);
+    const contentArea = this._createContentArea(unitConfig);
     
     // Créer les connecteurs
-    const connectorsContainer = this._createConnectors(moduleConfig);
+    const connectorsContainer = this._createConnectors(unitConfig);
     
     // Assembler le module
-    moduleContainer.appendChild(header);
-    moduleContainer.appendChild(contentArea);
-    moduleContainer.appendChild(connectorsContainer);
+    unitContainer.appendChild(header);
+    unitContainer.appendChild(contentArea);
+    unitContainer.appendChild(connectorsContainer);
     
     // Ajouter les fonctionnalités
-    this._addDragFunctionality(moduleContainer, moduleConfig);
-    this._addConnectorFunctionality(moduleContainer, moduleConfig);
-    this._addSelectionFunctionality(moduleContainer, moduleConfig);
+    this._addDragFunctionality(unitContainer, unitConfig);
+    this._addConnectorFunctionality(unitContainer, unitConfig);
+    this._addSelectionFunctionality(unitContainer, unitConfig);
     
     // Stocker le module
     const moduleInstance = {
-      id: moduleId,
-      config: moduleConfig,
-      element: moduleContainer,
+      id: unitId,
+      config: unitConfig,
+      element: unitContainer,
       inputs: new Map(),
       outputs: new Map(),
       connections: new Set()
     };
     
-    this.modules.set(moduleId, moduleInstance);
+    this.units.set(unitId, moduleInstance);
     
     // Callbacks
-    if (moduleConfig.callbacks.onCreate) {
-      moduleConfig.callbacks.onCreate(moduleInstance);
+    if (unitConfig.callbacks.onCreate) {
+      unitConfig.callbacks.onCreate(moduleInstance);
     }
     
     return moduleInstance;
@@ -224,10 +224,10 @@ class ModuleBuilder {
   }
 
   // Activer/désactiver le drag d'un module
-  _setModuleDraggable(moduleId, draggable) {
-    const module = this.modules.get(moduleId);
+  _setModuleDraggable(unitId, draggable) {
+    const module = this.units.get(unitId);
     if (module) {
-      const header = module.element.querySelector(`#${moduleId}_header`);
+      const header = module.element.querySelector(`#${unitId}_header`);
       if (header) {
         header.style.cursor = draggable ? 'move' : 'default';
         module.config.draggable = draggable;
@@ -311,13 +311,13 @@ class ModuleBuilder {
   }
 
   // Créer un connecteur individuel
-  _createConnector(moduleId, connectorConfig, type, index, moduleConfig) {
-    const connectorId = `${moduleId}_${type}_${index}`;
+  _createConnector(unitId, connectorConfig, type, index, unitConfig) {
+    const connectorId = `${unitId}_${type}_${index}`;
     const isInput = type === 'input';
     
     // Position du connecteur
     const yPosition = 40 + (index * 25); // Espacement vertical
-    const xPosition = isInput ? -8 : moduleConfig.size.width - 8;
+    const xPosition = isInput ? -8 : unitConfig.size.width - 8;
     
     const connector = $('div', {
       id: connectorId,
@@ -335,7 +335,7 @@ class ModuleBuilder {
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
         transition: 'transform 0.2s ease',
         zIndex: '1010',
-        ...moduleConfig.styling[`${type}Connector`]
+        ...unitConfig.styling[`${type}Connector`]
       },
       title: connectorConfig.label || connectorConfig.name || `${type} ${index + 1}`
     });
@@ -343,7 +343,7 @@ class ModuleBuilder {
     // Ajouter le label
     if (connectorConfig.label) {
       // Calculer la couleur de texte pour le label selon le fond du module
-      const containerBg = moduleConfig.styling?.container?.backgroundColor || '#f0f0f0';
+      const containerBg = unitConfig.styling?.container?.backgroundColor || '#f0f0f0';
       const labelColor = this._getTextColorForBackground(containerBg);
       
       const label = $('span', {
@@ -356,7 +356,7 @@ class ModuleBuilder {
           color: labelColor, // Couleur adaptée au fond du module
           whiteSpace: 'nowrap',
           pointerEvents: 'none',
-          ...moduleConfig.styling[`${type}Label`]
+          ...unitConfig.styling[`${type}Label`]
         },
         text: connectorConfig.label
       });
@@ -365,7 +365,7 @@ class ModuleBuilder {
 
     // Stocker les données du connecteur
     connector.connectorData = {
-      moduleId,
+      unitId,
       type,
       index,
       config: connectorConfig,
@@ -648,14 +648,14 @@ class ModuleBuilder {
   }
 
   // Sélectionner un module
-  _selectModule(moduleId) {
+  _selectModule(unitId) {
     // Désélectionner tous les autres modules
     this._clearAllSelections();
     
     // Sélectionner le module courant
-    this.selectedModules.add(moduleId);
+    this.selectedUnits.add(unitId);
     
-    const moduleData = this.modules.get(moduleId);
+    const moduleData = this.units.get(unitId);
     if (moduleData) {
       const moduleElement = moduleData.element;
       
@@ -667,18 +667,18 @@ class ModuleBuilder {
       
       // Callback de sélection si défini
       if (moduleData.config.callbacks && moduleData.config.callbacks.onSelect) {
-        moduleData.config.callbacks.onSelect(moduleId);
+        moduleData.config.callbacks.onSelect(unitId);
       }
       
-// console.log(`Module sélectionné: ${moduleId}`);
+// console.log(`Module sélectionné: ${unitId}`);
     }
   }
 
   // Désélectionner un module
-  _deselectModule(moduleId) {
-    this.selectedModules.delete(moduleId);
+  _deselectModule(unitId) {
+    this.selectedUnits.delete(unitId);
     
-    const moduleData = this.modules.get(moduleId);
+    const moduleData = this.units.get(unitId);
     if (moduleData) {
       const moduleElement = moduleData.element;
       
@@ -690,18 +690,18 @@ class ModuleBuilder {
       
       // Callback de désélection si défini
       if (moduleData.config.callbacks && moduleData.config.callbacks.onDeselect) {
-        moduleData.config.callbacks.onDeselect(moduleId);
+        moduleData.config.callbacks.onDeselect(unitId);
       }
       
-// console.log(`Module désélectionné: ${moduleId}`);
+// console.log(`Module désélectionné: ${unitId}`);
     }
   }
 
-  // Désélectionner tous les modules
+  // Désélectionner tous les units
   _clearAllSelections() {
-    const selectedModules = Array.from(this.selectedModules);
-    selectedModules.forEach(moduleId => {
-      this._deselectModule(moduleId);
+    const selectedUnits = Array.from(this.selectedUnits);
+    selectedUnits.forEach(unitId => {
+      this._deselectModule(unitId);
     });
   }
 
@@ -884,14 +884,14 @@ class ModuleBuilder {
   }
 
   // Mettre à jour immédiatement toutes les connexions d'un module (pour le drag)
-  _updateConnectionsImmediate(moduleId) {
+  _updateConnectionsImmediate(unitId) {
     // Trouver toutes les connexions liées à ce module
     for (const [connectionId, connection] of this.connections.entries()) {
-      const sourceModuleId = connection.source.moduleId;
-      const targetModuleId = connection.target.moduleId;
+      const sourceModuleId = connection.source.unitId;
+      const targetModuleId = connection.target.unitId;
       
       // Si cette connexion implique le module en cours de drag
-      if (sourceModuleId === moduleId || targetModuleId === moduleId) {
+      if (sourceModuleId === unitId || targetModuleId === unitId) {
         const sourceConnector = document.getElementById(connection.source.id);
         const targetConnector = document.getElementById(connection.target.id);
         
@@ -956,8 +956,8 @@ class ModuleBuilder {
 
   // Créer une connexion entre deux connecteurs
   createConnection(sourceModuleId, sourceConnectorId, targetModuleId, targetConnectorId) {
-    const sourceModule = this.modules.get(sourceModuleId);
-    const targetModule = this.modules.get(targetModuleId);
+    const sourceModule = this.units.get(sourceModuleId);
+    const targetModule = this.units.get(targetModuleId);
     
     if (!sourceModule || !targetModule) {
       console.warn('Module source ou cible introuvable');
@@ -986,7 +986,7 @@ class ModuleBuilder {
 
   // Supprimer une connexion entre deux connecteurs
   removeConnection(sourceModuleId, sourceConnectorId, targetModuleId, targetConnectorId) {
-    // Format: moduleId_type_index
+    // Format: unitId_type_index
     const sourceOutputId = `${sourceModuleId}_output_${sourceConnectorId}`;
     const sourceInputId = `${sourceModuleId}_input_${sourceConnectorId}`;
     const targetOutputId = `${targetModuleId}_output_${targetConnectorId}`;
@@ -1010,17 +1010,17 @@ class ModuleBuilder {
     return false;
   }
 
-  // Déconnecter tous les connecteurs d'un module
-  disconnectModule(moduleId) {
-    const module = this.modules.get(moduleId);
-    if (!module) return 0;
+  // Déconnecter tous les connecteurs d'un unit
+  disconnectUnit(unitId) {
+    const unit = this.units.get(unitId);
+    if (!unit) return 0;
     
     let count = 0;
     const connectionsToRemove = [];
     
-    // Trouver toutes les connexions du module
+    // Trouver toutes les connexions du unit
     for (const [connectionId, connection] of this.connections) {
-      if (connection.source.moduleId === moduleId || connection.target.moduleId === moduleId) {
+      if (connection.source.unitId === unitId || connection.target.unitId === unitId) {
         connectionsToRemove.push(connectionId);
       }
     }
@@ -1034,13 +1034,55 @@ class ModuleBuilder {
     return count;
   }
 
-  // Supprimer un module et ses connexions
-  removeModule(moduleId) {
-    const module = this.modules.get(moduleId);
+  // Déconnecter tous les connecteurs d'un module (rétrocompatibilité)
+  disconnectModule(unitId) {
+    const module = this.units.get(unitId);
+    if (!module) return 0;
+    
+    let count = 0;
+    const connectionsToRemove = [];
+    
+    // Trouver toutes les connexions du module
+    for (const [connectionId, connection] of this.connections) {
+      if (connection.source.unitId === unitId || connection.target.unitId === unitId) {
+        connectionsToRemove.push(connectionId);
+      }
+    }
+    
+    // Supprimer les connexions
+    connectionsToRemove.forEach(connectionId => {
+      this._removeConnectionById(connectionId);
+      count++;
+    });
+    
+    return count;
+  }
+
+  // Supprimer un unit et ses connexions
+  removeUnit(unitId) {
+    const unit = this.units.get(unitId);
+    if (!unit) return false;
+    
+    // Déconnecter d'abord
+    this.disconnectUnit(unitId);
+    
+    // Supprimer l'élément DOM
+    if (unit.element && unit.element.parentNode) {
+      unit.element.parentNode.removeChild(unit.element);
+    }
+    
+    // Supprimer de la Map
+    this.units.delete(unitId);
+    return true;
+  }
+
+  // Supprimer un module et ses connexions (rétrocompatibilité)
+  removeModule(unitId) {
+    const module = this.units.get(unitId);
     if (!module) return false;
     
     // Déconnecter d'abord
-    this.disconnectModule(moduleId);
+    this.disconnectModule(unitId);
     
     // Supprimer l'élément DOM
     if (module.element && module.element.parentNode) {
@@ -1048,14 +1090,14 @@ class ModuleBuilder {
     }
     
     // Supprimer de la Map
-    this.modules.delete(moduleId);
+    this.units.delete(unitId);
     
     return true;
   }
 
   // Vérifier si deux connecteurs sont connectés
   areConnectorsConnected(sourceModuleId, sourceConnectorId, targetModuleId, targetConnectorId) {
-    // Format: moduleId_type_index
+    // Format: unitId_type_index
     const sourceOutputId = `${sourceModuleId}_output_${sourceConnectorId}`;
     const sourceInputId = `${sourceModuleId}_input_${sourceConnectorId}`;
     const targetOutputId = `${targetModuleId}_output_${targetConnectorId}`;
@@ -1077,12 +1119,29 @@ class ModuleBuilder {
     return this.connections.size;
   }
 
-  // Obtenir les connexions d'un module spécifique
-  getModuleConnections(moduleId) {
+  // Obtenir les connexions d'un unit spécifique
+  getUnitConnections(unitId) {
+    const unitConnections = [];
+    
+    for (const [connectionId, connection] of this.connections) {
+      if (connection.source.unitId === unitId || connection.target.unitId === unitId) {
+        unitConnections.push({
+          id: connectionId,
+          source: connection.source,
+          target: connection.target
+        });
+      }
+    }
+    
+    return unitConnections;
+  }
+
+  // Obtenir les connexions d'un module spécifique (rétrocompatibilité)
+  getModuleConnections(unitId) {
     const moduleConnections = [];
     
     for (const [connectionId, connection] of this.connections) {
-      if (connection.source.moduleId === moduleId || connection.target.moduleId === moduleId) {
+      if (connection.source.unitId === unitId || connection.target.unitId === unitId) {
         moduleConnections.push({
           id: connectionId,
           source: connection.source,
@@ -1094,22 +1153,32 @@ class ModuleBuilder {
     return moduleConnections;
   }
 
-  // Obtenir la liste des IDs de modules
-  getModuleIds() {
-    return Array.from(this.modules.keys());
+  // Obtenir la liste des IDs de units
+  getUnitIds() {
+    return Array.from(this.units.keys());
   }
 
-  // Vérifier si un module existe
-  moduleExists(moduleId) {
-    return this.modules.has(moduleId);
+  // Obtenir la liste des IDs de modules (rétrocompatibilité)
+  getModuleIds() {
+    return Array.from(this.units.keys());
+  }
+
+  // Vérifier si un unit existe
+  unitExists(unitId) {
+    return this.units.has(unitId);
+  }
+
+  // Vérifier si un module existe (rétrocompatibilité)
+  moduleExists(unitId) {
+    return this.units.has(unitId);
   }
 
   // Vérifier si un connecteur existe
-  connectorExists(moduleId, connectorId) {
-    const module = this.modules.get(moduleId);
+  connectorExists(unitId, connectorId) {
+    const module = this.units.get(unitId);
     if (!module) return false;
     
-    const connector = module.element.querySelector(`#${moduleId}_input_${connectorId}, #${moduleId}_output_${connectorId}`);
+    const connector = module.element.querySelector(`#${unitId}_input_${connectorId}, #${unitId}_output_${connectorId}`);
     return !!connector;
   }
 
@@ -1118,9 +1187,9 @@ class ModuleBuilder {
     this._clearSelectedConnector();
   }
 
-  // Obtenir les IDs des modules actuellement sélectionnés
+  // Obtenir les IDs des units actuellement sélectionnés
   getSelectedModuleIds() {
-    return Array.from(this.selectedModules);
+    return Array.from(this.selectedUnits);
   }
 
   // Déconnecter tous les modules sélectionnés
@@ -1133,16 +1202,16 @@ class ModuleBuilder {
     let totalConnections = 0;
     const disconnectedModules = [];
     
-    selectedIds.forEach(moduleId => {
-      const count = this.disconnectModule(moduleId);
+    selectedIds.forEach(unitId => {
+      const count = this.disconnectModule(unitId);
       totalConnections += count;
-      disconnectedModules.push({ id: moduleId, connectionsRemoved: count });
+      disconnectedModules.push({ id: unitId, connectionsRemoved: count });
     });
     
     return { 
       count: totalConnections, 
       modules: disconnectedModules,
-      moduleIds: selectedIds
+      unitIds: selectedIds
     };
   }
 
@@ -1161,7 +1230,7 @@ class ModuleBuilder {
 }
 
 // Template prédéfinis
-const ModuleTemplates = {
+const UnitTemplates = {
     // Template simple
     simple: {
       size: { width: 150, height: 100 },
@@ -1344,19 +1413,31 @@ const ModuleTemplates = {
 };
 
 // Export pour utilisation
-window.ModuleBuilder = ModuleBuilder;
-window.ModuleTemplates = ModuleTemplates;
+window.UnitBuilder = UnitBuilder;
+window.UnitTemplates = UnitTemplates;
 
 // Intégration avec Squirrel.js
 if (typeof $ !== 'undefined') {
-  // Ajouter la méthode module à l'API Squirrel
-  $.module = function(config) {
-    if (!window.moduleBuilderInstance) {
-      window.moduleBuilderInstance = new ModuleBuilder();
+  // Ajouter la méthode unit à l'API Squirrel
+  $.unit = function(config) {
+    if (!window.unitBuilderInstance) {
+      window.unitBuilderInstance = new UnitBuilder();
     }
-    return window.moduleBuilderInstance.create(config);
+    return window.unitBuilderInstance.create(config);
   };
   
+  // Rétrocompatibilité
+  $.module = $.unit;
+  
   // Alias pour les templates
-  $.moduleTemplates = ModuleTemplates;
+  $.unitTemplates = UnitTemplates;
+  $.moduleTemplates = UnitTemplates; // Rétrocompatibilité
 }
+
+// Exporter les classes et templates globalement
+window.UnitBuilder = UnitBuilder;
+window.UnitTemplates = UnitTemplates;
+
+// Rétrocompatibilité
+window.UnitBuilder = UnitBuilder;
+window.ModuleTemplates = UnitTemplates;
