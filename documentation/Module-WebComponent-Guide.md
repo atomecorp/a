@@ -1,6 +1,6 @@
 # 🔧 Module Web Component - Guide Complet
 
-Le Module Web Component est un composant sophistiqué pour la programmation visuelle avec support complet des propriétés CSS avancées, effets graphiques, animations et connecteurs typés.
+Le Module Web Component est un composant sophistiqué pour la programmation visuelle avec support complet des propriétés CSS avancées, effets bombé, animations et connecteurs typés.
 
 ## ✨ Fonctionnalités Principales
 

@@ -1,0 +1,33 @@
+{
+  "name": "thermal-testing-framework",
+  "version": "1.0.0",
+  "description": "Complete Jest testing framework for thermal application database",
+  "dependencies": {
+    "objection": "^3.1.3",
+    "knex": "^3.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "babel-jest": "^29.7.0",
+    "sqlite3": "^5.1.6"
+  },
+  "scripts": {
+    "test": "jest --config jest.config.cjs",
+    "test:watch": "jest --config jest.config.cjs --watch",
+    "test:coverage": "jest --config jest.config.cjs --coverage",
+    "test:database": "jest tests/database.test.js --config jest.config.cjs --verbose",
+    "test:integration": "jest tests/thermal-integration.test.js --config jest.config.cjs --verbose"
+  },
+  "keywords": [
+    "thermal",
+    "testing",
+    "jest",
+    "objection",
+    "database",
+    "university"
+  ],
+  "author": "Thermal App Team",
+  "license": "MIT"
+}

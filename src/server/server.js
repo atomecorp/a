@@ -8,7 +8,7 @@ const server = fastify({
   logger: process.env.NODE_ENV === 'development' 
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 async function startServer() {
   try {

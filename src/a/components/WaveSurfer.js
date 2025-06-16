@@ -6,13 +6,10 @@
  * Compatible with WaveSurfer.js v7.x for complete offline functionality.
  * 
  * Enhanced with intelligent region loop functionality inspired by official examples.
- * Now uses modern particle system via BaseComponent.
  * 
- * @version 5.0.0 - Modern Particle System Edition
+ * @version 4.1.0 - Enhanced Region Loop
  * @author Squirrel Framework Team
  */
-
-import { BaseComponent } from './BaseComponent.js';
 
 // Global variables for WaveSurfer library and plugin loader
 let WaveSurferLib = null;
@@ -52,17 +49,14 @@ async function loadWaveSurfer() {
  * 🎵 WaveSurfer Web Component Class
  * 
  * Creates interactive audio waveform visualizations with full plugin support
- * Now extends BaseComponent for modern particle system architecture
+ * Now extends HTMLElement for true Web Component architecture
  * Enhanced with intelligent region looping based on official wavesurfer.js examples
  */
-class WaveSurfer extends BaseComponent {
+class WaveSurfer extends HTMLElement {
     static instances = new Map(); // Registry of all WaveSurfer instances
     
     constructor(config = {}) {
-        super(); // Appeler le constructeur de BaseComponent
-        
-        // Traiter d'abord la configuration commune via BaseComponent
-        this.processCommonConfig(config);
+        super();
         
         // Generate unique ID
         this.id = config.id || `wavesurfer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -440,7 +434,6 @@ class WaveSurfer extends BaseComponent {
     }
     
     applyPositioning() {
-        // Utiliser le système de positionnement de BaseComponent
         if (this.config.x !== undefined && this.config.y !== undefined) {
             this.style.position = 'absolute';
             this.style.left = `${this.config.x}px`;

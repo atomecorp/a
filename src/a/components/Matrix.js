@@ -1,32 +1,24 @@
 /**
  * 🔲 Matrix Web Component - Squirrel Framework
  * 
- * Modern Web Component avec système de particules modernes:
- * - Particules partagées pour propriétés communes (x, y, width, height, etc.)
+ * Modern Web Component avec support complet des propriétés CSS avancées:
  * - Multiple shadows (boxShadow arrays) pour effets relief
  * - CSS gradients pour backgrounds sophistiqués
  * - Animations avancées avec changements de taille au toucher
- * - Auto-attachment et positioning avec particules
+ * - Auto-attachment et positioning
  * - Propriétés CSS personnalisées pour chaque élément
  * - Effets bombé avec ombres internes/externes
- * - Performance ultra-moderne avec batch processing
  * 
- * @version 3.0.0 - MODERN PARTICLE SYSTEM
+ * @version 2.0.0 - WEB COMPONENT
  * @author Squirrel Framework Team
  */
 
-// Import du système centralisé
-import BaseComponent from './BaseComponent.js';
-
-class Matrix extends BaseComponent {
+class Matrix extends HTMLElement {
     static matrices = new Map(); // Registry of all matrices
     static resizeObserver = null; // Global resize observer
     
     constructor(config = {}) {
-        super(); // Appeler le constructeur de BaseComponent
-        
-        // Traiter d'abord la configuration commune via BaseComponent
-        this.processCommonConfig(config);
+        super();
         
         // Configuration avancée avec propriétés CSS complètes
         this.config = this.mergeConfig(config);
@@ -47,13 +39,13 @@ class Matrix extends BaseComponent {
             this.performAutoAttach();
         }
         
-        // Apply positioning with modern particles
-        this.applyModernPositioning();
+        // Apply positioning
+        this.applyPositioning();
         
         // Register matrix
         Matrix.matrices.set(this.id, this);
         
-        console.log(`🔲 Matrix Web Component created: ${this.id} (${this.config.grid.x}x${this.config.grid.y}) - MODERN PARTICLES ENABLED`);
+        console.log(`🔲 Matrix Web Component created: ${this.id} (${this.config.grid.x}x${this.config.grid.y})`);
     }
     
     mergeConfig(config) {
@@ -180,34 +172,6 @@ class Matrix extends BaseComponent {
                 cellActive: {
                     duration: '0.2s',
                     easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' // Ease out
-                }
-            },
-            
-            // 🚀 CONFIGURATION MODERNE DES PARTICULES
-            modernParticles: {
-                // Activer le système moderne
-                enabled: true,
-                batchUpdates: true,
-                performanceMonitoring: false,
-                
-                // Particules communes par défaut
-                defaultParticles: {
-                    smooth: true,
-                    responsive: true,
-                    optimize: true,
-                    glow: false,
-                    animate: {
-                        type: 'smooth',
-                        duration: 300,
-                        easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
-                    }
-                },
-                
-                // Configuration de fallback
-                fallback: {
-                    enableFrameworkA: true,
-                    enableCSSDirect: true,
-                    logErrors: true
                 }
             },
             
@@ -725,159 +689,6 @@ class Matrix extends BaseComponent {
         this.style.width = `${width}px`;
         this.style.height = `${height}px`;
         this._handleResize();
-    }
-
-    // ==========================================
-    // 🚀 MODERN PARTICLE SYSTEM INTEGRATION
-    // ==========================================
-
-    /**
-     * 🎯 APPLICATION DU POSITIONNEMENT MODERNE
-     */
-    applyModernPositioning() {
-        if (this.config.x !== undefined && this.config.y !== undefined) {
-            // Utiliser les particules modernes pour le positionnement
-            this.setParticles({
-                x: this.config.x,
-                y: this.config.y,
-                width: this.config.size.width,
-                height: this.config.size.height
-            });
-        } else {
-            // Juste les dimensions
-            this.setParticles({
-                width: this.config.size.width,
-                height: this.config.size.height
-            });
-        }
-    }
-
-    /**
-     * 🌟 MISE À JOUR CONFIGURATION MODERNE
-     */
-    updateModernConfig(newConfig) {
-        const oldConfig = { ...this.config };
-        this.config = this.mergeConfig({ ...this.config, ...newConfig });
-        
-        // Détecter les changements de propriétés communes
-        const commonProps = ['x', 'y', 'width', 'height', 'backgroundColor', 'opacity'];
-        const changedProps = {};
-        
-        commonProps.forEach(prop => {
-            if (oldConfig[prop] !== this.config[prop]) {
-                changedProps[prop] = this.config[prop];
-            }
-        });
-        
-        // Appliquer les changements via le système moderne
-        if (Object.keys(changedProps).length > 0) {
-            this.setParticles(changedProps, { force: true });
-        }
-        
-        // Régénérer les styles si nécessaire
-        this._updateMatrixStyles();
-        
-        console.log(`🔲 Matrix ${this.id} - Configuration moderne mise à jour:`, changedProps);
-    }
-
-    /**
-     * 🎨 APPLICATION STYLING MODERNE
-     */
-    applyModernStyling(styleConfig) {
-        // Appliquer les particules de style communes
-        const modernParticles = {};
-        
-        if (styleConfig.backgroundColor) modernParticles.backgroundColor = styleConfig.backgroundColor;
-        if (styleConfig.opacity !== undefined) modernParticles.opacity = styleConfig.opacity;
-        if (styleConfig.borderRadius) modernParticles.borderRadius = styleConfig.borderRadius;
-        if (styleConfig.boxShadow) modernParticles.boxShadow = styleConfig.boxShadow;
-        if (styleConfig.gradient) modernParticles.gradient = styleConfig.gradient;
-        if (styleConfig.glow) modernParticles.glow = styleConfig.glow;
-        
-        // Appliquer via le système moderne
-        this.setParticles(modernParticles);
-        
-        // Mettre à jour la configuration
-        this.config.containerStyle = { ...this.config.containerStyle, ...styleConfig };
-        this._updateMatrixStyles();
-    }
-
-    /**
-     * ⚡ OPTIMISATIONS MODERNES
-     */
-    enableModernOptimizations() {
-        // Activer le rendu optimisé
-        this.batchUpdates = true;
-        
-        // Optimisations CSS
-        this.setParticles({
-            smooth: true,
-            responsive: true,
-            animate: { 
-                type: 'smooth',
-                duration: 300,
-                easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
-            }
-        });
-        
-        // Performance monitoring
-        this._enablePerformanceMonitoring();
-        
-        console.log(`🔲 Matrix ${this.id} - Optimisations modernes activées`);
-    }
-
-    /**
-     * 🎭 ANIMATION D'ENTRÉE MODERNE
-     */
-    animateModernEntry() {
-        return this.animateParticle('opacity', 
-            { from: 0, to: 1 },
-            { 
-                duration: 500,
-                easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-                callback: () => {
-                    console.log(`🔲 Matrix ${this.id} - Animation d'entrée terminée`);
-                }
-            }
-        );
-    }
-
-    /**
-     * 🔄 MISE À JOUR DES STYLES MATRIX
-     */
-    _updateMatrixStyles() {
-        if (this.shadowRoot) {
-            const existingStyle = this.shadowRoot.querySelector('style');
-            if (existingStyle) {
-                existingStyle.remove();
-            }
-            const newStyle = this._generateStyles();
-            this.shadowRoot.insertBefore(newStyle, this.shadowRoot.firstChild);
-        }
-    }
-
-    /**
-     * 📊 MONITORING PERFORMANCE
-     */
-    _enablePerformanceMonitoring() {
-        let lastUpdate = performance.now();
-        let frameCount = 0;
-        
-        const monitor = () => {
-            frameCount++;
-            const now = performance.now();
-            
-            if (now - lastUpdate >= 1000) {
-                const fps = Math.round((frameCount * 1000) / (now - lastUpdate));
-                console.log(`🔲 Matrix ${this.id} - Performance: ${fps}fps`);
-                frameCount = 0;
-                lastUpdate = now;
-            }
-            
-            requestAnimationFrame(monitor);
-        };
-        
-        requestAnimationFrame(monitor);
     }
 }
 

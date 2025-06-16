@@ -1,18 +1,11 @@
 /**
  * 🎚️ Slider Web Component - Squirrel Framework
- * Version moderne avec système de particules et BaseComponent
- * 
- * @version 2.0.0 - Modern Particle System Edition
+ * Version simplifiée et fonctionnelle
  */
 
-import { BaseComponent } from './BaseComponent.js';
-
-class Slider extends BaseComponent {
+class Slider extends HTMLElement {
     constructor(config = {}) {
-        super(); // Appeler le constructeur de BaseComponent
-        
-        // Traiter d'abord la configuration commune via BaseComponent
-        this.processCommonConfig(config);
+        super();
         
         // Configuration par défaut qui sera écrasée si besoin
         this.defaultConfig = {
@@ -67,7 +60,7 @@ class Slider extends BaseComponent {
     }
     
     connectedCallback() {
-        // Si la config a été fournie par le constructeur, initialiser
+        // Si la config a été fournie par SliderCompatible, la fusionner
         if (this.config && !this.initialized) {
             this.currentValue = this.config.value;
             this._initialize();
@@ -78,11 +71,6 @@ class Slider extends BaseComponent {
             this.currentValue = this.config.value;
             this._initialize();
             this.initialized = true;
-        }
-        
-        // Auto-attachment via BaseComponent
-        if (this.config.attach && !this.parentElement) {
-            this._performAttachment();
         }
     }
 
