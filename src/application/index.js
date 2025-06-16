@@ -1,6 +1,6 @@
 // import('./examples/basic.js');
 // import('./examples/buttons.js');
-// import('./examples/sliders.js');  
+import('./examples/sliders.js');  
 // import('./examples/drag.js');
 // import('./examples/matrix.js');
 // import('./examples/lists.js');
@@ -9,4 +9,4 @@
 // import('./examples/modules.js');
 // import('./examples/plugins-demo.js');
 // import('./examples/ws.js');
-import('./examples/dragNdrop.js');
+// import('./examples/dragNdrop.js');

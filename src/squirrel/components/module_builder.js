@@ -184,7 +184,7 @@ class ModuleBuilder {
           config.callbacks.onRename(config.id, newName, currentText);
         }
         
-        console.log(`Module ${config.id} renommé: "${currentText}" → "${newName}"`);
+// console.log(`Module ${config.id} renommé: "${currentText}" → "${newName}"`);
       } else {
         // Restaurer l'ancien nom
         header.textContent = currentText;
@@ -488,11 +488,11 @@ class ModuleBuilder {
       this.selectedConnector = connector;
       connector.style.boxShadow = '0 0 8px #FF5722';
       connector.style.borderColor = '#FF5722';
-      console.log('Connecteur sélectionné - cliquez sur un autre pour connecter/déconnecter');
+// console.log('Connecteur sélectionné - cliquez sur un autre pour connecter/déconnecter');
     } else if (this.selectedConnector === connector) {
       // Clic sur le même connecteur : désélectionner
       this._clearSelectedConnector();
-      console.log('Sélection annulée');
+// console.log('Sélection annulée');
     } else {
       // Deuxième clic : vérifier s'il y a déjà une connexion
       const existingConnection = this._findConnectionBetween(this.selectedConnector, connector);
@@ -500,7 +500,7 @@ class ModuleBuilder {
       if (existingConnection) {
         // Déconnecter si déjà connecté
         this._removeConnectionById(existingConnection.id);
-        console.log('Connexion supprimée');
+// console.log('Connexion supprimée');
       } else {
         // Créer la connexion si pas encore connecté
         this._createConnection(this.selectedConnector, connector);
@@ -568,7 +568,7 @@ class ModuleBuilder {
       });
     });
     
-    console.log(`Connexion supprimée: ${connectionToRemove.id}`);
+// console.log(`Connexion supprimée: ${connectionToRemove.id}`);
   }
 
   // Nettoyer la sélection de connecteur
@@ -670,7 +670,7 @@ class ModuleBuilder {
         moduleData.config.callbacks.onSelect(moduleId);
       }
       
-      console.log(`Module sélectionné: ${moduleId}`);
+// console.log(`Module sélectionné: ${moduleId}`);
     }
   }
 
@@ -693,7 +693,7 @@ class ModuleBuilder {
         moduleData.config.callbacks.onDeselect(moduleId);
       }
       
-      console.log(`Module désélectionné: ${moduleId}`);
+// console.log(`Module désélectionné: ${moduleId}`);
     }
   }
 
@@ -833,7 +833,7 @@ class ModuleBuilder {
       callback({ id: connectionId, source: sourceData, target: targetData });
     });
     
-    console.log(`Connexion créée: ${connectionId}`);
+// console.log(`Connexion créée: ${connectionId}`);
   }
 
   // Créer une ligne de connexion visuelle
@@ -974,9 +974,9 @@ class ModuleBuilder {
     
     if (!sourceConnector || !targetConnector) {
       console.warn('Connecteur source ou cible introuvable');
-      console.log('Connecteurs recherchés:', 
-        `${sourceModuleId}_output_${sourceConnectorId}`, 
-        `${targetModuleId}_input_${targetConnectorId}`);
+      // console.log('Connecteurs recherchés:', 
+      //   `${sourceModuleId}_output_${sourceConnectorId}`, 
+      //   `${targetModuleId}_input_${targetConnectorId}`);
       return false;
     }
     
@@ -1238,7 +1238,7 @@ const ModuleTemplates = {
         });
         
         button.addEventListener('click', () => {
-          console.log('Generator triggered!');
+// console.log('Generator triggered!');
         });
         
         container.appendChild(button);

@@ -5,7 +5,7 @@
 
 class Menu {
   constructor(options = {}) {
-    console.log('🏗️ Création du composant Menu avec options:', options);
+// console.log('🏗️ Création du composant Menu avec options:', options);
     
     // Configuration par défaut
     this.config = {
@@ -159,7 +159,7 @@ class Menu {
     this.setupResponsive();
 
     if (this.config.debug) {
-      console.log(`✅ Menu "${this.config.id}" créé avec succès`);
+// console.log(`✅ Menu "${this.config.id}" créé avec succès`);
     }
   }
 
@@ -184,7 +184,7 @@ class Menu {
     this.applyContainerStyles();
     attachPoint.appendChild(this.container);
     
-    console.log(`📦 Container menu créé et attaché à "${this.config.attach}"`);
+// console.log(`📦 Container menu créé et attaché à "${this.config.attach}"`);
   }
 
   applyContainerStyles() {
@@ -469,7 +469,7 @@ class Menu {
       itemData.onClick(event);
     }
 
-    console.log(`🍽️ Menu item clicked: ${item.id}`);
+// console.log(`🍽️ Menu item clicked: ${item.id}`);
   }
 
   handleItemHover(event) {
@@ -773,7 +773,7 @@ class Menu {
     }
     
     this.container.remove();
-    console.log(`🗑️ Menu "${this.config.id}" détruit`);
+// console.log(`🗑️ Menu "${this.config.id}" détruit`);
   }
 
   // ========================================

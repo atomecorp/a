@@ -231,7 +231,7 @@ function makeDraggableWithDrop(element, options = {}) {
           onDropDetection(element, e.clientX, e.clientY);
           dropSuccess = true;
         } catch (err) {
-          console.log('Pas de zone de drop détectée');
+          // console.log('Pas de zone de drop détectée');
         }
       }
       

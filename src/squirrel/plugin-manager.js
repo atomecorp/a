@@ -28,7 +28,7 @@ class PluginManager {
       'waveSurfer_builder'
     ];
 
-    console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
+// console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
 
     // Enregistrement paresseux de tous les composants
     availableComponents.forEach(componentName => {
@@ -52,7 +52,7 @@ class PluginManager {
       loader: () => this.loadComponent(componentName, pluginName)
     });
 
-    console.log(`📝 Plugin "${pluginName}" enregistré (lazy loading)`);
+// console.log(`📝 Plugin "${pluginName}" enregistré (lazy loading)`);
   }
 
   /**
@@ -69,11 +69,11 @@ class PluginManager {
    */
   async loadComponent(componentName, pluginName) {
     if (this.loadedPlugins.has(pluginName)) {
-      console.log(`✅ Plugin "${pluginName}" déjà chargé`);
+// console.log(`✅ Plugin "${pluginName}" déjà chargé`);
       return this.plugins.get(pluginName);
     }
 
-    console.log(`🔄 Chargement du plugin "${pluginName}" depuis "${componentName}.js"`);
+// console.log(`🔄 Chargement du plugin "${pluginName}" depuis "${componentName}.js"`);
 
     try {
       const componentPath = `${this.componentsPath}${componentName}.js`;
@@ -89,7 +89,7 @@ class PluginManager {
       
       this.loadedPlugins.add(pluginName);
       
-      console.log(`✅ Plugin "${pluginName}" chargé et exposé en tant que window.${pluginName}`);
+// console.log(`✅ Plugin "${pluginName}" chargé et exposé en tant que window.${pluginName}`);
       return plugin;
       
     } catch (error) {
@@ -114,7 +114,7 @@ class PluginManager {
    * Exposition intelligente des plugins selon leur structure
    */
   exposePlugin(componentName, module, pluginName) {
-    console.log(`🔧 Exposition du plugin "${pluginName}" depuis "${componentName}"`);
+// console.log(`🔧 Exposition du plugin "${pluginName}" depuis "${componentName}"`);
     
     switch (componentName) {
       case 'button_builder':
@@ -122,22 +122,22 @@ class PluginManager {
         const buttonExports = module.default;
         window.Button = buttonExports.create; // Fonction principale
         window.ButtonStyles = buttonExports; // Objet complet pour styles avancés
-        console.log('  → window.Button = create function');
-        console.log('  → window.ButtonStyles = full object');
+// console.log('  → window.Button = create function');
+// console.log('  → window.ButtonStyles = full object');
         break;
         
       case 'slider_builder':
         // Slider - vérifier la structure
         if (module.default && typeof module.default === 'function') {
           window.Slider = module.default;
-          console.log('  → window.Slider = default function');
+// console.log('  → window.Slider = default function');
         } else if (module.default && module.default.create) {
           window.Slider = module.default.create;
           window.SliderStyles = module.default;
-          console.log('  → window.Slider = create function');
+// console.log('  → window.Slider = create function');
         } else if (module.default) {
           window.Slider = module.default;
-          console.log('  → window.Slider = default object');
+// console.log('  → window.Slider = default object');
         }
         break;
         
@@ -147,27 +147,27 @@ class PluginManager {
         if (typeof ModuleBuilder !== 'undefined') {
           window.ModuleBuilder = ModuleBuilder;
           window.Module = ModuleBuilder; // Alias simple
-          console.log('  → window.ModuleBuilder = constructor (global)');
-          console.log('  → window.Module = alias');
+// console.log('  → window.ModuleBuilder = constructor (global)');
+// console.log('  → window.Module = alias');
         } else if (module.ModuleBuilder) {
           window.ModuleBuilder = module.ModuleBuilder;
           window.Module = module.ModuleBuilder; // Alias simple
-          console.log('  → window.ModuleBuilder = constructor (export)');
-          console.log('  → window.Module = alias');
+// console.log('  → window.ModuleBuilder = constructor (export)');
+// console.log('  → window.Module = alias');
         } else {
           // Le module s'expose automatiquement via $ et window.moduleBuilderInstance
-          console.log('  → Module s\'expose automatiquement via $ et window.moduleBuilderInstance');
+// console.log('  → Module s\'expose automatiquement via $ et window.moduleBuilderInstance');
           
           // Essayer de récupérer ModuleBuilder du module importé
           const moduleKeys = Object.keys(module);
-          console.log('  → Keys du module:', moduleKeys);
+// console.log('  → Keys du module:', moduleKeys);
           
           // Chercher une classe qui ressemble à ModuleBuilder
           for (const key of moduleKeys) {
             if (typeof module[key] === 'function' && module[key].name === 'ModuleBuilder') {
               window.ModuleBuilder = module[key];
               window.Module = module[key];
-              console.log(`  → window.ModuleBuilder = ${key} (trouvé par inspection)`);
+// console.log(`  → window.ModuleBuilder = ${key} (trouvé par inspection)`);
               break;
             }
           }
@@ -178,15 +178,15 @@ class PluginManager {
               return window.moduleBuilderInstance;
             };
             window.Module = window.ModuleBuilder;
-            console.log('  → window.ModuleBuilder = wrapper vers instance globale');
+// console.log('  → window.ModuleBuilder = wrapper vers instance globale');
           }
         }
         if (typeof ModuleTemplates !== 'undefined') {
           window.ModuleTemplates = ModuleTemplates;
-          console.log('  → window.ModuleTemplates = templates (global)');
+// console.log('  → window.ModuleTemplates = templates (global)');
         } else if (module.ModuleTemplates) {
           window.ModuleTemplates = module.ModuleTemplates;
-          console.log('  → window.ModuleTemplates = templates (export)');
+// console.log('  → window.ModuleTemplates = templates (export)');
         }
         break;
         
@@ -197,10 +197,10 @@ class PluginManager {
         window.makeDraggableWithDrop = module.makeDraggableWithDrop;
         window.makeDropZone = module.makeDropZone;
         window.Draggable = module.draggable; // Alias principal
-        console.log('  → window.draggable = function');
-        console.log('  → window.makeDraggable = function');
-        console.log('  → window.makeDraggableWithDrop = function');
-        console.log('  → window.makeDropZone = function');
+// console.log('  → window.draggable = function');
+// console.log('  → window.makeDraggable = function');
+// console.log('  → window.makeDraggableWithDrop = function');
+// console.log('  → window.makeDropZone = function');
         break;
         
       case 'matrix_builder':
@@ -212,21 +212,21 @@ class PluginManager {
         if (module.default) {
           if (typeof module.default === 'function') {
             window[pluginName] = module.default;
-            console.log(`  → window.${pluginName} = default function`);
+// console.log(`  → window.${pluginName} = default function`);
           } else if (module.default.create && typeof module.default.create === 'function') {
             window[pluginName] = module.default.create;
             window[pluginName + 'Styles'] = module.default;
-            console.log(`  → window.${pluginName} = create function`);
+// console.log(`  → window.${pluginName} = create function`);
           } else {
             window[pluginName] = module.default;
-            console.log(`  → window.${pluginName} = default object`);
+// console.log(`  → window.${pluginName} = default object`);
           }
         } else {
           // Prendre la première exportation nommée
           const firstExport = Object.keys(module)[0];
           if (firstExport) {
             window[pluginName] = module[firstExport];
-            console.log(`  → window.${pluginName} = ${firstExport}`);
+// console.log(`  → window.${pluginName} = ${firstExport}`);
           }
         }
         break;
@@ -235,12 +235,12 @@ class PluginManager {
         // Fallback générique
         if (module.default) {
           window[pluginName] = module.default;
-          console.log(`  → window.${pluginName} = default (fallback)`);
+// console.log(`  → window.${pluginName} = default (fallback)`);
         } else {
           const firstExport = Object.keys(module)[0];
           if (firstExport) {
             window[pluginName] = module[firstExport];
-            console.log(`  → window.${pluginName} = ${firstExport} (fallback)`);
+// console.log(`  → window.${pluginName} = ${firstExport} (fallback)`);
           }
         }
         break;
@@ -286,7 +286,7 @@ class PluginManager {
    */
   async loadAll() {
     const pluginNames = Array.from(this.plugins.keys());
-    console.log(`🔄 Chargement de tous les plugins: ${pluginNames.join(', ')}`);
+// console.log(`🔄 Chargement de tous les plugins: ${pluginNames.join(', ')}`);
     
     return await this.loadMultiple(pluginNames);
   }

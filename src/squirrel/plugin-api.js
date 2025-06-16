@@ -17,7 +17,7 @@ class SquirrelPluginAPI {
       pluginNames = [pluginNames];
     }
 
-    console.log(`🎯 Chargement conditionnel des plugins: ${pluginNames.join(', ')}`);
+    // console.log(`🎯 Chargement conditionnel des plugins: ${pluginNames.join(', ')}`);
     
     const results = await this.pluginManager.loadMultiple(pluginNames);
     

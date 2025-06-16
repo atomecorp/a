@@ -6,7 +6,7 @@
 
 class List {
   constructor(options = {}) {
-    console.log('🏗️ Création du composant List avec options:', options);
+    // console.log('🏗️ Création du composant List avec options:', options);
     
     // Configuration par défaut Material Design
     this.config = {
@@ -95,15 +95,15 @@ class List {
 
   init() {
     try {
-      console.log(`🚀 Initialisation de la liste "${this.config.id}"...`);
+// console.log(`🚀 Initialisation de la liste "${this.config.id}"...`);
       this.createContainer();
       this.createItems();
       this.setupEventListeners();
       this.isInitialized = true;
 
       if (this.config.debug) {
-        console.log(`✅ List "${this.config.id}" initialisée avec succès`);
-        console.log(`📝 ${this.config.items.length} éléments créés`);
+// console.log(`✅ List "${this.config.id}" initialisée avec succès`);
+// console.log(`📝 ${this.config.items.length} éléments créés`);
       }
     } catch (error) {
       console.error(`❌ Erreur lors de l'initialisation de List "${this.config.id}":`, error);
@@ -126,10 +126,10 @@ class List {
     this.applyContainerStyles();
     attachPoint.appendChild(this.container);
     
-    console.log(`📦 Container créé et attaché à "${this.config.attach}"`);
-    console.log(`🔍 Container dans le DOM:`, this.container);
-    console.log(`📐 Dimensions:`, this.container.style.width, 'x', this.container.style.height);
-    console.log(`📍 Position:`, this.container.style.left, this.container.style.top);
+// console.log(`📦 Container créé et attaché à "${this.config.attach}"`);
+// console.log(`🔍 Container dans le DOM:`, this.container);
+// console.log(`📐 Dimensions:`, this.container.style.width, 'x', this.container.style.height);
+// console.log(`📍 Position:`, this.container.style.left, this.container.style.top);
   }
 
   applyContainerStyles() {
@@ -167,7 +167,7 @@ class List {
   }
 
   createItems() {
-    console.log(`📋 Création de ${this.config.items.length} éléments...`);
+// console.log(`📋 Création de ${this.config.items.length} éléments...`);
     this.config.items.forEach((itemData, index) => {
       const itemElement = this.createItem(itemData, index);
       this.container.appendChild(itemElement);

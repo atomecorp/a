@@ -5,7 +5,7 @@
 
 class Table {
   constructor(options = {}) {
-    console.log('🏗️ Création du composant Table avec options:', options);
+// console.log('🏗️ Création du composant Table avec options:', options);
     
     // Configuration par défaut
     this.config = {
@@ -119,15 +119,15 @@ class Table {
 
   init() {
     try {
-      console.log(`🚀 Initialisation de la table "${this.config.id}"...`);
+// console.log(`🚀 Initialisation de la table "${this.config.id}"...`);
       this.createContainer();
       this.createTable();
       this.setupEventListeners();
       this.isInitialized = true;
 
       if (this.config.debug) {
-        console.log(`✅ Table "${this.config.id}" initialisée avec succès`);
-        console.log(`📊 ${this.config.columns.length} colonnes, ${this.config.rows.length} lignes`);
+// console.log(`✅ Table "${this.config.id}" initialisée avec succès`);
+// console.log(`📊 ${this.config.columns.length} colonnes, ${this.config.rows.length} lignes`);
       }
     } catch (error) {
       console.error(`❌ Erreur lors de l'initialisation de Table "${this.config.id}":`, error);
@@ -150,7 +150,7 @@ class Table {
     this.applyContainerStyles();
     attachPoint.appendChild(this.container);
     
-    console.log(`📦 Container table créé et attaché à "${this.config.attach}"`);
+// console.log(`📦 Container table créé et attaché à "${this.config.attach}"`);
   }
 
   applyContainerStyles() {
@@ -372,7 +372,7 @@ class Table {
       this.callbacks.onCellClick(cellData, rowId, columnId, event);
     }
 
-    console.log(`📋 Cell clicked: ${cell.id}`);
+// console.log(`📋 Cell clicked: ${cell.id}`);
   }
 
   handleHeaderClick(header, event) {

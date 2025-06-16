@@ -5,7 +5,7 @@
 // });
 
 // Création d'un conteneur principal pour organiser les exemples
-const demoContainer = $( {
+const demoContainer = $('div', {
   css: {
 	padding: '40px',
 	fontFamily: 'system-ui, sans-serif',
