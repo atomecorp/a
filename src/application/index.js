@@ -7,6 +7,6 @@
 // import('./examples/tables.js');
 // import('./examples/menus.js');
 // import('./examples/modules.js');
-
 // import('./examples/plugins-demo.js');
-import('./examples/ws.js');
+// import('./examples/ws.js');
+import('./examples/dragNdrop.js');

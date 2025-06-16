@@ -194,9 +194,13 @@ class PluginManager {
         // Draggable exporte plusieurs fonctions
         window.draggable = module.draggable;
         window.makeDraggable = module.makeDraggable;
+        window.makeDraggableWithDrop = module.makeDraggableWithDrop;
+        window.makeDropZone = module.makeDropZone;
         window.Draggable = module.draggable; // Alias principal
         console.log('  → window.draggable = function');
         console.log('  → window.makeDraggable = function');
+        console.log('  → window.makeDraggableWithDrop = function');
+        console.log('  → window.makeDropZone = function');
         break;
         
       case 'matrix_builder':
