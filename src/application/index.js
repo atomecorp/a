@@ -8,6 +8,5 @@
 // import('./examples/menus.js');
 // import('./examples/modules.js');
 
-// 🔌 NOUVEAU: Test du système de plugins
 // import('./examples/plugins-demo.js');
 import('./examples/ws.js');

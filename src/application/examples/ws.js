@@ -140,20 +140,23 @@ const disconnectBtn = $('button', {
   parent: wsSection
 });
 
-// Créer l'input directement avec DOM natif car Squirrel crée des DIV
-messageInputElement = document.createElement('input');
-messageInputElement.type = 'text';
-messageInputElement.placeholder = 'Message à envoyer...';
-messageInputElement.id = 'message-input';
-messageInputElement.style.cssText = `
-  width: 60%;
-  padding: 10px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  margin-top: 15px;
-  margin-right: 10px;
-`;
-wsSection.appendChild(messageInputElement);
+// Input message avec la nouvelle API Squirrel améliorée
+messageInputElement = $('input', {
+  id: 'message-input',
+  attrs: { 
+    type: 'text', 
+    placeholder: 'Message à envoyer...'
+  },
+  css: {
+    width: '60%',
+    padding: '10px',
+    border: '1px solid #ced4da',
+    borderRadius: '6px',
+    marginTop: '15px',
+    marginRight: '10px'
+  },
+  parent: wsSection
+});
 
 const sendBtn = $('button', {
   text: '📤 Envoyer',

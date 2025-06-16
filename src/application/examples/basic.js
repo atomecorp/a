@@ -1,4 +1,44 @@
 // / === 🎉 Démonstrations ===
+$('span', {
+  // pas besoin de 'tag'
+  id: 'test1',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'Je suis un SPAN ! 🎯'
+});
+
+$('h1', {
+  id: 'test2',  // ID différent !
+  css: {
+    backgroundColor: '#00A',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px'
+  },
+  text: 'Je suis un H1 ! 🚀'
+});
+
+// Bonus: test avec input
+$('input', {
+  id: 'test-input',
+  attrs: { 
+    type: 'text', 
+    placeholder: 'Je suis un vrai INPUT ! ⚡'
+  },
+  css: {
+    padding: '10px',
+    margin: '10px',
+    border: '2px solid #007bff',
+    borderRadius: '5px'
+  }
+});
 
 // 1. Template basique
 define('box', {

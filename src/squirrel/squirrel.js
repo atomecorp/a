@@ -43,7 +43,7 @@ const booleanAttributes = new Set([
  */
 const $ = (id, props = {}) => {
   const config = templateRegistry.get(id) || {};
-  const element = createElement(config.tag || 'div');
+  const element = createElement(config.tag || props.tag || id || 'div');
   
   // 🔧 FIX: Merge CSS intelligent
   const merged = { ...config, ...props };
