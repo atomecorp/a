@@ -143,14 +143,13 @@ class UnitManager {
       svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.classList.add('unit-connections-svg');
       svg.style.cssText = `
-        position: absolute;
-        z-index: 0;
+        position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
         pointer-events: none;
-        z-index: 1000;
+        z-index: 50;
       `;
       document.body.appendChild(svg);
     }
@@ -299,7 +298,7 @@ class UnitManager {
         width: 100%;
         height: 100%;
         pointer-events: none;
-        z-index: 1000;
+        z-index: 50;
       `;
       document.body.appendChild(svg);
     }
