@@ -33,7 +33,7 @@
 - WaveSurfer
 
 ## 📊 Statistiques
-- Taille normale: 232K
+- Taille normale: 216K
 - Taille minifiée: 100K
-- Dernière mise à jour: Tue Jun 17 12:05:18 CEST 2025
+- Dernière mise à jour: Wed Jun 18 00:36:49 CEST 2025
 
