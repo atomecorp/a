@@ -237,11 +237,9 @@ class UnitManager {
           if (existingConnection) {
             // Déconnecter
             this.removeConnection(existingConnection.id);
-            console.log(`🔌 Connexion supprimée: ${fromUnitId}:${fromConnectorId} → ${toUnitId}:${toConnectorId}`);
           } else {
             // Connecter
             this.createConnection(fromUnitId, fromConnectorId, toUnitId, toConnectorId);
-            console.log(`🔗 Connexion créée: ${fromUnitId}:${fromConnectorId} → ${toUnitId}:${toConnectorId}`);
           }
         }
       }
@@ -281,8 +279,6 @@ class UnitManager {
     // Ajouter les listeners globaux
     document.addEventListener('mousemove', this.handleConnectorDragMove.bind(this));
     document.addEventListener('mouseup', this.handleConnectorDragEnd.bind(this));
-    
-    console.log(`🎯 Début du drag du connecteur: ${connectorType} ${connectorId}`);
   }
 
   createDragLine(event) {
@@ -407,11 +403,9 @@ class UnitManager {
         if (existingConnection) {
           // Déconnecter
           this.removeConnection(existingConnection.id);
-          console.log(`🔌 Connexion supprimée par drag: ${fromUnitId}:${fromConnectorId} → ${toUnitId}:${toConnectorId}`);
         } else {
           // Connecter
           this.createConnection(fromUnitId, fromConnectorId, toUnitId, toConnectorId);
-          console.log(`🔗 Connexion créée par drag: ${fromUnitId}:${fromConnectorId} → ${toUnitId}:${toConnectorId}`);
         }
       }
     }
@@ -427,8 +421,6 @@ class UnitManager {
     this.connectorDragState.isDragging = false;
     this.connectorDragState.sourceConnector = null;
     this.connectorDragState.dragLine = null;
-    
-    console.log(`🎯 Fin du drag du connecteur`);
   }
 
   getConnectorElement(unitId, connectorId) {

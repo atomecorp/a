@@ -51,7 +51,9 @@ async function startServer() {
     // CORS pour le développement
     await server.register(fastifyCors, {
       origin: true,
-      credentials: true
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
     });
 
     // Servir les fichiers statiques depuis ../src

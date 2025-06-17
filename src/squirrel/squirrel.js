@@ -1,16 +1,6 @@
 // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
 
-const creator = (element, props) => {
-  // Génération automatique d'ID si absent
-  if (!element.id) {
-    element.id = `el_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-  }
-  
-  // Logging simple
-};
-
 // Cache pour templates et conversions de styles
-const body = document.body;
 const createElement = (tag) => document.createElement(tag);
 const templateRegistry = new Map();
 const cssCache = new Map();
@@ -35,6 +25,22 @@ const booleanAttributes = new Set([
   'draggable', 'hidden', 'spellcheck', 'contenteditable', 
   'disabled', 'checked', 'readonly'
 ]);
+
+// Fonction utilitaire pour ajouter des classes (évite la duplication de code)
+const addClasses = (element, classes) => {
+  if (!classes) return;
+  
+  if (typeof classes === 'string') {
+    // Éviter split si une seule classe
+    if (classes.indexOf(' ') === -1) {
+      element.classList.add(classes);
+    } else {
+      element.classList.add(...classes.split(' '));
+    }
+  } else if (Array.isArray(classes)) {
+    element.classList.add(...classes);
+  }
+};
 
 /**
  * Création et mise à jour d'éléments DOM
@@ -72,18 +78,7 @@ const $ = (id, props = {}) => {
   merged.text && (element.textContent = merged.text);
   
   // Classes via classList (optimisé)
-  if (merged.class) {
-    if (typeof merged.class === 'string') {
-      // Éviter split si une seule classe
-      if (merged.class.indexOf(' ') === -1) {
-        element.classList.add(merged.class);
-      } else {
-        element.classList.add(...merged.class.split(' '));
-      }
-    } else if (Array.isArray(merged.class)) {
-      element.classList.add(...merged.class);
-    }
-  }
+  addClasses(element, merged.class);
   
   // Attributs personnalisés
   if (merged.attrs) {
@@ -139,16 +134,7 @@ const $ = (id, props = {}) => {
     if ('text' in updateProps) element.textContent = updateProps.text;
     
     if (updateProps.class) {
-      if (typeof updateProps.class === 'string') {
-        // Éviter split si une seule classe
-        if (updateProps.class.indexOf(' ') === -1) {
-          element.classList.add(updateProps.class);
-        } else {
-          element.classList.add(...updateProps.class.split(' '));
-        }
-      } else if (Array.isArray(updateProps.class)) {
-        element.classList.add(...updateProps.class);
-      }
+      addClasses(element, updateProps.class);
     }
     
     if (updateProps.css) {
@@ -203,9 +189,6 @@ const $ = (id, props = {}) => {
   
   // Alias pour le style
   element._ = element.style;
-
-   // 🎯 APPEL DU CREATOR ICI
-  creator(element, merged);
   
   // Parent (support des sélecteurs)
   const parent = merged.parent || '#view';  // ← Votre changement

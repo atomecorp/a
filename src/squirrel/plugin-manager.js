@@ -27,11 +27,8 @@ class PluginManager {
       'table_builder',
       'tooltip_builder',
       'unit_builder',
-      'waveSurfer_builder',
-      'wavesurfer'
+      'waveSurfer_builder'
     ];
-
-    // console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
 
     // Enregistrement paresseux de tous les composants
     availableComponents.forEach(componentName => {
@@ -69,59 +66,6 @@ class PluginManager {
     }
     
     // Règle générale : première lettre en majuscule
-    return baseName.charAt(0).toUpperCase() + baseName.slice(1);
-  }
-
-  /**
-   * Auto-discovery des composants dans le dossier components
-   */
-  async discover() {
-    // Liste des composants disponibles (générée automatiquement)
-    const availableComponents = [
-      'List_builder',
-      'button_builder',
-      'draggable_builder',
-      'matrix_builder',
-      'menu_builder',
-      'slider_builder',
-      'table_builder',
-      'unit_builder',
-      'waveSurfer_builder'
-    ];
-
-    // console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
-
-    // Enregistrement paresseux de tous les composants
-    availableComponents.forEach(componentName => {
-      this.registerLazyPlugin(componentName);
-    });
-
-    this.registeredComponents = availableComponents;
-    return availableComponents;
-  }
-
-  /**
-   * Enregistrement paresseux d'un plugin (ne charge pas immédiatement)
-   */
-  registerLazyPlugin(componentName) {
-    const pluginName = this.getPluginName(componentName);
-    
-    this.plugins.set(pluginName, {
-      componentFile: componentName,
-      loaded: false,
-      instance: null,
-      loader: () => this.loadComponent(componentName, pluginName)
-    });
-
-// console.log(`📝 Plugin "${pluginName}" enregistré (lazy loading)`);
-  }
-
-  /**
-   * Conversion nom de fichier -> nom de plugin
-   * Ex: "button_builder" -> "Button"
-   */
-  getPluginName(componentName) {
-    const baseName = componentName.replace('_builder', '').replace('.js', '');
     return baseName.charAt(0).toUpperCase() + baseName.slice(1);
   }
 

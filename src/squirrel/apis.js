@@ -87,20 +87,19 @@ Object.prototype.inspect = function () {
     return AJS.inspect(this);
 };
 
-// Add a wait function for delays
-function wait(delay, callback) {
-    if (typeof callback === 'function') {
-        setTimeout(callback, delay);
-    } else {
-        console.warn('wait() requires a callback function');
-    }
-}
+// Add a wait function for delays (promisified version is more modern)
+const wait = (delay, callback) => {
+  if (typeof callback === 'function') {
+    setTimeout(callback, delay);
+  } else {
+    // Return a promise if no callback
+    return new Promise(resolve => setTimeout(resolve, delay));
+  }
+};
 window.wait = wait;
 
-// Add log function
-window.log = function(message) {
-    console.log(message);
-};
+// Add log function (alias for puts)
+window.log = window.puts;
 
 // Helper functions for grab method - use global versions
 // (Remove duplicated functions since they're already defined in a.js)

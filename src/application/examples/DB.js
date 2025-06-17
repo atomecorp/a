@@ -535,9 +535,133 @@ async function addNewUser() {
 }
 
 async function deleteUser(userId, userName) {
-  if (!confirm(`Are you sure you want to delete user "${userName}"?`)) {
-    return;
-  }
+  // Créer une div de confirmation personnalisée
+  showDeleteConfirmation(userId, userName);
+}
+
+function showDeleteConfirmation(userId, userName) {
+  // Overlay semi-transparent
+  const overlay = $('div', {
+    css: {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      zIndex: '1000',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    parent: 'body'
+  });
+
+  // Modal de confirmation
+  const modal = $('div', {
+    css: {
+      backgroundColor: 'white',
+      borderRadius: '10px',
+      padding: '30px',
+      maxWidth: '400px',
+      width: '90%',
+      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+      textAlign: 'center',
+      position: 'relative'
+    },
+    parent: overlay
+  });
+
+  // Icône d'avertissement
+  $('div', {
+    text: '⚠️',
+    css: {
+      fontSize: '48px',
+      marginBottom: '20px'
+    },
+    parent: modal
+  });
+
+  // Titre
+  $('h3', {
+    text: 'Confirmer la suppression',
+    css: {
+      color: '#e74c3c',
+      marginBottom: '15px',
+      fontSize: '20px'
+    },
+    parent: modal
+  });
+
+  // Message
+  $('p', {
+    text: `Êtes-vous sûr de vouloir supprimer l'utilisateur "${userName}" ?`,
+    css: {
+      color: '#2c3e50',
+      marginBottom: '25px',
+      lineHeight: '1.5'
+    },
+    parent: modal
+  });
+
+  // Container pour les boutons
+  const buttonContainer = $('div', {
+    css: {
+      display: 'flex',
+      gap: '15px',
+      justifyContent: 'center'
+    },
+    parent: modal
+  });
+
+  // Bouton Annuler
+  $('button', {
+    text: '❌ Annuler',
+    css: {
+      backgroundColor: '#95a5a6',
+      color: 'white',
+      border: 'none',
+      padding: '12px 24px',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: 'bold'
+    },
+    onclick: () => {
+      overlay.remove();
+    },
+    parent: buttonContainer
+  });
+
+  // Bouton Confirmer
+  $('button', {
+    text: '🗑️ Supprimer',
+    css: {
+      backgroundColor: '#e74c3c',
+      color: 'white',
+      border: 'none',
+      padding: '12px 24px',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      fontWeight: 'bold'
+    },
+    onclick: () => {
+      overlay.remove();
+      performDeleteUser(userId, userName);
+    },
+    parent: buttonContainer
+  });
+
+  // Fermer si on clique sur l'overlay
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      overlay.remove();
+    }
+  };
+}
+
+async function performDeleteUser(userId, userName) {
     try {
     updateUserStatus(`⏳ Deleting user "${userName}"...`, 'info');
     
