@@ -13,6 +13,11 @@ if [ ! -d "node_modules" ]; then
     echo ""
 fi
 
+# Scanner les composants Squirrel
+echo "🔍 Scan des composants Squirrel..."
+npm run scan:components
+echo ""
+
 # Démarrer le serveur
 echo "🎯 Lancement du serveur..."
 cd server && node server.js

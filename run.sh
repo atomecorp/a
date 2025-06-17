@@ -22,6 +22,11 @@ cleanup() {
     exit 0
 }
 
+# Scanner les composants Squirrel
+echo "🔍 Scan des composants Squirrel..."
+npm run scan:components
+echo ""
+
 # Capturer les signaux d'interruption
 trap cleanup SIGINT SIGTERM EXIT
 

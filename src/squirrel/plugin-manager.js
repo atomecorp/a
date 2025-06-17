@@ -18,17 +18,77 @@ class PluginManager {
     // Liste des composants disponibles (générée automatiquement)
     const availableComponents = [
       'List_builder',
-      'button_builder', 
+      'badge_builder',
+      'button_builder',
       'draggable_builder',
       'matrix_builder',
       'menu_builder',
-      'unit_builder',
       'slider_builder',
       'table_builder',
+      'tooltip_builder',
+      'unit_builder',
       'waveSurfer_builder'
     ];
 
-// console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
+    // console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
+
+    // Enregistrement paresseux de tous les composants
+    availableComponents.forEach(componentName => {
+      this.registerLazyPlugin(componentName);
+    });
+
+    this.registeredComponents = availableComponents;
+    return availableComponents;
+  }
+
+  /**
+   * Enregistrement paresseux d'un plugin (ne charge pas immédiatement)
+   */
+  registerLazyPlugin(componentName) {
+    const pluginName = this.getPluginName(componentName);
+    
+    this.plugins.set(pluginName, {
+      componentFile: componentName,
+      loaded: false,
+      instance: null,
+      loader: () => this.loadComponent(componentName, pluginName)
+    });
+  }
+
+  /**
+   * Transformation du nom de fichier en nom de plugin
+   * Ex: "button_builder" -> "Button", "draggable_builder" -> "draggable"
+   */
+  getPluginName(componentName) {
+    const baseName = componentName.replace('_builder', '').replace('.js', '');
+    
+    // Cas spéciaux pour garder la casse originale
+    if (baseName === 'draggable') {
+      return 'draggable'; // Garde en minuscule pour cohérence
+    }
+    
+    // Règle générale : première lettre en majuscule
+    return baseName.charAt(0).toUpperCase() + baseName.slice(1);
+  }
+
+  /**
+   * Auto-discovery des composants dans le dossier components
+   */
+  async discover() {
+    // Liste des composants disponibles (générée automatiquement)
+    const availableComponents = [
+      'List_builder',
+      'button_builder',
+      'draggable_builder',
+      'matrix_builder',
+      'menu_builder',
+      'slider_builder',
+      'table_builder',
+      'unit_builder',
+      'waveSurfer_builder'
+    ];
+
+    // console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
 
     // Enregistrement paresseux de tous les composants
     availableComponents.forEach(componentName => {
@@ -89,7 +149,7 @@ class PluginManager {
       
       this.loadedPlugins.add(pluginName);
       
-// console.log(`✅ Plugin "${pluginName}" chargé et exposé en tant que window.${pluginName}`);
+      console.log(`✅ Plugin "${pluginName}" chargé et exposé en tant que window.${pluginName}`, typeof window[pluginName]);
       return plugin;
       
     } catch (error) {
@@ -111,152 +171,135 @@ class PluginManager {
   }
 
   /**
-   * Exposition intelligente des plugins selon leur structure
+   * Exposition automatique des plugins selon des conventions standards
    */
   exposePlugin(componentName, module, pluginName) {
-// console.log(`🔧 Exposition du plugin "${pluginName}" depuis "${componentName}"`);
+// console.log(`🔧 Exposition automatique du plugin "${pluginName}" depuis "${componentName}"`);
+    
+    // 🎯 SYSTÈME D'EXPOSITION AUTOMATIQUE PAR CONVENTION
+    
+    // ⚠️ CAS SPÉCIAUX PRIORITAIRES (avant les conventions)
+    if (componentName === 'unit_builder') {
+      this.exposePluginManual(componentName, module, pluginName);
+      return;
+    }
+    
+    // Convention 1: module.default.create (structure recommandée)
+    if (module.default && typeof module.default.create === 'function') {
+      window[pluginName] = module.default.create;
+      window[pluginName + 'Styles'] = module.default; // Pour accès aux styles/variantes
+      console.log(`  ✅ window.${pluginName} = module.default.create (convention standard)`);
+      
+      // Exposition des fonctions utilitaires pour certains composants
+      if (componentName === 'draggable_builder') {
+        window.makeDraggable = module.makeDraggable;
+        window.makeDraggableWithDrop = module.makeDraggableWithDrop;
+        window.makeDropZone = module.makeDropZone;
+        console.log(`  ✅ Fonctions utilitaires Draggable exposées`);
+      }
+      
+      return;
+    }
+    
+    // Convention 2: module.default direct (fonction simple)  
+    if (module.default && typeof module.default === 'function') {
+      window[pluginName] = module.default;
+// console.log(`  ✅ window.${pluginName} = module.default (fonction directe)`);
+      return;
+    }
+    
+    // Convention 3: Fonction avec nom conventionnel (createNom)
+    const createFunctionName = `create${pluginName}`;
+    if (module[createFunctionName] && typeof module[createFunctionName] === 'function') {
+      window[pluginName] = module[createFunctionName];
+// console.log(`  ✅ window.${pluginName} = ${createFunctionName} (convention nommée)`);
+      return;
+    }
+    
+    // Convention 4: Recherche de fonction create* 
+    const createFunctions = Object.keys(module).filter(key => 
+      key.startsWith('create') && typeof module[key] === 'function'
+    );
+    if (createFunctions.length > 0) {
+      window[pluginName] = module[createFunctions[0]];
+// console.log(`  ✅ window.${pluginName} = ${createFunctions[0]} (fonction create trouvée)`);
+      return;
+    }
+    
+    // Convention 5: Première fonction exportée
+    const functions = Object.keys(module).filter(key => typeof module[key] === 'function');
+    if (functions.length > 0) {
+      window[pluginName] = module[functions[0]];
+// console.log(`  ✅ window.${pluginName} = ${functions[0]} (première fonction)`);
+      return;
+    }
+    
+    // Convention 6: module.default objet (fallback)
+    if (module.default) {
+      window[pluginName] = module.default;
+// console.log(`  ⚠️ window.${pluginName} = module.default (fallback objet)`);
+      return;
+    }
+    
+    // Cas spéciaux - méthode manuelle pour composants complexes
+    this.exposePluginManual(componentName, module, pluginName);
+  }
+  
+  /**
+   * Exposition manuelle pour cas spéciaux (garde-fou)
+   */
+  exposePluginManual(componentName, module, pluginName) {
+// console.log(`🔧 Exposition manuelle pour "${pluginName}" (cas spécial)`);
     
     switch (componentName) {
-      case 'button_builder':
-        // Button exporte un objet avec des méthodes
-        const buttonExports = module.default;
-        window.Button = buttonExports.create; // Fonction principale
-        window.ButtonStyles = buttonExports; // Objet complet pour styles avancés
-// console.log('  → window.Button = create function');
-// console.log('  → window.ButtonStyles = full object');
-        break;
-        
-      case 'slider_builder':
-        // Slider - vérifier la structure
-        if (module.default && typeof module.default === 'function') {
-          window.Slider = module.default;
-// console.log('  → window.Slider = default function');
-        } else if (module.default && module.default.create) {
-          window.Slider = module.default.create;
-          window.SliderStyles = module.default;
-// console.log('  → window.Slider = create function');
-        } else if (module.default) {
-          window.Slider = module.default;
-// console.log('  → window.Slider = default object');
-        }
-        break;
-        
-      case 'unit_builder':
-        // Unit builder exporte UnitBuilder et templates via des variables globales
-        // Vérifier si UnitBuilder est disponible dans le scope global après import
-        if (typeof UnitBuilder !== 'undefined') {
-          window.UnitBuilder = UnitBuilder;
-          window.Unit = UnitBuilder; // Alias simple
-          window.Module = UnitBuilder; // Rétrocompatibilité
-// console.log('  → window.UnitBuilder = constructor (global)');
-// console.log('  → window.Unit = alias');
-        } else if (module.UnitBuilder) {
-          window.UnitBuilder = module.UnitBuilder;
-          window.Unit = module.UnitBuilder; // Alias simple
-          window.Module = module.UnitBuilder; // Rétrocompatibilité
-// console.log('  → window.UnitBuilder = constructor (export)');
-// console.log('  → window.Unit = alias');
-        } else {
-          // Le unit s'expose automatiquement via $ et window.unitBuilderInstance
-// console.log('  → Unit s\'expose automatiquement via $ et window.unitBuilderInstance');
-          
-          // Essayer de récupérer ModuleBuilder du module importé
-          const moduleKeys = Object.keys(module);
-// console.log('  → Keys du module:', moduleKeys);
-          
-          // Chercher une classe qui ressemble à ModuleBuilder
-          for (const key of moduleKeys) {
-            if (typeof module[key] === 'function' && module[key].name === 'ModuleBuilder') {
-              window.ModuleBuilder = module[key];
-              window.Module = module[key];
-// console.log(`  → window.ModuleBuilder = ${key} (trouvé par inspection)`);
-              break;
-            }
-          }
-          
-          // Si toujours pas trouvé, créer un wrapper
-          if (!window.ModuleBuilder && window.moduleBuilderInstance) {
-            window.ModuleBuilder = function() {
-              return window.moduleBuilderInstance;
-            };
-            window.Module = window.ModuleBuilder;
-// console.log('  → window.ModuleBuilder = wrapper vers instance globale');
-          }
-        }
-        // Support UnitTemplates (nouveau nom)
-        if (typeof UnitTemplates !== 'undefined') {
-          window.UnitTemplates = UnitTemplates;
-          window.ModuleTemplates = UnitTemplates; // Rétrocompatibilité
-// console.log('  → window.UnitTemplates = templates (global)');
-        } else if (module.UnitTemplates) {
-          window.UnitTemplates = module.UnitTemplates;
-          window.ModuleTemplates = module.UnitTemplates; // Rétrocompatibilité
-// console.log('  → window.UnitTemplates = templates (export)');
-        }
-        // Support ancien nom pour rétrocompatibilité
-        if (typeof ModuleTemplates !== 'undefined') {
-          window.ModuleTemplates = ModuleTemplates;
-          window.UnitTemplates = ModuleTemplates; // Migration vers nouveau nom
-// console.log('  → window.ModuleTemplates = templates (global)');
-        } else if (module.ModuleTemplates) {
-          window.ModuleTemplates = module.ModuleTemplates;
-          window.UnitTemplates = module.ModuleTemplates; // Migration vers nouveau nom
-// console.log('  → window.ModuleTemplates = templates (export)');
-        }
-        break;
-        
       case 'draggable_builder':
-        // Draggable exporte plusieurs fonctions
+        // Draggable exporte plusieurs fonctions - les exposer toutes
         window.draggable = module.draggable;
         window.makeDraggable = module.makeDraggable;
         window.makeDraggableWithDrop = module.makeDraggableWithDrop;
         window.makeDropZone = module.makeDropZone;
         window.Draggable = module.draggable; // Alias principal
-// console.log('  → window.draggable = function');
-// console.log('  → window.makeDraggable = function');
-// console.log('  → window.makeDraggableWithDrop = function');
-// console.log('  → window.makeDropZone = function');
+// console.log('  ✅ Draggable exposé avec toutes ses fonctions');
         break;
         
-      case 'matrix_builder':
-      case 'table_builder':
-      case 'menu_builder':
-      case 'List_builder':
-      case 'waveSurfer_builder':
-        // Pour les autres, utiliser l'export par défaut
-        if (module.default) {
-          if (typeof module.default === 'function') {
-            window[pluginName] = module.default;
-// console.log(`  → window.${pluginName} = default function`);
-          } else if (module.default.create && typeof module.default.create === 'function') {
-            window[pluginName] = module.default.create;
-            window[pluginName + 'Styles'] = module.default;
-// console.log(`  → window.${pluginName} = create function`);
-          } else {
-            window[pluginName] = module.default;
-// console.log(`  → window.${pluginName} = default object`);
-          }
-        } else {
-          // Prendre la première exportation nommée
-          const firstExport = Object.keys(module)[0];
-          if (firstExport) {
-            window[pluginName] = module[firstExport];
-// console.log(`  → window.${pluginName} = ${firstExport}`);
-          }
+      case 'unit_builder':
+        // Unit builder - gestion spéciale des variables globales
+        if (typeof UnitBuilder !== 'undefined') {
+          window.UnitBuilder = UnitBuilder;
+          window.Unit = UnitBuilder;
+          window.Module = UnitBuilder;
+// console.log('  ✅ UnitBuilder exposé depuis variable globale');
+        } else if (module.UnitBuilder) {
+          window.UnitBuilder = module.UnitBuilder;
+          window.Unit = module.UnitBuilder;
+          window.Module = module.UnitBuilder;
+// console.log('  ✅ UnitBuilder exposé depuis module');
+        } else if (window.moduleBuilderInstance) {
+          window.UnitBuilder = () => window.moduleBuilderInstance;
+          window.Unit = window.UnitBuilder;
+          window.Module = window.UnitBuilder;
+// console.log('  ✅ UnitBuilder wrapper créé');
+        }
+        
+        // Templates
+        if (typeof UnitTemplates !== 'undefined') {
+          window.UnitTemplates = UnitTemplates;
+          window.ModuleTemplates = UnitTemplates;
+        } else if (module.UnitTemplates) {
+          window.UnitTemplates = module.UnitTemplates;
+          window.ModuleTemplates = module.UnitTemplates;
         }
         break;
         
       default:
-        // Fallback générique
-        if (module.default) {
-          window[pluginName] = module.default;
-// console.log(`  → window.${pluginName} = default (fallback)`);
+        // Dernier fallback absolu
+        const firstExport = Object.keys(module)[0];
+        if (firstExport) {
+          window[pluginName] = module[firstExport];
+// console.log(`  ⚠️ window.${pluginName} = ${firstExport} (dernier fallback)`);
         } else {
-          const firstExport = Object.keys(module)[0];
-          if (firstExport) {
-            window[pluginName] = module[firstExport];
-// console.log(`  → window.${pluginName} = ${firstExport} (fallback)`);
-          }
+          console.warn(`❌ Impossible d'exposer le plugin ${pluginName} automatiquement`);
+          console.warn('   Module exports:', Object.keys(module));
         }
         break;
     }
@@ -334,6 +377,34 @@ class PluginManager {
       loadedList: loaded,
       pending: available.filter(p => !loaded.includes(p))
     };
+  }
+  
+  /**
+   * Chargement synchrone d'un plugin (pour compatibilité avec les proxies)
+   * Note: Cette méthode suppose que le plugin est déjà préchargé
+   */
+  loadSync(pluginName) {
+    const plugin = this.plugins.get(pluginName);
+    if (!plugin) {
+      console.error(`❌ Plugin "${pluginName}" non trouvé. Plugins disponibles: ${Array.from(this.plugins.keys()).join(', ')}`);
+      return null;
+    }
+
+    if (plugin.loaded) {
+      // console.log(`✅ Plugin "${pluginName}" déjà chargé (synchrone)`);
+      return plugin.instance;
+    }
+
+    // Si le plugin n'est pas chargé, on ne peut pas le charger de façon synchrone
+    // avec les imports ES6. On va donc forcer un chargement asynchrone immédiat
+    console.warn(`⚠️ Tentative de chargement synchrone du plugin "${pluginName}" non préchargé`);
+    
+    // Chargement asynchrone immédiat (pas vraiment synchrone mais on fait de notre mieux)
+    this.load(pluginName).catch(error => {
+      console.error(`❌ Erreur chargement synchrone de "${pluginName}":`, error);
+    });
+    
+    return null;
   }
 }
 
