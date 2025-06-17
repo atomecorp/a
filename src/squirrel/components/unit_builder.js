@@ -143,7 +143,8 @@ class UnitManager {
       svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.classList.add('unit-connections-svg');
       svg.style.cssText = `
-        position: fixed;
+        position: absolute;
+        z-index: 0;
         top: 0;
         left: 0;
         width: 100%;
@@ -521,6 +522,7 @@ define('unit-connector', {
   tag: 'div',
   class: 'unit-connector',
   css: {
+    zIndex: '2',
     position: 'absolute',
     width: '12px',
     height: '12px',
@@ -574,11 +576,12 @@ const unitStyles = `
   }
   
   .unit-name[contenteditable="true"] {
-    background-color: #fff !important;
-    border: 1px solid #007bff !important;
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    border: none !important;
     border-radius: 3px !important;
-    padding: 2px 4px !important;
+    padding: 0 !important;
     outline: none !important;
+    box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.3) !important;
   }
   
   .connector-selected {
