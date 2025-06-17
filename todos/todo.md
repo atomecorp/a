@@ -6,7 +6,7 @@ Urgent : debug - simplify - factorise - optimise - audit
 
 | Status | Priority | Task | Description |
 |--------|----------|------|-------------|
-| [ ]    | MEDIUM   | Write clear documentation: What is `Squirrel`? DSL? OS? UI engine? | Define what atome really is, its scope, and how it differs from a framework or visual builder. |
+| [ ]    | HIGH     | Write clear documentation: What is `Squirrel`? DSL? OS? UI engine? | Define what atome really is, its scope, and how it differs from a framework or visual builder. |
 | [ ]    | MEDIUM   | Add onboarding guide for new developers | Create a guide for new devs to install, understand the structure, and create their first atome. |
 
 ---
@@ -15,8 +15,8 @@ Urgent : debug - simplify - factorise - optimise - audit
 
 | Status | Priority  | Task | Description |
 |--------|-----------|------|-------------|
-| [ ]    | VERY HIGH | Implement reactive engine (signals/observers) | Add a lightweight observer system to update views when a property changes. |
-| [ ]    | VERY HIGH | Add DOM batching/render pipeline (`requestAnimationFrame`) | Batch particle updates into single-frame commits to improve perf and animation. |
+| [Done] | VERY HIGH | Implement reactive engine (signals/observers) | Add a lightweight observer system to update views when a property changes. |
+| [Done] | VERY HIGH | Add DOM batching/render pipeline (`requestAnimationFrame`) | Batch particle updates into single-frame commits to improve perf and animation. |
 | [ ]    | LOW       | Explore Slint/Canvas integration for native rendering | Investigate rendering UI via Canvas or native GUI libs for non-DOM targets. |
 | [ ]    | HIGH      | Create architecture diagram (DSL ↔ DOM ↔ backend) | Visual diagram showing data flow and responsibility of each layer. |
 | [ ]    | HIGH      | Add centralized app state store (observables or proxy) | Create a reactive object store for global UI state, like selection or user state. |
