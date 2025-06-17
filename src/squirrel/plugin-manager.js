@@ -27,7 +27,8 @@ class PluginManager {
       'table_builder',
       'tooltip_builder',
       'unit_builder',
-      'waveSurfer_builder'
+      'waveSurfer_builder',
+      'wavesurfer'
     ];
 
     // console.log(`🔍 Découverte de ${availableComponents.length} composants:`, availableComponents);
@@ -149,7 +150,7 @@ class PluginManager {
       
       this.loadedPlugins.add(pluginName);
       
-      console.log(`✅ Plugin "${pluginName}" chargé et exposé en tant que window.${pluginName}`, typeof window[pluginName]);
+      // console.log(`✅ Plugin "${pluginName}" chargé et exposé en tant que window.${pluginName}`, typeof window[pluginName]);
       return plugin;
       
     } catch (error) {
@@ -179,23 +180,42 @@ class PluginManager {
     // 🎯 SYSTÈME D'EXPOSITION AUTOMATIQUE PAR CONVENTION
     
     // ⚠️ CAS SPÉCIAUX PRIORITAIRES (avant les conventions)
-    if (componentName === 'unit_builder') {
-      this.exposePluginManual(componentName, module, pluginName);
-      return;
-    }
+    // Plus aucun cas spécial - tous les composants suivent les conventions ES6
     
     // Convention 1: module.default.create (structure recommandée)
     if (module.default && typeof module.default.create === 'function') {
       window[pluginName] = module.default.create;
       window[pluginName + 'Styles'] = module.default; // Pour accès aux styles/variantes
-      console.log(`  ✅ window.${pluginName} = module.default.create (convention standard)`);
+      // console.log(`  ✅ window.${pluginName} = module.default.create (convention standard)`);
       
       // Exposition des fonctions utilitaires pour certains composants
       if (componentName === 'draggable_builder') {
         window.makeDraggable = module.makeDraggable;
         window.makeDraggableWithDrop = module.makeDraggableWithDrop;
         window.makeDropZone = module.makeDropZone;
-        console.log(`  ✅ Fonctions utilitaires Draggable exposées`);
+        // console.log(`  ✅ Fonctions utilitaires Draggable exposées`);
+      }
+      
+      if (componentName === 'unit_builder') {
+        // Exposer les fonctions utilitaires sur l'objet global Unit
+        Object.assign(window[pluginName], {
+          deleteUnit: module.deleteUnit,
+          deleteUnits: module.deleteUnits,
+          selectUnit: module.selectUnit,
+          selectUnits: module.selectUnits,
+          deselectUnit: module.deselectUnit,
+          deselectUnits: module.deselectUnits,
+          deselectAllUnits: module.deselectAllUnits,
+          getSelectedUnits: module.getSelectedUnits,
+          renameUnit: module.renameUnit,
+          renameUnits: module.renameUnits,
+          connectUnits: module.connectUnits,
+          disconnectUnits: module.disconnectUnits,
+          getAllConnections: module.getAllConnections,
+          getUnit: module.getUnit,
+          getAllUnits: module.getAllUnits
+        });
+        // console.log(`  ✅ Fonctions utilitaires Unit exposées`);
       }
       
       return;
@@ -262,35 +282,8 @@ class PluginManager {
 // console.log('  ✅ Draggable exposé avec toutes ses fonctions');
         break;
         
-      case 'unit_builder':
-        // Unit builder - gestion spéciale des variables globales
-        if (typeof UnitBuilder !== 'undefined') {
-          window.UnitBuilder = UnitBuilder;
-          window.Unit = UnitBuilder;
-          window.Module = UnitBuilder;
-// console.log('  ✅ UnitBuilder exposé depuis variable globale');
-        } else if (module.UnitBuilder) {
-          window.UnitBuilder = module.UnitBuilder;
-          window.Unit = module.UnitBuilder;
-          window.Module = module.UnitBuilder;
-// console.log('  ✅ UnitBuilder exposé depuis module');
-        } else if (window.moduleBuilderInstance) {
-          window.UnitBuilder = () => window.moduleBuilderInstance;
-          window.Unit = window.UnitBuilder;
-          window.Module = window.UnitBuilder;
-// console.log('  ✅ UnitBuilder wrapper créé');
-        }
-        
-        // Templates
-        if (typeof UnitTemplates !== 'undefined') {
-          window.UnitTemplates = UnitTemplates;
-          window.ModuleTemplates = UnitTemplates;
-        } else if (module.UnitTemplates) {
-          window.UnitTemplates = module.UnitTemplates;
-          window.ModuleTemplates = module.UnitTemplates;
-        }
-        break;
-        
+      // Plus de cas spéciaux - tous les composants utilisent les conventions ES6
+      
       default:
         // Dernier fallback absolu
         const firstExport = Object.keys(module)[0];

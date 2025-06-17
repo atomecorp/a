@@ -46,7 +46,7 @@
           apply: function(target, thisArg, argumentsList) {
             // Chargement paresseux du plugin à l'utilisation (synchrone)
             if (!pluginManager.getLoadedPlugins().includes(name)) {
-              console.log(`🔄 Chargement automatique de "${name}" via proxy...`);
+              // console.log(`🔄 Chargement automatique de "${name}" via proxy...`);
               // Chargement synchrone pour éviter les promesses
               pluginManager.loadSync(name);
             }
@@ -54,7 +54,7 @@
             // Appel de la fonction réelle maintenant chargée
             const realFunction = window[name];
             if (typeof realFunction === 'function') {
-              console.log(`✅ Appel de ${name}(), type de retour:`, typeof realFunction.apply(thisArg, argumentsList));
+              // console.log(`✅ Appel de ${name}(), type de retour:`, typeof realFunction.apply(thisArg, argumentsList));
               return realFunction.apply(thisArg, argumentsList);
             } else {
               console.warn(`⚠️ "${name}" n'est pas une fonction après chargement`);
@@ -65,7 +65,7 @@
           get: function(target, prop) {
             // Chargement paresseux pour accès aux propriétés (synchrone)
             if (!pluginManager.getLoadedPlugins().includes(name)) {
-              console.log(`🔄 Chargement automatique de "${name}" via proxy (propriété ${prop})...`);
+              // console.log(`🔄 Chargement automatique de "${name}" via proxy (propriété ${prop})...`);
               pluginManager.loadSync(name);
             }
             
@@ -90,7 +90,7 @@
     
     // 🚀 PRÉCHARGEMENT IMMÉDIAT DE TOUS LES COMPOSANTS
     // Résout le problème des proxies asynchrones
-    console.log('🚀 Préchargement immédiat de tous les composants...');
+    // console.log('🚀 Préchargement immédiat de tous les composants...');
     await pluginManager.loadAll();
     
     // Remplacement des proxies par les vraies instances pour éviter tout problème
@@ -99,23 +99,23 @@
         const realInstance = pluginManager.plugins.get(pluginName)?.instance;
         if (realInstance) {
           window[pluginName] = realInstance;
-          console.log(`✅ ${pluginName} remplacé par l'instance réelle`);
+          // console.log(`✅ ${pluginName} remplacé par l'instance réelle`);
         }
       }
     });
-    console.log('🎉 Préchargement terminé, tous les composants sont prêts !');
+    // console.log('🎉 Préchargement terminé, tous les composants sont prêts !');
     
-    console.log('✅ Squirrel Framework initialisé avec succès !');
-    console.log('📦 Composants chargés:', pluginManager.getLoadedPlugins());
+    // console.log('✅ Squirrel Framework initialisé avec succès !');
+    // console.log('📦 Composants chargés:', pluginManager.getLoadedPlugins());
     
     // APIs pour utilisation externe
     window.loadPlugin = async (pluginName) => {
       try {
         const plugin = await pluginManager.load(pluginName);
-        console.log(`✅ Plugin "${pluginName}" chargé manuellement`);
+        // console.log(`✅ Plugin "${pluginName}" chargé manuellement`);
         return plugin;
       } catch (error) {
-        console.error(`❌ Erreur lors du chargement manuel de "${pluginName}":`, error);
+        // console.error(`❌ Erreur lors du chargement manuel de "${pluginName}":`, error);
         return null;
       }
     };

@@ -12,16 +12,8 @@
 // import('./examples/design_slider.js');
 // import('./examples/DB.js');
 
-
-
-
-// const button = Button({ text: 'Click me' });
-// const tooltip = Tooltip({ content: 'Info' });
-// const badge = Badge({ text: 'New', color: 'red' });
-
-
-
 // import('./examples/matrix.js');
-// import('./examples/unit.js');
 // import('./examples/drag.js');
-import('./examples/dragNdrop.js');
+// import('./examples/dragNdrop.js');
+
+import('./examples/unit.js');
