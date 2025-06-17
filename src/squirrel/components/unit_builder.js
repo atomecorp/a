@@ -626,7 +626,8 @@ class Unit {
       inputs = [],
       outputs = [],
       icon = null,
-      iconSrc = null
+      iconSrc = null,
+      backgroundColor = null
     } = options;
 
     this.id = id;
@@ -637,12 +638,18 @@ class Unit {
     this.isDragging = false;
     this.dragOffset = { x: 0, y: 0 };
     this.isEditingName = false;
+    this.backgroundColor = backgroundColor;
 
     this.createElement();
     this.setupDragging();
     this.setupSelection();
     this.setupNameEditing();
     this.setPosition(position.x, position.y);
+    
+    // Appliquer la couleur de fond si fournie
+    if (backgroundColor) {
+      this.setBackgroundColor(backgroundColor);
+    }
     
     // Ajouter au DOM d'abord
     unitManager.registerUnit(this);
@@ -767,6 +774,13 @@ class Unit {
     this.position.y = y;
     this.element.style.left = `${x}px`;
     this.element.style.top = `${y}px`;
+  }
+
+  setBackgroundColor(color) {
+    this.backgroundColor = color;
+    if (this.element) {
+      this.element.style.backgroundColor = color;
+    }
   }
 
   setIcon(iconData) {
