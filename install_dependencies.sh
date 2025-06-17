@@ -237,3 +237,4 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
     cd server && node server.js
 fi
+npm install knex objection
