@@ -1,5 +1,5 @@
-const knex = require('knex');
-const { Model } = require('objection');
+import knex from 'knex';
+import { Model } from 'objection';
 
 // Database configuration
 const knexConfig = {
@@ -9,7 +9,7 @@ const knexConfig = {
   },
   useNullAsDefault: true,
   migrations: {
-    directory: './src/database/migrations'
+    directory: '../database/migrations'
   }
 };
 
@@ -20,7 +20,7 @@ const knexInstance = knex(knexConfig);
 Model.knex(knexInstance);
 
 // Export for use in tests and app
-module.exports = {
-  knex: knexInstance,
+export {
+  knexInstance as knex,
   knexConfig
 };

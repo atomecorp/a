@@ -1,4 +1,4 @@
-const { Model } = require('objection');
+import { Model } from 'objection';
 
 class Project extends Model {
   static get tableName() {
@@ -28,16 +28,12 @@ class Project extends Model {
         user_id: { type: ['integer', 'null'] }
       }
     };
-  }
-
-  static get relationMappings() {
-    const User = require('./User');
-    const Atome = require('./Atome');
-
+  }  static get relationMappings() {
+    // Use dynamic imports to avoid circular dependencies
     return {
       users: {
         relation: Model.HasManyRelation,
-        modelClass: User,
+        modelClass: () => require('./User.js'),
         join: {
           from: 'project.id',
           to: 'user.project_id'
@@ -45,7 +41,7 @@ class Project extends Model {
       },
       owner: {
         relation: Model.BelongsToOneRelation,
-        modelClass: User,
+        modelClass: () => require('./User.js'),
         join: {
           from: 'project.user_id',
           to: 'user.id'
@@ -53,7 +49,7 @@ class Project extends Model {
       },
       atomes: {
         relation: Model.HasManyRelation,
-        modelClass: Atome,
+        modelClass: () => require('./Atome.js'),
         join: {
           from: 'project.id',
           to: 'atome.project_id'
@@ -97,8 +93,7 @@ class Project extends Model {
 
   // Method to rollback to version
   canRollback(targetVersion, userId) {
-    const user = this.users?.find(u => u.id === userId);
-    if (!user || !user.hasPermission('edit')) {
+    const user = this.users?.find(u => u.id === userId);    if (!user || !user.hasPermission('edit')) {
       return false;
     }
     
@@ -115,4 +110,4 @@ class Project extends Model {
   }
 }
 
-module.exports = Project;
+export default Project;

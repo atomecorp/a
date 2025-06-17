@@ -6,6 +6,12 @@ import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Database imports
+import { knex } from '../database/db.js';
+import User from '../database/User.js';
+import Project from '../database/Project.js';
+import Atome from '../database/Atome.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Créer l'instance Fastify
@@ -23,6 +29,20 @@ const PORT = process.env.PORT || 3001;
 async function startServer() {
   try {
     console.log('🚀 Démarrage du serveur Fastify v5...');
+
+    // ===========================
+    // 0. DATABASE INITIALIZATION
+    // ===========================
+    
+    console.log('📊 Initialisation de la base de données...');
+    
+    // Run migrations
+    await knex.migrate.latest();
+    console.log('✅ Migrations exécutées');
+    
+    // Test database connection
+    await knex.raw('SELECT 1');
+    console.log('✅ Connexion à la base de données établie');
 
     // ===========================
     // 1. PLUGINS DE BASE
@@ -75,22 +95,184 @@ async function startServer() {
       };
     });
 
-    // Route de debug pour vérifier les fichiers statiques
-    server.get('/debug/files', async (request, reply) => {
-      const fs = await import('fs');
-      const wsPath = path.join(__dirname, '../src/application/examples/ws.js');
-      const squirrelPath = path.join(__dirname, '../src/squirrel/squirrel.js');
-      
-      return {
-        files: {
-          'ws.js': fs.existsSync(wsPath),
-          'squirrel.js': fs.existsSync(squirrelPath),
-          'ws.js_size': fs.existsSync(wsPath) ? fs.statSync(wsPath).size : 0,
-          'squirrel.js_size': fs.existsSync(squirrelPath) ? fs.statSync(squirrelPath).size : 0
-        },
-        static_root: path.join(__dirname, '../src'),
-        timestamp: new Date().toISOString()
-      };
+    // ===========================
+    // 3. DATABASE API ROUTES
+    // ===========================
+
+    // Database status endpoint
+    server.get('/api/db/status', async (request, reply) => {
+      try {
+        // Test database connection
+        await knex.raw('SELECT 1');
+        
+        // Get table info
+        const tables = await knex.raw("SELECT name FROM sqlite_master WHERE type='table'");
+        
+        // Get database file info
+        const dbStats = await knex.raw("PRAGMA database_list");
+        
+        return {
+          success: true,
+          status: 'connected',
+          database: 'SQLite',
+          tables: tables.map(row => row.name),
+          connection: {
+            type: 'sqlite3',
+            file: './thermal_app.db'
+          },
+          timestamp: new Date().toISOString()
+        };      } catch (error) {
+        reply.code(500);
+        return {
+          success: false,
+          status: 'disconnected',
+          error: error.message,          timestamp: new Date().toISOString()
+        };
+      }
+    });
+
+    // ...existing database routes...
+
+    // Users API
+    server.get('/api/users', async (request, reply) => {
+      try {
+        const users = await User.query();
+        return { success: true, data: users };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.post('/api/users', async (request, reply) => {
+      try {
+        const user = await User.query().insert(request.body);
+        return { success: true, data: user };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/users/:id', async (request, reply) => {
+      try {
+        const user = await User.query()
+          .findById(request.params.id)
+          .withGraphFetched('[project, atomes]');
+        
+        if (!user) {
+          reply.code(404);
+          return { success: false, error: 'User not found' };
+        }
+        
+        return { success: true, data: user };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.delete('/api/users/:id', async (request, reply) => {
+      try {
+        const deletedCount = await User.query().deleteById(request.params.id);
+        
+        if (deletedCount === 0) {
+          reply.code(404);
+          return { success: false, error: 'User not found' };
+        }
+        
+        return { 
+          success: true, 
+          message: `User with ID ${request.params.id} deleted successfully`,
+          data: { deletedId: request.params.id }
+        };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Projects API
+    server.get('/api/projects', async (request, reply) => {
+      try {
+        const projects = await Project.query().withGraphFetched('[users, owner, atomes]');
+        return { success: true, data: projects };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.post('/api/projects', async (request, reply) => {
+      try {
+        const project = await Project.query().insert(request.body);
+        return { success: true, data: project };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/projects/:id', async (request, reply) => {
+      try {
+        const project = await Project.query()
+          .findById(request.params.id)
+          .withGraphFetched('[users, owner, atomes]');
+        
+        if (!project) {
+          reply.code(404);
+          return { success: false, error: 'Project not found' };
+        }
+        
+        return { success: true, data: project };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Atomes API
+    server.get('/api/atomes', async (request, reply) => {
+      try {
+        const atomes = await Atome.query().withGraphFetched('[user, project]');
+        return { success: true, data: atomes };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.post('/api/atomes', async (request, reply) => {
+      try {
+        const atome = await Atome.query().insert(request.body);
+        return { success: true, data: atome };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Database stats endpoint
+    server.get('/api/db/stats', async (request, reply) => {
+      try {
+        const [userCount] = await knex('user').count('* as count');
+        const [projectCount] = await knex('project').count('* as count');
+        const [atomeCount] = await knex('atome').count('* as count');
+        
+        return {
+          success: true,
+          data: {
+            users: userCount.count,
+            projects: projectCount.count,
+            atomes: atomeCount.count,
+            database: 'SQLite + Objection.js',
+            timestamp: new Date().toISOString()
+          }
+        };
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
     });
 
     // ===========================

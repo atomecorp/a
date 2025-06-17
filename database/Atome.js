@@ -1,4 +1,4 @@
-const { Model } = require('objection');
+import { Model } from 'objection';
 
 class Atome extends Model {
   static get tableName() {
@@ -21,15 +21,12 @@ class Atome extends Model {
       }
     };
   }
-
   static get relationMappings() {
-    const User = require('./User');
-    const Project = require('./Project');
-
+    // Use function factories to avoid circular dependencies
     return {
       user: {
         relation: Model.BelongsToOneRelation,
-        modelClass: User,
+        modelClass: () => require('./User.js'),
         join: {
           from: 'atome.user_id',
           to: 'user.id'
@@ -37,7 +34,7 @@ class Atome extends Model {
       },
       project: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Project,
+        modelClass: () => require('./Project.js'),
         join: {
           from: 'atome.project_id',
           to: 'project.id'
@@ -50,11 +47,10 @@ class Atome extends Model {
   canBeUsedBy(user) {
     return this.user_id === user.id || user.hasPermission('admin');
   }
-
   // Method to check if atome belongs to project
   belongsToProject(projectId) {
     return this.project_id === projectId;
   }
 }
 
-module.exports = Atome;
+export default Atome;

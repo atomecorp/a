@@ -188,6 +188,175 @@ const messagesLog = $('div', {
   parent: wsSection
 });
 
+// Section Database Management
+const dbSection = $('div', {
+  css: {
+    backgroundColor: 'white',
+    border: '2px solid #dee2e6',
+    borderRadius: '8px',
+    padding: '20px',
+    marginBottom: '20px'
+  },
+  parent: container
+});
+
+$('h2', {
+  text: '� User Management',
+  css: { color: '#495057', marginBottom: '20px' },
+  parent: dbSection
+});
+
+// Add User Form
+const addUserForm = $('div', {
+  css: {
+    backgroundColor: '#f8f9fa',
+    padding: '15px',
+    borderRadius: '6px',
+    marginBottom: '20px',
+    border: '1px solid #dee2e6'
+  },
+  parent: dbSection
+});
+
+$('h3', {
+  text: '➕ Add New User',
+  css: { color: '#28a745', marginBottom: '15px', fontSize: '18px' },
+  parent: addUserForm
+});
+
+// Name input
+const nameInput = $('input', {
+  attrs: { 
+    type: 'text', 
+    placeholder: 'Enter user name...',
+    id: 'user-name-input'
+  },
+  css: {
+    width: '200px',
+    padding: '8px 12px',
+    border: '1px solid #ced4da',
+    borderRadius: '4px',
+    marginRight: '10px',
+    marginBottom: '10px'
+  },
+  parent: addUserForm
+});
+
+// Password input
+const passwordInput = $('input', {
+  attrs: { 
+    type: 'password', 
+    placeholder: 'Enter password...',
+    id: 'user-password-input'
+  },
+  css: {
+    width: '200px',
+    padding: '8px 12px',
+    border: '1px solid #ced4da',
+    borderRadius: '4px',
+    marginRight: '10px',
+    marginBottom: '10px'
+  },
+  parent: addUserForm
+});
+
+// Role select
+const roleSelect = $('select', {
+  id: 'user-role-select',
+  css: {
+    width: '120px',
+    padding: '8px 12px',
+    border: '1px solid #ced4da',
+    borderRadius: '4px',
+    marginRight: '10px',
+    marginBottom: '10px'
+  },
+  parent: addUserForm
+});
+
+// Add options to select
+['read', 'edit', 'admin'].forEach(role => {
+  const option = $('option', {
+    attrs: { value: role },
+    text: role.charAt(0).toUpperCase() + role.slice(1),
+    parent: roleSelect
+  });
+});
+
+// Add user button
+const addUserBtn = $('button', {
+  text: '✅ Add User',
+  css: {
+    backgroundColor: '#28a745',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginLeft: '10px'
+  },
+  onclick: addNewUser,
+  parent: addUserForm
+});
+
+// Users list and management
+const usersManagement = $('div', {
+  css: {
+    marginTop: '20px'
+  },
+  parent: dbSection
+});
+
+$('h3', {
+  text: '📋 Users List',
+  css: { color: '#495057', marginBottom: '15px', fontSize: '18px' },
+  parent: usersManagement
+});
+
+// Refresh button
+const refreshUsersBtn = $('button', {
+  text: '🔄 Refresh Users',
+  css: {
+    backgroundColor: '#17a2b8',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginBottom: '15px'
+  },
+  onclick: loadUsersList,
+  parent: usersManagement
+});
+
+// Users display container
+const usersContainer = $('div', {
+  css: {
+    border: '1px solid #dee2e6',
+    borderRadius: '6px',
+    backgroundColor: '#ffffff',
+    maxHeight: '400px',
+    overflowY: 'auto'
+  },
+  parent: usersManagement
+});
+
+// Status display
+const statusDisplay2 = $('div', {
+  css: {
+    padding: '15px',
+    marginTop: '15px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '6px',
+    fontFamily: 'monospace',
+    fontSize: '14px',
+    border: '1px solid #dee2e6',
+    minHeight: '100px'
+  },
+  text: 'Ready to manage users...',
+  parent: dbSection
+});
+
 // === FONCTIONS ===
 
 function checkHealth() {
@@ -311,9 +480,229 @@ function logMessage(type, content) {
   messagesLog.scrollTop = messagesLog.scrollHeight;
 }
 
+// Database API Functions
+// User Management Functions
+async function addNewUser() {
+  const name = nameInput.value.trim();
+  const password = passwordInput.value.trim();
+  const role = roleSelect.value;
+    if (!name || !password) {
+    updateUserStatus('❌ Please fill in both name and password', 'error');
+    return;
+  }
+  
+  try {
+    updateUserStatus('⏳ Creating user...', 'info');
+    
+    const response = await fetch('http://localhost:3001/api/users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: name,
+        password: password,
+        autorisation: role
+      })
+    });
+    
+    const data = await response.json();
+      if (data.success) {
+      updateUserStatus(`✅ User "${name}" created successfully!`, 'success');
+      
+      // Clear form
+      nameInput.value = '';
+      passwordInput.value = '';
+      roleSelect.value = 'read';
+      
+      // Refresh users list
+      await loadUsersList();
+      
+      // Send WebSocket notification if connected
+      if (isConnected && websocket) {
+        websocket.send(JSON.stringify({
+          type: 'user_added',
+          user: data.data,
+          timestamp: new Date().toISOString()
+        }));
+      }
+        } else {
+      updateUserStatus(`❌ Error creating user: ${data.error}`, 'error');
+    }
+  } catch (error) {
+    updateUserStatus(`❌ Network Error: ${error.message}`, 'error');
+  }
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Are you sure you want to delete user "${userName}"?`)) {
+    return;
+  }
+    try {
+    updateUserStatus(`⏳ Deleting user "${userName}"...`, 'info');
+    
+    const response = await fetch(`http://localhost:3001/api/users/${userId}`, {
+      method: 'DELETE'
+    });
+    
+    const data = await response.json();
+      if (data.success) {
+      updateUserStatus(`✅ User "${userName}" deleted successfully!`, 'success');
+      
+      // Refresh users list
+      await loadUsersList();
+      
+      // Send WebSocket notification if connected
+      if (isConnected && websocket) {
+        websocket.send(JSON.stringify({
+          type: 'user_deleted',
+          userId: userId,
+          userName: userName,
+          timestamp: new Date().toISOString()
+        }));
+      }
+        } else {
+      updateUserStatus(`❌ Error deleting user: ${data.error}`, 'error');
+    }
+  } catch (error) {
+    updateUserStatus(`❌ Network Error: ${error.message}`, 'error');
+  }
+}
+
+async function loadUsersList() {  try {
+    updateUserStatus('⏳ Loading users...', 'info');
+    
+    const response = await fetch('http://localhost:3001/api/users');
+    const data = await response.json();
+      if (data.success) {
+      displayUsers(data.data);
+      updateUserStatus(`✅ Loaded ${data.data.length} users`, 'success');
+    } else {
+      updateUserStatus(`❌ Error loading users: ${data.error}`, 'error');
+      usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">Failed to load users</div>';
+    }
+  } catch (error) {
+    updateUserStatus(`❌ Network Error: ${error.message}`, 'error');
+    usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">Network error</div>';
+  }
+}
+
+function displayUsers(users) {
+  if (users.length === 0) {
+    usersContainer.innerHTML = '<div style="padding: 15px; color: #6c757d;">No users found</div>';
+    return;
+  }
+  
+  usersContainer.innerHTML = '';
+  
+  users.forEach(user => {
+    const userRow = $('div', {
+      css: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '12px 15px',
+        borderBottom: '1px solid #dee2e6',
+        ':hover': {
+          backgroundColor: '#f8f9fa'
+        }
+      },
+      parent: usersContainer
+    });
+    
+    const userInfo = $('div', {
+      css: {
+        flex: '1'
+      },
+      parent: userRow
+    });
+    
+    $('div', {
+      text: `👤 ${user.name}`,
+      css: {
+        fontWeight: 'bold',
+        marginBottom: '4px'
+      },
+      parent: userInfo
+    });
+    
+    $('div', {
+      text: `ID: ${user.id} | Role: ${user.autorisation} | Created: ${new Date(user.created_at).toLocaleDateString()}`,
+      css: {
+        fontSize: '12px',
+        color: '#6c757d'
+      },
+      parent: userInfo
+    });
+    
+    const actionsDiv = $('div', {
+      css: {
+        display: 'flex',
+        gap: '8px'
+      },
+      parent: userRow
+    });
+    
+    $('button', {
+      text: '🗑️ Delete',
+      css: {
+        backgroundColor: '#dc3545',
+        color: 'white',
+        border: 'none',
+        padding: '6px 12px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '12px'
+      },
+      onclick: () => deleteUser(user.id, user.name),
+      parent: actionsDiv
+    });
+  });
+}
+
+function updateUserStatus(message, type = 'info') {
+  const colors = {
+    success: '#28a745',
+    error: '#dc3545',
+    info: '#17a2b8',
+    warning: '#ffc107'
+  };
+  
+  const timestamp = new Date().toLocaleTimeString();
+  
+  statusDisplay2.innerHTML = `
+    <div style="color: ${colors[type]}; font-weight: bold;">
+      [${timestamp}] ${message}
+    </div>
+  `;
+  
+  // Auto clear after 5 seconds for non-error messages
+  if (type !== 'error') {
+    setTimeout(() => {
+      if (statusDisplay2.innerHTML.includes(message)) {
+        statusDisplay2.innerHTML = 'Ready to manage users...';
+      }
+    }, 5000);
+  }
+}
+
 // Event listener pour Enter dans l'input
 messageInputElement.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') sendMessage();
+});
+
+// Auto-load users list when page loads
+setTimeout(() => {
+  loadUsersList();
+}, 2000);
+
+// Add Enter key support for form inputs
+nameInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') addNewUser();
+});
+
+passwordInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') addNewUser();
 });
 
 // Auto-test du serveur au chargement

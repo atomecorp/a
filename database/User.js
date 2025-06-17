@@ -1,4 +1,4 @@
-const { Model } = require('objection');
+import { Model } from 'objection';
 
 class User extends Model {
   static get tableName() {
@@ -26,15 +26,12 @@ class User extends Model {
       }
     };
   }
-
   static get relationMappings() {
-    const Project = require('./Project');
-    const Atome = require('./Atome');
-
+    // Use function factories to avoid circular dependencies
     return {
       project: {
         relation: Model.BelongsToOneRelation,
-        modelClass: Project,
+        modelClass: () => require('./Project.js'),
         join: {
           from: 'user.project_id',
           to: 'project.id'
@@ -42,7 +39,7 @@ class User extends Model {
       },
       atomes: {
         relation: Model.HasManyRelation,
-        modelClass: Atome,
+        modelClass: () => require('./Atome.js'),
         join: {
           from: 'user.id',
           to: 'atome.user_id'
@@ -56,11 +53,10 @@ class User extends Model {
     const levels = { read: 1, edit: 2, admin: 3 };
     return levels[this.autorisation] >= levels[requiredLevel];
   }
-
   // Method to check if user can access project
   canAccessProject(project) {
     return this.project_id === project.id;
   }
 }
 
-module.exports = User;
+export default User;
