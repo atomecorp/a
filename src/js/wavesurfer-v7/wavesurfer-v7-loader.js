@@ -17,7 +17,7 @@ class WaveSurferV7Loader {
         try {
             const module = await import(`${this.baseUrl}core/wavesurfer.esm.js`);
             window.WaveSurfer = module.default;
-            console.log('✅ WaveSurfer.js v7.9.5 loaded successfully');
+// console.log('✅ WaveSurfer.js v7.9.5 loaded successfully');
             return module.default;
         } catch (error) {
             console.error('❌ Failed to load WaveSurfer.js:', error);
@@ -37,7 +37,7 @@ class WaveSurferV7Loader {
             const module = await import(`${this.baseUrl}${pluginName}.esm.js`);
             this.loadedPlugins.add(pluginName);
             this.pluginCache.set(pluginName, module.default);
-            console.log(`✅ Plugin ${pluginName} loaded successfully`);
+// console.log(`✅ Plugin ${pluginName} loaded successfully`);
             return module.default;
         } catch (error) {
             console.error(`❌ Failed to load plugin ${pluginName}:`, error);
@@ -79,12 +79,12 @@ class WaveSurferV7Loader {
                 Object.entries(plugins).forEach(([name, plugin]) => {
                     if (plugin) {
                         WaveSurfer.registerPlugin(plugin);
-                        console.log(`🔌 Plugin ${name} registered`);
+// console.log(`🔌 Plugin ${name} registered`);
                     }
                 });
             }
             
-            console.log('🚀 WaveSurfer.js v7.9.5 fully initialized with plugins');
+// console.log('🚀 WaveSurfer.js v7.9.5 fully initialized with plugins');
             return WaveSurfer;
             
         } catch (error) {

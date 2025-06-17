@@ -10,7 +10,7 @@
     "build:dev": "rollup -c --environment BUILD:development",
     "build:prod": "rollup -c --environment BUILD:production",
     "build:analyze": "rollup -c --environment BUILD:production,ANALYZE:true",
-    "start:server": "node fastify-server.mjs",
+    "start:server": "cd server && node server.js",
     "serve": "python -m http.server 8000",
     "perf": "rollup -c --environment BUILD:development && python -m http.server 8000",
     "tauri": "tauri",
@@ -20,12 +20,21 @@
     "@rollup/plugin-node-resolve": "^15.2.0",
     "@rollup/plugin-terser": "^0.4.4",
     "@tauri-apps/cli": "^2.4.0",
+    "pino-pretty": "^13.0.0",
     "rollup": "^4.0.0",
-    "rollup-plugin-filesize": "^10.0.0"
+    "rollup-plugin-filesize": "^10.0.0",
+    "ws": "^8.18.2"
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
-    "fastify": "^5.3.3",
+    "@fastify/static": "^8.0.1",
+    "@fastify/websocket": "^11.0.0",
+    "fastify": "^5.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
+    "objection": "^3.1.5",
+    "sequelize": "^6.37.1",
+    "sqlite3": "^5.1.6",
     "wavesurfer.js": "^7.9.5"
   }
 }

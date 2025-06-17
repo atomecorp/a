@@ -27,17 +27,17 @@ trap cleanup SIGINT SIGTERM EXIT
 
 echo "🚀 Démarrage des serveurs..."
 
-# Lancer Fastify en arrière-plan
+# Lancer Fastify en arrière-plan via le script
 echo "📡 Démarrage du serveur Fastify..."
-node fastify-server.mjs &
+./run_fastify.sh &
 FASTIFY_PID=$!
 
 # Attendre un peu que Fastify démarre
 sleep 2
 
-# Lancer Tauri en arrière-plan
+# Lancer Tauri en arrière-plan via le script
 echo "🖥️  Démarrage de Tauri..."
-npm run tauri:dev &
+./run_taurie.sh &
 TAURI_PID=$!
 
 echo "✅ Serveurs lancés:"
