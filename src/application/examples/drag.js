@@ -1,35 +1,5 @@
 // === TESTS DU COMPOSANT DRAGGABLE ===
 
-// S'assurer que le composant Draggable est chargé
-async function initDraggableTests() {
-  // Attendre un peu que les composants se chargent automatiquement
-  if (!window.Draggable) {
-    console.log('🔄 Attente du chargement automatique du composant Draggable...');
-    // Essayer plusieurs fois avec un délai
-    for (let i = 0; i < 10; i++) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (window.Draggable) break;
-    }
-  }
-
-  // Si toujours pas disponible, essayer de forcer l'import
-  if (!window.Draggable) {
-    console.log('🔄 Import manuel du composant Draggable...');
-    try {
-      const module = await import('../../squirrel/components/draggable_builder.js');
-      window.Draggable = module.draggable;
-      window.draggable = module.draggable;
-      window.makeDraggable = module.makeDraggable;
-      window.makeDraggableWithDrop = module.makeDraggableWithDrop;
-      console.log('✅ Composant Draggable importé manuellement');
-    } catch (error) {
-      console.error('❌ Erreur lors de l\'import manuel:', error);
-      return;
-    }
-  }
-
-  console.log('🎯 Démarrage des tests Draggable...');
-
 // Test 1: Draggable basique avec template
 const basicDrag = Draggable('draggable-box', {
   content: '🔴 Basic',
@@ -220,12 +190,3 @@ const child2Drag = Draggable('draggable-box', {
     }
   }
 });
-
-}
-
-// Lancer les tests une fois le DOM prêt
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initDraggableTests);
-} else {
-  initDraggableTests();
-}

@@ -60,12 +60,7 @@ class PluginManager {
   getPluginName(componentName) {
     const baseName = componentName.replace('_builder', '').replace('.js', '');
     
-    // Cas spéciaux pour garder la casse originale
-    if (baseName === 'draggable') {
-      return 'draggable'; // Garde en minuscule pour cohérence
-    }
-    
-    // Règle générale : première lettre en majuscule
+    // Règle générale : première lettre en majuscule pour tous les composants
     return baseName.charAt(0).toUpperCase() + baseName.slice(1);
   }
 
