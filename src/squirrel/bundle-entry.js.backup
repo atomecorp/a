@@ -18,7 +18,7 @@ import * as ListBuilder from './components/List_builder.js';
 import * as MenuBuilder from './components/menu_builder.js';
 import * as DraggableBuilder from './components/draggable_builder.js';
 import * as UnitBuilder from './components/unit_builder.js';
-// REMOVED: // REMOVED: import * as WaveSurferBuilder from './components/waveSurfer_builder.js'; // File not found // File not found
+// REMOVED: import * as WaveSurferBuilder from './components/waveSurfer_builder.js'; // File not found
 
 // === INITIALISATION DU FRAMEWORK ===
 function initSquirrel() {

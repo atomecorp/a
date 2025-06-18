@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-17T22:36:49.270Z
+ * Generated: 2025-06-18T13:11:52.678Z
  */
 var Squirrel = (function (exports) {
   'use strict';
@@ -523,8 +523,7 @@ var Squirrel = (function (exports) {
         'slider_builder',
         'table_builder',
         'tooltip_builder',
-        'unit_builder',
-        'waveSurfer_builder'
+        'unit_builder'
       ];
 
       // Enregistrement paresseux de tous les composants
@@ -6204,8 +6203,8 @@ var Squirrel = (function (exports) {
     tag: 'div',
     class: 'unit-body',
     css: {
-      padding: '12px',
-      minHeight: '40px',
+      padding: '8px 12px', // Réduire le padding vertical
+      minHeight: '32px', // Réduire la hauteur minimale
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -6217,10 +6216,12 @@ var Squirrel = (function (exports) {
   define('unit-icon', {
     tag: 'img',
     class: 'unit-icon',
+    attrs: { draggable: 'false' },
     css: {
       maxWidth: '32px',
       maxHeight: '32px',
-      objectFit: 'contain'
+      objectFit: 'contain',
+      pointerEvents: 'none'
     }
   });
 
@@ -6367,6 +6368,9 @@ var Squirrel = (function (exports) {
       inputs.forEach(input => this.addInput(input));
       outputs.forEach(output => this.addOutput(output));
       
+      // Ajuster la hauteur initiale du module
+      this.adjustModuleHeight();
+      
       // Ajouter l'icône si fournie
       if (icon || iconSrc) {
         this.setIcon(icon || iconSrc);
@@ -6502,6 +6506,9 @@ var Squirrel = (function (exports) {
 
       const icon = $('unit-icon');
       
+      // Désactiver le drag par défaut sur l'image
+      icon.draggable = false;
+      
       if (iconData.startsWith('data:')) {
         // Base64
         icon.src = iconData;
@@ -6546,7 +6553,10 @@ var Squirrel = (function (exports) {
       // Positionner le connecteur
       const inputIndex = this.inputs.length;
       const spacing = 20;
-      const startY = 30;
+      const headerHeight = 35; // Hauteur du header
+      const bodyPaddingTop = 8; // Padding top du body
+      const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+      const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
       connector.style.top = `${startY + inputIndex * spacing}px`;
 
       connector.addEventListener('click', (e) => {
@@ -6562,6 +6572,9 @@ var Squirrel = (function (exports) {
 
       this.element.appendChild(connector);
       this.inputs.push({ id, name, color, element: connector });
+      
+      // Ajuster la hauteur du module après ajout
+      this.adjustModuleHeight();
       
       return id;
     }
@@ -6589,7 +6602,10 @@ var Squirrel = (function (exports) {
       // Positionner le connecteur
       const outputIndex = this.outputs.length;
       const spacing = 20;
-      const startY = 30;
+      const headerHeight = 35; // Hauteur du header
+      const bodyPaddingTop = 8; // Padding top du body
+      const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+      const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
       connector.style.top = `${startY + outputIndex * spacing}px`;
 
       connector.addEventListener('click', (e) => {
@@ -6605,6 +6621,9 @@ var Squirrel = (function (exports) {
 
       this.element.appendChild(connector);
       this.outputs.push({ id, name, color, element: connector });
+      
+      // Ajuster la hauteur du module après ajout
+      this.adjustModuleHeight();
       
       return id;
     }
@@ -6635,18 +6654,61 @@ var Squirrel = (function (exports) {
 
     repositionInputs() {
       const spacing = 20;
-      const startY = 30;
+      const headerHeight = 35; // Hauteur du header
+      const bodyPaddingTop = 8; // Padding top du body
+      const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+      const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
       this.inputs.forEach((input, index) => {
         input.element.style.top = `${startY + index * spacing}px`;
       });
+      
+      // Ajuster la hauteur du module après repositionnement
+      this.adjustModuleHeight();
     }
 
     repositionOutputs() {
       const spacing = 20;
-      const startY = 30;
+      const headerHeight = 35; // Hauteur du header
+      const bodyPaddingTop = 8; // Padding top du body
+      const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+      const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
       this.outputs.forEach((output, index) => {
         output.element.style.top = `${startY + index * spacing}px`;
       });
+      
+      // Ajuster la hauteur du module après repositionnement
+      this.adjustModuleHeight();
+    }
+
+    // Nouvelle méthode pour ajuster automatiquement la hauteur du module
+    adjustModuleHeight() {
+      const connectorSpacing = 20;
+      const headerHeight = 35; // Hauteur réduite du header
+      const bodyPadding = 16; // Padding réduit top + bottom du body
+      const minBodyHeight = 32; // Hauteur minimale réduite du body
+      const extraMargin = 8; // Marge réduite pour l'esthétique
+      
+      // Calculer le nombre maximum de connecteurs sur un côté
+      const maxConnectors = Math.max(this.inputs.length, this.outputs.length);
+      
+      if (maxConnectors === 0) {
+        // Pas de connecteurs, utiliser une hauteur minimale réduite
+        this.element.style.height = 'auto';
+        this.element.style.minHeight = '60px';
+        return;
+      }
+      
+      // Calculer la hauteur nécessaire pour tous les connecteurs
+      const connectorsHeight = Math.max(1, maxConnectors) * connectorSpacing; // Supprimer le +10 pour startY
+      const requiredBodyHeight = Math.max(minBodyHeight, connectorsHeight);
+      const totalHeight = headerHeight + requiredBodyHeight + bodyPadding + extraMargin;
+      
+      // Appliquer la nouvelle hauteur
+      this.element.style.height = `${totalHeight}px`;
+      this.element.style.minHeight = `${totalHeight}px`;
+      
+      // Optionnel: Log pour debug
+      console.log(`📏 Unit ${this.name}: ${maxConnectors} connecteurs max → hauteur ${totalHeight}px`);
     }
 
     select() {
@@ -6689,172 +6751,11 @@ var Squirrel = (function (exports) {
   };
 
   /**
-   * Composant WaveSurfer pour lecteur audio avec visualisation
-   */
-
-  // Template pour le conteneur WaveSurfer
-  define('wavesurfer-container', {
-    tag: 'div',
-    class: 'hs-wavesurfer',
-    css: {
-      position: 'relative',
-      width: '100%',
-      minHeight: '100px',
-      backgroundColor: '#f8f9fa',
-      border: '1px solid #e9ecef',
-      borderRadius: '8px',
-      overflow: 'hidden'
-    }
-  });
-
-  // Template pour les contrôles
-  define('wavesurfer-controls', {
-    tag: 'div',
-    class: 'hs-wavesurfer-controls',
-    css: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      padding: '8px 12px',
-      backgroundColor: '#ffffff',
-      borderTop: '1px solid #e9ecef'
-    }
-  });
-
-  // Template pour les boutons de contrôle
-  define('wavesurfer-button', {
-    tag: 'button',
-    class: 'hs-wavesurfer-btn',
-    css: {
-      padding: '6px 12px',
-      border: '1px solid #ccc',
-      borderRadius: '4px',
-      backgroundColor: '#f8f9fa',
-      color: '#333',
-      fontSize: '12px',
-      cursor: 'pointer',
-      transition: 'all 0.2s ease'
-    }
-  });
-
-  /**
-   * Crée un lecteur WaveSurfer
-   */
-  const createWaveSurfer = (config = {}) => {
-    const {
-      url = '',
-      height = 100,
-      waveColor = '#4a90e2',
-      progressColor = '#2c5282',
-      showControls = true,
-      ...otherConfig
-    } = config;
-
-    // Créer le conteneur principal
-    const container = $('wavesurfer-container');
-    
-    // Zone de visualisation
-    const waveform = $({
-      tag: 'div',
-      class: 'wavesurfer-waveform',
-      css: {
-        height: `${height}px`,
-        backgroundColor: '#fafafa',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#666',
-        fontSize: '14px'
-      },
-      text: url ? 'Chargement audio...' : 'Aucun fichier audio'
-    });
-
-    container.append(waveform);
-
-    // Ajouter les contrôles si demandé
-    if (showControls) {
-      const controls = $('wavesurfer-controls');
-      
-      const playBtn = $('wavesurfer-button', { text: '▶️ Play' });
-      const pauseBtn = $('wavesurfer-button', { text: '⏸️ Pause' });
-      const stopBtn = $('wavesurfer-button', { text: '⏹️ Stop' });
-      
-      controls.append(playBtn, pauseBtn, stopBtn);
-      container.append(controls);
-
-      // Événements basiques (simulation)
-      playBtn.on('click', () => {
-        console.log('🎵 WaveSurfer: Play');
-        waveform.text('En cours de lecture...');
-      });
-
-      pauseBtn.on('click', () => {
-        console.log('🎵 WaveSurfer: Pause');
-        waveform.text('En pause');
-      });
-
-      stopBtn.on('click', () => {
-        console.log('🎵 WaveSurfer: Stop');
-        waveform.text(url ? 'Arrêté' : 'Aucun fichier audio');
-      });
-    }
-
-    // Méthodes publiques
-    const waveSurferInstance = {
-      element: container,
-      
-      loadUrl(newUrl) {
-        waveform.text('Chargement...');
-        console.log('🎵 WaveSurfer: Chargement de', newUrl);
-        // TODO: Intégrer la vraie librairie WaveSurfer ici
-        setTimeout(() => {
-          waveform.text('Prêt à lire');
-        }, 1000);
-        return this;
-      },
-
-      play() {
-        console.log('🎵 WaveSurfer: Play');
-        waveform.text('En cours de lecture...');
-        return this;
-      },
-
-      pause() {
-        console.log('🎵 WaveSurfer: Pause');
-        waveform.text('En pause');
-        return this;
-      },
-
-      stop() {
-        console.log('🎵 WaveSurfer: Stop');
-        waveform.text('Arrêté');
-        return this;
-      },
-
-      destroy() {
-        container.remove();
-        return this;
-      }
-    };
-
-    // Charger l'URL si fournie
-    if (url) {
-      waveSurferInstance.loadUrl(url);
-    }
-
-    return waveSurferInstance;
-  };
-
-  // Export par défaut
-  var waveSurfer_builder = {
-    create: createWaveSurfer
-  };
-
-  /**
    * 🚀 SQUIRREL.JS - BUNDLE ENTRY POINT
    * Point d'entrée pour générer le bundle CDN unique
    */
 
+  // REMOVED: // REMOVED: import * as WaveSurferBuilder from './components/waveSurfer_builder.js'; // File not found // File not found
 
   // === INITIALISATION DU FRAMEWORK ===
   function initSquirrel() {
@@ -6945,9 +6846,9 @@ var Squirrel = (function (exports) {
     }
     
     // WaveSurfer
-    if (waveSurfer_builder && waveSurfer_builder.create) {
-      window.WaveSurfer = waveSurfer_builder.create;
-      window.WaveSurferStyles = waveSurfer_builder;
+    if (WaveSurferBuilder.default && WaveSurferBuilder.default.create) {
+      window.WaveSurfer = WaveSurferBuilder.default.create;
+      window.WaveSurferStyles = WaveSurferBuilder.default;
       pluginManager.loadedPlugins.add('WaveSurfer');
       console.log('  ✅ WaveSurfer exposé');
     }
