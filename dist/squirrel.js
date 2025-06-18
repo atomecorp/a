@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-18T19:49:51.032Z
+ * Generated: 2025-06-18T19:54:54.567Z
  */
 var Squirrel = (function (exports) {
   'use strict';
@@ -59,7 +59,7 @@ var Squirrel = (function (exports) {
    * @param {string|Function} id - Identifiant du template ou fonction de création
    * @param {Object} props - Propriétés de configuration
    */
-  const $ = (id, props = {}) => {
+  const $$1 = (id, props = {}) => {
     const config = templateRegistry.get(id) || {};
     const element = createElement(config.tag || props.tag || id || 'div');
     
@@ -136,7 +136,7 @@ var Squirrel = (function (exports) {
     // Enfants imbriqués
     if (merged.children) {
       merged.children.forEach(childConfig => {
-        const child = $(childConfig.id, childConfig);
+        const child = $$1(childConfig.id, childConfig);
         element.appendChild(child);
       });
     }
@@ -253,7 +253,7 @@ var Squirrel = (function (exports) {
    * @param {string} id - Identifiant du template
    * @param {Object} config - Configuration du template
    */
-  const define = (id, config) => {
+  const define$1 = (id, config) => {
     templateRegistry.set(id, config);
     return config;
   };
@@ -860,6 +860,34 @@ var Squirrel = (function (exports) {
     }
   }
 
+  // / === 🎉 Démonstrations ===
+
+  // 1. Template basique
+
+
+  define('view', {
+      tag: 'div',
+      class: 'atome',
+      id: 'view',
+
+  });
+
+  // 2. Animation avec CSS
+  $('view', {
+      parent: document.body,
+      css: {
+          background: '#272727',
+          color: 'lightgray',
+          left: '0px',
+          top: '0px',
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          overflow: 'auto',
+      }
+
+  });
+
   /**
    * 🎯 LIST COMPONENT - VERSION 2.0 MATERIAL DESIGN
    * Composant List avec styles Material Design et personnalisation complète
@@ -1332,7 +1360,7 @@ var Squirrel = (function (exports) {
    */
 
   // Template pour le badge
-  define('badge-element', {
+  define$1('badge-element', {
     tag: 'span',
     class: 'hs-badge',
     css: {
@@ -1375,7 +1403,7 @@ var Squirrel = (function (exports) {
     const variantStyles = variants[variant] || variants.primary;
 
     // Créer le badge
-    const badge = $('badge-element', {
+    const badge = $$1('badge-element', {
       text,
       css: { 
         ...variantStyles,
@@ -1419,7 +1447,7 @@ var Squirrel = (function (exports) {
   // === DÉFINITION DES TEMPLATES DE BASE ===
 
   // Template pour le conteneur principal du bouton
-  define('button-container', {
+  define$1('button-container', {
     tag: 'button',
     class: 'hs-button',
     text: 'hello',
@@ -1445,7 +1473,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour l'icône du bouton
-  define('button-icon', {
+  define$1('button-icon', {
     tag: 'span',
     class: 'hs-button-icon',
     css: {
@@ -1458,7 +1486,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour le texte du bouton
-  define('button-text', {
+  define$1('button-text', {
     tag: 'span',
     class: 'hs-button-text',
     css: {
@@ -1469,7 +1497,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour le badge/compteur
-  define('button-badge', {
+  define$1('button-badge', {
     tag: 'span',
     class: 'hs-button-badge',
     css: {
@@ -1585,7 +1613,7 @@ var Squirrel = (function (exports) {
     }
 
     // Création du conteneur principal
-    const button = $('button-container', {
+    const button = $$1('button-container', {
       id: buttonId,
       css: containerStyles,
       attrs: { disabled },
@@ -1595,7 +1623,7 @@ var Squirrel = (function (exports) {
 
     // Ajout de l'icône si présente
     if (icon) {
-      const iconElement = $('button-icon', {
+      const iconElement = $$1('button-icon', {
         id: `${buttonId}_icon`,
         text: icon,
         css: skin.icon || {}
@@ -1611,7 +1639,7 @@ var Squirrel = (function (exports) {
 
     // Ajout du texte si présent
     if (text) {
-      const textElement = $('button-text', {
+      const textElement = $$1('button-text', {
         id: `${buttonId}_text`,
         text,
         css: skin.text || {}
@@ -1621,7 +1649,7 @@ var Squirrel = (function (exports) {
 
     // Ajout du badge si présent
     if (badge !== undefined) {
-      const badgeElement = $('button-badge', {
+      const badgeElement = $$1('button-badge', {
         id: `${buttonId}_badge`,
         text: badge.toString(),
         css: skin.badge || {}
@@ -1642,7 +1670,7 @@ var Squirrel = (function (exports) {
         badgeEl.textContent = newBadge.toString();
       } else if (newBadge !== undefined) {
         // Créer le badge s'il n'existe pas
-        const badgeElement = $('button-badge', {
+        const badgeElement = $$1('button-badge', {
           id: `${buttonId}_badge_new`,
           text: newBadge.toString(),
           css: skin.badge || {}
@@ -2204,7 +2232,7 @@ var Squirrel = (function (exports) {
   // === TEMPLATES POUR DRAGGABLE ===
 
   // Template pour un élément draggable basique
-  define('draggable-box', {
+  define$1('draggable-box', {
     tag: 'div',
     class: 'hs-draggable',
     css: {
@@ -2226,7 +2254,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour un handle de drag
-  define('drag-handle', {
+  define$1('drag-handle', {
     tag: 'div',
     class: 'hs-drag-handle',
     css: {
@@ -2245,7 +2273,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour une drop zone
-  define('drop-zone', {
+  define$1('drop-zone', {
     tag: 'div',
     class: 'hs-drop-zone',
     css: {
@@ -2265,7 +2293,7 @@ var Squirrel = (function (exports) {
   });
 
   // Styles pour les états des drop zones
-  define('drop-zone-active', {
+  define$1('drop-zone-active', {
     css: {
       borderColor: '#3498db',
       backgroundColor: '#ebf3fd',
@@ -2273,7 +2301,7 @@ var Squirrel = (function (exports) {
     }
   });
 
-  define('drop-zone-hover', {
+  define$1('drop-zone-hover', {
     css: {
       borderColor: '#27ae60',
       backgroundColor: '#e8f5e8',
@@ -2282,7 +2310,7 @@ var Squirrel = (function (exports) {
     }
   });
 
-  define('drop-zone-reject', {
+  define$1('drop-zone-reject', {
     css: {
       borderColor: '#e74c3c',
       backgroundColor: '#fdf2f2',
@@ -2323,7 +2351,7 @@ var Squirrel = (function (exports) {
     } = config;
 
     // Créer l'élément avec le template
-    const element = $(template, {
+    const element = $$1(template, {
       content,
       css,
       attrs,
@@ -4416,7 +4444,7 @@ var Squirrel = (function (exports) {
   // === DÉFINITION DES TEMPLATES DE BASE ===
 
   // Template pour le conteneur principal du slider
-  define('slider-container', {
+  define$1('slider-container', {
     tag: 'div',
     class: 'hs-slider',
     css: {
@@ -4428,7 +4456,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour la piste du slider
-  define('slider-track', {
+  define$1('slider-track', {
     tag: 'div',
     class: 'hs-slider-track',
     css: {
@@ -4442,7 +4470,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour la partie progression du slider
-  define('slider-progression', {
+  define$1('slider-progression', {
     tag: 'div',
     class: 'hs-slider-progression',
     css: {
@@ -4454,7 +4482,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour le handle/thumb du slider
-  define('slider-handle', {
+  define$1('slider-handle', {
     tag: 'div',
     class: 'hs-slider-handle',
     css: {
@@ -4469,7 +4497,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour le label/valeur du slider
-  define('slider-label', {
+  define$1('slider-label', {
     tag: 'div',
     class: 'hs-slider-label',
     css: {
@@ -4482,7 +4510,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour les graduations
-  define('slider-tick', {
+  define$1('slider-tick', {
     tag: 'div',
     class: 'hs-slider-tick',
     css: {
@@ -4733,14 +4761,14 @@ var Squirrel = (function (exports) {
     }
 
     // Création du conteneur principal
-    const container = $('slider-container', {
+    const container = $$1('slider-container', {
       id: sliderId,
       css: containerStyles,
       ...otherProps
     });
 
     // Création de la piste
-    const track = $('slider-track', {
+    const track = $$1('slider-track', {
       id: `${sliderId}_track`,
       css: trackStyles
     });
@@ -4760,7 +4788,7 @@ var Squirrel = (function (exports) {
     // Création de la progression
     let progression;
     if (!isCircular) {
-      progression = $('slider-progression', {
+      progression = $$1('slider-progression', {
         id: `${sliderId}_progression`,
         css: progressionStyles
       });
@@ -4768,7 +4796,7 @@ var Squirrel = (function (exports) {
     }
 
     // Création du handle
-    const handle = $('slider-handle', {
+    const handle = $$1('slider-handle', {
       id: `${sliderId}_handle`,
       css: handleStyles
     });
@@ -4776,7 +4804,7 @@ var Squirrel = (function (exports) {
     // Création du label si demandé
     let label;
     if (showLabel) {
-      label = $('slider-label', {
+      label = $$1('slider-label', {
         id: `${sliderId}_label`,
         text: currentValue.toString(),
         css: labelStyles
@@ -4787,7 +4815,7 @@ var Squirrel = (function (exports) {
     if (showTicks && ticks.length > 0) {
       ticks.forEach((tickValue, index) => {
         const tickPosition = ((tickValue - min) / (max - min)) * 100;
-        const tick = $('slider-tick', {
+        const tick = $$1('slider-tick', {
           id: `${sliderId}_tick_${index}`,
           css: {
             ...skin.tick || {},
@@ -5824,7 +5852,7 @@ var Squirrel = (function (exports) {
    */
 
   // Template pour le tooltip
-  define('tooltip-container', {
+  define$1('tooltip-container', {
     tag: 'div',
     class: 'hs-tooltip',
     css: {
@@ -5854,7 +5882,7 @@ var Squirrel = (function (exports) {
     } = config;
 
     // Créer le tooltip
-    const tooltip = $('tooltip-container', {
+    const tooltip = $$1('tooltip-container', {
       text,
       css: { ...css },
       ...otherProps
@@ -6333,7 +6361,7 @@ var Squirrel = (function (exports) {
   // === DÉFINITION DES TEMPLATES ===
 
   // Template pour le conteneur principal du unit
-  define('unit-container', {
+  define$1('unit-container', {
     tag: 'div',
     class: 'unit-container',
     css: {
@@ -6351,7 +6379,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour l'en-tête du unit
-  define('unit-header', {
+  define$1('unit-header', {
     tag: 'div',
     class: 'unit-header',
     css: {
@@ -6367,7 +6395,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour le nom éditable
-  define('unit-name', {
+  define$1('unit-name', {
     tag: 'span',
     class: 'unit-name',
     css: {
@@ -6379,7 +6407,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour le corps du unit
-  define('unit-body', {
+  define$1('unit-body', {
     tag: 'div',
     class: 'unit-body',
     css: {
@@ -6393,7 +6421,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour l'icône
-  define('unit-icon', {
+  define$1('unit-icon', {
     tag: 'img',
     class: 'unit-icon',
     attrs: { draggable: 'false' },
@@ -6406,7 +6434,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour les connecteurs
-  define('unit-connector', {
+  define$1('unit-connector', {
     tag: 'div',
     class: 'unit-connector',
     css: {
@@ -6423,7 +6451,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour les connecteurs d'entrée
-  define('unit-connector-input', {
+  define$1('unit-connector-input', {
     tag: 'div',
     class: 'unit-connector unit-connector-input',
     css: {
@@ -6440,7 +6468,7 @@ var Squirrel = (function (exports) {
   });
 
   // Template pour les connecteurs de sortie
-  define('unit-connector-output', {
+  define$1('unit-connector-output', {
     tag: 'div',
     class: 'unit-connector unit-connector-output',
     css: {
@@ -6558,13 +6586,13 @@ var Squirrel = (function (exports) {
     }
 
     createElement() {
-      this.element = $('unit-container', {
+      this.element = $$1('unit-container', {
         attrs: { 'data-unit-id': this.id }
       });
 
-      this.header = $('unit-header');
-      this.nameElement = $('unit-name', { text: this.name });
-      this.body = $('unit-body');
+      this.header = $$1('unit-header');
+      this.nameElement = $$1('unit-name', { text: this.name });
+      this.body = $$1('unit-body');
 
       this.header.appendChild(this.nameElement);
       this.element.appendChild(this.header);
@@ -6684,7 +6712,7 @@ var Squirrel = (function (exports) {
 
       if (!iconData) return;
 
-      const icon = $('unit-icon');
+      const icon = $$1('unit-icon');
       
       // Désactiver le drag par défaut sur l'image
       icon.draggable = false;
@@ -6717,7 +6745,7 @@ var Squirrel = (function (exports) {
         color = '#28a745'
       } = options;
 
-      const connector = $('unit-connector-input', {
+      const connector = $$1('unit-connector-input', {
         attrs: { 
           'data-connector-id': id,
           'data-connector-type': 'input',
@@ -6766,7 +6794,7 @@ var Squirrel = (function (exports) {
         color = '#dc3545'
       } = options;
 
-      const connector = $('unit-connector-output', {
+      const connector = $$1('unit-connector-output', {
         attrs: { 
           'data-connector-id': id,
           'data-connector-type': 'output',
@@ -7058,8 +7086,8 @@ var Squirrel = (function (exports) {
     console.log('🔄 Initialisation de Squirrel.js...');
     
     // Exposer les utilitaires de base
-    window.$ = $;
-    window.define = define;
+    window.$ = $$1;
+    window.define = define$1;
     window.observeMutations = observeMutations;
     window.body = document.body;
     window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
