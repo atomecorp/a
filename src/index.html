@@ -7,6 +7,12 @@
     <link rel="icon" type="image/svg+xml" href="assets/images/icons/audio.svg">
     <link rel="stylesheet" href="css/styles.css">
     <script type="module" src="squirrel/spark.js"></script>
+    <script type="module">
+        // Écouter l'événement Squirrel prêt
+        window.addEventListener('squirrel:ready', () => {
+            import('./application/index.js');
+        });
+    </script>
 </head>
 <body>
 </body>

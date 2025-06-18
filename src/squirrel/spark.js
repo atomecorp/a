@@ -131,8 +131,9 @@
 
     // Chargement de l'application principale
     await import('./kickstart.js');
-    await import('../application/index.js');
-   
+
+    // 🎉 Émettre un événement pour signaler que Squirrel est prêt
+    window.dispatchEvent(new CustomEvent('squirrel:ready'));
 
   } catch (error) {
     // Gestion centralisée des erreurs
