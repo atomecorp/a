@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-18T21:36:29.880Z
+ * Generated: 2025-06-18T21:38:49.449Z
  */
 var Squirrel = (function (exports) {
   'use strict';
@@ -7055,17 +7055,19 @@ var Squirrel = (function (exports) {
   }
 
   /**
-   * 🚀 SQUIRREL.JS - BUNDLE ENTRY POINT
-   * Point d'entrée avec initialisation immédiate et simple
+   * 🚀 SQUIRREL.JS - BUNDLE ENTRY POINT (STATIC VERSION)
+   * Point d'entrée avec imports statiques et initialisation immédiate
    */
 
 
   // === ÉTAT GLOBAL ===
   let pluginManager = null;
 
-  // === EXPOSITION DES APIS CORE ===
+  // === EXPOSITION IMMÉDIATE DES APIS CORE ===
   function exposeCorAPIs() {
-    // Exposer les utilitaires de base
+    console.log('⚡ Exposition des APIs core Squirrel...');
+    
+    // Exposer les utilitaires de base immédiatement
     window.$ = $$1;
     window.define = define$1;
     window.observeMutations = observeMutations;
@@ -7079,10 +7081,14 @@ var Squirrel = (function (exports) {
     // Créer l'API des plugins
     const pluginAPI = new SquirrelPluginAPI(pluginManager);
     window.Squirrel = pluginAPI;
+    
+    console.log('✅ APIs core exposées');
   }
 
   // === CHARGEMENT DES COMPOSANTS ===
   function loadComponents() {
+    console.log('🔍 Chargement des composants...');
+    
     const componentModules = {
       ListBuilder,
       BadgeBuilder,
@@ -7117,29 +7123,50 @@ var Squirrel = (function (exports) {
           
           // Enregistrer dans le plugin manager
           pluginManager.loadedPlugins.add(componentName);
+          
+          // console.log(`  ✅ ${componentName} exposé globalement`);
         }
       } catch (error) {
-        console.warn(`⚠️ Erreur lors de l'exposition de ${moduleName}:`, error.message);
+        console.warn(`  ⚠️ Erreur lors de l'exposition de ${moduleName}:`, error.message);
       }
     });
     
-    // API pour le chargement manuel (compatibilité)
+    // API pour le chargement manuel (pour compatibilité)
     window.loadPlugin = async (pluginName) => {
+      // console.log(`✅ Plugin ${pluginName} déjà chargé dans le bundle`);
       return window[pluginName];
     };
+    
+    console.log('✅ Composants chargés et exposés');
+    console.log(`📦 ${Object.keys(componentModules).length} composants disponibles`);
+    console.log('🧩 Composants:', Array.from(pluginManager.loadedPlugins));
     
     return componentModules;
   }
 
   // === INITIALISATION IMMÉDIATE DES APIs ===
   function initSquirrelAPIs() {
+    console.log('⚡ Initialisation immédiate des APIs Squirrel...');
+    
     exposeCorAPIs();
     loadComponents();
+    
+    console.log('✅ APIs Squirrel disponibles immédiatement');
     window.squirrelReady = true;
+    
+    // Émettre événement pour les APIs prêtes
+    window.dispatchEvent(new CustomEvent('squirrel:apis-ready', {
+      detail: { 
+        version: '1.0.0', 
+        components: Array.from(pluginManager.loadedPlugins)
+      }
+    }));
   }
 
   // === INITIALISATION DOM ===
   function initSquirrelDOM() {
+    console.log('🏠 Initialisation DOM Squirrel...');
+    
     try {
       runKickstart();
       window.squirrelDomReady = true;
@@ -7152,6 +7179,8 @@ var Squirrel = (function (exports) {
           domReady: true
         }
       }));
+      
+      console.log('🎉 Squirrel.js complètement initialisé!');
     } catch (error) {
       console.error('❌ Erreur lors de l\'initialisation DOM:', error);
     }
@@ -7161,13 +7190,13 @@ var Squirrel = (function (exports) {
   window.squirrelReady = false;
   window.squirrelDomReady = false;
 
-  // === FONCTIONS UTILITAIRES ===
+  // === FONCTIONS UTILITAIRES POUR LES UTILISATEURS ===
   window.whenSquirrelReady = function(callback) {
     if (window.squirrelReady) {
       callback();
     } else {
-      // Fallback - ne devrait pas arriver
-      setTimeout(callback, 0);
+      // Fallback au cas où (ne devrait pas arriver)
+      window.addEventListener('squirrel:apis-ready', callback, { once: true });
     }
   };
 
@@ -7181,20 +7210,15 @@ var Squirrel = (function (exports) {
 
   // === AUTO-INITIALISATION ===
   if (typeof window !== 'undefined') {
-    // ÉTAPE 1: Initialiser les APIs immédiatement
+    // ÉTAPE 1: Initialiser les APIs immédiatement (synchrone)
     initSquirrelAPIs();
     
-    // ÉTAPE 2: Initialiser le DOM dès que body est disponible
-    if (document.body) {
-      // Body disponible, initialiser immédiatement
-      initSquirrelDOM();
+    // ÉTAPE 2: Initialiser le DOM quand prêt (asynchrone)
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSquirrelDOM);
     } else {
-      // Attendre le body
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initSquirrelDOM);
-      } else {
-        setTimeout(initSquirrelDOM, 0);
-      }
+      // DOM déjà prêt
+      setTimeout(initSquirrelDOM, 0);
     }
   }
 
