@@ -488,8 +488,8 @@ define('unit-body', {
   tag: 'div',
   class: 'unit-body',
   css: {
-    padding: '12px',
-    minHeight: '40px',
+    padding: '8px 12px', // Réduire le padding vertical
+    minHeight: '32px', // Réduire la hauteur minimale
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -652,6 +652,9 @@ class Unit {
     // Puis ajouter les connecteurs
     inputs.forEach(input => this.addInput(input));
     outputs.forEach(output => this.addOutput(output));
+    
+    // Ajuster la hauteur initiale du module
+    this.adjustModuleHeight();
     
     // Ajouter l'icône si fournie
     if (icon || iconSrc) {
@@ -835,7 +838,10 @@ class Unit {
     // Positionner le connecteur
     const inputIndex = this.inputs.length;
     const spacing = 20;
-    const startY = 30;
+    const headerHeight = 35; // Hauteur du header
+    const bodyPaddingTop = 8; // Padding top du body
+    const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+    const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
     connector.style.top = `${startY + inputIndex * spacing}px`;
 
     connector.addEventListener('click', (e) => {
@@ -851,6 +857,9 @@ class Unit {
 
     this.element.appendChild(connector);
     this.inputs.push({ id, name, color, element: connector });
+    
+    // Ajuster la hauteur du module après ajout
+    this.adjustModuleHeight();
     
     return id;
   }
@@ -878,7 +887,10 @@ class Unit {
     // Positionner le connecteur
     const outputIndex = this.outputs.length;
     const spacing = 20;
-    const startY = 30;
+    const headerHeight = 35; // Hauteur du header
+    const bodyPaddingTop = 8; // Padding top du body
+    const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+    const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
     connector.style.top = `${startY + outputIndex * spacing}px`;
 
     connector.addEventListener('click', (e) => {
@@ -894,6 +906,9 @@ class Unit {
 
     this.element.appendChild(connector);
     this.outputs.push({ id, name, color, element: connector });
+    
+    // Ajuster la hauteur du module après ajout
+    this.adjustModuleHeight();
     
     return id;
   }
@@ -924,18 +939,61 @@ class Unit {
 
   repositionInputs() {
     const spacing = 20;
-    const startY = 30;
+    const headerHeight = 35; // Hauteur du header
+    const bodyPaddingTop = 8; // Padding top du body
+    const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+    const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
     this.inputs.forEach((input, index) => {
       input.element.style.top = `${startY + index * spacing}px`;
     });
+    
+    // Ajuster la hauteur du module après repositionnement
+    this.adjustModuleHeight();
   }
 
   repositionOutputs() {
     const spacing = 20;
-    const startY = 30;
+    const headerHeight = 35; // Hauteur du header
+    const bodyPaddingTop = 8; // Padding top du body
+    const connectorRadius = 6; // Moitié de la taille d'un connecteur (12px/2)
+    const startY = headerHeight + bodyPaddingTop + connectorRadius; // Position sous le début du body + marge
     this.outputs.forEach((output, index) => {
       output.element.style.top = `${startY + index * spacing}px`;
     });
+    
+    // Ajuster la hauteur du module après repositionnement
+    this.adjustModuleHeight();
+  }
+
+  // Nouvelle méthode pour ajuster automatiquement la hauteur du module
+  adjustModuleHeight() {
+    const connectorSpacing = 20;
+    const headerHeight = 35; // Hauteur réduite du header
+    const bodyPadding = 16; // Padding réduit top + bottom du body
+    const minBodyHeight = 32; // Hauteur minimale réduite du body
+    const extraMargin = 8; // Marge réduite pour l'esthétique
+    
+    // Calculer le nombre maximum de connecteurs sur un côté
+    const maxConnectors = Math.max(this.inputs.length, this.outputs.length);
+    
+    if (maxConnectors === 0) {
+      // Pas de connecteurs, utiliser une hauteur minimale réduite
+      this.element.style.height = 'auto';
+      this.element.style.minHeight = '60px';
+      return;
+    }
+    
+    // Calculer la hauteur nécessaire pour tous les connecteurs
+    const connectorsHeight = Math.max(1, maxConnectors) * connectorSpacing; // Supprimer le +10 pour startY
+    const requiredBodyHeight = Math.max(minBodyHeight, connectorsHeight);
+    const totalHeight = headerHeight + requiredBodyHeight + bodyPadding + extraMargin;
+    
+    // Appliquer la nouvelle hauteur
+    this.element.style.height = `${totalHeight}px`;
+    this.element.style.minHeight = `${totalHeight}px`;
+    
+    // Optionnel: Log pour debug
+    console.log(`📏 Unit ${this.name}: ${maxConnectors} connecteurs max → hauteur ${totalHeight}px`);
   }
 
   select() {
