@@ -148,6 +148,7 @@ window.addEventListener('unhandledrejection', (event) => {
   event.preventDefault();
 });
 
+console.log('🚀 Squirrel initailized') ;
 // import Button from '../squirrel/components/Buttons.js';
 
 
