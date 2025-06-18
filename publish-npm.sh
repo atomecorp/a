@@ -1,7 +1,14 @@
 #!/bin/bash
 
 # 🚀 SQUIRREL NPM PUBLISHER
-# Script pour publier automatiquement via NPM + unpkg
+# Scr# Fonction pour nettoyer les imports manquants
+clean_bundle_imports() {
+    local bundle_file="cdn_npm_maker/bundle-entry.js"
+    
+    if [ ! -f "$bundle_file" ]; then
+        echo "⚠️ bundle-entry.js not found"
+        return 1
+    fi publier automatiquement via NPM + unpkg
 
 echo "🐿️ Squirrel.js NPM Publisher (NPM + unpkg)"
 echo "=========================================="
@@ -91,11 +98,11 @@ clean_bundle_imports() {
 echo "🔍 Checking component dependencies..."
 missing_files=()
 
-if [ -f "src/squirrel/bundle-entry.js" ]; then
+if [ -f "cdn_npm_maker/bundle-entry.js" ]; then
     echo "   Checking imports in bundle-entry.js..."
     
     # Extraire les imports de composants
-    imports=$(grep -o "from.*components/.*\.js" src/squirrel/bundle-entry.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
+    imports=$(grep -o "from.*components/.*\.js" cdn_npm_maker/bundle-entry.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
     
     for component in $imports; do
         file_path="src/squirrel/components/${component}.js"
@@ -308,6 +315,13 @@ npm install $PACKAGE_NAME
 EOF
 
 echo "✅ Publication terminée!"
+
+# 🧹 Nettoyage des fichiers temporaires
+if [ -f "cdn_npm_maker/bundle-entry.js.backup" ]; then
+    rm "cdn_npm_maker/bundle-entry.js.backup"
+    echo "🧹 Backup temporaire supprimé"
+fi
+
 echo ""
 echo "🎉 Package publié avec succès!"
 echo "📦 npm: https://www.npmjs.com/package/$PACKAGE_NAME"

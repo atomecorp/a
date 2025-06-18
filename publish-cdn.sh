@@ -84,9 +84,56 @@ check_whois() {
     fi
 }
 
+# Fonction pour diagnostiquer et trouver la liste statique
+find_static_component_list() {
+    echo "🔍 Searching for static component lists..."
+    
+    # 1. Chercher dans les fichiers de build/config
+    echo "   Checking build configuration files..."
+    find . -name "*.js" -o -name "*.json" -o -name "*.config.*" | grep -E "(webpack|rollup|build|config)" | while read file; do
+        if grep -q "WaveSurfer\|components.*\[\|export.*{" "$file" 2>/dev/null; then
+            echo "   🎯 Found potential list in: $file"
+            grep -n "WaveSurfer\|components.*\[\|export.*{" "$file" 2>/dev/null | head -5
+            echo ""
+        fi
+    done
+    
+    # 2. Chercher dans src/squirrel/
+    echo "   Checking src/squirrel/ files..."
+    find src/squirrel/ -name "*.js" -type f | while read file; do
+        if grep -q "WaveSurfer\|components.*\[\|export.*{.*Button.*Slider" "$file" 2>/dev/null; then
+            echo "   🎯 Found potential list in: $file"
+            grep -n -A5 -B5 "WaveSurfer\|components.*\[\|export.*{.*Button" "$file" 2>/dev/null
+            echo ""
+        fi
+    done
+    
+    # 3. Chercher dans package.json scripts
+    echo "   Checking package.json scripts..."
+    if [ -f "package.json" ]; then
+        echo "   📝 Build scripts found:"
+        node -p "Object.keys(require('./package.json').scripts || {}).filter(s => s.includes('build')).map(s => s + ': ' + require('./package.json').scripts[s]).join('\n')" 2>/dev/null
+        echo ""
+    fi
+    
+    # 4. Chercher les références à WaveSurfer dans tout le projet
+    echo "   Searching for WaveSurfer references..."
+    grep -r "WaveSurfer" . --include="*.js" --include="*.json" --exclude-dir=node_modules --exclude-dir=dist 2>/dev/null | head -10
+    echo ""
+    
+    # 5. Lister les fichiers de composants réellement présents
+    echo "   📁 Actual component files present:"
+    if [ -d "src/squirrel/components" ]; then
+        ls -la src/squirrel/components/*.js 2>/dev/null | awk '{print "      " $9}' | sed 's|src/squirrel/components/||g'
+    else
+        echo "      ⚠️ No components directory found"
+    fi
+    echo ""
+}
+
 # Fonction pour nettoyer les imports manquants
 clean_bundle_imports() {
-    local bundle_file="src/squirrel/bundle-entry.js"
+    local bundle_file="cdn_npm_maker/bundle-entry.js"
     
     if [ ! -f "$bundle_file" ]; then
         echo "⚠️ bundle-entry.js not found"
@@ -94,6 +141,9 @@ clean_bundle_imports() {
     fi
     
     echo "🧹 Cleaning missing imports from bundle-entry.js..."
+    
+    # D'abord, diagnostiquer le problème
+    find_static_component_list
     
     # Créer une sauvegarde
     cp "$bundle_file" "${bundle_file}.backup"
@@ -175,11 +225,11 @@ echo "🔍 Checking component dependencies..."
 missing_files=()
 
 # Vérifier si bundle-entry.js existe et lister les imports
-if [ -f "src/squirrel/bundle-entry.js" ]; then
+if [ -f "cdn_npm_maker/bundle-entry.js" ]; then
     echo "   Checking imports in bundle-entry.js..."
     
     # Extraire les imports de composants
-    imports=$(grep -o "from.*components/.*\.js" src/squirrel/bundle-entry.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
+    imports=$(grep -o "from.*components/.*\.js" cdn_npm_maker/bundle-entry.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
     
     for component in $imports; do
         file_path="src/squirrel/components/${component}.js"
@@ -362,6 +412,13 @@ cat > CDN-README.md << EOF
 EOF
 
 echo "✅ Publication terminée!"
+
+# 🧹 Nettoyage des fichiers temporaires
+if [ -f "cdn_npm_maker/bundle-entry.js.backup" ]; then
+    rm "cdn_npm_maker/bundle-entry.js.backup"
+    echo "🧹 Backup temporaire supprimé"
+fi
+
 echo "🌐 URLs jsDelivr disponibles:"
 echo "   Normal: $CDN_URL/squirrel.js"
 echo "   Minifié: $CDN_URL/squirrel.min.js"

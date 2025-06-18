@@ -42,7 +42,7 @@ sleep 2
 
 # Lancer Tauri en arrière-plan via le script
 echo "🖥️  Démarrage de Tauri..."
-./run_taurie.sh &
+./run_tauri.sh &
 TAURI_PID=$!
 
 echo "✅ Serveurs lancés:"

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Squirrel.js - Version Modernisée</title>
+</head>
+<body>
+    <script src="./squirrel.js"></script>
+    <script>
+        console.log('🎯 Application démarrée sans attendre !');
+        
+        // ✅ APIs disponibles immédiatement
+        console.log('✅ $ disponible:', typeof $ !== 'undefined');
+        console.log('✅ makeDraggable disponible:', typeof makeDraggable !== 'undefined');
+        
+        // ✅ Pour créer des éléments DOM, attendre que le DOM soit prêt
+        window.whenSquirrelDOMReady(() => {
+            console.log('🎯 DOM prêt, création des éléments');
+            
+            // Créer l'élément immédiatement
+            const monSpan = $('span', {
+                id: 'test1',
+                css: {
+                    backgroundColor: '#00f',
+                    display: 'block',
+                    position: 'absolute',
+                    marginLeft: '0',
+                    padding: '10px',
+                    color: 'white',
+                    margin: '10px',
+                    borderRadius: '5px'
+                },
+                text: 'Je suis un SPAN moderne ! 🎯'
+            });
+
+            makeDraggable(grab('test1'), {
+                onDragStart: (element, event) => { 
+                    puts(`Début du drag sur l'élément ${element.id} !`); 
+                }
+            });
+            
+            grab('test1').left = '100px';
+            
+            console.log('✅ Élément créé et configuré sans setTimeout !');
+        });
+        
+        // 📢 L'ancien événement fonctionne toujours (pour compatibilité)
+        window.addEventListener('squirrel:ready', (event) => {
+            console.log('🔄 Événement squirrel:ready reçu (rétrocompatibilité)');
+            console.log('💡 Mais le code moderne au-dessus s\'exécute déjà !');
+        });
+        
+        console.log('🎉 Tout fonctionne sans attendre squirrel:ready !');
+    </script>
+</body>
+</html>
