@@ -53,7 +53,7 @@ fi
 
 # Fonction pour nettoyer les imports manquants (réutilisée)
 clean_bundle_imports() {
-    local bundle_file="src/squirrel/bundle-entry.js"
+    local bundle_file="cdn_npm_maker/bundle-entry.js"
     
     if [ ! -f "$bundle_file" ]; then
         echo "⚠️ bundle-entry.js not found"

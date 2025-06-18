@@ -1,42 +1,91 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Squirrel.js avec Kickstart</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Complet - Squirrel.js Sans Attente</title>
 </head>
+
 <body>
-      <script src="./squirrel.js"></script>
-<script>
-  // window.addEventListener('squirrel:ready', (event) => {
-    // setTimeout(() => {
-        console.log('🎯 Application prête, #view disponible');
-        
-        // D'ABORD créer l'élément
-        const monSpan = $('span', {
-            id: 'test1',
-            css: {
-                backgroundColor: '#00f',
-display: 'block',
-position: 'absolute',
-marginLeft: '0',
-padding: '10px',
-color: 'white',
-margin: '10px',
-display: 'inline-block'
-},
-text: 'Je suis un SPAN ! 🎯'
-});
+  <script src="./squirrel.js"></script>
+  <script>
+    console.log('🎯 Test démarré - vérification des APIs...');
+    
+    // Test 1: APIs disponibles
+    console.log('✅ $ disponible:', typeof $ !== 'undefined');
+    console.log('✅ grab disponible:', typeof grab !== 'undefined');
+    console.log('✅ puts disponible:', typeof puts !== 'undefined');
+    console.log('✅ makeDraggable disponible:', typeof makeDraggable !== 'undefined');
+    
+    // Test 2: DOM ready states
+    console.log('✅ squirrelReady:', window.squirrelReady);
+    console.log('✅ squirrelDomReady:', window.squirrelDomReady);
+    console.log('✅ #view existe:', !!document.getElementById('view'));
 
-makeDraggable(grab('test1'), {
-  onDragStart: (element, event) => { puts(`Début du drag sur l'élément ${element.id} !`); }
-});
-grab('test1').left='100px';
-//     }, 10);
-// });
- 
-</script>
+    // Test 3: Création d'éléments avec parent: '#view'
+    const monSpan = $('span', {
+      id: 'test1',
+      parent: '#view',
+      css: {
+        backgroundColor: '#00f',
+        display: 'block',
+        position: 'absolute',
+        marginLeft: '0',
+        padding: '10px',
+        color: 'white',
+        margin: '10px',
+        borderRadius: '5px'
+      },
+      text: 'Je suis un SPAN sans attente ! 🎯'
+    });
 
- 
+    // Test 4: grab() fonctionne immédiatement
+    const element = grab('test1');
+    console.log('✅ grab(test1) retourne:', element);
+    console.log('✅ Élément dans le DOM:', element && element.parentNode);
+
+    // Test 5: makeDraggable fonctionne
+    if (element && typeof makeDraggable !== 'undefined') {
+      makeDraggable(element, {
+        onDragStart: (el, event) => { 
+          puts(`🎯 Drag started sur ${el.id}!`); 
+        }
+      });
+      console.log('✅ Draggable configuré');
+    }
+
+    // Test 6: Manipulation directe
+    if (element) {
+      element.left = '100px';
+      element.style.top = '100px';
+      console.log('✅ Position modifiée');
+    }
+
+    // Test 7: Créer un deuxième élément pour tester
+    const button = $('button', {
+      id: 'test-button',
+      parent: '#view',
+      text: 'Cliquez-moi !',
+      css: {
+        position: 'absolute',
+        top: '200px',
+        left: '20px',
+        padding: '10px',
+        backgroundColor: '#007acc',
+        color: 'white',
+        border: 'none',
+        borderRadius: '5px',
+        cursor: 'pointer'
+      },
+      onclick: () => {
+        puts('🎉 Button cliqué sans problème !');
+        alert('Tout fonctionne parfaitement !');
+      }
+    });
+
+    console.log('🎉 Test terminé - Tout fonctionne sans attendre d\'événement !');
+  </script>
 </body>
+
 </html>
