@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-18T19:54:54.567Z
+ * Generated: 2025-06-18T19:58:42.785Z
  */
 var Squirrel = (function (exports) {
   'use strict';
@@ -859,34 +859,6 @@ var Squirrel = (function (exports) {
       return await this.create('Menu', ...args);
     }
   }
-
-  // / === 🎉 Démonstrations ===
-
-  // 1. Template basique
-
-
-  define('view', {
-      tag: 'div',
-      class: 'atome',
-      id: 'view',
-
-  });
-
-  // 2. Animation avec CSS
-  $('view', {
-      parent: document.body,
-      css: {
-          background: '#272727',
-          color: 'lightgray',
-          left: '0px',
-          top: '0px',
-          position: 'absolute',
-          width: '100%',
-          height: '100%',
-          overflow: 'auto',
-      }
-
-  });
 
   /**
    * 🎯 LIST COMPONENT - VERSION 2.0 MATERIAL DESIGN
@@ -7055,6 +7027,35 @@ var Squirrel = (function (exports) {
     unitManager: unitManager
   });
 
+  // === 🎉 SQUIRREL KICKSTART ===
+  // Fonction d'initialisation à appeler après que $ et define soient disponibles
+
+  function runKickstart() {
+    // 1. Template basique
+    define('view', {
+        tag: 'div',
+        class: 'atome',
+        id: 'view',
+    });
+
+    // 2. Animation avec CSS
+    $('view', {
+        parent: document.body,
+        css: {
+            background: '#272727',
+            color: 'lightgray',
+            left: '0px',
+            top: '0px',
+            position: 'absolute',
+            width: '100%',
+            height: '100%',
+            overflow: 'auto',
+        }
+    });
+    
+    console.log('🎯 Kickstart exécuté avec succès!');
+  }
+
   /**
    * 🚀 SQUIRREL.JS - BUNDLE ENTRY POINT (DYNAMIC VERSION)
    * Point d'entrée avec chargement dynamique des composants
@@ -7139,9 +7140,9 @@ var Squirrel = (function (exports) {
       return window[pluginName];
     };
     
-    // console.log('🎉 Squirrel.js initialisé avec succès!');
-    // console.log(`📦 ${Object.keys(componentModules).length} composants chargés`);
-    // console.log('🧩 Composants:', Array.from(pluginManager.loadedPlugins));
+    console.log('🎉 Squirrel.js initialisé avec succès!');
+    console.log(`📦 ${Object.keys(componentModules).length} composants chargés`);
+    console.log('🧩 Composants:', Array.from(pluginManager.loadedPlugins));
     
     // Émettre un événement pour signaler que tout est prêt
     window.dispatchEvent(new CustomEvent('squirrel:ready', {
@@ -7152,6 +7153,13 @@ var Squirrel = (function (exports) {
         dynamicLoading: true
       }
     }));
+    
+    // 🚀 KICKSTART EN DERNIER - Après que tout soit prêt
+    try {
+      runKickstart();
+    } catch (error) {
+      console.error('❌ Erreur lors du kickstart:', error);
+    }
   }
 
   // === AUTO-INITIALISATION ===
