@@ -1,27 +1,28 @@
 <!DOCTYPE html>
 <html lang="fr">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Test Complet - Squirrel.js Sans Attente</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Squirrel.js avec Kickstart</title>
 </head>
-
 <body>
-  <script src="./squirrel.js"></script>
-  <script>
-    console.log('🎯 Test démarré - vérification des APIs...');
+
+    <!-- Chargement du bundle avec kickstart -->
+    <script src="https://cdn.jsdelivr.net/gh/atomecorp/a@main/dist/squirrel.js"></script>
+    
+    <script>
+    // console.log('🎯 Test démarré - vérification des APIs...');
     
     // Test 1: APIs disponibles
-    console.log('✅ $ disponible:', typeof $ !== 'undefined');
-    console.log('✅ grab disponible:', typeof grab !== 'undefined');
-    console.log('✅ puts disponible:', typeof puts !== 'undefined');
-    console.log('✅ makeDraggable disponible:', typeof makeDraggable !== 'undefined');
+    // console.log('✅ $ disponible:', typeof $ !== 'undefined');
+    // console.log('✅ grab disponible:', typeof grab !== 'undefined');
+    // console.log('✅ puts disponible:', typeof puts !== 'undefined');
+    // console.log('✅ makeDraggable disponible:', typeof makeDraggable !== 'undefined');
     
     // Test 2: DOM ready states
-    console.log('✅ squirrelReady:', window.squirrelReady);
-    console.log('✅ squirrelDomReady:', window.squirrelDomReady);
-    console.log('✅ #view existe:', !!document.getElementById('view'));
+    // console.log('✅ squirrelReady:', window.squirrelReady);
+    // console.log('✅ squirrelDomReady:', window.squirrelDomReady);
+    // console.log('✅ #view existe:', !!document.getElementById('view'));
 
     // Test 3: Création d'éléments avec parent: '#view'
     const monSpan = $('span', {
@@ -42,8 +43,8 @@
 
     // Test 4: grab() fonctionne immédiatement
     const element = grab('test1');
-    console.log('✅ grab(test1) retourne:', element);
-    console.log('✅ Élément dans le DOM:', element && element.parentNode);
+    // console.log('✅ grab(test1) retourne:', element);
+    // console.log('✅ Élément dans le DOM:', element && element.parentNode);
 
     // Test 5: makeDraggable fonctionne
     if (element && typeof makeDraggable !== 'undefined') {
@@ -52,14 +53,14 @@
           puts(`🎯 Drag started sur ${el.id}!`); 
         }
       });
-      console.log('✅ Draggable configuré');
+      // console.log('✅ Draggable configuré');
     }
 
     // Test 6: Manipulation directe
     if (element) {
       element.left = '100px';
       element.style.top = '100px';
-      console.log('✅ Position modifiée');
+      // console.log('✅ Position modifiée');
     }
 
     // Test 7: Créer un deuxième élément pour tester
@@ -84,8 +85,6 @@
       }
     });
 
-    console.log('🎉 Test terminé - Tout fonctionne sans attendre d\'événement !');
   </script>
 </body>
-
 </html>

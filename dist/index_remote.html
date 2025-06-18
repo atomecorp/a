@@ -6,140 +6,85 @@
     <title>Test Squirrel.js avec Kickstart</title>
 </head>
 <body>
-    <h1>🐿️ Test Kickstart intégré</h1>
 
     <!-- Chargement du bundle avec kickstart -->
     <script src="https://cdn.jsdelivr.net/gh/atomecorp/a@main/dist/squirrel.js"></script>
     
     <script>
-        window.addEventListener('squirrel:ready', (event) => {
-            function createMaterialToggle(initialState = false) {
-  let state = initialState;
-  
-  const container = document.createElement('div');
-  container.style.cssText = `
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
-  `;
-  
-  const toggle = Button({
-    text: '',
-    onClick: () => {
-      state = !state;
-      updateVisualState();
-      console.log('Toggle:', state ? 'ON ✅' : 'OFF ❌');
-    },
-    style: {
-      width: '50px',
-      height: '24px',
-      borderRadius: '12px',
-      backgroundColor: state ? '#4CAF50' : '#ccc',
-      position: 'relative',
-      border: 'none',
-      cursor: 'pointer',
-      transition: 'background-color 0.3s ease'
-    }
-  });
-  
-  // const thumb = document.createElement('div');
-  // thumb.style.cssText = `
-  //   position: absolute;
-  //   top: 2px;
-  //   left: ${state ? '26px' : '2px'};
-  //   width: 20px;
-  //   height: 20px;
-  //   border-radius: 50%;
-  //   background: white;
-  //   transition: left 0.3s ease;
-  //   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  // `;
-  
-  // toggle.appendChild(thumb);
-  
-  const label = document.createElement('span');
-  label.textContent = state ? 'Activé' : 'Désactivé';
-  label.style.fontWeight = 'bold';
-  
-  function updateVisualState() {
-    toggle.style.backgroundColor = state ? '#4CAF50' : '#ccc';
-    // thumb.style.left = state ? '26px' : '2px';
-    label.textContent = state ? 'Activé' : 'Désactivé';
-    label.style.color = state ? '#4CAF50' : '#666';
-  }
-  
-  container.appendChild(toggle);
-  container.appendChild(label);
-  
-  return {
-    element: container,
-    getValue: () => state,
-    setValue: (newState) => {
-      state = newState;
-      updateVisualState();
-    }
-  };
-}
+    // console.log('🎯 Test démarré - vérification des APIs...');
+    
+    // Test 1: APIs disponibles
+    // console.log('✅ $ disponible:', typeof $ !== 'undefined');
+    // console.log('✅ grab disponible:', typeof grab !== 'undefined');
+    // console.log('✅ puts disponible:', typeof puts !== 'undefined');
+    // console.log('✅ makeDraggable disponible:', typeof makeDraggable !== 'undefined');
+    
+    // Test 2: DOM ready states
+    // console.log('✅ squirrelReady:', window.squirrelReady);
+    // console.log('✅ squirrelDomReady:', window.squirrelDomReady);
+    // console.log('✅ #view existe:', !!document.getElementById('view'));
 
-// Utilisation
-const myToggle = createMaterialToggle(false);
-document.body.appendChild(myToggle.element);
+    // Test 3: Création d'éléments avec parent: '#view'
+    const monSpan = $('span', {
+      id: 'test1',
+      parent: '#view',
+      css: {
+        backgroundColor: '#00f',
+        display: 'block',
+        position: 'absolute',
+        marginLeft: '0',
+        padding: '10px',
+        color: 'white',
+        margin: '10px',
+        borderRadius: '5px'
+      },
+      text: 'Je suis un SPAN sans attente ! 🎯'
+    });
 
-// Pour récupérer la valeur
-console.log('État actuel:', myToggle.getValue());
-            console.log('🎯 Squirrel.js prêt avec kickstart!', event.detail);
-            
-            // Vérifier que le kickstart a bien créé la vue
-            const view = document.getElementById('view');
-            if (view) {
-                console.log('✅ Vue principale créée par kickstart:', view);
-                console.log('📐 Styles de la vue:', window.getComputedStyle(view));
-                
-                // Ajouter du contenu dans la vue
-                const content = $('div', {
-                    text: '🎉 Kickstart fonctionne ! La vue principale est créée.',
-                    css: {
-                        padding: '20px',
-                        fontSize: '18px',
-                        textAlign: 'center',
-                        backgroundColor: '#333',
-                        color: '#fff',
-                        margin: '20px',
-                        borderRadius: '8px'
-                    }
-                });
-                
-                view.appendChild(content);
-                
-                // Test d'un composant dans la vue
-                if (window.Button) {
-                    const button = Button({
-                        text: '🔥 Button dans la vue',
-                        css: {
-                            display: 'block',
-                            margin: '20px auto',
-                            padding: '15px 30px',
-                            backgroundColor: '#007bff',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '5px',
-                            fontSize: '16px',
-                            cursor: 'pointer'
-                        },
-                        events: {
-                            click: () => alert('Button dans la vue kickstart !')
-                        }
-                    });
-                    
-                    view.appendChild(button);
-                    console.log('✅ Button ajouté dans la vue');
-                }
-                
-            } else {
-                console.error('❌ Vue principale non trouvée - kickstart a échoué');
-            }
-        });
-    </script>
+    // Test 4: grab() fonctionne immédiatement
+    const element = grab('test1');
+    // console.log('✅ grab(test1) retourne:', element);
+    // console.log('✅ Élément dans le DOM:', element && element.parentNode);
+
+    // Test 5: makeDraggable fonctionne
+    if (element && typeof makeDraggable !== 'undefined') {
+      makeDraggable(element, {
+        onDragStart: (el, event) => { 
+          puts(`🎯 Drag started sur ${el.id}!`); 
+        }
+      });
+      // console.log('✅ Draggable configuré');
+    }
+
+    // Test 6: Manipulation directe
+    if (element) {
+      element.left = '100px';
+      element.style.top = '100px';
+      // console.log('✅ Position modifiée');
+    }
+
+    // Test 7: Créer un deuxième élément pour tester
+    const button = $('button', {
+      id: 'test-button',
+      parent: '#view',
+      text: 'Cliquez-moi !',
+      css: {
+        position: 'absolute',
+        top: '200px',
+        left: '20px',
+        padding: '10px',
+        backgroundColor: '#007acc',
+        color: 'white',
+        border: 'none',
+        borderRadius: '5px',
+        cursor: 'pointer'
+      },
+      onclick: () => {
+        puts('🎉 Button cliqué sans problème !');
+        alert('Tout fonctionne parfaitement !');
+      }
+    });
+
+  </script>
 </body>
 </html>
