@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-18T19:58:42.785Z
+ * Generated: 2025-06-18T20:08:35.748Z
  */
 var Squirrel = (function (exports) {
   'use strict';
@@ -7031,15 +7031,20 @@ var Squirrel = (function (exports) {
   // Fonction d'initialisation à appeler après que $ et define soient disponibles
 
   function runKickstart() {
+    console.log('🚀 Début du kickstart...');
+    
     // 1. Template basique
+    console.log('📝 Définition du template view...');
     define('view', {
         tag: 'div',
         class: 'atome',
         id: 'view',
     });
+    console.log('✅ Template view défini');
 
     // 2. Animation avec CSS
-    $('view', {
+    console.log('🎨 Création de l\'élément view...');
+    const viewElement = $('view', {
         parent: document.body,
         css: {
             background: '#272727',
@@ -7052,6 +7057,9 @@ var Squirrel = (function (exports) {
             overflow: 'auto',
         }
     });
+    
+    console.log('🔍 Élément créé:', viewElement);
+    console.log('🔍 Element avec id="view" dans le DOM:', document.getElementById('view'));
     
     console.log('🎯 Kickstart exécuté avec succès!');
   }
