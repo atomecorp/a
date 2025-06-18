@@ -430,6 +430,21 @@ EOF
 
 echo "✅ Publication terminée!"
 
+# 🔄 Purge du cache jsDelivr
+echo "🔄 Purge du cache jsDelivr..."
+purge_urls=(
+    "/gh/$GITHUB_REPO@main/dist/squirrel.js"
+    "/gh/$GITHUB_REPO@main/dist/squirrel.min.js"
+    "/gh/$GITHUB_REPO@latest/dist/squirrel.js"
+    "/gh/$GITHUB_REPO@latest/dist/squirrel.min.js"
+)
+
+for url in "${purge_urls[@]}"; do
+    echo "   Purging: $url"
+    curl -s "https://purge.jsdelivr.net$url" > /dev/null
+done
+echo "✅ Cache jsDelivr purgé"
+
 # 🧹 Nettoyage des fichiers temporaires
 if [ -f "cdn_npm_maker/bundle-entry.js.backup" ]; then
     rm "cdn_npm_maker/bundle-entry.js.backup"
