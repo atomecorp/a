@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperSquirrel Performance Benchmark</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Consolas', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .benchmark-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .benchmark-header {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 2px solid #333;
+            margin-bottom: 30px;
+        }
+        
+        .benchmark-title {
+            font-size: 2.5em;
+            margin: 0;
+            background: linear-gradient(45deg, #00ff88, #0088ff);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .benchmark-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .control-group {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #404040;
+        }
+        
+        .control-title {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #00ff88;
+        }
+        
+        .benchmark-button {
+            background: linear-gradient(45deg, #00ff88, #0088ff);
+            color: #1e1e1e;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 5px;
+            transition: transform 0.2s ease;
+        }
+        
+        .benchmark-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .benchmark-button:active {
+            transform: translateY(0);
+        }
+        
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .result-card {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #404040;
+        }
+        
+        .result-title {
+            font-size: 1.1em;
+            color: #00ff88;
+            margin-bottom: 10px;
+        }
+        
+        .result-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ffffff;
+        }
+        
+        .result-unit {
+            font-size: 0.8em;
+            color: #888;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #404040;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #00ff88, #0088ff);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .test-area {
+            background: #333;
+            border: 2px dashed #555;
+            border-radius: 10px;
+            min-height: 300px;
+            margin: 20px 0;
+            padding: 20px;
+            position: relative;
+            overflow: auto;
+        }
+        
+        .performance-chart {
+            background: #2d2d2d;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        #console-log {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+        }
+        
+        .dynamic-element {
+            display: inline-block;
+            margin: 2px;
+            padding: 8px 12px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            border-radius: 4px;
+            font-size: 0.8em;
+            transition: all 0.2s ease;
+        }
+        
+        .dynamic-element:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="benchmark-container">
+        <div class="benchmark-header">
+            <h1 class="benchmark-title">⚡ HyperSquirrel Performance Benchmark</h1>
+            <p>Real-time performance testing of optimized framework</p>
+        </div>
+        
+        <div class="benchmark-controls">
+            <div class="control-group">
+                <div class="control-title">🔥 Creation Tests</div>
+                <button class="benchmark-button" onclick="benchmarkCreation(100)">100 Elements</button>
+                <button class="benchmark-button" onclick="benchmarkCreation(1000)">1K Elements</button>
+                <button class="benchmark-button" onclick="benchmarkCreation(5000)">5K Elements</button>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-title">🚀 Update Tests</div>
+                <button class="benchmark-button" onclick="benchmarkUpdate(100)">Update 100</button>
+                <button class="benchmark-button" onclick="benchmarkUpdate(1000)">Update 1K</button>
+                <button class="benchmark-button" onclick="benchmarkUpdate(5000)">Update 5K</button>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-title">🎯 Specialized Tests</div>
+                <button class="benchmark-button" onclick="benchmarkStyles()">CSS Styles</button>
+                <button class="benchmark-button" onclick="benchmarkEvents()">Events</button>
+                <button class="benchmark-button" onclick="benchmarkAnimation()">Animations</button>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-title">🧹 Controls</div>
+                <button class="benchmark-button" onclick="clearResults()">Clear</button>
+                <button class="benchmark-button" onclick="runAllTests()">Run All</button>
+                <button class="benchmark-button" onclick="exportResults()">Export</button>
+            </div>
+        </div>
+        
+        <div class="results-grid">
+            <div class="result-card">
+                <div class="result-title">Element Creation</div>
+                <div class="result-value" id="creation-result">-- <span class="result-unit">ops/sec</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="creation-progress"></div></div>
+            </div>
+            
+            <div class="result-card">
+                <div class="result-title">Updates</div>
+                <div class="result-value" id="update-result">-- <span class="result-unit">ops/sec</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="update-progress"></div></div>
+            </div>
+            
+            <div class="result-card">
+                <div class="result-title">Style Management</div>
+                <div class="result-value" id="styles-result">-- <span class="result-unit">ops/sec</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="styles-progress"></div></div>
+            </div>
+            
+            <div class="result-card">
+                <div class="result-title">Memory Used</div>
+                <div class="result-value" id="memory-result">-- <span class="result-unit">MB</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="memory-progress"></div></div>
+            </div>
+        </div>
+        
+        <div class="test-area" id="test-area">
+            <p style="text-align: center; color: #888;">Test area - Created elements will appear here</p>
+        </div>
+        
+        <div class="performance-chart">
+            <h3 style="color: #00ff88; margin-top: 0;">📊 Performance Console</h3>
+            <div id="console-log">Ready for performance tests...\n</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { $ } from './src/squirrel/squirrel.js';
+        
+        // Global variables for results
+        let performanceResults = {
+            creation: [],
+            update: [],
+            styles: [],
+            memory: []
+        };
+        
+        // Logging utilities
+        function log(message) {
+            const console = document.getElementById('console-log');
+            const timestamp = new Date().toLocaleTimeString();
+            console.textContent += `[${timestamp}] ${message}\n`;
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        function updateResult(testName, value, unit = 'ops/sec', maxValue = 10000) {
+            const resultElement = document.getElementById(`${testName}-result`);
+            const progressElement = document.getElementById(`${testName}-progress`);
+            
+            if (resultElement) {
+                resultElement.innerHTML = `${value.toLocaleString()} <span class="result-unit">${unit}</span>`;
+            }
+            
+            if (progressElement) {
+                const percentage = Math.min((value / maxValue) * 100, 100);
+                progressElement.style.width = `${percentage}%`;
+            }
+        }
+        
+        // Element creation test
+        window.benchmarkCreation = async function(count) {
+            log(`🔥 Starting creation test: ${count} elements`);
+            const testArea = document.getElementById('test-area');
+            testArea.innerHTML = '';
+            
+            const startTime = performance.now();
+            const startMemory = performance.memory ? performance.memory.usedJSHeapSize : 0;
+            
+            for (let i = 0; i < count; i++) {
+                const element = $('div', {
+                    text: `Item ${i}`,
+                    class: 'dynamic-element',
+                    css: {
+                        backgroundColor: `hsl(${(i * 137.5) % 360}, 70%, 60%)`,
+                        transform: `rotate(${i % 45}deg)`
+                    },
+                    parent: testArea
+                });
+            }
+            
+            const endTime = performance.now();
+            const endMemory = performance.memory ? performance.memory.usedJSHeapSize : 0;
+            const duration = endTime - startTime;
+            const opsPerSec = Math.round((count / duration) * 1000);
+            const memoryUsed = Math.round((endMemory - startMemory) / 1024 / 1024);
+            
+            updateResult('creation', opsPerSec);
+            updateResult('memory', memoryUsed, 'MB', 100);
+            
+            performanceResults.creation.push({ count, opsPerSec, duration, memoryUsed });
+            log(`✅ Creation completed: ${opsPerSec} ops/sec (${duration.toFixed(2)}ms)`);
+        };
+        
+        // Update test
+        window.benchmarkUpdate = async function(count) {
+            log(`🚀 Starting update test: ${count} elements`);
+            
+            // Create elements first
+            const elements = [];
+            const testArea = document.getElementById('test-area');
+            testArea.innerHTML = '';
+            
+            for (let i = 0; i < count; i++) {
+                const element = $('div', {
+                    text: `Original ${i}`,
+                    class: 'dynamic-element',
+                    parent: testArea
+                });
+                elements.push(element);
+            }
+            
+            // Measure updates
+            const startTime = performance.now();
+            
+            elements.forEach((element, i) => {
+                element.$({
+                    text: `Updated ${i}`,
+                    css: {
+                        backgroundColor: `hsl(${(i * 77) % 360}, 80%, 50%)`,
+                        transform: `scale(${1 + (i % 5) * 0.1})`
+                    }
+                });
+            });
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            const opsPerSec = Math.round((count / duration) * 1000);
+            
+            updateResult('update', opsPerSec);
+            
+            performanceResults.update.push({ count, opsPerSec, duration });
+            log(`✅ Update completed: ${opsPerSec} ops/sec (${duration.toFixed(2)}ms)`);
+        };
+        
+        // CSS styles test
+        window.benchmarkStyles = async function() {
+            log(`🎯 Intensive CSS styles test`);
+            const testArea = document.getElementById('test-area');
+            testArea.innerHTML = '';
+            const count = 500;
+            
+            const startTime = performance.now();
+            
+            for (let i = 0; i < count; i++) {
+                const element = $('div', {
+                    text: `Style ${i}`,
+                    css: {
+                        position: 'absolute',
+                        left: `${i % 50 * 10}px`,
+                        top: `${Math.floor(i / 50) * 25}px`,
+                        width: '8px',
+                        height: '20px',
+                        backgroundColor: `rgb(${i % 255}, ${(i * 2) % 255}, ${(i * 3) % 255})`,
+                        border: `1px solid hsl(${i % 360}, 50%, 50%)`,
+                        borderRadius: `${i % 10}px`,
+                        transform: `rotate(${i % 360}deg) scale(${0.5 + (i % 10) * 0.1})`,
+                        opacity: 0.7 + (i % 3) * 0.1,
+                        boxShadow: `${i % 5}px ${i % 3}px ${i % 8}px rgba(0,0,0,0.3)`
+                    },
+                    parent: testArea
+                });
+            }
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            const opsPerSec = Math.round((count / duration) * 1000);
+            
+            updateResult('styles', opsPerSec);
+            
+            performanceResults.styles.push({ count, opsPerSec, duration });
+            log(`✅ Styles completed: ${opsPerSec} ops/sec (${duration.toFixed(2)}ms)`);
+        };
+        
+        // Events test
+        window.benchmarkEvents = async function() {
+            log(`⚡ Events and interactions test`);
+            const testArea = document.getElementById('test-area');
+            testArea.innerHTML = '';
+            const count = 200;
+            let eventsFired = 0;
+            
+            const startTime = performance.now();
+            
+            for (let i = 0; i < count; i++) {
+                const element = $('button', {
+                    text: `Event ${i}`,
+                    class: 'dynamic-element',
+                    css: {
+                        cursor: 'pointer',
+                        margin: '2px'
+                    },
+                    onClick: () => {
+                        eventsFired++;
+                        element.$({
+                            text: `Clicked! (${eventsFired})`,
+                            css: { backgroundColor: '#00ff88' }
+                        });
+                    },
+                    onMouseEnter: () => {
+                        element.style.transform = 'scale(1.1)';
+                    },
+                    onMouseLeave: () => {
+                        element.style.transform = 'scale(1)';
+                    },
+                    parent: testArea
+                });
+            }
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            const opsPerSec = Math.round((count / duration) * 1000);
+            
+            log(`✅ Events created: ${opsPerSec} ops/sec (${count} elements with 3 events each)`);
+        };
+        
+        // Animation test
+        window.benchmarkAnimation = async function() {
+            log(`🎬 Native animations test`);
+            const testArea = document.getElementById('test-area');
+            testArea.innerHTML = '';
+            const count = 100;
+            
+            for (let i = 0; i < count; i++) {
+                const element = $('div', {
+                    text: `Anim ${i}`,
+                    class: 'dynamic-element',
+                    css: {
+                        position: 'absolute',
+                        left: `${Math.random() * 800}px`,
+                        top: `${Math.random() * 200}px`
+                    },
+                    parent: testArea
+                });
+                
+                // Continuous animation
+                setInterval(() => {
+                    element.style.transform = `
+                        rotate(${Date.now() / 10 + i * 10}deg) 
+                        scale(${1 + Math.sin(Date.now() / 500 + i) * 0.3})
+                    `;
+                    element.style.backgroundColor = `hsl(${(Date.now() / 50 + i * 10) % 360}, 70%, 60%)`;
+                }, 50);
+            }
+            
+            log(`✅ ${count} animations launched`);
+        };
+        
+        // Clear results
+        window.clearResults = function() {
+            document.getElementById('test-area').innerHTML = '<p style="text-align: center; color: #888;">Test area cleared</p>';
+            document.getElementById('console-log').textContent = 'Console cleared...\n';
+            
+            // Reset results
+            ['creation', 'update', 'styles', 'memory'].forEach(test => {
+                updateResult(test, 0);
+            });
+            
+            performanceResults = { creation: [], update: [], styles: [], memory: [] };
+            log('🧹 Results cleared');
+        };
+        
+        // Run all tests
+        window.runAllTests = async function() {
+            log('🚀 RUNNING ALL TESTS');
+            
+            await benchmarkCreation(1000);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await benchmarkUpdate(1000);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await benchmarkStyles();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await benchmarkEvents();
+            
+            log('🏆 ALL TESTS COMPLETED!');
+        };
+        
+        // Export results
+        window.exportResults = function() {
+            const results = {
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                performance: performanceResults,
+                summary: {
+                    avgCreation: performanceResults.creation.reduce((a, b) => a + b.opsPerSec, 0) / performanceResults.creation.length || 0,
+                    avgUpdate: performanceResults.update.reduce((a, b) => a + b.opsPerSec, 0) / performanceResults.update.length || 0,
+                    avgStyles: performanceResults.styles.reduce((a, b) => a + b.opsPerSec, 0) / performanceResults.styles.length || 0
+                }
+            };
+            
+            const blob = new Blob([JSON.stringify(results, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hypersquirrel-benchmark-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log('📄 Results exported to JSON');
+        };
+        
+        // Auto-test on load
+        setTimeout(() => {
+            log('⚡ HyperSquirrel Benchmark ready!');
+            log('Click buttons to start tests');
+        }, 500);
+    </script>
+</body>
+</html>
