@@ -27,7 +27,8 @@ class PluginManager {
       'table_builder',
       'tooltip_builder',
       'unit_builder',
-      'waveSurfer_builder'
+      'waveSurfer_builder',
+      'wavesurfer'
     ];
 
     // Enregistrement paresseux de tous les composants

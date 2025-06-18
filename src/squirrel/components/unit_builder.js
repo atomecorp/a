@@ -501,10 +501,12 @@ define('unit-body', {
 define('unit-icon', {
   tag: 'img',
   class: 'unit-icon',
+  attrs: { draggable: 'false' },
   css: {
     maxWidth: '32px',
     maxHeight: '32px',
-    objectFit: 'contain'
+    objectFit: 'contain',
+    pointerEvents: 'none'
   }
 });
 
@@ -785,6 +787,9 @@ class Unit {
     if (!iconData) return;
 
     const icon = $('unit-icon');
+    
+    // Désactiver le drag par défaut sur l'image
+    icon.draggable = false;
     
     if (iconData.startsWith('data:')) {
       // Base64

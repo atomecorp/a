@@ -1,9 +1,46 @@
 {
   "name": "squirrel-framework",
-  "private": true,
   "version": "1.0.0",
   "type": "module",
   "description": "🐿️ Framework hybride moderne avec Vanilla JS + Tauri + Axum",
+  "main": "dist/squirrel.js",
+  "module": "dist/squirrel.esm.js",
+  "browser": "dist/squirrel.umd.js",
+  "unpkg": "dist/squirrel.min.js",
+  "jsdelivr": "dist/squirrel.min.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/squirrel.esm.js",
+      "require": "./dist/squirrel.cjs.js",
+      "browser": "./dist/squirrel.umd.js"
+    },
+    "./dist/*": "./dist/*"
+  },
+  "files": [
+    "dist/",
+    "src/squirrel/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "framework",
+    "web-components",
+    "vanilla-js",
+    "ui-framework",
+    "frontend",
+    "squirrel"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/your-org/squirrel-framework",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/squirrel-framework.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-org/squirrel-framework/issues"
+  },
   "scripts": {
     "dev": "./dev.sh",
     "build": "rollup -c --environment BUILD:production",
@@ -12,9 +49,13 @@
     "build:analyze": "rollup -c --environment BUILD:production,ANALYZE:true",
     "build:cdn": "rollup -c rollup.config.cdn.js",
     "build:cdn:watch": "rollup -c rollup.config.cdn.js --watch",
+    "build:npm": "rollup -c rollup.config.npm.js",
+    "build:all": "npm run build:cdn && npm run build:npm",
+    "prepublishOnly": "npm run build:all",
     "scan:components": "node scan-components.js",
     "prebuild": "npm run scan:components",
     "prebuild:cdn": "npm run scan:components",
+    "prebuild:npm": "npm run scan:components",
     "cdn:upload": "echo 'TODO: Upload vers CDN (AWS S3, Cloudflare, etc.)'",
     "start:server": "cd server && node server.js",
     "serve": "python -m http.server 8000",
