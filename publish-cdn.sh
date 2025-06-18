@@ -319,14 +319,31 @@ if [ -n "$(git status --porcelain)" ]; then
     if git push origin main; then
         echo "✅ Successfully pushed to GitHub"
         
-        # Attendre un peu que jsDelivr se mette à jour
-        echo "⏳ Waiting for jsDelivr to update (30s)..."
-        sleep 30
+        # Purger le cache jsDelivr pour forcer la mise à jour immédiate
+        echo "🧹 Purging jsDelivr cache..."
+        purge_result1=$(curl -s "https://purge.jsdelivr.net/gh/$GITHUB_REPO@main/dist/squirrel.js")
+        purge_result2=$(curl -s "https://purge.jsdelivr.net/gh/$GITHUB_REPO@main/dist/squirrel.min.js")
+        
+        if echo "$purge_result1" | grep -q '"status":"finished"'; then
+            echo "✅ Cache purged for squirrel.js"
+        else
+            echo "⚠️ Cache purge may have failed for squirrel.js"
+        fi
+        
+        if echo "$purge_result2" | grep -q '"status":"finished"'; then
+            echo "✅ Cache purged for squirrel.min.js"
+        else
+            echo "⚠️ Cache purge may have failed for squirrel.min.js"
+        fi
+        
+        # Attendre un peu que la purge soit effective
+        echo "⏳ Waiting for cache purge to take effect (10s)..."
+        sleep 10
         
         # Tester la disponibilité sur jsDelivr
         echo "🧪 Testing jsDelivr availability..."
         if curl -s --head "$CDN_URL/squirrel.js" >/dev/null 2>&1; then
-            echo "✅ jsDelivr CDN is ready!"
+            echo "✅ jsDelivr CDN is ready with latest version!"
         else
             echo "⚠️ jsDelivr may need more time to update (try again in 5-10 minutes)"
         fi
