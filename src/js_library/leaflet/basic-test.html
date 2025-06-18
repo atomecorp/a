@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Basic Test</title>
+</head>
+<body>
+    <h1>Hello World!</h1>
+    <p>This is a basic test page.</p>
+    <p>Current time: <span id="time"></span></p>
+    
+    <script>
+        document.getElementById('time').textContent = new Date().toString();
+        document.body.style.backgroundColor = '#f0f0f0';
+        console.log('Basic page loaded');
+    </script>
+</body>
+</html>

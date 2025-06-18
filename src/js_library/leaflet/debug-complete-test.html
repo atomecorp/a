@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ Leaflet Debug Test</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #2c5f2d;
+            color: white;
+        }
+        .debug-log {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            border: 2px solid #97bc62;
+        }
+        .map-container {
+            height: 400px;
+            background-color: white;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 3px solid #97bc62;
+        }
+        .btn {
+            padding: 12px 20px;
+            background-color: #97bc62;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Leaflet Debug Test</h1>
+    
+    <div id="debugLog" class="debug-log">
+        <div>🚀 Debug log started...</div>
+    </div>
+    
+    <button class="btn" onclick="testBasicSetup()">Test Basic Setup</button>
+    <button class="btn" onclick="createMap()">Create Map</button>
+    <button class="btn" onclick="addMarker()">Add Marker</button>
+    
+    <div id="map1" class="map-container"></div>
+
+    <!-- Load Leaflet from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <script>
+        let debugLog;
+        let map;
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(message);
+            if (debugLog) {
+                debugLog.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+                debugLog.scrollTop = debugLog.scrollHeight;
+            } else {
+                console.warn('Debug log element not found');
+            }
+        }
+        
+        function testBasicSetup() {
+            log('🧪 Testing basic setup...');
+            
+            try {
+                log(`Leaflet available: ${typeof L !== 'undefined'}`);
+                if (typeof L !== 'undefined') {
+                    log(`Leaflet version: ${L.version}`);
+                    log(`Map function available: ${typeof L.map === 'function'}`);
+                    log(`Marker function available: ${typeof L.marker === 'function'}`);
+                    log(`TileLayer function available: ${typeof L.tileLayer === 'function'}`);
+                }
+                
+                log(`DOM ready state: ${document.readyState}`);
+                log(`Map container exists: ${!!document.getElementById('map1')}`);
+                log(`Debug log exists: ${!!document.getElementById('debugLog')}`);
+                
+                log('✅ Basic setup test complete');
+            } catch (error) {
+                log(`❌ Error in basic setup: ${error.message}`);
+                console.error(error);
+            }
+        }
+        
+        function createMap() {
+            log('🗺️ Creating map...');
+            
+            try {
+                if (map) {
+                    log('Removing existing map...');
+                    map.remove();
+                }
+                
+                const mapContainer = document.getElementById('map1');
+                if (!mapContainer) {
+                    throw new Error('Map container not found');
+                }
+                
+                log('Creating Leaflet map instance...');
+                map = L.map('map1').setView([51.505, -0.09], 13);
+                
+                log('Adding tile layer...');
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                log('✅ Map created successfully');
+            } catch (error) {
+                log(`❌ Error creating map: ${error.message}`);
+                console.error(error);
+            }
+        }
+        
+        function addMarker() {
+            log('📍 Adding marker...');
+            
+            try {
+                if (!map) {
+                    throw new Error('Map not created yet');
+                }
+                
+                const marker = L.marker([51.5, -0.09]).addTo(map);
+                marker.bindPopup('Test marker');
+                
+                log('✅ Marker added successfully');
+            } catch (error) {
+                log(`❌ Error adding marker: ${error.message}`);
+                console.error(error);
+            }
+        }
+        
+        function initDebug() {
+            log('🔧 Initializing debug page...');
+            
+            try {
+                debugLog = document.getElementById('debugLog');
+                if (!debugLog) {
+                    console.error('Debug log element not found!');
+                    return;
+                }
+                
+                log('Debug log element found');
+                log('Page initialization complete');
+                
+                // Auto-test basic setup
+                setTimeout(() => {
+                    testBasicSetup();
+                }, 500);
+                
+            } catch (error) {
+                console.error('Error in initDebug:', error);
+            }
+        }
+        
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e);
+            if (debugLog) {
+                debugLog.innerHTML += `<div style="color: red;">[ERROR] ${e.message}</div>`;
+            }
+        });
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initDebug);
+        } else {
+            initDebug();
+        }
+    </script>
+</body>
+</html>

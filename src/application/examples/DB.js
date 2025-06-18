@@ -323,9 +323,26 @@ const refreshUsersBtn = $('button', {
     padding: '8px 16px',
     borderRadius: '4px',
     cursor: 'pointer',
-    marginBottom: '15px'
+    marginBottom: '15px',
+    marginRight: '10px'
   },
   onclick: loadUsersList,
+  parent: usersManagement
+});
+
+// Database stats button
+const dbStatsBtn = $('button', {
+  text: '📊 DB Stats',
+  css: {
+    backgroundColor: '#6f42c1',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginBottom: '15px'
+  },
+  onclick: getDatabaseStats,
   parent: usersManagement
 });
 
@@ -388,11 +405,53 @@ function connectWS() {
     updateStatus(true);
     logMessage('🔗 Connexion', 'WebSocket connecté !');
   };
-  
-  websocket.onmessage = (event) => {
+    websocket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
-      logMessage('📥 Reçu', JSON.stringify(data, null, 2));
+      
+      // Handle database operation responses
+      switch (data.type) {
+        case 'add_user_response':
+          if (data.success) {
+            updateUserStatus(`✅ User "${data.data.name}" created successfully!`, 'success');
+            loadUsersList(); // Refresh the list
+          } else {
+            updateUserStatus(`❌ Error creating user: ${data.error}`, 'error');
+          }
+          break;
+          
+        case 'delete_user_response':
+          if (data.success) {
+            updateUserStatus(`✅ User deleted successfully!`, 'success');
+            loadUsersList(); // Refresh the list
+          } else {
+            updateUserStatus(`❌ Error deleting user: ${data.error}`, 'error');
+          }
+          break;
+          
+        case 'users_response':
+          if (data.success) {
+            displayUsers(data.data);
+            updateUserStatus(`✅ Loaded ${data.data.length} users via WebSocket`, 'success');
+          } else {
+            updateUserStatus(`❌ Error loading users: ${data.error}`, 'error');
+            usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">Failed to load users</div>';
+          }
+          break;
+          
+        case 'db_stats_response':
+          if (data.success) {
+            updateUserStatus(`✅ Database Stats: ${data.data.users} users, ${data.data.projects} projects`, 'success');
+          } else {
+            updateUserStatus(`❌ Error getting stats: ${data.error}`, 'error');
+          }
+          break;
+          
+        default:
+          // Log other messages as before
+          logMessage('📥 Reçu', JSON.stringify(data, null, 2));
+          break;
+      }
     } catch (e) {
       logMessage('📥 Reçu', event.data);
     }
@@ -481,233 +540,88 @@ function logMessage(type, content) {
 }
 
 // Database API Functions
-// User Management Functions
+// User Management Functions (WebSocket-based)
 async function addNewUser() {
   const name = nameInput.value.trim();
   const password = passwordInput.value.trim();
   const role = roleSelect.value;
-    if (!name || !password) {
+  
+  if (!name || !password) {
     updateUserStatus('❌ Please fill in both name and password', 'error');
     return;
   }
   
+  if (!isConnected || !websocket) {
+    updateUserStatus('❌ WebSocket not connected. Please connect first.', 'error');
+    return;
+  }
+  
   try {
-    updateUserStatus('⏳ Creating user...', 'info');
+    updateUserStatus('⏳ Creating user via WebSocket...', 'info');
     
-    const response = await fetch('http://localhost:3001/api/users', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    // Send via WebSocket instead of HTTP
+    websocket.send(JSON.stringify({
+      type: 'add_user',
+      userData: {
         name: name,
         password: password,
         autorisation: role
-      })
-    });
+      },
+      timestamp: new Date().toISOString()
+    }));
     
-    const data = await response.json();
-      if (data.success) {
-      updateUserStatus(`✅ User "${name}" created successfully!`, 'success');
-      
-      // Clear form
-      nameInput.value = '';
-      passwordInput.value = '';
-      roleSelect.value = 'read';
-      
-      // Refresh users list
-      await loadUsersList();
-      
-      // Send WebSocket notification if connected
-      if (isConnected && websocket) {
-        websocket.send(JSON.stringify({
-          type: 'user_added',
-          user: data.data,
-          timestamp: new Date().toISOString()
-        }));
-      }
-        } else {
-      updateUserStatus(`❌ Error creating user: ${data.error}`, 'error');
-    }
-  } catch (error) {
-    updateUserStatus(`❌ Network Error: ${error.message}`, 'error');
+    // Clear form immediately (response will be handled in WebSocket message handler)
+    nameInput.value = '';
+    passwordInput.value = '';
+    roleSelect.value = 'read';
+    
+  } catch (error) {    updateUserStatus(`❌ WebSocket Error: ${error.message}`, 'error');
   }
 }
 
 async function deleteUser(userId, userName) {
-  // Créer une div de confirmation personnalisée
-  showDeleteConfirmation(userId, userName);
-}
-
-function showDeleteConfirmation(userId, userName) {
-  // Overlay semi-transparent
-  const overlay = $('div', {
-    css: {
-      position: 'fixed',
-      top: '0',
-      left: '0',
-      width: '100%',
-      height: '100%',
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      zIndex: '1000',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    },
-    parent: 'body'
-  });
-
-  // Modal de confirmation
-  const modal = $('div', {
-    css: {
-      backgroundColor: 'white',
-      borderRadius: '10px',
-      padding: '30px',
-      maxWidth: '400px',
-      width: '90%',
-      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
-      textAlign: 'center',
-      position: 'relative'
-    },
-    parent: overlay
-  });
-
-  // Icône d'avertissement
-  $('div', {
-    text: '⚠️',
-    css: {
-      fontSize: '48px',
-      marginBottom: '20px'
-    },
-    parent: modal
-  });
-
-  // Titre
-  $('h3', {
-    text: 'Confirmer la suppression',
-    css: {
-      color: '#e74c3c',
-      marginBottom: '15px',
-      fontSize: '20px'
-    },
-    parent: modal
-  });
-
-  // Message
-  $('p', {
-    text: `Êtes-vous sûr de vouloir supprimer l'utilisateur "${userName}" ?`,
-    css: {
-      color: '#2c3e50',
-      marginBottom: '25px',
-      lineHeight: '1.5'
-    },
-    parent: modal
-  });
-
-  // Container pour les boutons
-  const buttonContainer = $('div', {
-    css: {
-      display: 'flex',
-      gap: '15px',
-      justifyContent: 'center'
-    },
-    parent: modal
-  });
-
-  // Bouton Annuler
-  $('button', {
-    text: '❌ Annuler',
-    css: {
-      backgroundColor: '#95a5a6',
-      color: 'white',
-      border: 'none',
-      padding: '12px 24px',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: 'bold'
-    },
-    onclick: () => {
-      overlay.remove();
-    },
-    parent: buttonContainer
-  });
-
-  // Bouton Confirmer
-  $('button', {
-    text: '🗑️ Supprimer',
-    css: {
-      backgroundColor: '#e74c3c',
-      color: 'white',
-      border: 'none',
-      padding: '12px 24px',
-      borderRadius: '6px',
-      cursor: 'pointer',
-      fontSize: '14px',
-      fontWeight: 'bold'
-    },
-    onclick: () => {
-      overlay.remove();
-      performDeleteUser(userId, userName);
-    },
-    parent: buttonContainer
-  });
-
-  // Fermer si on clique sur l'overlay
-  overlay.onclick = (e) => {
-    if (e.target === overlay) {
-      overlay.remove();
-    }
-  };
-}
-
-async function performDeleteUser(userId, userName) {
-    try {
-    updateUserStatus(`⏳ Deleting user "${userName}"...`, 'info');
+  if (!confirm(`Are you sure you want to delete user "${userName}"?`)) {
+    return;
+  }
+  
+  if (!isConnected || !websocket) {
+    updateUserStatus('❌ WebSocket not connected. Please connect first.', 'error');
+    return;
+  }
+  
+  try {
+    updateUserStatus(`⏳ Deleting user "${userName}" via WebSocket...`, 'info');
     
-    const response = await fetch(`http://localhost:3001/api/users/${userId}`, {
-      method: 'DELETE'
-    });
-    
-    const data = await response.json();
-      if (data.success) {
-      updateUserStatus(`✅ User "${userName}" deleted successfully!`, 'success');
-      
-      // Refresh users list
-      await loadUsersList();
-      
-      // Send WebSocket notification if connected
-      if (isConnected && websocket) {
-        websocket.send(JSON.stringify({
-          type: 'user_deleted',
-          userId: userId,
-          userName: userName,
-          timestamp: new Date().toISOString()
-        }));
-      }
-        } else {
-      updateUserStatus(`❌ Error deleting user: ${data.error}`, 'error');
-    }
+    // Send via WebSocket instead of HTTP
+    websocket.send(JSON.stringify({
+      type: 'delete_user',
+      userId: userId,
+      userName: userName,
+      timestamp: new Date().toISOString()
+    }));    
   } catch (error) {
-    updateUserStatus(`❌ Network Error: ${error.message}`, 'error');
+    updateUserStatus(`❌ WebSocket Error: ${error.message}`, 'error');
   }
 }
 
-async function loadUsersList() {  try {
-    updateUserStatus('⏳ Loading users...', 'info');
+async function loadUsersList() {
+  if (!isConnected || !websocket) {
+    updateUserStatus('❌ WebSocket not connected. Please connect first.', 'error');
+    usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">WebSocket not connected</div>';
+    return;
+  }
+  
+  try {
+    updateUserStatus('⏳ Loading users via WebSocket...', 'info');
     
-    const response = await fetch('http://localhost:3001/api/users');
-    const data = await response.json();
-      if (data.success) {
-      displayUsers(data.data);
-      updateUserStatus(`✅ Loaded ${data.data.length} users`, 'success');
-    } else {
-      updateUserStatus(`❌ Error loading users: ${data.error}`, 'error');
-      usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">Failed to load users</div>';
-    }
+    // Send via WebSocket instead of HTTP
+    websocket.send(JSON.stringify({
+      type: 'get_users',
+      timestamp: new Date().toISOString()
+    }));
+    
   } catch (error) {
-    updateUserStatus(`❌ Network Error: ${error.message}`, 'error');
-    usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">Network error</div>';
+    updateUserStatus(`❌ WebSocket Error: ${error.message}`, 'error');    usersContainer.innerHTML = '<div style="padding: 15px; color: #dc3545;">WebSocket error</div>';
   }
 }
 
@@ -782,6 +696,26 @@ function displayUsers(users) {
       parent: actionsDiv
     });
   });
+}
+
+function getDatabaseStats() {
+  if (!isConnected || !websocket) {
+    updateUserStatus('❌ WebSocket not connected. Please connect first.', 'error');
+    return;
+  }
+  
+  try {
+    updateUserStatus('⏳ Getting database stats via WebSocket...', 'info');
+    
+    // Send via WebSocket instead of HTTP
+    websocket.send(JSON.stringify({
+      type: 'get_db_stats',
+      timestamp: new Date().toISOString()
+    }));
+    
+  } catch (error) {
+    updateUserStatus(`❌ WebSocket Error: ${error.message}`, 'error');
+  }
 }
 
 function updateUserStatus(message, type = 'info') {

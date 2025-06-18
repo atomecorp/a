@@ -34,79 +34,14 @@
     window.pluginManager = pluginManager;
     window.Squirrel = pluginAPI;
     
-    // 🎭 SYSTÈME DE PROXIES AUTOMATIQUES
-    // Création de proxies pour tous les composants découverts
-    // Permet l'utilisation immédiate avec chargement paresseux
-    const availablePluginNames = pluginManager.getAvailablePlugins();
-    
-    availablePluginNames.forEach(pluginName => {
-      // Créer un proxy qui charge automatiquement le plugin à la première utilisation
-      const createLazyProxy = (name) => {
-        return new Proxy(() => {}, {
-          apply: function(target, thisArg, argumentsList) {
-            // Chargement paresseux du plugin à l'utilisation (synchrone)
-            if (!pluginManager.getLoadedPlugins().includes(name)) {
-              // console.log(`🔄 Chargement automatique de "${name}" via proxy...`);
-              // Chargement synchrone pour éviter les promesses
-              pluginManager.loadSync(name);
-            }
-            
-            // Appel de la fonction réelle maintenant chargée
-            const realFunction = window[name];
-            if (typeof realFunction === 'function') {
-              // console.log(`✅ Appel de ${name}(), type de retour:`, typeof realFunction.apply(thisArg, argumentsList));
-              return realFunction.apply(thisArg, argumentsList);
-            } else {
-              console.warn(`⚠️ "${name}" n'est pas une fonction après chargement`);
-              return realFunction;
-            }
-          },
-          
-          get: function(target, prop) {
-            // Chargement paresseux pour accès aux propriétés (synchrone)
-            if (!pluginManager.getLoadedPlugins().includes(name)) {
-              // console.log(`🔄 Chargement automatique de "${name}" via proxy (propriété ${prop})...`);
-              pluginManager.loadSync(name);
-            }
-            
-            const realObject = window[name];
-            if (realObject && typeof realObject === 'object') {
-              return realObject[prop];
-            } else if (typeof realObject === 'function' && prop in realObject) {
-              return realObject[prop];
-            }
-            
-            return undefined;
-          }
-        });
-      };
-      
-      // Ne pas écraser si déjà défini (évite les conflits)
-      if (!window[pluginName]) {
-        window[pluginName] = createLazyProxy(pluginName);
-        // console.log(`🎭 Proxy automatique créé pour "${pluginName}"`);
-      }
-    });
-    
-    // 🚀 PRÉCHARGEMENT IMMÉDIAT DE TOUS LES COMPOSANTS
-    // Résout le problème des proxies asynchrones
-    // console.log('🚀 Préchargement immédiat de tous les composants...');
+    // Chargement de tous les plugins découverts
+    // console.log('🚀 Chargement automatique de tous les plugins...');
     await pluginManager.loadAll();
     
-    // Remplacement des proxies par les vraies instances pour éviter tout problème
-    availablePluginNames.forEach(pluginName => {
-      if (pluginManager.getLoadedPlugins().includes(pluginName)) {
-        const realInstance = pluginManager.plugins.get(pluginName)?.instance;
-        if (realInstance) {
-          window[pluginName] = realInstance;
-          // console.log(`✅ ${pluginName} remplacé par l'instance réelle`);
-        }
-      }
-    });
-    // console.log('🎉 Préchargement terminé, tous les composants sont prêts !');
-    
-    // console.log('✅ Squirrel Framework initialisé avec succès !');
-    // console.log('📦 Composants chargés:', pluginManager.getLoadedPlugins());
+    // Affichage du statut
+    const status = pluginManager.getStatus();
+    // console.log('📊 Statut des plugins:', status);
+    // console.log(`✅ ${status.loaded}/${status.available} plugins chargés avec succès`);
     
     // APIs pour utilisation externe
     window.loadPlugin = async (pluginName) => {
@@ -115,7 +50,7 @@
         // console.log(`✅ Plugin "${pluginName}" chargé manuellement`);
         return plugin;
       } catch (error) {
-        // console.error(`❌ Erreur lors du chargement manuel de "${pluginName}":`, error);
+        console.error(`❌ Erreur lors du chargement manuel de "${pluginName}":`, error);
         return null;
       }
     };

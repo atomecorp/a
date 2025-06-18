@@ -1,7 +1,9 @@
+
+
 // === TESTS DU COMPOSANT DRAGGABLE ===
 
 // Test 1: Draggable basique avec template
-const basicDrag = Draggable('draggable-box', {
+const basicDrag = draggable('draggable-box', {
   content: '🔴 Basic',
   css: {
     left: '100px',
@@ -17,7 +19,7 @@ const basicDrag = Draggable('draggable-box', {
 });
 
 // Test 2: Draggable avec rotation
-const rotatingDrag = Draggable('draggable-box', {
+const rotatingDrag = draggable('draggable-box', {
   content: '🔵 Rotation',
   css: {
     left: '250px',
@@ -41,7 +43,7 @@ const rotatingDrag = Draggable('draggable-box', {
 });
 
 // Test 3: Draggable avec scale
-const scalingDrag = Draggable('draggable-box', {
+const scalingDrag = draggable('draggable-box', {
   content: '🟢 Scale',
   css: {
     left: '400px',
@@ -97,10 +99,11 @@ makeDraggable(customElement, {
   }
 });
 
+
 // === TEST D'OBJETS DRAGGABLES IMBRIQUÉS ===
 
 // Créer le conteneur parent draggable
-const parentDrag = Draggable('draggable-box', {
+const parentDrag = draggable('draggable-box', {
   content: '🟣 Parent',
   css: {
     left: '100px',
@@ -123,7 +126,7 @@ const parentDrag = Draggable('draggable-box', {
 });
 
 // Créer l'enfant draggable DANS le parent
-const childDrag = Draggable('draggable-box', {
+const childDrag = draggable('draggable-box', {
   content: '🟠 Enfant',
   css: {
     left: '20px',
@@ -160,7 +163,7 @@ const childDrag = Draggable('draggable-box', {
 });
 
 // Créer un deuxième enfant dans le même parent
-const child2Drag = Draggable('draggable-box', {
+const child2Drag = draggable('draggable-box', {
   content: '🟢 Enfant 2',
   css: {
     left: '100px',

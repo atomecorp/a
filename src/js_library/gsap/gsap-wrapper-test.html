@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 GSAP Wrapper Advanced Features Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 50%, #9b59b6 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .test-section {
+            margin-bottom: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+        }
+
+        .test-section h2 {
+            color: #ffeb3b;
+            border-bottom: 2px solid #ffeb3b;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: linear-gradient(45deg, #e74c3c, #c0392b);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .demo-area {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 200px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .test-element {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            position: absolute;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .text-demo {
+            font-size: 2em;
+            font-weight: bold;
+            text-align: center;
+            margin: 20px 0;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .particle-container {
+            width: 100%;
+            height: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .svg-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .status {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            overflow-x: auto;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .draggable-area {
+            height: 200px;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            position: relative;
+            background: rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 GSAP Wrapper Advanced Features</h1>
+
+        <!-- Wrapper Status -->
+        <div class="test-section">
+            <h2>📊 Wrapper Status</h2>
+            <div class="info-grid" id="wrapperInfo">
+                <!-- Will be populated by JavaScript -->
+            </div>
+            <button onclick="refreshWrapperInfo()">Refresh Info</button>
+        </div>
+
+        <!-- Basic Wrapper Methods -->
+        <div class="test-section">
+            <h2>🎯 Basic Wrapper Methods</h2>
+            <div class="controls">
+                <button onclick="testWrapperAnimate()">Wrapper Animate</button>
+                <button onclick="testWrapperTimeline()">Wrapper Timeline</button>
+                <button onclick="testWrapperEffects()">Wrapper Effects</button>
+                <button onclick="resetBasicElements()">Reset</button>
+            </div>
+            <div class="demo-area">
+                <div class="test-element" id="element1" style="top: 50px; left: 50px;">1</div>
+                <div class="test-element" id="element2" style="top: 100px; left: 150px;">2</div>
+                <div class="test-element" id="element3" style="top: 50px; left: 250px;">3</div>
+            </div>
+        </div>
+
+        <!-- Advanced Animations -->
+        <div class="test-section">
+            <h2>🚀 Advanced Animations</h2>
+            <div class="controls">
+                <button onclick="testStagger()">Stagger Animation</button>
+                <button onclick="testBatch()">Batch Animation</button>
+                <button onclick="testFromTo()">FromTo Animation</button>
+                <button onclick="testColorAnimation()">Color Animation</button>
+            </div>
+            <div class="demo-area" id="advancedDemo">
+                <div class="test-element" style="top: 20px; left: 20px;">A</div>
+                <div class="test-element" style="top: 20px; left: 100px;">B</div>
+                <div class="test-element" style="top: 20px; left: 180px;">C</div>
+                <div class="test-element" style="top: 100px; left: 20px;">D</div>
+                <div class="test-element" style="top: 100px; left: 100px;">E</div>
+                <div class="test-element" style="top: 100px; left: 180px;">F</div>
+            </div>
+        </div>
+
+        <!-- Text Animations -->
+        <div class="test-section">
+            <h2>📝 Text Animations</h2>
+            <div class="controls">
+                <button onclick="testTextPlugin()">Text Plugin</button>
+                <button onclick="testTypewriter()">Typewriter Effect</button>
+                <button onclick="testSplitText()">Split Text</button>
+                <button onclick="resetText()">Reset Text</button>
+            </div>
+            <div class="text-demo" id="textDemo">GSAP Wrapper Text Magic</div>
+        </div>
+
+        <!-- Physics & Particles -->
+        <div class="test-section">
+            <h2>⚡ Physics & Particles</h2>
+            <div class="controls">
+                <button onclick="testPhysics()">Physics Animation</button>
+                <button onclick="testParticles()">Particle System</button>
+                <button onclick="clearParticles()">Clear Particles</button>
+            </div>
+            <div class="particle-container" id="particleContainer">
+                <div class="test-element" id="physicsElement" style="top: 20px; left: 200px;">⚡</div>
+            </div>
+        </div>
+
+        <!-- SVG & Motion Path -->
+        <div class="test-section">
+            <h2>🎨 SVG & Motion Path</h2>
+            <div class="controls">
+                <button onclick="testMotionPath()">Motion Path</button>
+                <button onclick="testMorphSVG()">Morph SVG</button>
+                <button onclick="testCustomEase()">Custom Ease</button>
+            </div>
+            <div class="svg-container">
+                <svg width="400" height="200" id="svgDemo">
+                    <defs>
+                        <path id="motionPath" d="M 50 100 Q 200 30 350 100 Q 200 170 50 100" 
+                              stroke="#ffeb3b" stroke-width="2" fill="none"/>
+                    </defs>
+                    <use href="#motionPath"/>
+                    <circle cx="50" cy="100" r="10" fill="#e74c3c" id="pathElement">
+                        <animateTransform attributeName="transform" type="rotate" 
+                                        values="0 50 100;360 50 100" dur="2s" repeatCount="indefinite"/>
+                    </circle>
+                    <rect x="300" y="80" width="40" height="40" fill="#3498db" id="morphElement"/>
+                </svg>
+            </div>
+        </div>
+
+        <!-- Draggable & Interactive -->
+        <div class="test-section">
+            <h2>🖱️ Draggable & Interactive</h2>
+            <div class="controls">
+                <button onclick="testDraggable()">Make Draggable</button>
+                <button onclick="testScrollAnimation()">Scroll Animation</button>
+                <button onclick="resetDraggable()">Reset</button>
+            </div>
+            <div class="draggable-area" id="draggableArea">
+                <div class="test-element" id="draggableElement" style="top: 50px; left: 50px;">DRAG</div>
+                <div class="test-element" id="scrollElement" style="top: 100px; left: 150px;">SCROLL</div>
+            </div>
+        </div>
+
+        <!-- Performance & Utils -->
+        <div class="test-section">
+            <h2>🔧 Utilities & Performance</h2>
+            <div class="controls">
+                <button onclick="testUtils()">Test GSAP Utils</button>
+                <button onclick="testPerformance()">Performance Test</button>
+                <button onclick="killAllAnimations()">Kill All</button>
+                <button onclick="getAnimationInfo()">Animation Info</button>
+            </div>
+            <div class="status" id="utilsStatus">
+                Ready for utility tests...
+            </div>
+        </div>
+
+        <!-- Status Log -->
+        <div class="test-section">
+            <h2>📋 Activity Log</h2>
+            <div class="status" id="activityLog">
+                GSAP Wrapper Advanced Features Test initialized...<br>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load GSAP and plugins from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/TextPlugin.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollToPlugin.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/MotionPathPlugin.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/CustomEase.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/Draggable.min.js"></script>    <!-- Load our enhanced wrapper -->
+    <script type="module">
+        import gsapWrapper from './gsap-wrapper.js';
+        window.gsapWrapper = gsapWrapper;
+        
+        // Initialize after a short delay
+        setTimeout(() => {
+            if (window.gsapWrapper && window.gsapWrapper.initialized) {
+                log('🎬 GSAP Wrapper loaded and initialized!');
+                refreshWrapperInfo();
+            } else {
+                log('⚠️ GSAP Wrapper not fully initialized yet...');
+            }
+        }, 1000);
+    </script>
+
+    <script>
+        const activityLog = document.getElementById('activityLog');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            activityLog.innerHTML += `[${timestamp}] ${message}<br>`;
+            activityLog.scrollTop = activityLog.scrollHeight;
+            console.log(message);
+        }
+
+        function refreshWrapperInfo() {
+            if (!window.gsapWrapper) {
+                log('❌ GSAP Wrapper not available');
+                return;
+            }
+
+            const info = gsapWrapper.getAnimationInfo();
+            const wrapperInfoEl = document.getElementById('wrapperInfo');
+            
+            wrapperInfoEl.innerHTML = `
+                <div class="info-card">
+                    <h3>GSAP Version</h3>
+                    <p>${info.gsapVersion}</p>
+                </div>
+                <div class="info-card">
+                    <h3>Active Animations</h3>
+                    <p>${info.activeAnimations}</p>
+                </div>
+                <div class="info-card">
+                    <h3>Active Timelines</h3>
+                    <p>${info.activeTimelines}</p>
+                </div>
+                <div class="info-card">
+                    <h3>Available Plugins</h3>
+                    <p>${info.availablePlugins.length}</p>
+                    <small>${info.availablePlugins.join(', ')}</small>
+                </div>
+            `;
+            
+            log(`📊 Wrapper info refreshed - ${info.availablePlugins.length} plugins available`);
+        }
+
+        // Basic wrapper methods
+        function testWrapperAnimate() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.animate('#element1', { x: 200, rotation: 360 }, 1);
+            gsapWrapper.fadeIn('#element2', 0.5);
+            gsapWrapper.slideIn('#element3', 'bottom', 0.8);
+            log('🎯 Testing wrapper basic animations');
+        }
+
+        function testWrapperTimeline() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const tl = gsapWrapper.createTimeline({ repeat: 1, yoyo: true });
+            tl.to('#element1', { duration: 0.5, scale: 1.5 })
+              .to('#element2', { duration: 0.5, y: 100 }, '-=0.3')
+              .to('#element3', { duration: 0.5, rotation: 180 }, '-=0.2');
+            log('⏱️ Testing wrapper timeline');
+        }
+
+        function testWrapperEffects() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.bounce('#element1', 1.3, 0.8);
+            gsapWrapper.shake('#element2', 15, 0.6);
+            gsapWrapper.scale('#element3', 0.5, 0.4);
+            log('✨ Testing wrapper effects');
+        }
+
+        function resetBasicElements() {
+            gsapWrapper?.set('.test-element', { 
+                x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 
+            });
+            log('🔄 Reset basic elements');
+        }
+
+        // Advanced animations
+        function testStagger() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const elements = document.querySelectorAll('#advancedDemo .test-element');
+            gsapWrapper.stagger(elements, { 
+                y: 100, 
+                rotation: 360, 
+                scale: 1.2 
+            }, 0.2);
+            log('🌊 Testing stagger animation');
+        }
+
+        function testBatch() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const elements = document.querySelectorAll('#advancedDemo .test-element');
+            gsapWrapper.batch(elements, { 
+                x: 100, 
+                backgroundColor: '#e74c3c' 
+            }, 0.1);
+            log('📦 Testing batch animation');
+        }
+
+        function testFromTo() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const elements = document.querySelectorAll('#advancedDemo .test-element');
+            gsapWrapper.fromTo(elements, 
+                { scale: 0, opacity: 0 },
+                { scale: 1, opacity: 1, stagger: 0.1 },
+                0.8
+            );
+            log('🔄 Testing fromTo animation');
+        }
+
+        function testColorAnimation() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const elements = document.querySelectorAll('#advancedDemo .test-element');
+            gsapWrapper.colorAnimation(elements, 
+                ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6'], 2);
+            log('🎨 Testing color animation');
+        }
+
+        // Text animations
+        function testTextPlugin() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.animateText('#textDemo', 'Text Plugin Magic!', 2);
+            log('📝 Testing text plugin animation');
+        }
+
+        function testTypewriter() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.typewriterEffect('#textDemo', 'Typewriter Effect...', 3);
+            log('⌨️ Testing typewriter effect');
+        }
+
+        function testSplitText() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.splitTextAnimation('#textDemo', 'chars', {
+                opacity: 0,
+                y: 50,
+                rotation: 180,
+                stagger: 0.05
+            });
+            log('✂️ Testing split text animation');
+        }
+
+        function resetText() {
+            document.getElementById('textDemo').textContent = 'GSAP Wrapper Text Magic';
+            gsapWrapper?.set('#textDemo', { 
+                color: 'white', 
+                scale: 1,
+                background: 'transparent'
+            });
+            log('🔄 Reset text demo');
+        }
+
+        // Physics and particles
+        function testPhysics() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.physics('#physicsElement', {
+                velocityY: -500,
+                velocityX: 100,
+                gravity: 980,
+                bounce: 0.8
+            });
+            log('⚡ Testing physics animation');
+        }
+
+        function testParticles() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.particles('#particleContainer', 30, {
+                size: 6,
+                color: '#ffeb3b',
+                duration: 3
+            });
+            log('✨ Testing particle system');
+        }
+
+        function clearParticles() {
+            const container = document.getElementById('particleContainer');
+            const particles = container.querySelectorAll('div:not(.test-element)');
+            particles.forEach(p => p.remove());
+            log('🧹 Cleared particles');
+        }
+
+        // SVG and motion path
+        function testMotionPath() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const result = gsapWrapper.motionPath('#pathElement', '#motionPath', 4, {
+                autoRotate: true
+            });
+            
+            if (result) {
+                log('🛤️ Testing motion path animation');
+            } else {
+                log('⚠️ Motion path plugin not available');
+            }
+        }
+
+        function testMorphSVG() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const result = gsapWrapper.morph('#morphElement', 'M 300,80 L 340,80 L 320,120 Z', 2);
+            
+            if (result) {
+                log('🔄 Testing SVG morphing');
+            } else {
+                log('⚠️ MorphSVG plugin not available (requires license)');
+            }
+        }
+
+        function testCustomEase() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const result = gsapWrapper.customEase('#pathElement', 
+                { x: 100, y: 50 }, 
+                "M0,0 C0.25,0.1 0.25,1 1,1", 
+                2
+            );
+            
+            if (result) {
+                log('📈 Testing custom ease');
+            } else {
+                log('⚠️ Custom ease using fallback');
+            }
+        }
+
+        // Draggable and interactive
+        function testDraggable() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const result = gsapWrapper.makeDraggable('#draggableElement', {
+                bounds: '#draggableArea'
+            });
+            
+            if (result) {
+                log('🖱️ Element is now draggable');
+            } else {
+                log('⚠️ Draggable plugin not available');
+            }
+        }
+
+        function testScrollAnimation() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const result = gsapWrapper.scrollAnimation('#scrollElement', {
+                x: 200,
+                rotation: 360
+            }, {
+                trigger: '#scrollElement',
+                start: 'top 90%',
+                scrub: true
+            });
+            
+            if (result) {
+                log('📜 Scroll animation set up');
+            } else {
+                log('⚠️ ScrollTrigger plugin not available');
+            }
+        }
+
+        function resetDraggable() {
+            gsapWrapper?.set('#draggableElement, #scrollElement', { 
+                x: 0, y: 0, rotation: 0 
+            });
+            log('🔄 Reset draggable elements');
+        }
+
+        // Utilities and performance
+        function testUtils() {
+            if (!gsapWrapper || !gsapWrapper.utils) {
+                return log('❌ GSAP utils not available');
+            }
+
+            const utils = gsapWrapper.utils;
+            const status = document.getElementById('utilsStatus');
+            
+            status.innerHTML = `
+                <strong>GSAP Utilities Test:</strong><br>
+                Random(0,100): ${utils.random(0, 100)}<br>
+                Clamp(150, 0-100): ${utils.clamp(0, 100)(150)}<br>
+                Wrap array [A,B,C] index 5: ${utils.wrap(['A', 'B', 'C'])(5)}<br>
+                Interpolate(0-100) at 0.75: ${utils.interpolate(0, 100)(0.75)}<br>
+                MapRange(5, 0-10, 0-100): ${utils.mapRange(0, 10, 0, 100)(5)}
+            `;
+            
+            log('🔧 GSAP utilities tested');
+        }
+
+        function testPerformance() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const startTime = performance.now();
+            const tempElements = [];
+            
+            // Create temporary elements for performance test
+            for (let i = 0; i < 50; i++) {
+                const el = document.createElement('div');
+                el.className = 'test-element';
+                el.style.position = 'absolute';
+                el.style.top = Math.random() * 100 + 'px';
+                el.style.left = Math.random() * 300 + 'px';
+                el.textContent = i;
+                document.getElementById('utilsStatus').appendChild(el);
+                tempElements.push(el);
+            }
+            
+            // Animate all at once
+            gsapWrapper.stagger(tempElements, {
+                x: () => Math.random() * 200,
+                y: () => Math.random() * 100,
+                rotation: () => Math.random() * 360,
+                scale: () => 0.5 + Math.random() * 0.5
+            }, 0.02);
+            
+            setTimeout(() => {
+                const endTime = performance.now();
+                log(`⚡ Performance test: ${tempElements.length} elements animated in ${(endTime - startTime).toFixed(2)}ms`);
+                
+                // Clean up
+                tempElements.forEach(el => el.remove());
+            }, 2000);
+        }
+
+        function killAllAnimations() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            gsapWrapper.killAll();
+            log('🛑 All animations killed');
+            refreshWrapperInfo();
+        }
+
+        function getAnimationInfo() {
+            if (!gsapWrapper) return log('❌ Wrapper not available');
+            
+            const info = gsapWrapper.getAnimationInfo();
+            log(`📊 Animation Info: ${info.activeAnimations} animations, ${info.activeTimelines} timelines, GSAP v${info.gsapVersion}`);
+            refreshWrapperInfo();
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            log('🎬 GSAP Wrapper Advanced Features Test loaded!');
+            
+            setTimeout(() => {
+                if (typeof gsap !== 'undefined') {
+                    log(`✅ GSAP ${gsap.version} loaded successfully`);
+                } else {
+                    log('❌ GSAP not loaded');
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>

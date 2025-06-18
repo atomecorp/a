@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Debug Test</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        
+        .debug-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+        
+        #map {
+            height: 400px;
+            margin: 20px 0;
+            border: 2px solid #007bff;
+        }
+        
+        .status {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        
+        .warning {
+            color: orange;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-section">
+        <h1>🔍 Leaflet Debug Test</h1>
+        <p>This page tests the basic Leaflet integration step by step.</p>
+    </div>
+
+    <div class="debug-section">
+        <h2>Step 1: Library Loading</h2>
+        <div id="library-status" class="status">Checking libraries...</div>
+    </div>
+
+    <div class="debug-section">
+        <h2>Step 2: Wrapper Import</h2>
+        <div id="wrapper-status" class="status">Loading wrapper...</div>
+    </div>
+
+    <div class="debug-section">
+        <h2>Step 3: Basic Map</h2>
+        <div id="map"></div>
+        <div id="map-status" class="status">Creating map...</div>
+    </div>
+
+    <div class="debug-section">
+        <h2>Debug Console</h2>
+        <div id="debug-log" class="status">Starting debug...\n</div>
+    </div>
+
+    <!-- Load Leaflet from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <script>
+        let debugLog = document.getElementById('debug-log');
+        
+        function debug(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : '';
+            debugLog.innerHTML += `[${timestamp}] ${message}\n`;
+            debugLog.scrollTop = debugLog.scrollHeight;
+            console.log(`[DEBUG] ${message}`);
+        }
+
+        // Step 1: Check library loading
+        function checkLibraries() {
+            const libraryStatus = document.getElementById('library-status');
+            
+            setTimeout(() => {
+                const checks = [
+                    { name: 'Leaflet (L)', check: () => typeof L !== 'undefined' },
+                    { name: 'L.map', check: () => typeof L !== 'undefined' && typeof L.map !== 'undefined' },
+                    { name: 'L.marker', check: () => typeof L !== 'undefined' && typeof L.marker !== 'undefined' },
+                    { name: 'L.tileLayer', check: () => typeof L !== 'undefined' && typeof L.tileLayer !== 'undefined' }
+                ];
+                
+                let status = '';
+                let allGood = true;
+                
+                checks.forEach(check => {
+                    const result = check.check();
+                    status += `${check.name}: ${result ? '✅ OK' : '❌ FAIL'}\n`;
+                    if (!result) allGood = false;
+                    debug(`${check.name}: ${result ? 'OK' : 'FAIL'}`, result ? 'success' : 'error');
+                });
+                
+                libraryStatus.innerHTML = status;
+                
+                if (allGood) {
+                    debug('All libraries loaded successfully!', 'success');
+                    checkWrapper();
+                } else {
+                    debug('Some libraries failed to load!', 'error');
+                }
+            }, 1000);
+        }
+
+        // Step 2: Check wrapper
+        function checkWrapper() {
+            const wrapperStatus = document.getElementById('wrapper-status');
+            
+            debug('Attempting to import wrapper...', 'info');
+            
+            import('./leaflet-wrapper.js')
+                .then(module => {
+                    debug('Wrapper module imported successfully!', 'success');
+                    window.leafletWrapper = module.default;
+                    
+                    wrapperStatus.innerHTML = `✅ Wrapper imported\n✅ Instance created\nInitialization: ${window.leafletWrapper.initialized ? 'Ready' : 'Pending'}`;
+                    
+                    // Try to initialize
+                    if (!window.leafletWrapper.initialized) {
+                        debug('Initializing wrapper...', 'info');
+                        window.leafletWrapper.init().then(() => {
+                            debug('Wrapper initialized!', 'success');
+                            wrapperStatus.innerHTML += `\n✅ Wrapper initialized`;
+                            createBasicMap();
+                        }).catch(err => {
+                            debug(`Wrapper init error: ${err}`, 'error');
+                            wrapperStatus.innerHTML += `\n❌ Init failed: ${err}`;
+                        });
+                    } else {
+                        debug('Wrapper already initialized!', 'success');
+                        createBasicMap();
+                    }
+                })
+                .catch(error => {
+                    debug(`Wrapper import failed: ${error.message}`, 'error');
+                    wrapperStatus.innerHTML = `❌ Import failed: ${error.message}`;
+                    
+                    // Try direct map creation as fallback
+                    debug('Trying direct Leaflet usage as fallback...', 'warning');
+                    createDirectMap();
+                });
+        }
+
+        // Step 3: Create basic map
+        function createBasicMap() {
+            const mapStatus = document.getElementById('map-status');
+            debug('Creating map with wrapper...', 'info');
+            
+            try {
+                // Using wrapper
+                const mapContainer = document.getElementById('map');
+                const map = L.map(mapContainer).setView([51.505, -0.09], 13);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                // Add a marker
+                L.marker([51.5, -0.09]).addTo(map)
+                    .bindPopup('Hello World!<br>Map is working!')
+                    .openPopup();
+                
+                mapStatus.innerHTML = '✅ Map created successfully!\n✅ Tile layer added\n✅ Marker added';
+                debug('Map created successfully with wrapper!', 'success');
+                
+            } catch (error) {
+                debug(`Map creation failed: ${error.message}`, 'error');
+                mapStatus.innerHTML = `❌ Map creation failed: ${error.message}`;
+                createDirectMap();
+            }
+        }
+
+        // Fallback: Create map directly
+        function createDirectMap() {
+            const mapStatus = document.getElementById('map-status');
+            debug('Creating map directly with Leaflet (fallback)...', 'warning');
+            
+            try {
+                const mapContainer = document.getElementById('map');
+                const map = L.map(mapContainer).setView([51.505, -0.09], 13);
+                
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                // Add a marker
+                L.marker([51.5, -0.09]).addTo(map)
+                    .bindPopup('Direct Leaflet Map<br>Fallback working!')
+                    .openPopup();
+                
+                mapStatus.innerHTML = '✅ Direct map created successfully!\n✅ Tile layer added\n✅ Marker added\n⚠️ (Using fallback method)';
+                debug('Direct map created successfully!', 'success');
+                
+            } catch (error) {
+                debug(`Direct map creation failed: ${error.message}`, 'error');
+                mapStatus.innerHTML = `❌ Direct map creation failed: ${error.message}`;
+            }
+        }
+
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            debug(`Global error: ${e.message}`, 'error');
+        });
+
+        // Start the debugging process
+        debug('Starting Leaflet debug test...', 'info');
+        checkLibraries();
+    </script>
+</body>
+</html>

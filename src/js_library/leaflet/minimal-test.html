@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal Leaflet Test</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        #map {
+            height: 400px;
+            width: 100%;
+            border: 2px solid #007bff;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .status {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Minimal Leaflet Test</h1>
+    
+    <div class="status" id="status">
+        Loading...
+    </div>
+    
+    <div>
+        <button onclick="createMap()">Create Map</button>
+        <button onclick="addMarker()">Add Marker</button>
+        <button onclick="testComplete()">Test Complete</button>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div class="status" id="console-log">
+        <strong>Console Log:</strong><br>
+        <div id="log-content"></div>
+    </div>
+
+    <!-- Load Leaflet from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <script>
+        let map = null;
+        let statusDiv = document.getElementById('status');
+        let logDiv = document.getElementById('log-content');
+        
+        function updateStatus(message, isError = false) {
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + (isError ? 'error' : 'success');
+            log(message);
+        }
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            console.log(message);
+        }
+        
+        function checkLeaflet() {
+            if (typeof L !== 'undefined') {
+                updateStatus('✅ Leaflet loaded successfully (version ' + (L.version || 'unknown') + ')');
+                return true;
+            } else {
+                updateStatus('❌ Leaflet not loaded', true);
+                return false;
+            }
+        }
+        
+        function createMap() {
+            if (!checkLeaflet()) return;
+            
+            try {
+                if (map) {
+                    map.remove();
+                }
+                
+                log('Creating map...');
+                map = L.map('map').setView([51.505, -0.09], 13);
+                
+                log('Adding tile layer...');
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                
+                updateStatus('✅ Map created successfully!');
+                
+            } catch (error) {
+                updateStatus('❌ Error creating map: ' + error.message, true);
+                log('Error details: ' + error.stack);
+            }
+        }
+        
+        function addMarker() {
+            if (!map) {
+                updateStatus('❌ Please create a map first', true);
+                return;
+            }
+            
+            try {
+                log('Adding marker...');
+                L.marker([51.5, -0.09]).addTo(map)
+                    .bindPopup('Hello World!<br>Marker working!')
+                    .openPopup();
+                
+                updateStatus('✅ Marker added successfully!');
+                
+            } catch (error) {
+                updateStatus('❌ Error adding marker: ' + error.message, true);
+            }
+        }
+        
+        function testComplete() {
+            if (!map) {
+                updateStatus('❌ No map created', true);
+                return;
+            }
+            
+            updateStatus('🎉 All tests completed successfully!');
+            log('Map container: ' + document.getElementById('map').innerHTML.length + ' chars');
+            log('Map object: ' + typeof map);
+            log('Leaflet version: ' + (L.version || 'unknown'));
+        }
+        
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            updateStatus('❌ Global error: ' + e.message, true);
+            log('Error file: ' + e.filename + ':' + e.lineno);
+        });
+        
+        // Initialize
+        log('Page loaded, checking Leaflet...');
+        
+        // Wait a bit for Leaflet to load
+        setTimeout(() => {
+            if (checkLeaflet()) {
+                log('Auto-creating map...');
+                createMap();
+            }
+        }, 1000);
+        
+    </script>
+</body>
+</html>

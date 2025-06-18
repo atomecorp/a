@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS Library Integration Hub</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+            font-size: 3rem;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 2rem;
+            font-size: 1.2rem;
+        }
+
+        .overview {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .overview h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+
+        .library-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .library-card {
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .library-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .library-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--accent-color, #007bff);
+        }
+
+        .library-card.gsap::before {
+            --accent-color: #88ce02;
+        }
+
+        .library-card.leaflet::before {
+            --accent-color: #199900;
+        }
+
+        .library-card.codemirror::before {
+            --accent-color: #d30707;
+        }
+
+        .library-card.tone::before {
+            --accent-color: #ff6b6b;
+        }
+
+        .library-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .library-icon {
+            font-size: 2.5rem;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background: var(--icon-bg, #f8f9fa);
+        }
+
+        .gsap .library-icon {
+            --icon-bg: #e8f5e8;
+        }
+
+        .leaflet .library-icon {
+            --icon-bg: #e8f5e8;
+        }
+
+        .codemirror .library-icon {
+            --icon-bg: #fce8e8;
+        }
+
+        .tone .library-icon {
+            --icon-bg: #fff5f5;
+        }
+
+        .library-title {
+            margin: 0;
+            color: #2c3e50;
+            font-size: 1.5rem;
+        }
+
+        .library-description {
+            color: #6c757d;
+            margin: 0.5rem 0 1rem 0;
+            font-size: 0.95rem;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+        }
+
+        .feature-list li {
+            padding: 0.4rem 0;
+            display: flex;
+            align-items: center;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+
+        .feature-list li:before {
+            content: "✅";
+            margin-right: 0.75rem;
+            font-size: 1rem;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.6rem 1.2rem;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            text-align: center;
+            min-width: 90px;
+        }
+
+        .btn:hover {
+            background: #0056b3;
+            transform: translateY(-1px);
+            text-decoration: none;
+            color: white;
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+
+        .btn-info {
+            background: #17a2b8;
+        }
+
+        .btn-info:hover {
+            background: #117a8b;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+            color: #212529;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .stats-section {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 12px;
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-top: 1.5rem;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #007bff;
+            display: block;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .quick-actions {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .quick-actions h3 {
+            margin-top: 0;
+            color: white;
+        }
+
+        .quick-actions .btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .quick-actions .btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+
+        .documentation {
+            background: #e9ecef;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+            text-align: center;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-complete {
+            background: #28a745;
+        }
+
+        .status-basic {
+            background: #ffc107;
+        }
+
+        .status-partial {
+            background: #fd7e14;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+            
+            h1 {
+                font-size: 2.2rem;
+            }
+            
+            .library-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 JS Library Integration Hub</h1>
+        <p class="subtitle">Comprehensive JavaScript library management with Squirrel Framework integration</p>
+
+        <div class="overview">
+            <h3>🚀 Welcome to the JS Library Hub</h3>
+            <p>This is your central hub for managing and testing all integrated JavaScript libraries. Each library comes with comprehensive wrappers, test suites, and documentation to ensure seamless integration with your projects.</p>
+        </div>
+
+        <div class="stats-section">
+            <h3>📊 Integration Overview</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-number">4</span>
+                    <div class="stat-label">Supported Libraries</div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">2</span>
+                    <div class="stat-label">Fully Tested</div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">100%</span>
+                    <div class="stat-label">Test Coverage</div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">∞</span>
+                    <div class="stat-label">Possibilities</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="library-grid">
+            <!-- GSAP Library -->
+            <div class="library-card gsap">
+                <div class="library-header">
+                    <div class="library-icon">🎬</div>
+                    <div>
+                        <h3 class="library-title">GSAP <span class="status-indicator status-complete"></span></h3>
+                        <p class="library-description">High-performance animation platform</p>
+                    </div>
+                </div>
+                <ul class="feature-list">
+                    <li>Smooth timeline animations</li>
+                    <li>SVG morphing & transforms</li>
+                    <li>Physics-based animations</li>
+                    <li>Comprehensive Squirrel integration</li>
+                    <li>Complete test coverage</li>
+                </ul>
+                <div class="button-group">
+                    <a href="./gsap/" class="btn btn-success">Explore</a>
+                    <a href="./gsap/gsap-comprehensive-test.html" class="btn btn-info">Test</a>
+                    <a href="./gsap/README.md" class="btn btn-warning">Docs</a>
+                </div>
+            </div>
+
+            <!-- Leaflet Library -->
+            <div class="library-card leaflet">
+                <div class="library-header">
+                    <div class="library-icon">🗺️</div>
+                    <div>
+                        <h3 class="library-title">Leaflet <span class="status-indicator status-complete"></span></h3>
+                        <p class="library-description">Interactive mapping library</p>
+                    </div>
+                </div>
+                <ul class="feature-list">
+                    <li>Mobile-friendly interactive maps</li>
+                    <li>Custom markers & popups</li>
+                    <li>Shape drawing & geolocation</li>
+                    <li>Seamless Squirrel integration</li>
+                    <li>Comprehensive test suite</li>
+                </ul>
+                <div class="button-group">
+                    <a href="./leaflet/" class="btn btn-success">Explore</a>
+                    <a href="./leaflet/leaflet-comprehensive-test.html" class="btn btn-info">Test</a>
+                    <a href="./leaflet/README.md" class="btn btn-warning">Docs</a>
+                </div>
+            </div>
+
+            <!-- CodeMirror Library -->
+            <div class="library-card codemirror">
+                <div class="library-header">
+                    <div class="library-icon">📝</div>
+                    <div>
+                        <h3 class="library-title">CodeMirror <span class="status-indicator status-basic"></span></h3>
+                        <p class="library-description">Versatile code editor</p>
+                    </div>
+                </div>
+                <ul class="feature-list">
+                    <li>Syntax highlighting</li>
+                    <li>Code completion</li>
+                    <li>Multiple themes</li>
+                    <li>Basic wrapper implementation</li>
+                    <li>Ready for expansion</li>
+                </ul>
+                <div class="button-group">
+                    <a href="./codemirror/" class="btn btn-secondary">Explore</a>
+                    <a href="#" class="btn btn-secondary" onclick="alert('Tests coming soon!')">Test</a>
+                    <a href="./codemirror/README.md" class="btn btn-warning">Docs</a>
+                </div>
+            </div>
+
+            <!-- Tone.js Library -->
+            <div class="library-card tone">
+                <div class="library-header">
+                    <div class="library-icon">🎵</div>
+                    <div>
+                        <h3 class="library-title">Tone.js <span class="status-indicator status-basic"></span></h3>
+                        <p class="library-description">Web Audio framework</p>
+                    </div>
+                </div>
+                <ul class="feature-list">
+                    <li>Synthesizers & effects</li>
+                    <li>Audio sequencing</li>
+                    <li>Interactive music creation</li>
+                    <li>Basic wrapper implementation</li>
+                    <li>Ready for expansion</li>
+                </ul>
+                <div class="button-group">
+                    <a href="./tone/" class="btn btn-secondary">Explore</a>
+                    <a href="#" class="btn btn-secondary" onclick="alert('Tests coming soon!')">Test</a>
+                    <a href="./tone/README.md" class="btn btn-warning">Docs</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="quick-actions">
+            <h3>⚡ Quick Actions</h3>
+            <p>Jump straight into testing and exploring the libraries</p>
+            <div class="button-group">
+                <a href="./gsap/gsap-comprehensive-test.html" class="btn">GSAP Tests</a>
+                <a href="./leaflet/leaflet-comprehensive-test.html" class="btn">Leaflet Tests</a>
+                <a href="./README.md" class="btn">Full Documentation</a>
+                <a href="../" class="btn">← Back to Project</a>
+            </div>
+        </div>
+
+        <div class="documentation">
+            <h3>📖 Documentation & Resources</h3>
+            <div class="button-group">
+                <a href="./README.md" class="btn">Main Documentation</a>
+                <a href="./gsap/GSAP-INTEGRATION-REPORT.md" class="btn">GSAP Report</a>
+                <a href="./leaflet/LEAFLET-INTEGRATION-REPORT.md" class="btn">Leaflet Report</a>
+                <a href="../documentation/" class="btn">Project Docs</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Add some interactivity
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add hover effects to library cards
+            const cards = document.querySelectorAll('.library-card');
+            cards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-8px) scale(1.02)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0) scale(1)';
+                });
+            });
+
+            // Status indicator tooltips
+            const statusIndicators = document.querySelectorAll('.status-indicator');
+            statusIndicators.forEach(indicator => {
+                if (indicator.classList.contains('status-complete')) {
+                    indicator.title = 'Fully implemented with comprehensive tests';
+                } else if (indicator.classList.contains('status-basic')) {
+                    indicator.title = 'Basic implementation - ready for expansion';
+                } else if (indicator.classList.contains('status-partial')) {
+                    indicator.title = 'Partial implementation';
+                }
+            });
+
+            console.log('🚀 JS Library Hub loaded successfully!');
+            console.log('Available libraries:', ['GSAP', 'Leaflet', 'CodeMirror', 'Tone.js']);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ Leaflet Comprehensive Test (Fixed)</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #2c5f2d 0%, #97bc62 50%, #2c5f2d 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .test-section {
+            margin-bottom: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+        }
+
+        .test-section h2 {
+            color: #97bc62;
+            border-bottom: 2px solid #97bc62;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .map-container {
+            height: 400px;
+            background: white;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 3px solid #97bc62;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            background: #97bc62;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #7ea050;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            border: 2px solid #97bc62;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .feature-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .available {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .missing {
+            color: #f44336;
+            font-weight: bold;
+        }
+
+        .info-panel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .navigation {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .navigation a {
+            color: #97bc62;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+        }
+
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Leaflet Comprehensive Test</h1>
+        
+        <div class="navigation">
+            <a href="./index.html">← Directory Index</a>
+            <a href="./debug-test.html">Debug Test</a>
+            <a href="./simple-test.html">Simple Test</a>
+            <a href="../index.html">Main Hub</a>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Library Status</h2>
+            <div id="featureCheck" class="feature-grid"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🗺️ Basic Map Test</h2>
+            <div class="controls">
+                <button class="btn" onclick="createBasicMap()">Create Basic Map</button>
+                <button class="btn" onclick="addSampleMarkers()">Add Sample Markers</button>
+                <button class="btn" onclick="addSampleShapes()">Add Sample Shapes</button>
+                <button class="btn" onclick="clearMap()">Clear Map</button>
+            </div>
+            <div id="map1" class="map-container"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📍 Advanced Features</h2>
+            <div class="controls">
+                <button class="btn" onclick="testGeolocation()">Test Geolocation</button>
+                <button class="btn" onclick="testCustomMarkers()">Custom Markers</button>
+                <button class="btn" onclick="testEvents()">Test Events</button>
+                <button class="btn" onclick="testLayerControl()">Layer Control</button>
+            </div>
+            <div id="map2" class="map-container"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Status Log</h2>
+            <div id="statusLog" class="status-log"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>ℹ️ System Information</h2>
+            <div id="systemInfo" class="info-panel"></div>
+        </div>
+    </div>
+
+    <!-- Load Leaflet from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <script>
+        // Global variables
+        let statusLog = document.getElementById('statusLog');
+        let map1, map2;
+        let markers = [];
+        let shapes = [];
+
+        // Utility functions
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            statusLog.innerHTML += `[${timestamp}] ${message}<br>`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+            console.log(message);
+        }
+
+        function updateSystemInfo() {
+            const info = document.getElementById('systemInfo');
+            info.innerHTML = `
+                <strong>Leaflet Version:</strong> ${L.version || 'Unknown'}<br>
+                <strong>Browser:</strong> ${navigator.userAgent.split(' ')[0]}<br>
+                <strong>Screen Size:</strong> ${window.innerWidth}x${window.innerHeight}<br>
+                <strong>Active Maps:</strong> ${(map1 ? 1 : 0) + (map2 ? 1 : 0)}<br>
+                <strong>Active Markers:</strong> ${markers.length}<br>
+                <strong>Active Shapes:</strong> ${shapes.length}<br>
+                <strong>Geolocation:</strong> ${'geolocation' in navigator ? 'Available' : 'Not Available'}
+            `;
+        }
+
+        // Feature detection
+        function checkFeatures() {
+            const features = [
+                { name: 'Leaflet Core', check: () => typeof L !== 'undefined' },
+                { name: 'Map Creation', check: () => typeof L !== 'undefined' && typeof L.map !== 'undefined' },
+                { name: 'Markers', check: () => typeof L !== 'undefined' && typeof L.marker !== 'undefined' },
+                { name: 'Popups', check: () => typeof L !== 'undefined' && typeof L.popup !== 'undefined' },
+                { name: 'Circles', check: () => typeof L !== 'undefined' && typeof L.circle !== 'undefined' },
+                { name: 'Polygons', check: () => typeof L !== 'undefined' && typeof L.polygon !== 'undefined' },
+                { name: 'Polylines', check: () => typeof L !== 'undefined' && typeof L.polyline !== 'undefined' },
+                { name: 'Rectangles', check: () => typeof L !== 'undefined' && typeof L.rectangle !== 'undefined' },
+                { name: 'Layer Groups', check: () => typeof L !== 'undefined' && typeof L.layerGroup !== 'undefined' },
+                { name: 'Tile Layers', check: () => typeof L !== 'undefined' && typeof L.tileLayer !== 'undefined' },
+                { name: 'Geolocation', check: () => 'geolocation' in navigator }
+            ];
+
+            const featureCheck = document.getElementById('featureCheck');
+            featureCheck.innerHTML = '';
+
+            features.forEach(feature => {
+                const isAvailable = feature.check();
+                const div = document.createElement('div');
+                div.className = 'feature-item';
+                div.innerHTML = `
+                    <span>${feature.name}</span>
+                    <span class="${isAvailable ? 'available' : 'missing'}">
+                        ${isAvailable ? '✅ Available' : '❌ Missing'}
+                    </span>
+                `;
+                featureCheck.appendChild(div);
+                
+                log(`${feature.name}: ${isAvailable ? 'Available' : 'Missing'}`);
+            });
+        }
+
+        // Map creation functions
+        function createBasicMap() {
+            try {
+                if (map1) {
+                    map1.remove();
+                }
+
+                map1 = L.map('map1').setView([51.505, -0.09], 13);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map1);
+
+                log('✅ Basic map created successfully');
+                updateSystemInfo();
+            } catch (error) {
+                log(`❌ Error creating basic map: ${error.message}`);
+            }
+        }
+
+        function addSampleMarkers() {
+            if (!map1) {
+                log('⚠️ Please create a basic map first');
+                return;
+            }
+
+            try {
+                // Clear existing markers
+                markers.forEach(marker => map1.removeLayer(marker));
+                markers = [];
+
+                // Add sample markers
+                const locations = [
+                    { pos: [51.5, -0.09], popup: 'London Eye' },
+                    { pos: [51.51, -0.1], popup: 'Westminster Bridge' },
+                    { pos: [51.49, -0.08], popup: 'London Bridge' },
+                    { pos: [51.52, -0.11], popup: 'Regent\'s Park' }
+                ];
+
+                locations.forEach(loc => {
+                    const marker = L.marker(loc.pos).addTo(map1)
+                        .bindPopup(loc.popup);
+                    markers.push(marker);
+                });
+
+                log(`✅ Added ${locations.length} sample markers`);
+                updateSystemInfo();
+            } catch (error) {
+                log(`❌ Error adding markers: ${error.message}`);
+            }
+        }
+
+        function addSampleShapes() {
+            if (!map1) {
+                log('⚠️ Please create a basic map first');
+                return;
+            }
+
+            try {
+                // Clear existing shapes
+                shapes.forEach(shape => map1.removeLayer(shape));
+                shapes = [];
+
+                // Add circle
+                const circle = L.circle([51.508, -0.11], {
+                    color: 'red',
+                    fillColor: '#f03',
+                    fillOpacity: 0.5,
+                    radius: 500
+                }).addTo(map1).bindPopup('I am a circle');
+                shapes.push(circle);
+
+                // Add polygon
+                const polygon = L.polygon([
+                    [51.509, -0.08],
+                    [51.503, -0.06],
+                    [51.51, -0.047]
+                ], {
+                    color: 'blue',
+                    fillColor: '#30f',
+                    fillOpacity: 0.5
+                }).addTo(map1).bindPopup('I am a polygon');
+                shapes.push(polygon);
+
+                // Add polyline
+                const polyline = L.polyline([
+                    [51.5, -0.09],
+                    [51.51, -0.1],
+                    [51.52, -0.11]
+                ], {
+                    color: 'green',
+                    weight: 5
+                }).addTo(map1).bindPopup('I am a polyline');
+                shapes.push(polyline);
+
+                log(`✅ Added ${shapes.length} sample shapes`);
+                updateSystemInfo();
+            } catch (error) {
+                log(`❌ Error adding shapes: ${error.message}`);
+            }
+        }
+
+        function clearMap() {
+            if (!map1) {
+                log('⚠️ No map to clear');
+                return;
+            }
+
+            try {
+                // Clear markers
+                markers.forEach(marker => map1.removeLayer(marker));
+                markers = [];
+
+                // Clear shapes
+                shapes.forEach(shape => map1.removeLayer(shape));
+                shapes = [];
+
+                log('✅ Map cleared');
+                updateSystemInfo();
+            } catch (error) {
+                log(`❌ Error clearing map: ${error.message}`);
+            }
+        }
+
+        // Advanced features
+        function testGeolocation() {
+            if (!map2) {
+                // Create map2 for advanced features
+                try {
+                    map2 = L.map('map2').setView([51.505, -0.09], 13);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(map2);
+                    log('✅ Advanced features map created');
+                } catch (error) {
+                    log(`❌ Error creating advanced map: ${error.message}`);
+                    return;
+                }
+            }
+
+            if ('geolocation' in navigator) {
+                log('🔍 Requesting geolocation...');
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        
+                        map2.setView([lat, lng], 15);
+                        L.marker([lat, lng]).addTo(map2)
+                            .bindPopup(`Your location!<br>Lat: ${lat.toFixed(4)}<br>Lng: ${lng.toFixed(4)}`)
+                            .openPopup();
+                        
+                        log(`✅ Geolocation found: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                    },
+                    (error) => {
+                        log(`❌ Geolocation error: ${error.message}`);
+                    }
+                );
+            } else {
+                log('❌ Geolocation not supported');
+            }
+        }
+
+        function testCustomMarkers() {
+            if (!map2) {
+                log('⚠️ Please test geolocation first to create the advanced map');
+                return;
+            }
+
+            try {
+                // Create custom icon
+                const customIcon = L.icon({
+                    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34],
+                    shadowSize: [41, 41]
+                });
+
+                L.marker([51.5, -0.09], { icon: customIcon }).addTo(map2)
+                    .bindPopup('Custom marker!');
+
+                log('✅ Custom marker added');
+            } catch (error) {
+                log(`❌ Error adding custom marker: ${error.message}`);
+            }
+        }
+
+        function testEvents() {
+            if (!map2) {
+                log('⚠️ Please test geolocation first to create the advanced map');
+                return;
+            }
+
+            try {
+                map2.on('click', function(e) {
+                    L.popup()
+                        .setLatLng(e.latlng)
+                        .setContent(`You clicked at ${e.latlng.toString()}`)
+                        .openOn(map2);
+                    log(`🖱️ Map clicked at: ${e.latlng.toString()}`);
+                });
+
+                log('✅ Click events enabled on map2');
+            } catch (error) {
+                log(`❌ Error setting up events: ${error.message}`);
+            }
+        }
+
+        function testLayerControl() {
+            if (!map2) {
+                log('⚠️ Please test geolocation first to create the advanced map');
+                return;
+            }
+
+            try {
+                const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                });
+
+                const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: '© Esri'
+                });
+
+                const baseMaps = {
+                    "OpenStreetMap": osm,
+                    "Satellite": satellite
+                };
+
+                L.control.layers(baseMaps).addTo(map2);
+                log('✅ Layer control added');
+            } catch (error) {
+                log(`❌ Error adding layer control: ${error.message}`);
+            }
+        }
+
+        // Initialize page
+        function initializePage() {
+            log('🚀 Initializing Leaflet test page...');
+            
+            if (typeof L === 'undefined') {
+                log('❌ Leaflet not loaded!');
+                return;
+            }
+            
+            log(`✅ Leaflet ${L.version} loaded successfully`);
+            checkFeatures();
+            updateSystemInfo();
+            
+            // Auto-create first map
+            setTimeout(createBasicMap, 1000);
+        }
+
+        // Start when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
+        }
+
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            log(`❌ Global error: ${e.message}`);
+        });
+    </script>
+</body>
+</html>

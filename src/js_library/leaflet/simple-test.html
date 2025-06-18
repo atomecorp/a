@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test">
+        <h1>✅ Basic HTML Test</h1>
+        <p>If you can see this, HTML is working correctly.</p>
+        <p>Current time: <span id="time"></span></p>
+        <button onclick="alert('JavaScript is working!')">Test JavaScript</button>
+    </div>
+
+    <div class="test">
+        <h2>Navigation Links</h2>
+        <ul>
+            <li><a href="./index.html">Directory Index</a></li>
+            <li><a href="./debug-test.html">Debug Test</a></li>
+            <li><a href="./leaflet-comprehensive-test.html">Comprehensive Test</a></li>
+            <li><a href="./leaflet-wrapper-test.html">Wrapper Test</a></li>
+            <li><a href="../index.html">Main js_library Hub</a></li>
+        </ul>
+    </div>
+
+    <script>
+        document.getElementById('time').textContent = new Date().toLocaleString();
+        console.log('Simple test page loaded successfully!');
+    </script>
+</body>
+</html>

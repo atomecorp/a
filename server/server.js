@@ -51,14 +51,10 @@ async function startServer() {
     // CORS pour le développement
     await server.register(fastifyCors, {
       origin: true,
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
-    });
-
-    // Servir les fichiers statiques depuis ../src
+      credentials: true
+    });    // Servir les fichiers statiques depuis le répertoire parent
     await server.register(fastifyStatic, {
-      root: path.join(__dirname, '../src'),
+      root: path.join(__dirname, '../'),
       prefix: '/'
     });
 
@@ -294,20 +290,149 @@ async function startServer() {
         }));
 
         // Écouter les messages du client
-        connection.on('message', (message) => {
+        connection.on('message', async (message) => {
           try {
             const data = JSON.parse(message);
             console.log('📨 Message reçu:', data);
 
-            // Echo du message avec enrichissement
-            const response = {
-              type: 'echo',
-              original: data,
-              timestamp: new Date().toISOString(),
-              server: 'Fastify v5'
-            };
+            // Handle database operations via WebSocket
+            switch (data.type) {
+              case 'get_users':
+                try {
+                  const users = await User.query();
+                  connection.send(JSON.stringify({
+                    type: 'users_response',
+                    success: true,
+                    data: users,
+                    timestamp: new Date().toISOString()
+                  }));
+                } catch (error) {
+                  connection.send(JSON.stringify({
+                    type: 'users_response',
+                    success: false,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+                break;
 
-            connection.send(JSON.stringify(response));
+              case 'add_user':
+                try {
+                  const { name, password, autorisation } = data.userData;
+                  
+                  if (!name || !password) {
+                    connection.send(JSON.stringify({
+                      type: 'add_user_response',
+                      success: false,
+                      error: 'Name and password are required',
+                      timestamp: new Date().toISOString()
+                    }));
+                    return;
+                  }
+
+                  const newUser = await User.query().insert({
+                    name,
+                    password,
+                    autorisation: autorisation || 'read'
+                  });
+
+                  connection.send(JSON.stringify({
+                    type: 'add_user_response',
+                    success: true,
+                    data: newUser,
+                    message: `User "${name}" created successfully`,
+                    timestamp: new Date().toISOString()
+                  }));
+
+                  // Broadcast to all connected clients
+                  console.log('📢 Broadcasting user addition to all clients');
+                  
+                } catch (error) {
+                  connection.send(JSON.stringify({
+                    type: 'add_user_response',
+                    success: false,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+                break;
+
+              case 'delete_user':
+                try {
+                  const { userId, userName } = data;
+                  
+                  const deletedCount = await User.query().deleteById(userId);
+                  
+                  if (deletedCount === 0) {
+                    connection.send(JSON.stringify({
+                      type: 'delete_user_response',
+                      success: false,
+                      error: 'User not found',
+                      timestamp: new Date().toISOString()
+                    }));
+                    return;
+                  }
+
+                  connection.send(JSON.stringify({
+                    type: 'delete_user_response',
+                    success: true,
+                    message: `User "${userName}" deleted successfully`,
+                    deletedId: userId,
+                    timestamp: new Date().toISOString()
+                  }));
+
+                  // Broadcast to all connected clients
+                  console.log('📢 Broadcasting user deletion to all clients');
+                  
+                } catch (error) {
+                  connection.send(JSON.stringify({
+                    type: 'delete_user_response',
+                    success: false,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+                break;
+
+              case 'get_db_stats':
+                try {
+                  const [userCount] = await knex('user').count('* as count');
+                  const [projectCount] = await knex('project').count('* as count');
+                  const [atomeCount] = await knex('atome').count('* as count');
+                  
+                  connection.send(JSON.stringify({
+                    type: 'db_stats_response',
+                    success: true,
+                    data: {
+                      users: userCount.count,
+                      projects: projectCount.count,
+                      atomes: atomeCount.count,
+                      database: 'SQLite + Objection.js (WebSocket)',
+                      timestamp: new Date().toISOString()
+                    }
+                  }));
+                } catch (error) {
+                  connection.send(JSON.stringify({
+                    type: 'db_stats_response',
+                    success: false,
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                  }));
+                }
+                break;
+
+              default:
+                // Echo du message avec enrichissement (fallback)
+                const response = {
+                  type: 'echo',
+                  original: data,
+                  timestamp: new Date().toISOString(),
+                  server: 'Fastify v5'
+                };
+
+                connection.send(JSON.stringify(response));
+                break;
+            }
           } catch (error) {
             console.error('❌ Erreur parsing message:', error);
             connection.send(JSON.stringify({

@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ Leaflet Wrapper Advanced Features Test</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #2c5f2d 0%, #97bc62 50%, #2c5f2d 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .test-section {
+            margin-bottom: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+        }
+
+        .test-section h2 {
+            color: #97bc62;
+            border-bottom: 2px solid #97bc62;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: linear-gradient(45deg, #2c5f2d, #4a7c59);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .info-number {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #97bc62;
+        }
+
+        .map-container {
+            height: 400px;
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+            background: rgba(0,0,0,0.2);
+        }
+
+        .status {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: monospace;
+            overflow-x: auto;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .wrapper-methods {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .method-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .method-card h4 {
+            color: #97bc62;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .method-card code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .tile-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .tile-option {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .tile-option.active {
+            background: #97bc62;
+            border-color: #97bc62;
+        }
+
+        .benchmark-results {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .benchmark-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .benchmark-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Leaflet Wrapper Advanced Features</h1>
+
+        <!-- Wrapper Status -->
+        <div class="test-section">
+            <h2>📊 Wrapper Status & Info</h2>
+            <div class="info-grid" id="wrapperInfo">
+                <!-- Will be populated by JavaScript -->
+            </div>
+            <button onclick="refreshWrapperInfo()">Refresh Info</button>
+            <button onclick="getWrapperMethods()">List Methods</button>
+        </div>
+
+        <!-- Wrapper Methods Overview -->
+        <div class="test-section">
+            <h2>🔧 Available Wrapper Methods</h2>
+            <div class="wrapper-methods" id="wrapperMethods">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Basic Wrapper Operations -->
+        <div class="test-section">
+            <h2>🗺️ Basic Wrapper Operations</h2>
+            <div class="controls">
+                <button onclick="testCreateMap()">Create Map</button>
+                <button onclick="testTileLayerSwitch()">Switch Tile Layers</button>
+                <button onclick="testMapUtilities()">Map Utilities</button>
+                <button onclick="resetBasicMap()">Reset</button>
+            </div>
+            <div class="map-container" id="basicWrapperMap"></div>
+            <div class="tile-selector" id="tileSelector">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Marker Management -->
+        <div class="test-section">
+            <h2>📍 Advanced Marker Management</h2>
+            <div class="controls">
+                <button onclick="testMarkerCreation()">Create Markers</button>
+                <button onclick="testMarkerUpdates()">Update Markers</button>
+                <button onclick="testMarkerEvents()">Marker Events</button>
+                <button onclick="testMarkerClustering()">Marker Clustering</button>
+                <button onclick="clearMarkerTests()">Clear</button>
+            </div>
+            <div class="map-container" id="markerWrapperMap"></div>
+            <div class="status" id="markerStatus">Ready for marker tests...</div>
+        </div>
+
+        <!-- Shape and Overlay Management -->
+        <div class="test-section">
+            <h2>🔷 Shape & Overlay Wrapper</h2>
+            <div class="controls">
+                <button onclick="testShapeCreation()">Create Shapes</button>
+                <button onclick="testShapeInteraction()">Shape Interaction</button>
+                <button onclick="testLayerManagement()">Layer Management</button>
+                <button onclick="clearShapeTests()">Clear</button>
+            </div>
+            <div class="map-container" id="shapeWrapperMap"></div>
+        </div>
+
+        <!-- Tile Layer Testing -->
+        <div class="test-section">
+            <h2>🎨 Tile Layer Management</h2>
+            <div class="controls">
+                <button onclick="testAllTileLayers()">Test All Layers</button>
+                <button onclick="benchmarkTileLoading()">Benchmark Loading</button>
+                <button onclick="testCustomTileLayer()">Custom Tile Layer</button>
+            </div>
+            <div class="map-container" id="tileWrapperMap"></div>
+            <div class="benchmark-results" id="tileBenchmark">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Squirrel Integration Testing -->
+        <div class="test-section">
+            <h2>🐿️ Squirrel Integration Tests</h2>
+            <div class="controls">
+                <button onclick="testSquirrelDollar()">Test $ Function</button>
+                <button onclick="testSquirrelAClass()">Test A Class</button>
+                <button onclick="testChainedOperations()">Chained Operations</button>
+                <button onclick="testEventIntegration()">Event Integration</button>
+            </div>
+            <div class="map-container" id="squirrelWrapperMap"></div>
+            <div class="status" id="squirrelWrapperStatus">Ready for Squirrel integration tests...</div>
+        </div>
+
+        <!-- Performance & Optimization -->
+        <div class="test-section">
+            <h2>⚡ Performance & Optimization</h2>
+            <div class="controls">
+                <button onclick="performanceStressTest()">Stress Test</button>
+                <button onclick="memoryUsageTest()">Memory Test</button>
+                <button onclick="renderingBenchmark()">Rendering Benchmark</button>
+                <button onclick="cleanupTest()">Cleanup Test</button>
+            </div>
+            <div class="map-container" id="performanceWrapperMap"></div>
+            <div class="benchmark-results" id="performanceBenchmark">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Error Handling & Edge Cases -->
+        <div class="test-section">
+            <h2>🛡️ Error Handling & Edge Cases</h2>
+            <div class="controls">
+                <button onclick="testInvalidInputs()">Invalid Inputs</button>
+                <button onclick="testBoundaryConditions()">Boundary Conditions</button>
+                <button onclick="testErrorRecovery()">Error Recovery</button>
+                <button onclick="testNullChecks()">Null Checks</button>
+            </div>
+            <div class="status" id="errorTestStatus">Ready for error handling tests...</div>
+        </div>
+
+        <!-- Wrapper Utilities -->
+        <div class="test-section">
+            <h2>🔧 Wrapper Utilities & Helpers</h2>
+            <div class="controls">
+                <button onclick="testWrapperUtilities()">Test Utilities</button>
+                <button onclick="testDataExport()">Data Export</button>
+                <button onclick="testBulkOperations()">Bulk Operations</button>
+                <button onclick="testConfigManagement()">Config Management</button>
+            </div>
+            <div class="status" id="utilityStatus">Ready for utility tests...</div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="test-section">
+            <h2>📋 Activity Log</h2>
+            <div class="status" id="activityLog">
+                Leaflet Wrapper Advanced Features Test initialized...<br>
+            </div>
+        </div>
+    </div>    <!-- Load Leaflet from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+    <!-- Load our wrapper as regular script -->
+    <script>
+        // Simple wrapper loading without ES6 modules
+        let leafletWrapper = null;
+        
+        // Create a simple version of the wrapper functionality
+        function initializeWrapper() {
+            if (typeof L === 'undefined') {
+                log('❌ Leaflet not loaded!');
+                return;
+            }
+            
+            // Simple wrapper object with advanced features
+            leafletWrapper = {
+                initialized: true,
+                maps: new Map(),
+                createMap: function(containerId, options = {}) {
+                    const container = typeof containerId === 'string' ? 
+                        document.getElementById(containerId) : containerId;
+                    
+                    const map = L.map(container).setView(
+                        options.center || [51.505, -0.09], 
+                        options.zoom || 13
+                    );
+                    
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(map);
+                    
+                    this.maps.set(containerId, map);
+                    return map;
+                },
+                addMarker: function(map, latlng, content, options = {}) {
+                    const marker = L.marker(latlng, options).addTo(map);
+                    if (content) {
+                        marker.bindPopup(content);
+                    }
+                    return marker;
+                },
+                getMapsInfo: function() {
+                    return {
+                        activeMaps: this.maps.size,
+                        leafletVersion: L.version || 'Unknown'
+                    };
+                }
+            };
+            
+            window.leafletWrapper = leafletWrapper;
+            log('🗺️ Advanced wrapper initialized!');
+            
+            // Continue with initialization
+            refreshWrapperInfo();
+            getWrapperMethods();
+            setupTileSelector();
+        }
+        
+        // Initialize when ready
+        if (typeof L !== 'undefined') {
+            initializeWrapper();
+        } else {
+            // Wait for Leaflet to load
+            let checkCount = 0;
+            const checkInterval = setInterval(() => {
+                checkCount++;
+                if (typeof L !== 'undefined') {
+                    clearInterval(checkInterval);
+                    initializeWrapper();
+                } else if (checkCount > 50) { // 5 seconds timeout
+                    clearInterval(checkInterval);
+                    log('❌ Timeout waiting for Leaflet to load');
+                }
+            }, 100);
+        }
+    </script>
+
+    <script>
+        const activityLog = document.getElementById('activityLog');
+        let wrapperMaps = new Map();
+        let testMarkers = [];
+        let performanceMetrics = {};
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            activityLog.innerHTML += `[${timestamp}] ${message}<br>`;
+            activityLog.scrollTop = activityLog.scrollHeight;
+            console.log(message);
+        }
+
+        function refreshWrapperInfo() {
+            if (!window.leafletWrapper) {
+                log('❌ Leaflet Wrapper not available');
+                return;
+            }
+
+            const info = leafletWrapper.getMapsInfo();
+            const wrapperInfoEl = document.getElementById('wrapperInfo');
+            
+            wrapperInfoEl.innerHTML = `
+                <div class="info-card">
+                    <div class="info-number">${info.leafletVersion}</div>
+                    <div>Leaflet Version</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-number">${info.activeMaps}</div>
+                    <div>Active Maps</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-number">${info.activeMarkers}</div>
+                    <div>Active Markers</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-number">${info.availableTileLayers}</div>
+                    <div>Tile Layers</div>
+                </div>
+            `;
+            
+            log(`📊 Wrapper info refreshed - Leaflet v${info.leafletVersion}`);
+        }
+
+        function getWrapperMethods() {
+            if (!window.leafletWrapper) return;
+
+            const methods = [
+                { name: 'createMap()', desc: 'Create a new map instance', example: 'createMap(element, options)' },
+                { name: 'addMarker()', desc: 'Add marker to map', example: 'addMarker(mapId, lat, lng, options)' },
+                { name: 'addCircle()', desc: 'Add circle overlay', example: 'addCircle(mapId, lat, lng, radius)' },
+                { name: 'addPolygon()', desc: 'Add polygon shape', example: 'addPolygon(mapId, points, options)' },
+                { name: 'addPolyline()', desc: 'Add polyline path', example: 'addPolyline(mapId, points, options)' },
+                { name: 'changeTileLayer()', desc: 'Switch tile layer', example: 'changeTileLayer(mapId, layer)' },
+                { name: 'removeMarker()', desc: 'Remove specific marker', example: 'removeMarker(markerId)' },
+                { name: 'removeMap()', desc: 'Remove entire map', example: 'removeMap(mapId)' },
+                { name: 'getMap()', desc: 'Get map instance', example: 'getMap(mapId)' },
+                { name: 'getMapsInfo()', desc: 'Get wrapper statistics', example: 'getMapsInfo()' }
+            ];
+
+            const methodsEl = document.getElementById('wrapperMethods');
+            methodsEl.innerHTML = methods.map(method => `
+                <div class="method-card">
+                    <h4>${method.name}</h4>
+                    <p>${method.desc}</p>
+                    <code>${method.example}</code>
+                </div>
+            `).join('');
+
+            log(`🔧 Listed ${methods.length} wrapper methods`);
+        }
+
+        function setupTileSelector() {
+            if (!leafletWrapper) return;
+            
+            const layers = leafletWrapper.getTileLayers();
+            const selectorEl = document.getElementById('tileSelector');
+            
+            selectorEl.innerHTML = layers.map(layer => 
+                `<button class="tile-option" onclick="switchWrapperTileLayer('${layer.key}')" id="tile-${layer.key}">
+                    ${layer.name}
+                </button>`
+            ).join('');
+            
+            // Set OSM as active by default
+            document.getElementById('tile-osm')?.classList.add('active');
+        }
+
+        // Basic Wrapper Operations
+        function testCreateMap() {
+            const container = document.getElementById('basicWrapperMap');
+            container.innerHTML = '';
+            
+            if (!leafletWrapper) {
+                log('❌ Leaflet wrapper not available');
+                return;
+            }
+
+            try {
+                const startTime = performance.now();
+                
+                const mapData = leafletWrapper.createMap(container, {
+                    center: [51.505, -0.09], // London
+                    zoom: 13,
+                    tileLayer: 'osm'
+                });
+
+                wrapperMaps.set('basic', mapData);
+                
+                const endTime = performance.now();
+                const creationTime = endTime - startTime;
+
+                log(`🗺️ Map created successfully in ${creationTime.toFixed(2)}ms`);
+                log(`📍 Map ID: ${mapData.id}`);
+                
+                // Add click event
+                mapData.instance.on('click', function(e) {
+                    log(`🖱️ Map clicked at ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`);
+                });
+
+            } catch (error) {
+                log(`❌ Error creating map: ${error.message}`);
+            }
+        }
+
+        function switchWrapperTileLayer(layerKey) {
+            const mapData = wrapperMaps.get('basic');
+            if (!mapData) {
+                log('❌ No basic map found');
+                return;
+            }
+
+            const startTime = performance.now();
+            leafletWrapper.changeTileLayer(mapData.id, layerKey);
+            const endTime = performance.now();
+            
+            // Update active button
+            document.querySelectorAll('.tile-option').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tile-${layerKey}`)?.classList.add('active');
+            
+            log(`🎨 Switched to ${layerKey} layer in ${(endTime - startTime).toFixed(2)}ms`);
+        }
+
+        function testTileLayerSwitch() {
+            const layers = ['osm', 'satellite', 'terrain', 'dark'];
+            let index = 0;
+            
+            const interval = setInterval(() => {
+                switchWrapperTileLayer(layers[index]);
+                index++;
+                if (index >= layers.length) {
+                    clearInterval(interval);
+                    log('🎨 Tile layer switching test completed');
+                }
+            }, 1500);
+            
+            log('🎨 Starting automated tile layer switching...');
+        }
+
+        function testMapUtilities() {
+            const mapData = wrapperMaps.get('basic');
+            if (!mapData) {
+                log('❌ No basic map found');
+                return;
+            }
+
+            // Test various map utilities
+            const center = mapData.instance.getCenter();
+            const zoom = mapData.instance.getZoom();
+            const bounds = mapData.instance.getBounds();
+            
+            log(`📊 Map center: ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
+            log(`🔍 Current zoom: ${zoom}`);
+            log(`📐 Map bounds: ${bounds.toBBoxString()}`);
+            
+            // Test zoom and pan
+            mapData.instance.setZoom(15);
+            setTimeout(() => {
+                mapData.instance.panTo([51.51, -0.1]);
+                log('🎮 Tested zoom and pan operations');
+            }, 1000);
+        }
+
+        function resetBasicMap() {
+            const mapData = wrapperMaps.get('basic');
+            if (mapData) {
+                leafletWrapper.removeMap(mapData.id);
+                wrapperMaps.delete('basic');
+            }
+            
+            document.getElementById('basicWrapperMap').innerHTML = '';
+            log('🧹 Basic wrapper map reset');
+        }
+
+        // Marker Management
+        function testMarkerCreation() {
+            let container = document.getElementById('markerWrapperMap');
+            if (!container.firstChild) {
+                container.innerHTML = '';
+                const mapData = leafletWrapper.createMap(container, {
+                    center: [51.505, -0.09],
+                    zoom: 13,
+                    tileLayer: 'osm'
+                });
+                wrapperMaps.set('markers', mapData);
+            }
+
+            const mapData = wrapperMaps.get('markers');
+            if (!mapData) return;
+
+            const startTime = performance.now();
+            
+            // Create various types of markers
+            const markerTypes = [
+                { lat: 51.505, lng: -0.09, popup: 'Standard Marker', tooltip: 'Hover me!' },
+                { lat: 51.51, lng: -0.08, popup: 'Custom Icon', icon: L.divIcon({html: '🏠', iconSize: [25, 25]}) },
+                { lat: 51.5, lng: -0.1, popup: 'Draggable Marker', draggable: true },
+                { lat: 51.515, lng: -0.095, popup: 'Auto-open Popup', autoOpenPopup: true }
+            ];
+
+            markerTypes.forEach((markerData, index) => {
+                const marker = leafletWrapper.addMarker(mapData.id, markerData.lat, markerData.lng, markerData);
+                if (marker) {
+                    testMarkers.push(marker);
+                    
+                    if (markerData.autoOpenPopup) {
+                        setTimeout(() => marker.openPopup(), index * 200);
+                    }
+                }
+            });
+
+            const endTime = performance.now();
+            const statusEl = document.getElementById('markerStatus');
+            statusEl.innerHTML = `Created ${markerTypes.length} markers in ${(endTime - startTime).toFixed(2)}ms<br>Active markers: ${testMarkers.length}`;
+            
+            log(`📍 Created ${markerTypes.length} test markers`);
+        }
+
+        function testMarkerUpdates() {
+            if (testMarkers.length === 0) {
+                log('❌ No test markers found. Create markers first.');
+                return;
+            }
+
+            testMarkers.forEach((marker, index) => {
+                setTimeout(() => {
+                    // Update marker position slightly
+                    const currentPos = marker.marker.getLatLng();
+                    const newLat = currentPos.lat + (Math.random() - 0.5) * 0.001;
+                    const newLng = currentPos.lng + (Math.random() - 0.5) * 0.001;
+                    
+                    marker.setPosition(newLat, newLng);
+                    log(`📍 Updated marker ${index + 1} position`);
+                }, index * 300);
+            });
+            
+            log('🔄 Starting marker position updates...');
+        }
+
+        function testMarkerEvents() {
+            testMarkers.forEach((marker, index) => {
+                marker.marker.on('click', function(e) {
+                    log(`🖱️ Marker ${index + 1} clicked at ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`);
+                });
+                
+                marker.marker.on('mouseover', function() {
+                    log(`🖱️ Mouse over marker ${index + 1}`);
+                });
+            });
+            
+            log('⚡ Added click and hover events to markers');
+        }
+
+        function testMarkerClustering() {
+            const mapData = wrapperMaps.get('markers');
+            if (!mapData) return;
+
+            // Add multiple markers in clusters
+            const clusters = [
+                { center: [51.52, -0.1], count: 10, name: 'North Cluster' },
+                { center: [51.49, -0.08], count: 15, name: 'South Cluster' },
+                { center: [51.505, -0.12], count: 8, name: 'West Cluster' }
+            ];
+
+            clusters.forEach(cluster => {
+                for (let i = 0; i < cluster.count; i++) {
+                    const lat = cluster.center[0] + (Math.random() - 0.5) * 0.01;
+                    const lng = cluster.center[1] + (Math.random() - 0.5) * 0.01;
+                    
+                    const marker = leafletWrapper.addMarker(mapData.id, lat, lng, {
+                        popup: `${cluster.name} - Marker ${i + 1}`,
+                        icon: L.divIcon({
+                            html: '📍',
+                            iconSize: [20, 20],
+                            className: 'cluster-marker'
+                        })
+                    });
+                    
+                    if (marker) testMarkers.push(marker);
+                }
+            });
+
+            log(`📍 Added clustered markers: ${clusters.reduce((sum, c) => sum + c.count, 0)} total`);
+        }
+
+        function clearMarkerTests() {
+            testMarkers.forEach(marker => marker.remove());
+            testMarkers = [];
+            
+            document.getElementById('markerStatus').innerHTML = 'Ready for marker tests...';
+            log('🧹 Cleared all test markers');
+        }
+
+        // Shape and Overlay Management
+        function testShapeCreation() {
+            let container = document.getElementById('shapeWrapperMap');
+            if (!container.firstChild) {
+                container.innerHTML = '';
+                const mapData = leafletWrapper.createMap(container, {
+                    center: [51.505, -0.09],
+                    zoom: 13,
+                    tileLayer: 'osm'
+                });
+                wrapperMaps.set('shapes', mapData);
+            }
+
+            const mapData = wrapperMaps.get('shapes');
+            if (!mapData) return;
+
+            // Create various shapes
+            leafletWrapper.addCircle(mapData.id, 51.505, -0.09, 1000, {
+                color: 'red',
+                fillColor: 'pink',
+                fillOpacity: 0.3,
+                popup: 'Red Circle - 1km radius'
+            });
+
+            leafletWrapper.addPolygon(mapData.id, [
+                [51.51, -0.08],
+                [51.51, -0.06],
+                [51.52, -0.07]
+            ], {
+                color: 'blue',
+                fillColor: 'lightblue',
+                popup: 'Blue Triangle'
+            });
+
+            leafletWrapper.addPolyline(mapData.id, [
+                [51.5, -0.1],
+                [51.505, -0.09],
+                [51.51, -0.08],
+                [51.515, -0.07]
+            ], {
+                color: 'green',
+                weight: 5,
+                popup: 'Green Path'
+            });
+
+            log('🔷 Created circles, polygons, and polylines');
+        }
+
+        function testShapeInteraction() {
+            const mapData = wrapperMaps.get('shapes');
+            if (!mapData) {
+                log('❌ No shapes map found. Create shapes first.');
+                return;
+            }
+
+            // Add interactive shapes that respond to events
+            const interactiveCircle = leafletWrapper.addCircle(mapData.id, 51.495, -0.095, 800, {
+                color: 'orange',
+                fillColor: 'yellow',
+                fillOpacity: 0.2
+            });
+
+            log('🎮 Added interactive shapes (click and hover events)');
+        }
+
+        function testLayerManagement() {
+            const mapData = wrapperMaps.get('shapes');
+            if (!mapData) return;
+
+            // Create layer groups for organizing shapes
+            const layerGroup1 = L.layerGroup();
+            const layerGroup2 = L.layerGroup();
+
+            // Add shapes to different groups
+            L.circle([51.52, -0.05], {radius: 500, color: 'purple'}).addTo(layerGroup1);
+            L.circle([51.48, -0.05], {radius: 500, color: 'cyan'}).addTo(layerGroup2);
+
+            layerGroup1.addTo(mapData.instance);
+            layerGroup2.addTo(mapData.instance);
+
+            log('📂 Created and added layer groups');
+        }
+
+        function clearShapeTests() {
+            const mapData = wrapperMaps.get('shapes');
+            if (mapData) {
+                leafletWrapper.removeMap(mapData.id);
+                wrapperMaps.delete('shapes');
+            }
+            
+            document.getElementById('shapeWrapperMap').innerHTML = '';
+            log('🧹 Cleared shapes test map');
+        }
+
+        // Tile Layer Testing
+        function testAllTileLayers() {
+            let container = document.getElementById('tileWrapperMap');
+            container.innerHTML = '';
+            
+            const mapData = leafletWrapper.createMap(container, {
+                center: [51.505, -0.09],
+                zoom: 13,
+                tileLayer: 'osm'
+            });
+            wrapperMaps.set('tiles', mapData);
+
+            const layers = leafletWrapper.getTileLayers();
+            let index = 0;
+
+            const testNextLayer = () => {
+                if (index < layers.length) {
+                    const startTime = performance.now();
+                    leafletWrapper.changeTileLayer(mapData.id, layers[index].key);
+                    const endTime = performance.now();
+                    
+                    log(`🎨 Testing ${layers[index].name} - Load time: ${(endTime - startTime).toFixed(2)}ms`);
+                    
+                    index++;
+                    setTimeout(testNextLayer, 2000);
+                } else {
+                    log('✅ All tile layers tested');
+                }
+            };
+
+            testNextLayer();
+        }
+
+        function benchmarkTileLoading() {
+            const benchmarkEl = document.getElementById('tileBenchmark');
+            const layers = leafletWrapper.getTileLayers();
+            const results = [];
+
+            let container = document.getElementById('tileWrapperMap');
+            container.innerHTML = '';
+
+            const mapData = leafletWrapper.createMap(container, {
+                center: [51.505, -0.09],
+                zoom: 13,
+                tileLayer: 'osm'
+            });
+
+            let index = 0;
+            const benchmarkNext = () => {
+                if (index < layers.length) {
+                    const startTime = performance.now();
+                    
+                    leafletWrapper.changeTileLayer(mapData.id, layers[index].key);
+                    
+                    // Simulate load time
+                    setTimeout(() => {
+                        const endTime = performance.now();
+                        const loadTime = endTime - startTime;
+                        
+                        results.push({
+                            name: layers[index].name,
+                            time: loadTime
+                        });
+
+                        benchmarkEl.innerHTML = results.map(result => `
+                            <div class="benchmark-item">
+                                <span>${result.name}</span>
+                                <span>${result.time.toFixed(2)}ms</span>
+                            </div>
+                        `).join('');
+
+                        index++;
+                        benchmarkNext();
+                    }, 1000);
+                } else {
+                    const avgTime = results.reduce((sum, r) => sum + r.time, 0) / results.length;
+                    log(`📊 Tile loading benchmark complete - Average: ${avgTime.toFixed(2)}ms`);
+                }
+            };
+
+            benchmarkNext();
+        }
+
+        function testCustomTileLayer() {
+            const mapData = wrapperMaps.get('tiles');
+            if (!mapData) return;
+
+            // Add a custom tile layer (example with a different provider)
+            const customLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap'
+            });
+
+            mapData.instance.eachLayer(layer => {
+                if (layer instanceof L.TileLayer) {
+                    mapData.instance.removeLayer(layer);
+                }
+            });
+
+            customLayer.addTo(mapData.instance);
+            log('🗺️ Added custom topographic tile layer');
+        }
+
+        // Squirrel Integration Testing
+        function testSquirrelDollar() {
+            if (typeof $ === 'undefined') {
+                log('❌ Squirrel $ function not available');
+                return;
+            }
+
+            let container = document.getElementById('squirrelWrapperMap');
+            container.innerHTML = '';
+
+            try {
+                const startTime = performance.now();
+                const mapData = $.map(container, {
+                    center: [51.505, -0.09],
+                    zoom: 13,
+                    tileLayer: 'satellite'
+                });
+
+                if (mapData) {
+                    wrapperMaps.set('squirrel', mapData);
+                    const endTime = performance.now();
+                    
+                    document.getElementById('squirrelWrapperStatus').innerHTML = 
+                        `✅ $ function test successful<br>Creation time: ${(endTime - startTime).toFixed(2)}ms<br>Map ID: ${mapData.id}`;
+                    
+                    log('✅ Squirrel $ function integration successful');
+                } else {
+                    log('❌ $ function map creation failed');
+                }
+            } catch (error) {
+                log(`❌ $ function integration error: ${error.message}`);
+            }
+        }
+
+        function testSquirrelAClass() {
+            if (typeof A === 'undefined') {
+                log('❌ Squirrel A class not available');
+                return;
+            }
+
+            try {
+                const mapContainer = new A({
+                    tag: 'div',
+                    width: '100%',
+                    height: '400px',
+                    attach: document.getElementById('squirrelWrapperMap')
+                });
+
+                const startTime = performance.now();
+                const mapData = mapContainer.makeMap({
+                    center: [40.7128, -74.0060], // New York
+                    zoom: 12,
+                    tileLayer: 'dark'
+                });
+
+                if (mapData) {
+                    wrapperMaps.set('squirrel-a', mapData);
+                    const endTime = performance.now();
+                    
+                    document.getElementById('squirrelWrapperStatus').innerHTML += 
+                        `<br>✅ A class test successful<br>Creation time: ${(endTime - startTime).toFixed(2)}ms`;
+                    
+                    log('✅ Squirrel A class integration successful');
+                } else {
+                    log('❌ A class map creation failed');
+                }
+            } catch (error) {
+                log(`❌ A class integration error: ${error.message}`);
+            }
+        }
+
+        function testChainedOperations() {
+            const mapData = wrapperMaps.get('squirrel') || wrapperMaps.get('squirrel-a');
+            if (!mapData) {
+                log('❌ No Squirrel-created map found');
+                return;
+            }
+
+            // Test chained operations on Squirrel-created map
+            const center = mapData.instance.getCenter();
+            
+            leafletWrapper.addMarker(mapData.id, center.lat, center.lng, {
+                popup: 'Squirrel Integration Test',
+                tooltip: 'Created via wrapper on Squirrel map'
+            });
+
+            leafletWrapper.addCircle(mapData.id, center.lat + 0.01, center.lng, 1000, {
+                color: 'green',
+                popup: 'Circle added to Squirrel map'
+            });
+
+            log('🔗 Successfully chained wrapper operations on Squirrel map');
+        }
+
+        function testEventIntegration() {
+            const mapData = wrapperMaps.get('squirrel') || wrapperMaps.get('squirrel-a');
+            if (!mapData) return;
+
+            mapData.instance.on('click', function(e) {
+                const popup = L.popup()
+                    .setLatLng(e.latlng)
+                    .setContent(`Squirrel Event Integration<br>Clicked at: ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`)
+                    .openOn(mapData.instance);
+                
+                log(`🔗 Squirrel map event: clicked at ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`);
+            });
+
+            log('⚡ Added event integration to Squirrel map');
+        }
+
+        // Performance & Optimization
+        function performanceStressTest() {
+            let container = document.getElementById('performanceWrapperMap');
+            container.innerHTML = '';
+            
+            const startTime = performance.now();
+            
+            const mapData = leafletWrapper.createMap(container, {
+                center: [51.505, -0.09],
+                zoom: 10,
+                tileLayer: 'osm'
+            });
+            wrapperMaps.set('performance', mapData);
+
+            const mapCreationTime = performance.now() - startTime;
+
+            // Add many markers for stress testing
+            const markerStartTime = performance.now();
+            const markerCount = 500;
+            
+            for (let i = 0; i < markerCount; i++) {
+                const lat = 51.3 + Math.random() * 0.4;
+                const lng = -0.3 + Math.random() * 0.4;
+                
+                leafletWrapper.addMarker(mapData.id, lat, lng, {
+                    popup: `Stress Test Marker ${i + 1}`
+                });
+            }
+
+            const markerCreationTime = performance.now() - markerStartTime;
+            const totalTime = performance.now() - startTime;
+
+            performanceMetrics = {
+                mapCreation: mapCreationTime,
+                markerCreation: markerCreationTime,
+                totalTime: totalTime,
+                markerCount: markerCount,
+                markersPerSecond: markerCount / (markerCreationTime / 1000)
+            };
+
+            updatePerformanceBenchmark();
+            log(`⚡ Stress test completed: ${markerCount} markers in ${totalTime.toFixed(2)}ms`);
+        }
+
+        function memoryUsageTest() {
+            if (performance.memory) {
+                const before = performance.memory.usedJSHeapSize;
+                
+                // Create and destroy maps multiple times
+                for (let i = 0; i < 10; i++) {
+                    const tempDiv = document.createElement('div');
+                    const mapData = leafletWrapper.createMap(tempDiv, {
+                        center: [51.505, -0.09],
+                        zoom: 10
+                    });
+                    
+                    // Add some markers
+                    for (let j = 0; j < 50; j++) {
+                        leafletWrapper.addMarker(mapData.id, 51.5 + Math.random() * 0.01, -0.09 + Math.random() * 0.01, {});
+                    }
+                    
+                    // Clean up
+                    leafletWrapper.removeMap(mapData.id);
+                }
+
+                const after = performance.memory.usedJSHeapSize;
+                const memoryDiff = after - before;
+
+                performanceMetrics.memoryUsage = {
+                    before: before / 1024 / 1024,
+                    after: after / 1024 / 1024,
+                    difference: memoryDiff / 1024 / 1024
+                };
+
+                updatePerformanceBenchmark();
+                log(`💾 Memory test: ${memoryDiff > 0 ? '+' : ''}${(memoryDiff / 1024 / 1024).toFixed(2)}MB difference`);
+            } else {
+                log('💾 Memory usage information not available');
+            }
+        }
+
+        function renderingBenchmark() {
+            const mapData = wrapperMaps.get('performance');
+            if (!mapData) {
+                log('❌ No performance map found. Run stress test first.');
+                return;
+            }
+
+            const startTime = performance.now();
+            let operationCount = 0;
+
+            const benchmark = setInterval(() => {
+                const zoom = 8 + Math.random() * 6;
+                mapData.instance.setZoom(zoom);
+                operationCount++;
+
+                if (operationCount >= 20) {
+                    clearInterval(benchmark);
+                    const endTime = performance.now();
+                    const totalTime = endTime - startTime;
+                    
+                    performanceMetrics.rendering = {
+                        operations: operationCount,
+                        totalTime: totalTime,
+                        opsPerSecond: operationCount / (totalTime / 1000)
+                    };
+
+                    updatePerformanceBenchmark();
+                    log(`🖼️ Rendering benchmark: ${operationCount} operations in ${totalTime.toFixed(2)}ms`);
+                }
+            }, 100);
+
+            log('🖼️ Starting rendering performance benchmark...');
+        }
+
+        function cleanupTest() {
+            // Test wrapper cleanup functionality
+            const mapsBefore = leafletWrapper.getMapsInfo().activeMaps;
+            const markersBefore = leafletWrapper.getMapsInfo().activeMarkers;
+
+            // Remove all test maps
+            Array.from(wrapperMaps.keys()).forEach(key => {
+                const mapData = wrapperMaps.get(key);
+                if (mapData) {
+                    leafletWrapper.removeMap(mapData.id);
+                }
+            });
+
+            wrapperMaps.clear();
+            testMarkers = [];
+
+            const mapsAfter = leafletWrapper.getMapsInfo().activeMaps;
+            const markersAfter = leafletWrapper.getMapsInfo().activeMarkers;
+
+            log(`🧹 Cleanup test: ${mapsBefore} → ${mapsAfter} maps, ${markersBefore} → ${markersAfter} markers`);
+            
+            performanceMetrics.cleanup = {
+                mapsBefore,
+                mapsAfter,
+                markersBefore,
+                markersAfter
+            };
+
+            updatePerformanceBenchmark();
+        }
+
+        function updatePerformanceBenchmark() {
+            const benchmarkEl = document.getElementById('performanceBenchmark');
+            
+            benchmarkEl.innerHTML = Object.entries(performanceMetrics).map(([test, data]) => {
+                if (typeof data === 'object') {
+                    return `
+                        <div class="benchmark-item">
+                            <span>${test.charAt(0).toUpperCase() + test.slice(1)}</span>
+                            <span>${JSON.stringify(data)}</span>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="benchmark-item">
+                            <span>${test.charAt(0).toUpperCase() + test.slice(1)}</span>
+                            <span>${data}</span>
+                        </div>
+                    `;
+                }
+            }).join('');
+        }
+
+        // Error Handling & Edge Cases
+        function testInvalidInputs() {
+            const statusEl = document.getElementById('errorTestStatus');
+            statusEl.innerHTML = '';
+            
+            try {
+                // Test with null element
+                leafletWrapper.createMap(null, {});
+                log('❌ Should have failed with null element');
+            } catch (error) {
+                log(`✅ Correctly handled null element: ${error.message}`);
+            }
+
+            try {
+                // Test with invalid coordinates
+                leafletWrapper.addMarker('nonexistent', 999, 999, {});
+                log('❌ Should have failed with invalid map ID');
+            } catch (error) {
+                log(`✅ Correctly handled invalid map ID: ${error.message}`);
+            }
+
+            try {
+                // Test with invalid tile layer
+                const tempDiv = document.createElement('div');
+                const mapData = leafletWrapper.createMap(tempDiv, {});
+                leafletWrapper.changeTileLayer(mapData.id, 'nonexistent');
+                leafletWrapper.removeMap(mapData.id);
+                log('⚠️ Invalid tile layer handled gracefully');
+            } catch (error) {
+                log(`✅ Correctly handled invalid tile layer: ${error.message}`);
+            }
+
+            statusEl.innerHTML = 'Error handling tests completed - check console for details';
+        }
+
+        function testBoundaryConditions() {
+            const statusEl = document.getElementById('errorTestStatus');
+            
+            // Test extreme coordinates
+            const tempDiv = document.createElement('div');
+            const mapData = leafletWrapper.createMap(tempDiv, {
+                center: [90, 180], // North pole, date line
+                zoom: 1
+            });
+
+            if (mapData) {
+                leafletWrapper.addMarker(mapData.id, 90, 180, {popup: 'North Pole'});
+                leafletWrapper.addMarker(mapData.id, -90, -180, {popup: 'South Pole'});
+                leafletWrapper.removeMap(mapData.id);
+                log('✅ Boundary coordinates handled correctly');
+            }
+
+            statusEl.innerHTML += '<br>Boundary condition tests completed';
+        }
+
+        function testErrorRecovery() {
+            // Test wrapper's ability to recover from errors
+            try {
+                // Simulate error condition
+                const originalCreateMap = leafletWrapper.createMap;
+                leafletWrapper.createMap = function() { throw new Error('Simulated error'); };
+                
+                // Try to create map
+                leafletWrapper.createMap(document.createElement('div'), {});
+                
+                // Restore original function
+                leafletWrapper.createMap = originalCreateMap;
+                
+                log('❌ Error recovery test setup failed');
+            } catch (error) {
+                // Restore function even if test fails
+                log(`✅ Error caught and handled: ${error.message}`);
+            }
+        }
+
+        function testNullChecks() {
+            const statusEl = document.getElementById('errorTestStatus');
+            
+            // Test null parameter handling
+            const results = [];
+            
+            try {
+                leafletWrapper.removeMarker(null);
+                results.push('✅ removeMarker(null) handled');
+            } catch (error) {
+                results.push(`⚠️ removeMarker(null): ${error.message}`);
+            }
+
+            try {
+                leafletWrapper.getMap(null);
+                results.push('✅ getMap(null) handled');
+            } catch (error) {
+                results.push(`⚠️ getMap(null): ${error.message}`);
+            }
+
+            statusEl.innerHTML += '<br>' + results.join('<br>');
+            log('🛡️ Null check tests completed');
+        }
+
+        // Wrapper Utilities
+        function testWrapperUtilities() {
+            const info = leafletWrapper.getMapsInfo();
+            const tileLayers = leafletWrapper.getTileLayers();
+            
+            const utilityStatus = document.getElementById('utilityStatus');
+            utilityStatus.innerHTML = `
+                Utility Functions Test:<br>
+                • getMapsInfo(): ${JSON.stringify(info)}<br>
+                • getTileLayers(): ${tileLayers.length} layers available<br>
+                • Available layers: ${tileLayers.map(l => l.name).join(', ')}
+            `;
+            
+            log('🔧 Wrapper utilities tested successfully');
+        }
+
+        function testDataExport() {
+            // Export current wrapper state
+            const exportData = {
+                mapsInfo: leafletWrapper.getMapsInfo(),
+                tileLayers: leafletWrapper.getTileLayers(),
+                activeMaps: Array.from(wrapperMaps.keys()),
+                testMarkers: testMarkers.length,
+                performanceMetrics: performanceMetrics
+            };
+
+            console.log('📤 Export data:', exportData);
+            log(`📤 Data export completed: ${JSON.stringify(exportData).length} characters`);
+        }
+
+        function testBulkOperations() {
+            // Test bulk marker operations
+            const tempDiv = document.createElement('div');
+            const mapData = leafletWrapper.createMap(tempDiv, {
+                center: [51.505, -0.09],
+                zoom: 10
+            });
+
+            const startTime = performance.now();
+            const bulkMarkers = [];
+
+            // Bulk add markers
+            for (let i = 0; i < 100; i++) {
+                const marker = leafletWrapper.addMarker(mapData.id, 
+                    51.5 + Math.random() * 0.01, 
+                    -0.09 + Math.random() * 0.01, 
+                    {popup: `Bulk marker ${i}`}
+                );
+                if (marker) bulkMarkers.push(marker);
+            }
+
+            const addTime = performance.now() - startTime;
+
+            // Bulk remove markers
+            const removeStartTime = performance.now();
+            bulkMarkers.forEach(marker => marker.remove());
+            const removeTime = performance.now() - removeStartTime;
+
+            leafletWrapper.removeMap(mapData.id);
+
+            log(`📦 Bulk operations: Add ${bulkMarkers.length} markers (${addTime.toFixed(2)}ms), Remove (${removeTime.toFixed(2)}ms)`);
+        }
+
+        function testConfigManagement() {
+            // Test configuration and settings
+            const defaultConfig = {
+                center: [51.505, -0.09],
+                zoom: 13,
+                tileLayer: 'osm'
+            };
+
+            const customConfig = {
+                center: [40.7128, -74.0060],
+                zoom: 10,
+                tileLayer: 'satellite'
+            };
+
+            // Test with different configurations
+            const tempDiv1 = document.createElement('div');
+            const tempDiv2 = document.createElement('div');
+
+            const map1 = leafletWrapper.createMap(tempDiv1, defaultConfig);
+            const map2 = leafletWrapper.createMap(tempDiv2, customConfig);
+
+            if (map1 && map2) {
+                log('⚙️ Configuration management test successful');
+                leafletWrapper.removeMap(map1.id);
+                leafletWrapper.removeMap(map2.id);
+            } else {
+                log('❌ Configuration management test failed');
+            }
+        }
+
+        // Initialize
+        window.addEventListener('load', () => {
+            log('🗺️ Leaflet Wrapper Advanced Features Test loaded!');
+            
+            setTimeout(() => {
+                if (typeof L !== 'undefined') {
+                    log(`✅ Leaflet ${L.version} loaded successfully`);
+                } else {
+                    log('❌ Leaflet not loaded');
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>

@@ -7,9 +7,8 @@ const knexConfig = {
   connection: {
     filename: './thermal_app.db'
   },
-  useNullAsDefault: true,
-  migrations: {
-    directory: '../database/migrations'
+  useNullAsDefault: true,  migrations: {
+    directory: './database/migrations'
   }
 };
 

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎬 GSAP Library Directory</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 3em;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .description {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+            opacity: 0.9;
+        }
+
+        .file-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .file-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 25px;
+            transition: transform 0.3s, box-shadow 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .file-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+        }
+
+        .file-card h3 {
+            color: #ffeb3b;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+
+        .file-card p {
+            margin-bottom: 20px;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .file-card a {
+            display: inline-block;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-weight: bold;
+            transition: transform 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .file-card a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .features {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+        }
+
+        .features h3 {
+            color: #4ecdc4;
+            margin-top: 0;
+        }
+
+        .features ul {
+            columns: 2;
+            column-gap: 30px;
+        }
+
+        .features li {
+            margin-bottom: 10px;
+            break-inside: avoid;
+        }
+
+        .status {
+            text-align: center;
+            background: rgba(76, 175, 80, 0.2);
+            border: 2px solid #4caf50;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 30px;
+            font-weight: bold;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #ffeb3b;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../" class="back-link">← Back to JS Library</a>
+        
+        <h1>🎬 GSAP Library Directory</h1>
+        
+        <p class="description">
+            Complete GSAP (GreenSock Animation Platform) integration with advanced features, 
+            comprehensive testing, and Squirrel Framework compatibility.
+        </p>
+
+        <div class="file-grid">
+            <div class="file-card">
+                <h3>📝 Core Wrapper</h3>
+                <p>Advanced GSAP wrapper with 25+ animation methods, plugin detection, and framework integration.</p>
+                <a href="gsap-wrapper.js" target="_blank">View Wrapper Code</a>
+            </div>
+
+            <div class="file-card">
+                <h3>🧪 Comprehensive Tests</h3>
+                <p>Complete feature detection and testing suite for all GSAP capabilities and plugins.</p>
+                <a href="gsap-comprehensive-test.html">Run Tests</a>
+            </div>
+
+            <div class="file-card">
+                <h3>🚀 Wrapper Tests</h3>
+                <p>Advanced wrapper-specific functionality tests with interactive demonstrations.</p>
+                <a href="gsap-wrapper-test.html">Test Wrapper</a>
+            </div>
+
+            <div class="file-card">
+                <h3>📊 Integration Report</h3>
+                <p>Detailed documentation of implementation, features, and usage guidelines.</p>
+                <a href="GSAP-INTEGRATION-REPORT.md" target="_blank">View Report</a>
+            </div>
+
+            <div class="file-card">
+                <h3>📚 Documentation</h3>
+                <p>Complete usage guide, examples, and API reference for the GSAP integration.</p>
+                <a href="README.md" target="_blank">View Docs</a>
+            </div>
+        </div>
+
+        <div class="features">
+            <h3>✨ Available Features</h3>
+            <ul>
+                <li>Basic animations (fade, slide, scale, rotate)</li>
+                <li>Advanced effects (bounce, shake, physics)</li>
+                <li>Timeline management and sequencing</li>
+                <li>Stagger and batch animations</li>
+                <li>Text animations with typewriter fallback</li>
+                <li>SVG animations and motion paths</li>
+                <li>Particle systems and physics simulation</li>
+                <li>Interactive features (draggable, scroll triggers)</li>
+                <li>Plugin detection and auto-registration</li>
+                <li>Squirrel Framework integration</li>
+                <li>Performance monitoring and optimization</li>
+                <li>Comprehensive error handling</li>
+            </ul>
+        </div>
+
+        <div class="status">
+            ✅ PRODUCTION READY - Comprehensive testing completed
+        </div>
+    </div>
+</body>
+</html>

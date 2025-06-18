@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page Selector</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        
+        h1 {
+            color: #2c5f2d;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .test-card {
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .test-card h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .test-card a {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 5px 10px 5px 0;
+        }
+        
+        .test-card a:hover {
+            background: #0056b3;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .working {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .testing {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        
+        .issue {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Leaflet Test Page Selector</h1>
+    
+    <div class="test-card">
+        <h3>📋 Basic Tests</h3>
+        <p>Simple tests to verify basic functionality</p>
+        <div class="status working">✅ These should always work</div>
+        <a href="./basic-test.html">Basic HTML Test</a>
+        <a href="./simple-test.html">Simple Test</a>
+    </div>
+    
+    <div class="test-card">
+        <h3>🗺️ Leaflet Core Tests</h3>
+        <p>Minimal Leaflet functionality tests</p>
+        <div class="status testing">🔄 Testing Leaflet CDN loading</div>
+        <a href="./minimal-test.html">Minimal Leaflet Test</a>
+        <a href="./leaflet-simple-test.html">Simple Leaflet Test</a>
+    </div>
+      <div class="test-card">
+        <h3>🔧 Advanced Tests</h3>
+        <p>Complex functionality and wrapper tests</p>
+        <div class="status working">✅ All working now!</div>
+        <a href="./leaflet-comprehensive-test.html">Comprehensive Test</a>
+        <a href="./leaflet-complete-test.html">Complete Feature Test</a>
+        <a href="./leaflet-wrapper-test.html">Wrapper Test</a>
+        <a href="./leaflet-fixed-test.html">Fixed Test</a>
+    </div>
+    
+    <div class="test-card">
+        <h3>🗺️ Complete Test - Fixed Version</h3>
+        <p>A completely rewritten version of the comprehensive test with better error handling and streamlined functionality.</p>
+        <a href="./leaflet-complete-test-fixed.html">Open Fixed Complete Test</a>
+        <span class="status working">✅ Should Work</span>
+    </div>
+
+    <div class="test-card">
+        <h3>🗺️ Complete Test - Original</h3>
+        <p>The original comprehensive test with all features (may have issues).</p>
+        <a href="./leaflet-complete-test.html">Open Original Complete Test</a>
+        <span class="status issue">⚠️ May Have Issues</span>
+    </div>
+    
+    <div class="test-card">
+        <h3>🔍 Debug Tools</h3>
+        <p>Debugging and diagnostic tools</p>
+        <div class="status testing">🔄 For troubleshooting</div>
+        <a href="./debug-test.html">Debug Test</a>
+    </div>
+    
+    <div class="test-card">
+        <h3>📚 Navigation</h3>
+        <p>Directory navigation and documentation</p>
+        <div class="status working">✅ Should work</div>
+        <a href="./index.html">Directory Index</a>
+        <a href="../index.html">Main js_library Hub</a>
+        <a href="./README.md">Documentation</a>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Test selector page loaded');
+            
+            // Add click tracking
+            document.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    console.log('Navigating to:', this.href);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

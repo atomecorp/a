@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple JS Library Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #2a2a2a;
+        }
+        .status {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.loading { background: #ffa726; color: #000; }
+        .status.success { background: #4caf50; }
+        .status.error { background: #f44336; }
+        .test-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover { background: #45a049; }
+        #animated-box {
+            width: 100px;
+            height: 100px;
+            background: #ff6b6b;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        #log {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Simple JS Library Test</h1>
+
+    <div class="test-section">
+        <h2>📊 Debug Log</h2>
+        <div id="log"></div>
+        <button class="test-button" onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="test-section">
+        <h2>📦 Library Loading</h2>
+        <button class="test-button" onclick="loadLibraryManager()">1. Load Library Manager</button>
+        <button class="test-button" onclick="loadGSAP()">2. Load GSAP</button>
+        <button class="test-button" onclick="testBasicGSAP()">3. Test GSAP</button>
+        <div id="library-status"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🎬 GSAP Test</h2>
+        <div id="animated-box"></div>
+        <button class="test-button" onclick="animateBox()">Animate Box</button>
+        <div id="gsap-result"></div>
+    </div>
+
+    <script>
+        // Simple logging function
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Global variables
+        window.jsLibraryManager = null;
+        window.gsapLoaded = false;
+
+        // Step 1: Load Library Manager
+        async function loadLibraryManager() {
+            log('🔄 Loading library manager...');
+            try {
+                const module = await import('./src/js_library/index.js');
+                window.jsLibraryManager = module.default;
+                log('✅ Library manager loaded successfully');
+                
+                // Show available libraries
+                const libraries = window.jsLibraryManager.listLibraries();
+                log(`📚 Available libraries: ${libraries.map(l => l.name).join(', ')}`);
+                
+                document.getElementById('library-status').innerHTML = 
+                    '<div class="status success">Library Manager Loaded ✅</div>';
+            } catch (error) {
+                log(`❌ Failed to load library manager: ${error.message}`);
+                document.getElementById('library-status').innerHTML = 
+                    `<div class="status error">Failed: ${error.message}</div>`;
+            }
+        }
+
+        // Step 2: Load GSAP
+        async function loadGSAP() {
+            if (!window.jsLibraryManager) {
+                log('❌ Load library manager first!');
+                return;
+            }
+
+            log('🔄 Loading GSAP...');
+            try {
+                await window.jsLibraryManager.loadGSAP();
+                window.gsapLoaded = true;
+                log('✅ GSAP loaded successfully');
+                
+                // Check if GSAP is available globally
+                if (typeof window.gsap !== 'undefined') {
+                    log(`✅ GSAP global object available: version ${window.gsap.version || 'unknown'}`);
+                } else {
+                    log('⚠️ GSAP loaded but global object not found');
+                }
+
+                if (typeof window.gsapWrapper !== 'undefined') {
+                    log('✅ GSAP wrapper available');
+                } else {
+                    log('⚠️ GSAP wrapper not found');
+                }
+
+                document.getElementById('library-status').innerHTML += 
+                    '<div class="status success">GSAP Loaded ✅</div>';
+            } catch (error) {
+                log(`❌ Failed to load GSAP: ${error.message}`);
+                document.getElementById('library-status').innerHTML += 
+                    `<div class="status error">GSAP Failed: ${error.message}</div>`;
+            }
+        }
+
+        // Step 3: Test Basic GSAP
+        async function testBasicGSAP() {
+            log('🔄 Testing basic GSAP functionality...');
+            
+            if (typeof window.gsap === 'undefined') {
+                log('❌ GSAP not available globally');
+                return;
+            }
+
+            try {
+                const box = document.getElementById('animated-box');
+                
+                // Test direct GSAP
+                window.gsap.to(box, {
+                    duration: 1,
+                    x: 100,
+                    backgroundColor: '#4CAF50',
+                    onComplete: () => {
+                        log('✅ Direct GSAP animation completed');
+                        window.gsap.to(box, {
+                            duration: 1,
+                            x: 0,
+                            backgroundColor: '#ff6b6b'
+                        });
+                    }
+                });
+
+                log('✅ Basic GSAP test started');
+            } catch (error) {
+                log(`❌ Basic GSAP test failed: ${error.message}`);
+            }
+        }
+
+        // Simple animation test
+        function animateBox() {
+            const box = document.getElementById('animated-box');
+            
+            if (typeof window.gsap !== 'undefined') {
+                log('🎬 Animating with GSAP...');
+                window.gsap.to(box, {
+                    duration: 0.5,
+                    scale: 1.2,
+                    rotation: 180,
+                    onComplete: () => {
+                        window.gsap.to(box, {
+                            duration: 0.5,
+                            scale: 1,
+                            rotation: 0
+                        });
+                    }
+                });
+            } else if (typeof window.gsapWrapper !== 'undefined') {
+                log('🎬 Animating with GSAP wrapper...');
+                window.gsapWrapper.animate(box, { scale: 1.2, rotation: 180 }, 0.5);
+                setTimeout(() => {
+                    window.gsapWrapper.animate(box, { scale: 1, rotation: 0 }, 0.5);
+                }, 500);
+            } else {
+                log('❌ No GSAP available for animation');
+                // Fallback CSS animation
+                box.style.transition = 'transform 0.5s';
+                box.style.transform = 'scale(1.2) rotate(180deg)';
+                setTimeout(() => {
+                    box.style.transform = 'scale(1) rotate(0deg)';
+                }, 500);
+            }
+        }
+
+        // Initialize
+        log('🚀 Simple JS Library Test initialized');
+        log('👉 Click "1. Load Library Manager" to start');
+    </script>
+</body>
+</html>

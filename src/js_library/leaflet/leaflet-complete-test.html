@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🗺️ Leaflet Complete Feature Test</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #2c5f2d;
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+        }
+
+        .test-section {
+            margin-bottom: 40px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 25px;
+        }
+
+        .test-section h2 {
+            color: #97bc62;
+            border-bottom: 2px solid #97bc62;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .map-container {
+            height: 400px;
+            background-color: white;
+            border-radius: 10px;
+            margin: 20px 0;
+            border: 3px solid #97bc62;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            background-color: #97bc62;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #7ea050;
+        }
+
+        .btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .btn:active {
+            background-color: #6a8c43;
+        }
+
+        .status-log {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            border: 2px solid #97bc62;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .feature-item {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .available {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .missing {
+            color: #f44336;
+            font-weight: bold;
+        }
+
+        .info-panel {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .navigation {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .navigation a {
+            color: #97bc62;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+        }
+
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+
+        .progress-bar {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            background-color: #97bc62;
+            height: 20px;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .test-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        @media (max-width: 768px) {
+            .test-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ Leaflet Complete Feature Test</h1>
+        
+        <div class="navigation">
+            <a href="./index.html">← Directory Index</a>
+            <a href="./test-selector.html">Test Selector</a>
+            <a href="./minimal-test.html">Minimal Test</a>
+            <a href="../index.html">Main Hub</a>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Library Status & Progress</h2>
+            <div id="featureCheck" class="feature-grid">
+                <div class="feature-item">
+                    <span>Checking features...</span>
+                    <span>⏳ Loading</span>
+                </div>
+            </div>
+            
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill" style="width: 0%;">
+                    Loading... 0%
+                </div>
+            </div>
+        </div>
+
+        <div class="test-grid">
+            <div class="test-section">
+                <h2>🗺️ Basic Map Operations</h2>
+                <div class="controls">
+                    <button class="btn" onclick="createBasicMap()" id="mapBtn">Create Map</button>
+                    <button class="btn" onclick="changeView()" id="viewBtn" disabled>Change View</button>
+                    <button class="btn" onclick="resetView()" id="resetBtn" disabled>Reset View</button>
+                </div>
+                <div id="map1" class="map-container"></div>
+            </div>
+
+            <div class="test-section">
+                <h2>📍 Marker Management</h2>
+                <div class="controls">
+                    <button class="btn" onclick="addSampleMarkers()" id="markerBtn" disabled>Add Markers</button>
+                    <button class="btn" onclick="addRandomMarker()" id="randomBtn" disabled>Random Marker</button>
+                    <button class="btn" onclick="clearMarkers()" id="clearMarkersBtn" disabled>Clear Markers</button>
+                </div>
+                <div id="markerInfo" class="info-panel">No markers added yet</div>
+            </div>
+        </div>
+
+        <div class="test-grid">
+            <div class="test-section">
+                <h2>🟢 Shape Drawing</h2>
+                <div class="controls">
+                    <button class="btn" onclick="addCircle()" id="circleBtn" disabled>Add Circle</button>
+                    <button class="btn" onclick="addPolygon()" id="polygonBtn" disabled>Add Polygon</button>
+                    <button class="btn" onclick="addPolyline()" id="polylineBtn" disabled>Add Polyline</button>
+                    <button class="btn" onclick="clearShapes()" id="clearShapesBtn" disabled>Clear Shapes</button>
+                </div>
+                <div id="shapeInfo" class="info-panel">No shapes added yet</div>
+            </div>
+
+            <div class="test-section">
+                <h2>⚡ Interactive Features</h2>
+                <div class="controls">
+                    <button class="btn" onclick="enableClickEvents()" id="eventsBtn" disabled>Enable Click Events</button>
+                    <button class="btn" onclick="testGeolocation()" id="geoBtn">Test Geolocation</button>
+                    <button class="btn" onclick="changeTileLayer()" id="tilesBtn" disabled>Change Tiles</button>
+                </div>
+                <div id="interactionInfo" class="info-panel">Click events not enabled</div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔬 Advanced Testing</h2>
+            <div class="controls">
+                <button class="btn" onclick="performanceTest()" id="perfBtn" disabled>Performance Test</button>
+                <button class="btn" onclick="stressTest()" id="stressBtn" disabled>Stress Test (100 markers)</button>
+                <button class="btn" onclick="clearAll()" id="clearAllBtn" disabled>Clear Everything</button>
+                <button class="btn" onclick="runAllTests()" id="autoBtn">🚀 Run All Tests</button>
+            </div>
+            <div id="performanceInfo" class="info-panel">
+                <strong>Performance Metrics:</strong><br>
+                <span id="perfMetrics">Not tested yet</span>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>📝 Live Activity Log</h2>
+            <div id="statusLog" class="status-log">
+                <div>🚀 Initializing comprehensive test page...</div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>ℹ️ System Information</h2>
+            <div id="systemInfo" class="info-panel">
+                Loading system information...
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Leaflet from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>    <script>
+        console.log('🚀 Script started loading...');
+        
+        // Global variables
+        let statusLog;
+        let map1;
+        let markers = [];
+        let shapes = [];
+        let clickEventsEnabled = false;
+        let currentTileLayer = 0;
+        let testProgress = 0;
+        let totalTests = 12;
+
+        // Tile layer options
+        const tileLayers = [
+            {
+                name: 'OpenStreetMap',
+                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                attribution: '© OpenStreetMap contributors'
+            },
+            {
+                name: 'Satellite',
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri'
+            },
+            {
+                name: 'Terrain',
+                url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}{r}.png',
+                attribution: '© Stamen Design, © OpenStreetMap contributors'
+            }
+        ];        // Utility functions
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            console.log(message);
+            
+            if (!statusLog) {
+                statusLog = document.getElementById('statusLog');
+            }
+            
+            if (statusLog) {
+                statusLog.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+                statusLog.scrollTop = statusLog.scrollHeight;
+            }
+        }
+
+        function updateProgress(increment = 1) {
+            testProgress += increment;
+            const percentage = Math.min((testProgress / totalTests) * 100, 100);
+            const progressFill = document.getElementById('progressFill');
+            progressFill.style.width = percentage + '%';
+            progressFill.textContent = `Progress: ${Math.round(percentage)}%`;
+            
+            if (percentage >= 100) {
+                progressFill.textContent = '🎉 All Tests Complete!';
+                progressFill.style.backgroundColor = '#28a745';
+            }
+        }
+
+        function updateSystemInfo() {
+            const info = document.getElementById('systemInfo');
+            info.innerHTML = `
+                <strong>Leaflet Version:</strong> ${L.version || 'Unknown'}<br>
+                <strong>Browser:</strong> ${navigator.userAgent.split('(')[0].trim()}<br>
+                <strong>Screen Size:</strong> ${window.innerWidth}x${window.innerHeight}<br>
+                <strong>Map Status:</strong> ${map1 ? 'Active' : 'Not Created'}<br>
+                <strong>Active Markers:</strong> ${markers.length}<br>
+                <strong>Active Shapes:</strong> ${shapes.length}<br>
+                <strong>Click Events:</strong> ${clickEventsEnabled ? 'Enabled' : 'Disabled'}<br>
+                <strong>Current Tiles:</strong> ${tileLayers[currentTileLayer]?.name || 'Default'}<br>
+                <strong>Geolocation:</strong> ${'geolocation' in navigator ? 'Supported' : 'Not Supported'}
+            `;
+        }
+
+        function updateMarkerInfo() {
+            const info = document.getElementById('markerInfo');
+            if (markers.length === 0) {
+                info.innerHTML = 'No markers added yet';
+            } else {
+                info.innerHTML = `
+                    <strong>Total Markers:</strong> ${markers.length}<br>
+                    <strong>Last Added:</strong> ${new Date().toLocaleTimeString()}<br>
+                    <strong>Status:</strong> All markers active
+                `;
+            }
+        }
+
+        function updateShapeInfo() {
+            const info = document.getElementById('shapeInfo');
+            if (shapes.length === 0) {
+                info.innerHTML = 'No shapes added yet';
+            } else {
+                const shapeTypes = shapes.reduce((acc, shape) => {
+                    const type = shape.options.shapeType || 'unknown';
+                    acc[type] = (acc[type] || 0) + 1;
+                    return acc;
+                }, {});
+                
+                info.innerHTML = `
+                    <strong>Total Shapes:</strong> ${shapes.length}<br>
+                    <strong>Types:</strong> ${Object.entries(shapeTypes).map(([type, count]) => `${type}: ${count}`).join(', ')}<br>
+                    <strong>Last Added:</strong> ${new Date().toLocaleTimeString()}
+                `;
+            }
+        }
+
+        function updateInteractionInfo(message) {
+            const info = document.getElementById('interactionInfo');
+            info.innerHTML = message;
+        }
+
+        // Feature detection
+        function checkFeatures() {
+            const features = [
+                { name: 'Leaflet Core', check: () => typeof L !== 'undefined' },
+                { name: 'Map Creation', check: () => typeof L !== 'undefined' && typeof L.map !== 'undefined' },
+                { name: 'Markers', check: () => typeof L !== 'undefined' && typeof L.marker !== 'undefined' },
+                { name: 'Popups', check: () => typeof L !== 'undefined' && typeof L.popup !== 'undefined' },
+                { name: 'Circles', check: () => typeof L !== 'undefined' && typeof L.circle !== 'undefined' },
+                { name: 'Polygons', check: () => typeof L !== 'undefined' && typeof L.polygon !== 'undefined' },
+                { name: 'Polylines', check: () => typeof L !== 'undefined' && typeof L.polyline !== 'undefined' },
+                { name: 'Rectangles', check: () => typeof L !== 'undefined' && typeof L.rectangle !== 'undefined' },
+                { name: 'Layer Groups', check: () => typeof L !== 'undefined' && typeof L.layerGroup !== 'undefined' },
+                { name: 'Tile Layers', check: () => typeof L !== 'undefined' && typeof L.tileLayer !== 'undefined' },
+                { name: 'Geolocation', check: () => 'geolocation' in navigator },
+                { name: 'Touch Support', check: () => 'ontouchstart' in window }
+            ];
+
+            const featureCheck = document.getElementById('featureCheck');
+            featureCheck.innerHTML = '';
+
+            features.forEach(feature => {
+                const isAvailable = feature.check();
+                const div = document.createElement('div');
+                div.className = 'feature-item';
+                div.innerHTML = `
+                    <span>${feature.name}</span>
+                    <span class="${isAvailable ? 'available' : 'missing'}">
+                        ${isAvailable ? '✅ Available' : '❌ Missing'}
+                    </span>
+                `;
+                featureCheck.appendChild(div);
+                
+                log(`${feature.name}: ${isAvailable ? 'Available' : 'Missing'}`);
+            });
+            
+            updateProgress();
+        }
+
+        // Map creation and management
+        function createBasicMap() {
+            try {
+                log('Creating basic map...');
+                
+                if (map1) {
+                    map1.remove();
+                }
+
+                map1 = L.map('map1').setView([51.505, -0.09], 13);
+
+                L.tileLayer(tileLayers[currentTileLayer].url, {
+                    attribution: tileLayers[currentTileLayer].attribution
+                }).addTo(map1);
+
+                log('✅ Basic map created successfully');
+                
+                // Enable other buttons
+                document.getElementById('viewBtn').disabled = false;
+                document.getElementById('resetBtn').disabled = false;
+                document.getElementById('markerBtn').disabled = false;
+                document.getElementById('randomBtn').disabled = false;
+                document.getElementById('circleBtn').disabled = false;
+                document.getElementById('polygonBtn').disabled = false;
+                document.getElementById('polylineBtn').disabled = false;
+                document.getElementById('eventsBtn').disabled = false;
+                document.getElementById('tilesBtn').disabled = false;
+                document.getElementById('perfBtn').disabled = false;
+                document.getElementById('stressBtn').disabled = false;
+                document.getElementById('clearAllBtn').disabled = false;
+                
+                updateSystemInfo();
+                updateProgress();
+            } catch (error) {
+                log(`❌ Error creating basic map: ${error.message}`);
+            }
+        }
+
+        function changeView() {
+            if (!map1) return;
+            
+            const locations = [
+                { name: 'London', coords: [51.505, -0.09], zoom: 13 },
+                { name: 'Paris', coords: [48.8566, 2.3522], zoom: 12 },
+                { name: 'New York', coords: [40.7128, -74.0060], zoom: 11 },
+                { name: 'Tokyo', coords: [35.6762, 139.6503], zoom: 12 },
+                { name: 'Sydney', coords: [-33.8688, 151.2093], zoom: 12 }
+            ];
+            
+            const location = locations[Math.floor(Math.random() * locations.length)];
+            map1.setView(location.coords, location.zoom);
+            log(`📍 View changed to ${location.name}`);
+        }
+
+        function resetView() {
+            if (!map1) return;
+            map1.setView([51.505, -0.09], 13);
+            log('🔄 View reset to default (London)');
+        }
+
+        // Marker functions
+        function addSampleMarkers() {
+            if (!map1) {
+                log('⚠️ Please create a map first');
+                return;
+            }
+
+            try {
+                log('Adding sample markers...');
+                
+                const locations = [
+                    { pos: [51.5, -0.09], popup: '🎡 London Eye - Famous Ferris wheel' },
+                    { pos: [51.51, -0.1], popup: '🌉 Westminster Bridge - Historic bridge' },
+                    { pos: [51.49, -0.08], popup: '🌉 London Bridge - Iconic Thames crossing' },
+                    { pos: [51.52, -0.11], popup: '🌳 Regent\'s Park - Beautiful royal park' },
+                    { pos: [51.515, -0.072], popup: '🏛️ St. Paul\'s Cathedral - Historic cathedral' }
+                ];
+
+                locations.forEach((loc, index) => {
+                    setTimeout(() => {
+                        const marker = L.marker(loc.pos).addTo(map1)
+                            .bindPopup(loc.popup);
+                        markers.push(marker);
+                        
+                        if (index === locations.length - 1) {
+                            log(`✅ Added ${locations.length} sample markers`);
+                            updateMarkerInfo();
+                            updateSystemInfo();
+                            updateProgress();
+                            
+                            document.getElementById('clearMarkersBtn').disabled = false;
+                        }
+                    }, index * 200); // Staggered adding for visual effect
+                });
+
+            } catch (error) {
+                log(`❌ Error adding markers: ${error.message}`);
+            }
+        }
+
+        function addRandomMarker() {
+            if (!map1) return;
+            
+            const center = map1.getCenter();
+            const bounds = map1.getBounds();
+            const latSpan = bounds.getNorth() - bounds.getSouth();
+            const lngSpan = bounds.getEast() - bounds.getWest();
+            
+            const randomLat = center.lat + (Math.random() - 0.5) * latSpan * 0.8;
+            const randomLng = center.lng + (Math.random() - 0.5) * lngSpan * 0.8;
+            
+            const emojis = ['🎯', '⭐', '🔥', '💎', '🎪', '🎨', '🎭', '🎪', '🎲', '🎊'];
+            const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+            
+            const marker = L.marker([randomLat, randomLng]).addTo(map1)
+                .bindPopup(`${emoji} Random marker #${markers.length + 1}<br>Lat: ${randomLat.toFixed(4)}<br>Lng: ${randomLng.toFixed(4)}`);
+            
+            markers.push(marker);
+            log(`🎲 Added random marker at ${randomLat.toFixed(4)}, ${randomLng.toFixed(4)}`);
+            updateMarkerInfo();
+            updateSystemInfo();
+            
+            document.getElementById('clearMarkersBtn').disabled = false;
+        }
+
+        function clearMarkers() {
+            markers.forEach(marker => map1.removeLayer(marker));
+            markers = [];
+            log('🗑️ All markers cleared');
+            updateMarkerInfo();
+            updateSystemInfo();
+            
+            document.getElementById('clearMarkersBtn').disabled = true;
+        }
+
+        // Shape functions
+        function addCircle() {
+            if (!map1) return;
+            
+            const center = map1.getCenter();
+            const colors = ['red', 'blue', 'green', 'purple', 'orange', 'yellow'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            const circle = L.circle([center.lat + (Math.random() - 0.5) * 0.01, center.lng + (Math.random() - 0.5) * 0.01], {
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.3,
+                radius: 200 + Math.random() * 500,
+                shapeType: 'circle'
+            }).addTo(map1).bindPopup(`🟢 Circle #${shapes.length + 1}<br>Color: ${color}`);
+            
+            shapes.push(circle);
+            log(`🟢 Added ${color} circle`);
+            updateShapeInfo();
+            updateSystemInfo();
+            
+            document.getElementById('clearShapesBtn').disabled = false;
+        }
+
+        function addPolygon() {
+            if (!map1) return;
+            
+            const center = map1.getCenter();
+            const colors = ['red', 'blue', 'green', 'purple', 'orange'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            // Create a triangle around the center
+            const offset = 0.005;
+            const points = [
+                [center.lat + offset, center.lng],
+                [center.lat - offset, center.lng - offset],
+                [center.lat - offset, center.lng + offset]
+            ];
+            
+            const polygon = L.polygon(points, {
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.4,
+                shapeType: 'polygon'
+            }).addTo(map1).bindPopup(`🔺 Polygon #${shapes.length + 1}<br>Color: ${color}`);
+            
+            shapes.push(polygon);
+            log(`🔺 Added ${color} polygon`);
+            updateShapeInfo();
+            updateSystemInfo();
+            
+            document.getElementById('clearShapesBtn').disabled = false;
+        }
+
+        function addPolyline() {
+            if (!map1) return;
+            
+            const center = map1.getCenter();
+            const colors = ['red', 'blue', 'green', 'purple', 'orange'];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            // Create a zigzag line
+            const points = [];
+            for (let i = 0; i < 5; i++) {
+                points.push([
+                    center.lat + (Math.random() - 0.5) * 0.01,
+                    center.lng + (Math.random() - 0.5) * 0.01
+                ]);
+            }
+            
+            const polyline = L.polyline(points, {
+                color: color,
+                weight: 4,
+                shapeType: 'polyline'
+            }).addTo(map1).bindPopup(`〰️ Polyline #${shapes.length + 1}<br>Color: ${color}`);
+            
+            shapes.push(polyline);
+            log(`〰️ Added ${color} polyline`);
+            updateShapeInfo();
+            updateSystemInfo();
+            
+            document.getElementById('clearShapesBtn').disabled = false;
+        }
+
+        function clearShapes() {
+            shapes.forEach(shape => map1.removeLayer(shape));
+            shapes = [];
+            log('🗑️ All shapes cleared');
+            updateShapeInfo();
+            updateSystemInfo();
+            
+            document.getElementById('clearShapesBtn').disabled = true;
+        }
+
+        // Interactive features
+        function enableClickEvents() {
+            if (!map1) return;
+            
+            if (clickEventsEnabled) {
+                log('⚠️ Click events already enabled');
+                return;
+            }
+            
+            map1.on('click', function(e) {
+                const popup = L.popup()
+                    .setLatLng(e.latlng)
+                    .setContent(`🖱️ You clicked at:<br>Lat: ${e.latlng.lat.toFixed(4)}<br>Lng: ${e.latlng.lng.toFixed(4)}`)
+                    .openOn(map1);
+                
+                log(`🖱️ Map clicked at: ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`);
+            });
+            
+            clickEventsEnabled = true;
+            updateInteractionInfo('✅ Click events enabled - click anywhere on the map!');
+            log('✅ Click events enabled on map');
+            updateProgress();
+        }
+
+        function testGeolocation() {
+            if ('geolocation' in navigator) {
+                log('🔍 Requesting geolocation...');
+                updateInteractionInfo('🔍 Requesting your location...');
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const accuracy = position.coords.accuracy;
+                        
+                        if (map1) {
+                            map1.setView([lat, lng], 15);
+                            L.marker([lat, lng]).addTo(map1)
+                                .bindPopup(`📍 Your Location!<br>Lat: ${lat.toFixed(4)}<br>Lng: ${lng.toFixed(4)}<br>Accuracy: ${accuracy.toFixed(0)}m`)
+                                .openPopup();
+                        }
+                        
+                        updateInteractionInfo(`✅ Location found: ${lat.toFixed(4)}, ${lng.toFixed(4)} (±${accuracy.toFixed(0)}m)`);
+                        log(`✅ Geolocation found: ${lat.toFixed(4)}, ${lng.toFixed(4)} (accuracy: ${accuracy.toFixed(0)}m)`);
+                        updateProgress();
+                    },
+                    (error) => {
+                        updateInteractionInfo(`❌ Geolocation error: ${error.message}`);
+                        log(`❌ Geolocation error: ${error.message}`);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 300000
+                    }
+                );
+            } else {
+                updateInteractionInfo('❌ Geolocation not supported by this browser');
+                log('❌ Geolocation not supported');
+            }
+        }
+
+        function changeTileLayer() {
+            if (!map1) return;
+            
+            currentTileLayer = (currentTileLayer + 1) % tileLayers.length;
+            const newLayer = tileLayers[currentTileLayer];
+            
+            // Remove existing tile layers
+            map1.eachLayer(function(layer) {
+                if (layer instanceof L.TileLayer) {
+                    map1.removeLayer(layer);
+                }
+            });
+            
+            // Add new tile layer
+            L.tileLayer(newLayer.url, {
+                attribution: newLayer.attribution
+            }).addTo(map1);
+            
+            log(`🗺️ Changed to ${newLayer.name} tiles`);
+            updateSystemInfo();
+            updateProgress();
+        }
+
+        // Advanced testing
+        function performanceTest() {
+            if (!map1) return;
+            
+            log('⚡ Starting performance test...');
+            const startTime = performance.now();
+            
+            // Add 50 markers quickly
+            const testMarkers = [];
+            for (let i = 0; i < 50; i++) {
+                const lat = 51.505 + (Math.random() - 0.5) * 0.1;
+                const lng = -0.09 + (Math.random() - 0.5) * 0.1;
+                
+                const marker = L.marker([lat, lng]).addTo(map1)
+                    .bindPopup(`Performance Test Marker #${i + 1}`);
+                testMarkers.push(marker);
+            }
+            
+            const endTime = performance.now();
+            const duration = (endTime - startTime).toFixed(2);
+            
+            // Clean up test markers after 3 seconds
+            setTimeout(() => {
+                testMarkers.forEach(marker => map1.removeLayer(marker));
+                log('🧹 Performance test markers cleaned up');
+            }, 3000);
+            
+            const perfInfo = `
+                <strong>Performance Test Results:</strong><br>
+                • Added 50 markers in ${duration}ms<br>
+                • Average: ${(duration / 50).toFixed(2)}ms per marker<br>
+                • Status: ${duration < 1000 ? '✅ Excellent' : duration < 2000 ? '⚠️ Good' : '❌ Slow'}<br>
+                • Test completed: ${new Date().toLocaleTimeString()}
+            `;
+            
+            document.getElementById('perfMetrics').innerHTML = perfInfo;
+            log(`⚡ Performance test completed: ${duration}ms for 50 markers`);
+            updateProgress();
+        }
+
+        function stressTest() {
+            if (!map1) return;
+            
+            log('🔥 Starting stress test with 100 markers...');
+            const startTime = performance.now();
+            
+            const stressMarkers = [];
+            let addedCount = 0;
+            
+            // Add markers with a slight delay to prevent browser freezing
+            const addBatch = () => {
+                for (let i = 0; i < 10 && addedCount < 100; i++) {
+                    const lat = 51.505 + (Math.random() - 0.5) * 0.2;
+                    const lng = -0.09 + (Math.random() - 0.5) * 0.2;
+                    
+                    const marker = L.marker([lat, lng]).addTo(map1)
+                        .bindPopup(`Stress Test Marker #${addedCount + 1}`);
+                    stressMarkers.push(marker);
+                    addedCount++;
+                }
+                
+                if (addedCount < 100) {
+                    setTimeout(addBatch, 50);
+                } else {
+                    const endTime = performance.now();
+                    const duration = (endTime - startTime).toFixed(2);
+                    log(`🔥 Stress test completed: 100 markers in ${duration}ms`);
+                    
+                    // Clean up after 5 seconds
+                    setTimeout(() => {
+                        stressMarkers.forEach(marker => map1.removeLayer(marker));
+                        log('🧹 Stress test markers cleaned up');
+                    }, 5000);
+                    
+                    updateProgress();
+                }
+            };
+            
+            addBatch();
+        }
+
+        function clearAll() {
+            clearMarkers();
+            clearShapes();
+            clickEventsEnabled = false;
+            updateInteractionInfo('All interactive features reset');
+            log('🗑️ Everything cleared and reset');
+        }
+
+        function runAllTests() {
+            log('🚀 Starting automated test sequence...');
+            
+            const tests = [
+                { name: 'Create Map', func: createBasicMap, delay: 1000 },
+                { name: 'Change View', func: changeView, delay: 1500 },
+                { name: 'Add Markers', func: addSampleMarkers, delay: 2000 },
+                { name: 'Add Circle', func: addCircle, delay: 500 },
+                { name: 'Add Polygon', func: addPolygon, delay: 500 },
+                { name: 'Add Polyline', func: addPolyline, delay: 500 },
+                { name: 'Enable Events', func: enableClickEvents, delay: 500 },
+                { name: 'Change Tiles', func: changeTileLayer, delay: 1000 },
+                { name: 'Performance Test', func: performanceTest, delay: 2000 },
+                { name: 'Reset View', func: resetView, delay: 1000 }
+            ];
+            
+            let currentTest = 0;
+            
+            const runNextTest = () => {
+                if (currentTest < tests.length) {
+                    const test = tests[currentTest];
+                    log(`🔄 Running: ${test.name}...`);
+                    test.func();
+                    currentTest++;
+                    setTimeout(runNextTest, test.delay);
+                } else {
+                    log('🎉 All automated tests completed!');
+                    updateProgress(2); // Bonus progress for completing all tests
+                }
+            };
+            
+            runNextTest();
+        }        // Initialize page
+        function initializePage() {
+            // Initialize DOM elements
+            statusLog = document.getElementById('statusLog');
+            
+            log('🚀 Page loaded, checking Leaflet...');
+            
+            if (typeof L === 'undefined') {
+                log('❌ Leaflet not loaded yet, waiting...');
+                setTimeout(initializePage, 500);
+                return;
+            }
+            
+            log(`✅ Leaflet ${L.version} loaded successfully`);
+            checkFeatures();
+            updateSystemInfo();
+            
+            // Auto-create map after a short delay
+            setTimeout(() => {
+                log('🔄 Auto-creating map...');
+                createBasicMap();
+            }, 1000);
+            
+            log('✅ Page initialization complete');
+        }        // Global error handler
+        window.addEventListener('error', function(e) {
+            const errorMsg = `❌ Global error: ${e.message} (${e.filename}:${e.lineno})`;
+            console.error('Error details:', e);
+            
+            // Try to log to status log if available
+            if (statusLog || document.getElementById('statusLog')) {
+                log(errorMsg);
+            } else {
+                // Fallback: create an error display
+                document.body.innerHTML = `
+                    <div style="background: red; color: white; padding: 20px; margin: 20px; border-radius: 10px;">
+                        <h2>❌ JavaScript Error Detected</h2>
+                        <p><strong>Error:</strong> ${e.message}</p>
+                        <p><strong>File:</strong> ${e.filename}</p>
+                        <p><strong>Line:</strong> ${e.lineno}</p>
+                        <p><strong>Details:</strong> ${e.error}</p>
+                    </div>
+                ` + document.body.innerHTML;
+            }
+        });
+
+        // Start when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
+        }
+        
+        // Fallback initialization
+        setTimeout(initializePage, 1000);
+    </script>
+</body>
+</html>

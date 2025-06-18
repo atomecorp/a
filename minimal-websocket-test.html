@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal WebSocket Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .log { background: #f0f0f0; padding: 10px; height: 300px; overflow-y: auto; }
+        button { padding: 10px; margin: 5px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Minimal WebSocket Test</h1>
+    
+    <button onclick="testConnect()">Test WebSocket Connection</button>
+    <button onclick="clearLog()">Clear Log</button>
+    
+    <div id="log" class="log">Ready to test...<br></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = 'Log cleared...<br>';
+        }
+        
+        function testConnect() {
+            log('Starting WebSocket test...');
+            
+            try {
+                const socket = io('http://localhost:3001', {
+                    autoConnect: false
+                });
+                
+                socket.on('connect', () => {
+                    log('✅ Connected to WebSocket server!');
+                    log('Socket ID: ' + socket.id);
+                    
+                    // Try to authenticate
+                    const testAuth = {
+                        auth: {
+                            id: 'test-user',
+                            token: btoa(JSON.stringify({
+                                userId: 'test-user',
+                                username: 'test-user',
+                                iat: Math.floor(Date.now() / 1000),
+                                exp: Math.floor(Date.now() / 1000) + 3600
+                            }))
+                        }
+                    };
+                    
+                    log('Sending authentication...');
+                    socket.emit('connect_request', testAuth);
+                });
+                
+                socket.on('disconnect', () => {
+                    log('❌ Disconnected from server');
+                });
+                
+                socket.on('connection_success', (data) => {
+                    log('✅ Authentication successful!');
+                    log('Response: ' + JSON.stringify(data));
+                    
+                    // Send a ping
+                    log('Sending ping...');
+                    socket.emit('message', { action: 'ping' });
+                });
+                
+                socket.on('connection_error', (error) => {
+                    log('❌ Authentication failed: ' + JSON.stringify(error));
+                });
+                
+                socket.on('message_success', (data) => {
+                    log('✅ Message response: ' + JSON.stringify(data));
+                });
+                
+                socket.on('message_error', (error) => {
+                    log('❌ Message error: ' + JSON.stringify(error));
+                });
+                
+                socket.on('connect_error', (error) => {
+                    log('❌ Connection error: ' + error.message);
+                });
+                
+                log('Attempting to connect to http://localhost:3001...');
+                socket.connect();
+                
+            } catch (error) {
+                log('❌ JavaScript error: ' + error.message);
+            }
+        }
+        
+        log('Page loaded. Socket.IO version: ' + (typeof io !== 'undefined' ? 'loaded' : 'not loaded'));
+    </script>
+</body>
+</html>

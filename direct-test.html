@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Direct GSAP Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .test-box {
+            width: 100px;
+            height: 100px;
+            background: #ff6b6b;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #log {
+            background: #000;
+            color: #0f0;
+            padding: 10px;
+            font-family: monospace;
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Direct GSAP Test</h1>
+    
+    <div id="log"></div>
+    
+    <div class="test-box" id="box1"></div>
+    
+    <button onclick="loadGSAPDirect()">Load GSAP from CDN</button>
+    <button onclick="testGSAPDirect()">Test GSAP Animation</button>
+    <button onclick="loadCodeMirror()">Load CodeMirror</button>
+    <button onclick="testCodeMirror()">Test CodeMirror</button>
+
+    <div id="editor-container" style="height: 200px; border: 1px solid #333; margin: 10px 0;"></div>
+
+    <script>
+        function log(msg) {
+            const logEl = document.getElementById('log');
+            logEl.innerHTML += new Date().toLocaleTimeString() + ': ' + msg + '\n';
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(msg);
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        }
+
+        function loadCSS(href) {
+            return new Promise((resolve, reject) => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = href;
+                link.onload = resolve;
+                link.onerror = reject;
+                document.head.appendChild(link);
+            });
+        }
+
+        async function loadGSAPDirect() {
+            log('🔄 Loading GSAP from CDN...');
+            try {
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js');
+                log('✅ GSAP loaded from CDN');
+                
+                if (typeof gsap !== 'undefined') {
+                    log(`✅ GSAP available globally: version ${gsap.version}`);
+                } else {
+                    log('❌ GSAP not available globally after loading');
+                }
+            } catch (error) {
+                log(`❌ Failed to load GSAP: ${error.message}`);
+            }
+        }
+
+        function testGSAPDirect() {
+            if (typeof gsap === 'undefined') {
+                log('❌ GSAP not loaded. Load it first!');
+                return;
+            }
+
+            log('🎬 Testing GSAP animation...');
+            const box = document.getElementById('box1');
+            
+            gsap.to(box, {
+                duration: 1,
+                x: 200,
+                rotation: 360,
+                scale: 1.5,
+                backgroundColor: '#4CAF50',
+                onComplete: () => {
+                    log('✅ Animation complete!');
+                    gsap.to(box, {
+                        duration: 1,
+                        x: 0,
+                        rotation: 0,
+                        scale: 1,
+                        backgroundColor: '#ff6b6b'
+                    });
+                }
+            });
+        }
+
+        async function loadCodeMirror() {
+            log('🔄 Loading CodeMirror from CDN...');
+            try {
+                await loadCSS('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css');
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js');
+                await loadScript('https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js');
+                
+                log('✅ CodeMirror loaded from CDN');
+                
+                if (typeof CodeMirror !== 'undefined') {
+                    log(`✅ CodeMirror available globally: version ${CodeMirror.version || 'unknown'}`);
+                } else {
+                    log('❌ CodeMirror not available globally after loading');
+                }
+            } catch (error) {
+                log(`❌ Failed to load CodeMirror: ${error.message}`);
+            }
+        }
+
+        function testCodeMirror() {
+            if (typeof CodeMirror === 'undefined') {
+                log('❌ CodeMirror not loaded. Load it first!');
+                return;
+            }
+
+            log('📝 Testing CodeMirror editor...');
+            const container = document.getElementById('editor-container');
+            container.innerHTML = '';
+
+            const editor = CodeMirror(container, {
+                value: 'function hello() {\n  console.log("Hello World!");\n}',
+                mode: 'javascript',
+                lineNumbers: true,
+                theme: 'default'
+            });
+
+            log('✅ CodeMirror editor created!');
+        }
+
+        log('🚀 Direct library test initialized');
+    </script>
+</body>
+</html>

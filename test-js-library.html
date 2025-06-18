@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS Library Test - Squirrel Framework</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #2a2a2a;
+        }
+        .test-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover {
+            background: #45a049;
+        }
+        .test-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #map-container {
+            height: 300px;
+            border: 1px solid #555;
+            margin: 10px 0;
+        }
+        #editor-container {
+            height: 200px;
+            border: 1px solid #555;
+            margin: 10px 0;
+        }
+        #animated-box {
+            width: 100px;
+            height: 100px;
+            background: #ff6b6b;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        .status {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.loading { background: #ffa726; color: #000; }
+        .status.success { background: #4caf50; }
+        .status.error { background: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>🧪 JS Library Test Suite</h1>
+    <p>Testing GSAP, CodeMirror, Leaflet, and Tone.js integration with Squirrel Framework</p>
+
+    <!-- Status Section -->
+    <div class="test-section">
+        <h2>📊 Library Status</h2>
+        <div id="status-container"></div>
+        <button class="test-button" onclick="refreshStatus()">Refresh Status</button>
+    </div>
+
+    <!-- GSAP Tests -->
+    <div class="test-section">
+        <h2>🎬 GSAP Animation Tests</h2>
+        <div id="animated-box"></div>
+        <button class="test-button" onclick="testGSAP('fadeIn')">Fade In</button>
+        <button class="test-button" onclick="testGSAP('fadeOut')">Fade Out</button>
+        <button class="test-button" onclick="testGSAP('slideLeft')">Slide Left</button>
+        <button class="test-button" onclick="testGSAP('scale')">Scale</button>
+        <button class="test-button" onclick="testGSAP('rotate')">Rotate</button>
+        <button class="test-button" onclick="testGSAP('bounce')">Bounce</button>
+        <div id="gsap-status"></div>
+    </div>
+
+    <!-- CodeMirror Tests -->
+    <div class="test-section">
+        <h2>📝 CodeMirror Editor Tests</h2>
+        <div id="editor-container"></div>
+        <button class="test-button" onclick="testCodeMirror('javascript')">JavaScript Mode</button>
+        <button class="test-button" onclick="testCodeMirror('css')">CSS Mode</button>
+        <button class="test-button" onclick="testCodeMirror('html')">HTML Mode</button>
+        <button class="test-button" onclick="toggleTheme()">Toggle Theme</button>
+        <div id="codemirror-status"></div>
+    </div>
+
+    <!-- Leaflet Tests -->
+    <div class="test-section">
+        <h2>🗺️ Leaflet Map Tests</h2>
+        <div id="map-container"></div>
+        <button class="test-button" onclick="testLeaflet('london')">London</button>
+        <button class="test-button" onclick="testLeaflet('paris')">Paris</button>
+        <button class="test-button" onclick="testLeaflet('newyork')">New York</button>
+        <button class="test-button" onclick="testLeaflet('marker')">Add Marker</button>
+        <button class="test-button" onclick="testLeaflet('satellite')">Satellite View</button>
+        <div id="leaflet-status"></div>
+    </div>
+
+    <!-- Tone.js Tests -->
+    <div class="test-section">
+        <h2>🎵 Tone.js Audio Tests</h2>
+        <button class="test-button" onclick="testTone('start')">Start Audio</button>
+        <button class="test-button" onclick="testTone('C4')">Play C4</button>
+        <button class="test-button" onclick="testTone('E4')">Play E4</button>
+        <button class="test-button" onclick="testTone('G4')">Play G4</button>
+        <button class="test-button" onclick="testTone('chord')">Play Chord</button>
+        <button class="test-button" onclick="testTone('drums')">Drum Pattern</button>
+        <div id="tone-status"></div>
+    </div>
+
+    <!-- Load Squirrel Framework first -->
+    <script type="module" src="./src/squirrel/apis.js"></script>
+    <script type="module" src="./src/squirrel/squirrel.js"></script>
+
+    <script type="module">
+        // Import the library manager
+        import jsLibrary from './src/js_library/index.js';
+
+        // Global variables for testing
+        window.jsLibrary = jsLibrary;
+        window.currentEditor = null;
+        window.currentMap = null;
+        window.currentSynth = null;
+        window.isDarkTheme = false;
+
+        // Status update function
+        window.refreshStatus = function() {
+            const container = document.getElementById('status-container');
+            container.innerHTML = '';
+
+            const libraries = jsLibrary.listLibraries();
+            libraries.forEach(lib => {
+                const status = document.createElement('div');
+                status.className = `status ${lib.loaded ? 'success' : 'error'}`;
+                status.textContent = `${lib.name}: ${lib.loaded ? 'Loaded ✅' : 'Not Loaded ❌'}`;
+                container.appendChild(status);
+            });
+        };        // GSAP test functions
+        window.testGSAP = async function(action) {
+            const statusDiv = document.getElementById('gsap-status');
+            
+            try {
+                if (!jsLibrary.isLoaded('gsap')) {
+                    statusDiv.innerHTML = '<div class="status loading">Loading GSAP...</div>';
+                    await jsLibrary.loadGSAP();
+                    
+                    // Wait for wrapper to initialize
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                const box = document.getElementById('animated-box');
+                
+                // Check if GSAP is available (fallback to direct GSAP if wrapper fails)
+                if (window.gsapWrapper && window.gsapWrapper.initialized) {
+                    // Use wrapper
+                    switch(action) {
+                        case 'fadeIn':
+                            window.gsapWrapper.fadeIn(box);
+                            break;
+                        case 'fadeOut':
+                            window.gsapWrapper.fadeOut(box);
+                            break;
+                        case 'slideLeft':
+                            window.gsapWrapper.animate(box, { x: -100 }, 0.5);
+                            setTimeout(() => window.gsapWrapper.animate(box, { x: 0 }, 0.5), 600);
+                            break;
+                        case 'scale':
+                            window.gsapWrapper.scale(box, 1.5, 0.5);
+                            setTimeout(() => window.gsapWrapper.scale(box, 1, 0.5), 600);
+                            break;
+                        case 'rotate':
+                            window.gsapWrapper.rotate(box, 360, 1);
+                            break;
+                        case 'bounce':
+                            window.gsapWrapper.bounce(box);
+                            break;
+                    }
+                    statusDiv.innerHTML = '<div class="status success">GSAP wrapper animation executed!</div>';
+                } else if (typeof gsap !== 'undefined') {
+                    // Use direct GSAP
+                    switch(action) {
+                        case 'fadeIn':
+                            gsap.to(box, { opacity: 1, duration: 0.3 });
+                            break;
+                        case 'fadeOut':
+                            gsap.to(box, { opacity: 0, duration: 0.3 });
+                            break;
+                        case 'slideLeft':
+                            gsap.to(box, { x: -100, duration: 0.5 });
+                            setTimeout(() => gsap.to(box, { x: 0, duration: 0.5 }), 600);
+                            break;
+                        case 'scale':
+                            gsap.to(box, { scale: 1.5, duration: 0.5 });
+                            setTimeout(() => gsap.to(box, { scale: 1, duration: 0.5 }), 600);
+                            break;
+                        case 'rotate':
+                            gsap.to(box, { rotation: 360, duration: 1 });
+                            break;
+                        case 'bounce':
+                            gsap.to(box, { scale: 1.2, duration: 0.3, yoyo: true, repeat: 1, ease: "power2.out" });
+                            break;
+                    }
+                    statusDiv.innerHTML = '<div class="status success">GSAP direct animation executed!</div>';
+                } else {
+                    throw new Error('GSAP not available');
+                }
+
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">GSAP Error: ${error.message}</div>`;
+            }
+        };        // CodeMirror test functions
+        window.testCodeMirror = async function(mode) {
+            const statusDiv = document.getElementById('codemirror-status');
+            
+            try {
+                if (!jsLibrary.isLoaded('codemirror')) {
+                    statusDiv.innerHTML = '<div class="status loading">Loading CodeMirror...</div>';
+                    await jsLibrary.loadCodeMirror();
+                    
+                    // Wait for wrapper to initialize
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+
+                const container = document.getElementById('editor-container');
+                container.innerHTML = ''; // Clear previous editor
+
+                const sampleCode = {
+                    javascript: 'function hello() {\n  console.log("Hello World!");\n  return true;\n}',
+                    css: 'body {\n  background: #1a1a1a;\n  color: #fff;\n  font-family: Arial;\n}',
+                    html: '<!DOCTYPE html>\n<html>\n<head>\n  <title>Test</title>\n</head>\n<body>\n  <h1>Hello!</h1>\n</body>\n</html>'
+                };
+
+                // Try wrapper first, fallback to direct CodeMirror
+                if (window.codeMirrorWrapper && window.codeMirrorWrapper.initialized) {
+                    window.currentEditor = window.codeMirrorWrapper.createEditor(container, {
+                        mode: mode,
+                        theme: window.isDarkTheme ? 'dark' : 'default',
+                        value: sampleCode[mode] || '// Sample code'
+                    });
+                    statusDiv.innerHTML = `<div class="status success">CodeMirror wrapper ${mode} editor created!</div>`;
+                } else if (typeof CodeMirror !== 'undefined') {
+                    // Direct CodeMirror usage
+                    window.currentEditor = {
+                        editor: CodeMirror(container, {
+                            mode: mode,
+                            theme: window.isDarkTheme ? 'dark' : 'default',
+                            value: sampleCode[mode] || '// Sample code',
+                            lineNumbers: true
+                        }),
+                        setMode: function(newMode) { this.editor.setOption('mode', newMode); },
+                        setTheme: function(newTheme) { this.editor.setOption('theme', newTheme); }
+                    };
+                    statusDiv.innerHTML = `<div class="status success">CodeMirror direct ${mode} editor created!</div>`;
+                } else {
+                    throw new Error('CodeMirror not available');
+                }
+
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">CodeMirror Error: ${error.message}</div>`;
+            }
+        };
+
+        window.toggleTheme = function() {
+            if (window.currentEditor) {
+                window.isDarkTheme = !window.isDarkTheme;
+                window.currentEditor.setTheme(window.isDarkTheme ? 'dark' : 'default');
+                document.getElementById('codemirror-status').innerHTML = 
+                    `<div class="status success">Theme changed to ${window.isDarkTheme ? 'dark' : 'default'}!</div>`;
+            }
+        };
+
+        // Leaflet test functions
+        window.testLeaflet = async function(action) {
+            const statusDiv = document.getElementById('leaflet-status');
+            
+            try {
+                if (!jsLibrary.isLoaded('leaflet')) {
+                    statusDiv.innerHTML = '<div class="status loading">Loading Leaflet...</div>';
+                    await jsLibrary.loadLeaflet();
+                }
+
+                const container = document.getElementById('map-container');
+
+                if (!window.currentMap && action !== 'satellite') {
+                    container.innerHTML = ''; // Clear previous content
+                    window.currentMap = window.leafletWrapper.createMap(container, {
+                        center: [51.505, -0.09],
+                        zoom: 13
+                    });
+                }
+
+                switch(action) {
+                    case 'london':
+                        window.currentMap.setView([51.505, -0.09], 13);
+                        break;
+                    case 'paris':
+                        window.currentMap.setView([48.8566, 2.3522], 13);
+                        break;
+                    case 'newyork':
+                        window.currentMap.setView([40.7128, -74.0060], 13);
+                        break;
+                    case 'marker':
+                        const center = window.currentMap.getCenter();
+                        window.currentMap.addMarker(center.lat, center.lng, {
+                            popup: `Marker at ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`
+                        });
+                        break;
+                    case 'satellite':
+                        container.innerHTML = ''; // Clear and recreate with satellite
+                        window.currentMap = window.leafletWrapper.createMap(container, {
+                            center: [51.505, -0.09],
+                            zoom: 13,
+                            tileLayer: 'satellite'
+                        });
+                        break;
+                }
+
+                statusDiv.innerHTML = `<div class="status success">Leaflet ${action} executed!</div>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">Leaflet Error: ${error.message}</div>`;
+            }
+        };
+
+        // Tone.js test functions
+        window.testTone = async function(action) {
+            const statusDiv = document.getElementById('tone-status');
+            
+            try {
+                if (!jsLibrary.isLoaded('tone')) {
+                    statusDiv.innerHTML = '<div class="status loading">Loading Tone.js...</div>';
+                    await jsLibrary.loadTone();
+                }
+
+                switch(action) {
+                    case 'start':
+                        await window.toneWrapper.startAudio();
+                        window.currentSynth = window.toneWrapper.createSynth('sine');
+                        statusDiv.innerHTML = '<div class="status success">Audio context started!</div>';
+                        return;
+                    case 'C4':
+                    case 'E4':
+                    case 'G4':
+                        if (!window.currentSynth) {
+                            await window.toneWrapper.startAudio();
+                            window.currentSynth = window.toneWrapper.createSynth('sine');
+                        }
+                        window.currentSynth.play(action, '4n');
+                        break;
+                    case 'chord':
+                        if (!window.currentSynth) {
+                            await window.toneWrapper.startAudio();
+                            window.currentSynth = window.toneWrapper.createSynth('sine');
+                        }
+                        window.currentSynth.play('C4', '2n');
+                        setTimeout(() => window.currentSynth.play('E4', '2n'), 100);
+                        setTimeout(() => window.currentSynth.play('G4', '2n'), 200);
+                        break;
+                    case 'drums':
+                        await window.toneWrapper.startAudio();
+                        const drums = window.toneWrapper.createDrumMachine();
+                        drums.kick();
+                        setTimeout(() => drums.snare(), 250);
+                        setTimeout(() => drums.hihat(), 125);
+                        setTimeout(() => drums.hihat(), 375);
+                        break;
+                }
+
+                statusDiv.innerHTML = `<div class="status success">Tone.js ${action} played!</div>`;
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="status error">Tone.js Error: ${error.message}</div>`;
+            }
+        };
+
+        // Initialize status on load
+        setTimeout(refreshStatus, 100);
+
+        console.log('🧪 JS Library Test Suite loaded!');
+        console.log('Available methods:', Object.keys(window).filter(k => k.includes('test')));
+    </script>
+</body>
+</html>

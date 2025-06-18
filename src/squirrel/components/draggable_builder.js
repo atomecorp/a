@@ -573,11 +573,3 @@ function draggable(template = 'draggable-box', config = {}) {
 
 // === EXPORTS ===
 export { draggable, makeDraggable, makeDraggableWithDrop, makeDropZone };
-
-// Export par défaut conforme aux autres composants
-export default {
-  create: draggable,
-  makeDraggable,
-  makeDraggableWithDrop,
-  makeDropZone
-};
