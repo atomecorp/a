@@ -1,0 +1,624 @@
+// Exemple de Drag & Drop avancé avec Squirrel
+// Démontre les capacités de drag & drop avec zones de dépôt
+
+console.log('🎯 Chargement de l\'exemple Drag & Drop...');
+
+// Détecter l'environnement d'exécution
+const isTauri = window.__TAURI__ !== undefined;
+const isWebView = /Tauri|Electron|WebView/i.test(navigator.userAgent);
+const useClassicDrag = isTauri || isWebView;
+
+console.log('🔍 Environnement détecté:', { 
+  isTauri, 
+  isWebView, 
+  useClassicDrag,
+  userAgent: navigator.userAgent 
+});
+
+// Container principal
+const container = $('div', {
+  css: {
+    padding: '20px',
+    fontFamily: 'Arial, sans-serif',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '10px'
+  },
+  parent: '#view'
+});
+
+// Titre
+$('h1', {
+  text: '🎯 Démo Drag & Drop Avancé',
+  css: {
+    color: '#2c3e50',
+    textAlign: 'center',
+    marginBottom: '30px'
+  },
+  parent: container
+});
+
+// Indicateur de mode drag & drop
+$('div', {
+  css: {
+    backgroundColor: useClassicDrag ? '#f39c12' : '#27ae60',
+    color: 'white',
+    padding: '10px 20px',
+    borderRadius: '20px',
+    textAlign: 'center',
+    marginBottom: '20px',
+    fontSize: '14px',
+    fontWeight: 'bold'
+  },
+  text: `🔧 Mode: ${useClassicDrag ? 'Drag Classique (Compatible Tauri)' : 'HTML5 Drag & Drop'}`,
+  parent: container
+});
+
+// Description
+$('p', {
+  text: 'Faites glisser les éléments colorés dans les zones de dépôt. Observez les effets visuels et les callbacks.',
+  css: {
+    color: '#7f8c8d',
+    textAlign: 'center',
+    marginBottom: '30px',
+    fontSize: '16px'
+  },
+  parent: container
+});
+
+// === SECTION 1: ÉLÉMENTS DRAGGABLES ===
+
+const sourceSection = $('div', {
+  css: {
+    backgroundColor: 'white',
+    border: '2px solid #dee2e6',
+    borderRadius: '8px',
+    padding: '20px',
+    marginBottom: '20px'
+  },
+  parent: container
+});
+
+$('h2', {
+  text: '🎮 Éléments Draggables',
+  css: { color: '#495057', marginBottom: '15px' },
+  parent: sourceSection
+});
+
+$('p', {
+  text: 'Ces éléments peuvent être déplacés avec la souris ou glissés vers les zones de dépôt :',
+  css: { color: '#6c757d', marginBottom: '20px' },
+  parent: sourceSection
+});
+
+// Container pour les éléments draggables
+const draggablesContainer = $('div', {
+  css: {
+    display: 'flex',
+    gap: '15px',
+    flexWrap: 'wrap',
+    justifyContent: 'center'
+  },
+  parent: sourceSection
+});
+
+// Créer plusieurs éléments draggables avec différentes propriétés
+const draggableItems = [
+  { id: 'item1', text: '🔵 Bleu', color: '#3498db', data: { type: 'circle', value: 'blue' } },
+  { id: 'item2', text: '🔴 Rouge', color: '#e74c3c', data: { type: 'circle', value: 'red' } },
+  { id: 'item3', text: '🟢 Vert', color: '#27ae60', data: { type: 'circle', value: 'green' } },
+  { id: 'item4', text: '🟡 Jaune', color: '#f39c12', data: { type: 'circle', value: 'yellow' } },
+  { id: 'item5', text: '📄 Document', color: '#9b59b6', data: { type: 'document', value: 'file.txt' } },
+  { id: 'item6', text: '📁 Dossier', color: '#34495e', data: { type: 'folder', value: 'projects' } }
+];
+
+draggableItems.forEach(item => {
+  const element = $('div', {
+    id: item.id,
+    css: {
+      width: '120px',
+      height: '80px',
+      backgroundColor: item.color,
+      color: 'white',
+      borderRadius: '8px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      cursor: 'grab',
+      fontWeight: 'bold',
+      fontSize: '12px',
+      textAlign: 'center',
+      userSelect: 'none',
+      transition: 'all 0.3s ease',
+      border: '2px solid transparent'
+    },
+    text: item.text,
+    parent: draggablesContainer
+  });
+
+  // Appliquer le drag & drop hybride (HTML5 + fallback classique)
+  if (window.makeDraggableWithDrop) {
+    console.log(`🔧 Configuration drag pour ${item.text}:`, { 
+      enableHTML5: !useClassicDrag, 
+      transferData: item.data 
+    });
+    
+    window.makeDraggableWithDrop(element, {
+      enableHTML5: !useClassicDrag, // Utiliser HTML5 sauf dans Tauri
+      transferData: item.data,
+      dragStartClass: 'dragging',
+      cursor: 'grab',
+      onHTML5DragStart: (e, el) => {
+        el.style.opacity = '0.5';
+        el.style.transform = 'scale(0.9)';
+        logActivity(`🚀 Drag HTML5 démarré: ${item.text}`);
+      },
+      onHTML5DragEnd: (e, el) => {
+        el.style.opacity = '1';
+        el.style.transform = 'scale(1)';
+        logActivity(`🏁 Drag HTML5 terminé: ${item.text}`);
+      },
+      // Drag classique pour compatibilité universelle
+      onDragStart: (el, x, y) => {
+        el.style.boxShadow = '0 8px 16px rgba(0,0,0,0.3)';
+        el.style.opacity = '0.8';
+        logActivity(`🚀 Drag classique démarré: ${item.text}`);
+      },
+      onDragEnd: (el) => {
+        el.style.boxShadow = '';
+        el.style.opacity = '1';
+        logActivity(`🏁 Drag classique terminé: ${item.text}`);
+      },
+      // Callback pour détecter les drops sur les zones
+      onDropDetection: (el, x, y) => {
+        // Trouver l'élément sous la souris
+        const elementsBelow = document.elementsFromPoint(x, y);
+        const dropZone = elementsBelow.find(elem => 
+          elem.id && elem.id.startsWith('zone-')
+        );
+        
+        if (dropZone) {
+          // Simuler un drop sur la zone
+          const zone = dropZones.find(z => z.id === dropZone.id);
+          if (zone) {
+            handleClassicDrop(zone, dropZone, item.data);
+          }
+        }
+      }
+    });
+  }
+});
+
+// === SECTION 2: ZONES DE DÉPÔT ===
+
+const dropSection = $('div', {
+  css: {
+    backgroundColor: 'white',
+    border: '2px solid #dee2e6',
+    borderRadius: '8px',
+    padding: '20px',
+    marginBottom: '20px'
+  },
+  parent: container
+});
+
+$('h2', {
+  text: '🎯 Zones de Dépôt',
+  css: { color: '#495057', marginBottom: '15px' },
+  parent: dropSection
+});
+
+$('p', {
+  text: 'Glissez les éléments dans les zones appropriées selon leur type. Double-cliquez sur un élément déposé pour le supprimer.',
+  css: { color: '#6c757d', marginBottom: '20px' },
+  parent: dropSection
+});
+
+// Container pour les zones de dépôt
+const dropZonesContainer = $('div', {
+  css: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gap: '20px',
+    marginTop: '20px'
+  },
+  parent: dropSection
+});
+
+// Créer différentes zones de dépôt
+const dropZones = [
+  {
+    id: 'zone-colors',
+    title: '🎨 Zone Couleurs',
+    description: 'Déposez les éléments colorés ici',
+    accepts: ['circle'],
+    color: '#e8f4fd'
+  },
+  {
+    id: 'zone-files',
+    title: '📂 Zone Fichiers',
+    description: 'Déposez les documents et dossiers ici',
+    accepts: ['document', 'folder'],
+    color: '#f0e6ff'
+  },
+  {
+    id: 'zone-all',
+    title: '🌟 Zone Universelle',
+    description: 'Accepte tout type d\'élément',
+    accepts: [],
+    color: '#e8f5e8'
+  }
+];
+
+dropZones.forEach(zone => {
+  const zoneElement = $('div', {
+    id: zone.id,
+    css: {
+      minHeight: '120px',
+      border: '2px dashed #bdc3c7',
+      borderRadius: '8px',
+      backgroundColor: zone.color,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: '#7f8c8d',
+      fontSize: '14px',
+      transition: 'all 0.3s ease',
+      padding: '20px',
+      textAlign: 'center'
+    },
+    parent: dropZonesContainer
+  });
+
+  // Titre de la zone
+  $('div', {
+    text: zone.title,
+    css: {
+      fontSize: '16px',
+      fontWeight: 'bold',
+      marginBottom: '8px'
+    },
+    parent: zoneElement
+  });
+
+  // Description de la zone
+  $('div', {
+    text: zone.description,
+    css: {
+      fontSize: '12px',
+      opacity: '0.8'
+    },
+    parent: zoneElement
+  });
+
+  // Container pour les éléments déposés
+  const droppedContainer = $('div', {
+    css: {
+      marginTop: '10px',
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '5px',
+      justifyContent: 'center'
+    },
+    parent: zoneElement
+  });
+
+  // Configurer la zone de dépôt
+  if (window.makeDropZone) {
+    window.makeDropZone(zoneElement, {
+      acceptTypes: zone.accepts,
+      onDragEnter: (e, el) => {
+        el.style.borderColor = '#3498db';
+        el.style.backgroundColor = '#ebf3fd';
+        el.style.transform = 'scale(1.02)';
+        logActivity(`🎯 Entrée dans ${zone.title}`);
+      },
+      onDragLeave: (e, el) => {
+        el.style.borderColor = '#bdc3c7';
+        el.style.backgroundColor = zone.color;
+        el.style.transform = 'scale(1)';
+      },
+      onDragOver: (e, el) => {
+        // Validation en temps réel
+        try {
+          const data = JSON.parse(e.dataTransfer.getData('application/json') || '{}');
+          const isAccepted = zone.accepts.length === 0 || zone.accepts.includes(data.type);
+          
+          el.style.borderColor = isAccepted ? '#27ae60' : '#e74c3c';
+          el.style.backgroundColor = isAccepted ? '#e8f5e8' : '#fdf2f2';
+        } catch (err) {
+          // Fallback si pas de données JSON
+        }
+      },
+      onDrop: (e, el, transferData) => {
+        console.log('🔍 DEBUG onDrop:', {
+          event: e,
+          element: el,
+          transferData: transferData,
+          zone: zone,
+          droppedContainer: droppedContainer
+        });
+        
+        el.style.borderColor = '#bdc3c7';
+        el.style.backgroundColor = zone.color;
+        el.style.transform = 'scale(1)';
+
+        // Vérifier si l'élément est accepté
+        const isAccepted = zone.accepts.length === 0 || zone.accepts.includes(transferData.type);
+        
+        console.log('🔍 DEBUG validation:', {
+          accepts: zone.accepts,
+          transferType: transferData.type,
+          isAccepted: isAccepted
+        });
+        
+        if (isAccepted) {
+          // Retrouver l'élément original pour copier son style
+          const originalItem = draggableItems.find(item => 
+            item.data.type === transferData.type && item.data.value === transferData.value
+          );
+          
+          // Créer une copie visuelle de l'élément déposé
+          const droppedItem = $('div', {
+            css: {
+              width: '60px',
+              height: '40px',
+              backgroundColor: originalItem ? originalItem.color : '#27ae60',
+              color: 'white',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '10px',
+              margin: '3px',
+              border: '1px solid rgba(255,255,255,0.3)',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+              cursor: 'pointer',
+              transition: 'transform 0.2s ease',
+              position: 'relative',
+              fontWeight: 'bold',
+              textAlign: 'center'
+            },
+            text: originalItem ? originalItem.text : (transferData.value || 'Objet'),
+            parent: droppedContainer
+          });
+
+          // Ajouter un effet hover à l'élément déposé
+          droppedItem.addEventListener('mouseenter', () => {
+            droppedItem.style.transform = 'scale(1.1)';
+          });
+          
+          droppedItem.addEventListener('mouseleave', () => {
+            droppedItem.style.transform = 'scale(1)';
+          });
+          
+          // Permettre de supprimer l'élément avec un double-clic
+          droppedItem.addEventListener('dblclick', () => {
+            droppedItem.style.animation = 'fadeOut 0.3s ease-out forwards';
+            setTimeout(() => {
+              if (droppedItem.parentNode) {
+                droppedItem.parentNode.removeChild(droppedItem);
+              }
+            }, 300);
+            logActivity(`🗑️ Élément retiré de ${zone.title}`);
+          });
+
+          console.log('✅ Élément déposé créé:', droppedItem);
+          logActivity(`✅ Dépôt réussi dans ${zone.title}: ${originalItem ? originalItem.text : transferData.value}`);
+        } else {
+          logActivity(`❌ Dépôt rejeté dans ${zone.title}: type non accepté`);
+          
+          // Animation de rejet
+          el.style.animation = 'shake 0.5s ease-in-out';
+          setTimeout(() => {
+            el.style.animation = '';
+          }, 500);
+        }
+      }
+    });
+  }
+});
+
+// === SECTION 3: LOG D'ACTIVITÉ ===
+
+const logSection = $('div', {
+  css: {
+    backgroundColor: 'white',
+    border: '2px solid #dee2e6',
+    borderRadius: '8px',
+    padding: '20px'
+  },
+  parent: container
+});
+
+$('h2', {
+  text: '📋 Log d\'Activité',
+  css: { color: '#495057', marginBottom: '15px' },
+  parent: logSection
+});
+
+const logContainer = $('div', {
+  id: 'activity-log',
+  css: {
+    backgroundColor: '#f8f9fa',
+    border: '1px solid #dee2e6',
+    borderRadius: '6px',
+    padding: '15px',
+    maxHeight: '200px',
+    overflowY: 'auto',
+    fontFamily: 'monospace',
+    fontSize: '12px'
+  },
+  text: '🚀 Démo initialisée. Commencez à glisser des éléments !',
+  parent: logSection
+});
+
+// Bouton pour vider le log
+$('button', {
+  text: '🗑️ Vider le log',
+  css: {
+    backgroundColor: '#6c757d',
+    color: 'white',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '10px',
+    fontSize: '12px'
+  },
+  onclick: () => {
+    logContainer.innerHTML = '📝 Log vidé.';
+  },
+  parent: logSection
+});
+
+// === FONCTION UTILITAIRE ===
+
+function logActivity(message) {
+  const timestamp = new Date().toLocaleTimeString();
+  const logEntry = $('div', {
+    css: {
+      borderBottom: '1px solid #dee2e6',
+      paddingBottom: '5px',
+      marginBottom: '5px',
+      color: '#495057'
+    },
+    text: `[${timestamp}] ${message}`,
+    parent: logContainer
+  });
+  
+  // Scroll vers le bas
+  logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+// === FONCTION DE GESTION DU DROP CLASSIQUE ===
+
+function handleClassicDrop(zone, zoneElement, transferData) {
+  console.log('🔍 DEBUG handleClassicDrop:', {
+    zone: zone,
+    zoneElement: zoneElement,
+    transferData: transferData
+  });
+  
+  // Vérifier si l'élément est accepté
+  const isAccepted = zone.accepts.length === 0 || zone.accepts.includes(transferData.type);
+  
+  console.log('🔍 DEBUG validation classique:', {
+    accepts: zone.accepts,
+    transferType: transferData.type,
+    isAccepted: isAccepted
+  });
+  
+  if (isAccepted) {
+    // Trouver le container des éléments déposés dans cette zone
+    // Il s'agit du dernier div enfant de la zone
+    const droppedContainer = zoneElement.querySelector('div:last-child');
+    
+    console.log('🔍 DEBUG container recherche:', {
+      zoneElement: zoneElement,
+      droppedContainer: droppedContainer,
+      children: Array.from(zoneElement.children)
+    });
+    
+    if (droppedContainer) {
+      // Retrouver l'élément original pour copier son style
+      const originalItem = draggableItems.find(item => 
+        item.data.type === transferData.type && item.data.value === transferData.value
+      );
+      
+      // Créer une copie visuelle de l'élément déposé
+      const droppedItem = $('div', {
+        css: {
+          width: '60px',
+          height: '40px',
+          backgroundColor: originalItem ? originalItem.color : '#27ae60',
+          color: 'white',
+          borderRadius: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '10px',
+          margin: '3px',
+          border: '1px solid rgba(255,255,255,0.3)',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          cursor: 'pointer',
+          transition: 'transform 0.2s ease',
+          position: 'relative',
+          fontWeight: 'bold',
+          textAlign: 'center'
+        },
+        text: originalItem ? originalItem.text : (transferData.value || 'Objet'),
+        parent: droppedContainer
+      });
+
+      // Ajouter les interactions
+      droppedItem.addEventListener('mouseenter', () => {
+        droppedItem.style.transform = 'scale(1.1)';
+      });
+      
+      droppedItem.addEventListener('mouseleave', () => {
+        droppedItem.style.transform = 'scale(1)';
+      });
+      
+      droppedItem.addEventListener('dblclick', () => {
+        droppedItem.style.animation = 'fadeOut 0.3s ease-out forwards';
+        setTimeout(() => {
+          if (droppedItem.parentNode) {
+            droppedItem.parentNode.removeChild(droppedItem);
+          }
+        }, 300);
+        logActivity(`🗑️ Élément retiré de ${zone.title}`);
+      });
+
+      console.log('✅ Élément déposé créé (classique):', droppedItem);
+      logActivity(`✅ Dépôt réussi (classique) dans ${zone.title}: ${originalItem ? originalItem.text : transferData.value}`);
+    }
+  } else {
+    logActivity(`❌ Dépôt rejeté (classique) dans ${zone.title}: type non accepté`);
+    
+    // Animation de rejet
+    zoneElement.style.animation = 'shake 0.5s ease-in-out';
+    setTimeout(() => {
+      zoneElement.style.animation = '';
+    }, 500);
+  }
+}
+
+// === STYLES CSS ADDITIONNELS ===
+
+// Ajouter des styles CSS pour l'animation de rejet
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+  
+  @keyframes fadeOut {
+    0% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.8); }
+  }
+  
+  .dragging {
+    opacity: 0.7;
+    transform: scale(0.95) rotate(5deg);
+    z-index: 1000;
+    transition: none !important; /* Désactiver transitions pendant drag */
+  }
+  
+  .no-transition {
+    transition: none !important;
+  }
+  
+  .drop-hover {
+    border-color: #27ae60 !important;
+    background-color: #e8f5e8 !important;
+    transform: scale(1.02);
+  }
+`;
+document.head.appendChild(style);
+
+console.log('✅ Exemple Drag & Drop chargé avec succès !');
