@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎹 Basic Synth Test - Tone.js</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #FFD700;
+            margin-bottom: 30px;
+        }
+
+        .control-panel {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .synth-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .synth-card {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .note-buttons {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .note-btn {
+            background: linear-gradient(145deg, #f0f0f0, #c0c0c0);
+            color: #333;
+            border: none;
+            padding: 15px 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .note-btn:hover {
+            background: linear-gradient(145deg, #fff, #e0e0e0);
+            transform: translateY(-2px);
+        }
+
+        .note-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .black-key {
+            background: linear-gradient(145deg, #333, #000);
+            color: white;
+            grid-column: span 1;
+            margin: 0 -5px;
+            z-index: 2;
+            height: 60px;
+        }
+
+        .status {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 14px;
+            min-height: 100px;
+            overflow-y: auto;
+        }
+
+        .info-panel {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .slider-group {
+            margin: 15px 0;
+        }
+
+        .slider-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .slider {
+            width: 100%;
+            height: 5px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+        }
+
+        .navigation {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .navigation a {
+            color: #FFD700;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+        }
+
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎹 Basic Synth Test</h1>
+
+        <div class="control-panel">
+            <h3>🎛️ Audio Controls</h3>
+            <button class="btn" onclick="startAudio()" id="startBtn">🎵 Start Audio Context</button>
+            <button class="btn" onclick="stopAllAudio()" id="stopBtn" disabled>🛑 Stop All</button>
+            
+            <div class="slider-group">
+                <label for="volumeSlider">🔊 Master Volume</label>
+                <input type="range" id="volumeSlider" class="slider" min="-30" max="0" value="-10" onchange="setMasterVolume(this.value)">
+                <span id="volumeValue">-10 dB</span>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <h3>🎹 Synthesizer Types</h3>
+            <div class="synth-grid" id="synthGrid">
+                <!-- Synth buttons will be populated here -->
+            </div>
+            <p><em>Current Synth: <span id="currentSynth">None</span></em></p>
+        </div>
+
+        <div class="control-panel">
+            <h3>🎼 Play Notes</h3>
+            <div class="note-buttons" id="noteButtons">
+                <!-- Piano keys will be populated here -->
+            </div>
+        </div>
+
+        <div class="info-panel">
+            <h3>📊 System Info</h3>
+            <div id="systemInfo">Loading...</div>
+        </div>
+
+        <div class="status" id="statusLog">
+            🎵 Tone.js Basic Synth Test loaded. Click "Start Audio Context" to begin!
+        </div>
+
+        <div class="navigation">
+            <a href="index.html">← Back to Tests</a>
+            <a href="drum-machine-test.html">Next: Drum Machine →</a>
+        </div>
+    </div>
+
+    <!-- Load Tone.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <script src="tone-wrapper.js"></script>
+
+    <script>
+        let currentSynthId = null;
+        let activeSynth = null;
+        let masterVolume = new Tone.Volume(-10).toDestination();
+
+        const synthTypes = [
+            { type: 'sine', name: '🌊 Sine Wave', icon: '🌊' },
+            { type: 'square', name: '⬛ Square Wave', icon: '⬛' },
+            { type: 'sawtooth', name: '🪚 Sawtooth', icon: '🪚' },
+            { type: 'triangle', name: '🔺 Triangle', icon: '🔺' },
+            { type: 'am', name: '📻 AM Synth', icon: '📻' },
+            { type: 'fm', name: '📡 FM Synth', icon: '📡' },
+            { type: 'mono', name: '🎛️ Mono Synth', icon: '🎛️' },
+            { type: 'poly', name: '🎹 Poly Synth', icon: '🎹' }
+        ];
+
+        const notes = [
+            { note: 'C4', name: 'C', type: 'white' },
+            { note: 'C#4', name: 'C#', type: 'black' },
+            { note: 'D4', name: 'D', type: 'white' },
+            { note: 'D#4', name: 'D#', type: 'black' },
+            { note: 'E4', name: 'E', type: 'white' },
+            { note: 'F4', name: 'F', type: 'white' },
+            { note: 'F#4', name: 'F#', type: 'black' },
+            { note: 'G4', name: 'G', type: 'white' },
+            { note: 'G#4', name: 'G#', type: 'black' },
+            { note: 'A4', name: 'A', type: 'white' },
+            { note: 'A#4', name: 'A#', type: 'black' },
+            { note: 'B4', name: 'B', type: 'white' }
+        ];
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const statusLog = document.getElementById('statusLog');
+            statusLog.innerHTML += `\n[${timestamp}] ${message}`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+            console.log(message);
+        }
+
+        function updateSystemInfo() {
+            const info = document.getElementById('systemInfo');
+            const audioInfo = toneWrapper.getAudioInfo();
+            
+            info.innerHTML = `
+                <strong>Tone.js Version:</strong> ${audioInfo.toneVersion}<br>
+                <strong>Context State:</strong> ${audioInfo.contextState}<br>
+                <strong>Sample Rate:</strong> ${audioInfo.sampleRate} Hz<br>
+                <strong>Active Synths:</strong> ${audioInfo.activeSynths}<br>
+                <strong>Active Players:</strong> ${audioInfo.activePlayers}<br>
+                <strong>Active Effects:</strong> ${audioInfo.activeEffects}<br>
+                <strong>Current Tempo:</strong> ${audioInfo.tempo} BPM
+            `;
+        }
+
+        async function startAudio() {
+            try {
+                await toneWrapper.startAudio();
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                log('🎵 Audio context started successfully!');
+                updateSystemInfo();
+                enableSynthButtons();
+            } catch (error) {
+                log(`❌ Error starting audio: ${error.message}`);
+            }
+        }
+
+        function stopAllAudio() {
+            toneWrapper.stopAudio();
+            if (activeSynth) {
+                activeSynth.destroy();
+                activeSynth = null;
+                currentSynthId = null;
+            }
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('currentSynth').textContent = 'None';
+            log('🛑 All audio stopped');
+            updateSystemInfo();
+        }
+
+        function enableSynthButtons() {
+            const buttons = document.querySelectorAll('.synth-btn');
+            buttons.forEach(btn => btn.disabled = false);
+        }
+
+        function createSynth(type) {
+            try {
+                // Destroy previous synth
+                if (activeSynth) {
+                    activeSynth.destroy();
+                }
+
+                // Create new synth
+                activeSynth = toneWrapper.createSynth(type);
+                activeSynth.synth.connect(masterVolume);
+                
+                currentSynthId = activeSynth.id;
+                document.getElementById('currentSynth').textContent = type.toUpperCase();
+                
+                log(`🎹 Created ${type} synthesizer (ID: ${currentSynthId})`);
+                updateSystemInfo();
+                
+                // Update button states
+                document.querySelectorAll('.synth-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.querySelector(`[data-synth="${type}"]`).classList.add('active');
+                
+            } catch (error) {
+                log(`❌ Error creating synth: ${error.message}`);
+            }
+        }
+
+        function playNote(note) {
+            if (!activeSynth) {
+                log('⚠️ Please select a synthesizer first');
+                return;
+            }
+
+            try {
+                activeSynth.triggerAttackRelease(note, '8n');
+                log(`🎵 Playing note: ${note}`);
+            } catch (error) {
+                log(`❌ Error playing note: ${error.message}`);
+            }
+        }
+
+        function setMasterVolume(value) {
+            masterVolume.volume.value = value;
+            document.getElementById('volumeValue').textContent = `${value} dB`;
+            log(`🔊 Master volume set to ${value} dB`);
+        }
+
+        // Initialize UI
+        function initializeUI() {
+            // Create synth buttons
+            const synthGrid = document.getElementById('synthGrid');
+            synthTypes.forEach(synth => {
+                const button = document.createElement('button');
+                button.className = 'btn synth-btn';
+                button.setAttribute('data-synth', synth.type);
+                button.disabled = true;
+                button.innerHTML = `${synth.icon}<br>${synth.name}`;
+                button.onclick = () => createSynth(synth.type);
+                
+                const card = document.createElement('div');
+                card.className = 'synth-card';
+                card.appendChild(button);
+                synthGrid.appendChild(card);
+            });
+
+            // Create note buttons
+            const noteButtons = document.getElementById('noteButtons');
+            notes.forEach(noteData => {
+                const button = document.createElement('button');
+                button.className = `note-btn ${noteData.type === 'black' ? 'black-key' : ''}`;
+                button.textContent = noteData.name;
+                button.onclick = () => playNote(noteData.note);
+                noteButtons.appendChild(button);
+            });
+
+            updateSystemInfo();
+            log('🎹 Basic Synth Test initialized. Ready to make music!');
+        }
+
+        // Add CSS for active synth
+        const style = document.createElement('style');
+        style.textContent = `
+            .synth-btn.active {
+                background: linear-gradient(45deg, #FFD700, #FFA500) !important;
+                color: #333 !important;
+                transform: scale(1.05);
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeUI);
+    </script>
+</body>
+</html>

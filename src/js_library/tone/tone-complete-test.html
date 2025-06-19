@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎛️ Tone.js Complete Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 50%, #16213e 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #FFD700;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto auto;
+            gap: 20px;
+            height: 80vh;
+        }
+
+        .panel {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            overflow-y: auto;
+        }
+
+        .panel h3 {
+            color: #FFD700;
+            margin-bottom: 15px;
+            text-align: center;
+            border-bottom: 2px solid #FFD700;
+            padding-bottom: 10px;
+        }
+
+        .mixer {
+            grid-column: 1 / -1;
+            grid-row: 1;
+        }
+
+        .synthesizer {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .drum-machine {
+            grid-column: 2;
+            grid-row: 2;
+        }
+
+        .sequencer {
+            grid-column: 1 / -1;
+            grid-row: 3;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 3px;
+            transition: all 0.3s ease;
+            min-width: 80px;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.active {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #333;
+        }
+
+        .transport-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .faders {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .fader-channel {
+            text-align: center;
+        }        .fader {
+            width: 100%;
+            height: 150px;
+            writing-mode: bt-lr;
+            -webkit-appearance: slider-vertical;
+            appearance: slider-vertical;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            border-radius: 10px;
+        }
+
+        .synth-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .drum-pads {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .drum-pad {
+            aspect-ratio: 1;
+            background: linear-gradient(145deg, #444, #222);
+            border: 2px solid #666;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-weight: bold;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .drum-pad:hover {
+            border-color: #FFD700;
+            transform: scale(1.05);
+        }
+
+        .drum-pad:active, .drum-pad.playing {
+            background: linear-gradient(145deg, #FFD700, #FFA500);
+            color: #333;
+            transform: scale(0.95);
+        }
+
+        .pattern-row {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .pattern-label {
+            width: 60px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .pattern-steps {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 2px;
+            flex: 1;
+            margin-left: 10px;
+        }
+
+        .pattern-step {
+            aspect-ratio: 1;
+            background-color: #333;
+            border: 1px solid #666;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .pattern-step:hover {
+            border-color: #FFD700;
+        }
+
+        .pattern-step.active {
+            background-color: #FFD700;
+        }
+
+        .pattern-step.current {
+            box-shadow: 0 0 8px #00FF00;
+            border-color: #00FF00;
+        }
+
+        .status-bar {
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 10px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 12px;
+            height: 100px;
+            overflow-y: auto;
+        }
+
+        .visualization {
+            height: 80px;
+            background: linear-gradient(90deg, #000 0%, #333 50%, #000 100%);
+            border-radius: 10px;
+            margin: 15px 0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .waveform {
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 255, 0, 0.1) 2px,
+                rgba(0, 255, 0, 0.1) 4px
+            );
+        }
+
+        .navigation {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .navigation a {
+            color: #FFD700;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+        }
+
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+
+        .tempo-display {
+            font-size: 2em;
+            font-weight: bold;
+            color: #FFD700;
+            text-align: center;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎛️ Tone.js Complete Audio Workstation</h1>
+
+        <div class="workspace">
+            <!-- Mixer Panel -->
+            <div class="panel mixer">
+                <h3>🎚️ Mixer & Transport</h3>
+                
+                <div class="transport-controls">
+                    <button class="btn" onclick="startAudio()" id="startBtn">🎵 Start Audio</button>
+                    <button class="btn" onclick="playSequence()" id="playBtn" disabled>▶️ Play</button>
+                    <button class="btn" onclick="stopSequence()" id="stopBtn" disabled>⏹️ Stop</button>
+                    <button class="btn" onclick="recordPattern()" id="recordBtn" disabled>🔴 Record</button>
+                    <button class="btn" onclick="clearAll()" id="clearBtn">🗑️ Clear All</button>
+                </div>
+
+                <div class="tempo-display" id="tempoDisplay">120 BPM</div>
+                
+                <div class="faders">
+                    <div class="fader-channel">
+                        <label>KICK</label>
+                        <input type="range" class="fader" min="0" max="100" value="80" orient="vertical" onchange="setChannelVolume('kick', this.value)">
+                    </div>
+                    <div class="fader-channel">
+                        <label>SNARE</label>
+                        <input type="range" class="fader" min="0" max="100" value="75" orient="vertical" onchange="setChannelVolume('snare', this.value)">
+                    </div>
+                    <div class="fader-channel">
+                        <label>HIHAT</label>
+                        <input type="range" class="fader" min="0" max="100" value="60" orient="vertical" onchange="setChannelVolume('hihat', this.value)">
+                    </div>
+                    <div class="fader-channel">
+                        <label>SYNTH</label>
+                        <input type="range" class="fader" min="0" max="100" value="70" orient="vertical" onchange="setChannelVolume('synth', this.value)">
+                    </div>
+                    <div class="fader-channel">
+                        <label>REVERB</label>
+                        <input type="range" class="fader" min="0" max="100" value="30" orient="vertical" onchange="setEffectLevel('reverb', this.value)">
+                    </div>
+                    <div class="fader-channel">
+                        <label>DELAY</label>
+                        <input type="range" class="fader" min="0" max="100" value="20" orient="vertical" onchange="setEffectLevel('delay', this.value)">
+                    </div>
+                    <div class="fader-channel">
+                        <label>FILTER</label>
+                        <input type="range" class="fader" min="0" max="100" value="50" orient="vertical" onchange="setEffectLevel('filter', this.value)">
+                    </div>
+                    <div class="fader-channel">
+                        <label>MASTER</label>
+                        <input type="range" class="fader" min="0" max="100" value="85" orient="vertical" onchange="setMasterVolume(this.value)">
+                    </div>
+                </div>
+
+                <div class="visualization">
+                    <div class="waveform" id="waveform"></div>
+                </div>
+            </div>
+
+            <!-- Synthesizer Panel -->
+            <div class="panel synthesizer">
+                <h3>🎹 Synthesizer</h3>
+                
+                <div class="synth-controls">
+                    <button class="btn" onclick="selectSynth('sine')" data-synth="sine">🌊 Sine</button>
+                    <button class="btn" onclick="selectSynth('square')" data-synth="square">⬛ Square</button>
+                    <button class="btn" onclick="selectSynth('sawtooth')" data-synth="sawtooth">🪚 Saw</button>
+                    <button class="btn" onclick="selectSynth('triangle')" data-synth="triangle">🔺 Triangle</button>
+                    <button class="btn" onclick="selectSynth('fm')" data-synth="fm">📡 FM</button>
+                    <button class="btn" onclick="selectSynth('am')" data-synth="am">📻 AM</button>
+                </div>
+
+                <div style="margin: 15px 0;">
+                    <label>Octave: <span id="octaveValue">4</span></label>
+                    <input type="range" style="width: 100%;" min="2" max="6" value="4" onchange="setOctave(this.value)">
+                </div>
+
+                <div style="margin: 15px 0;">
+                    <label>Attack: <span id="attackValue">0.1</span>s</label>
+                    <input type="range" style="width: 100%;" min="0" max="1" step="0.1" value="0.1" onchange="setAttack(this.value)">
+                </div>
+
+                <div style="margin: 15px 0;">
+                    <label>Release: <span id="releaseValue">0.5</span>s</label>
+                    <input type="range" style="width: 100%;" min="0.1" max="2" step="0.1" value="0.5" onchange="setRelease(this.value)">
+                </div>
+
+                <!-- Mini Keyboard -->
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin: 15px 0;">
+                    <button class="btn" onclick="playNote('C')" style="background: linear-gradient(145deg, #f0f0f0, #c0c0c0); color: #333;">C</button>
+                    <button class="btn" onclick="playNote('D')" style="background: linear-gradient(145deg, #f0f0f0, #c0c0c0); color: #333;">D</button>
+                    <button class="btn" onclick="playNote('E')" style="background: linear-gradient(145deg, #f0f0f0, #c0c0c0); color: #333;">E</button>
+                    <button class="btn" onclick="playNote('F')" style="background: linear-gradient(145deg, #f0f0f0, #c0c0c0); color: #333;">F</button>
+                    <button class="btn" onclick="playNote('G')" style="background: linear-gradient(145deg, #f0f0f0, #c0c0c0); color: #333;">G</button>
+                    <button class="btn" onclick="playNote('A')" style="background: linear-gradient(145deg, #f0f0f0, #c0c0c0); color: #333;">A</button>
+                    <button class="btn" onclick="playNote('B')" style="background: linear-gradient(145deg, #f0f0f0, #c0c0c0); color: #333;">B</button>
+                </div>
+
+                <div id="synthInfo" style="font-size: 12px; color: #ccc;">
+                    Current: None selected
+                </div>
+            </div>
+
+            <!-- Drum Machine Panel -->
+            <div class="panel drum-machine">
+                <h3>🥁 Drum Machine</h3>
+                
+                <div class="drum-pads">
+                    <div class="drum-pad" onclick="playDrum('kick')" data-drum="kick">KICK</div>
+                    <div class="drum-pad" onclick="playDrum('snare')" data-drum="snare">SNARE</div>
+                    <div class="drum-pad" onclick="playDrum('hihat')" data-drum="hihat">HIHAT</div>
+                    <div class="drum-pad" onclick="playDrum('crash')" data-drum="crash">CRASH</div>
+                    <div class="drum-pad" onclick="playDrum('openhat')" data-drum="openhat">OPEN</div>
+                    <div class="drum-pad" onclick="playDrum('clap')" data-drum="clap">CLAP</div>
+                    <div class="drum-pad" onclick="playDrum('tom')" data-drum="tom">TOM</div>
+                    <div class="drum-pad" onclick="playDrum('perc')" data-drum="perc">PERC</div>
+                </div>
+
+                <div style="margin: 15px 0;">
+                    <label>Tempo: <span id="tempoValue">120</span> BPM</label>
+                    <input type="range" style="width: 100%;" min="60" max="200" value="120" onchange="setTempo(this.value)">
+                </div>
+
+                <div style="margin: 15px 0;">
+                    <label>Swing: <span id="swingValue">0</span>%</label>
+                    <input type="range" style="width: 100%;" min="0" max="50" value="0" onchange="setSwing(this.value)">
+                </div>
+
+                <div style="text-align: center; margin: 15px 0;">
+                    <button class="btn" onclick="loadPreset('basic')">Basic</button>
+                    <button class="btn" onclick="loadPreset('rock')">Rock</button>
+                    <button class="btn" onclick="loadPreset('techno')">Techno</button>
+                </div>
+            </div>
+
+            <!-- Sequencer Panel -->
+            <div class="panel sequencer">
+                <h3>🎼 16-Step Sequencer</h3>
+                
+                <div id="sequencerGrid">
+                    <!-- Pattern rows will be populated here -->
+                </div>
+
+                <div style="text-align: center; margin: 15px 0;">
+                    <button class="btn" onclick="randomizePattern()">🎲 Randomize</button>
+                    <button class="btn" onclick="savePattern()">💾 Save</button>
+                    <button class="btn" onclick="loadPattern()">📁 Load</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar" id="statusLog">
+            🎛️ Complete Audio Workstation loaded. Click "Start Audio" to begin!
+        </div>
+
+        <div class="navigation">
+            <a href="index.html">← Back to Tests</a>
+            <a href="basic-synth-test.html">Basic Synth</a>
+            <a href="drum-machine-test.html">Drum Machine</a>
+            <a href="README.md">Documentation</a>
+        </div>
+    </div>
+
+    <!-- Load Tone.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <script src="tone-wrapper.js"></script>
+
+    <script>
+        // Global state
+        let currentSynth = null;
+        let drumMachine = null;
+        let isPlaying = false;
+        let currentStep = 0;
+        let sequence = null;
+        let octave = 4;
+        let pattern = {};
+        let effects = {};
+
+        const drumTypes = ['kick', 'snare', 'hihat', 'crash'];
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const statusLog = document.getElementById('statusLog');
+            statusLog.innerHTML += `\n[${timestamp}] ${message}`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+            console.log(message);
+        }
+
+        async function startAudio() {
+            try {
+                await toneWrapper.startAudio();
+                
+                // Create drum machine
+                drumMachine = toneWrapper.createDrumMachine();
+                
+                // Create effects
+                effects.reverb = toneWrapper.createEffect('reverb', { roomSize: 0.5 });
+                effects.delay = toneWrapper.createEffect('delay', { delayTime: '8n' });
+                
+                // Initialize pattern
+                initializePattern();
+                createSequencerUI();
+                
+                // Enable controls
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('playBtn').disabled = false;
+                document.getElementById('recordBtn').disabled = false;
+                
+                log('🎵 Audio workstation initialized!');
+                updateDisplay();
+                
+            } catch (error) {
+                log(`❌ Error starting audio: ${error.message}`);
+            }
+        }
+
+        function selectSynth(type) {
+            try {
+                if (currentSynth) {
+                    currentSynth.destroy();
+                }
+                
+                currentSynth = toneWrapper.createSynth(type);
+                
+                // Connect through effects
+                if (effects.reverb && effects.delay) {
+                    currentSynth.synth.connect(effects.reverb.effect);
+                    effects.reverb.connect(effects.delay.effect);
+                    effects.delay.connect(Tone.Destination);
+                }
+                
+                // Update UI
+                document.querySelectorAll('[data-synth]').forEach(btn => btn.classList.remove('active'));
+                document.querySelector(`[data-synth="${type}"]`).classList.add('active');
+                
+                document.getElementById('synthInfo').textContent = `Current: ${type.toUpperCase()} Synth`;
+                log(`🎹 Selected ${type} synthesizer`);
+                
+            } catch (error) {
+                log(`❌ Error creating synth: ${error.message}`);
+            }
+        }
+
+        function playNote(note) {
+            if (!currentSynth) {
+                log('⚠️ Please select a synthesizer first');
+                return;
+            }
+            
+            const fullNote = note + octave;
+            currentSynth.triggerAttackRelease(fullNote, '8n');
+            log(`🎵 Playing ${fullNote}`);
+        }
+
+        function playDrum(drumType) {
+            if (!drumMachine) {
+                log('⚠️ Audio not started');
+                return;
+            }
+
+            const pad = document.querySelector(`[data-drum="${drumType}"]`);
+            pad.classList.add('playing');
+            setTimeout(() => pad.classList.remove('playing'), 150);
+
+            switch(drumType) {
+                case 'kick':
+                    drumMachine.kick();
+                    break;
+                case 'snare':
+                    drumMachine.snare();
+                    break;
+                case 'hihat':
+                case 'crash':
+                case 'openhat':
+                case 'clap':
+                case 'tom':
+                case 'perc':
+                    drumMachine.hihat(); // Use hihat for other drums
+                    break;
+            }
+            
+            log(`🥁 ${drumType.toUpperCase()}`);
+        }
+
+        function initializePattern() {
+            drumTypes.forEach(drum => {
+                pattern[drum] = new Array(16).fill(0);
+            });
+        }
+
+        function createSequencerUI() {
+            const grid = document.getElementById('sequencerGrid');
+            grid.innerHTML = '';
+
+            drumTypes.forEach(drumType => {
+                const row = document.createElement('div');
+                row.className = 'pattern-row';
+                
+                const label = document.createElement('div');
+                label.className = 'pattern-label';
+                label.textContent = drumType.toUpperCase();
+                row.appendChild(label);
+
+                const steps = document.createElement('div');
+                steps.className = 'pattern-steps';
+                
+                for (let step = 0; step < 16; step++) {
+                    const stepBtn = document.createElement('div');
+                    stepBtn.className = 'pattern-step';
+                    stepBtn.dataset.drum = drumType;
+                    stepBtn.dataset.step = step;
+                    stepBtn.onclick = () => toggleStep(drumType, step);
+                    steps.appendChild(stepBtn);
+                }
+
+                row.appendChild(steps);
+                grid.appendChild(row);
+            });
+        }
+
+        function toggleStep(drumType, step) {
+            pattern[drumType][step] = pattern[drumType][step] ? 0 : 1;
+            updatePatternUI();
+            log(`🎼 ${drumType} step ${step + 1}: ${pattern[drumType][step] ? 'ON' : 'OFF'}`);
+        }
+
+        function updatePatternUI() {
+            drumTypes.forEach(drumType => {
+                for (let step = 0; step < 16; step++) {
+                    const stepElement = document.querySelector(`[data-drum="${drumType}"][data-step="${step}"]`);
+                    if (stepElement) {
+                        stepElement.classList.toggle('active', pattern[drumType][step] === 1);
+                    }
+                }
+            });
+        }
+
+        function playSequence() {
+            if (isPlaying) return;
+            
+            isPlaying = true;
+            currentStep = 0;
+            
+            sequence = new Tone.Sequence((time) => {
+                // Update UI
+                updateCurrentStepUI();
+                
+                // Play drums
+                drumTypes.forEach(drumType => {
+                    if (pattern[drumType][currentStep]) {
+                        Tone.Draw.schedule(() => {
+                            playDrum(drumType);
+                        }, time);
+                    }
+                });
+
+                currentStep = (currentStep + 1) % 16;
+            }, new Array(16).fill(0), '16n').start(0);
+
+            Tone.Transport.start();
+            
+            document.getElementById('playBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            log('▶️ Sequence started');
+        }
+
+        function stopSequence() {
+            if (sequence) {
+                sequence.stop();
+                sequence.dispose();
+                sequence = null;
+            }
+            
+            Tone.Transport.stop();
+            Tone.Transport.cancel(0);
+            
+            isPlaying = false;
+            currentStep = 0;
+            clearCurrentStepUI();
+            
+            document.getElementById('playBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            log('⏹️ Sequence stopped');
+        }
+
+        function updateCurrentStepUI() {
+            // Clear previous highlights
+            document.querySelectorAll('.pattern-step.current').forEach(el => {
+                el.classList.remove('current');
+            });
+
+            // Highlight current step
+            drumTypes.forEach(drumType => {
+                const stepElement = document.querySelector(`[data-drum="${drumType}"][data-step="${currentStep}"]`);
+                if (stepElement) {
+                    stepElement.classList.add('current');
+                }
+            });
+        }
+
+        function clearCurrentStepUI() {
+            document.querySelectorAll('.pattern-step.current').forEach(el => {
+                el.classList.remove('current');
+            });
+        }
+
+        function loadPreset(presetName) {
+            const presets = {
+                basic: {
+                    kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+                    snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+                    hihat: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]
+                },
+                rock: {
+                    kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+                    snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+                    hihat: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    crash: [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0]
+                },
+                techno: {
+                    kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+                    hihat: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+                    snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0]
+                }
+            };
+
+            if (presets[presetName]) {
+                stopSequence();
+                Object.keys(presets[presetName]).forEach(drum => {
+                    if (pattern[drum]) {
+                        pattern[drum] = presets[presetName][drum].slice();
+                    }
+                });
+                updatePatternUI();
+                log(`🎼 Loaded ${presetName.toUpperCase()} preset`);
+            }
+        }
+
+        function randomizePattern() {
+            stopSequence();
+            drumTypes.forEach(drum => {
+                for (let i = 0; i < 16; i++) {
+                    pattern[drum][i] = Math.random() > 0.7 ? 1 : 0;
+                }
+            });
+            updatePatternUI();
+            log('🎲 Pattern randomized');
+        }
+
+        function clearAll() {
+            stopSequence();
+            initializePattern();
+            updatePatternUI();
+            log('🗑️ All patterns cleared');
+        }
+
+        function setTempo(value) {
+            toneWrapper.setTempo(value);
+            document.getElementById('tempoValue').textContent = value;
+            document.getElementById('tempoDisplay').textContent = `${value} BPM`;
+            log(`⏱️ Tempo: ${value} BPM`);
+        }
+
+        function setOctave(value) {
+            octave = parseInt(value);
+            document.getElementById('octaveValue').textContent = value;
+            log(`🎹 Octave: ${value}`);
+        }
+
+        function setAttack(value) {
+            document.getElementById('attackValue').textContent = value;
+            if (currentSynth) {
+                currentSynth.synth.envelope.attack = parseFloat(value);
+            }
+        }
+
+        function setRelease(value) {
+            document.getElementById('releaseValue').textContent = value;
+            if (currentSynth) {
+                currentSynth.synth.envelope.release = parseFloat(value);
+            }
+        }
+
+        function setSwing(value) {
+            Tone.Transport.swing = value / 100;
+            document.getElementById('swingValue').textContent = value;
+            log(`🎷 Swing: ${value}%`);
+        }
+
+        function setChannelVolume(channel, value) {
+            // Implementation would depend on having individual channel controls
+            log(`🎚️ ${channel.toUpperCase()} volume: ${value}%`);
+        }
+
+        function setEffectLevel(effect, value) {
+            // Implementation would depend on effect routing
+            log(`🎛️ ${effect.toUpperCase()} level: ${value}%`);
+        }
+
+        function setMasterVolume(value) {
+            const db = (value - 100) * 0.6; // Convert 0-100 to roughly -60 to 0 dB
+            Tone.Destination.volume.value = db;
+            log(`🔊 Master volume: ${value}% (${db.toFixed(1)} dB)`);
+        }
+
+        function recordPattern() {
+            log('🔴 Recording feature coming soon!');
+        }
+
+        function savePattern() {
+            const data = JSON.stringify(pattern);
+            localStorage.setItem('toneWorkstationPattern', data);
+            log('💾 Pattern saved to browser storage');
+        }
+
+        function loadPattern() {
+            const data = localStorage.getItem('toneWorkstationPattern');
+            if (data) {
+                pattern = JSON.parse(data);
+                updatePatternUI();
+                log('📁 Pattern loaded from browser storage');
+            } else {
+                log('⚠️ No saved pattern found');
+            }
+        }
+
+        function updateDisplay() {
+            // Animate the visualization
+            const waveform = document.getElementById('waveform');
+            if (waveform && isPlaying) {
+                waveform.style.background = `
+                    repeating-linear-gradient(
+                        90deg,
+                        transparent,
+                        transparent 2px,
+                        rgba(0, 255, 0, ${Math.random() * 0.5 + 0.1}) 2px,
+                        rgba(0, 255, 0, ${Math.random() * 0.5 + 0.1}) 4px
+                    )
+                `;
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            
+            switch(e.key.toLowerCase()) {
+                case ' ':
+                    e.preventDefault();
+                    if (isPlaying) stopSequence();
+                    else playSequence();
+                    break;
+                case 'q': playNote('C'); break;
+                case 'w': playNote('D'); break;
+                case 'e': playNote('E'); break;
+                case 'r': playNote('F'); break;
+                case 't': playNote('G'); break;
+                case 'y': playNote('A'); break;
+                case 'u': playNote('B'); break;
+                case 'z': playDrum('kick'); break;
+                case 'x': playDrum('snare'); break;
+                case 'c': playDrum('hihat'); break;
+                case 'v': playDrum('crash'); break;
+            }
+        });
+
+        // Update display periodically
+        setInterval(updateDisplay, 100);
+
+        log('🎛️ Complete Audio Workstation ready! Press SPACE to play/stop, Q-U for notes, Z-V for drums');
+    </script>
+</body>
+</html>

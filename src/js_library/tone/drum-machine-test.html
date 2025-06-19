@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🥁 Drum Machine - Tone.js</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #FFD700;
+            margin-bottom: 30px;
+        }
+
+        .drum-machine {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 3px solid #FFD700;
+        }
+
+        .drum-pads {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .drum-pad {
+            background: linear-gradient(145deg, #444, #222);
+            border: 3px solid #666;
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: white;
+            user-select: none;
+        }
+
+        .drum-pad:hover {
+            background: linear-gradient(145deg, #555, #333);
+            border-color: #FFD700;
+            transform: scale(1.05);
+        }
+
+        .drum-pad:active,
+        .drum-pad.playing {
+            background: linear-gradient(145deg, #FFD700, #FFA500);
+            color: #333;
+            transform: scale(0.95);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .control-group {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin: 5px;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.active {
+            background: linear-gradient(45deg, #FFD700, #FFA500);
+            color: #333;
+        }
+
+        .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 5px;
+            margin: 15px 0;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .pattern-step {
+            aspect-ratio: 1;
+            background-color: #333;
+            border: 2px solid #666;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .pattern-step:hover {
+            border-color: #FFD700;
+        }
+
+        .pattern-step.active {
+            background-color: #FFD700;
+            border-color: #FFA500;
+        }
+
+        .pattern-step.current {
+            box-shadow: 0 0 10px #00FF00;
+            border-color: #00FF00;
+        }
+
+        .slider-group {
+            margin: 15px 0;
+        }
+
+        .slider-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .slider {
+            width: 100%;
+            height: 5px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+        }
+
+        .status {
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .preset-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .navigation {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .navigation a {
+            color: #FFD700;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+        }
+
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥁 Drum Machine</h1>
+
+        <div class="control-group">
+            <h3>🎛️ Transport Controls</h3>
+            <button class="btn" onclick="startAudio()" id="startBtn">🎵 Start Audio</button>
+            <button class="btn" onclick="playPattern()" id="playBtn" disabled>▶️ Play Pattern</button>
+            <button class="btn" onclick="stopPattern()" id="stopBtn" disabled>⏹️ Stop</button>
+            <button class="btn" onclick="clearPattern()" id="clearBtn">🗑️ Clear Pattern</button>
+        </div>
+
+        <div class="drum-machine">
+            <h3>🥁 Drum Pads</h3>
+            <div class="drum-pads">
+                <div class="drum-pad" data-drum="kick" onclick="playDrum('kick')">
+                    <div>🦵 KICK</div>
+                    <div style="font-size: 0.8em;">C1</div>
+                </div>
+                <div class="drum-pad" data-drum="snare" onclick="playDrum('snare')">
+                    <div>🥁 SNARE</div>
+                    <div style="font-size: 0.8em;">D1</div>
+                </div>
+                <div class="drum-pad" data-drum="hihat" onclick="playDrum('hihat')">
+                    <div>🎩 HI-HAT</div>
+                    <div style="font-size: 0.8em;">F#1</div>
+                </div>
+                <div class="drum-pad" data-drum="crash" onclick="playDrum('crash')">
+                    <div>💥 CRASH</div>
+                    <div style="font-size: 0.8em;">C#2</div>
+                </div>
+                <div class="drum-pad" data-drum="openhat" onclick="playDrum('openhat')">
+                    <div>🔓 OPEN HAT</div>
+                    <div style="font-size: 0.8em;">A#1</div>
+                </div>
+                <div class="drum-pad" data-drum="clap" onclick="playDrum('clap')">
+                    <div>👏 CLAP</div>
+                    <div style="font-size: 0.8em;">D#1</div>
+                </div>
+                <div class="drum-pad" data-drum="tom" onclick="playDrum('tom')">
+                    <div>🎯 TOM</div>
+                    <div style="font-size: 0.8em;">G1</div>
+                </div>
+                <div class="drum-pad" data-drum="perc" onclick="playDrum('perc')">
+                    <div>🔔 PERC</div>
+                    <div style="font-size: 0.8em;">B1</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <h3>⏱️ Tempo & Time</h3>
+                <div class="slider-group">
+                    <label for="tempoSlider">🎼 Tempo: <span id="tempoValue">120</span> BPM</label>
+                    <input type="range" id="tempoSlider" class="slider" min="60" max="200" value="120" onchange="setTempo(this.value)">
+                </div>
+                <div class="slider-group">
+                    <label for="swingSlider">🎷 Swing: <span id="swingValue">0</span>%</label>
+                    <input type="range" id="swingSlider" class="slider" min="0" max="100" value="0" onchange="setSwing(this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>🔊 Volume Controls</h3>
+                <div class="slider-group">
+                    <label for="masterVol">🎚️ Master: <span id="masterValue">-10</span> dB</label>
+                    <input type="range" id="masterVol" class="slider" min="-30" max="0" value="-10" onchange="setMasterVolume(this.value)">
+                </div>
+                <div class="slider-group">
+                    <label for="drumVol">🥁 Drums: <span id="drumValue">0</span> dB</label>
+                    <input type="range" id="drumVol" class="slider" min="-20" max="10" value="0" onchange="setDrumVolume(this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>🎼 Pattern Presets</h3>
+                <div class="preset-buttons">
+                    <button class="btn" onclick="loadPreset('basic')">🎵 Basic Beat</button>
+                    <button class="btn" onclick="loadPreset('rock')">🎸 Rock</button>
+                    <button class="btn" onclick="loadPreset('techno')">🤖 Techno</button>
+                    <button class="btn" onclick="loadPreset('funk')">🕺 Funk</button>
+                    <button class="btn" onclick="loadPreset('trap')">🎤 Trap</button>
+                    <button class="btn" onclick="loadPreset('dnb')">⚡ D&B</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>🎼 Pattern Sequencer (16 Steps)</h3>
+            <div id="patternSequencer">
+                <!-- Pattern grid will be populated here -->
+            </div>
+        </div>
+
+        <div class="status" id="statusLog">
+            🥁 Drum Machine loaded. Click "Start Audio" to begin!
+        </div>
+
+        <div class="navigation">
+            <a href="basic-synth-test.html">← Basic Synth</a>
+            <a href="index.html">Back to Tests</a>
+            <a href="effects-test.html">Effects Test →</a>
+        </div>
+    </div>
+
+    <!-- Load Tone.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <script src="tone-wrapper.js"></script>
+
+    <script>
+        let drumMachine = null;
+        let currentSequence = null;
+        let isPlaying = false;
+        let currentStep = 0;
+        let pattern = {};
+        let masterVolume = new Tone.Volume(-10).toDestination();
+
+        const drumTypes = ['kick', 'snare', 'hihat', 'crash', 'openhat', 'clap', 'tom', 'perc'];
+
+        const presets = {
+            basic: {
+                kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+                snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+                hihat: [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]
+            },
+            rock: {
+                kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+                snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+                hihat: [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                crash: [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0]
+            },
+            techno: {
+                kick: [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0],
+                hihat: [0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0],
+                clap: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0]
+            },
+            funk: {
+                kick: [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0],
+                snare: [0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,0],
+                hihat: [1,0,1,1,0,1,1,0,1,1,0,1,0,1,1,0]
+            },
+            trap: {
+                kick: [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0],
+                snare: [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+                hihat: [1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1]
+            },
+            dnb: {
+                kick: [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0],
+                snare: [0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0],
+                hihat: [1,0,1,1,0,1,1,1,0,1,1,1,0,1,1,0]
+            }
+        };
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const statusLog = document.getElementById('statusLog');
+            statusLog.innerHTML += `\n[${timestamp}] ${message}`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+            console.log(message);
+        }
+
+        async function startAudio() {
+            try {
+                await toneWrapper.startAudio();
+                createDrumMachine();
+                initializePattern();
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('playBtn').disabled = false;
+                log('🎵 Audio context started! Drum machine ready.');
+            } catch (error) {
+                log(`❌ Error starting audio: ${error.message}`);
+            }
+        }
+
+        function createDrumMachine() {
+            drumMachine = toneWrapper.createDrumMachine();
+            log('🥁 Drum machine created with kick, snare, hihat');
+        }
+
+        function playDrum(drumType) {
+            if (!drumMachine) {
+                log('⚠️ Please start audio first');
+                return;
+            }
+
+            try {
+                const pad = document.querySelector(`[data-drum="${drumType}"]`);
+                pad.classList.add('playing');
+                setTimeout(() => pad.classList.remove('playing'), 150);
+
+                switch(drumType) {
+                    case 'kick':
+                        drumMachine.kick();
+                        break;
+                    case 'snare':
+                        drumMachine.snare();
+                        break;
+                    case 'hihat':
+                        drumMachine.hihat();
+                        break;
+                    case 'crash':
+                    case 'openhat':
+                    case 'clap':
+                    case 'tom':
+                    case 'perc':
+                        // Simulate other drums with existing ones
+                        drumMachine.hihat();
+                        break;
+                }
+
+                log(`🥁 ${drumType.toUpperCase()} played`);
+            } catch (error) {
+                log(`❌ Error playing ${drumType}: ${error.message}`);
+            }
+        }
+
+        function initializePattern() {
+            // Initialize empty pattern
+            drumTypes.forEach(drum => {
+                pattern[drum] = new Array(16).fill(0);
+            });
+            createPatternUI();
+        }
+
+        function createPatternUI() {
+            const sequencer = document.getElementById('patternSequencer');
+            sequencer.innerHTML = '';
+
+            drumTypes.forEach(drumType => {
+                const row = document.createElement('div');
+                row.style.marginBottom = '10px';
+                
+                const label = document.createElement('div');
+                label.textContent = drumType.toUpperCase();
+                label.style.display = 'inline-block';
+                label.style.width = '80px';
+                label.style.marginRight = '10px';
+                label.style.fontWeight = 'bold';
+                row.appendChild(label);
+
+                const grid = document.createElement('div');
+                grid.className = 'pattern-grid';
+                grid.style.display = 'inline-block';
+                grid.style.width = 'calc(100% - 100px)';
+
+                for (let step = 0; step < 16; step++) {
+                    const stepBtn = document.createElement('div');
+                    stepBtn.className = 'pattern-step';
+                    stepBtn.dataset.drum = drumType;
+                    stepBtn.dataset.step = step;
+                    stepBtn.onclick = () => toggleStep(drumType, step);
+                    grid.appendChild(stepBtn);
+                }
+
+                row.appendChild(grid);
+                sequencer.appendChild(row);
+            });
+        }
+
+        function toggleStep(drumType, step) {
+            pattern[drumType][step] = pattern[drumType][step] ? 0 : 1;
+            updatePatternUI();
+            log(`🎼 Pattern: ${drumType} step ${step + 1} ${pattern[drumType][step] ? 'ON' : 'OFF'}`);
+        }
+
+        function updatePatternUI() {
+            drumTypes.forEach(drumType => {
+                for (let step = 0; step < 16; step++) {
+                    const stepElement = document.querySelector(`[data-drum="${drumType}"][data-step="${step}"]`);
+                    if (stepElement) {
+                        stepElement.classList.toggle('active', pattern[drumType][step] === 1);
+                    }
+                }
+            });
+        }
+
+        function playPattern() {
+            if (!drumMachine) {
+                log('⚠️ Please start audio first');
+                return;
+            }
+
+            if (isPlaying) {
+                log('⚠️ Pattern already playing');
+                return;
+            }
+
+            isPlaying = true;
+            currentStep = 0;
+            
+            // Create sequence that plays the pattern
+            currentSequence = new Tone.Sequence((time) => {
+                // Highlight current step
+                updateCurrentStepUI();
+                
+                // Play drums for current step
+                drumTypes.forEach(drumType => {
+                    if (pattern[drumType][currentStep]) {
+                        Tone.Draw.schedule(() => {
+                            playDrum(drumType);
+                        }, time);
+                    }
+                });
+
+                currentStep = (currentStep + 1) % 16;
+            }, new Array(16).fill(0), '16n').start(0);
+
+            Tone.Transport.start();
+            
+            document.getElementById('playBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            log('▶️ Pattern started playing');
+        }
+
+        function stopPattern() {
+            if (currentSequence) {
+                currentSequence.stop();
+                currentSequence.dispose();
+                currentSequence = null;
+            }
+            
+            Tone.Transport.stop();
+            Tone.Transport.cancel(0);
+            
+            isPlaying = false;
+            currentStep = 0;
+            clearCurrentStepUI();
+            
+            document.getElementById('playBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            log('⏹️ Pattern stopped');
+        }
+
+        function clearPattern() {
+            stopPattern();
+            drumTypes.forEach(drum => {
+                pattern[drum] = new Array(16).fill(0);
+            });
+            updatePatternUI();
+            log('🗑️ Pattern cleared');
+        }
+
+        function updateCurrentStepUI() {
+            // Clear previous current step highlights
+            document.querySelectorAll('.pattern-step.current').forEach(el => {
+                el.classList.remove('current');
+            });
+
+            // Highlight current step for all drums
+            drumTypes.forEach(drumType => {
+                const stepElement = document.querySelector(`[data-drum="${drumType}"][data-step="${currentStep}"]`);
+                if (stepElement) {
+                    stepElement.classList.add('current');
+                }
+            });
+        }
+
+        function clearCurrentStepUI() {
+            document.querySelectorAll('.pattern-step.current').forEach(el => {
+                el.classList.remove('current');
+            });
+        }
+
+        function loadPreset(presetName) {
+            if (!presets[presetName]) {
+                log(`❌ Unknown preset: ${presetName}`);
+                return;
+            }
+
+            stopPattern();
+            
+            // Clear current pattern
+            drumTypes.forEach(drum => {
+                pattern[drum] = new Array(16).fill(0);
+            });
+
+            // Load preset
+            Object.keys(presets[presetName]).forEach(drum => {
+                if (pattern[drum]) {
+                    pattern[drum] = presets[presetName][drum].slice();
+                }
+            });
+
+            updatePatternUI();
+            log(`🎼 Loaded ${presetName.toUpperCase()} preset`);
+        }
+
+        function setTempo(value) {
+            toneWrapper.setTempo(value);
+            document.getElementById('tempoValue').textContent = value;
+            log(`⏱️ Tempo set to ${value} BPM`);
+        }
+
+        function setSwing(value) {
+            Tone.Transport.swing = value / 100;
+            document.getElementById('swingValue').textContent = value;
+            log(`🎷 Swing set to ${value}%`);
+        }
+
+        function setMasterVolume(value) {
+            masterVolume.volume.value = value;
+            document.getElementById('masterValue').textContent = value;
+            log(`🔊 Master volume: ${value} dB`);
+        }
+
+        function setDrumVolume(value) {
+            // This would require modifying the drum machine wrapper
+            document.getElementById('drumValue').textContent = value;
+            log(`🥁 Drum volume: ${value} dB`);
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (!drumMachine) return;
+            
+            switch(e.key.toLowerCase()) {
+                case 'z': playDrum('kick'); break;
+                case 'x': playDrum('snare'); break;
+                case 'c': playDrum('hihat'); break;
+                case 'v': playDrum('crash'); break;
+                case 'a': playDrum('openhat'); break;
+                case 's': playDrum('clap'); break;
+                case 'd': playDrum('tom'); break;
+                case 'f': playDrum('perc'); break;
+                case ' ': 
+                    e.preventDefault();
+                    if (isPlaying) stopPattern();
+                    else playPattern();
+                    break;
+            }
+        });
+
+        log('🥁 Drum Machine initialized. Use keyboard: Z=kick, X=snare, C=hihat, SPACE=play/stop');
+    </script>
+</body>
+</html>

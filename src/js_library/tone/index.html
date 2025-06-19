@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 Tone.js Integration Tests</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .intro {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .test-card {
+            background-color: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .test-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .test-card h3 {
+            color: #FFD700;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .test-card p {
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .navigation {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .navigation a {
+            color: #FFD700;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+
+        .features {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 25px;
+            margin: 30px 0;
+        }
+
+        .features h2 {
+            color: #FFD700;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .features ul {
+            list-style: none;
+            padding: 0;
+            columns: 2;
+            column-gap: 30px;
+        }
+
+        .features li {
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .features li::before {
+            content: "🎵 ";
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Tone.js Integration</h1>
+        
+        <div class="intro">
+            <p><strong>Tone.js</strong> is a powerful Web Audio framework for creating interactive music in the browser. Our integration provides a comprehensive wrapper with synthesizers, effects, drum machines, and more!</p>
+        </div>
+
+        <div class="features">
+            <h2>🎼 Available Features</h2>
+            <ul>
+                <li>Multiple Synthesizer Types (AM, FM, Mono, Poly, etc.)</li>
+                <li>Audio File Playback & Management</li>
+                <li>Drum Machine with Pattern Sequencing</li>
+                <li>Audio Effects (Reverb, Delay, Distortion, etc.)</li>
+                <li>Sequence & Pattern Creation</li>
+                <li>Transport Controls (Start, Stop, Tempo)</li>
+                <li>Squirrel Framework Integration</li>
+                <li>Visual Audio Analysis & Display</li>
+                <li>Real-time Audio Processing</li>
+                <li>MIDI Integration Support</li>
+                <li>Recording & Export Capabilities</li>
+                <li>Interactive Keyboard & Piano</li>
+            </ul>
+        </div>
+
+        <div class="test-grid">
+            <div class="test-card">
+                <h3>🎹 Basic Synth Test</h3>
+                <p>Test basic synthesizer functionality with different waveforms and note playing capabilities.</p>
+                <a href="basic-synth-test.html" class="btn">Test Synths</a>
+            </div>
+
+            <div class="test-card">
+                <h3>🥁 Drum Machine</h3>
+                <p>Interactive drum machine with pattern sequencing and real-time beat creation.</p>
+                <a href="drum-machine-test.html" class="btn">Test Drums</a>
+            </div>
+
+            <div class="test-card">
+                <h3>🎧 Audio Effects</h3>
+                <p>Test various audio effects like reverb, delay, distortion, and filter chains.</p>
+                <a href="effects-test.html" class="btn">Test Effects</a>
+            </div>
+
+            <div class="test-card">
+                <h3>🎼 Sequencer</h3>
+                <p>Create and play musical sequences with patterns and tempo controls.</p>
+                <a href="sequencer-test.html" class="btn">Test Sequencer</a>
+            </div>
+
+            <div class="test-card">
+                <h3>🎵 Audio Player</h3>
+                <p>Load and play audio files with loop controls and volume management.</p>
+                <a href="audio-player-test.html" class="btn">Test Player</a>
+            </div>
+
+            <div class="test-card">
+                <h3>🎹 Virtual Piano</h3>
+                <p>Interactive piano keyboard with multiple instrument sounds and recording.</p>
+                <a href="virtual-piano-test.html" class="btn">Test Piano</a>
+            </div>
+
+            <div class="test-card">
+                <h3>📊 Audio Visualizer</h3>
+                <p>Real-time audio visualization with waveforms, frequency analysis, and spectrum display.</p>
+                <a href="audio-visualizer-test.html" class="btn">Test Visualizer</a>
+            </div>
+
+            <div class="test-card">
+                <h3>🎛️ Complete Demo</h3>
+                <p>Comprehensive test page with all features combined into an interactive audio workstation.</p>
+                <a href="tone-complete-test.html" class="btn">Complete Demo</a>
+            </div>
+        </div>
+
+        <div class="navigation">
+            <h3>🔗 Navigation</h3>
+            <a href="../">← Back to JS Library</a>
+            <a href="../../">Main Project</a>
+            <a href="README.md">Documentation</a>
+            <a href="tone-wrapper.js">Source Code</a>
+        </div>
+    </div>
+</body>
+</html>

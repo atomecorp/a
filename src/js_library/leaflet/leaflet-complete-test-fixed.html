@@ -205,16 +205,19 @@
             </div>
         </div>
 
-        <div class="test-grid">
-            <div class="test-section">
+        <div class="test-grid">            <div class="test-section">
                 <h2>🟢 Shape Drawing</h2>
                 <div class="controls">
-                    <button class="btn" onclick="addCircle()" id="circleBtn" disabled>Add Circle</button>
-                    <button class="btn" onclick="addPolygon()" id="polygonBtn" disabled>Add Polygon</button>
-                    <button class="btn" onclick="clearShapes()" id="clearShapesBtn" disabled>Clear Shapes</button>
+                    <button class="btn" onclick="enableClickToAddCircles()" id="circleBtn" disabled>⭕ Click to Add Circles</button>
+                    <button class="btn" onclick="enableClickToAddPolygons()" id="polygonBtn" disabled>📐 Click to Add Polygons</button>
+                    <button class="btn" onclick="clearShapes()" id="clearShapesBtn" disabled>🗑️ Clear All Shapes</button>
                 </div>
-                <div id="shapeInfo" class="info-panel">No shapes added yet</div>
-            </div>            <div class="test-section">
+                <div id="shapeModeStatus" class="info-panel" style="border: 2px solid #666;">
+                    ⏸️ <strong>Shape Mode: INACTIVE</strong><br>
+                    Click a shape button above, then click on the map to place shapes at those locations.
+                </div>
+                <div id="shapeInfo" class="info-panel">No shapes added yet. Click a shape button above to start drawing.</div>
+            </div><div class="test-section">
                 <h2>⚡ Interactive Features</h2>
                 <div class="controls">
                     <button class="btn" onclick="enableClickToAddMarkers()" id="eventsBtn" disabled>🖱️ Enable Click Events (Add Markers)</button>
@@ -248,14 +251,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
     <script>
-        console.log('🚀 Script started loading...');
-          // Global variables
+        console.log('🚀 Script started loading...');        // Global variables
         let statusLog;
         let map1;
         let markers = [];
         let shapes = [];
         let clickEventsEnabled = false;
         let markerPlacementMode = false;
+        let shapePlacementMode = false;
+        let currentShapeType = null; // 'circle' or 'polygon'
         let currentTileLayer = 0;
 
         // Tile layer options
@@ -315,17 +319,20 @@
                     `;
                 }
             }
-        }
-
-        function updateShapeInfo() {
+        }        function updateShapeInfo() {
             const info = document.getElementById('shapeInfo');
             if (info) {
                 if (shapes.length === 0) {
-                    info.innerHTML = 'No shapes added yet';
+                    info.innerHTML = 'No shapes added yet. Click a shape button above to start drawing.';
                 } else {
+                    const clickPlaced = shapes.filter(s => s.getPopup() && s.getPopup().getContent().includes('clicking on map')).length;
+                    const predefined = shapes.length - clickPlaced;
+                    
                     info.innerHTML = `
                         <strong>Total Shapes:</strong> ${shapes.length}<br>
-                        <strong>Last Added:</strong> ${new Date().toLocaleTimeString()}
+                        <strong>Types:</strong> ${clickPlaced} click-placed, ${predefined} predefined<br>
+                        <strong>Last Added:</strong> ${new Date().toLocaleTimeString()}<br>
+                        <em>Continue clicking on map to add more shapes, or use shape buttons above.</em>
                     `;
                 }
             }
@@ -528,10 +535,305 @@
                 updateInteractionInfo('All markers cleared');
             } catch (error) {
                 log(`❌ Error clearing markers: ${error.message}`);
+            }        }
+
+        // Shape functions - Click to Place
+        function enableClickToAddCircles() {
+            if (!map1) {
+                log('⚠️ Please create a map first');
+                return;
+            }
+
+            try {
+                const btn = document.getElementById('circleBtn');
+                const status = document.getElementById('shapeModeStatus');
+                
+                if (shapePlacementMode && currentShapeType === 'circle') {
+                    // DISABLE circle placement mode
+                    disableShapePlacement();
+                    
+                } else {
+                    // ENABLE circle placement mode
+                    enableShapePlacement('circle', btn, status, '⭕ Click to Add Circles', '🛑 Stop Adding Circles');
+                }
+            } catch (error) {
+                log(`❌ Error toggling circle placement: ${error.message}`);
             }
         }
 
-        // Shape functions
+        function enableClickToAddPolygons() {
+            if (!map1) {
+                log('⚠️ Please create a map first');
+                return;
+            }
+
+            try {
+                const btn = document.getElementById('polygonBtn');
+                const status = document.getElementById('shapeModeStatus');
+                
+                if (shapePlacementMode && currentShapeType === 'polygon') {
+                    // DISABLE polygon placement mode
+                    disableShapePlacement();
+                    
+                } else {
+                    // ENABLE polygon placement mode
+                    enableShapePlacement('polygon', btn, status, '📐 Click to Add Polygons', '🛑 Stop Adding Polygons');
+                }
+            } catch (error) {
+                log(`❌ Error toggling polygon placement: ${error.message}`);
+            }
+        }        function enableShapePlacement(shapeType, activeBtn, status, normalText, activeText) {
+            // Disable any existing modes first
+            disableShapePlacement();
+            disableMarkerPlacement();
+            
+            shapePlacementMode = true;
+            currentShapeType = shapeType;
+            
+            // Update active button
+            if (activeBtn) {
+                activeBtn.textContent = activeText;
+                activeBtn.classList.add('active-mode');
+            }
+            
+            // Reset other shape buttons
+            resetShapeButtons(activeBtn);
+            
+            // Update status display
+            if (status) {
+                status.innerHTML = `
+                    ▶️ <strong>Shape Mode: ACTIVE (${shapeType.toUpperCase()})</strong><br>
+                    🖱️ Click anywhere on the map to place a ${shapeType} at that location!
+                `;
+                status.style.border = '2px solid #28a745';
+            }
+            
+            // Set up unified click handler
+            setupMapClickHandler();
+              log(`▶️ ${shapeType.charAt(0).toUpperCase() + shapeType.slice(1)} placement mode ENABLED - Click anywhere on the map!`);
+        }
+
+        function setupMapClickHandler() {
+            // Remove any existing click handlers to avoid conflicts
+            map1.off('click');
+            
+            // Set up unified click handler for both markers and shapes
+            map1.on('click', function(e) {
+                const lat = e.latlng.lat.toFixed(6);
+                const lng = e.latlng.lng.toFixed(6);
+                
+                if (markerPlacementMode) {
+                    // Handle marker placement
+                    const markerNumber = markers.length + 1;
+                    const marker = L.marker(e.latlng).addTo(map1);
+                    
+                    const popupContent = `
+                        <div style="text-align: center;">
+                            <h4>📍 Marker #${markerNumber}</h4>
+                            <p><strong>Coordinates:</strong><br>
+                            Lat: ${lat}<br>
+                            Lng: ${lng}</p>
+                            <p><em>Added by clicking on map!</em></p>
+                        </div>
+                    `;
+                    marker.bindPopup(popupContent).openPopup();
+                    markers.push(marker);
+                    
+                    log(`📍 Marker #${markerNumber} added at: ${lat}, ${lng}`);
+                    updateMarkerInfo();
+                    updateSystemInfo();
+                    updateInteractionInfo(`✅ Marker #${markerNumber} added at ${lat}, ${lng}`);
+                    
+                } else if (shapePlacementMode && currentShapeType) {
+                    // Handle shape placement
+                    const shapeNumber = shapes.length + 1;
+                    let shape;
+                    
+                    if (currentShapeType === 'circle') {
+                        // Create circle at clicked location
+                        shape = L.circle(e.latlng, {
+                            color: 'red',
+                            fillColor: '#f03',
+                            fillOpacity: 0.5,
+                            radius: 500
+                        }).addTo(map1);
+                        
+                        shape.bindPopup(`
+                            <div style="text-align: center;">
+                                <h4>⭕ Circle #${shapeNumber}</h4>
+                                <p><strong>Center:</strong><br>
+                                Lat: ${lat}<br>
+                                Lng: ${lng}</p>
+                                <p><strong>Radius:</strong> 500 meters</p>
+                                <p><em>Added by clicking on map!</em></p>
+                            </div>
+                        `).openPopup();
+                        
+                        log(`⭕ Circle #${shapeNumber} added at: ${lat}, ${lng}`);
+                        
+                    } else if (currentShapeType === 'polygon') {
+                        // Create polygon at clicked location
+                        const offset = 0.005; // Small offset for polygon points
+                        shape = L.polygon([
+                            [e.latlng.lat + offset, e.latlng.lng - offset],
+                            [e.latlng.lat + offset, e.latlng.lng + offset],
+                            [e.latlng.lat - offset, e.latlng.lng + offset],
+                            [e.latlng.lat - offset, e.latlng.lng - offset]
+                        ], {
+                            color: 'blue',
+                            fillColor: '#30f',
+                            fillOpacity: 0.5
+                        }).addTo(map1);
+                        
+                        shape.bindPopup(`
+                            <div style="text-align: center;">
+                                <h4>📐 Polygon #${shapeNumber}</h4>
+                                <p><strong>Center:</strong><br>
+                                Lat: ${lat}<br>
+                                Lng: ${lng}</p>
+                                <p><em>Added by clicking on map!</em></p>
+                            </div>
+                        `).openPopup();
+                        
+                        log(`📐 Polygon #${shapeNumber} added at: ${lat}, ${lng}`);
+                    }
+                    
+                    if (shape) {
+                        shapes.push(shape);
+                        updateShapeInfo();
+                        updateSystemInfo();
+                    }
+                }
+            });
+        }
+
+        function disableShapePlacement() {
+            if (shapePlacementMode) {
+                shapePlacementMode = false;
+                currentShapeType = null;
+                
+                // Reset all shape buttons
+                resetShapeButtons();
+                
+                // Update status display
+                const status = document.getElementById('shapeModeStatus');
+                if (status) {
+                    status.innerHTML = `
+                        ⏸️ <strong>Shape Mode: INACTIVE</strong><br>
+                        Click a shape button above, then click on the map to place shapes at those locations.
+                    `;
+                    status.style.border = '2px solid #666';
+                }
+                
+                // Update click handler
+                setupMapClickHandler();
+                
+                log('⏸️ Shape placement mode DISABLED');
+            }
+        }        function disableMarkerPlacement() {
+            if (markerPlacementMode) {
+                markerPlacementMode = false;
+                const btn = document.getElementById('eventsBtn');
+                const status = document.getElementById('clickModeStatus');
+                
+                if (btn) {
+                    btn.textContent = '🖱️ Enable Click Events (Add Markers)';
+                    btn.classList.remove('active-mode');
+                    btn.style.backgroundColor = '';
+                }
+                
+                if (status) {
+                    status.innerHTML = `
+                        ⏸️ <strong>Click Events: DISABLED</strong><br>
+                        Click "Enable Click Events" button, then click anywhere on the map to add markers at those locations.
+                    `;
+                    status.style.border = '2px solid #666';
+                }
+                
+                // Update click handler
+                setupMapClickHandler();
+            }
+        }
+
+        function resetShapeButtons(activeBtn = null) {
+            const shapeButtons = ['circleBtn', 'polygonBtn'];
+            shapeButtons.forEach(btnId => {
+                const btn = document.getElementById(btnId);
+                if (btn && btn !== activeBtn) {
+                    if (btnId === 'circleBtn') {
+                        btn.textContent = '⭕ Click to Add Circles';
+                    } else if (btnId === 'polygonBtn') {
+                        btn.textContent = '📐 Click to Add Polygons';
+                    }
+                    btn.classList.remove('active-mode');
+                    btn.style.backgroundColor = '';
+                }
+            });
+        }
+
+        function placeShapeAtLocation(latlng, shapeType) {
+            const lat = latlng.lat.toFixed(6);
+            const lng = latlng.lng.toFixed(6);
+            const shapeNumber = shapes.length + 1;
+            
+            let shape;
+            let popupContent;
+            
+            if (shapeType === 'circle') {
+                shape = L.circle(latlng, {
+                    color: 'red',
+                    fillColor: '#f03',
+                    fillOpacity: 0.5,
+                    radius: 500
+                }).addTo(map1);
+                
+                popupContent = `
+                    <div style="text-align: center;">
+                        <h4>⭕ Circle #${shapeNumber}</h4>
+                        <p><strong>Center:</strong><br>
+                        Lat: ${lat}<br>
+                        Lng: ${lng}</p>
+                        <p><strong>Radius:</strong> 500 meters</p>
+                        <p><em>Placed by clicking on map!</em></p>
+                    </div>
+                `;
+                
+            } else if (shapeType === 'polygon') {
+                const offset = 0.005; // Small offset for polygon corners
+                shape = L.polygon([
+                    [latlng.lat + offset, latlng.lng - offset],
+                    [latlng.lat + offset, latlng.lng + offset],
+                    [latlng.lat - offset, latlng.lng + offset],
+                    [latlng.lat - offset, latlng.lng - offset]
+                ], {
+                    color: 'blue',
+                    fillColor: '#30f',
+                    fillOpacity: 0.5
+                }).addTo(map1);
+                
+                popupContent = `
+                    <div style="text-align: center;">
+                        <h4>📐 Polygon #${shapeNumber}</h4>
+                        <p><strong>Center:</strong><br>
+                        Lat: ${lat}<br>
+                        Lng: ${lng}</p>
+                        <p><strong>Type:</strong> Square polygon</p>
+                        <p><em>Placed by clicking on map!</em></p>
+                    </div>
+                `;
+            }
+            
+            if (shape && popupContent) {
+                shape.bindPopup(popupContent).openPopup();
+                shapes.push(shape);
+                
+                log(`${shapeType === 'circle' ? '⭕' : '📐'} ${shapeType.charAt(0).toUpperCase() + shapeType.slice(1)} #${shapeNumber} placed at: ${lat}, ${lng}`);
+                updateShapeInfo();
+                updateSystemInfo();
+            }
+        }
+
+        // Original shape functions (for reference/backup)
         function addCircle() {
             if (!map1) {
                 log('⚠️ Please create a map first');
@@ -586,18 +888,23 @@
             } catch (error) {
                 log(`❌ Error adding polygon: ${error.message}`);
             }
-        }
-
-        function clearShapes() {
+        }        function clearShapes() {
             try {
                 shapes.forEach(shape => map1.removeLayer(shape));
                 shapes = [];
-                log('🗑️ All shapes cleared');
+                
+                // Reset shape placement mode
+                disableShapePlacement();
+                
+                log('🗑️ All shapes cleared and shape placement mode disabled');
                 updateShapeInfo();
                 updateSystemInfo();
             } catch (error) {
                 log(`❌ Error clearing shapes: ${error.message}`);
-            }        }        // Interactive functions - Click to Add Markers
+            }
+        }
+
+        // Interactive functions - Click to Add Markers
         function enableClickToAddMarkers() {
             if (!map1) {
                 log('⚠️ Please create a map first');
