@@ -229,6 +229,67 @@ echo ""
 print_success "🚀 Fastify v5 Server ready to start!"
 echo ""
 
+# AJOUT: Installation des dépendances manquantes pour Squirrel Framework complet
+echo ""
+print_status "🐿️ Installing additional Squirrel Framework dependencies..."
+echo ""
+
+# Dépendances manquantes importantes
+print_status "Installing missing production dependencies..."
+npm install knex@^3.1.0 objection@^3.1.5 2>/dev/null || print_warning "knex/objection already installed or error"
+
+print_status "Installing missing development dependencies..."
+npm install --save-dev @rollup/plugin-node-resolve@^15.2.0 2>/dev/null || print_warning "rollup plugins already installed or error"
+npm install --save-dev @rollup/plugin-terser@^0.4.4 2>/dev/null || true
+npm install --save-dev rollup@^4.0.0 2>/dev/null || true
+npm install --save-dev rollup-plugin-filesize@^10.0.0 2>/dev/null || true
+npm install --save-dev @tauri-apps/cli@^2.4.0 2>/dev/null || true
+
+echo ""
+print_status "🦀 Checking Rust/Cargo for Tauri desktop apps..."
+if command -v cargo &> /dev/null; then
+    print_success "✅ Rust/Cargo is installed"
+    if [ -d "src-tauri" ]; then
+        print_status "Updating Rust dependencies..."
+        cd src-tauri && cargo update && cd .. || print_warning "Cargo update failed"
+    fi
+else
+    print_warning "⚠️ Rust/Cargo not installed. For desktop apps with Tauri:"
+    echo "   Install Rust: https://rustup.rs/"
+    echo "   Then run: cargo update in src-tauri/ folder"
+fi
+
+echo ""
+print_status "🐍 Checking Python for development server..."
+if command -v python3 &> /dev/null; then
+    print_success "✅ Python3 installed (for local dev server)"
+elif command -v python &> /dev/null; then
+    print_success "✅ Python installed (for local dev server)"
+else
+    print_warning "⚠️ Python not installed. Some dev scripts won't work."
+fi
+
+echo ""
+print_success "🎉 Complete Squirrel Framework installation finished!"
+echo ""
+echo "📋 ADDITIONAL SQUIRREL COMMANDS:"
+echo "==============================="
+echo ""
+echo "🏗️  Build commands:"
+echo "    npm run build         - Production build"
+echo "    npm run build:cdn     - CDN bundle"
+echo "    npm run build:npm     - NPM package"
+echo ""
+echo "🚀 Development:"
+echo "    npm run dev           - Development mode"
+echo "    npm run serve         - Local static server"
+echo "    npm run tauri:dev     - Desktop app (requires Rust)"
+echo ""
+echo "🎮 Testing:"
+echo "    npm run start:server  - API server only"
+echo "    npm run perf          - Performance testing"
+echo ""
+
 # Offer to start the server
 read -p "🚀 Start the server now? (y/N): " -n 1 -r
 echo
@@ -237,4 +298,3 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
     cd server && node server.js
 fi
-npm install knex objection
