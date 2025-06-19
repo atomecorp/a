@@ -1,17 +1,18 @@
 /*!
  * Squirrel.js v1.0.0
  * Modern Web Component Framework
- * Generated: 2025-06-19T14:04:11.935Z
+ * Generated: 2025-06-19T14:05:02.324Z
  */
 var Squirrel = (function () {
   'use strict';
 
   
-          // Temporarily disable AMD define to avoid conflicts
-          var _define = typeof define !== 'undefined' ? define : undefined;
-          if (typeof define === 'function' && define.amd) {
-            var define = undefined;
-          }
+          // Create global define function before any modules load
+          window.templateRegistry = window.templateRegistry || new Map();
+          window.define = window.define || function(id, config) {
+            window.templateRegistry.set(id, config);
+            return config;
+          };
         
 
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
@@ -1870,6 +1871,16 @@ var Squirrel = (function () {
       initSquirrelDOM();
     }
   }
+
+  // === EXPOSITION DES APIS CORE ===
+  function exposeCorAPIs() {
+    // Exposer les utilitaires de base
+    window.$ = $$1;
+    window.define = define$1; // Utilise la fonction define importée de squirrel.js
+  }
+
+  // Appel de la fonction pour exposer les APIs core
+  exposeCorAPIs();
 
   var bundleEntry = {
     initAPIs: initSquirrelAPIs,
