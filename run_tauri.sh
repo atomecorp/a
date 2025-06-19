@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "🖥️ Démarrage de Tauri..."
+
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
 
@@ -54,11 +56,5 @@ else
     echo ""
 fi
 
-# Scanner les composants Squirrel
-echo "🔍 Scan des composants Squirrel..."
-npm run scan:components
-echo ""
-
-# Démarrer le serveur
-echo "🎯 Lancement du serveur..."
-cd server && node server.js
+# Lancer Tauri
+npm run tauri:dev

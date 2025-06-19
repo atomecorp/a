@@ -3,10 +3,43 @@
 # 🚀 Fastify v5 Server Dependencies Installation Script
 # Author: Squirrel Framework Team
 # Date: $(date '+%Y-%m-%d')
+# Enhanced: Smart version checking and updating
 
-echo "📦 Installing dependencies for Fastify v5 Server"
-echo "================================================"
+echo "📦 Installing dependencies for Fastify v5 Server + Squirrel Framework"
+echo "====================================================================="
 echo ""
+
+# Parse command line arguments
+FORCE_UPDATE=false
+INTERACTIVE=true
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force|-f)
+            FORCE_UPDATE=true
+            shift
+            ;;
+        --non-interactive|-n)
+            INTERACTIVE=false
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  -f, --force            Force update all packages to latest versions"
+            echo "  -n, --non-interactive  Run without prompts"
+            echo "  -h, --help            Show this help message"
+            echo ""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
 
 # Colors for messages
 RED='\033[0;31m'
@@ -101,11 +134,15 @@ echo "  🎵 wavesurfer.js@^7.9.5        - Audio visualization"
 echo ""
 
 # Ask for confirmation
-read -p "📥 Install dependencies? (Y/n): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Nn]$ ]]; then
-    print_warning "Installation cancelled."
-    exit 0
+if [ "$INTERACTIVE" = true ]; then
+    read -p "📥 Install dependencies? (Y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        print_warning "Installation cancelled."
+        exit 0
+    fi
+else
+    print_status "📥 Running in non-interactive mode, proceeding with installation..."
 fi
 
 # Clean npm cache (optional)
@@ -231,19 +268,95 @@ echo ""
 
 # AJOUT: Installation des dépendances manquantes pour Squirrel Framework complet
 echo ""
-print_status "🐿️ Installing additional Squirrel Framework dependencies..."
+print_status "🐿️ Checking and updating Squirrel Framework dependencies..."
 echo ""
 
-# Dépendances manquantes importantes
-print_status "Installing missing production dependencies..."
-npm install knex@^3.1.0 objection@^3.1.5 2>/dev/null || print_warning "knex/objection already installed or error"
+# Fonction pour vérifier et installer/mettre à jour une dépendance
+check_and_install() {
+    local package=$1
+    local dev_flag=$2
+    
+    # Récupérer la version installée
+    local installed_version=""
+    if [ -d "node_modules/$package" ]; then
+        installed_version=$(npm list "$package" --depth=0 2>/dev/null | grep "$package" | sed -n 's/.*@\([^[:space:]]*\).*/\1/p' | head -1)
+    fi
+    
+    # Récupérer la dernière version disponible
+    local latest_version=$(npm view "$package" version 2>/dev/null)
+    
+    if [ -z "$installed_version" ]; then
+        print_status "📦 Installing $package@$latest_version..."
+        if [ "$dev_flag" = "--save-dev" ]; then
+            npm install --save-dev "$package@$latest_version" 2>/dev/null || print_warning "Failed to install $package"
+        else
+            npm install "$package@$latest_version" 2>/dev/null || print_warning "Failed to install $package"
+        fi
+    elif [ "$FORCE_UPDATE" = true ] || [ "$installed_version" != "$latest_version" ]; then
+        if [ "$FORCE_UPDATE" = true ]; then
+            print_status "🔄 Force updating $package: $installed_version → $latest_version"
+        else
+            print_status "🔄 Updating $package: $installed_version → $latest_version"
+        fi
+        if [ "$dev_flag" = "--save-dev" ]; then
+            npm install --save-dev "$package@$latest_version" 2>/dev/null || print_warning "Failed to update $package"
+        else
+            npm install "$package@$latest_version" 2>/dev/null || print_warning "Failed to update $package"
+        fi
+    else
+        print_success "✅ $package@$installed_version (up to date)"
+    fi
+}
 
-print_status "Installing missing development dependencies..."
-npm install --save-dev @rollup/plugin-node-resolve@^15.2.0 2>/dev/null || print_warning "rollup plugins already installed or error"
-npm install --save-dev @rollup/plugin-terser@^0.4.4 2>/dev/null || true
-npm install --save-dev rollup@^4.0.0 2>/dev/null || true
-npm install --save-dev rollup-plugin-filesize@^10.0.0 2>/dev/null || true
-npm install --save-dev @tauri-apps/cli@^2.4.0 2>/dev/null || true
+# Fonction pour vérifier et installer plusieurs packages
+install_packages() {
+    local dev_flag=$1
+    shift
+    local packages=("$@")
+    
+    for package in "${packages[@]}"; do
+        check_and_install "$package" "$dev_flag"
+    done
+}
+
+print_status "🗄️ Checking database dependencies..."
+PRODUCTION_DB_DEPS=("knex" "objection")
+install_packages "" "${PRODUCTION_DB_DEPS[@]}"
+
+print_status "🏗️ Checking build tools..."
+BUILD_DEPS=("rollup" "@rollup/plugin-node-resolve" "@rollup/plugin-terser" "rollup-plugin-filesize")
+install_packages "--save-dev" "${BUILD_DEPS[@]}"
+
+print_status "🖥️ Checking desktop app dependencies..."
+DESKTOP_DEPS=("@tauri-apps/cli")
+install_packages "--save-dev" "${DESKTOP_DEPS[@]}"
+
+# Vérifier les dépendances optionnelles manquantes
+if [ "$INTERACTIVE" = true ]; then
+    print_status "🔍 Checking optional dependencies..."
+    OPTIONAL_DEPS=("nodemon" "concurrently" "cross-env")
+    for dep in "${OPTIONAL_DEPS[@]}"; do
+        if ! npm list "$dep" --depth=0 &>/dev/null; then
+            read -p "📦 Install optional $dep? (y/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                check_and_install "$dep" "--save-dev"
+            fi
+        else
+            check_and_install "$dep" "--save-dev"
+        fi
+    done
+else
+    print_status "🔍 Checking optional dependencies (non-interactive mode)..."
+    OPTIONAL_DEPS=("nodemon" "concurrently" "cross-env")
+    for dep in "${OPTIONAL_DEPS[@]}"; do
+        if npm list "$dep" --depth=0 &>/dev/null; then
+            check_and_install "$dep" "--save-dev"
+        else
+            print_status "⏭️ Skipping optional dependency: $dep"
+        fi
+    done
+fi
 
 echo ""
 print_status "🦀 Checking Rust/Cargo for Tauri desktop apps..."
@@ -271,6 +384,65 @@ fi
 
 echo ""
 print_success "🎉 Complete Squirrel Framework installation finished!"
+
+# Afficher un résumé des versions installées
+echo ""
+print_status "📊 INSTALLED VERSIONS SUMMARY:"
+echo "==============================="
+
+# Fonction pour afficher la version d'un package
+show_version() {
+    local package=$1
+    local version=$(npm list "$package" --depth=0 2>/dev/null | grep "$package" | sed -n 's/.*@\([^[:space:]]*\).*/\1/p' | head -1)
+    if [ -n "$version" ]; then
+        echo "  ✅ $package@$version"
+    else
+        echo "  ❌ $package (not installed)"
+    fi
+}
+
+echo ""
+echo "🚀 SERVER & API:"
+show_version "fastify"
+show_version "@fastify/cors"
+show_version "@fastify/static"
+show_version "@fastify/websocket"
+
+echo ""
+echo "🗄️ DATABASE:"
+show_version "knex"
+show_version "objection"
+show_version "sequelize"
+show_version "sqlite3"
+
+echo ""
+echo "🏗️ BUILD TOOLS:"
+show_version "rollup"
+show_version "@rollup/plugin-node-resolve"
+show_version "@rollup/plugin-terser"
+
+echo ""
+echo "🖥️ DESKTOP:"
+show_version "@tauri-apps/cli"
+
+echo ""
+echo "🎵 MEDIA:"
+show_version "wavesurfer.js"
+
+echo ""
+echo "🔐 SECURITY:"
+show_version "jsonwebtoken"
+
+# Vérifier les versions Node.js et npm
+echo ""
+echo "🔧 ENVIRONMENT:"
+echo "  ✅ Node.js: $(node --version)"
+echo "  ✅ npm: $(npm --version)"
+if command -v cargo &> /dev/null; then
+    echo "  ✅ Rust: $(rustc --version 2>/dev/null | cut -d' ' -f2)"
+else
+    echo "  ⚠️ Rust: Not installed"
+fi
 echo ""
 echo "📋 ADDITIONAL SQUIRREL COMMANDS:"
 echo "==============================="
@@ -291,10 +463,14 @@ echo "    npm run perf          - Performance testing"
 echo ""
 
 # Offer to start the server
-read -p "🚀 Start the server now? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    print_status "Starting server..."
-    echo ""
-    cd server && node server.js
+if [ "$INTERACTIVE" = true ]; then
+    read -p "🚀 Start the server now? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        print_status "Starting server..."
+        echo ""
+        cd server && node server.js
+    fi
+else
+    print_status "🚀 Run 'cd server && node server.js' to start the server"
 fi
