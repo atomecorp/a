@@ -1,7 +1,7 @@
 /*!
  * Squirrel.js v1.0.0
  * Modern Web Component Framework
- * Generated: 2025-06-19T14:06:58.624Z
+ * Generated: 2025-06-19T14:07:48.326Z
  */
 var Squirrel = (function () {
   'use strict';
@@ -1849,7 +1849,6 @@ var Squirrel = (function () {
   // === INITIALISATION DOM ===
   function initSquirrelDOM() {
     try {
-      runKickstart(); // Utilise le vrai kickstart importé
       window.squirrelDomReady = true;
       
       // Émettre l'événement de compatibilité
@@ -1865,17 +1864,22 @@ var Squirrel = (function () {
     }
   }
 
-  // Auto-initialisation
+  // === AUTO-INITIALISATION ===
   if (typeof window !== 'undefined') {
-    // Attendre que le DOM soit prêt
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        initSquirrelAPIs();
-        initSquirrelDOM();
-      });
-    } else {
-      initSquirrelAPIs();
+    // ÉTAPE 1: Initialiser les APIs immédiatement
+    initSquirrelAPIs();
+    
+    // ÉTAPE 2: Initialiser le DOM dès que body est disponible
+    if (document.body) {
+      // Body disponible, initialiser immédiatement
       initSquirrelDOM();
+    } else {
+      // Attendre le body
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSquirrelDOM);
+      } else {
+        setTimeout(initSquirrelDOM, 0);
+      }
     }
   }
 
