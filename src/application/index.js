@@ -9,7 +9,7 @@
 // import('./examples/plugins-demo.js');
 // import('./examples/ws.js');
 
-// import('./examples/design_slider.js');
+import('./examples/design_slider.js');
 // import('./examples/DB.js');
 
 // import('./examples/matrix.js');
