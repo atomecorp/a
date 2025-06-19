@@ -1,6 +1,11 @@
 /*!
  * Squirrel.js v1.0.0
- * Generated: 2025-06-19T13:25:43.796Z
+ * Modern Web Component Framework
+ * https://github.com/your-org/squirrel
+ * 
+ * Copyright (c) 2025 Squirrel Team
+ * Released under the MIT License
+ * Generated: 2025-06-19T13:45:54.148Z
  */
 var Squirrel = (function () {
   'use strict';
@@ -756,8 +761,8 @@ var Squirrel = (function () {
     }
   }
 
-  var bundleEntryClean = { initSquirrel };
+  var bundleEntry = { initSquirrel };
 
-  return bundleEntryClean;
+  return bundleEntry;
 
 })();
