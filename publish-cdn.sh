@@ -133,7 +133,7 @@ find_static_component_list() {
 
 # Fonction pour nettoyer les imports manquants
 clean_bundle_imports() {
-    local bundle_file="cdn_npm_maker/bundle-entry.js"
+    local bundle_file="scripts_utils/bundle-entry.js"
     
     if [ ! -f "$bundle_file" ]; then
         echo "⚠️ bundle-entry.js not found"
@@ -225,11 +225,11 @@ echo "🔍 Checking component dependencies..."
 missing_files=()
 
 # Vérifier si bundle-entry.js existe et lister les imports
-if [ -f "cdn_npm_maker/bundle-entry.js" ]; then
+if [ -f "scripts_utils/bundle-entry.js" ]; then
     echo "   Checking imports in bundle-entry.js..."
     
     # Extraire les imports de composants
-    imports=$(grep -o "from.*components/.*\.js" cdn_npm_maker/bundle-entry.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
+    imports=$(grep -o "from.*components/.*\.js" scripts_utils/bundle-entry.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
     
     for component in $imports; do
         file_path="src/squirrel/components/${component}.js"
@@ -446,8 +446,8 @@ done
 echo "✅ Cache jsDelivr purgé"
 
 # 🧹 Nettoyage des fichiers temporaires
-if [ -f "cdn_npm_maker/bundle-entry.js.backup" ]; then
-    rm "cdn_npm_maker/bundle-entry.js.backup"
+if [ -f "scripts_utils/bundle-entry.js.backup" ]; then
+    rm "scripts_utils/bundle-entry.js.backup"
     echo "🧹 Backup temporaire supprimé"
 fi
 

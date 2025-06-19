@@ -14,7 +14,7 @@ const banner = `/*!
 export default [
   // ESM build
   {
-    input: 'cdn_npm_maker/bundle-entry.js',
+    input: 'scripts_utils/bundle-entry.js',
     output: {
       file: 'dist/squirrel.esm.js',
       format: 'es',
@@ -31,7 +31,7 @@ export default [
   
   // CommonJS build
   {
-    input: 'cdn_npm_maker/bundle-entry.js',
+    input: 'scripts_utils/bundle-entry.js',
     output: {
       file: 'dist/squirrel.cjs.js',
       format: 'cjs',
@@ -49,7 +49,7 @@ export default [
   
   // UMD build (pour navigateurs)
   {
-    input: 'cdn_npm_maker/bundle-entry.js',
+    input: 'scripts_utils/bundle-entry.js',
     output: {
       file: 'dist/squirrel.umd.js',
       format: 'umd',
@@ -67,7 +67,7 @@ export default [
   
   // UMD minifié
   {
-    input: 'cdn_npm_maker/bundle-entry.js',
+    input: 'scripts_utils/bundle-entry.js',
     output: {
       file: 'dist/squirrel.min.js',
       format: 'umd',

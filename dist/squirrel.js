@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-19T07:23:15.378Z
+ * Generated: 2025-06-19T09:07:19.213Z
  */
 var Squirrel = (function (exports) {
   'use strict';

@@ -2,7 +2,7 @@ import resolve from '@rollup/plugin-node-resolve';
 import terser from '@rollup/plugin-terser';
 
 export default {
-  input: 'cdn_npm_maker/bundle-entry.js',
+  input: 'scripts_utils/bundle-entry.js',
   output: [
     {
       file: 'dist/squirrel.js',

@@ -22,7 +22,7 @@ let static_dir = std::path::PathBuf::from("../src");
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let output = Command::new("node")
                     .current_dir("../")
-                    .arg("fastify-server.mjs")
+                    .arg("server/server.js")
                     .output();
 
                 match output {

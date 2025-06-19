@@ -68,10 +68,10 @@ if [ ! -d "node_modules" ] || [ ! -f "node_modules/.install_complete" ]; then
     echo "📥 Installation/mise à jour des dépendances Squirrel Framework..."
     
     # Rendre le script exécutable s'il ne l'est pas
-    chmod +x install_dependencies.sh
+    chmod +x scripts_utils/install_dependencies.sh
     
     # Lancer l'installation en mode non-interactif
-    ./install_dependencies.sh --non-interactive
+    ./scripts_utils/install_dependencies.sh --non-interactive
     
     # Créer un marqueur pour éviter les installations répétées
     touch node_modules/.install_complete
