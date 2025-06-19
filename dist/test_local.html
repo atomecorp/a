@@ -10,8 +10,11 @@
 
     <!-- Chargement du bundle avec kickstart -->
     <script src="./squirrel.js"></script>
+
+     <script type="module">
+    window.addEventListener('squirrel:ready', () => {
     
-    <script>
+      
         window.addEventListener('squirrel:ready', (event) => {
             function createMaterialToggle(initialState = false) {
   let state = initialState;
@@ -140,6 +143,9 @@ console.log('État actuel:', myToggle.getValue());
                 console.error('❌ Vue principale non trouvée - kickstart a échoué');
             }
         });
-    </script>
+    });
+  </script>
+    
+    
 </body>
 </html>
