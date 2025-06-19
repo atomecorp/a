@@ -10,7 +10,7 @@
 // import('./examples/ws.js');
 
 // import('./examples/design_slider.js');
-import('./examples/DB.js');
+// import('./examples/DB.js');
 
 // import('./examples/matrix.js');
 // import('./examples/drag.js');
