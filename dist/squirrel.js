@@ -1,7 +1,7 @@
 /*!
  * Squirrel.js v1.0.0
  * Modern Web Component Framework
- * Generated: 2025-06-19T14:19:44.112Z
+ * Generated: 2025-06-19T14:33:24.470Z
  */
 var Squirrel = (function (exports) {
   'use strict';
@@ -6606,20 +6606,11 @@ var Squirrel = (function (exports) {
   // === ÉTAT GLOBAL ===
   let pluginManager = null;
 
-  // === FONCTION DEFINE LOCALE ===
-  const defineTemplate = (id, config) => {
-    if (!window.templateRegistry) {
-      window.templateRegistry = new Map();
-    }
-    window.templateRegistry.set(id, config);
-    return config;
-  };
-
   // === INITIALISATION IMMÉDIATE DES APIs ===
   function initSquirrelAPIs() {
     // Exposer les utilitaires de base
     window.$ = $$1;
-    window.define = defineTemplate;
+    window.define = define$1; // Use the real define function from squirrel.js
     window.observeMutations = observeMutations;
     window.body = document.body;
     window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
@@ -6645,10 +6636,18 @@ var Squirrel = (function (exports) {
       unit_builder: UnitBuilder
     };
 
-    // Register all components with the plugin manager
+    // Register all components with the plugin manager and expose globally
     Object.entries(components).forEach(([name, component]) => {
       if (component && typeof component === 'object') {
         pluginManager.registerPlugin(name, component);
+        
+        // Expose components globally for direct access
+        const componentName = name.replace('_builder', '');
+        componentName.charAt(0).toUpperCase() + componentName.slice(1);
+        
+      
+        // For other components, expose them with their proper names
+      
       }
     });
   }
@@ -6691,15 +6690,7 @@ var Squirrel = (function (exports) {
   }
 
   // === EXPOSITION DES APIs CORE ===
-  function exposeCorAPIs() {
-    // Replace temporary functions with real ones
-    window.$ = $$1;
-    window.define = define$1;
-    window.observeMutations = observeMutations;
-  }
-
-  // Appel de la fonction pour exposer les APIs core
-  exposeCorAPIs();
+  // No need for separate function, already done in initSquirrelAPIs
 
   // Export for module compatibility
   const squirrelBundleInfo = {
