@@ -62,7 +62,7 @@
     "perf": "rollup -c --environment BUILD:development && python -m http.server 8000",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "debug-bundle": "node debug-bundle.js"
+    "debug-bundle": "node debug-bundle.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.1",
