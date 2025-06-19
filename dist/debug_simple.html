@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Simple CDN</title>
+</head>
+<body>
+    <h1>Debug Simple CDN</h1>
+    
+    <script>
+        console.log('🔍 AVANT import - window.$:', typeof window.$);
+        console.log('🔍 AVANT import - window.Button:', typeof window.Button);
+        console.log('🔍 AVANT import - window.Squirrel:', typeof window.Squirrel);
+        
+        // Écouter l'événement de préparation
+        window.addEventListener('squirrel:ready', (event) => {
+            console.log('🎉 Squirrel ready event reçu:', event.detail);
+            console.log('🔍 APRÈS event - window.$:', typeof window.$);
+            console.log('🔍 APRÈS event - window.Button:', typeof window.Button);
+        });
+    </script>
+    
+    <script src="squirrel.js"></script>
+    
+    <script>
+        console.log('🔍 APRÈS import - window.$:', typeof window.$);
+        console.log('🔍 APRÈS import - window.Button:', typeof window.Button);
+        console.log('🔍 APRÈS import - window.Squirrel:', typeof window.Squirrel);
+        
+        // Attendre un peu et réessayer
+        setTimeout(() => {
+            console.log('🔍 APRÈS timeout - window.$:', typeof window.$);
+            console.log('🔍 APRÈS timeout - window.Button:', typeof window.Button);
+            console.log('🔍 Contenu window:', Object.keys(window).filter(k => k.includes('$') || k.includes('Button') || k.includes('Squirrel')));
+        }, 100);
+    </script>
+</body>
+</html>

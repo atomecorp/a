@@ -4,7 +4,7 @@
  */
 
 // 🎨 Tableau simple mais élégant
-const sexyTable = new Table({
+const sexyTable = Table({
     id: "sexy-table",
     position: { x: 50, y: 50 },
     size: { width: 700, height: 400 },
@@ -154,7 +154,7 @@ const sexyTable = new Table({
 console.log('✨ Sexy Table créée ! Cliquez sur les en-têtes pour trier, sur les cellules pour sélectionner.');
 
 // 🎮 Tableau Gaming/Dark Theme
-const gamingTable = new Table({
+const gamingTable = Table({
     id: "gaming-table",
     position: { x: 800, y: 50 },
     size: { width: 500, height: 300 },
@@ -229,7 +229,7 @@ const gamingTable = new Table({
 });
 
 // 📊 Tableau Financial/Professional
-const financialTable = new Table({
+const financialTable = Table({
     id: "financial-table",
     position: { x: 50, y: 500 },
     size: { width: 600, height: 250 },
@@ -302,7 +302,7 @@ const financialTable = new Table({
 });
 
 // 🌈 Tableau Colorful/Creative
-const creativeTable = new Table({
+const creativeTable = Table({
     id: "creative-table", 
     position: { x: 700, y: 400 },
     size: { width: 450, height: 300 },
@@ -403,7 +403,7 @@ const creativeTable = new Table({
 });
 
 // 📱 Tableau Mobile/Card Style
-const mobileTable = new Table({
+const mobileTable = Table({
     id: "mobile-table",
     position: { x: 1200, y: 50 },
     size: { width: 350, height: 400 },
@@ -520,7 +520,7 @@ setTimeout(() => {
 }, 2000);
 
 // 📜 Tableau Long avec En-tête Fixe (test scrolling)
-const longTable = new Table({
+const longTable = Table({
     id: "long-table",
     position: { x: 50, y: 800 },
     size: { width: 800, height: 300 },  // Hauteur limitée pour forcer le scroll

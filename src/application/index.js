@@ -1,10 +1,13 @@
+// import('./examples/tables.js');
+import('./examples/menus.js');
+
 // import('./examples/basic.js');
-import('./examples/buttons.js');
+// import('./examples/buttons.js');
 // import('./examples/sliders.js');  
 
 // import('./examples/lists.js');
-// import('./examples/tables.js');
-// import('./examples/menus.js');
+
+
 
 // import('./examples/plugins-demo.js');
 // import('./examples/ws.js');

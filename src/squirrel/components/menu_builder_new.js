@@ -473,13 +473,8 @@ function createMenu(options = {}) {
 // === EXPORTS ===
 export { createMenu };
 
-// Alias pour compatibilité avec l'ancien pattern
-const Menu = createMenu;
-export { Menu };
-
 // Export par défaut compatible avec l'ancien système
 export default {
   create: createMenu,
-  createMenu: createMenu,
-  Menu: Menu
+  createMenu: createMenu
 };

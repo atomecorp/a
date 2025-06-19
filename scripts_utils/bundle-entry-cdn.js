@@ -1,17 +1,17 @@
 /**
- * 🚀 SQUIRREL.JS - BUNDLE ENTRY POINT
- * Based on spark.js for proper dynamic loading
+ * 🚀 SQUIRREL.JS - CDN BUNDLE ENTRY POINT
+ * Static imports version for IIFE bundling
  */
 
-// Import spark.js which handles everything dynamically
-import '../src/squirrel/spark.js';
+// Import core APIs statically
+import { $, define, observeMutations } from '../src/squirrel/squirrel.js';
+import '../src/squirrel/apis.js';
 
-// Export for module compatibility
-// Removed duplicate default export to fix module error
-export const squirrelBundleInfo = {
-  ready: true,
-  version: '1.0.0'
-};
+// Import plugin system statically
+import PluginManager from '../src/squirrel/plugin-manager.js';
+import PluginAPI from '../src/squirrel/plugin-api.js';
+
+// Import all components statically
 import * as BadgeBuilder from '../src/squirrel/components/badge_builder.js';
 import * as ButtonBuilder from '../src/squirrel/components/button_builder.js';
 import * as DraggableBuilder from '../src/squirrel/components/draggable_builder.js';
@@ -22,25 +22,17 @@ import * as TableBuilder from '../src/squirrel/components/table_builder.js';
 import * as TooltipBuilder from '../src/squirrel/components/tooltip_builder.js';
 import * as UnitBuilder from '../src/squirrel/components/unit_builder.js';
 
+// Import kickstart at the end
+import '../src/squirrel/kickstart.js';
+
 // === ÉTAT GLOBAL ===
 let pluginManager = null;
-
-// === FONCTION DEFINE LOCALE ===
-const defineTemplate = (id, config) => {
-  if (!window.templateRegistry) {
-    window.templateRegistry = new Map();
-  }
-  window.templateRegistry.set(id, config);
-  return config;
-};
-
-
 
 // === INITIALISATION IMMÉDIATE DES APIs ===
 function initSquirrelAPIs() {
   // Exposer les utilitaires de base
   window.$ = $;
-  window.define = defineTemplate;
+  window.define = define; // Use the real define function from squirrel.js
   window.observeMutations = observeMutations;
   window.body = document.body;
   window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
@@ -52,6 +44,34 @@ function initSquirrelAPIs() {
   // Créer l'API des plugins
   const pluginAPI = new PluginAPI(pluginManager);
   window.Squirrel = pluginAPI;
+
+  // Pre-register all components
+  const components = {
+    badge_builder: BadgeBuilder,
+    button_builder: ButtonBuilder,
+    draggable_builder: DraggableBuilder,
+    matrix_builder: MatrixBuilder,
+    menu_builder: MenuBuilder,
+    slider_builder: SliderBuilder,
+    table_builder: TableBuilder,
+    tooltip_builder: TooltipBuilder,
+    unit_builder: UnitBuilder
+  };
+
+  // Register all components with the plugin manager and expose globally
+  Object.entries(components).forEach(([name, component]) => {
+    if (component && typeof component === 'object') {
+      pluginManager.registerPlugin(name, component);
+      
+      // Expose components globally for direct access
+      const componentName = name.replace('_builder', '');
+      const globalName = componentName.charAt(0).toUpperCase() + componentName.slice(1);
+      
+    
+      // For other components, expose them with their proper names
+    
+    }
+  });
 }
 
 // === INITIALISATION DOM ===
@@ -63,7 +83,7 @@ function initSquirrelDOM() {
     window.dispatchEvent(new CustomEvent('squirrel:ready', {
       detail: { 
         version: '1.0.0', 
-        components: Array.from(pluginManager.loadedPlugins),
+        components: pluginManager ? Array.from(pluginManager.getLoadedPlugins()) : [],
         domReady: true
       }
     }));
@@ -91,22 +111,28 @@ if (typeof window !== 'undefined') {
   }
 }
 
-// === IMPORT KICKSTART À LA FIN ===
-import '../src/squirrel/kickstart.js';
+// === EXPOSITION DES APIs CORE ===
+// No need for separate function, already done in initSquirrelAPIs
 
-// === EXPOSITION DES APIS CORE ===
-function exposeCorAPIs() {
-  // Replace temporary functions with real ones
-  window.$ = $;
-  window.define = define;
-  window.observeMutations = observeMutations;
-}
-
-// Appel de la fonction pour exposer les APIs core
-exposeCorAPIs();
+// Export for module compatibility
+export const squirrelBundleInfo = {
+  ready: true,
+  version: '1.0.0',
+  components: [
+    'badge_builder',
+    'button_builder', 
+    'draggable_builder',
+    'matrix_builder',
+    'menu_builder',
+    'slider_builder',
+    'table_builder',
+    'tooltip_builder',
+    'unit_builder'
+  ]
+};
 
 export default {
   initAPIs: initSquirrelAPIs,
   initDOM: initSquirrelDOM,
-  loadComponents
+  version: '1.0.0'
 };

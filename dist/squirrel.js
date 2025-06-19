@@ -1,9 +1,9 @@
 /*!
  * Squirrel.js v1.0.0
  * Modern Web Component Framework
- * Generated: 2025-06-19T14:33:24.470Z
+ * Generated: 2025-06-19T20:37:48.185Z
  */
-var Squirrel = (function (exports) {
+(function (exports) {
   'use strict';
 
   
@@ -16,6 +16,122 @@ var Squirrel = (function (exports) {
             };
           }
         
+
+  /**
+   * 🌐 APIS - EXTENSIONS FOR JAVASCRIPT
+   * Adding Ruby-like functionalities to JavaScript + MINIMAL REQUIRE SYSTEM FOR SQUIRREL
+   */
+
+  // Add the puts method to display in the console
+  window.puts = function puts(val) {
+      console.log(val);
+  };
+
+  // Add the print method to display in the console without newline (Ruby-like)
+  window.print = function print(val) {
+      // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
+      console.log('[PRINT]', val);
+  };
+
+  // Add the grab method to retrieve DOM elements
+  window.grab = (function () {
+      // Cache for recent results
+      const domCache = new Map();
+
+      return function (id) {
+          if (!id) return null;
+
+          // Check the registry first (fast path)
+          const instance = _registry[id];
+          if (instance) return instance;
+
+          // Check the DOM cache
+          if (domCache.has(id)) {
+              const cached = domCache.get(id);
+              // Check if the element is still in the DOM
+              if (cached && cached.isConnected) {
+                  return cached;
+              } else {
+                  // Remove obsolete entry
+                  domCache.delete(id);
+              }
+          }
+
+          // Search in the DOM
+          const element = document.getElementById(id);
+          if (!element) return null;
+
+          // Add useful methods – only once!
+          if (!element._enhanced) {
+              // Mark as enhanced to avoid duplicates
+              element._enhanced = true;
+
+              const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
+              cssProperties.forEach(prop => {
+                  const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
+
+                  element[prop] = function (value) {
+                      if (arguments.length === 0) {
+                          return getComputedStyle(this)[styleProp];
+                      }
+
+                      this.style[styleProp] = window._isNumber && window._isNumber(value) ? 
+                          window._formatSize(value) : value;
+                      return this;
+                  };
+              });
+          }
+
+          // Store in the cache for future calls
+          domCache.set(id, element);
+
+          return element;
+      };
+  })();
+
+  // Add extensions to native JavaScript objects (similar to Ruby)
+  Object.prototype.define_method = function (name, fn) {
+      this[name] = fn;
+      return this;
+  };
+
+  // Add methods to Array to mimic Ruby behavior
+  Array.prototype.each = function (callback) {
+      this.forEach(callback);
+      return this;
+  };
+
+  // Extend the Object class to allow inspection
+  Object.prototype.inspect = function () {
+      return AJS.inspect(this);
+  };
+
+  // Add a wait function for delays (promisified version is more modern)
+  const wait = (delay, callback) => {
+    if (typeof callback === 'function') {
+      setTimeout(callback, delay);
+    } else {
+      // Return a promise if no callback
+      return new Promise(resolve => setTimeout(resolve, delay));
+    }
+  };
+  window.wait = wait;
+
+  // Add log function (alias for puts)
+  window.log = window.puts;
+
+  // Helper functions for grab method - use global versions
+  // (Remove duplicated functions since they're already defined in a.js)
+
+  // Registry for grab method
+  window._registry = window._registry || {};
+
+  // AJS object for inspect method
+  window.AJS = window.AJS || {
+      inspect: function(obj) {
+          return JSON.stringify(obj, null, 2);
+      }
+  };
 
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
 
@@ -287,122 +403,6 @@ var Squirrel = (function (exports) {
     // Stocker l'observateur pour le nettoyage
     if (!mutationRegistry.has(element)) mutationRegistry.set(element, []);
     mutationRegistry.get(element).push(observer);
-  };
-
-  /**
-   * 🌐 APIS - EXTENSIONS FOR JAVASCRIPT
-   * Adding Ruby-like functionalities to JavaScript + MINIMAL REQUIRE SYSTEM FOR SQUIRREL
-   */
-
-  // Add the puts method to display in the console
-  window.puts = function puts(val) {
-      console.log(val);
-  };
-
-  // Add the print method to display in the console without newline (Ruby-like)
-  window.print = function print(val) {
-      // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
-      console.log('[PRINT]', val);
-  };
-
-  // Add the grab method to retrieve DOM elements
-  window.grab = (function () {
-      // Cache for recent results
-      const domCache = new Map();
-
-      return function (id) {
-          if (!id) return null;
-
-          // Check the registry first (fast path)
-          const instance = _registry[id];
-          if (instance) return instance;
-
-          // Check the DOM cache
-          if (domCache.has(id)) {
-              const cached = domCache.get(id);
-              // Check if the element is still in the DOM
-              if (cached && cached.isConnected) {
-                  return cached;
-              } else {
-                  // Remove obsolete entry
-                  domCache.delete(id);
-              }
-          }
-
-          // Search in the DOM
-          const element = document.getElementById(id);
-          if (!element) return null;
-
-          // Add useful methods – only once!
-          if (!element._enhanced) {
-              // Mark as enhanced to avoid duplicates
-              element._enhanced = true;
-
-              const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
-              cssProperties.forEach(prop => {
-                  const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
-
-                  element[prop] = function (value) {
-                      if (arguments.length === 0) {
-                          return getComputedStyle(this)[styleProp];
-                      }
-
-                      this.style[styleProp] = window._isNumber && window._isNumber(value) ? 
-                          window._formatSize(value) : value;
-                      return this;
-                  };
-              });
-          }
-
-          // Store in the cache for future calls
-          domCache.set(id, element);
-
-          return element;
-      };
-  })();
-
-  // Add extensions to native JavaScript objects (similar to Ruby)
-  Object.prototype.define_method = function (name, fn) {
-      this[name] = fn;
-      return this;
-  };
-
-  // Add methods to Array to mimic Ruby behavior
-  Array.prototype.each = function (callback) {
-      this.forEach(callback);
-      return this;
-  };
-
-  // Extend the Object class to allow inspection
-  Object.prototype.inspect = function () {
-      return AJS.inspect(this);
-  };
-
-  // Add a wait function for delays (promisified version is more modern)
-  const wait = (delay, callback) => {
-    if (typeof callback === 'function') {
-      setTimeout(callback, delay);
-    } else {
-      // Return a promise if no callback
-      return new Promise(resolve => setTimeout(resolve, delay));
-    }
-  };
-  window.wait = wait;
-
-  // Add log function (alias for puts)
-  window.log = window.puts;
-
-  // Helper functions for grab method - use global versions
-  // (Remove duplicated functions since they're already defined in a.js)
-
-  // Registry for grab method
-  window._registry = window._registry || {};
-
-  // AJS object for inspect method
-  window.AJS = window.AJS || {
-      inspect: function(obj) {
-          return JSON.stringify(obj, null, 2);
-      }
   };
 
   /**
@@ -931,7 +931,7 @@ var Squirrel = (function (exports) {
     return badge;
   };
 
-  // Export selon la convention standard recommandée
+  // Export par défaut
   var badge_builder = {
     create: createBadge,
     
@@ -946,12 +946,6 @@ var Squirrel = (function (exports) {
       dark: '#343a40'
     }
   };
-
-  var BadgeBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    createBadge: createBadge,
-    default: badge_builder
-  });
 
   /**
    * Composant Button skinnable avec HyperSquirrel
@@ -1214,120 +1208,6 @@ var Squirrel = (function (exports) {
 
     return button;
   };
-
-  // === FACTORY FUNCTIONS POUR VARIANTES COMMUNES ===
-
-  const createPrimaryButton = (config) => createButton({ ...config, variant: 'primary' });
-  const createSecondaryButton = (config) => createButton({ ...config, variant: 'secondary' });
-  const createSuccessButton = (config) => createButton({ ...config, variant: 'success' });
-  const createDangerButton = (config) => createButton({ ...config, variant: 'danger' });
-  const createWarningButton = (config) => createButton({ ...config, variant: 'warning' });
-
-  const createIconButton = (config) => createButton({ 
-    ...config, 
-    text: '', 
-    skin: { 
-      container: { padding: '8px', borderRadius: '50%' },
-      ...config.skin 
-    }
-  });
-
-  const createOutlineButton = (config) => createButton({
-    ...config,
-    variant: 'outline',
-    skin: {
-      container: { 
-        color: buttonStyles[config.color || 'primary']?.backgroundColor || '#007bff',
-        borderColor: buttonStyles[config.color || 'primary']?.backgroundColor || '#007bff'
-      },
-      ...config.skin
-    }
-  });
-
-  // === SYSTÈME DE PRESETS ===
-  const buttonPresets = {
-    materialSwitch: (config = {}) => {
-      const baseSkin = {
-        container: {
-          position: 'relative',
-          width: '60px',
-          height: '34px',
-          padding: '0',
-          borderRadius: '17px',
-          backgroundColor: '#ccc',
-          border: 'none',
-          cursor: 'pointer',
-          transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          overflow: 'hidden',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          fontFamily: 'Roboto, Arial, sans-serif',
-          fontSize: '0px'
-        },
-        icon: {
-          position: 'absolute',
-          left: '2px',
-          top: '2px',
-          width: '30px',
-          height: '30px',
-          borderRadius: '50%',
-          backgroundColor: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '0px',
-          transition: 'all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          transform: 'translateX(0px)'
-        }
-      };
-      return {
-        ...config,
-        skin: {
-          ...baseSkin,
-          ...(config.skin || {})
-        },
-        icon: config.icon || '○',
-        text: config.text || 'OFF',
-        id: config.id || 'material-toggle',
-      };
-    }
-  };
-
-  // Ajout d'une méthode utilitaire sur Button pour le preset
-  function materialSwitch(config) {
-    return createButton(buttonPresets.materialSwitch(config));
-  }
-
-  // Export par défaut
-  var button_builder = {
-    create: createButton,
-    primary: createPrimaryButton,
-    secondary: createSecondaryButton,
-    success: createSuccessButton,
-    danger: createDangerButton,
-    warning: createWarningButton,
-    icon: createIconButton,
-    outline: createOutlineButton,
-    materialSwitch,
-  };
-
-  var ButtonBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    buttonSizes: buttonSizes,
-    buttonStyles: buttonStyles,
-    createButton: createButton,
-    createDangerButton: createDangerButton,
-    createIconButton: createIconButton,
-    createOutlineButton: createOutlineButton,
-    createPrimaryButton: createPrimaryButton,
-    createSecondaryButton: createSecondaryButton,
-    createSuccessButton: createSuccessButton,
-    createWarningButton: createWarningButton,
-    default: button_builder
-  });
 
   /**
    * Composant Draggable avec HyperSquirrel
@@ -1907,15 +1787,6 @@ var Squirrel = (function (exports) {
     makeDraggableWithDrop,
     makeDropZone
   };
-
-  var DraggableBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    default: draggable_builder,
-    draggable: draggable,
-    makeDraggable: makeDraggable,
-    makeDraggableWithDrop: makeDraggableWithDrop,
-    makeDropZone: makeDropZone
-  });
 
   /**
    * 🎯 MATRIX COMPONENT - VERSION 2.0 COMPLÈTE
@@ -3081,6 +2952,10 @@ var Squirrel = (function (exports) {
     }
   }
 
+  // ========================================
+  // 🌟 EXPORT DU MODULE
+  // ========================================
+
   // Factory functions pour usage simplifié
   function createMatrix(options) {
     return new Matrix(options);
@@ -3126,13 +3001,13 @@ var Squirrel = (function (exports) {
     return matrix;
   }
 
-  var MatrixBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    createAutoSizedMatrix: createAutoSizedMatrix,
-    createMatrix: createMatrix,
-    createResponsiveMatrix: createResponsiveMatrix,
-    default: Matrix
-  });
+  // Export par défaut
+  var matrix_builder = {
+    create: createMatrix,
+    responsive: createResponsiveMatrix,
+    autoSized: createAutoSizedMatrix,
+    Matrix: Matrix
+  };
 
   /**
    * 🍽️ MENU COMPONENT - VERSION 1.0 PROFESSIONAL
@@ -3944,10 +3819,16 @@ var Squirrel = (function (exports) {
     }
   }
 
-  var MenuBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    default: Menu
-  });
+  // === FONCTION DE CRÉATION POUR COHÉRENCE ===
+  const createMenu = (config = {}) => {
+    return new Menu(config);
+  };
+
+  // Export par défaut
+  var menu_builder = {
+    create: createMenu,
+    Menu: Menu
+  };
 
   /**
    * Composant Slider skinnable avec HyperSquirrel
@@ -4772,21 +4653,6 @@ var Squirrel = (function (exports) {
     materialCircular
   };
 
-  var SliderBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    createCircularSlider: createCircularSlider,
-    createHorizontalSlider: createHorizontalSlider,
-    createSlider: createSlider,
-    createVerticalSlider: createVerticalSlider,
-    default: slider_builder,
-    materialCircular: materialCircular,
-    materialHorizontal: materialHorizontal,
-    materialVertical: materialVertical,
-    sliderPresets: sliderPresets,
-    sliderSizes: sliderSizes,
-    sliderVariants: sliderVariants
-  });
-
   /**
    * 📊 TABLE COMPONENT - VERSION 1.0 PROFESSIONAL
    * Composant Table avec gestion complète des cellules, styles et fonctionnalités
@@ -5356,10 +5222,16 @@ var Squirrel = (function (exports) {
     }
   }
 
-  var TableBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    default: Table
-  });
+  // === FONCTION DE CRÉATION POUR COHÉRENCE ===
+  const createTable = (config = {}) => {
+    return new Table(config);
+  };
+
+  // Export par défaut
+  var table_builder = {
+    create: createTable,
+    Table: Table
+  };
 
   /**
    * Composant Tooltip simple pour tester la découverte automatique
@@ -5431,11 +5303,6 @@ var Squirrel = (function (exports) {
   var tooltip_builder = {
     create: createTooltip
   };
-
-  var TooltipBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    default: tooltip_builder
-  });
 
   /**
    * Composant Unit Builder avec HyperSquirrel
@@ -6467,107 +6334,10 @@ var Squirrel = (function (exports) {
     return new Unit(options);
   }
 
-  function deleteUnit(unitId) {
-    const unit = unitManager.units.get(unitId);
-    if (unit) {
-      unit.destroy();
-    }
-  }
-
-  function deleteUnits(unitIds) {
-    unitIds.forEach(id => deleteUnit(id));
-  }
-
-  function selectUnit(unitId) {
-    unitManager.selectUnit(unitId);
-  }
-
-  function selectUnits(unitIds) {
-    unitIds.forEach(id => selectUnit(id));
-  }
-
-  function deselectUnit(unitId) {
-    unitManager.deselectUnit(unitId);
-  }
-
-  function deselectUnits(unitIds) {
-    unitIds.forEach(id => deselectUnit(id));
-  }
-
-  function deselectAllUnits() {
-    unitManager.deselectAll();
-  }
-
-  function getSelectedUnits() {
-    return unitManager.getSelectedUnits();
-  }
-
-  function renameUnit(unitId, newName) {
-    const unit = unitManager.units.get(unitId);
-    if (unit) {
-      unit.rename(newName);
-    }
-  }
-
-  function renameUnits(unitIds, newName) {
-    unitIds.forEach(id => renameUnit(id, newName));
-  }
-
-  function connectUnits(fromUnitId, fromConnectorId, toUnitId, toConnectorId) {
-    return unitManager.createConnection(fromUnitId, fromConnectorId, toUnitId, toConnectorId);
-  }
-
-  function disconnectUnits(fromUnitId, fromConnectorId, toUnitId, toConnectorId) {
-    const connectionToRemove = Array.from(unitManager.connections.values()).find(conn =>
-      conn.fromUnit === fromUnitId && 
-      conn.fromConnector === fromConnectorId &&
-      conn.toUnit === toUnitId && 
-      conn.toConnector === toConnectorId
-    );
-    
-    if (connectionToRemove) {
-      unitManager.removeConnection(connectionToRemove.id);
-    }
-  }
-
-  function getAllConnections() {
-    return unitManager.getAllConnections();
-  }
-
-  function getUnit(unitId) {
-    return unitManager.units.get(unitId);
-  }
-
-  function getAllUnits() {
-    return Array.from(unitManager.units.values());
-  }
-
   // === EXPORT ===
   var unit_builder = {
     create: createUnit
   };
-
-  var UnitBuilder = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    connectUnits: connectUnits,
-    createUnit: createUnit,
-    default: unit_builder,
-    deleteUnit: deleteUnit,
-    deleteUnits: deleteUnits,
-    deselectAllUnits: deselectAllUnits,
-    deselectUnit: deselectUnit,
-    deselectUnits: deselectUnits,
-    disconnectUnits: disconnectUnits,
-    getAllConnections: getAllConnections,
-    getAllUnits: getAllUnits,
-    getSelectedUnits: getSelectedUnits,
-    getUnit: getUnit,
-    renameUnit: renameUnit,
-    renameUnits: renameUnits,
-    selectUnit: selectUnit,
-    selectUnits: selectUnits,
-    unitManager: unitManager
-  });
 
   // / === 🎉 Démonstrations ===
 
@@ -6598,128 +6368,94 @@ var Squirrel = (function (exports) {
   });
 
   /**
-   * 🚀 SQUIRREL.JS - CDN BUNDLE ENTRY POINT
-   * Static imports version for IIFE bundling
+   * 🚀 SQUIRREL CDN - STATIC VERSION OF SPARK.JS
+   * Version statique pour bundle CDN (sans dynamic imports)
    */
 
 
-  // === ÉTAT GLOBAL ===
-  let pluginManager = null;
+  // Exposition immédiate et directe (sans attendre le DOM)
+  window.$ = $$1;
+  window.define = define$1;
+  window.observeMutations = observeMutations;
+  window.body = document.body;
+  window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
-  // === INITIALISATION IMMÉDIATE DES APIs ===
-  function initSquirrelAPIs() {
-    // Exposer les utilitaires de base
-    window.$ = $$1;
-    window.define = define$1; // Use the real define function from squirrel.js
-    window.observeMutations = observeMutations;
-    window.body = document.body;
-    window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
-    
-    // Créer le plugin manager
-    pluginManager = new PluginManager();
-    window.pluginManager = pluginManager;
-    
-    // Créer l'API des plugins
-    const pluginAPI = new SquirrelPluginAPI(pluginManager);
-    window.Squirrel = pluginAPI;
+  // Exposition directe des composants
+  window.Button = createButton;
+  window.Badge = createBadge || badge_builder;
+  window.Slider = createSlider || slider_builder;
+  window.Table = createTable || table_builder;
+  window.Matrix = createMatrix || matrix_builder;
+  window.Draggable = draggable_builder;
+  window.Menu = menu_builder;
+  window.Tooltip = tooltip_builder;
+  window.Unit = unit_builder;
 
-    // Pre-register all components
-    const components = {
-      badge_builder: BadgeBuilder,
-      button_builder: ButtonBuilder,
-      draggable_builder: DraggableBuilder,
-      matrix_builder: MatrixBuilder,
-      menu_builder: MenuBuilder,
-      slider_builder: SliderBuilder,
-      table_builder: TableBuilder,
-      tooltip_builder: TooltipBuilder,
-      unit_builder: UnitBuilder
-    };
+  // Initialisation du plugin manager
+  const pluginManager = new PluginManager();
+  const pluginAPI = new SquirrelPluginAPI(pluginManager);
 
-    // Register all components with the plugin manager and expose globally
-    Object.entries(components).forEach(([name, component]) => {
-      if (component && typeof component === 'object') {
-        pluginManager.registerPlugin(name, component);
-        
-        // Expose components globally for direct access
-        const componentName = name.replace('_builder', '');
-        componentName.charAt(0).toUpperCase() + componentName.slice(1);
-        
-      
-        // For other components, expose them with their proper names
-      
+  window.pluginManager = pluginManager;
+  window.Squirrel = pluginAPI;
+
+  // Émission immédiate de l'événement de compatibilité
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('squirrel:ready', {
+      detail: { 
+        version: '1.0.0', 
+        components: ['Button', 'Badge', 'Slider', 'Table', 'Matrix', 'Draggable', 'Menu', 'Tooltip', 'Unit'],
+        domReady: true
       }
+    }));
+  }
+
+  /**
+   * 🚀 SQUIRREL.JS - CDN BUNDLE ENTRY POINT
+   * Utilise la version statique de spark.js pour le CDN
+   */
+
+
+  // Force l'exposition dans le contexte global APRÈS le chargement
+  if (typeof window !== 'undefined') {
+    // Exposition immédiate dans le contexte IIFE
+    window.$ = $$1;
+    window.Button = createButton;
+    window.define = define$1;
+    window.observeMutations = observeMutations;
+    
+    console.log('🔍 CDN Bundle - Functions exposed:', {
+      '$': typeof window.$,
+      'Button': typeof window.Button,
+      'define': typeof window.define
     });
   }
 
-  // === INITIALISATION DOM ===
-  function initSquirrelDOM() {
-    try {
-      window.squirrelDomReady = true;
-      
-      // Émettre l'événement de compatibilité
-      window.dispatchEvent(new CustomEvent('squirrel:ready', {
-        detail: { 
-          version: '1.0.0', 
-          components: pluginManager ? Array.from(pluginManager.getLoadedPlugins()) : [],
-          domReady: true
-        }
-      }));
-    } catch (error) {
-      console.error('❌ Erreur lors de l\'initialisation DOM:', error);
-    }
-  }
-
-  // === AUTO-INITIALISATION ===
-  if (typeof window !== 'undefined') {
-    // ÉTAPE 1: Initialiser les APIs immédiatement
-    initSquirrelAPIs();
-    
-    // ÉTAPE 2: Initialiser le DOM dès que body est disponible
-    if (document.body) {
-      // Body disponible, initialiser immédiatement
-      initSquirrelDOM();
-    } else {
-      // Attendre le body
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initSquirrelDOM);
-      } else {
-        setTimeout(initSquirrelDOM, 0);
-      }
-    }
-  }
-
-  // === EXPOSITION DES APIs CORE ===
-  // No need for separate function, already done in initSquirrelAPIs
-
-  // Export for module compatibility
+  // Export pour compatibilité module
   const squirrelBundleInfo = {
     ready: true,
     version: '1.0.0',
-    components: [
-      'badge_builder',
-      'button_builder', 
-      'draggable_builder',
-      'matrix_builder',
-      'menu_builder',
-      'slider_builder',
-      'table_builder',
-      'tooltip_builder',
-      'unit_builder'
-    ]
+    type: 'cdn'
   };
 
-  var bundleEntryCdn = {
-    initAPIs: initSquirrelAPIs,
-    initDOM: initSquirrelDOM,
-    version: '1.0.0'
+  var bundleEntryCdnSimple = {
+    version: '1.0.0',
+    type: 'cdn',
+    $: $$1,
+    Button: createButton,
+    define: define$1
   };
 
-  exports.default = bundleEntryCdn;
+  exports.default = bundleEntryCdnSimple;
   exports.squirrelBundleInfo = squirrelBundleInfo;
 
   Object.defineProperty(exports, '__esModule', { value: true });
 
-  return exports;
 
-})({});
+          // Force global exposure after bundle execution
+          if (typeof window !== 'undefined' && Squirrel) {
+            // Ensure all APIs are globally available
+            console.log('🔍 Bundle loaded, exposing globals...');
+          }
+        
+
+})(this.Squirrel = this.Squirrel || {});

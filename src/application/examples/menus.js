@@ -8,7 +8,7 @@ let currentActiveItem = null;
 let isMobileMenuOpen = false;
 
 // 🌙 Menu Header Material Dark - Navigation principale FINE avec contraste
-const modernHeaderMenu = new Menu({
+const modernHeaderMenu = Menu({
     id: "modern-header-menu",
     attach: "#view",
     position: { x: 50, y: 30 },
@@ -430,7 +430,7 @@ const modernHeaderMenu = new Menu({
 });
 
 // 📱 Menu Mobile Overlay - Menu hamburger minimaliste
-const mobileMenuOverlay = new Menu({
+const mobileMenuOverlay = Menu({
     id: "mobile-menu-overlay",
     attach: "#view",
     position: { x: 0, y: 0 },
@@ -672,7 +672,7 @@ function hideMobileMenu() {
 }
 
 // 📱 Sidebar Material Dark - Menu latéral moderne et sobre
-const modernSidebar = new Menu({
+const modernSidebar = Menu({
     id: "modern-sidebar",
     attach: "#view",
     position: { x: 50, y: 130 },
@@ -946,7 +946,7 @@ const modernSidebar = new Menu({
 });
 
 // 🎯 Menu FAB (Floating Action Button) moderne
-const modernFAB = new Menu({
+const modernFAB = Menu({
     id: "modern-fab",
     attach: "#view",
     position: { x: 1200, y: 500 },
@@ -1088,7 +1088,7 @@ const modernFAB = new Menu({
 });
 
 // 📋 Menu Contextuel moderne - Clic droit
-const modernContextMenu = new Menu({
+const modernContextMenu = Menu({
     id: "modern-context-menu",
     attach: "#view",
     position: { x: 0, y: 0 }, // Position dynamique selon le clic

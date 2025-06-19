@@ -1174,8 +1174,6 @@ class Matrix {
 // 🌟 EXPORT DU MODULE
 // ========================================
 
-export default Matrix;
-
 // Factory functions pour usage simplifié
 export function createMatrix(options) {
   return new Matrix(options);
@@ -1220,3 +1218,16 @@ export function createAutoSizedMatrix(options = {}) {
   
   return matrix;
 }
+
+// === EXPORT ===
+export {
+  Matrix
+};
+
+// Export par défaut
+export default {
+  create: createMatrix,
+  responsive: createResponsiveMatrix,
+  autoSized: createAutoSizedMatrix,
+  Matrix: Matrix
+};

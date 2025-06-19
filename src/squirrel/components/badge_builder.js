@@ -64,7 +64,12 @@ const createBadge = (config = {}) => {
   return badge;
 };
 
-// Export selon la convention standard recommandée
+// === EXPORT ===
+export {
+  createBadge
+};
+
+// Export par défaut
 export default {
   create: createBadge,
   
@@ -79,6 +84,3 @@ export default {
     dark: '#343a40'
   }
 };
-
-// Export direct également disponible (convention alternative)
-export { createBadge };
