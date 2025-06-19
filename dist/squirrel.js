@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-19T13:58:26.912Z
+ * Generated: 2025-06-19T13:59:40.685Z
  */
 var Squirrel = (function () {
   'use strict';
@@ -59,7 +59,7 @@ var Squirrel = (function () {
    * @param {string|Function} id - Identifiant du template ou fonction de création
    * @param {Object} props - Propriétés de configuration
    */
-  const $$1 = (id, props = {}) => {
+  const $ = (id, props = {}) => {
     const config = templateRegistry.get(id) || {};
     const element = createElement(config.tag || props.tag || id || 'div');
     
@@ -136,7 +136,7 @@ var Squirrel = (function () {
     // Enfants imbriqués
     if (merged.children) {
       merged.children.forEach(childConfig => {
-        const child = $$1(childConfig.id, childConfig);
+        const child = $(childConfig.id, childConfig);
         element.appendChild(child);
       });
     }
@@ -253,9 +253,33 @@ var Squirrel = (function () {
    * @param {string} id - Identifiant du template
    * @param {Object} config - Configuration du template
    */
-  const define$1 = (id, config) => {
+  const define = (id, config) => {
     templateRegistry.set(id, config);
     return config;
+  };
+
+  // === 🧠 Observation des mutations DOM ===
+  /**
+   * Surveiller les changements sur un élément
+   * @param {Element} element - Élément à observer
+   * @param {Function} callback - Callback sur mutation
+   * @param {Object} options - Options de l'observateur
+   */
+  const observeMutations = (element, callback, options = {}) => {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach(mutation => callback(mutation));
+    });
+    
+    observer.observe(element, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      ...options
+    });
+    
+    // Stocker l'observateur pour le nettoyage
+    if (!mutationRegistry.has(element)) mutationRegistry.set(element, []);
+    mutationRegistry.get(element).push(observer);
   };
 
   /**
@@ -719,13 +743,131 @@ var Squirrel = (function () {
   window.PluginManager = PluginManager;
 
   /**
+   * 🎯 SQUIRREL PLUGIN API
+   * Interface simple pour l'utilisation conditionnelle des plugins
+   */
+
+  class SquirrelPluginAPI {
+    constructor(pluginManager) {
+      this.pluginManager = pluginManager;
+    }
+
+    /**
+     * Utilisation conditionnelle de plugins
+     * Usage: await Squirrel.use(['Button', 'Slider'])
+     */
+    async use(pluginNames) {
+      if (typeof pluginNames === 'string') {
+        pluginNames = [pluginNames];
+      }
+
+      // console.log(`🎯 Chargement conditionnel des plugins: ${pluginNames.join(', ')}`);
+      
+      const results = await this.pluginManager.loadMultiple(pluginNames);
+      
+      // Retourne les instances chargées
+      return results;
+    }
+
+    /**
+     * Chargement d'un plugin unique avec retour d'instance
+     */
+    async plugin(pluginName) {
+      return await this.pluginManager.load(pluginName);
+    }
+
+    /**
+     * Vérification si un plugin est disponible
+     */
+    hasPlugin(pluginName) {
+      return this.pluginManager.plugins.has(pluginName);
+    }
+
+    /**
+     * Vérification si un plugin est chargé
+     */
+    isPluginLoaded(pluginName) {
+      return this.pluginManager.loadedPlugins.has(pluginName);
+    }
+
+    /**
+     * Liste des plugins disponibles
+     */
+    getAvailablePlugins() {
+      return this.pluginManager.getAvailablePlugins();
+    }
+
+    /**
+     * Liste des plugins chargés
+     */
+    getLoadedPlugins() {
+      return this.pluginManager.getLoadedPlugins();
+    }
+
+    /**
+     * Statut complet des plugins
+     */
+    getPluginStatus() {
+      return this.pluginManager.getStatus();
+    }
+
+    /**
+     * API de création de composants avec chargement automatique
+     */
+    async create(componentType, ...args) {
+      // Chargement automatique du plugin si nécessaire
+      await this.use([componentType]);
+      
+      // Récupération du constructeur depuis window
+      const ComponentClass = window[componentType];
+      if (!ComponentClass) {
+        throw new Error(`Composant "${componentType}" non trouvé après chargement`);
+      }
+
+      // Création et retour de l'instance
+      return new ComponentClass(...args);
+    }
+
+    /**
+     * Raccourcis pour les composants les plus utilisés
+     */
+    async button(...args) {
+      return await this.create('Button', ...args);
+    }
+
+    async slider(...args) {
+      return await this.create('Slider', ...args);
+    }
+
+    async matrix(...args) {
+      return await this.create('Matrix', ...args);
+    }
+
+    async module(...args) {
+      return await this.create('Module', ...args);
+    }
+
+    async table(...args) {
+      return await this.create('Table', ...args);
+    }
+
+    async list(...args) {
+      return await this.create('List', ...args);
+    }
+
+    async menu(...args) {
+      return await this.create('Menu', ...args);
+    }
+  }
+
+  /**
    * 🔴 Badge Component - Test de l'auto-discovery
    * Composant simple pour tester que le système détecte et expose automatiquement
    * les nouveaux composants sans intervention manuelle.
    */
 
   // Template pour le badge
-  define$1('badge-element', {
+  define('badge-element', {
     tag: 'span',
     class: 'hs-badge',
     css: {
@@ -749,7 +891,7 @@ var Squirrel = (function () {
   // === DÉFINITION DES TEMPLATES DE BASE ===
 
   // Template pour le conteneur principal du bouton
-  define$1('button-container', {
+  define('button-container', {
     tag: 'button',
     class: 'hs-button',
     text: 'hello',
@@ -775,7 +917,7 @@ var Squirrel = (function () {
   });
 
   // Template pour l'icône du bouton
-  define$1('button-icon', {
+  define('button-icon', {
     tag: 'span',
     class: 'hs-button-icon',
     css: {
@@ -788,7 +930,7 @@ var Squirrel = (function () {
   });
 
   // Template pour le texte du bouton
-  define$1('button-text', {
+  define('button-text', {
     tag: 'span',
     class: 'hs-button-text',
     css: {
@@ -799,7 +941,7 @@ var Squirrel = (function () {
   });
 
   // Template pour le badge/compteur
-  define$1('button-badge', {
+  define('button-badge', {
     tag: 'span',
     class: 'hs-button-badge',
     css: {
@@ -823,7 +965,7 @@ var Squirrel = (function () {
   // === TEMPLATES POUR DRAGGABLE ===
 
   // Template pour un élément draggable basique
-  define$1('draggable-box', {
+  define('draggable-box', {
     tag: 'div',
     class: 'hs-draggable',
     css: {
@@ -845,7 +987,7 @@ var Squirrel = (function () {
   });
 
   // Template pour un handle de drag
-  define$1('drag-handle', {
+  define('drag-handle', {
     tag: 'div',
     class: 'hs-drag-handle',
     css: {
@@ -864,7 +1006,7 @@ var Squirrel = (function () {
   });
 
   // Template pour une drop zone
-  define$1('drop-zone', {
+  define('drop-zone', {
     tag: 'div',
     class: 'hs-drop-zone',
     css: {
@@ -884,7 +1026,7 @@ var Squirrel = (function () {
   });
 
   // Styles pour les états des drop zones
-  define$1('drop-zone-active', {
+  define('drop-zone-active', {
     css: {
       borderColor: '#3498db',
       backgroundColor: '#ebf3fd',
@@ -892,7 +1034,7 @@ var Squirrel = (function () {
     }
   });
 
-  define$1('drop-zone-hover', {
+  define('drop-zone-hover', {
     css: {
       borderColor: '#27ae60',
       backgroundColor: '#e8f5e8',
@@ -901,7 +1043,7 @@ var Squirrel = (function () {
     }
   });
 
-  define$1('drop-zone-reject', {
+  define('drop-zone-reject', {
     css: {
       borderColor: '#e74c3c',
       backgroundColor: '#fdf2f2',
@@ -918,7 +1060,7 @@ var Squirrel = (function () {
   // === DÉFINITION DES TEMPLATES DE BASE ===
 
   // Template pour le conteneur principal du slider
-  define$1('slider-container', {
+  define('slider-container', {
     tag: 'div',
     class: 'hs-slider',
     css: {
@@ -930,7 +1072,7 @@ var Squirrel = (function () {
   });
 
   // Template pour la piste du slider
-  define$1('slider-track', {
+  define('slider-track', {
     tag: 'div',
     class: 'hs-slider-track',
     css: {
@@ -944,7 +1086,7 @@ var Squirrel = (function () {
   });
 
   // Template pour la partie progression du slider
-  define$1('slider-progression', {
+  define('slider-progression', {
     tag: 'div',
     class: 'hs-slider-progression',
     css: {
@@ -956,7 +1098,7 @@ var Squirrel = (function () {
   });
 
   // Template pour le handle/thumb du slider
-  define$1('slider-handle', {
+  define('slider-handle', {
     tag: 'div',
     class: 'hs-slider-handle',
     css: {
@@ -971,7 +1113,7 @@ var Squirrel = (function () {
   });
 
   // Template pour le label/valeur du slider
-  define$1('slider-label', {
+  define('slider-label', {
     tag: 'div',
     class: 'hs-slider-label',
     css: {
@@ -984,7 +1126,7 @@ var Squirrel = (function () {
   });
 
   // Template pour les graduations
-  define$1('slider-tick', {
+  define('slider-tick', {
     tag: 'div',
     class: 'hs-slider-tick',
     css: {
@@ -999,7 +1141,7 @@ var Squirrel = (function () {
    */
 
   // Template pour le tooltip
-  define$1('tooltip-container', {
+  define('tooltip-container', {
     tag: 'div',
     class: 'hs-tooltip',
     css: {
@@ -1454,7 +1596,7 @@ var Squirrel = (function () {
   // === DÉFINITION DES TEMPLATES ===
 
   // Template pour le conteneur principal du unit
-  define$1('unit-container', {
+  define('unit-container', {
     tag: 'div',
     class: 'unit-container',
     css: {
@@ -1472,7 +1614,7 @@ var Squirrel = (function () {
   });
 
   // Template pour l'en-tête du unit
-  define$1('unit-header', {
+  define('unit-header', {
     tag: 'div',
     class: 'unit-header',
     css: {
@@ -1488,7 +1630,7 @@ var Squirrel = (function () {
   });
 
   // Template pour le nom éditable
-  define$1('unit-name', {
+  define('unit-name', {
     tag: 'span',
     class: 'unit-name',
     css: {
@@ -1500,7 +1642,7 @@ var Squirrel = (function () {
   });
 
   // Template pour le corps du unit
-  define$1('unit-body', {
+  define('unit-body', {
     tag: 'div',
     class: 'unit-body',
     css: {
@@ -1514,7 +1656,7 @@ var Squirrel = (function () {
   });
 
   // Template pour l'icône
-  define$1('unit-icon', {
+  define('unit-icon', {
     tag: 'img',
     class: 'unit-icon',
     attrs: { draggable: 'false' },
@@ -1527,7 +1669,7 @@ var Squirrel = (function () {
   });
 
   // Template pour les connecteurs
-  define$1('unit-connector', {
+  define('unit-connector', {
     tag: 'div',
     class: 'unit-connector',
     css: {
@@ -1544,7 +1686,7 @@ var Squirrel = (function () {
   });
 
   // Template pour les connecteurs d'entrée
-  define$1('unit-connector-input', {
+  define('unit-connector-input', {
     tag: 'div',
     class: 'unit-connector unit-connector-input',
     css: {
@@ -1561,7 +1703,7 @@ var Squirrel = (function () {
   });
 
   // Template pour les connecteurs de sortie
-  define$1('unit-connector-output', {
+  define('unit-connector-output', {
     tag: 'div',
     class: 'unit-connector unit-connector-output',
     css: {
@@ -1626,72 +1768,81 @@ var Squirrel = (function () {
     document.head.appendChild(style);
   }
 
-  // / === 🎉 Démonstrations ===
-
-  // 1. Template basique
-
-
-  define('view', {
-      tag: 'div',
-      class: 'atome',
-      id: 'view',
-
-  });
-
-  // 2. Animation avec CSS
-  $('view', {
-      parent: document.body,
-      css: {
-          background: '#272727',
-          color: 'lightgray',
-          left: '0px',
-          top: '0px',
-          position: 'absolute',
-          width: '100%',
-          height: '100%',
-          overflow: 'auto',
-      }
-
-  });
-
   /**
-   * 🚀 SQUIRREL.JS - CLEAN BUNDLE ENTRY
-   * Optimized entry point for browser usage
+   * 🚀 SQUIRREL.JS - BUNDLE ENTRY POINT
+   * Point d'entrée avec initialisation immédiate et simple
    */
 
 
-
-  // Fonction define locale pour éviter les conflits AMD
-  function defineTemplate(id, config) {
+  // === FONCTION DEFINE LOCALE ===
+  const defineTemplate = (id, config) => {
     if (!window.templateRegistry) {
       window.templateRegistry = new Map();
     }
     window.templateRegistry.set(id, config);
     return config;
+  };
+
+  // === KICKSTART MANUEL (sans importer kickstart.js) ===
+  function runKickstart() {
+    // Créer la view
+    defineTemplate('view', {
+      tag: 'div',
+      class: 'atome',
+      id: 'view',
+    });
+
+    // Créer l'élément view
+    $('view', {
+      parent: document.body,
+      css: {
+        background: '#272727',
+        color: 'lightgray',
+        left: '0px',
+        top: '0px',
+        position: 'absolute',
+        width: '100%',
+        height: '100%',
+        overflow: 'auto',
+      }
+    });
   }
 
-
-  // Initialisation des APIs
-  function initSquirrel() {
-    window.$ = $$1;
+  // === INITIALISATION IMMÉDIATE DES APIs ===
+  function initSquirrelAPIs() {
+    // Exposer les utilitaires de base
+    window.$ = $;
     window.define = defineTemplate;
+    window.observeMutations = observeMutations;
+    window.body = document.body;
+    window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
     
-    // Créer la structure DOM de base
-    createViewElement();
+    // Créer le plugin manager
+    pluginManager = new PluginManager();
+    window.pluginManager = pluginManager;
     
-    // Chargement des composants
-    const components = {};
+    // Créer l'API des plugins
+    const pluginAPI = new SquirrelPluginAPI(pluginManager);
+    window.Squirrel = pluginAPI;
+  }
 
-    
-    window.Squirrel = {
-      version: '1.0.0',
-      ready: true,
-      $: $$1,
-      define: defineTemplate,
-      components: components,
-      ...components
-    };
-    
+  // === INITIALISATION DOM ===
+  function initSquirrelDOM() {
+    try {
+      runKickstart();
+      window.squirrelDomReady = true;
+      
+      // Émettre l'événement de compatibilité
+      window.dispatchEvent(new CustomEvent('squirrel:ready', {
+        detail: { 
+          version: '1.0.0', 
+          components: Array.from(pluginManager.loadedPlugins),
+          domReady: true
+        }
+      }));
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'initialisation DOM:', error);
+    }
   }
 
   // Auto-initialisation
@@ -1699,19 +1850,12 @@ var Squirrel = (function () {
     // Attendre que le DOM soit prêt
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
-        initSquirrel();
-        window.dispatchEvent(new CustomEvent('squirrel:ready', {
-          detail: { version: '1.0.0', ready: true }
-        }));
+        initSquirrelAPIs();
+        initSquirrelDOM();
       });
     } else {
-      initSquirrel();
-      // Déclencher l'événement de manière asynchrone
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('squirrel:ready', {
-          detail: { version: '1.0.0', ready: true }
-        }));
-      }, 0);
+      initSquirrelAPIs();
+      initSquirrelDOM();
     }
   }
 
