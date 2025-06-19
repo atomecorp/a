@@ -5,7 +5,7 @@
  * 
  * Copyright (c) 2025 Squirrel Team
  * Released under the MIT License
- * Generated: 2025-06-19T13:57:03.727Z
+ * Generated: 2025-06-19T13:58:26.912Z
  */
 var Squirrel = (function () {
   'use strict';
@@ -717,34 +717,6 @@ var Squirrel = (function () {
 
   // Exposition globale pour utilisation directe
   window.PluginManager = PluginManager;
-
-  // / === 🎉 Démonstrations ===
-
-  // 1. Template basique
-
-
-  define('view', {
-      tag: 'div',
-      class: 'atome',
-      id: 'view',
-
-  });
-
-  // 2. Animation avec CSS
-  $('view', {
-      parent: document.body,
-      css: {
-          background: '#272727',
-          color: 'lightgray',
-          left: '0px',
-          top: '0px',
-          position: 'absolute',
-          width: '100%',
-          height: '100%',
-          overflow: 'auto',
-      }
-
-  });
 
   /**
    * 🔴 Badge Component - Test de l'auto-discovery
@@ -1654,11 +1626,38 @@ var Squirrel = (function () {
     document.head.appendChild(style);
   }
 
+  // / === 🎉 Démonstrations ===
+
+  // 1. Template basique
+
+
+  define('view', {
+      tag: 'div',
+      class: 'atome',
+      id: 'view',
+
+  });
+
+  // 2. Animation avec CSS
+  $('view', {
+      parent: document.body,
+      css: {
+          background: '#272727',
+          color: 'lightgray',
+          left: '0px',
+          top: '0px',
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          overflow: 'auto',
+      }
+
+  });
+
   /**
    * 🚀 SQUIRREL.JS - CLEAN BUNDLE ENTRY
    * Optimized entry point for browser usage
    */
-
 
 
 
