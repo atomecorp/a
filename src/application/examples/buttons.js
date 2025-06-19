@@ -11,6 +11,7 @@ function createMaterialToggle(initialState = false) {
   
   const toggle = Button({
     text: '',
+    parent: '#view',//TODO correct parent attache is not working
     onClick: () => {
       state = !state;
       updateVisualState();

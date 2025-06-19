@@ -3,17 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Squirrel.js avec Kickstart</title>
+    <title>Test Squirrel</title>
 </head>
 <body>
-    <h1>🐿️ Test Kickstart intégré</h1>
-
-    <!-- Chargement du bundle avec kickstart -->
-    <script src="./squirrel.js"></script>
+    <h1>Test Squirrel Library</h1>
+    <div id="test-container"></div>
+    
+    <script src="squirrel.js"></script>
+    <script>
+        console.log('🔍 Debug initial - Squirrel:', typeof Squirrel);
+        console.log('🔍 Debug initial - Button:', typeof Button);
+        
+        // Test simple avec timeout pour debug
+        setTimeout(() => {
+            console.log('🔍 Après timeout - Squirrel:', typeof Squirrel);
+            console.log('🔍 Après timeout - Button:', typeof Button);
+            console.log('🔍 View element:', document.getElementById('view'));
+            
+            if (window.Button) {
+                console.log('✅ Button fonction trouvée, création...');
+                
+                try {
+                    const btn = Button({
+                        text: 'Simple Test Button'
+                    });
+                    
+                    if (btn) {
+                        document.body.appendChild(btn);
+                        console.log('✅ Button ajouté au DOM');
+                    } else {
+                        console.error('❌ Button est null');
+                    }
+                } catch (error) {
+                    console.error('❌ Erreur création button:', error);
+                }
+            } else {
+                console.error('❌ Button non disponible');
+            }
+        }, 100);
+    </script>
+</body>
+</html>
+                    }
+                } catch (error) {
+                    console.error('❌ Erreur création bouton:', error);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+            console.log('✅ Squirrel ready via Promise:', squirrel.version);
+        })();
+    </script>
 
      <script type="module">
     window.addEventListener('squirrel:ready', () => {
-    
+    $('span', {
+  // pas besoin de 'tag'
+  id: 'test1',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'Je suis un SPAN ! 🎯'
+});
       
         window.addEventListener('squirrel:ready', (event) => {
             function createMaterialToggle(initialState = false) {
@@ -28,6 +86,7 @@
   `;
   
   const toggle = Button({
+    parent: '#view',
     text: '',
     onClick: () => {
       state = !state;
@@ -118,6 +177,7 @@ console.log('État actuel:', myToggle.getValue());
                 // Test d'un composant dans la vue
                 if (window.Button) {
                     const button = Button({
+                      parent: '#view',
                         text: '🔥 Button dans la vue',
                         css: {
                             display: 'block',
@@ -148,4 +208,9 @@ console.log('État actuel:', myToggle.getValue());
     
     
 </body>
+</html>
+</html>
+    
+</body>
+</html>
 </html>

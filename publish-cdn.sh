@@ -226,10 +226,10 @@ missing_files=()
 
 # Vérifier si bundle-entry.js existe et lister les imports
 if [ -f "scripts_utils/bundle-entry.js" ]; then
-    echo "   Checking imports in bundle-entry.js..."
+    echo "   Checking imports in bundle-entry-clean.js..."
     
     # Extraire les imports de composants
-    imports=$(grep -o "from.*components/.*\.js" scripts_utils/bundle-entry.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
+    imports=$(grep -o "from.*components/.*\.js" scripts_utils/bundle-entry-clean.js 2>/dev/null | sed 's/from.*components\///g' | sed 's/\.js.*//g')
     
     for component in $imports; do
         file_path="src/squirrel/components/${component}.js"

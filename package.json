@@ -47,7 +47,7 @@
     "build:dev": "rollup -c --environment BUILD:development",
     "build:prod": "rollup -c --environment BUILD:production",
     "build:analyze": "rollup -c --environment BUILD:production,ANALYZE:true",
-    "build:cdn": "rollup -c scripts_utils/rollup.config.cdn.js",
+    "build:cdn": "npm run build:cdn:clean",
     "build:cdn:watch": "rollup -c scripts_utils/rollup.config.cdn.js --watch",
     "build:npm": "rollup -c scripts_utils/rollup.config.npm.js",
     "build:all": "npm run build:cdn && npm run build:npm",
@@ -62,7 +62,10 @@
     "perf": "rollup -c --environment BUILD:development && python -m http.server 8000",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "debug-bundle": "node debug-bundle.mjs"
+    "debug-bundle": "node debug-bundle.mjs",
+    "build:cdn:clean": "rollup -c scripts_utils/rollup.config.cdn.clean.js",
+    "build:minimal": "rollup -c scripts_utils/rollup.config.minimal.js",
+    "check:syntax": "node check-syntax.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.1",
