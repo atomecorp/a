@@ -203,15 +203,42 @@
                 </div>
                 <div id="markerInfo" class="info-panel">No markers added yet. Use "Enable Click Events" to click on map and add markers, or use buttons above for predefined locations.</div>
             </div>
-        </div>
-
-        <div class="test-grid">            <div class="test-section">
+        </div>        <div class="test-grid">            <div class="test-section">
                 <h2>🟢 Shape Drawing</h2>
                 <div class="controls">
                     <button class="btn" onclick="enableClickToAddCircles()" id="circleBtn" disabled>⭕ Click to Add Circles</button>
                     <button class="btn" onclick="enableClickToAddPolygons()" id="polygonBtn" disabled>📐 Click to Add Polygons</button>
                     <button class="btn" onclick="clearShapes()" id="clearShapesBtn" disabled>🗑️ Clear All Shapes</button>
                 </div>
+                
+                <!-- Size Controls -->
+                <div class="info-panel">
+                    <h3>📏 Shape Size Controls</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 15px 0;">
+                        <div>
+                            <label for="circleRadius" style="display: block; margin-bottom: 5px; font-weight: bold;">⭕ Circle Radius (meters):</label>
+                            <input type="number" id="circleRadius" value="500" min="10" max="10000" step="10" 
+                                   style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" 
+                                   onchange="updateCircleRadius(this.value)">
+                            <small style="color: #666;">Current: <span id="circleRadiusValue">500</span> meters</small>
+                        </div>
+                        <div>
+                            <label for="polygonSize" style="display: block; margin-bottom: 5px; font-weight: bold;">📐 Polygon Size (offset):</label>
+                            <input type="number" id="polygonSize" value="0.005" min="0.001" max="0.1" step="0.001" 
+                                   style="width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ccc;" 
+                                   onchange="updatePolygonSize(this.value)">
+                            <small style="color: #666;">Current: <span id="polygonSizeValue">0.005</span> degrees</small>
+                        </div>
+                    </div>
+                    <div style="margin: 10px 0; padding: 10px; background-color: rgba(255, 255, 255, 0.1); border-radius: 5px;">
+                        <strong>💡 Tips:</strong>
+                        <ul style="margin: 5px 0; padding-left: 20px;">
+                            <li>Circle radius: 100-1000m for buildings, 1000-5000m for neighborhoods</li>
+                            <li>Polygon size: 0.001-0.01 for small areas, 0.01-0.1 for larger regions</li>
+                        </ul>
+                    </div>
+                </div>
+                
                 <div id="shapeModeStatus" class="info-panel" style="border: 2px solid #666;">
                     ⏸️ <strong>Shape Mode: INACTIVE</strong><br>
                     Click a shape button above, then click on the map to place shapes at those locations.
@@ -261,6 +288,10 @@
         let shapePlacementMode = false;
         let currentShapeType = null; // 'circle' or 'polygon'
         let currentTileLayer = 0;
+        
+        // Shape size variables
+        let circleRadius = 500; // meters
+        let polygonSize = 0.005; // degrees offset
 
         // Tile layer options
         const tileLayers = [
@@ -336,13 +367,24 @@
                     `;
                 }
             }
-        }
-
-        function updateInteractionInfo(message) {
+        }        function updateInteractionInfo(message) {
             const info = document.getElementById('interactionInfo');
             if (info) {
                 info.innerHTML = message;
             }
+        }
+
+        // Shape size update functions
+        function updateCircleRadius(value) {
+            circleRadius = parseInt(value);
+            document.getElementById('circleRadiusValue').textContent = circleRadius;
+            log(`⭕ Circle radius updated to: ${circleRadius} meters`);
+        }
+
+        function updatePolygonSize(value) {
+            polygonSize = parseFloat(value);
+            document.getElementById('polygonSizeValue').textContent = polygonSize;
+            log(`📐 Polygon size updated to: ${polygonSize} degrees`);
         }
 
         // Feature detection
@@ -648,14 +690,13 @@
                     // Handle shape placement
                     const shapeNumber = shapes.length + 1;
                     let shape;
-                    
-                    if (currentShapeType === 'circle') {
-                        // Create circle at clicked location
+                      if (currentShapeType === 'circle') {
+                        // Create circle at clicked location with user-defined radius
                         shape = L.circle(e.latlng, {
                             color: 'red',
                             fillColor: '#f03',
                             fillOpacity: 0.5,
-                            radius: 500
+                            radius: circleRadius
                         }).addTo(map1);
                         
                         shape.bindPopup(`
@@ -664,21 +705,20 @@
                                 <p><strong>Center:</strong><br>
                                 Lat: ${lat}<br>
                                 Lng: ${lng}</p>
-                                <p><strong>Radius:</strong> 500 meters</p>
+                                <p><strong>Radius:</strong> ${circleRadius} meters</p>
                                 <p><em>Added by clicking on map!</em></p>
                             </div>
                         `).openPopup();
                         
-                        log(`⭕ Circle #${shapeNumber} added at: ${lat}, ${lng}`);
+                        log(`⭕ Circle #${shapeNumber} added at: ${lat}, ${lng} (radius: ${circleRadius}m)`);
                         
                     } else if (currentShapeType === 'polygon') {
-                        // Create polygon at clicked location
-                        const offset = 0.005; // Small offset for polygon points
+                        // Create polygon at clicked location with user-defined size
                         shape = L.polygon([
-                            [e.latlng.lat + offset, e.latlng.lng - offset],
-                            [e.latlng.lat + offset, e.latlng.lng + offset],
-                            [e.latlng.lat - offset, e.latlng.lng + offset],
-                            [e.latlng.lat - offset, e.latlng.lng - offset]
+                            [e.latlng.lat + polygonSize, e.latlng.lng - polygonSize],
+                            [e.latlng.lat + polygonSize, e.latlng.lng + polygonSize],
+                            [e.latlng.lat - polygonSize, e.latlng.lng + polygonSize],
+                            [e.latlng.lat - polygonSize, e.latlng.lng - polygonSize]
                         ], {
                             color: 'blue',
                             fillColor: '#30f',
@@ -691,11 +731,12 @@
                                 <p><strong>Center:</strong><br>
                                 Lat: ${lat}<br>
                                 Lng: ${lng}</p>
+                                <p><strong>Size:</strong> ${polygonSize} degrees</p>
                                 <p><em>Added by clicking on map!</em></p>
                             </div>
                         `).openPopup();
                         
-                        log(`📐 Polygon #${shapeNumber} added at: ${lat}, ${lng}`);
+                        log(`📐 Polygon #${shapeNumber} added at: ${lat}, ${lng} (size: ${polygonSize})`);
                     }
                     
                     if (shape) {
