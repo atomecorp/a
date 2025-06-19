@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 Simple Tone.js Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 20px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 14px;
+            text-align: left;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Simple Tone.js Test</h1>
+        
+        <p>This is a minimal test to check if Tone.js is working.</p>
+        
+        <button class="btn" onclick="testTone()" id="testBtn">🎵 Test Audio</button>
+        
+        <div class="status" id="status">
+            Click the button above to test audio...
+        </div>
+        
+        <p><a href="debug-test.html" style="color: #FFD700;">Full Debug Test</a> | 
+           <a href="index.html" style="color: #FFD700;">Back to Tests</a></p>
+    </div>
+
+    <!-- Load Tone.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.2.6/Tone.min.js"></script>
+
+    <script>
+        function log(message) {
+            const status = document.getElementById('status');
+            const timestamp = new Date().toLocaleTimeString();
+            status.innerHTML += `[${timestamp}] ${message}\n`;
+        }
+
+        async function testTone() {
+            const btn = document.getElementById('testBtn');
+            btn.disabled = true;
+            btn.textContent = 'Testing...';
+
+            try {
+                log('🔍 Checking if Tone.js is loaded...');
+                
+                if (typeof Tone === 'undefined') {
+                    throw new Error('Tone.js is not loaded!');
+                }
+                
+                log(`✅ Tone.js version ${Tone.version} detected`);
+                log('🎵 Starting audio context...');
+                
+                // Start audio context
+                await Tone.start();
+                log(`✅ Audio context started! State: ${Tone.context.state}`);
+                
+                log('🎹 Creating simple oscillator...');
+                
+                // Create and play a simple tone
+                const synth = new Tone.Synth().toDestination();
+                
+                log('🎵 Playing 440Hz for 1 second...');
+                synth.triggerAttackRelease('A4', '1n');
+                
+                log('✅ SUCCESS! You should hear a beep!');
+                log('🎉 Tone.js is working correctly!');
+                
+                btn.textContent = '✅ Audio Works!';
+                btn.style.background = 'linear-gradient(45deg, #28a745, #20c997)';
+                
+                // Clean up
+                setTimeout(() => {
+                    synth.dispose();
+                    log('🗑️ Cleaned up oscillator');
+                }, 1500);
+                
+            } catch (error) {
+                log(`❌ ERROR: ${error.message}`);
+                log('🔧 Try the debug test page for detailed diagnostics');
+                
+                btn.textContent = '❌ Failed';
+                btn.style.background = 'linear-gradient(45deg, #dc3545, #fd7e14)';
+            }
+        }
+
+        // Log initial state
+        document.addEventListener('DOMContentLoaded', () => {
+            log('📋 Simple Tone.js test loaded');
+            
+            if (typeof Tone !== 'undefined') {
+                log(`✅ Tone.js ${Tone.version} is available`);
+                log('👆 Click the button to start audio test');
+            } else {
+                log('❌ Tone.js not detected - check network connection');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -11,7 +11,17 @@ class ToneWrapper {
         this.sequences = new Map();
         this.initialized = false;
         
-        this.init();
+        // Wait for Tone.js to be available
+        this.waitForTone();
+    }
+
+    waitForTone() {
+        if (typeof Tone !== 'undefined') {
+            this.init();
+        } else {
+            // Check every 100ms for Tone.js to be available
+            setTimeout(() => this.waitForTone(), 100);
+        }
     }
 
     async init() {
@@ -48,15 +58,24 @@ class ToneWrapper {
                 return toneWrapper.playSound(url);
             };
         }
-    }
-
-    /**
+    }    /**
      * Start audio context (required for modern browsers)
      */
     async startAudio() {
-        if (Tone.context.state !== 'running') {
-            await Tone.start();
-            console.log('🎵 Audio context started');
+        if (!this.initialized) {
+            throw new Error('ToneWrapper not initialized. Please wait for Tone.js to load.');
+        }
+
+        try {
+            if (Tone.context.state !== 'running') {
+                await Tone.start();
+                console.log('🎵 Audio context started');
+            } else {
+                console.log('🎵 Audio context already running');
+            }
+        } catch (error) {
+            console.error('Error starting audio:', error);
+            throw error;
         }
     }
 
@@ -66,45 +85,52 @@ class ToneWrapper {
     stopAudio() {
         Tone.Transport.stop();
         Tone.Transport.cancel();
-    }
-
-    /**
+    }    /**
      * Create synthesizer
      */
     createSynth(type = 'sine', options = {}) {
+        if (!this.initialized) {
+            throw new Error('ToneWrapper not initialized. Please wait for Tone.js to load.');
+        }
+
         const synthId = `synth_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
         let synth;
-        switch (type) {
-            case 'am':
-                synth = new Tone.AMSynth(options);
-                break;
-            case 'fm':
-                synth = new Tone.FMSynth(options);
-                break;
-            case 'mono':
-                synth = new Tone.MonoSynth(options);
-                break;
-            case 'poly':
-                synth = new Tone.PolySynth(options);
-                break;
-            case 'membrane':
-                synth = new Tone.MembraneSynth(options);
-                break;
-            case 'metal':
-                synth = new Tone.MetalSynth(options);
-                break;
-            case 'noise':
-                synth = new Tone.NoiseSynth(options);
-                break;
-            default:
-                synth = new Tone.Synth({
-                    oscillator: { type: type },
-                    ...options
-                });
-        }
+        try {
+            switch (type) {
+                case 'am':
+                    synth = new Tone.AMSynth(options);
+                    break;
+                case 'fm':
+                    synth = new Tone.FMSynth(options);
+                    break;
+                case 'mono':
+                    synth = new Tone.MonoSynth(options);
+                    break;
+                case 'poly':
+                    synth = new Tone.PolySynth(Tone.Synth, options);
+                    break;
+                case 'membrane':
+                    synth = new Tone.MembraneSynth(options);
+                    break;
+                case 'metal':
+                    synth = new Tone.MetalSynth(options);
+                    break;
+                case 'noise':
+                    synth = new Tone.NoiseSynth(options);
+                    break;
+                default:
+                    synth = new Tone.Synth({
+                        oscillator: { type: type },
+                        ...options
+                    });
+            }
 
-        synth.toDestination();
+            synth.toDestination();
+        } catch (error) {
+            console.error('Error creating synth:', error);
+            throw error;
+        }
 
         this.synths.set(synthId, {
             instance: synth,

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 Tone.js Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #FFD700;
+            margin-bottom: 30px;
+        }
+
+        .test-section {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.success {
+            background: linear-gradient(45deg, #28a745, #20c997);
+        }
+
+        .btn.error {
+            background: linear-gradient(45deg, #dc3545, #fd7e14);
+        }
+
+        .status {
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 14px;
+            min-height: 200px;
+            overflow-y: auto;
+            border: 2px solid #666;
+        }
+
+        .info-panel {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .version-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .test-pass {
+            background-color: rgba(40, 167, 69, 0.2);
+            border: 1px solid #28a745;
+            color: #28a745;
+        }
+
+        .test-fail {
+            background-color: rgba(220, 53, 69, 0.2);
+            border: 1px solid #dc3545;
+            color: #dc3545;
+        }
+
+        .navigation {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .navigation a {
+            color: #FFD700;
+            text-decoration: none;
+            margin: 0 15px;
+            font-weight: bold;
+        }
+
+        .navigation a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Tone.js Debug & Test</h1>
+
+        <div class="info-panel">
+            <h3>📋 System Check</h3>
+            <div id="systemCheck">Running system diagnostics...</div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎵 Step 1: Initialize Audio Context</h3>
+            <p>Modern browsers require user interaction to start audio. Click the button below:</p>
+            <button class="btn" onclick="testAudioContext()" id="audioBtn">🎵 Start Audio Context</button>
+            <div id="audioResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎹 Step 2: Test Basic Tone.js</h3>
+            <p>Test if Tone.js can create and play a simple oscillator:</p>
+            <button class="btn" onclick="testBasicTone()" id="toneBtn" disabled>🎵 Test Basic Tone</button>
+            <div id="toneResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎛️ Step 3: Test Wrapper Integration</h3>
+            <p>Test if our wrapper functions work correctly:</p>
+            <button class="btn" onclick="testWrapper()" id="wrapperBtn" disabled>🎵 Test Wrapper</button>
+            <div id="wrapperResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🥁 Step 4: Test Advanced Features</h3>
+            <p>Test synthesizers, drum machine, and effects:</p>
+            <button class="btn" onclick="testAdvanced()" id="advancedBtn" disabled>🎵 Test Advanced</button>
+            <div id="advancedResult"></div>
+        </div>
+
+        <div class="version-info">
+            <div class="info-panel">
+                <h3>📊 Tone.js Info</h3>
+                <div id="toneInfo">Not loaded</div>
+            </div>
+            <div class="info-panel">
+                <h3>🌐 Browser Info</h3>
+                <div id="browserInfo">Loading...</div>
+            </div>
+        </div>
+
+        <div class="status" id="statusLog">
+            🔧 Tone.js Debug Test loaded. Starting diagnostics...
+        </div>
+
+        <div class="navigation">
+            <a href="index.html">← Back to Tests</a>
+            <a href="basic-synth-test.html">Basic Synth</a>
+            <a href="tone-complete-test.html">Complete Demo</a>
+        </div>
+    </div>
+
+    <!-- Load Tone.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.2.6/Tone.min.js"></script>
+    <script src="tone-wrapper.js"></script>
+
+    <script>
+        let audioContext = null;
+        let tests = {
+            toneLoaded: false,
+            audioContext: false,
+            basicTone: false,
+            wrapper: false,
+            advanced: false
+        };
+
+        function log(message, isError = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            const statusLog = document.getElementById('statusLog');
+            const color = isError ? '#ff6b6b' : '#4ecdc4';
+            statusLog.innerHTML += `\n<span style="color: ${color}">[${timestamp}] ${message}</span>`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+            console.log(message);
+        }
+
+        function updateTestResult(elementId, passed, message) {
+            const element = document.getElementById(elementId);
+            const resultDiv = document.createElement('div');
+            resultDiv.className = passed ? 'test-result test-pass' : 'test-result test-fail';
+            resultDiv.innerHTML = `${passed ? '✅' : '❌'} ${message}`;
+            element.appendChild(resultDiv);
+        }
+
+        function runSystemCheck() {
+            log('🔍 Running system diagnostics...');
+            
+            const checks = [];
+            
+            // Check if Tone.js is loaded
+            if (typeof Tone !== 'undefined') {
+                checks.push('✅ Tone.js library loaded');
+                tests.toneLoaded = true;
+                
+                // Get Tone.js version
+                const version = Tone.version || 'Unknown';
+                checks.push(`✅ Tone.js version: ${version}`);
+                
+                document.getElementById('toneInfo').innerHTML = `
+                    <strong>Version:</strong> ${version}<br>
+                    <strong>Loaded:</strong> Yes<br>
+                    <strong>Context State:</strong> ${Tone.context ? Tone.context.state : 'Unknown'}
+                `;
+            } else {
+                checks.push('❌ Tone.js library NOT loaded');
+                log('❌ ERROR: Tone.js not found! Check CDN link.', true);
+            }
+
+            // Check wrapper
+            if (typeof toneWrapper !== 'undefined') {
+                checks.push('✅ ToneWrapper loaded');
+            } else {
+                checks.push('❌ ToneWrapper NOT loaded');
+                log('❌ ERROR: ToneWrapper not found! Check wrapper file.', true);
+            }
+
+            // Check Web Audio API support
+            if (window.AudioContext || window.webkitAudioContext) {
+                checks.push('✅ Web Audio API supported');
+            } else {
+                checks.push('❌ Web Audio API NOT supported');
+                log('❌ ERROR: Browser does not support Web Audio API!', true);
+            }
+
+            // Browser info
+            const browserInfo = `
+                <strong>User Agent:</strong> ${navigator.userAgent.split('(')[0]}<br>
+                <strong>Platform:</strong> ${navigator.platform}<br>
+                <strong>Language:</strong> ${navigator.language}<br>
+                <strong>Online:</strong> ${navigator.onLine ? 'Yes' : 'No'}
+            `;
+            document.getElementById('browserInfo').innerHTML = browserInfo;
+
+            // Update system check display
+            document.getElementById('systemCheck').innerHTML = checks.join('<br>');
+            
+            log('📋 System check completed');
+        }
+
+        async function testAudioContext() {
+            log('🎵 Testing audio context initialization...');
+            
+            try {
+                if (typeof Tone === 'undefined') {
+                    throw new Error('Tone.js not loaded');
+                }
+
+                // Start Tone.js audio context
+                await Tone.start();
+                
+                tests.audioContext = true;
+                updateTestResult('audioResult', true, 'Audio context started successfully');
+                
+                // Enable next test
+                document.getElementById('toneBtn').disabled = false;
+                document.getElementById('audioBtn').disabled = true;
+                document.getElementById('audioBtn').textContent = '✅ Audio Started';
+                document.getElementById('audioBtn').className = 'btn success';
+                
+                log(`✅ Audio context started! State: ${Tone.context.state}`);
+                
+            } catch (error) {
+                updateTestResult('audioResult', false, `Failed to start audio: ${error.message}`);
+                log(`❌ Audio context failed: ${error.message}`, true);
+            }
+        }
+
+        async function testBasicTone() {
+            log('🎹 Testing basic Tone.js functionality...');
+            
+            try {
+                // Create a simple oscillator
+                const osc = new Tone.Oscillator(440, 'sine').toDestination();
+                
+                // Play for 0.5 seconds
+                osc.start();
+                setTimeout(() => {
+                    osc.stop();
+                    osc.dispose();
+                }, 500);
+                
+                tests.basicTone = true;
+                updateTestResult('toneResult', true, 'Basic oscillator test passed');
+                
+                // Enable next test
+                document.getElementById('wrapperBtn').disabled = false;
+                document.getElementById('toneBtn').disabled = true;
+                document.getElementById('toneBtn').textContent = '✅ Basic Tone Works';
+                document.getElementById('toneBtn').className = 'btn success';
+                
+                log('✅ Basic Tone.js test passed - you should hear a beep!');
+                
+            } catch (error) {
+                updateTestResult('toneResult', false, `Basic tone test failed: ${error.message}`);
+                log(`❌ Basic tone test failed: ${error.message}`, true);
+            }
+        }
+
+        async function testWrapper() {
+            log('🎛️ Testing wrapper functionality...');
+            
+            try {
+                if (typeof toneWrapper === 'undefined') {
+                    throw new Error('ToneWrapper not found');
+                }
+
+                // Test wrapper methods
+                const audioInfo = toneWrapper.getAudioInfo();
+                log(`📊 Audio info: ${JSON.stringify(audioInfo)}`);
+                
+                // Test synth creation
+                const synth = toneWrapper.createSynth('sine');
+                if (!synth || !synth.synth) {
+                    throw new Error('Failed to create synth');
+                }
+                
+                // Play a note
+                synth.triggerAttackRelease('C4', '8n');
+                
+                // Clean up
+                setTimeout(() => {
+                    synth.destroy();
+                }, 1000);
+                
+                tests.wrapper = true;
+                updateTestResult('wrapperResult', true, 'Wrapper integration test passed');
+                
+                // Enable next test
+                document.getElementById('advancedBtn').disabled = false;
+                document.getElementById('wrapperBtn').disabled = true;
+                document.getElementById('wrapperBtn').textContent = '✅ Wrapper Works';
+                document.getElementById('wrapperBtn').className = 'btn success';
+                
+                log('✅ Wrapper test passed - synth created and played C4!');
+                
+            } catch (error) {
+                updateTestResult('wrapperResult', false, `Wrapper test failed: ${error.message}`);
+                log(`❌ Wrapper test failed: ${error.message}`, true);
+            }
+        }
+
+        async function testAdvanced() {
+            log('🥁 Testing advanced features...');
+            
+            try {
+                // Test drum machine
+                const drums = toneWrapper.createDrumMachine();
+                if (!drums) {
+                    throw new Error('Failed to create drum machine');
+                }
+                
+                // Test effects
+                const reverb = toneWrapper.createEffect('reverb', { roomSize: 0.5 });
+                if (!reverb) {
+                    throw new Error('Failed to create reverb effect');
+                }
+                
+                // Test sequence
+                let stepCount = 0;
+                const sequence = toneWrapper.createSequence((time) => {
+                    drums.kick();
+                    stepCount++;
+                    if (stepCount >= 4) {
+                        sequence.sequence.stop();
+                    }
+                }, [0, 0, 0, 0], '4n');
+                
+                // Start transport
+                sequence.start();
+                toneWrapper.startTransport();
+                
+                // Stop after 2 seconds
+                setTimeout(() => {
+                    toneWrapper.stopTransport();
+                    sequence.destroy();
+                    reverb.destroy();
+                }, 2000);
+                
+                tests.advanced = true;
+                updateTestResult('advancedResult', true, 'Advanced features test passed');
+                
+                document.getElementById('advancedBtn').disabled = true;
+                document.getElementById('advancedBtn').textContent = '✅ Advanced Works';
+                document.getElementById('advancedBtn').className = 'btn success';
+                
+                log('✅ Advanced test passed - drum sequence with effects!');
+                
+                // Show final summary
+                setTimeout(() => {
+                    showFinalSummary();
+                }, 3000);
+                
+            } catch (error) {
+                updateTestResult('advancedResult', false, `Advanced test failed: ${error.message}`);
+                log(`❌ Advanced test failed: ${error.message}`, true);
+            }
+        }
+
+        function showFinalSummary() {
+            log('📋 === FINAL TEST SUMMARY ===');
+            
+            const passedTests = Object.values(tests).filter(t => t).length;
+            const totalTests = Object.keys(tests).length;
+            
+            log(`✅ Tests Passed: ${passedTests}/${totalTests}`);
+            
+            if (passedTests === totalTests) {
+                log('🎉 ALL TESTS PASSED! Tone.js integration is working correctly.');
+                log('👉 You can now use the other test pages with confidence.');
+            } else {
+                log('⚠️ Some tests failed. Check the errors above for troubleshooting.');
+            }
+            
+            // Update Tone.js info with final state
+            if (typeof Tone !== 'undefined') {
+                const audioInfo = toneWrapper ? toneWrapper.getAudioInfo() : {};
+                document.getElementById('toneInfo').innerHTML = `
+                    <strong>Version:</strong> ${Tone.version || 'Unknown'}<br>
+                    <strong>Context State:</strong> ${Tone.context.state}<br>
+                    <strong>Sample Rate:</strong> ${Tone.context.sampleRate} Hz<br>
+                    <strong>Active Synths:</strong> ${audioInfo.activeSynths || 0}<br>
+                    <strong>Tests Status:</strong> ${passedTests}/${totalTests} passed
+                `;
+            }
+        }
+
+        // Run system check on load
+        document.addEventListener('DOMContentLoaded', () => {
+            log('🔧 Debug test page loaded');
+            
+            // Small delay to ensure Tone.js is loaded
+            setTimeout(() => {
+                runSystemCheck();
+            }, 500);
+        });
+
+        // Additional error handling
+        window.addEventListener('error', (e) => {
+            log(`❌ JavaScript Error: ${e.message}`, true);
+        });
+
+        // Log when Tone.js loads
+        if (typeof Tone !== 'undefined') {
+            log('✅ Tone.js detected on page load');
+        }
+    </script>
+</body>
+</html>

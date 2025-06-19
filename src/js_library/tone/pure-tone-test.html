@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 Pure Tone.js Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 20px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px;
+            transition: all 0.3s ease;
+            display: block;
+            width: 80%;
+            margin: 10px auto;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .status {
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 14px;
+            text-align: left;
+            min-height: 100px;
+            white-space: pre-line;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Pure Tone.js Test</h1>
+        
+        <p>Direct Tone.js testing without any wrapper</p>
+        
+        <button class="btn" onclick="testDirectTone()">🎵 Test Pure Tone.js</button>
+        <button class="btn" onclick="testSynth()">🎹 Test Synth</button>
+        <button class="btn" onclick="testOscillator()">🌊 Test Oscillator</button>
+        <button class="btn" onclick="testSequence()">🎼 Test Sequence</button>
+        
+        <div class="status" id="status">
+Ready to test Tone.js...
+        </div>
+        
+        <p><a href="simple-test.html" style="color: #FFD700;">Simple Test</a> | 
+           <a href="debug-test.html" style="color: #FFD700;">Debug Test</a> | 
+           <a href="index.html" style="color: #FFD700;">Back to Tests</a></p>
+    </div>
+
+    <!-- Load Tone.js directly -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.2.6/Tone.min.js"></script>
+
+    <script>
+        let audioStarted = false;
+
+        function log(message) {
+            const status = document.getElementById('status');
+            const timestamp = new Date().toLocaleTimeString();
+            status.textContent += `[${timestamp}] ${message}\n`;
+            status.scrollTop = status.scrollHeight;
+        }
+
+        async function startAudioIfNeeded() {
+            if (!audioStarted) {
+                log('🎵 Starting audio context...');
+                await Tone.start();
+                audioStarted = true;
+                log(`✅ Audio context started! State: ${Tone.context.state}`);
+            }
+        }
+
+        async function testDirectTone() {
+            try {
+                log('🔍 Testing direct Tone.js...');
+                
+                await startAudioIfNeeded();
+                
+                log('🎹 Creating Tone.Synth...');
+                const synth = new Tone.Synth().toDestination();
+                
+                log('🎵 Playing C4 for 0.5 seconds...');
+                synth.triggerAttackRelease('C4', '8n');
+                
+                log('✅ SUCCESS! Pure Tone.js works!');
+                
+                setTimeout(() => {
+                    synth.dispose();
+                    log('🗑️ Synth disposed');
+                }, 1000);
+                
+            } catch (error) {
+                log(`❌ ERROR: ${error.message}`);
+                console.error('Direct Tone test error:', error);
+            }
+        }
+
+        async function testSynth() {
+            try {
+                log('🎹 Testing different synth types...');
+                
+                await startAudioIfNeeded();
+                
+                // Test AM Synth
+                log('📻 Creating AM Synth...');
+                const amSynth = new Tone.AMSynth().toDestination();
+                amSynth.triggerAttackRelease('A4', '8n');
+                
+                setTimeout(() => {
+                    // Test FM Synth
+                    log('📡 Creating FM Synth...');
+                    const fmSynth = new Tone.FMSynth().toDestination();
+                    fmSynth.triggerAttackRelease('D4', '8n');
+                    
+                    setTimeout(() => {
+                        amSynth.dispose();
+                        fmSynth.dispose();
+                        log('✅ Synth test completed!');
+                    }, 1000);
+                }, 500);
+                
+            } catch (error) {
+                log(`❌ Synth ERROR: ${error.message}`);
+                console.error('Synth test error:', error);
+            }
+        }
+
+        async function testOscillator() {
+            try {
+                log('🌊 Testing Oscillator...');
+                
+                await startAudioIfNeeded();
+                
+                log('🔊 Creating 440Hz oscillator...');
+                const osc = new Tone.Oscillator(440, 'sine').toDestination();
+                
+                osc.start();
+                log('▶️ Oscillator started');
+                
+                setTimeout(() => {
+                    osc.stop();
+                    osc.dispose();
+                    log('⏹️ Oscillator stopped and disposed');
+                    log('✅ Oscillator test completed!');
+                }, 1000);
+                
+            } catch (error) {
+                log(`❌ Oscillator ERROR: ${error.message}`);
+                console.error('Oscillator test error:', error);
+            }
+        }
+
+        async function testSequence() {
+            try {
+                log('🎼 Testing Sequence and Transport...');
+                
+                await startAudioIfNeeded();
+                
+                log('🎹 Creating synth for sequence...');
+                const synth = new Tone.Synth().toDestination();
+                
+                const notes = ['C4', 'D4', 'E4', 'F4'];
+                let noteIndex = 0;
+                
+                log('🎵 Creating sequence...');
+                const sequence = new Tone.Sequence((time, note) => {
+                    synth.triggerAttackRelease(note, '8n', time);
+                    log(`♪ Playing: ${note}`);
+                }, notes, '4n');
+                
+                log('▶️ Starting transport...');
+                sequence.start(0);
+                Tone.Transport.start();
+                
+                // Stop after 4 beats
+                setTimeout(() => {
+                    Tone.Transport.stop();
+                    sequence.dispose();
+                    synth.dispose();
+                    log('⏹️ Sequence stopped');
+                    log('✅ Sequence test completed!');
+                }, 4000);
+                
+            } catch (error) {
+                log(`❌ Sequence ERROR: ${error.message}`);
+                console.error('Sequence test error:', error);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            log('📋 Pure Tone.js test loaded');
+            
+            if (typeof Tone !== 'undefined') {
+                log(`✅ Tone.js ${Tone.version} detected`);
+                log('👆 Click any button to test functionality');
+            } else {
+                log('❌ Tone.js not found!');
+            }
+        });
+
+        // Global error handler
+        window.addEventListener('error', (e) => {
+            log(`❌ Global Error: ${e.message}`);
+        });
+    </script>
+</body>
+</html>
