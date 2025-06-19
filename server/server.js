@@ -120,7 +120,7 @@ async function startServer() {
           tables: tables.map(row => row.name),
           connection: {
             type: 'sqlite3',
-            file: './thermal_app.db'
+            file: './eDen.db'
           },
           timestamp: new Date().toISOString()
         };      } catch (error) {

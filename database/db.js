@@ -5,7 +5,7 @@ import { Model } from 'objection';
 const knexConfig = {
   client: 'sqlite3',
   connection: {
-    filename: './thermal_app.db'
+    filename: './eDen.db'
   },
   useNullAsDefault: true,
   migrations: {
