@@ -1,20 +1,20 @@
 /*!
  * Squirrel.js v1.0.0
  * Modern Web Component Framework
- * Generated: 2025-06-19T14:05:36.763Z
+ * Generated: 2025-06-19T14:06:09.441Z
  */
 var Squirrel = (function () {
   'use strict';
 
   
           // Create global define function at the very start
-          var templateRegistry = new Map();
-          function define(id, config) {
-            templateRegistry.set(id, config);
-            return config;
+          if (typeof window.define === 'undefined') {
+            window.templateRegistry = window.templateRegistry || new Map();
+            window.define = function(id, config) {
+              window.templateRegistry.set(id, config);
+              return config;
+            };
           }
-          window.define = define;
-          window.templateRegistry = templateRegistry;
         
 
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
@@ -1878,7 +1878,7 @@ var Squirrel = (function () {
   function exposeCorAPIs() {
     // Exposer les utilitaires de base
     window.$ = $$1;
-    // window.define est déjà défini dans intro de Rollup
+    // Don't redeclare define - use the one from intro
     window.observeMutations = observeMutations;
   }
 
