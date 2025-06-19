@@ -1,19 +1,24 @@
 /*!
  * Squirrel.js v1.0.0
  * Modern Web Component Framework
- * Generated: 2025-06-19T14:06:09.441Z
+ * Generated: 2025-06-19T14:06:58.624Z
  */
 var Squirrel = (function () {
   'use strict';
 
   
-          // Create global define function at the very start
+          // Create global functions at the very start
           if (typeof window.define === 'undefined') {
             window.templateRegistry = window.templateRegistry || new Map();
             window.define = function(id, config) {
               window.templateRegistry.set(id, config);
               return config;
             };
+          }
+          
+          // Create temporary $ function until real one loads
+          if (typeof window.$ === 'undefined') {
+            window.$ = function() { console.warn('$ not ready yet'); };
           }
         
 
@@ -1876,9 +1881,9 @@ var Squirrel = (function () {
 
   // === EXPOSITION DES APIS CORE ===
   function exposeCorAPIs() {
-    // Exposer les utilitaires de base
+    // Replace temporary functions with real ones
     window.$ = $$1;
-    // Don't redeclare define - use the one from intro
+    window.define = define$1;
     window.observeMutations = observeMutations;
   }
 
