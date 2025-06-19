@@ -43,12 +43,12 @@
 - WaveSurfer
 
 ## 📊 Statistiques
-- Taille normale: 220K
-- Taille minifiée:  96K
-- Dernière mise à jour: Thu Jun 19 14:49:19 CEST 2025
+- Taille normale:  24K
+- Taille minifiée:  12K
+- Dernière mise à jour: Thu Jun 19 15:47:03 CEST 2025
 
 ## 🔄 Cache et versions
 - jsDelivr met en cache pendant 12h
-- Pour forcer le rafraîchissement: ajoutez `?v=1750337359`
+- Pour forcer le rafraîchissement: ajoutez `?v=1750340823`
 - Pour la production, utilisez toujours une version taggée
 
