@@ -1,3 +1,6 @@
+import Button from '../../squirrel/components/button_builder.js';
+
+
 function createMaterialToggle(initialState = false) {
   let state = initialState;
   

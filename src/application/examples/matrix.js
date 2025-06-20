@@ -1,3 +1,5 @@
+import Matrix from '../../squirrel/components/matrix_builder.js';
+
 // Matrix with gradients and shadow-based selection
 const matrix = new Matrix({
   id: 'gradient-matrix',

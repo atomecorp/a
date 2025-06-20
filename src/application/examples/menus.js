@@ -2,6 +2,7 @@
  * 🍽️ EXEMPLES MENU MODERNES - MATERIAL DESIGN DARK
  * Menus beaux, modernes et responsives avec espacement correct et sobre
  */
+import Menu from '../../squirrel/components/menu_builder.js';
 
 // Variable pour gérer l'état actif et menu mobile
 let currentActiveItem = null;

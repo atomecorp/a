@@ -1,5 +1,6 @@
 // Exemple de Drag & Drop avancé avec Squirrel
 // Démontre les capacités de drag & drop avec zones de dépôt
+import Draggable from '../../squirrel/components/draggable_builder.js';
 
 console.log('🎯 Chargement de l\'exemple Drag & Drop...');
 

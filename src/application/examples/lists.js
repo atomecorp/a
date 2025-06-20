@@ -2,6 +2,7 @@
  * 📋 EXEMPLES DE LISTES AVEC LOOKS DIFFÉRENTS
  * Démonstration de la personnalisation complète du composant List
  */
+import List from '../../squirrel/components/List_builder.js';
 
 // Object externe pour tester les callbacks
 const globalState = {

@@ -1,3 +1,6 @@
+import Unit from '../../squirrel/components/unit_builder.js';
+
+
 console.log('🔥 VERSION MODIFIÉE - Test de Unit.js - ' + new Date().toISOString());
 
 /**

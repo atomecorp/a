@@ -2,7 +2,7 @@
  * 📊 EXEMPLE TABLE SEXY - CODE MINIMALISTE
  * Tableau professionnel avec styles modernes
  */
-
+import Table from '../../squirrel/components/table_builder.js';
 // 🎨 Tableau simple mais élégant
 const sexyTable = Table({
     id: "sexy-table",
