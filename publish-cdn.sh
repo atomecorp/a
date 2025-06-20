@@ -18,6 +18,11 @@ fi
 echo "Build terminé. Fichiers générés dans ./dist :"
 ls -lh ./dist/squirrel*.js
 
-echo "\nPour utiliser le CDN jsDelivr, poussez sur GitHub puis utilisez :"
-echo "https://cdn.jsdelivr.net/gh/<user>/<repo>@<tag>/dist/squirrel.js"
-echo "https://cdn.jsdelivr.net/gh/<user>/<repo>@<tag>/dist/squirrel.min.js"
+echo ""
+chmod +x ./dist/publish-to-github.sh
+read "REPLY?Publier sur GitHub et jsDelivr maintenant ? (y/N): "
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  ./dist/publish-to-github.sh --no-confirm
+else
+  echo "Publication annulée. Les fichiers sont prêts dans ./dist."
+fi
