@@ -17,10 +17,11 @@
 
 // import('./examples/ws.js');
 
-import('./examples/design_slider.js');
+// import('./examples/design_slider.js');
 // import('./examples/DB.js');
 
 
+import('./vie/vie.js');
 
 
 

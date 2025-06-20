@@ -28,10 +28,10 @@ echo "Build complete. Files generated in ./dist:"
 ls -lh ./dist/squirrel*.js ./dist/squirrel.css
 
 echo ""
-chmod +x ./dist/publish-to-github.sh
+chmod +x ./scripts_utils/publish-to-github.sh
 read "REPLY?Publish to GitHub and jsDelivr now? (y/N): "
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-  ./dist/publish-to-github.sh --no-confirm
+  ./scripts_utils/publish-to-github.sh --no-confirm
   # Force update the tag to point to the latest commit
   VERSION=$(jq -r .version ./src/version.json 2>/dev/null || echo "1.0.0")
   git tag -f "$VERSION"
