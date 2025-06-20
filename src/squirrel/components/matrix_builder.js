@@ -1175,7 +1175,7 @@ class Matrix {
 // ========================================
 
 // Factory functions pour usage simplifié
-export function createMatrix(options) {
+function createMatrix(options) {
   return new Matrix(options);
 }
 
@@ -1185,7 +1185,7 @@ export function createMatrix(options) {
  * @param {Object} options - Options de configuration
  * @returns {Matrix} Instance de Matrix
  */
-export function createResponsiveMatrix(parent, options = {}) {
+function createResponsiveMatrix(parent, options = {}) {
   const parentElement = typeof parent === 'string' ? document.querySelector(parent) : parent;
   
   if (!parentElement) {
@@ -1205,7 +1205,7 @@ export function createResponsiveMatrix(parent, options = {}) {
  * @param {Object} options - Options de configuration
  * @returns {Matrix} Instance de Matrix
  */
-export function createAutoSizedMatrix(options = {}) {
+function createAutoSizedMatrix(options = {}) {
   const matrix = new Matrix({
     autoResize: false,
     ...options
@@ -1220,7 +1220,8 @@ export function createAutoSizedMatrix(options = {}) {
 }
 
 // === EXPORTS ===
-// createMatrix est déjà exporté à la ligne 1178
+// createMatrix est déjà exporté à la ligne 1178, mais ajoutons l'export nommé pour cohérence
+export { createMatrix };
 
 // Alias pour compatibilité avec l'ancien pattern (éviter le conflit avec la classe Matrix)
 const MatrixComponent = createMatrix;
@@ -1230,5 +1231,8 @@ export { MatrixComponent as Matrix };
 // Export par défaut - fonction directe pour usage: Matrix({...})
 export default createMatrix;
 
-// Export des utilitaires supplémentaires - déjà exportés comme functions aux lignes 1188 et 1208
-// export { createResponsiveMatrix, createAutoSizedMatrix };
+// Export des utilitaires supplémentaires
+export {
+  createResponsiveMatrix,
+  createAutoSizedMatrix
+};
