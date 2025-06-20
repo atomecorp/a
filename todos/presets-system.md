@@ -1,13 +1,13 @@
-# 🎨 SYSTÈME DE PRESETS/SKINS
+# 🎨 PRESET/SKIN SYSTEM
 
 ## Vision
-Système LEGO de composants pré-stylés et skinnables pour rapidité de développement.
+LEGO-style system of pre-styled and skinnable components for rapid development.
 
-## Examples d'usage souhaité
+## Desired Usage Examples
 
-### Définition de presets
+### Preset Definition
 ```javascript
-// Preset de base
+// Basic preset
 definePreset('button', {
   tag: 'button',
   css: {
@@ -19,7 +19,7 @@ definePreset('button', {
   }
 });
 
-// Skins pour le preset
+// Skins for the preset
 defineSkin('button', 'primary', {
   backgroundColor: '#007bff',
   color: 'white'
@@ -37,9 +37,9 @@ defineSkin('button', 'glass', {
 });
 ```
 
-### Usage simple
+### Simple Usage
 ```javascript
-// Utilisation avec preset + skin
+// Usage with preset + skin
 const saveBtn = $('button:primary', {
   text: 'Save',
   parent: document.body
@@ -56,9 +56,9 @@ const glassBtn = $('button:glass', {
 });
 ```
 
-### Presets complexes
+### Complex Presets
 ```javascript
-// Preset slider moderne
+// Modern slider preset
 definePreset('slider', {
   tag: 'input',
   attrs: { type: 'range' },
@@ -72,7 +72,7 @@ definePreset('slider', {
 
 defineSkin('slider', 'ios', {
   background: '#ddd',
-  // + pseudo-elements pour thumb styling
+  // + pseudo-elements for thumb styling
 });
 
 defineSkin('slider', 'material', {
@@ -89,8 +89,8 @@ const volumeSlider = $('slider:ios', {
 ```
 
 ## TODO Implementation
-- [ ] Créer `definePreset(name, config)`
-- [ ] Créer `defineSkin(preset, skinName, styles)`
-- [ ] Parser la syntaxe `'preset:skin'`
-- [ ] Merge intelligent preset + skin + props
-- [ ] Cache des combinaisons preset/skin
+- [ ] Create `definePreset(name, config)`
+- [ ] Create `defineSkin(preset, skinName, styles)`
+- [ ] Parse the syntax `'preset:skin'`
+- [ ] Smart merge of preset + skin + props
+- [ ] Cache for preset/skin combinations

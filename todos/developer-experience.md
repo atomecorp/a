@@ -1,35 +1,35 @@
-# 🚨 DEVELOPER EXPERIENCE - Erreurs plus claires
+# 🚨 DEVELOPER EXPERIENCE - Clearer Errors
 
-## Problèmes actuels
-Le framework fail silencieusement dans plusieurs cas, rendant le debug difficile.
+## Current Issues
+The framework fails silently in several cases, making debugging difficult.
 
-## Examples d'erreurs à améliorer
+## Examples of Errors to Improve
 
-### 1. Template inexistant
+### 1. Nonexistent Template
 ```javascript
-// Actuellement - silent fail
+// Current - silent fail
 const element = $('nonexistent-template', { text: 'Hello' });
-// → Crée un div vide sans avertissement
+// → Creates an empty div without warning
 
-// Souhaité - erreur claire
+// Desired - clear error
 // → Console: "⚠️ Template 'nonexistent-template' not found. Available: ['box', 'button', 'card']"
 ```
 
-### 2. Parent selector invalide
+### 2. Invalid Parent Selector
 ```javascript
-// Actuellement - silent fail ou erreur native
+// Current - silent fail or native error
 const element = $('box', { 
   parent: '#nonexistent-container' 
 });
-// → Element créé mais pas attaché
+// → Element created but not attached
 
-// Souhaité - fallback + warning
+// Desired - fallback + warning
 // → Console: "⚠️ Parent '#nonexistent-container' not found. Falling back to document.body"
 ```
 
-### 3. CSS properties invalides
+### 3. Invalid CSS Properties
 ```javascript
-// Actuellement - silent fail
+// Current - silent fail
 const element = $('box', {
   css: {
     'invalid-property': 'value',
@@ -37,25 +37,25 @@ const element = $('box', {
   }
 });
 
-// Souhaité - validation + suggestions
+// Desired - validation + suggestions
 // → Console: "⚠️ Unknown CSS property 'backgroundColr'. Did you mean 'backgroundColor'?"
 ```
 
-### 4. Event handlers non-fonctions
+### 4. Non-function Event Handlers
 ```javascript
-// Actuellement - erreur native peu claire
+// Current - unclear native error
 const element = $('button', {
-  onclick: "not a function" // String au lieu de fonction
+  onclick: "not a function" // String instead of function
 });
 
-// Souhaité - erreur explicite
+// Desired - explicit error
 // → Console: "❌ Event handler 'onclick' must be a function, got string"
 ```
 
 ## TODO Implementation
-- [ ] Validation template registry avec suggestions
-- [ ] Warning pour parent selectors invalides + fallback
-- [ ] Validation CSS properties avec typo detection
-- [ ] Type checking pour event handlers
-- [ ] Mode dev vs prod (verbose vs silent)
-- [ ] Helper `debugSquirrel()` pour état du système
+- [ ] Template registry validation with suggestions
+- [ ] Warning for invalid parent selectors + fallback
+- [ ] CSS property validation with typo detection
+- [ ] Type checking for event handlers
+- [ ] Dev vs prod mode (verbose vs silent)
+- [ ] `debugSquirrel()` helper for system state
