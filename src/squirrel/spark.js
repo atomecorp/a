@@ -24,7 +24,7 @@ import Unit, {
   getUnit,
   getAllUnits 
 } from './components/unit_builder.js';
-import Draggable from './components/draggable_builder.js';
+import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from './components/draggable_builder.js';
 import Badge from './components/badge_builder.js';
 import Tooltip from './components/tooltip_builder.js';
 import Template from './components/template_builder.js';
@@ -46,6 +46,9 @@ window.List = List;
 window.Menu = Menu;
 window.Unit = Unit;
 window.Draggable = Draggable;
+window.makeDraggable = makeDraggable;
+window.makeDraggableWithDrop = makeDraggableWithDrop;
+window.makeDropZone = makeDropZone;
 window.Badge = Badge;
 window.Tooltip = Tooltip;
 window.Template = Template;
