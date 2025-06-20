@@ -1,0 +1,514 @@
+/* ===== SQUIRREL STYLES - VERSION OPTIMISÉE ===== */
+
+/* Reset et base */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;
+    font-size: 12px;
+    margin: 0;
+    padding: 0;
+    background: #272727;
+    color: #5a5050;
+    overflow: hidden;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    height: 100%;
+    touch-action: manipulation;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Polices personnalisées */
+@font-face {
+    font-family: 'Roboto-Thin';
+    src: url('../assets/fonts/Roboto/Roboto-Thin.ttf') format('truetype');
+}
+
+pre {
+    min-width: 100px;
+    margin: 0;
+    padding: 0;
+}
+
+/* input, textarea {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+} */
+/* Vue principale */
+#view {
+    position: absolute;
+    inset: 0;
+    font-size: 25px;
+    overflow: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Composants */
+.matrix {
+    background-color: blue;
+    border-radius: 9px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 3px;
+}
+
+/* États de sélection */
+.ui-selected {
+    border: 3px solid #00bb00;
+}
+
+.ui-selecting {
+    border: 3px solid orange;
+}
+
+.selected {
+    outline: 2px dashed white;
+    background-color: #00bb00;
+}
+
+/* Élément Atome */
+.atome {
+    will-change: transform;
+    cursor: default;
+    pointer-events: auto;
+    caret-color: white;
+    outline: none;
+    user-select: none;
+    position: absolute;
+    display: inline-block;
+    background-size: 100%;
+    background-repeat: no-repeat;
+    -webkit-overflow-scrolling: touch;
+    -webkit-user-drag: none;
+    caret-shape: bar;
+    overflow: visible;
+    box-sizing: border-box;
+}
+
+/* Texte */
+.text {
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    position: relative;
+    display: inline-block;
+    box-sizing: border-box;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* Centrage */
+.center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    transform: translate(-50%, -50%);
+}
+
+.center_vertical {
+    display: flex;
+    align-items: center;
+    position: absolute;
+    transform: translateY(-50%);
+}
+
+.center_horizontal {
+    display: flex;
+    justify-content: center;
+    position: absolute;
+    transform: translateX(-50%);
+}
+
+/* Alignements */
+.e_align_h_left {
+    text-align: left;
+}
+
+.e_align_h_right {
+    text-align: right;
+}
+
+.e_align_h_center {
+    text-align: center;
+}
+
+.el_align_h {
+    text-align: justify;
+}
+
+.el_align_v {
+    display: flex;
+    align-items: center;
+}
+
+.el_align_v_bottom {
+    display: flex;
+    align-items: flex-end;
+}
+
+/* ===== SVELTE INTEGRATION STYLES ===== */
+
+.controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin: 20px 0 30px 0;
+    flex-wrap: wrap;
+}
+
+.controls button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.controls button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Conteneurs Svelte */
+#squirrel-dashboard,
+#squirrel-settings {
+    margin: 20px 0;
+}
+
+/* Animation d'apparition */
+.squirrel-svelte-container {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== SQUIRREL TESTING INTERFACE ===== */
+
+.container {
+    max-width: 1200px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #f9f9f9;
+    border-radius: 10px;
+    color: #333;
+}
+
+.container h1 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 30px;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.controls button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.controls button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.controls button:active {
+    transform: translateY(0);
+}
+
+#status {
+    text-align: center;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+#squirrel-dashboard,
+#squirrel-settings {
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+#squirrel-dashboard em,
+#squirrel-settings em {
+    color: #888;
+    font-style: italic;
+    display: block;
+    text-align: center;
+}
+
+/* ===== END TESTING INTERFACE ===== */
+
+/* ===== MODULE CONNECTIONS STYLING ===== */
+
+/* Conteneur SVG pour les connexions */
+#module-connections-svg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Lignes de connexion */
+.connection-line {
+    pointer-events: auto;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.connection-line:hover {
+    filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8)) !important;
+    stroke-width: 4 !important;
+}
+
+/* Ligne temporaire pendant le drag */
+.temp-connection-line {
+    pointer-events: none;
+    animation: dashMove 1s linear infinite;
+}
+
+@keyframes dashMove {
+    to {
+        stroke-dashoffset: -10;
+    }
+}
+
+/* États des connecteurs */
+.module-connector.connecting {
+    animation: pulse 1.5s ease-in-out infinite;
+    border-color: #3498db !important;
+    box-shadow: 0 0 12px rgba(52, 152, 219, 0.8) !important;
+}
+
+.module-connector.selected {
+    border-color: #3498db !important;
+    box-shadow: 0 0 16px rgba(52, 152, 219, 1) !important;
+    transform: scale(1.2);
+}
+
+.module-connector.drag-target {
+    border-color: #2ecc71 !important;
+    box-shadow: 0 0 12px rgba(46, 204, 113, 0.8) !important;
+    animation: targetPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+@keyframes targetPulse {
+
+    0%,
+    100% {
+        transform: scale(1.2);
+        box-shadow: 0 0 12px rgba(46, 204, 113, 0.8);
+    }
+
+    50% {
+        transform: scale(1.4);
+        box-shadow: 0 0 20px rgba(46, 204, 113, 1);
+    }
+}
+
+/* Amélioration des connecteurs par type */
+.module-connector.connector-audio {
+    background: radial-gradient(circle, #e74c3c 0%, #c0392b 100%);
+}
+
+.module-connector.connector-control {
+    background: linear-gradient(145deg, #3498db 0%, #2980b9 100%);
+    border-radius: 3px;
+}
+
+.module-connector.connector-data {
+    background: linear-gradient(145deg, #f39c12 0%, #e67e22 100%);
+    clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+}
+
+.module-connector.connector-midi {
+    background: linear-gradient(145deg, #9b59b6 0%, #8e44ad 100%);
+    transform: rotateZ(45deg);
+}
+
+.module-connector.connector-video {
+    background: linear-gradient(145deg, #e67e22 0%, #d35400 100%);
+    clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+}
+
+/* Effet glow pour les connecteurs connectés */
+.module-connector.connected {
+    box-shadow:
+        0 0 8px rgba(255, 255, 255, 0.4),
+        inset 0 1px 2px rgba(255, 255, 255, 0.3);
+}
+
+/* === MODULE CONNECTOR STYLES === */
+.module-connector {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #ffffff;
+    cursor: crosshair;
+    transition: all 0.2s ease;
+    z-index: 1001;
+    /* Higher than modules */
+    pointer-events: auto;
+    /* Ensure they can be clicked/detected */
+}
+
+/* Connector types */
+.connector-audio {
+    background: #e74c3c;
+}
+
+.connector-control {
+    background: #f39c12;
+    border-radius: 2px;
+}
+
+.connector-data {
+    background: #3498db;
+}
+
+.connector-midi {
+    background: #9b59b6;
+}
+
+.connector-video {
+    background: #27ae60;
+}
+
+/* Input connectors - left side */
+.connector-input {
+    left: -6px;
+}
+
+/* Output connectors - right side */
+.connector-output {
+    right: -6px;
+}
+
+/* Connector states */
+.module-connector:hover {
+    transform: scale(1.3);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+}
+
+.module-connector.connecting {
+    transform: scale(1.2);
+    box-shadow: 0 0 12px rgba(52, 152, 219, 0.8);
+    animation: pulse 1s infinite;
+}
+
+.module-connector.selected {
+    transform: scale(1.4);
+    box-shadow: 0 0 16px rgba(52, 152, 219, 1);
+}
+
+.module-connector.drag-target {
+    transform: scale(1.5);
+    box-shadow: 0 0 16px rgba(46, 204, 113, 1);
+    animation: glow 0.5s ease-in-out infinite alternate;
+}
+
+/* Connection lines */
+.connection-line {
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.connection-line:hover {
+    stroke-width: 5;
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.8));
+}
+
+.temp-connection-line {
+    pointer-events: none !important;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes glow {
+    from {
+        box-shadow: 0 0 16px rgba(46, 204, 113, 1);
+    }
+
+    to {
+        box-shadow: 0 0 24px rgba(46, 204, 113, 0.6);
+    }
+}
+
+/* Panneau de contrôle responsive */
+@media (max-width: 768px) {
+    .control-panel {
+        width: 90% !important;
+        right: 5% !important;
+        font-size: 10px !important;
+    }
+}

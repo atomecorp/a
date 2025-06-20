@@ -1,6 +1,6 @@
 // import('./examples/tables.js');
 // import('./examples/buttons.js');
-import('./examples/matrix.js');
+// import('./examples/matrix.js');
 // import('./examples/drag.js');
 // import('./examples/dragNdrop.js');
 
@@ -17,7 +17,7 @@ import('./examples/matrix.js');
 
 // import('./examples/ws.js');
 
-// import('./examples/design_slider.js');
+import('./examples/design_slider.js');
 // import('./examples/DB.js');
 
 

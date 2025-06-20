@@ -15,8 +15,11 @@ else
   echo "terser non trouvé, minification ignorée. Installez-le avec: npm i -g terser"
 fi
 
+# 3. Copier le CSS dans dist
+cp ./src/css/squirrel.css ./dist/squirrel.css
+
 echo "Build terminé. Fichiers générés dans ./dist :"
-ls -lh ./dist/squirrel*.js
+ls -lh ./dist/squirrel*.js ./dist/squirrel.css
 
 echo ""
 chmod +x ./dist/publish-to-github.sh

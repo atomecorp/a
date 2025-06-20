@@ -14,8 +14,11 @@ else
   echo "terser non trouvé, minification ignorée. Installez-le avec: npm i -g terser"
 fi
 
+# 3. Copier le CSS dans dist
+cp ./src/css/squirrel.css ./dist/squirrel.css
+
 echo "Build terminé. Fichiers générés dans ./dist :"
-ls -lh ./dist/squirrel*.js
+ls -lh ./dist/squirrel*.js ./dist/squirrel.css
 
 echo ""
 read "REPLY?Publier sur NPM et unpkg maintenant ? (y/N): "
@@ -26,6 +29,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   echo "\nUnpkg prêt :"
   echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.js"
   echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.min.js"
+  echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.css"
 else
   echo "Publication NPM annulée. Les fichiers sont prêts dans ./dist."
 fi
