@@ -173,14 +173,30 @@ class List {
       this.container.appendChild(itemElement);
     });
   }
-
   createItem(itemData, index) {
     const itemElement = document.createElement('div');
     const itemId = itemData.id || `item-${index}`;
     
     itemElement.id = itemId;
     itemElement.className = 'list-item';
-    itemElement.textContent = itemData.content || itemData.text || `Élément ${index + 1}`;
+    
+    // Create content with icon if provided
+    const content = document.createElement('div');
+    content.style.cssText = 'display: flex; align-items: center; gap: 10px; width: 100%;';
+    
+    if (itemData.icon) {
+      const iconSpan = document.createElement('span');
+      iconSpan.textContent = itemData.icon;
+      iconSpan.style.cssText = 'font-size: 16px; min-width: 20px;';
+      content.appendChild(iconSpan);
+    }
+    
+    const textSpan = document.createElement('span');
+    textSpan.textContent = itemData.content || itemData.text || `Élément ${index + 1}`;
+    textSpan.style.cssText = 'flex: 1;';
+    content.appendChild(textSpan);
+    
+    itemElement.appendChild(content);
     
     // Stockage des données
     this.itemsMap.set(itemId, itemData);

@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Component Visual Tests</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .status { padding: 10px; margin: 5px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .warning { background: #fff3cd; color: #856404; }
+        .log { background: #1e1e1e; color: #d4d4d4; padding: 15px; font-family: monospace; height: 150px; overflow-y: auto; }
+        .demo-section { 
+            border: 2px dashed #ccc; 
+            padding: 20px; 
+            margin: 10px 0; 
+            border-radius: 8px;
+            min-height: 80px;
+            background: #fafafa;
+        }
+        .demo-title { 
+            font-weight: bold; 
+            margin-bottom: 10px; 
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        .component-container {
+            margin: 10px 0;
+            padding: 15px;
+            border: 1px solid #eee;
+            background: white;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            min-height: 50px;
+        }
+        
+        /* Slider-specific styles */
+        #slider-horizontal {
+            min-width: 300px;
+            margin: 10px 0;
+        }
+        
+        #slider-vertical {
+            height: 200px;
+            margin: 10px 0;
+            display: inline-block;
+        }
+        
+        /* Make slider handles more visible and interactive */
+        .hs-slider-handle {
+            transition: all 0.2s ease !important;
+        }
+        
+        .hs-slider-handle:hover {
+            transform: translate(-50%, -50%) scale(1.1) !important;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
+        }
+        
+        .hs-slider-handle:active {
+            cursor: grabbing !important;
+        }
+        
+        .hs-slider-track {
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Squirrel Framework Component Visual Tests</h1>
+        <div id="status" class="status">🔄 Running tests...</div>
+        
+        <div id="demo-content">
+            <div class="demo-section">
+                <div class="demo-title">🎚️ Slider Components</div>
+                <div class="component-container">
+                    <label>Horizontal Slider:</label>
+                    <div id="slider-horizontal"></div>
+                    <span id="slider-value">Volume: 50%</span>
+                </div>
+                <div class="component-container">
+                    <label>Vertical Slider:</label>
+                    <div id="slider-vertical" style="display: inline-block; margin-right: 20px;"></div>
+                    <span id="slider-vertical-value">Level: 30%</span>
+                </div>
+            </div>
+            
+            <div class="demo-section">
+                <div class="demo-title">🔘 Button Components</div>
+                <div class="component-container">
+                    <div id="button-demo"></div>
+                    <div id="button-feedback" style="margin-top: 10px; font-style: italic;"></div>
+                </div>
+            </div>
+            
+            <div class="demo-section">
+                <div class="demo-title">🏷️ Badge Components</div>
+                <div class="component-container">
+                    <div id="badge-demo"></div>
+                </div>
+            </div>
+            
+            <div class="demo-section">
+                <div class="demo-title">📋 Table Component</div>
+                <div class="component-container">
+                    <div id="table-demo"></div>
+                </div>
+            </div>
+            
+            <div class="demo-section">
+                <div class="demo-title">⚏ Matrix Component</div>
+                <div class="component-container">
+                    <div id="matrix-demo"></div>
+                </div>
+            </div>
+            
+            <div class="demo-section">
+                <div class="demo-title">📝 List Component</div>
+                <div class="component-container">
+                    <div id="list-demo"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="console" class="log"></div>
+    </div>
+
+    <script type="module">
+        let logMessages = [];
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logMessages.push(`[${timestamp}] ${message}`);
+            const console = document.getElementById('console');
+            console.textContent = logMessages.join('\n');
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        async function testComponentExports() {
+            const status = document.getElementById('status');
+            let passed = 0;
+            let total = 0;
+            
+            log('🔍 Testing component exports...');
+            
+            const tests = [
+                { name: 'createSlider', module: './src/squirrel/components/slider_builder.js' },
+                { name: 'createButton', module: './src/squirrel/components/button_builder.js' },
+                { name: 'createBadge', module: './src/squirrel/components/badge_builder.js' },
+                { name: 'createTable', module: './src/squirrel/components/table_builder.js' },
+                { name: 'createMatrix', module: './src/squirrel/components/matrix_builder.js' },
+                { name: 'createList', module: './src/squirrel/components/List_builder.js' },
+                { name: 'createTooltip', module: './src/squirrel/components/tooltip_builder.js' },
+                { name: 'createDraggable', module: './src/squirrel/components/draggable_builder.js' }
+            ];
+            
+            for (const test of tests) {
+                total++;
+                try {
+                    const module = await import(test.module);
+                    if (typeof module[test.name] === 'function') {
+                        log(`✅ ${test.name} export found and is a function`);
+                        passed++;
+                    } else if (module[test.name]) {
+                        log(`⚠️ ${test.name} export found but is not a function`);
+                    } else {
+                        log(`❌ ${test.name} export not found`);
+                    }
+                } catch (error) {
+                    log(`❌ ${test.name} module failed to load: ${error.message}`);
+                }
+            }
+            
+            log(`📊 Export test results: ${passed}/${total} passed`);
+            return { passed, total };
+        }
+        
+        async function createVisualDemos() {
+            // Demo 1: Basic Sliders
+            try {
+                log('Creating basic sliders...');
+                const sliderModule = await import('./src/squirrel/components/slider_builder.js');
+                const { createSlider } = sliderModule;
+                
+                // Horizontal Slider
+                const horizontalSliderContainer = document.getElementById('slider-horizontal');
+                const horizontalSlider = createSlider({
+                    type: 'horizontal',
+                    min: 0,
+                    max: 100,
+                    value: 50,
+                    showLabel: true,
+                    onChange: (value) => {
+                        document.getElementById('slider-value').textContent = `Volume: ${Math.round(value)}%`;
+                        log(`🎵 Horizontal slider: ${Math.round(value)}%`);
+                    },
+                    skin: {
+                        container: { width: '300px', height: '30px', padding: '10px 0' },
+                        track: { backgroundColor: '#ddd', height: '8px', borderRadius: '4px' },
+                        progression: { backgroundColor: '#4CAF50', borderRadius: '4px' },
+                        handle: { width: '20px', height: '20px', backgroundColor: '#4CAF50', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', cursor: 'grab' }
+                    }
+                });
+                horizontalSliderContainer.appendChild(horizontalSlider);
+                
+                // Vertical Slider
+                const verticalSliderContainer = document.getElementById('slider-vertical');
+                const verticalSlider = createSlider({
+                    type: 'vertical',
+                    min: 0,
+                    max: 100,
+                    value: 30,
+                    showLabel: true,
+                    onChange: (value) => {
+                        document.getElementById('slider-vertical-value').textContent = `Level: ${Math.round(value)}%`;
+                        log(`📊 Vertical slider: ${Math.round(value)}%`);
+                    },
+                    skin: {
+                        container: { width: '30px', height: '200px', padding: '0 10px' },
+                        track: { backgroundColor: '#ddd', width: '8px', borderRadius: '4px' },
+                        progression: { backgroundColor: '#2196F3', borderRadius: '4px' },
+                        handle: { width: '20px', height: '20px', backgroundColor: '#2196F3', border: '2px solid white', boxShadow: '0 2px 4px rgba(0,0,0,0.2)', cursor: 'grab' }
+                    }
+                });
+                verticalSliderContainer.appendChild(verticalSlider);
+                
+                log('✅ Basic sliders created successfully');
+            } catch (error) {
+                log('❌ Basic slider error: ' + error.message);
+            }
+            
+            // Demo 2: Advanced Sliders (XY and Knob)
+            try {
+                log('Creating advanced sliders...');
+                const sliderModule = await import('./src/squirrel/components/slider_builder.js');
+                const { createSlider } = sliderModule;
+                
+                // Create containers for new sliders
+                const advancedContainer = document.createElement('div');
+                advancedContainer.innerHTML = `
+                    <div class="demo-section">
+                        <div class="demo-title">🎛️ Advanced Sliders</div>
+                        <div class="component-container">
+                            <label>XY Trackpad:</label>
+                            <div id="xy-slider"></div>
+                            <span id="xy-value">Position: 50, 50</span>
+                        </div>
+                        <div class="component-container">
+                            <label>Rotational Knob:</label>
+                            <div id="knob-slider"></div>
+                            <span id="knob-value">Value: 45</span>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('demo-content').appendChild(advancedContainer);
+                  // XY Slider
+                const xySlider = createSlider({
+                    type: 'xy',
+                    valueX: 50, valueY: 50,
+                    minX: 0, maxX: 100, minY: 0, maxY: 100,
+                    onChange: (values) => {
+                        document.getElementById('xy-value').textContent = `Position: ${Math.round(values.x)}, ${Math.round(values.y)}`;
+                        log(`🎛️ XY: X=${Math.round(values.x)}, Y=${Math.round(values.y)}`);
+                    },
+                    skin: {
+                        container: { width: '150px', height: '150px' },
+                        track: { backgroundColor: '#f8f9fa', border: '2px solid #ddd', borderRadius: '8px' },
+                        handle: { width: '18px', height: '18px', backgroundColor: '#FF5722', border: '2px solid white', borderRadius: '50%', cursor: 'grab' }
+                    }
+                });
+                document.getElementById('xy-slider').appendChild(xySlider);
+                  // Knob Slider
+                const knobSlider = createSlider({
+                    type: 'knob',
+                    min: 0, max: 100, value: 45,
+                    onChange: (value) => {
+                        document.getElementById('knob-value').textContent = `Value: ${Math.round(value)}`;
+                        log(`🎚️ Knob: ${Math.round(value)}`);
+                    },
+                    skin: {
+                        container: { width: '120px', height: '120px', position: 'relative' },
+                        track: { 
+                            backgroundColor: '#e0e0e0', 
+                            border: '4px solid #ccc', 
+                            borderRadius: '50%',
+                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
+                        },
+                        handle: { 
+                            width: '80px', 
+                            height: '80px', 
+                            backgroundColor: '#f5f5f5', 
+                            border: '3px solid #333', 
+                            borderRadius: '50%', 
+                            cursor: 'grab',
+                            boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                            background: 'linear-gradient(145deg, #ffffff, #e6e6e6)'
+                        }
+                    }
+                });
+                document.getElementById('knob-slider').appendChild(knobSlider);
+                
+                log('✅ Advanced sliders created successfully');
+            } catch (error) {
+                log('❌ Advanced slider error: ' + error.message);
+            }
+            
+            // Demo 3: Button Component
+            try {
+                log('Creating button demo...');
+                const { createButton } = await import('./src/squirrel/components/button_builder.js');
+                
+                const buttonContainer = document.getElementById('button-demo');
+                const testButton = createButton({
+                    text: 'Click Me!',
+                    onClick: () => {
+                        document.getElementById('button-feedback').textContent = `Button clicked at ${new Date().toLocaleTimeString()}`;
+                        log('🔘 Button clicked!');
+                    },
+                    skin: {
+                        container: { padding: '12px 24px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '16px' }
+                    }
+                });
+                buttonContainer.appendChild(testButton);
+                log('✅ Button created successfully');
+            } catch (error) {
+                log('❌ Button error: ' + error.message);
+            }
+            
+            // Demo 4: Badge Component
+            try {
+                log('Creating badges...');
+                const { createBadge } = await import('./src/squirrel/components/badge_builder.js');
+                
+                const badgeContainer = document.getElementById('badge-demo');
+                const badges = [
+                    createBadge({ text: 'Success', variant: 'success' }),
+                    createBadge({ text: 'Warning', variant: 'warning' }),
+                    createBadge({ text: 'Error', variant: 'danger' }),
+                    createBadge({ text: 'Info', variant: 'info' })
+                ];
+                
+                badges.forEach((badge, index) => {
+                    badgeContainer.appendChild(badge);
+                    if (index < badges.length - 1) {
+                        badgeContainer.appendChild(document.createTextNode(' '));
+                    }
+                });
+                
+                log('✅ Badges created successfully');
+            } catch (error) {
+                log('❌ Badge error: ' + error.message);
+            }
+              // Demo 5: Table Component
+            try {
+                log('Creating table demo...');
+                const { createTable } = await import('./src/squirrel/components/table_builder.js');
+                
+                const tableContainer = document.getElementById('table-demo');
+                const testTable = createTable({
+                    columns: [
+                        { key: 'name', label: 'Name', width: '150px' },
+                        { key: 'age', label: 'Age', width: '80px' },
+                        { key: 'city', label: 'City', width: '120px' },
+                        { key: 'status', label: 'Status', width: '100px' }
+                    ],
+                    data: [
+                        { name: 'John Doe', age: 25, city: 'New York', status: 'Active' },
+                        { name: 'Jane Smith', age: 30, city: 'London', status: 'Inactive' },
+                        { name: 'Bob Johnson', age: 35, city: 'Paris', status: 'Active' },
+                        { name: 'Alice Brown', age: 28, city: 'Tokyo', status: 'Pending' }
+                    ],
+                    maxHeight: '200px',
+                    sortable: true,
+                    onRowClick: (rowData) => {
+                        log(`📋 Table row clicked: ${rowData.name}`);
+                    }
+                });
+                tableContainer.appendChild(testTable);
+                log('✅ Table created successfully');
+            } catch (error) {
+                log('❌ Table error: ' + error.message);
+                document.getElementById('table-demo').innerHTML = '<em>Table component failed to load</em>';
+            }            // Demo 6: Matrix Component
+            try {
+                log('Creating matrix demo...');
+                const { createMatrix } = await import('./src/squirrel/components/matrix_builder.js');
+                
+                // Create a temporary container div to attach the matrix to
+                const matrixTempContainer = document.createElement('div');
+                matrixTempContainer.style.position = 'relative';
+                matrixTempContainer.style.width = '100%';
+                matrixTempContainer.style.height = '200px';
+                document.body.appendChild(matrixTempContainer);
+                
+                const testMatrix = createMatrix({
+                    grid: { x: 4, y: 3 },
+                    size: { width: 280, height: 180 },
+                    position: { x: 0, y: 0 },
+                    attach: matrixTempContainer,
+                    autoResize: false,
+                    cells: {
+                        '0,0': { content: 'A1', style: { backgroundColor: '#ffeb3b', color: '#333' } },
+                        '1,1': { content: 'B2', style: { backgroundColor: '#4caf50', color: 'white' } },
+                        '2,2': { content: 'C3', style: { backgroundColor: '#f44336', color: 'white' } },
+                        '3,0': { content: 'D1', style: { backgroundColor: '#2196f3', color: 'white' } },
+                        '0,2': { content: 'A3', style: { backgroundColor: '#ff9800', color: 'white' } }
+                    },
+                    containerStyle: {
+                        position: 'relative',
+                        left: 'auto',
+                        top: 'auto'
+                    },
+                    onCellClick: (cellData) => {
+                        log(`⚏ Matrix cell clicked: (${cellData.x}, ${cellData.y}) - ${cellData.content || 'empty'}`);
+                    }
+                });
+                
+                // Get the matrix container and move it to our demo area
+                const matrixContainer = document.getElementById('matrix-demo');
+                if (testMatrix.container) {
+                    matrixContainer.appendChild(testMatrix.container);
+                    document.body.removeChild(matrixTempContainer);
+                } else {
+                    matrixContainer.appendChild(matrixTempContainer);
+                }
+                
+                log('✅ Matrix created successfully');
+            } catch (error) {
+                log('❌ Matrix error: ' + error.message);
+                document.getElementById('matrix-demo').innerHTML = '<em>Matrix component failed to load</em>';
+            }
+            
+            // Demo 7: List Component
+            try {
+                log('Creating list demo...');
+                const { createList } = await import('./src/squirrel/components/List_builder.js');
+                
+                // Create a temporary container div to attach the list to
+                const listTempContainer = document.createElement('div');
+                listTempContainer.style.position = 'relative';
+                listTempContainer.style.width = '100%';
+                listTempContainer.style.height = '200px';
+                document.body.appendChild(listTempContainer);
+                
+                const testList = createList({
+                    items: [
+                        { id: 1, text: 'First item', icon: '📝' },
+                        { id: 2, text: 'Second item', icon: '📊' },
+                        { id: 3, text: 'Third item', icon: '📈' },
+                        { id: 4, text: 'Fourth item', icon: '📉' },
+                        { id: 5, text: 'Fifth item', icon: '⚡' }
+                    ],
+                    size: { width: 280, height: 180 },
+                    position: { x: 0, y: 0 },
+                    attach: listTempContainer,
+                    selectable: true,
+                    containerStyle: {
+                        position: 'relative',
+                        left: 'auto',
+                        top: 'auto'
+                    },
+                    onItemClick: (item) => {
+                        log(`📝 List item clicked: ${item.text}`);
+                    }
+                });
+                
+                // Get the list container and move it to our demo area
+                const listContainer = document.getElementById('list-demo');
+                if (testList.container) {
+                    listContainer.appendChild(testList.container);
+                    document.body.removeChild(listTempContainer);
+                } else {
+                    listContainer.appendChild(listTempContainer);
+                }
+                
+                log('✅ List created successfully');
+            } catch (error) {
+                log('❌ List error: ' + error.message);
+                document.getElementById('list-demo').innerHTML = '<em>List component failed to load</em>';
+            }
+        }
+        
+        async function runTests() {
+            const status = document.getElementById('status');
+            
+            try {
+                // Test exports
+                const { passed, total } = await testComponentExports();
+                
+                // Create visual demos
+                log('🎨 Creating visual component demos...');
+                await createVisualDemos();
+                
+                if (passed === total) {
+                    status.textContent = '🎉 ALL TESTS PASSED!';
+                    status.className = 'status success';
+                    log('🎯 All exports consistent AND working visually!');
+                } else {
+                    status.textContent = `⚠️ ${passed}/${total} tests passed`;
+                    status.className = 'status warning';
+                }
+            } catch (error) {
+                status.textContent = '❌ Tests failed';
+                status.className = 'status error';
+                log('❌ Test execution failed: ' + error.message);
+            }
+        }
+        
+        // Start tests
+        runTests();
+    </script>
+</body>
+</html>

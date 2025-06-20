@@ -101,13 +101,19 @@ const sliderVariants = {
     progression: { width: '100%', bottom: '0', left: '0', borderBottomLeftRadius: '4px', borderBottomRightRadius: '4px' },
     handle: { width: '16px', height: '16px', left: '50%' },
     label: { left: '25px', transform: 'translateY(-50%)' }
-  },
-  circular: {
+  },  circular: {
     container: { width: '120px', height: '120px' },
     track: { width: '100%', height: '100%', borderRadius: '50%', border: '4px solid #e0e0e0' },
     progression: { display: 'none' }, // Progression géré différemment pour circulaire (SVG)
     handle: { width: '20px', height: '20px' },
     label: { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+  },
+  knob: {
+    container: { width: '120px', height: '120px', position: 'relative' },
+    track: { width: '100%', height: '100%', borderRadius: '50%', border: '4px solid #ccc', backgroundColor: '#e0e0e0' },
+    progression: { display: 'none' }, // Pas de progression visible pour knob
+    handle: { width: '80%', height: '80%', borderRadius: '50%', backgroundColor: '#f5f5f5', border: '3px solid #333' },
+    label: { top: '120%', left: '50%', transform: 'translateX(-50%)' }
   }
 };
 
@@ -293,10 +299,11 @@ const createSlider = (config = {}) => {
 
   // Génération d'ID unique si non fourni
   const sliderId = id || `slider_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-
   // Validation des valeurs
   const currentValue = Math.max(min, Math.min(max, value));
   const isCircular = type === 'circular';
+  const isKnob = type === 'knob';
+  const isXY = type === 'xy';
 
   // Styles de base selon type et taille
   let containerStyles = { ...sliderVariants[type]?.container || {}, ...sliderSizes[size] || {} };
@@ -304,9 +311,8 @@ const createSlider = (config = {}) => {
   let progressionStyles = { ...sliderVariants[type]?.progression || {} };
   let handleStyles = { ...sliderVariants[type]?.handle || {} };
   let labelStyles = { ...sliderVariants[type]?.label || {} };
-
-  // Si un radius est fourni pour un slider circulaire, l'utiliser
-  if (isCircular && radius) {
+  // Si un radius est fourni pour un slider circulaire ou knob, l'utiliser
+  if ((isCircular || isKnob) && radius) {
     const diameter = radius * 2;
     containerStyles.width = `${diameter}px`;
     containerStyles.height = `${diameter}px`;
