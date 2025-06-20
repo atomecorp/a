@@ -6,7 +6,7 @@ src/svelte/build/
 
 # Development files
 package-lock.json
-.DS_Store
+**/.DS_Store
 *.tmp
 *.bak
 *.old
