@@ -6,7 +6,6 @@
 // === IMPORTS STATIQUES ES6 ===
 import './apis.js';
 import { $, define, observeMutations } from './squirrel.js';
-import './kickstart.js';
 
 // === EXPOSITION GLOBALE ===
 window.$ = $;
