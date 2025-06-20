@@ -44,4 +44,25 @@ if (typeof window !== 'undefined') {
   }, 0);
 }
 
+// Expose all main components on the Squirrel global for CDN usage
+if (typeof window !== 'undefined') {
+  window.Squirrel = window.Squirrel || {};
+  window.Squirrel.$ = Squirrel.$;
+  window.Squirrel.define = Squirrel.define;
+  window.Squirrel.batch = Squirrel.batch;
+  window.Squirrel.observeMutations = Squirrel.observeMutations;
+  window.Squirrel.Slider = Slider;
+  window.Squirrel.Badge = Badge;
+  window.Squirrel.Button = Button;
+  window.Squirrel.Draggable = Draggable;
+  window.Squirrel.List = List;
+  window.Squirrel.Matrix = Matrix;
+  window.Squirrel.Menu = Menu;
+  window.Squirrel.Minimal = Minimal;
+  window.Squirrel.Table = Table;
+  window.Squirrel.Template = Template;
+  window.Squirrel.Tooltip = Tooltip;
+  window.Squirrel.Unit = Unit;
+}
+
 export default Squirrel;

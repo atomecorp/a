@@ -7,6 +7,7 @@ export default {
     file: './dist/squirrel.js',
     format: 'umd',
     name: 'Squirrel',
+    exports: 'named', // Ensure named exports for all components
     sourcemap: true,
   },
   plugins: [
