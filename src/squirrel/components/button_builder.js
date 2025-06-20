@@ -348,9 +348,18 @@ function materialSwitch(config) {
   return createButton(buttonPresets.materialSwitch(config));
 }
 
-// === EXPORT ===
+// === EXPORTS ===
+export { createButton };
+
+// Alias pour compatibilité avec l'ancien pattern
+const Button = createButton;
+export { Button };
+
+// Export par défaut - fonction directe pour usage: Button({...})
+export default createButton;
+
+// Export des utilitaires supplémentaires
 export {
-  createButton,
   createPrimaryButton,
   createSecondaryButton,
   createSuccessButton,
@@ -359,18 +368,6 @@ export {
   createIconButton,
   createOutlineButton,
   buttonStyles,
-  buttonSizes
-};
-
-// Export par défaut
-export default {
-  create: createButton,
-  primary: createPrimaryButton,
-  secondary: createSecondaryButton,
-  success: createSuccessButton,
-  danger: createDangerButton,
-  warning: createWarningButton,
-  icon: createIconButton,
-  outline: createOutlineButton,
-  materialSwitch,
+  buttonSizes,
+  materialSwitch
 };

@@ -64,23 +64,12 @@ const createBadge = (config = {}) => {
   return badge;
 };
 
-// === EXPORT ===
-export {
-  createBadge
-};
+// === EXPORTS ===
+export { createBadge };
 
-// Export par défaut
-export default {
-  create: createBadge,
-  
-  // Styles et variantes disponibles pour utilisation avancée
-  variants: {
-    primary: '#007bff',
-    success: '#28a745', 
-    warning: '#ffc107',
-    danger: '#dc3545',
-    info: '#17a2b8',
-    light: '#f8f9fa',
-    dark: '#343a40'
-  }
-};
+// Alias pour compatibilité avec l'ancien pattern
+const Badge = createBadge;
+export { Badge };
+
+// Export par défaut - fonction directe pour usage: Badge({...})
+export default createBadge;

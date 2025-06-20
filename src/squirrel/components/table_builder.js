@@ -512,18 +512,19 @@ const createTable = (config = {}) => {
 const createModernTable = (config) => createTable({ ...config, variant: 'modern' });
 const createMinimalTable = (config) => createTable({ ...config, variant: 'minimal' });
 
-// === EXPORT ===
+// === EXPORTS ===
+export { createTable };
+
+// Alias pour compatibilité avec l'ancien pattern
+const Table = createTable;
+export { Table };
+
+// Export par défaut - fonction directe pour usage: Table({...})
+export default createTable;
+
+// Export des utilitaires supplémentaires
 export {
-  createTable,
   createModernTable,
   createMinimalTable,
   tableStyles
-};
-
-// Export par défaut
-export default {
-  create: createTable,
-  modern: createModernTable,
-  minimal: createMinimalTable,
-  styles: tableStyles
 };

@@ -1219,15 +1219,16 @@ export function createAutoSizedMatrix(options = {}) {
   return matrix;
 }
 
-// === EXPORT ===
-export {
-  Matrix
-};
+// === EXPORTS ===
+// createMatrix est déjà exporté à la ligne 1178
 
-// Export par défaut
-export default {
-  create: createMatrix,
-  responsive: createResponsiveMatrix,
-  autoSized: createAutoSizedMatrix,
-  Matrix: Matrix
-};
+// Alias pour compatibilité avec l'ancien pattern (éviter le conflit avec la classe Matrix)
+const MatrixComponent = createMatrix;
+export { MatrixComponent };
+export { MatrixComponent as Matrix };
+
+// Export par défaut - fonction directe pour usage: Matrix({...})
+export default createMatrix;
+
+// Export des utilitaires supplémentaires - déjà exportés comme functions aux lignes 1188 et 1208
+// export { createResponsiveMatrix, createAutoSizedMatrix };

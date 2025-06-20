@@ -4,6 +4,8 @@
  * Support pour sliders horizontaux, verticaux et circulaires
  */
 
+import { $, define } from '../squirrel.js';
+
 // === DÉFINITION DES TEMPLATES DE BASE ===
 
 // Template pour le conteneur principal du slider

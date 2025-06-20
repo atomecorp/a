@@ -1106,12 +1106,18 @@ function getAllUnits() {
 }
 
 // === EXPORT ===
-export default {
-  create: createUnit
-};
+export { createUnit };
 
+// Alias pour compatibilité avec l'ancien pattern (éviter le conflit avec la classe Unit)
+const UnitComponent = createUnit;
+export { UnitComponent };
+export { UnitComponent as Unit };
+
+// Export par défaut - fonction directe pour usage: Unit({...})
+export default createUnit;
+
+// Export des utilitaires supplémentaires
 export { 
-  createUnit, 
   deleteUnit, 
   deleteUnits,
   selectUnit, 

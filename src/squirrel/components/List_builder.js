@@ -459,4 +459,20 @@ class List {
   }
 }
 
-export default List;
+// === FONCTION DE CRÉATION PRINCIPALE ===
+function createList(options = {}) {
+  const list = new List(options);
+  list.init();
+  return list.container;
+}
+
+// === EXPORTS ===
+export { createList };
+
+// Alias pour compatibilité avec l'ancien pattern (éviter le conflit avec la classe List)
+const ListComponent = createList;
+export { ListComponent };
+export { ListComponent as List };
+
+// Export par défaut - fonction directe pour usage: List({...})
+export default createList;

@@ -66,7 +66,12 @@ const createTooltip = (config = {}) => {
   return tooltip;
 };
 
-// Export par défaut
-export default {
-  create: createTooltip
-};
+// === EXPORTS ===
+export { createTooltip };
+
+// Alias pour compatibilité avec l'ancien pattern
+const Tooltip = createTooltip;
+export { Tooltip };
+
+// Export par défaut - fonction directe pour usage: Tooltip({...})
+export default createTooltip;
