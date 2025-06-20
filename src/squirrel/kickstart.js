@@ -1,16 +1,22 @@
-// === 🎉 Démonstrations ===
-// Attendre que les fonctions $ et define soient disponibles
+// === 🎉 KICKSTART INDÉPENDANT ===
+// Créer view et déclencher squirrel:ready quand tout est prêt
 
 function initKickstart() {
-  // 1. Template basique
-  define('view', {
+  // Vérifier que les fonctions globales sont disponibles
+  if (typeof window.$ !== 'function' || typeof window.define !== 'function') {
+    console.error('❌ Kickstart: Fonctions $ ou define non disponibles');
+    return;
+  }
+
+  // 1. Template basique pour view
+  window.define('view', {
       tag: 'div',
       class: 'atome',
       id: 'view',
   });
 
-  // 2. Animation avec CSS
-  $('view', {
+  // 2. Créer l'élément view
+  window.$('view', {
       parent: document.body,
       css: {
           background: '#272727',
@@ -25,12 +31,13 @@ function initKickstart() {
   });
   
   console.log('✅ Kickstart demo initialized');
+  
+  // === ÉVÉNEMENT READY MAINTENANT ===
+  // Framework vraiment prêt : Core + Kickstart fini !
+  window.dispatchEvent(new CustomEvent('squirrel:ready'));
+  console.log('🎉 Framework Squirrel vraiment prêt !');
 }
 
-// Attendre que squirrel:ready soit déclenché
-if (typeof window !== 'undefined') {
-  window.addEventListener('squirrel:ready', () => {
-    // Attendre un tick pour s'assurer que tout est exposé
-    setTimeout(initKickstart, 0);
-  });
-}
+// Exécuter kickstart dès que ce fichier est chargé
+// Les fonctions globales sont déjà exposées par spark.js
+initKickstart();

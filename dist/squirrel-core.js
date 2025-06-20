@@ -1,5 +1,5 @@
-/* 🐿️ Squirrel.js v1.0.0 - https://github.com/atomecorp/a */
-var Squirrel = (function () {
+/* 🐿️ Squirrel.js Core-Only v1.0.0 - https://github.com/atomecorp/a */
+(function () {
   'use strict';
 
   /**
@@ -167,7 +167,7 @@ var Squirrel = (function () {
    * @param {string|Function} id - Identifiant du template ou fonction de création
    * @param {Object} props - Propriétés de configuration
    */
-  const $$1 = (id, props = {}) => {
+  const $ = (id, props = {}) => {
     const config = templateRegistry.get(id) || {};
     const element = createElement(config.tag || props.tag || id || 'div');
     
@@ -244,7 +244,7 @@ var Squirrel = (function () {
     // Enfants imbriqués
     if (merged.children) {
       merged.children.forEach(childConfig => {
-        const child = $$1(childConfig.id, childConfig);
+        const child = $(childConfig.id, childConfig);
         element.appendChild(child);
       });
     }
@@ -361,7 +361,7 @@ var Squirrel = (function () {
    * @param {string} id - Identifiant du template
    * @param {Object} config - Configuration du template
    */
-  const define$1 = (id, config) => {
+  const define = (id, config) => {
     templateRegistry.set(id, config);
     return config;
   };
@@ -390,71 +390,31 @@ var Squirrel = (function () {
     mutationRegistry.get(element).push(observer);
   };
 
-  // === 🎉 Démonstrations ===
-  // Architecture corrigée : kickstart déclenche squirrel:ready
-
-  function initKickstart() {
-    // 1. Template basique
-    define('view', {
-        tag: 'div',
-        class: 'atome',
-        id: 'view',
-    });
-
-    // 2. Animation avec CSS
-    $('view', {
-        parent: document.body,
-        css: {
-            background: '#272727',
-            color: 'lightgray',
-            left: '0px',
-            top: '0px',
-            position: 'absolute',
-            width: '100%',
-            height: '100%',
-            overflow: 'auto',
-        }
-    });
-    
-    console.log('✅ Kickstart demo initialized');
-    
-    // === ÉVÉNEMENT READY MAINTENANT ===
-    // Framework vraiment prêt : Core + Kickstart fini !
-    window.dispatchEvent(new CustomEvent('squirrel:ready'));
-    console.log('🎉 Framework Squirrel vraiment prêt !');
-  }
-
-  // Exécuter kickstart immédiatement (les fonctions sont déjà disponibles)
-  if (typeof window !== 'undefined' && typeof $ !== 'undefined' && typeof define !== 'undefined') {
-    setTimeout(initKickstart, 150);
-  } else {
-    console.warn('⚠️ Kickstart: Fonctions $ ou define non disponibles');
-  }
-
   /**
-   * 🚀 SQUIRREL.JS MINIMAL WORKING BUNDLE
-   * Version ultra-simple qui marche VRAIMENT
+   * 🚀 SQUIRREL.JS CORE BUNDLE
+   * Core uniquement, sans composants, sans kickstart
+   * Léger et rapide pour usage avec imports explicites
    */
 
 
-  // === EXPOSITION GLOBALE FORCÉE ===
-  // Forcer Rollup à garder ces assignations
-  globalThis.$ = $$1;
-  globalThis.define = define$1;
-  globalThis.observeMutations = observeMutations;
-  globalThis.Squirrel = { $: $$1, define: define$1, observeMutations, version: '1.0.0' };
-
-  // Aliases pour compatibilité
-  window.$ = $$1;
-  window.define = define$1;
+  // === EXPOSITION GLOBALE ===
+  window.$ = $;
+  window.define = define;
   window.observeMutations = observeMutations;
-  window.Squirrel = globalThis.Squirrel;
+  window.body = document.body;
+  window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
-  console.log('✅ Squirrel.js Minimal loaded');
+  // === CORE UTILITIES OBJECT ===
+  window.Squirrel = {
+    $,
+    define,
+    observeMutations,
+    version: '1.0.0'
+  };
 
-  // === EXPORT POUR ROLLUP ===
-  var bundleMinimal = globalThis.Squirrel;
+  console.log('✅ Squirrel.js Core loaded - Use explicit imports for components');
 
-  return bundleMinimal;
+  // === PAS D'ÉVÉNEMENT READY POUR LE CORE ===
+  // Le bundle core est pour usage avancé sans kickstart
 
 })();

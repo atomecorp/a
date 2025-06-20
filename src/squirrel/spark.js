@@ -7,16 +7,19 @@
 import './apis.js';
 import { $, define, observeMutations } from './squirrel.js';
 
-// === EXPOSITION GLOBALE ===
+// === EXPOSITION GLOBALE IMMÉDIATE ===
 window.$ = $;
 window.define = define;
 window.observeMutations = observeMutations;
 window.body = document.body;
 window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
-console.log('✅ Squirrel Core chargé');
+console.log('✅ Squirrel Core chargé - Ordre respecté');
 
-// === ÉVÉNEMENT READY ===
-window.dispatchEvent(new CustomEvent('squirrel:ready'));
-console.log('🎉 Événement squirrel:ready déclenché');
+// === IMPORT KICKSTART APRÈS EXPOSITION ===
+import('./kickstart.js').then(() => {
+  console.log('✅ Kickstart chargé après exposition');
+}).catch(err => {
+  console.error('❌ Erreur kickstart:', err);
+});
     
