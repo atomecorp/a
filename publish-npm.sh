@@ -30,6 +30,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
   echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.js"
   echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.min.js"
   echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.css"
+  echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.min.css"
 else
   echo "Publication NPM annulée. Les fichiers sont prêts dans ./dist."
 fi
