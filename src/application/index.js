@@ -24,8 +24,8 @@ import('./examples/design_slider.js');
 
 
 
-// const monSpan = $('span', {
-// // pas besoin de 'tag'
+// const mySpan = $('span', {
+// // no need for 'tag'
 // id: 'test1',
 // css: {
 // backgroundColor: '#00f',
@@ -37,7 +37,7 @@ import('./examples/design_slider.js');
 // margin: '10px',
 // display: 'inline-block'
 // },
-// text: 'Je suis un SPAN ! 🎯'
+// text: 'I am a SPAN! 🎯'
 // });
 
 // makeDraggable(grab('test1'), {

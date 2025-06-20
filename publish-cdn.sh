@@ -1,41 +1,41 @@
 #!/bin/zsh
-# Script de publication CDN via GitHub + jsDelivr
+# CDN publication script via GitHub + jsDelivr
 # Usage: ./publish-cdn.sh
 
 set -e
 
-# 1. Build avec rollup (config dans ./scripts_utils/rollup.config.cdn.js)
+# 1. Build with rollup (config in ./scripts_utils/rollup.config.cdn.js)
 ./node_modules/.bin/rollup -c ./scripts_utils/rollup.config.cdn.js
 
-# 2. (Optionnel) Minification si besoin
+# 2. (Optional) Minification if needed
 echo "Minification..."
 if command -v terser > /dev/null; then
   terser ./dist/squirrel.js -o ./dist/squirrel.min.js --compress --mangle
 else
-  echo "terser non trouvé, minification ignorée. Installez-le avec: npm i -g terser"
+  echo "terser not found, minification skipped. Install it with: npm i -g terser"
 fi
 
-# 3. Copier le CSS dans dist
+# 3. Copy CSS to dist
 cp ./src/css/squirrel.css ./dist/squirrel.css
 
-# Vérifier la présence du CSS avant publication
+# Check for CSS presence before publishing
 if [ ! -f ./dist/squirrel.css ]; then
-  echo "❌ ERREUR : ./dist/squirrel.css introuvable, publication annulée."
+  echo "❌ ERROR: ./dist/squirrel.css not found, publication cancelled."
   exit 1
 fi
 
-echo "Build terminé. Fichiers générés dans ./dist :"
+echo "Build complete. Files generated in ./dist:"
 ls -lh ./dist/squirrel*.js ./dist/squirrel.css
 
 echo ""
 chmod +x ./dist/publish-to-github.sh
-read "REPLY?Publier sur GitHub et jsDelivr maintenant ? (y/N): "
+read "REPLY?Publish to GitHub and jsDelivr now? (y/N): "
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   ./dist/publish-to-github.sh --no-confirm
-  # Mise à jour forcée du tag pour pointer sur le dernier commit
+  # Force update the tag to point to the latest commit
   VERSION=$(jq -r .version ./src/version.json 2>/dev/null || echo "1.0.0")
   git tag -f "$VERSION"
   git push origin -f "$VERSION"
 else
-  echo "Publication annulée. Les fichiers sont prêts dans ./dist."
+  echo "Publication cancelled. Files are ready in ./dist."
 fi

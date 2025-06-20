@@ -1,13 +1,13 @@
 /**
  * 🚀 SQUIRREL APPLICATION - SIMPLIFIED ENTRY POINT
- * Version avec imports statiques pour compatibilité bundling CDN
+ * Version with static imports for CDN bundling compatibility
  */
 
-// === IMPORTS STATIQUES ES6 ===
+// === STATIC ES6 IMPORTS ===
 import './apis.js';
 import { $, define, observeMutations } from './squirrel.js';
 
-// === IMPORTS DES COMPOSANTS ===
+// === COMPONENT IMPORTS ===
 import Button from './components/button_builder.js';
 import Slider from './components/slider_builder.js';
 import Table from './components/table_builder.js';
@@ -30,14 +30,14 @@ import Tooltip from './components/tooltip_builder.js';
 import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
 
-// === EXPOSITION GLOBALE IMMÉDIATE ===
+// === IMMEDIATE GLOBAL EXPOSURE ===
 window.$ = $;
 window.define = define;
 window.observeMutations = observeMutations;
 window.body = document.body;
 window.toKebabCase = (str) => str.replace(/([A-Z])/g, '-$1').toLowerCase();
 
-// === EXPOSITION DES COMPOSANTS ===
+// === COMPONENT EXPOSURE ===
 window.Button = Button;
 window.Slider = Slider;
 window.Table = Table;
@@ -54,7 +54,7 @@ window.Tooltip = Tooltip;
 window.Template = Template;
 window.Minimal = Minimal;
 
-// === AJOUT DES MÉTHODES STATIQUES À UNIT POUR COMPATIBILITÉ ===
+// === ADD STATIC METHODS TO UNIT FOR COMPATIBILITY ===
 Unit.selectUnits = selectUnits;
 Unit.getSelectedUnits = getSelectedUnits;
 Unit.deleteUnit = deleteUnit;
@@ -64,12 +64,12 @@ Unit.getAllConnections = getAllConnections;
 Unit.getUnit = getUnit;
 Unit.getAllUnits = getAllUnits;
 
-console.log('✅ Squirrel Core chargé - Ordre respecté');
+console.log('✅ Squirrel Core loaded - Order respected');
 
-// === IMPORT KICKSTART APRÈS EXPOSITION ===
+// === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
-  console.log('✅ Kickstart chargé après exposition');
+  console.log('✅ Kickstart loaded after exposure');
 }).catch(err => {
-  console.error('❌ Erreur kickstart:', err);
+  console.error('❌ Kickstart error:', err);
 });
-    
+
