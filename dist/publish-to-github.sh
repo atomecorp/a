@@ -11,13 +11,8 @@ if [ ! -f squirrel.js ]; then
   exit 1
 fi
 
-# Vérifier si --no-confirm est passé
-NO_CONFIRM=false
-for arg in "$@"; do
-  if [[ "$arg" == "--no-confirm" ]]; then
-    NO_CONFIRM=true
-  fi
-done
+# Lire la version depuis src/version.json
+VERSION=$(jq -r .version ../src/version.json 2>/dev/null || echo "")
 
 # Ajouter et commit automatiquement
 cd .. # remonter à la racine du projet
@@ -31,11 +26,13 @@ MSG="CDN update"
 git commit -m "$MSG" || echo "Aucun changement à commiter."
 git push
 
-# Déterminer la branche ou le tag courant
-tag=$(git describe --tags --exact-match 2>/dev/null || true)
-if [ -n "$tag" ]; then
-  REF="$tag"
+# Créer un tag si version trouvée
+if [ -n "$VERSION" ]; then
+  git tag "$VERSION" || true
+  git push origin "$VERSION" || true
+  REF="$VERSION"
 else
+  # Déterminer la branche courante
   REF=$(git rev-parse --abbrev-ref HEAD)
 fi
 
