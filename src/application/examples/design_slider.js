@@ -1,4 +1,7 @@
 
+
+import Slider from '../../squirrel/components/slider_builder.js';
+
 // Wrapper pour le slider avec espacement
 const sliderWrapper = $('div', {
   id: 'design-slider-wrapper',

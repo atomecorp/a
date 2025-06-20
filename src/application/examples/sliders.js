@@ -1,5 +1,5 @@
 // Import des utilitaires nécessaires
-
+import Slider from '../../squirrel/components/slider_builder.js';
 // define('div', {
 //   tag: 'div',
 // });

@@ -1,5 +1,3 @@
-import { $, define } from '../squirrel.js';
-
 /**
  * Composant Slider skinnable avec HyperSquirrel
  * Chaque élément du slider est entièrement customisable
@@ -826,13 +824,9 @@ export {
   sliderPresets
 };
 
-// Export par défaut
-export default {
-  create: createSlider,
-  horizontal: createHorizontalSlider,
-  vertical: createVerticalSlider,
-  circular: createCircularSlider,
-  materialHorizontal,
-  materialVertical,
-  materialCircular
-};
+// Alias pour compatibilité
+const Slider = createSlider;
+export { Slider };
+
+// Export par défaut - fonction directe pour usage: Slider({...})
+export default createSlider;

@@ -477,9 +477,5 @@ export { createMenu };
 const Menu = createMenu;
 export { Menu };
 
-// Export par défaut compatible avec l'ancien système
-export default {
-  create: createMenu,
-  createMenu: createMenu,
-  Menu: Menu
-};
+// Export par défaut - fonction directe pour usage: Menu({...})
+export default createMenu;
