@@ -5,46 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Test Squirrel.js - Basic Example</title>
 
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        
-        .header {
-            background: #007bff;
-            color: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .test-area {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        
-        .status {
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-        
-        .status.success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .status.error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-    </style>
 </head>
 <body>
     <div class="header">
@@ -52,89 +12,41 @@
         <p>Test de création d'un élément SPAN avec Squirrel.js</p>
     </div>
 
-    <div class="test-area">
-        <h2>Zone de test</h2>
-        <p>L'élément SPAN devrait apparaître ci-dessous :</p>
-        <div id="test-container" style="border: 2px dashed #ccc; padding: 20px; min-height: 100px;">
-            <!-- L'élément SPAN sera créé ici -->
-        </div>
-    </div>
-
-    <div class="test-area">
-        <h2>Status du test</h2>
-        <div id="status-container">
-            <div class="status">⏳ Chargement de Squirrel.js...</div>
-        </div>
-    </div>
-
+   
     <!-- Charger Squirrel.js -->
     <script src="squirrel.js"></script>
     
     <script>
-        const statusContainer = document.getElementById('status-container');
-        const testContainer = document.getElementById('test-container');
-        
-        function addStatus(message, type = 'success') {
-            const div = document.createElement('div');
-            div.className = `status ${type}`;
-            div.textContent = message;
-            statusContainer.appendChild(div);
-        }
+  
         
         // Attendre que Squirrel soit prêt
         window.addEventListener('squirrel:ready', () => {
-            addStatus('✅ Squirrel.js chargé avec succès');
-            
-            // Vérifier que les fonctions sont disponibles
-            if (typeof window.$ === 'function') {
-                addStatus('✅ Fonction $ disponible');
-            } else {
-                addStatus('❌ Fonction $ non disponible', 'error');
-                return;
-            }
-            
-            // Test de création du SPAN
-            try {
-                const spanElement = $('span', {
-                    // pas besoin de 'tag'
-                    id: 'test1',
-                    css: {
-                        backgroundColor: '#00f',
-                        marginLeft: '0',
-                        padding: '10px',
-                        color: 'white',
-                        margin: '10px',
-                        display: 'inline-block'
-                    },
-                    text: 'Je suis un SPAN ! 🎯',
-                    parent: testContainer  // Attacher au container de test
-                });
-                
-                addStatus('✅ Élément SPAN créé avec succès');
-                addStatus(`✅ ID de l'élément : ${spanElement.id}`);
-                addStatus(`✅ Type d'élément : ${spanElement.tagName}`);
-                addStatus(`✅ Texte : "${spanElement.textContent}"`);
-                
-                // Vérifier que l'élément est bien dans le DOM
-                const elementInDOM = document.getElementById('test1');
-                if (elementInDOM) {
-                    addStatus('✅ Élément trouvé dans le DOM');
-                } else {
-                    addStatus('❌ Élément non trouvé dans le DOM', 'error');
-                }
-                
-            } catch (error) {
-                addStatus(`❌ Erreur lors de la création du SPAN: ${error.message}`, 'error');
-                console.error('Erreur détaillée:', error);
-            }
+          $('span', {
+  // pas besoin de 'tag'
+  id: 'test1',
+  parent: document.body,
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'Je suis un SPAN ! 🎯'
+});
+
         });
         
         // Timeout de sécurité
         setTimeout(() => {
             if (!document.getElementById('test1')) {
-                addStatus('❌ Timeout : Squirrel.js n\'a pas pu créer l\'élément', 'error');
+                console.log('❌ Timeout : Squirrel.js n\'a pas pu créer l\'élément', 'error');
             }
-        }, 3000);
+            else {
+                console.log('✅ Squirrel.js a créé l\'élément avec succès !');
+            }
+        }, 1000);
     </script>
 </body>
 </html>

@@ -216,6 +216,8 @@ echo ""
 echo "🛠️ DEVELOPMENT:"
 npm list pino-pretty ws 2>/dev/null | head -3 || echo "  Dev deps: ⚠️ Partially installed"
 
+npm i -g terser
+
 # Test module import capability
 echo ""
 print_status "🧪 Testing critical module imports..."
@@ -324,7 +326,7 @@ PRODUCTION_DB_DEPS=("knex" "objection")
 install_packages "" "${PRODUCTION_DB_DEPS[@]}"
 
 print_status "🏗️ Checking build tools..."
-BUILD_DEPS=("rollup" "@rollup/plugin-node-resolve" "@rollup/plugin-terser" "rollup-plugin-filesize")
+BUILD_DEPS=("rollup" "@rollup/plugin-node-resolve")
 install_packages "--save-dev" "${BUILD_DEPS[@]}"
 
 print_status "🖥️ Checking desktop app dependencies..."
@@ -419,7 +421,6 @@ echo ""
 echo "🏗️ BUILD TOOLS:"
 show_version "rollup"
 show_version "@rollup/plugin-node-resolve"
-show_version "@rollup/plugin-terser"
 
 echo ""
 echo "🖥️ DESKTOP:"

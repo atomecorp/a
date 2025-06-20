@@ -48,7 +48,7 @@
     "build:prod": "rollup -c scripts_utils/rollup.config.simple.js --environment BUILD:production",
     "build:analyze": "rollup -c scripts_utils/rollup.config.simple.js --environment BUILD:production,ANALYZE:true",
     "build:cdn": "rollup -c scripts_utils/rollup.config.simple.js",
-    "build:cdn:clean": "rollup -c scripts_utils/rollup.config.simple.js",
+    "build:cdn:clean": "rollup -c scripts_utils/rollup.config.cdn.clean.js",
     "build:cdn:watch": "rollup -c scripts_utils/rollup.config.simple.js --watch",
     "build:npm": "rollup -c scripts_utils/rollup.config.simple.js",
     "build:all": "npm run build:cdn && npm run build:npm",
@@ -64,17 +64,18 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "debug-bundle": "node debug-bundle.mjs",
-    "build:cdn:clean": "rollup -c scripts_utils/rollup.config.cdn.clean.js",
     "build:minimal": "rollup -c scripts_utils/rollup.config.minimal.js",
     "check:syntax": "node check-syntax.mjs"
   },
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-terser": "^0.4.4",
     "@tauri-apps/cli": "^2.4.0",
     "pino-pretty": "^13.0.0",
-    "rollup": "^4.0.0",
+    "rollup": "^4.44.0",
     "rollup-plugin-filesize": "^10.0.0",
+    "terser": "^5.43.1",
     "ws": "^8.18.2"
   },
   "dependencies": {
