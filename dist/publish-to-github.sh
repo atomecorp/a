@@ -22,40 +22,31 @@ done
 # Ajouter et commit automatiquement
 cd .. # remonter à la racine du projet
 git add dist/squirrel.js dist/squirrel.min.js 2>/dev/null || true
-# Ajoute aussi le script de publication s'il est nouveau
 if [ -f dist/publish-to-github.sh ]; then
-    exit 0
-  fi
+  git add dist/publish-to-github.sh 2>/dev/null || true
 fi
-
-# Ajouter et commit
-cd .. # remonter à la racine du projet
-git add dist/squirrel.js dist/squirrel.min.js 2>/dev/null || true
 git status
-read "MSG?Message de commit (défaut: 'CDN update'): "
-MSG=${MSG:-CDN update}
+
+MSG="CDN update"
 git commit -m "$MSG" || echo "Aucun changement à commiter."
 git push
 
-# Proposer un tag
-read "TAG?Créer un tag pour jsDelivr (ex: v1.0.0) ? (laisser vide pour ignorer): "
-if [ -n "$TAG" ]; then
-  git tag "$TAG"
-  git push origin "$TAG"
-fi
-
-# Demander l'utilisateur et le repo
-read "GHUSER?Nom GitHub (user ou org): "
-read "GHREPO?Nom du repo: "
-
-if [ -n "$TAG" ]; then
-  CDN_URL="https://cdn.jsdelivr.net/gh/$GHUSER/$GHREPO@$TAG/dist/squirrel.js"
-  CDN_URL_MIN="https://cdn.jsdelivr.net/gh/$GHUSER/$GHREPO@$TAG/dist/squirrel.min.js"
+# Déterminer la branche ou le tag courant
+tag=$(git describe --tags --exact-match 2>/dev/null || true)
+if [ -n "$tag" ]; then
+  REF="$tag"
 else
-  CDN_URL="https://cdn.jsdelivr.net/gh/$GHUSER/$GHREPO@main/dist/squirrel.js"
-  CDN_URL_MIN="https://cdn.jsdelivr.net/gh/$GHUSER/$GHREPO@main/dist/squirrel.min.js"
+  REF=$(git rev-parse --abbrev-ref HEAD)
 fi
 
+# Récupérer l'URL du repo
+REPO_URL=$(git config --get remote.origin.url)
+REPO_URL=${REPO_URL%.git}
+REPO_URL=${REPO_URL#*github.com[:/]}
+
+# Afficher les liens jsDelivr
+CDN_URL="https://cdn.jsdelivr.net/gh/$REPO_URL@$REF/dist/squirrel.js"
+CDN_URL_MIN="https://cdn.jsdelivr.net/gh/$REPO_URL@$REF/dist/squirrel.min.js"
 echo "\nCDN jsDelivr prêt :"
 echo "$CDN_URL"
 echo "$CDN_URL_MIN"
