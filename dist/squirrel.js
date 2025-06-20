@@ -1,8 +1,8 @@
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-  typeof define === 'function' && define.amd ? define(factory) :
-  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Squirrel = factory());
-})(this, (function () { 'use strict';
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.Squirrel = {}));
+})(this, (function (exports) { 'use strict';
 
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
 
@@ -5575,7 +5575,30 @@
     }, 0);
   }
 
-  return Squirrel;
+  // Expose all main components on the Squirrel global for CDN usage
+  if (typeof window !== 'undefined') {
+    window.Squirrel = window.Squirrel || {};
+    window.Squirrel.$ = Squirrel.$;
+    window.Squirrel.define = Squirrel.define;
+    window.Squirrel.batch = Squirrel.batch;
+    window.Squirrel.observeMutations = Squirrel.observeMutations;
+    window.Squirrel.Slider = createSlider;
+    window.Squirrel.Badge = createBadge;
+    window.Squirrel.Button = createButton;
+    window.Squirrel.Draggable = draggable;
+    window.Squirrel.List = createList;
+    window.Squirrel.Matrix = createMatrix;
+    window.Squirrel.Menu = createMenu;
+    window.Squirrel.Minimal = createMinimal;
+    window.Squirrel.Table = createTable;
+    window.Squirrel.Template = createTemplate;
+    window.Squirrel.Tooltip = createTooltip;
+    window.Squirrel.Unit = createUnit;
+  }
+
+  exports.default = Squirrel;
+
+  Object.defineProperty(exports, '__esModule', { value: true });
 
 }));
 //# sourceMappingURL=squirrel.js.map
