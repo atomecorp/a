@@ -18,6 +18,12 @@ fi
 # 3. Copier le CSS dans dist
 cp ./src/css/squirrel.css ./dist/squirrel.css
 
+# Vérifier la présence du CSS avant publication
+if [ ! -f ./dist/squirrel.css ]; then
+  echo "❌ ERREUR : ./dist/squirrel.css introuvable, publication annulée."
+  exit 1
+fi
+
 echo "Build terminé. Fichiers générés dans ./dist :"
 ls -lh ./dist/squirrel*.js ./dist/squirrel.css
 
