@@ -1,5 +1,17 @@
 /**
- * 🔌 SQUIRREL PLUGIN MANAGER
+ * 🔌 SQUIRREL    const availableComponents = [
+      'List_builder',
+      'badge_builder', 
+      'button_builder',
+      'draggable_builder',
+      'matrix_builder',
+      'menu_builder',
+      'slider_builder',
+      'table_builder',
+      'template_builder',
+      'tooltip_builder',
+      'unit_builder'
+    ];GER
  * Système de chargement automatique et dynamique des composants
  */
 
