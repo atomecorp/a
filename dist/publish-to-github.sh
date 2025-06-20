@@ -16,7 +16,7 @@ VERSION=$(jq -r .version ../src/version.json 2>/dev/null || echo "")
 
 # Ajouter et commit automatiquement
 cd .. # remonter à la racine du projet
-git add dist/squirrel.js dist/squirrel.min.js dist/squirrel.css 2>/dev/null || true
+git add dist/* 2>/dev/null || true
 if [ -f dist/publish-to-github.sh ]; then
   git add dist/publish-to-github.sh 2>/dev/null || true
 fi
