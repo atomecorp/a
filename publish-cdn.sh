@@ -32,6 +32,10 @@ chmod +x ./dist/publish-to-github.sh
 read "REPLY?Publier sur GitHub et jsDelivr maintenant ? (y/N): "
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   ./dist/publish-to-github.sh --no-confirm
+  # Mise à jour forcée du tag pour pointer sur le dernier commit
+  VERSION=$(jq -r .version ./src/version.json 2>/dev/null || echo "1.0.0")
+  git tag -f "$VERSION"
+  git push origin -f "$VERSION"
 else
   echo "Publication annulée. Les fichiers sont prêts dans ./dist."
 fi
