@@ -85,7 +85,7 @@ console.log('✅ Squirrel Core loaded - Order respected');
 
 // === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
-  console.log('✅ Kickstart loaded after exposure');
+  // console.log('✅ Kickstart loaded after exposure');
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
 });

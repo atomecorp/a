@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Animation interactive avancée avec Squirrel.js</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; background: #f9f9f9; }
+    nav {
+      background-color: #333;
+      padding: 10px;
+      text-align: center;
+    }
+    nav button {
+      background: #555;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin: 0 10px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    nav button:hover {
+      background: #777;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/gh/atomecorp/a@1.0.4/dist/squirrel.min.js"></script>
+</head>
+<body>
+  <nav>
+    <button id="startBtn">Démarrer</button>
+    <button id="stopBtn">Arrêter</button>
+    <button id="resetBtn">Reset</button>
+  </nav>
+  <div id="view"></div>
+  <script>
+    window.addEventListener('squirrel:ready', () => {
+      const canvas = Squirrel.$('div', {
+        id: 'canvas',
+        parent: '#view',
+        css: {
+          width: '500px',
+          height: '500px',
+          backgroundColor: '#eee',
+          margin: '20px auto',
+          position: 'relative',
+          overflow: 'hidden',
+          border: '2px solid #ccc'
+        }
+      });
+
+      const shape = Squirrel.$('div', {
+        id: 'shape',
+        parent: '#canvas',
+        css: {
+          width: '60px',
+          height: '60px',
+          backgroundColor: '#28a745',
+          position: 'absolute',
+          top: '220px',
+          left: '220px',
+          borderRadius: '50%',
+          transition: 'all 0.1s ease-out'
+        }
+      });
+
+      let x = 220, y = 220;
+      let dx = 2, dy = 1.5;
+      let scale = 1;
+      let growing = true;
+      let animationId = null;
+
+      function animate() {
+        x += dx;
+        y += dy;
+
+        if (x <= 0 || x >= 440) dx *= -1;
+        if (y <= 0 || y >= 440) dy *= -1;
+
+        if (growing) {
+          scale += 0.01;
+          if (scale >= 1.5) growing = false;
+        } else {
+          scale -= 0.01;
+          if (scale <= 1) growing = true;
+        }
+
+        shape.style.left = `${x}px`;
+        shape.style.top = `${y}px`;
+        shape.style.transform = `scale(${scale}) rotate(${x + y}deg)`;
+
+        animationId = requestAnimationFrame(animate);
+      }
+
+      document.getElementById('startBtn').onclick = () => {
+        if (!animationId) animate();
+      };
+
+      document.getElementById('stopBtn').onclick = () => {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+        }
+      };
+
+      document.getElementById('resetBtn').onclick = () => {
+        x = 220;
+        y = 220;
+        scale = 1;
+        growing = true;
+        shape.style.left = `${x}px`;
+        shape.style.top = `${y}px`;
+        shape.style.transform = 'scale(1) rotate(0deg)';
+      };
+    });
+  </script>
+</body>
+</html>

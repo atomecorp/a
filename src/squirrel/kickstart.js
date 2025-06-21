@@ -30,7 +30,7 @@ function initKickstart() {
       }
   });
   
-  console.log('✅ Kickstart demo initialized');
+  // console.log('✅ Kickstart demo initialized');
   
   // === ÉVÉNEMENT READY MAINTENANT ===
   // Framework vraiment prêt : Core + Kickstart fini !
