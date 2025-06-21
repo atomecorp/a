@@ -1,5 +1,10 @@
 # Instructions for AI Code Assistants: Using Squirrel.js
 
+**Important:** Before generating any code for Squirrel.js, always read and follow the rules and examples in this document. Refer to the official documentation and resources below for up-to-date API usage and best practices.
+
+- Official GitHub: https://github.com/atomecorp/a
+- Official CDN (jsDelivr): https://cdn.jsdelivr.net/gh/atomecorp/a@latest/dist/squirrel.min.js
+
 This guide is for AI code assistants (such as Copilot, ChatGPT, etc.) and developers using code generation tools. It provides best practices and explicit rules to ensure all generated code leverages the Squirrel.js API effectively, instead of defaulting to vanilla JavaScript or other frameworks.
 
 ---
@@ -76,6 +81,14 @@ runShellCommand('ls').then(result => console.log(result.stdout));
 - **For UI widgets, always check if a Squirrel.js component exists before re-implementing.**
 - **Avoid using `console.log` except when absolutely necessary for critical debugging or user feedback.**
 - **Always write minimal and concise code and comments; avoid verbosity.**
+- **Always use an array for the `children` property in Squirrel.js, even for a single child.**
+  - Example:
+    ```js
+    // Correct:
+    children: [Squirrel.$('span', { text: 'Child' })]
+    // Incorrect:
+    children: Squirrel.$('span', { text: 'Child' })
+    ```
 
 ---
 

@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Squirrel.js - Framework JavaScript Moderne</title>
+    <script src="https://cdn.jsdelivr.net/gh/atomecorp/a@1.0.1/dist/squirrel.min.js" defer ></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #8a2be2;
+            --primary-light: #a855f7;
+            --secondary: #ff6b6b;
+            --accent: #4ecdc4;
+            --dark: #0f0c29;
+            --darker: #0a081c;
+            --light: #f8f9fa;
+            --gradient: linear-gradient(135deg, var(--primary), var(--accent));
+            --gradient-alt: linear-gradient(135deg, var(--secondary), var(--primary));
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: var(--dark);
+            color: var(--light);
+            overflow-x: hidden;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 20% 30%, rgba(138, 43, 226, 0.15) 0%, transparent 30%), 
+                        radial-gradient(circle at 80% 70%, rgba(78, 205, 196, 0.15) 0%, transparent 30%);
+            z-index: -1;
+        }
+        
+        #view {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+        
+        .section {
+            padding: 6rem 0;
+        }
+        
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .logo {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 900;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-decoration: none;
+            letter-spacing: 1px;
+            margin-bottom: 2rem;
+        }
+        
+        h1 {
+            font-size: 4rem;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            font-family: 'Montserrat', sans-serif;
+        }
+        
+        h1 span {
+            display: block;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .tagline {
+            font-size: 1.5rem;
+            margin-bottom: 2.5rem;
+            color: #c5c6c7;
+            max-width: 600px;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem 2.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 1rem;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-primary {
+            background: var(--gradient);
+            color: white;
+            box-shadow: 0 10px 25px rgba(138, 43, 226, 0.4);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--gradient-alt);
+            z-index: -1;
+            transform: scaleX(0);
+            transform-origin: right;
+            transition: transform 0.5s ease;
+        }
+        
+        .btn:hover::before {
+            transform: scaleX(1);
+            transform-origin: left;
+        }
+        
+        .btn:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(138, 43, 226, 0.6);
+        }
+        
+        .btn-secondary:hover {
+            color: white;
+            border-color: transparent;
+        }
+        
+        .section-title {
+            font-size: 3rem;
+            margin-bottom: 5rem;
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 900;
+            text-align: center;
+        }
+        
+        .section-title span {
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2.5rem;
+            margin-top: 2rem;
+        }
+        
+        .feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 2.5rem;
+            text-align: center;
+            transition: all 0.4s ease;
+            border: 1px solid rgba(138, 43, 226, 0.1);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: var(--gradient);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.5s ease;
+        }
+        
+        .feature-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .feature-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1.5rem;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .feature-title {
+            font-size: 1.8rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+            color: var(--light);
+        }
+        
+        .feature-desc {
+            color: #c5c6c7;
+            font-size: 1.1rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            text-align: center;
+        }
+        
+        .stat-item {
+            padding: 2rem;
+        }
+        
+        .stat-number {
+            font-size: 4rem;
+            font-weight: 900;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+            font-family: 'Montserrat', sans-serif;
+        }
+        
+        .stat-label {
+            font-size: 1.2rem;
+            color: #c5c6c7;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .footer {
+            padding: 4rem 0 2rem;
+            background: rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+        
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 3rem;
+        }
+        
+        .footer-col {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .footer-title {
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            color: white;
+            font-weight: 700;
+        }
+        
+        .footer-links {
+            list-style: none;
+        }
+        
+        .footer-links li {
+            margin-bottom: 0.8rem;
+        }
+        
+        .footer-links a {
+            color: #c5c6c7;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .footer-links a:hover {
+            color: var(--primary-light);
+            padding-left: 5px;
+        }
+        
+        .social-icons {
+            display: flex;
+            gap: 1.2rem;
+            margin-top: 1.5rem;
+        }
+        
+        .social-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--light);
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .social-icon:hover {
+            background: var(--gradient);
+            transform: translateY(-5px);
+        }
+        
+        .copyright {
+            text-align: center;
+            padding-top: 3rem;
+            margin-top: 3rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            color: #777;
+        }
+        
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(138, 43, 226, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(138, 43, 226, 0); }
+        }
+        
+        .animated {
+            animation: fadeIn 0.8s ease forwards;
+        }
+        
+        .floating {
+            animation: float 8s ease-in-out infinite;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        .delay-1 { animation-delay: 0.2s; }
+        .delay-2 { animation-delay: 0.4s; }
+        .delay-3 { animation-delay: 0.6s; }
+        .delay-4 { animation-delay: 0.8s; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.8rem;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+                gap: 1rem;
+            }
+            
+            .section-title {
+                font-size: 2.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="view"></div>
+    
+    <script>
+           // Attendre que Squirrel soit prêt
+        window.addEventListener('squirrel:ready', () => {
+        // Définition de composants personnalisés
+        Squirrel.define('feature-card', {
+            tag: 'div',
+            class: 'feature-card',
+            template: `
+                <div class="feature-icon">
+                    <i class="fas fa-{{icon}}"></i>
+                </div>
+                <h3 class="feature-title">{{title}}</h3>
+                <p class="feature-desc">{{description}}</p>
+            `
+        });
+        
+        Squirrel.define('stat-item', {
+            tag: 'div',
+            class: 'stat-item',
+            template: `
+                <div class="stat-number">{{number}}</div>
+                <div class="stat-label">{{label}}</div>
+            `
+        });
+        
+        Squirrel.define('footer-column', {
+            tag: 'div',
+            class: 'footer-col',
+            template: `
+                <h3 class="footer-title">{{title}}</h3>
+                <ul class="footer-links">
+                    {{#each links}}
+                    <li><a href="{{url}}">{{text}}</a></li>
+                    {{/each}}
+                </ul>
+            `
+        });
+        
+     
+            // Création de la structure de la page
+            Squirrel.$('div', { 
+                id: 'app-container',
+                parent: '#view',
+                children: [
+                    // Section Hero
+                    Squirrel.$('div', {
+                        class: 'section hero',
+                        children: [
+                            Squirrel.$('div', {
+                                class: 'logo animated',
+                                text: 'SQUIRREL.js'
+                            }),
+                            Squirrel.$('h1', {
+                                class: 'animated delay-1',
+                                html: 'Créez des <span>animations époustouflantes</span> avec Squirrel'
+                            }),
+                            Squirrel.$('p', {
+                                class: 'tagline animated delay-2',
+                                text: 'Le framework JavaScript qui révolutionne l\'animation web avec une syntaxe simple et des performances exceptionnelles.'
+                            }),
+                            Squirrel.$('div', {
+                                class: 'cta-buttons',
+                                children: [
+                                    Squirrel.$('button', {
+                                        class: 'btn btn-primary pulse animated delay-3',
+                                        children: [
+                                            Squirrel.$('i', { class: 'fas fa-play-circle', style: { marginRight: '10px' } }),
+                                            'Voir la démo'
+                                        ],
+                                        onClick: () => alert('Démarrage de la démonstration!')
+                                    }),
+                                    Squirrel.$('button', {
+                                        class: 'btn btn-secondary animated delay-3',
+                                        children: [
+                                            Squirrel.$('i', { class: 'fas fa-book', style: { marginRight: '10px' } }),
+                                            'Documentation'
+                                        ],
+                                        onClick: () => window.open('https://github.com/atomecorp/a/blob/main/documentations/using_squirrel.md', '_blank')
+                                    })
+                                ]
+                            })
+                        ]
+                    }),
+                    
+                    // Section Fonctionnalités
+                    Squirrel.$('div', {
+                        class: 'section',
+                        id: 'features',
+                        children: [
+                            Squirrel.$('h2', {
+                                class: 'section-title animated',
+                                html: 'Des <span>fonctionnalités</span> puissantes'
+                            }),
+                            Squirrel.$('div', {
+                                class: 'features-grid',
+                                children: [
+                                    Squirrel.$('feature-card', {
+                                        icon: 'bolt',
+                                        title: 'Performances Optimales',
+                                        description: 'Moteur d\'animation optimisé pour une fluidité parfaite même sur mobile.'
+                                    }),
+                                    Squirrel.$('feature-card', {
+                                        icon: 'code',
+                                        title: 'Syntaxe Intuitive',
+                                        description: 'Des animations complexes avec seulement quelques attributs HTML.'
+                                    }),
+                                    Squirrel.$('feature-card', {
+                                        icon: 'paint-brush',
+                                        title: 'Effets Visuels',
+                                        description: 'Bibliothèque d\'effets prédéfinis pour des animations époustouflantes.'
+                                    }),
+                                    Squirrel.$('feature-card', {
+                                        icon: 'sync-alt',
+                                        title: 'Animations en Boucle',
+                                        description: 'Créez des animations infinies avec une simple configuration.'
+                                    }),
+                                    Squirrel.$('feature-card', {
+                                        icon: 'mobile-alt',
+                                        title: 'Responsive Design',
+                                        description: 'Adaptez vos animations à toutes les tailles d\'écran.'
+                                    }),
+                                    Squirrel.$('feature-card', {
+                                        icon: 'plug',
+                                        title: 'Intégration Facile',
+                                        description: 'Compatible avec tous les frameworks JavaScript modernes.'
+                                    })
+                                ]
+                            })
+                        ]
+                    }),
+                    
+                    // Section Statistiques
+                    Squirrel.$('div', {
+                        class: 'section',
+                        id: 'stats',
+                        children: [
+                            Squirrel.$('h2', {
+                                class: 'section-title animated',
+                                html: 'Squirrel <span>en chiffres</span>'
+                            }),
+                            Squirrel.$('div', {
+                                class: 'stats-grid',
+                                children: [
+                                    Squirrel.$('stat-item', {
+                                        number: '+97%',
+                                        label: 'Satisfaction des développeurs'
+                                    }),
+                                    Squirrel.$('stat-item', {
+                                        number: '15K',
+                                        label: 'Téléchargements/mois'
+                                    }),
+                                    Squirrel.$('stat-item', {
+                                        number: '2.7K',
+                                        label: 'Étoiles GitHub'
+                                    }),
+                                    Squirrel.$('stat-item', {
+                                        number: '98%',
+                                        label: 'Réduction du code d\'animation'
+                                    })
+                                ]
+                            })
+                        ]
+                    }),
+                    
+                    // Footer
+                    Squirrel.$('footer', {
+                        class: 'footer',
+                        children: [
+                            Squirrel.$('div', {
+                                class: 'footer-content',
+                                children: [
+                                    Squirrel.$('div', {
+                                        class: 'footer-col',
+                                        children: [
+                                            Squirrel.$('h3', {
+                                                class: 'footer-title',
+                                                text: 'Squirrel Framework'
+                                            }),
+                                            Squirrel.$('p', {
+                                                style: { color: '#c5c6c7', marginBottom: '1.5rem' },
+                                                text: 'La solution ultime pour des animations web fluides et performantes sans compromis.'
+                                            }),
+                                            Squirrel.$('div', {
+                                                class: 'social-icons',
+                                                children: [
+                                                    Squirrel.$('a', {
+                                                        class: 'social-icon',
+                                                        href: '#',
+                                                        children: [Squirrel.$('i', { class: 'fab fa-github' })]
+                                                    }),
+                                                    Squirrel.$('a', {
+                                                        class: 'social-icon',
+                                                        href: '#',
+                                                        children: [Squirrel.$('i', { class: 'fab fa-twitter' })]
+                                                    }),
+                                                    Squirrel.$('a', {
+                                                        class: 'social-icon',
+                                                        href: '#',
+                                                        children: [Squirrel.$('i', { class: 'fab fa-discord' })]
+                                                    }),
+                                                    Squirrel.$('a', {
+                                                        class: 'social-icon',
+                                                        href: '#',
+                                                        children: [Squirrel.$('i', { class: 'fab fa-youtube' })]
+                                                    })
+                                                ]
+                                            })
+                                        ]
+                                    }),
+                                    
+                                    Squirrel.$('footer-column', {
+                                        title: 'Liens Rapides',
+                                        links: [
+                                            { text: 'Documentation', url: '#' },
+                                            { text: 'Exemples', url: '#' },
+                                            { text: 'Tutoriels', url: '#' },
+                                            { text: 'Blog', url: '#' },
+                                            { text: 'Télécharger', url: '#' }
+                                        ]
+                                    }),
+                                    
+                                    Squirrel.$('footer-column', {
+                                        title: 'Ressources',
+                                        links: [
+                                            { text: 'GitHub', url: '#' },
+                                            { text: 'API Reference', url: '#' },
+                                            { text: 'Playground', url: '#' },
+                                            { text: 'Communauté', url: '#' },
+                                            { text: 'Contribution', url: '#' }
+                                        ]
+                                    })
+                                ]
+                            }),
+                            
+                            Squirrel.$('div', {
+                                class: 'copyright',
+                                children: [
+                                    Squirrel.$('p', { text: '© 2023 Squirrel Framework. Tous droits réservés.' }),
+                                    Squirrel.$('p', { text: 'Développé avec passion par Atome Corp' })
+                                ]
+                            })
+                        ]
+                    })
+                ]
+            });
+            
+            // Ajout des animations avec délais
+            Squirrel.batch(() => {
+                const elements = document.querySelectorAll('.animated');
+                elements.forEach((el, index) => {
+                    el.style.opacity = 0;
+                    
+                    // Ajout des délais en fonction de la position
+                    if (index > 0) {
+                        el.classList.add(`delay-${Math.min(Math.floor(index/2) + 1, 4)}`);
+                    }
+                    
+                    // Animation au scroll
+                    const observer = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting) {
+                                entry.target.style.animation = 'fadeIn 0.8s ease forwards';
+                                observer.unobserve(entry.target);
+                            }
+                        });
+                    }, { threshold: 0.1 });
+                    
+                    observer.observe(el);
+                });
+            });
+            
+            // Gestion des événements
+            Squirrel.$('button', {
+                parent: '#view',
+                children: [
+                  'Scroll to Features'
+                ],
+                text: undefined, // Ensure no text property
+                onClick: () => {
+                    document.getElementById('features').scrollIntoView({ behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

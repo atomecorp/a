@@ -83,6 +83,21 @@ Download or clone the repo, then include the built file:
 
 ---
 
+## Important: Always Use Arrays for `children`
+
+When using the `children` property in Squirrel.js, always provide an array, even if there is only one child. Passing a single element (not in an array) will cause a runtime error.
+
+**Correct:**
+```js
+children: [Squirrel.$('span', { text: 'Child' })]
+```
+**Incorrect:**
+```js
+children: Squirrel.$('span', { text: 'Child' })
+```
+
+---
+
 ## Beginner Tutorial
 
 ### 1. Creating Elements
