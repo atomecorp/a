@@ -31,6 +31,7 @@ import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
 
 // === IMMEDIATE GLOBAL EXPOSURE ===
+window.Squirrel = window.Squirrel || {};
 window.$ = $;
 window.define = define;
 window.observeMutations = observeMutations;
@@ -53,6 +54,22 @@ window.Badge = Badge;
 window.Tooltip = Tooltip;
 window.Template = Template;
 window.Minimal = Minimal;
+
+window.Squirrel.Button = Button;
+window.Squirrel.Slider = Slider;
+window.Squirrel.Table = Table;
+window.Squirrel.Matrix = Matrix;
+window.Squirrel.List = List;
+window.Squirrel.Menu = Menu;
+window.Squirrel.Unit = Unit;
+window.Squirrel.Draggable = Draggable;
+window.Squirrel.makeDraggable = makeDraggable;
+window.Squirrel.makeDraggableWithDrop = makeDraggableWithDrop;
+window.Squirrel.makeDropZone = makeDropZone;
+window.Squirrel.Badge = Badge;
+window.Squirrel.Tooltip = Tooltip;
+window.Squirrel.Template = Template;
+window.Squirrel.Minimal = Minimal;
 
 // === ADD STATIC METHODS TO UNIT FOR COMPATIBILITY ===
 Unit.selectUnits = selectUnits;

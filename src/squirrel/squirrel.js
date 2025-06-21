@@ -192,12 +192,20 @@ const $ = (id, props = {}) => {
   
   // Parent (support des sélecteurs)
   const parent = merged.parent || '#view';  // ← Votre changement
-  if (typeof parent === 'string') {
-    const target = document.querySelector(parent);
-    if (target) target.appendChild(element);
-    else console.warn(`Parent selector "${parent}" not found`);
+  const appendToParent = () => {
+    if (typeof parent === 'string') {
+      const target = document.querySelector(parent);
+      if (target) target.appendChild(element);
+      else console.warn(`Parent selector "${parent}" not found`);
+    } else {
+      parent.appendChild(element);
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', appendToParent);
   } else {
-    parent.appendChild(element);
+    appendToParent();
   }
   
   // 🔧 FIX: Animation native intégrée

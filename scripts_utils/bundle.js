@@ -29,23 +29,10 @@ Squirrel.components = {
   Unit
 };
 
-// Expose $ globalement et initialise le conteneur + event ready
+// Expose Squirrel globals immediately for both CDN and NPM builds
 if (typeof window !== 'undefined') {
+  // Expose Squirrel globals and bare component names immediately
   window.$ = Squirrel.$;
-  if (!document.getElementById('view')) {
-    const view = document.createElement('div');
-    view.id = 'view';
-    document.body.appendChild(view);
-  }
-  // Déclenche l'événement squirrel:ready de façon asynchrone pour garantir la capture
-  setTimeout(() => {
-    window.squirrelReady = true;
-    window.dispatchEvent(new Event('squirrel:ready'));
-  }, 0);
-}
-
-// Expose all main components on the Squirrel global for CDN usage
-if (typeof window !== 'undefined') {
   window.Squirrel = window.Squirrel || {};
   window.Squirrel.$ = Squirrel.$;
   window.Squirrel.define = Squirrel.define;
@@ -63,6 +50,42 @@ if (typeof window !== 'undefined') {
   window.Squirrel.Template = Template;
   window.Squirrel.Tooltip = Tooltip;
   window.Squirrel.Unit = Unit;
+
+  window.Slider = window.Squirrel.Slider;
+  window.Badge = window.Squirrel.Badge;
+  window.Button = window.Squirrel.Button;
+  window.Draggable = window.Squirrel.Draggable;
+  window.List = window.Squirrel.List;
+  window.Matrix = window.Squirrel.Matrix;
+  window.Menu = window.Squirrel.Menu;
+  window.Minimal = window.Squirrel.Minimal;
+  window.Table = window.Squirrel.Table;
+  window.Template = window.Squirrel.Template;
+  window.Tooltip = window.Squirrel.Tooltip;
+  window.Unit = window.Squirrel.Unit;
+
+  // Create #view container only after DOMContentLoaded
+  const createViewContainer = () => {
+    if (!document.getElementById('view')) {
+      const view = document.createElement('div');
+      view.id = 'view';
+      document.body.appendChild(view);
+    }
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createViewContainer);
+  } else {
+    createViewContainer();
+  }
+
+  // Only dispatch squirrel:ready after DOMContentLoaded
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      window.squirrelReady = true;
+      window.dispatchEvent(new Event('squirrel:ready'));
+    }, 0);
+  });
 }
 
 export default Squirrel;
