@@ -35,7 +35,7 @@ function initKickstart() {
   // === ÉVÉNEMENT READY MAINTENANT ===
   // Framework vraiment prêt : Core + Kickstart fini !
   window.dispatchEvent(new CustomEvent('squirrel:ready'));
-  console.log('🎉 Framework Squirrel vraiment prêt !');
+  // console.log('🎉 Framework Squirrel vraiment prêt !');
 }
 
 // Exécuter kickstart dès que ce fichier est chargé

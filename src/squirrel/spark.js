@@ -81,7 +81,7 @@ Unit.getAllConnections = getAllConnections;
 Unit.getUnit = getUnit;
 Unit.getAllUnits = getAllUnits;
 
-console.log('✅ Squirrel Core loaded - Order respected');
+// console.log('✅ Squirrel Core loaded - Order respected');
 
 // === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
