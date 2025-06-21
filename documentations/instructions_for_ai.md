@@ -74,6 +74,8 @@ runShellCommand('ls').then(result => console.log(result.stdout));
 - **When in doubt, refer to the official Squirrel.js documentation.**
 - **Do not mix Squirrel.js and direct DOM manipulation in the same code block.**
 - **For UI widgets, always check if a Squirrel.js component exists before re-implementing.**
+- **Avoid using `console.log` except when absolutely necessary for critical debugging or user feedback.**
+- **Always write minimal and concise code and comments; avoid verbosity.**
 
 ---
 
