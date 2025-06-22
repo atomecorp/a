@@ -5,6 +5,7 @@ describe('Button Component', () => {
   it('should create a button element', () => {
     const button = Button({ text: 'Test' });
     expect(button.tagName).toBe('BUTTON');
+
     const textEl = button.querySelector('.hs-button-text');
     expect(textEl.textContent).toBe('Test');
   });
@@ -17,5 +18,7 @@ describe('Button Component', () => {
     button.updateBadge(2);
     const badgeEl = button.querySelector('.hs-button-badge');
     expect(badgeEl.textContent).toBe('2');
+
+
   });
 });

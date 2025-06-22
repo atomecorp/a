@@ -1,4 +1,5 @@
 // Vitest setup file. Add global mocks here if needed.
+
 import { beforeAll } from 'vitest';
 
 beforeAll(() => {
@@ -6,3 +7,4 @@ beforeAll(() => {
   view.id = 'view';
   document.body.appendChild(view);
 });
+
