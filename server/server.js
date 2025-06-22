@@ -106,18 +106,17 @@ async function startServer() {
       try {
         // Test database connection
         await knex.raw('SELECT 1');
-        
-        // Get table info
-        const tables = await knex.raw("SELECT name FROM sqlite_master WHERE type='table'");
-        
-        // Get database file info
-        const dbStats = await knex.raw("PRAGMA database_list");
-        
+
+        // Get table info using Knex query builder for cross-driver compatibility
+        const tableRows = await knex('sqlite_master')
+          .select('name')
+          .where({ type: 'table' });
+
         return {
           success: true,
           status: 'connected',
           database: 'SQLite',
-          tables: tables.map(row => row.name),
+          tables: tableRows.map(row => row.name),
           connection: {
             type: 'sqlite3',
             file: './eDen.db'
