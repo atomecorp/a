@@ -17,7 +17,7 @@
 
 // import('./examples/ws.js');
 
-import('./examples/design_slider.js');
+import('./examples/material_page.js');
 // import('./examples/DB.js');
 
 
