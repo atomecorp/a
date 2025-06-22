@@ -1,7 +1,7 @@
 // Material design demo page built with Squirrel.js components
 import Menu from '../../squirrel/components/menu_builder.js';
-import Button from '../../squirrel/components/button_builder.js';
-import Slider from '../../squirrel/components/slider_builder.js';
+import Button, { materialSwitch } from '../../squirrel/components/button_builder.js';
+import { materialHorizontal } from '../../squirrel/components/slider_builder.js';
 import { createCard } from '../../squirrel/components/template_builder.js';
 
 window.addEventListener('squirrel:ready', () => {
@@ -71,8 +71,8 @@ window.addEventListener('squirrel:ready', () => {
           },
           {
             id: 'contact-link',
-            content: { text: 'Contact' },
-            style: { color: '#fff', padding: '4px 8px', borderRadius: '4px' },
+  materialHorizontal({
+  materialSwitch({
             states: { hover: { backgroundColor: 'rgba(255,255,255,0.1)' } }
           }
         ]
