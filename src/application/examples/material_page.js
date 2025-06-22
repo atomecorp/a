@@ -5,7 +5,9 @@ import Slider from '../../squirrel/components/slider_builder.js';
 import { createCard } from '../../squirrel/components/template_builder.js';
 
 window.addEventListener('squirrel:ready', () => {
-  const page = Squirrel.$('div', {
+
+  const page = $('div', {
+
     id: 'material-demo',
     parent: '#view',
     css: {
@@ -78,7 +80,9 @@ window.addEventListener('squirrel:ready', () => {
     ]
   });
 
-  const main = Squirrel.$('div', {
+
+  const main = $('div', {
+
     id: 'page-main',
     parent: page,
     css: {
