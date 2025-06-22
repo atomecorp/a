@@ -22,9 +22,12 @@ const isEventHandler = key => key.startsWith('on');
 
 // Attributs booléens reconnus
 const booleanAttributes = new Set([
-  'draggable', 'hidden', 'spellcheck', 'contenteditable', 
+  'draggable', 'hidden', 'spellcheck', 'contenteditable',
   'disabled', 'checked', 'readonly'
 ]);
+
+// Stocker la fonction d'animation native pour éviter la récursion
+const nativeAnimate = HTMLElement.prototype.animate;
 
 // Fonction utilitaire pour ajouter des classes (évite la duplication de code)
 const addClasses = (element, classes) => {
@@ -210,7 +213,7 @@ const $ = (id, props = {}) => {
   
   // 🔧 FIX: Animation native intégrée
   element.animate = (keyframes, options = {}) => {
-    const animation = element.animate(keyframes, {
+    const animation = nativeAnimate.call(element, keyframes, {
       duration: options.duration || 300,
       easing: options.easing || 'ease',
       fill: 'forwards'
