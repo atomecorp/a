@@ -25,7 +25,7 @@ const menuButton = $('div', {
   css: {
     position: 'absolute',
     left: '10px',
-    top: '7px',
+    top: '0',
     width: '24px',
     height: '24px',
     display: 'flex',
@@ -50,7 +50,7 @@ const menuOverlay = $('div', {
   id: 'sandwich-menu',
   css: {
     position: 'fixed',
-    top: '39px',
+    top: '0',
     left: '0',
     width: '200px',
     height: '100%',
@@ -76,6 +76,18 @@ const menuOverlay = $('div', {
 
 menuButton.addEventListener('click', () => {
   menuOverlay.style.display = menuOverlay.style.display === 'none' ? 'flex' : 'none';
+});
+
+function updateMenuLayout() {
+  const topHeight = topBar.getBoundingClientRect().height;
+  const buttonHeight = menuButton.getBoundingClientRect().height;
+  menuOverlay.$({ css: { top: `${topHeight}px` } });
+  menuButton.$({ css: { top: `${(topHeight - buttonHeight) / 2}px` } });
+}
+
+window.addEventListener('squirrel:ready', () => {
+  updateMenuLayout();
+  window.addEventListener('resize', updateMenuLayout);
 });
 
 
