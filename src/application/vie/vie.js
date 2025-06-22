@@ -50,7 +50,8 @@ const menuOverlay = $('div', {
   id: 'sandwich-menu',
   css: {
     position: 'fixed',
-    top: '0',
+    top: '41px',
+
     left: '0',
     width: '200px',
     height: '100%',
