@@ -191,7 +191,7 @@ const $ = (id, props = {}) => {
   element._ = element.style;
   
   // Parent (support des sélecteurs)
-  const parent = merged.parent || '#view';  // ← Votre changement
+  const parent = merged.parent || '#view';
   const appendToParent = () => {
     if (typeof parent === 'string') {
       const target = document.querySelector(parent);
