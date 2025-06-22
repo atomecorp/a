@@ -20,7 +20,7 @@ $('div', {
 
 
 $('div', {
-  id: 'top-bar',
+  id: 'bottom-bar',
   css: {
     backgroundColor: "rgb(68, 142, 220)",
     marginLeft: '0',
