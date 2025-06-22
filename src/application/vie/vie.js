@@ -25,7 +25,7 @@ const menuButton = $('div', {
   css: {
     position: 'absolute',
     left: '10px',
-    top: '0',
+    top: '7px',
     width: '24px',
     height: '24px',
     display: 'flex',
@@ -50,10 +50,11 @@ const menuOverlay = $('div', {
   id: 'sandwich-menu',
   css: {
     position: 'fixed',
+
     top: '41px',
 
     left: '0',
-    width: '200px',
+    width: '127px',
     height: '100%',
     backgroundColor: 'rgba(0,0,0,0.8)',
     color: 'white',
@@ -64,7 +65,7 @@ const menuOverlay = $('div', {
   }
 });
 
-['Accueil', 'Profil', 'Param\u00e8tres'].forEach(text => {
+['Accueil', 'Profil', 'Paramêtres'].forEach(text => {
   $('div', {
     parent: menuOverlay,
     text,

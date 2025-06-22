@@ -1,8 +1,8 @@
 (function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-  typeof define === 'function' && define.amd ? define(factory) :
-  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Squirrel = factory());
-})(this, (function () { 'use strict';
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+  (global = typeof globalThis !== 'undefined' ? globalThis : global || self, factory(global.Squirrel = {}));
+})(this, (function (exports) { 'use strict';
 
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
 
@@ -28,9 +28,12 @@
 
   // Attributs booléens reconnus
   const booleanAttributes = new Set([
-    'draggable', 'hidden', 'spellcheck', 'contenteditable', 
+    'draggable', 'hidden', 'spellcheck', 'contenteditable',
     'disabled', 'checked', 'readonly'
   ]);
+
+  // Stocker la fonction d'animation native pour éviter la récursion
+  const nativeAnimate = HTMLElement.prototype.animate;
 
   // Fonction utilitaire pour ajouter des classes (évite la duplication de code)
   const addClasses = (element, classes) => {
@@ -197,7 +200,7 @@
     element._ = element.style;
     
     // Parent (support des sélecteurs)
-    const parent = merged.parent || '#view';  // ← Votre changement
+    const parent = merged.parent || '#view';
     const appendToParent = () => {
       if (typeof parent === 'string') {
         const target = document.querySelector(parent);
@@ -216,7 +219,7 @@
     
     // 🔧 FIX: Animation native intégrée
     element.animate = (keyframes, options = {}) => {
-      const animation = element.animate(keyframes, {
+      const animation = nativeAnimate.call(element, keyframes, {
         duration: options.duration || 300,
         easing: options.easing || 'ease',
         fill: 'forwards'
@@ -5627,7 +5630,9 @@
     });
   }
 
-  return Squirrel;
+  exports.default = Squirrel;
+
+  Object.defineProperty(exports, '__esModule', { value: true });
 
 }));
 //# sourceMappingURL=squirrel.js.map
