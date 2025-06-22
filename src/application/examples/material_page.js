@@ -3,7 +3,7 @@ import Menu from '../../squirrel/components/menu_builder.js';
 import Button from '../../squirrel/components/button_builder.js';
 import Slider from '../../squirrel/components/slider_builder.js';
 import { createCard } from '../../squirrel/components/template_builder.js';
-
+alert('Squirrel.js Material Design Demo Loaded!');
 window.addEventListener('squirrel:ready', () => {
 
   const page = $('div', {
