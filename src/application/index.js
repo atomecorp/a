@@ -1,5 +1,5 @@
 // import('./examples/tables.js');
-// import('./examples/buttons.js');
+import('./examples/buttons.js');
 // import('./examples/matrix.js');
 // import('./examples/drag.js');
 // import('./examples/dragNdrop.js');
@@ -8,7 +8,7 @@
 
 // import('./examples/menus.js');
 
-import('./examples/check.js');
+// import('./examples/check.js');
 
 // import('./examples/sliders.js');  
 

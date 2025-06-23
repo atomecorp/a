@@ -13,28 +13,32 @@ function createMaterialToggle(initialState = false) {
   `;
   
   const toggle = Button({
-    text: '',
+    text: state ? 'on' : 'off',
     parent: '#view',//TODO correct parent attache is not working
     onClick: () => {
       state = !state;
       updateVisualState();
       console.log('Toggle:', state ? 'ON ✅' : 'OFF ❌');
     },
-    style: {
+    css: {
       width: '50px',
       height: '24px',
-      borderRadius: '12px',
-      backgroundColor: state ? '#4CAF50' : '#ccc',
+      left: '120px',
+      top: '120px',
+      borderRadius: '6px',
+      backgroundColor: state ? 'red' : 'yellow',
       position: 'relative',
       border: 'none',
       cursor: 'pointer',
-      transition: 'background-color 0.3s ease'
+      transition: 'background-color 0.3s ease',
+          border: '3px solid rgba(255,255,255,0.3)',
+              boxShadow: '0 2px 4px rgba(255,255,1,1)',
+           
     }
   });
   
   // const thumb = document.createElement('div');
-  // thumb.style.cssText = `
-  //   position: absolute;
+  // thumb.style
   //   top: 2px;
   //   left: ${state ? '26px' : '2px'};
   //   width: 20px;
@@ -52,10 +56,11 @@ function createMaterialToggle(initialState = false) {
   label.style.fontWeight = 'bold';
   
   function updateVisualState() {
-    toggle.style.backgroundColor = state ? '#4CAF50' : '#ccc';
+    toggle.$({ css: { backgroundColor: state ? 'red' : 'blue' } });
+    toggle.updateText(state ? 'on' : 'off');
     // thumb.style.left = state ? '26px' : '2px';
     label.textContent = state ? 'Activé' : 'Désactivé';
-    label.style.color = state ? '#4CAF50' : '#666';
+    label.style.color = state ? 'red' : 'blue';
   }
   
   container.appendChild(toggle);
