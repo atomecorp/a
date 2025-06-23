@@ -3,7 +3,7 @@ import Button from '../../squirrel/components/button_builder.js';
 
 function createMaterialToggle(initialState = false) {
   let state = initialState;
-  
+
   const container = document.createElement('div');
   container.style.cssText = `
     display: inline-flex;
@@ -11,7 +11,7 @@ function createMaterialToggle(initialState = false) {
     gap: 10px;
     padding: 10px;
   `;
-  
+
   const toggle = Button({
     text: state ? 'on' : 'off',
     parent: '#view',//TODO correct parent attache is not working
@@ -31,12 +31,12 @@ function createMaterialToggle(initialState = false) {
       border: 'none',
       cursor: 'pointer',
       transition: 'background-color 0.3s ease',
-          border: '3px solid rgba(255,255,255,0.3)',
-              boxShadow: '0 2px 4px rgba(255,255,1,1)',
-           
+      border: '3px solid rgba(255,255,255,0.3)',
+      boxShadow: '0 2px 4px rgba(255,255,1,1)',
+
     }
   });
-  
+
   // const thumb = document.createElement('div');
   // thumb.style
   //   top: 2px;
@@ -48,13 +48,13 @@ function createMaterialToggle(initialState = false) {
   //   transition: left 0.3s ease;
   //   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
   // `;
-  
+
   // toggle.appendChild(thumb);
-  
+
   const label = document.createElement('span');
   label.textContent = state ? 'Activé' : 'Désactivé';
   label.style.fontWeight = 'bold';
-  
+
   function updateVisualState() {
     toggle.$({ css: { backgroundColor: state ? 'red' : 'blue' } });
     toggle.updateText(state ? 'on' : 'off');
@@ -62,10 +62,10 @@ function createMaterialToggle(initialState = false) {
     label.textContent = state ? 'Activé' : 'Désactivé';
     label.style.color = state ? 'red' : 'blue';
   }
-  
+
   container.appendChild(toggle);
   container.appendChild(label);
-  
+
   return {
     element: container,
     getValue: () => state,
