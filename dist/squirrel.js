@@ -5706,6 +5706,7 @@
     window.Squirrel.Badge = createBadge;
     window.Squirrel.Button = createButton;
     window.Squirrel.Draggable = draggable;
+    window.Squirrel.makeDraggable = draggable.makeDraggable;
     window.Squirrel.List = createList;
     window.Squirrel.Matrix = createMatrix;
     window.Squirrel.Menu = createMenu;
