@@ -1,13 +1,10 @@
-// Material design demo page built with Squirrel.js components
 import Menu from '../../squirrel/components/menu_builder.js';
-import Button from '../../squirrel/components/button_builder.js';
-import Slider from '../../squirrel/components/slider_builder.js';
+import Button, { materialSwitch } from '../../squirrel/components/button_builder.js';
+import { materialHorizontal } from '../../squirrel/components/slider_builder.js';
 import { createCard } from '../../squirrel/components/template_builder.js';
-alert('Squirrel.js Material Design Demo Loaded!');
+
 window.addEventListener('squirrel:ready', () => {
-
-  const page = $('div', {
-
+  const page = Squirrel.$('div', {
     id: 'material-demo',
     parent: '#view',
     css: {
@@ -80,9 +77,7 @@ window.addEventListener('squirrel:ready', () => {
     ]
   });
 
-
-  const main = $('div', {
-
+  const main = Squirrel.$('div', {
     id: 'page-main',
     parent: page,
     css: {
@@ -100,12 +95,12 @@ window.addEventListener('squirrel:ready', () => {
     style: { maxWidth: '600px', textAlign: 'center' }
   });
 
-  Slider.materialHorizontal({
+  materialHorizontal({
     parent: main,
     value: 50
   });
 
-  Button.materialSwitch({
+  materialSwitch({
     parent: main,
     text: 'OFF',
     onClick: (btn) => {

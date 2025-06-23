@@ -41,4 +41,4 @@ function initKickstart() {
 // Exécuter kickstart dès que ce fichier est chargé
 // Les fonctions globales sont déjà exposées par spark.js
 initKickstart();
-console.log('✅ Kickstart v 1.0.5 @atome');
+console.log('✅ Squirrel 1.0.5 ©atome');

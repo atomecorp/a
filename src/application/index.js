@@ -8,7 +8,7 @@
 
 // import('./examples/menus.js');
 
-// import('./examples/basic.js');
+import('./examples/check.js');
 
 // import('./examples/sliders.js');  
 
@@ -19,7 +19,7 @@
 
 // import('./examples/design_slider.js');
 
-import('./examples/material_page.js');
+// import('./examples/material_page.js');
 // import('./examples/DB.js');
 
 
