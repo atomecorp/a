@@ -33,7 +33,8 @@ Squirrel.components = {
 // Expose Squirrel globals immediately for both CDN and NPM builds
 if (typeof window !== 'undefined') {
   // Expose Squirrel globals and bare component names immediately
-window.grab = Apis.grab;
+  window.Squirrel.Apis = Apis;
+window.Apis = Apis;
   window.$ = Squirrel.$;
   window.Squirrel = window.Squirrel || {};
   window.Squirrel.$ = Squirrel.$;
