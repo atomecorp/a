@@ -1,5 +1,5 @@
 // Point d'entrée du bundle CDN
-import Squirrel from '../src/squirrel/apis.js';
+// import Squirrel from '../src/squirrel/apis.js';
 import Squirrel from '../src/squirrel/squirrel.js';
 import Slider from '../src/squirrel/components/slider_builder.js';
 import Badge from '../src/squirrel/components/badge_builder.js';

@@ -4,8 +4,8 @@
  */
 
 // === STATIC ES6 IMPORTS ===
-import './apis.js';
-import { $, define, observeMutations } from './squirrel.js';
+// import './apis.js';
+// import { $, define, observeMutations } from './squirrel.js';
 
 // === COMPONENT IMPORTS ===
 import Button from './components/button_builder.js';

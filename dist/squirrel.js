@@ -5554,6 +5554,7 @@
   }
 
   // Point d'entrée du bundle CDN
+  // import Squirrel from '../src/squirrel/apis.js';
 
   // Ajout du composant Slider dans Squirrel.components pour accès via le CDN
   Squirrel.components = {

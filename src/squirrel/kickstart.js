@@ -13,12 +13,7 @@ function initKickstart() {
       tag: 'div',
       class: 'atome',
       id: 'view',
-  });
-
-  // 2. Créer l'élément view
-  window.$('view', {
-      parent: document.body,
-      css: {
+            css: {
           background: '#272727',
           color: 'lightgray',
           left: '0px',
@@ -28,6 +23,12 @@ function initKickstart() {
           height: '100%',
           overflow: 'auto',
       }
+  });
+
+  // 2. Créer l'élément view
+  window.$('view', {
+      parent: document.body,
+
   });
   
   // console.log('✅ Kickstart demo initialized');
