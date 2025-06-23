@@ -1330,9 +1330,14 @@
 
     // Styles de base selon variant et size
     let containerStyles = { ...buttonStyles[variant] || {}, ...buttonSizes[size] || {} };
-    
+
     // Application des styles personnalisés
-    if (skin.container) {
+    // On fusionne skin.container et config.css, mais on donne la priorité à config.css (pour permettre l'override dynamique)
+    if (skin.container && config.css) {
+      containerStyles = { ...containerStyles, ...skin.container, ...config.css };
+    } else if (config.css) {
+      containerStyles = { ...containerStyles, ...config.css };
+    } else if (skin.container) {
       containerStyles = { ...containerStyles, ...skin.container };
     }
 
@@ -1370,12 +1375,17 @@
 
     // Ajout du texte si présent
     if (text) {
-      const textElement = $('button-text', {
-        id: `${buttonId}_text`,
-        text,
-        css: skin.text || {}
-      });
-      button.appendChild(textElement);
+      // Si le bouton n'a pas déjà de texte, on le met directement sur le bouton principal
+      if (!button.querySelector('.hs-button-text')) {
+        button.textContent = text;
+      } else {
+        const textElement = $('button-text', {
+          id: `${buttonId}_text`,
+          text,
+          css: skin.text || {}
+        });
+        button.appendChild(textElement);
+      }
     }
 
     // Ajout du badge si présent
@@ -1390,8 +1400,10 @@
 
     // Méthodes utilitaires spécifiques au bouton
     button.updateText = (newText) => {
+      // Si le bouton n'a pas de .hs-button-text, on modifie directement textContent
       const textEl = button.querySelector('.hs-button-text');
       if (textEl) textEl.textContent = newText;
+      else button.textContent = newText;
       return button;
     };
 
