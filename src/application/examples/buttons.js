@@ -4,17 +4,20 @@ import Button from '../../squirrel/components/button_builder.js';
 function createMaterialToggle(initialState = false) {
   let state = initialState;
 
-  const container = document.createElement('div');
-  container.style.cssText = `
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
-  `;
+  // Création du conteneur avec Squirrel
+  const container = $("div", {
+    id: 'test1',
+    css: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '10px',
+    }
+  });
 
   const toggle = Button({
-    text: state ? 'on' : 'off',
-    parent: '#view',//TODO correct parent attache is not working
+    text: 'hello',
+    parent: container, // parent direct
     onClick: () => {
       state = !state;
       updateVisualState();
@@ -26,41 +29,26 @@ function createMaterialToggle(initialState = false) {
       left: '120px',
       top: '120px',
       borderRadius: '6px',
-      backgroundColor: state ? 'red' : 'yellow',
+      backgroundColor: 'orange',
       position: 'relative',
       border: 'none',
       cursor: 'pointer',
       transition: 'background-color 0.3s ease',
       border: '3px solid rgba(255,255,255,0.3)',
       boxShadow: '0 2px 4px rgba(255,255,1,1)',
-
     }
   });
-
-  // const thumb = document.createElement('div');
-  // thumb.style
-  //   top: 2px;
-  //   left: ${state ? '26px' : '2px'};
-  //   width: 20px;
-  //   height: 20px;
-  //   border-radius: 50%;
-  //   background: white;
-  //   transition: left 0.3s ease;
-  //   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  // `;
-
-  // toggle.appendChild(thumb);
 
   const label = document.createElement('span');
   label.textContent = state ? 'Activé' : 'Désactivé';
   label.style.fontWeight = 'bold';
+  label.style.color = state ? 'yellowgreen' : 'green';
 
   function updateVisualState() {
-    toggle.$({ css: { backgroundColor: state ? 'red' : 'blue' } });
     toggle.updateText(state ? 'on' : 'off');
-    // thumb.style.left = state ? '26px' : '2px';
+    toggle.style.backgroundColor = state ? 'yellowgreen' : 'yellow';
     label.textContent = state ? 'Activé' : 'Désactivé';
-    label.style.color = state ? 'red' : 'blue';
+    label.style.color = state ? 'yellowgreen' : 'green';
   }
 
   container.appendChild(toggle);

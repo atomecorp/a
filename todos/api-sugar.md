@@ -1,27 +1,27 @@
-# 🍭 API SUGAR - Commodités zero-overhead
+# 🍭 API SUGAR - Zero-overhead Commodities
 
 ## Vision
-Ajouter des raccourcis élégants sans impacter les performances.
+Add elegant shortcuts without impacting performance.
 
-## Examples d'API sugar souhaitées
+## Desired API Sugar Examples
 
 ### 1. Position & Size shortcuts
 ```javascript
-// Au lieu de
+// Instead of
 element.style.left = '100px';
 element.style.top = '200px';
 element.style.width = '300px';
 element.style.height = '150px';
 
-// Sugar proposé
+// Proposed sugar
 element.x = 100;           // → style.left = '100px'
 element.y = 200;           // → style.top = '200px'  
 element.w = 300;           // → style.width = '300px'
 element.h = 150;           // → style.height = '150px'
 
-// Dans $ après création de l'élément
+// In $ after element creation
 Object.defineProperties(element, {
-  // Sugar pour styles courants
+  // Sugar for common styles
   x: {
     get() { return this.style.left; },
     set(v) { this.style.left = typeof v === 'number' ? v + 'px' : v; }
@@ -41,13 +41,13 @@ Object.defineProperties(element, {
 });
 
 // Usage sugar
-element.x = 100;        // au lieu de element.style.left = '100px'
-element.visible = false; // au lieu de element.style.display = 'none'
+element.x = 100;        // instead of element.style.left = '100px'
+element.visible = false; // instead of element.style.display = 'none'
 
-// Ou method chaining
+// Or method chaining
 element.move(100, 200).size(300, 150);
 ```
-// Dans $ après création
+// In $ after element creation
 element.move = (x, y) => {
   element.style.left = x + 'px';
   element.style.top = y + 'px';
@@ -64,31 +64,31 @@ element.size = (w, h) => {
 element.move(100, 200).size(300, 150);
 ### 2. Visibility shortcuts
 ```javascript
-// Au lieu de
+// Instead of
 element.style.display = 'none';
 element.style.visibility = 'hidden';
 element.style.opacity = '0';
 
-// Sugar proposé
+// Proposed sugar
 element.visible = false;    // → display: none
 element.hidden = true;      // → visibility: hidden
 element.opacity = 0;        // → opacity: 0
 
-// Ou methods
+// Or methods
 element.hide().show().fadeOut().fadeIn();
 ```
 
 ### 3. Event sugar
 ```javascript
-// Au lieu de
+// Instead of
 element.addEventListener('click', handler);
 element.addEventListener('mouseenter', hoverHandler);
 
-// Sugar proposé
+// Proposed sugar
 element.click(handler);           // → addEventListener('click')
 element.hover(hoverHandler);      // → addEventListener('mouseenter')
 element.focus(focusHandler);      // → addEventListener('focus')
-// Raccourcis événements
+// Event shortcuts
 ['click', 'hover', 'focus', 'blur'].forEach(event => {
   element[event] = (callback) => {
     element.addEventListener(event === 'hover' ? 'mouseenter' : event, callback);
@@ -96,7 +96,7 @@ element.focus(focusHandler);      // → addEventListener('focus')
   };
 });
 
-// Usage simple
+// Simple usage
 element.click(() => console.log('clicked!'))
        .hover(() => element.style.opacity = '0.8');
 
@@ -107,11 +107,11 @@ element.click(() => console.log('clicked'))
 
 ### 4. CSS Template Literals
 ```javascript
-// Au lieu de multiples assignations
+// Instead of multiple assignments
 element.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
 element.style.background = `linear-gradient(45deg, ${color1}, ${color2})`;
 
-// Sugar proposé
+// Proposed sugar
 element.css`
   transform: translate(${x}px, ${y}px) scale(${scale});
   background: linear-gradient(45deg, ${color1}, ${color2});
@@ -121,13 +121,13 @@ element.css`
 
 ### 5. Animation shortcuts
 ```javascript
-// Au lieu du Web Animations API verbeux
+// Instead of verbose Web Animations API
 element.animate([
   { transform: 'translateX(0px)' },
   { transform: 'translateX(100px)' }
 ], { duration: 300 });
 
-// Sugar proposé
+// Proposed sugar
 element.slideX(100, 300);         // → translate X over time
 element.scaleTo(1.5, 200);        // → scale to value over time
 element.fadeTo(0.5, 150);         // → fade to opacity over time
@@ -138,15 +138,15 @@ element.slideX(100).then(() => element.scaleTo(1.2));
 
 ### 6. Class management sugar
 ```javascript
-// Au lieu de
+// Instead of
 element.classList.add('active');
 element.classList.remove('inactive');
 element.classList.toggle('expanded');
 
-// Sugar proposé (garde les originaux aussi)
+// Proposed sugar (keeps originals too)
 element.addClass('active').removeClass('inactive').toggleClass('expanded');
 
-// Ou properties
+// Or properties
 element.active = true;            // → classList.add('active')
 element.expanded = !element.expanded; // → classList.toggle('expanded')
 ```
