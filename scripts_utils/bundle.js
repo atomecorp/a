@@ -1,4 +1,5 @@
 // Point d'entrée du bundle CDN
+import * as Apis from '../src/squirrel/apis.js';
 import Squirrel from '../src/squirrel/squirrel.js';
 import Slider from '../src/squirrel/components/slider_builder.js';
 import Badge from '../src/squirrel/components/badge_builder.js';
@@ -32,6 +33,7 @@ Squirrel.components = {
 // Expose Squirrel globals immediately for both CDN and NPM builds
 if (typeof window !== 'undefined') {
   // Expose Squirrel globals and bare component names immediately
+window.grab = Apis.grab;
   window.$ = Squirrel.$;
   window.Squirrel = window.Squirrel || {};
   window.Squirrel.$ = Squirrel.$;

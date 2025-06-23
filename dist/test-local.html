@@ -28,15 +28,18 @@
           padding: '10px',
           color: 'white',
           margin: '10px',
+          position: 'absolute',
           display: 'inline-block'
         },
         text: 'Je suis un SPAN ! 🎯'
       });
 
+       grab('test1').style.left = '300px';
+
       // Slider example
       // Use Slider directly, no need for user-side assignment
       if (typeof Slider !== 'function') {
-        alert('Slider component is not available!');
+        puts('Slider component is not available!');
         return;
       }
       const sliderWrapper = $('div', {
@@ -103,9 +106,13 @@
           console.log('❌ Timeout : Squirrel.js n\'a pas pu créer l\'élément', 'error');
         } else {
           console.log('✅ Squirrel.js a créé l\'élément avec succès !');
+
+       grab('test1').style.left = '150px';
         }
       }, 1000);
     });
+
+
     </script>
 </body>
 </html>

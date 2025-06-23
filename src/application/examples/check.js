@@ -9,11 +9,13 @@ $('span', {
     color: 'white',
     margin: '10px',
     display: 'inline-block',
+    position: 'absolute',
      position: 'absolute',
   },
   text: 'Je suis un SPAN ! 🎯'
 });
  grab ('test1').style.left = '400px';
+ alert ('ok');
 // document.getElementById('test1').style.left = '400px';
 
 
