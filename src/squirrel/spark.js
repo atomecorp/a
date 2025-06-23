@@ -4,8 +4,8 @@
  */
 
 // === STATIC ES6 IMPORTS ===
-// import './apis.js';
-// import { $, define, observeMutations } from './squirrel.js';
+import './apis.js';
+import { $, define, observeMutations } from './squirrel.js';
 
 // === COMPONENT IMPORTS ===
 import Button from './components/button_builder.js';
@@ -81,11 +81,9 @@ Unit.getAllConnections = getAllConnections;
 Unit.getUnit = getUnit;
 Unit.getAllUnits = getAllUnits;
 
-// console.log('✅ Squirrel Core loaded - Order respected');
 
 // === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
-  // console.log('✅ Kickstart loaded after exposure');
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
 });

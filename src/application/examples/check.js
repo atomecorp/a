@@ -13,8 +13,8 @@ $('span', {
   },
   text: 'Je suis un SPAN ! 🎯'
 });
-
-document.getElementById('test1').style.left = '400px';
+ grab ('test1').style.left = '400px';
+// document.getElementById('test1').style.left = '400px';
 
 
   // const toggle = Button({
