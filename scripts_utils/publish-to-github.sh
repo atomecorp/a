@@ -49,3 +49,7 @@ echo "\nCDN jsDelivr ready:"
 echo "$CDN_URL"
 echo "$CDN_URL_MIN"
 echo "$CDN_CSS"
+
+# Purge jsDelivr cache for latest (optionnel, mais recommandé)
+echo "\nPurge jsDelivr cache for @latest..."
+curl -s "https://purge.jsdelivr.net/gh/$REPO_URL@latest/dist/squirrel.min.js" && echo "✅ Purge done."
