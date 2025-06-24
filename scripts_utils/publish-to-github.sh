@@ -30,6 +30,9 @@ git push
 if [ -n "$VERSION" ]; then
   git tag "$VERSION" || true
   git push origin "$VERSION" || true
+  # Met à jour le tag 'latest' pour pointer sur la dernière version
+  git tag -f latest
+  git push -f origin latest
   REF="$VERSION"
 else
   # Determine current branch
