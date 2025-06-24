@@ -4,7 +4,7 @@ import Squirrel from '../src/squirrel/squirrel.js';
 import Slider from '../src/squirrel/components/slider_builder.js';
 import Badge from '../src/squirrel/components/badge_builder.js';
 import Button from '../src/squirrel/components/button_builder.js';
-import Draggable from '../src/squirrel/components/draggable_builder.js';
+import Draggable from '../src/squirrel/behaviors/events/draggable_builder.js';
 import List from '../src/squirrel/components/List_builder.js';
 import Matrix from '../src/squirrel/components/matrix_builder.js';
 import Menu from '../src/squirrel/components/menu_builder.js';

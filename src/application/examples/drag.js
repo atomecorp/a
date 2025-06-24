@@ -1,5 +1,4 @@
 // === TESTS DU COMPOSANT DRAGGABLE ===
-import Draggable from '../../squirrel/components/draggable_builder.js';
 
 // Test 1: Draggable basique avec template
 const basicDrag = Draggable('draggable-box', {

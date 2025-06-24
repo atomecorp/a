@@ -1,4 +1,4 @@
-import { $, define } from '../squirrel.js';
+import { $, define } from '../../squirrel.js';
 
 /**
  * Composant Draggable avec HyperSquirrel

@@ -24,7 +24,7 @@ import Unit, {
   getUnit,
   getAllUnits 
 } from './components/unit_builder.js';
-import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from './components/draggable_builder.js';
+import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from './behaviors/events/draggable_builder.js';
 import Badge from './components/badge_builder.js';
 import Tooltip from './components/tooltip_builder.js';
 import Template from './components/template_builder.js';
