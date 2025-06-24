@@ -576,6 +576,7 @@ export { draggable };
 
 // Alias pour compatibilité avec l'ancien pattern
 const Draggable = draggable;
+Draggable.makeDraggable = makeDraggable;
 export { Draggable };
 
 // Export par défaut - fonction directe pour usage: Draggable({...})

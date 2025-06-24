@@ -1709,6 +1709,10 @@
     return element;
   }
 
+  // Alias pour compatibilité avec l'ancien pattern
+  const Draggable = draggable;
+  Draggable.makeDraggable = makeDraggable;
+
   /**
    * 🎯 LIST COMPONENT - VERSION 2.0 MATERIAL DESIGN
    * Composant List avec styles Material Design et personnalisation complète
@@ -5718,7 +5722,7 @@
     window.Squirrel.Badge = createBadge;
     window.Squirrel.Button = createButton;
     window.Squirrel.Draggable = draggable;
-    window.Squirrel.makeDraggable = draggable.makeDraggable;
+    window.makeDraggable = draggable.makeDraggable;
     window.Squirrel.List = createList;
     window.Squirrel.Matrix = createMatrix;
     window.Squirrel.Menu = createMenu;
