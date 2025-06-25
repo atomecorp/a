@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - Squirrel Framework</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        
+        .offline-container {
+            max-width: 500px;
+            padding: 40px 20px;
+        }
+        
+        .offline-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            opacity: 0.9;
+        }
+        
+        .offline-title {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            opacity: 0.95;
+        }
+        
+        .offline-message {
+            font-size: 18px;
+            line-height: 1.5;
+            margin-bottom: 32px;
+            opacity: 0.8;
+        }
+        
+        .offline-actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .btn-primary {
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            border-color: transparent;
+        }
+        
+        .btn-primary:hover {
+            background: white;
+            transform: translateY(-2px);
+        }
+        
+        .offline-features {
+            margin-top: 48px;
+            text-align: left;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 24px 0;
+        }
+        
+        .feature-list li {
+            padding: 8px 0;
+            opacity: 0.8;
+            position: relative;
+            padding-left: 32px;
+        }
+        
+        .feature-list li:before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 20px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        @media (max-width: 600px) {
+            .offline-title {
+                font-size: 24px;
+            }
+            
+            .offline-message {
+                font-size: 16px;
+            }
+            
+            .offline-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status pulse" id="connectionStatus">
+        📴 Offline
+    </div>
+    
+    <div class="offline-container">
+        <div class="offline-icon">🌐</div>
+        <h1 class="offline-title">You're Offline</h1>
+        <p class="offline-message">
+            Don't worry! The Squirrel Framework app works offline too. 
+            You can still access cached components and documentation.
+        </p>
+        
+        <div class="offline-actions">
+            <button class="btn btn-primary" onclick="retryConnection()">
+                🔄 Try Again
+            </button>
+            <a href="/" class="btn">
+                🏠 Go Home
+            </a>
+            <a href="/test-components-browser-clean.html" class="btn">
+                🧪 View Components
+            </a>
+        </div>
+        
+        <div class="offline-features">
+            <h3 style="margin-bottom: 16px; opacity: 0.9;">Available Offline:</h3>
+            <ul class="feature-list">
+                <li>Browse cached components</li>
+                <li>View documentation</li>
+                <li>Test UI interactions</li>
+                <li>Access component gallery</li>
+                <li>Read framework guides</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        // Check connection status
+        function updateConnectionStatus() {
+            const status = document.getElementById('connectionStatus');
+            if (navigator.onLine) {
+                status.textContent = '🌐 Online';
+                status.classList.remove('pulse');
+                status.style.background = 'rgba(76, 175, 80, 0.3)';
+            } else {
+                status.textContent = '📴 Offline';
+                status.classList.add('pulse');
+                status.style.background = 'rgba(244, 67, 54, 0.3)';
+            }
+        }
+        
+        // Retry connection
+        function retryConnection() {
+            if (navigator.onLine) {
+                // Go back to the previous page or home
+                if (document.referrer) {
+                    window.location.href = document.referrer;
+                } else {
+                    window.location.href = '/';
+                }
+            } else {
+                // Show a message that we're still offline
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '📴 Still Offline';
+                btn.style.background = 'rgba(244, 67, 54, 0.3)';
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.style.background = '';
+                }, 2000);
+            }
+        }
+        
+        // Listen for online/offline events
+        window.addEventListener('online', () => {
+            updateConnectionStatus();
+            // Show reconnection message
+            const container = document.querySelector('.offline-container');
+            const message = document.createElement('div');
+            message.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(76, 175, 80, 0.9);
+                color: white;
+                padding: 12px 24px;
+                border-radius: 6px;
+                z-index: 1000;
+            `;
+            message.textContent = '🌐 Back online! Redirecting...';
+            document.body.appendChild(message);
+            
+            // Redirect after showing message
+            setTimeout(() => {
+                if (document.referrer) {
+                    window.location.href = document.referrer;
+                } else {
+                    window.location.href = '/';
+                }
+            }, 2000);
+        });
+        
+        window.addEventListener('offline', updateConnectionStatus);
+        
+        // Initial status check
+        updateConnectionStatus();
+        
+        // Periodically check connection (in case browser events don't fire)
+        setInterval(updateConnectionStatus, 5000);
+    </script>
+</body>
+</html>

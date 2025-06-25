@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { margin: 0; background: #007bff; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .icon { color: white; font-family: Arial, sans-serif; font-weight: bold; font-size: 48px; }
+    </style>
+</head>
+<body>
+    <div class="icon">S</div>
+</body>
+</html>
