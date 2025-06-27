@@ -4,7 +4,7 @@
 // import('./examples/drag.js');
 // import('./examples/dragNdrop.js');
 
-import('./examples/unit.js');
+// import('./examples/unit.js');
 
 // import('./examples/menus.js');
 
@@ -20,7 +20,7 @@ import('./examples/unit.js');
 // import('./examples/design_slider.js');
 
 // import('./examples/material_page.js');
-// import('./examples/DB.js');
+import('./examples/DB.js');
 
 
 // import('./vie/vie.js');

@@ -1,0 +1,156 @@
+{
+  "id": "advanced_card",
+  "parent": "dashboard",
+  "type": "container",
+  "props": {
+    "geometry": {
+      "size": { "width": 280, "height": 200 },
+      "position": { "x": 10, "y": 10 },
+      "smooth": 16
+    },
+    "color": {
+      "red": 1,
+      "green": 1,
+      "blue": 1,
+      "alpha": 1
+    },
+    "contents": {
+      "text": "Carte Avancée",
+      "color": { "red": 0.2, "green": 0.2, "blue": 0.2, "alpha": 1 },
+      "font": { "name": "Inter", "weight": "bold", "size": 18 },
+      "align": "center"
+    },
+    "border": {
+      "radius": 16,
+      "width": 1,
+      "style": "solid",
+      "color": { "red": 0.8, "green": 0.8, "blue": 0.8, "alpha": 1 }
+    },
+    "shadow": {
+      "left": 0,
+      "top": 8,
+      "blur": 24,
+      "red": 0,
+      "green": 0,
+      "blue": 0,
+      "alpha": 0.12
+    },
+    "animation": {
+      "type": "slide-in",
+      "duration": 450,
+      "delay": 0,
+      "easing": "ease-in-out"
+    },
+    "layout": {
+      "type": "flex",
+      "direction": "column",
+      "justify": "flex-start",
+      "align": "stretch",
+      "gap": 12,
+      "padding": { "top": 16, "right": 16, "bottom": 16, "left": 16 }
+    },
+    "dataSource": "api/cards",
+    "validation": {
+      "required": ["title", "content"],
+      "maxLength": 500
+    },
+    "permissions": {
+      "read": ["user", "admin"],
+      "write": ["admin"],
+      "delete": ["admin"]
+    },
+    "units": {
+      "width": "px",
+      "height": "px",
+      "left": "px",
+      "top": "px",
+      "blur": "px",
+      "layout.gap": "px",
+      "shadow.blur": "px"
+    },
+    "bindings": {
+      "content": "user.content",
+      "color": "theme.color.primary",
+      "size": "user.preferences.cardSize",
+      "required": "permissions.isRequired"
+    },
+    "listeners": {
+      "click": "handleClick",
+      "hover": "handleHover",
+      "focus": "handleFocus",
+      "blur": "handleBlur"
+    },
+    "assets": {
+      "background": "images/card_bg.svg",
+      "icon": "icons/card_icon.svg"
+    },
+    "variables": {
+      "counter": 0,
+      "isActive": false
+    },
+    "computed": {
+      "isLarge": "props.size.width > 300",
+      "isLight": "props.color.red + props.color.green + props.color.blue > 2.4"
+    },
+    "actions": {
+      "onMount": ["fetchData", "logMount"],
+      "onClick": ["toggleActive"],
+      "onHover": ["logHover"],
+      "onFocus": ["highlight"],
+      "onBlur": ["unhighlight"]
+    },
+    "shortcuts": {
+      "toggle": "Space",
+      "activate": "Enter"
+    },
+    "interactions": {
+      "drag": {
+        "enabled": true,
+        "axis": "both",
+        "bounds": "viewport",
+        "ghost": true,
+        "grid": [10, 10],
+        "group": "cards",
+        "data": { "type": "card", "category": "dashboard" },
+        "onDragStart": [
+          "el.classList.add('dragging');",
+          "data.startX = ('clientX' in event ? event.clientX : event.x);",
+          "data.startY = ('clientY' in event ? event.clientY : event.y);",
+          "data.startW = el.offsetWidth  || el.width;",
+          "data.startH = el.offsetHeight || el.height;"
+        ],
+        "onDragMove": [
+          "const dx = ('clientX' in event ? event.clientX : event.x) - data.startX;",
+          "const dy = ('clientY' in event ? event.clientY : event.y) - data.startY;",
+          "el.style.width  = Math.max(20, data.startW + dx) + 'px';",
+          "el.style.height = Math.max(20, data.startH + dy) + 'px';"
+        ],
+        "onDragEnd": [
+          "el.classList.remove('dragging');",
+          "delete data.startX; delete data.startY;",
+          "delete data.startW; delete data.startH;"
+        ]
+      },
+      "touch": {
+        "down": "onMainBoxTouchDown",
+        "up": "onMainBoxTouchUp",
+        "longpress": "onLongPress"
+      },
+      "hover": {
+        "enter": "onHoverEnter",
+        "leave": "onHoverLeave",
+        "move": "onHoverMove"
+      },
+      "click": {
+        "tap": "onTap"
+      }
+    }
+  },
+  "children": ["card_header", "card_body", "card_footer"],
+  "meta": {
+    "tags": ["card", "dashboard", "interactive"],
+    "version": "2.1",
+    "created": "2025-01-15",
+    "permissions": "user"
+  }
+}
