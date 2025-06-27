@@ -78,6 +78,11 @@ class ${className} {
     ${this.generateChildrenSetup(data.children)}
   }
 
+  createChild(childId) {
+    // Placeholder: retourne null, à surcharger pour gestion réelle des enfants
+    return null;
+  }
+
   // API publique optimisée
   updateProp(key, value) {
     const keys = key.split('.');
@@ -381,7 +386,8 @@ if (typeof module !== 'undefined' && module.exports) {
   // Crée une factory function
   createFactory(data) {
     const code = this.generateComponentClass(data);
-    return new Function('return ' + code)();
+    // Retourne la classe générée, pas une instance
+    return new Function(code + `; return ${this.toPascalCase(data.id)};`)();
   }
 
   // Utilitaires
@@ -414,3 +420,6 @@ function convertAndRun(jsonData) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { JSONToVanillaConverter, convertAndRun };
 }
+
+// Export universel pour ESM (navigateur)
+export { JSONToVanillaConverter };

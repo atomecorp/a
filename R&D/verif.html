@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Vérif Conversion JSON → Vanilla Component</title>
+  <style>
+    body { background: #f7f7f7; font-family: Inter, Arial, sans-serif; margin: 0; padding: 40px; }
+    #result { margin-top: 40px; }
+    .atomic-component { box-shadow: 0 2px 16px rgba(0,0,0,0.08); margin: 24px auto; }
+  </style>
+</head>
+<body>
+  <h1>Test conversion atomic_object_desc_finalXXX.json</h1>
+  <div id="result"></div>
+  <script type="module">
+    import { JSONToVanillaConverter } from './converter.js';
+    import * as demoMethods from './atomic_object_demo_methods.js';
+
+    fetch('./atomic_object_desc_finalXXX.json')
+      .then(r => r.json())
+      .then(jsonDesc => {
+        const converter = new JSONToVanillaConverter();
+        const result = converter.convert(jsonDesc);
+        console.log(result.code);
+        const component = result.instance();
+
+        // Injection des méthodes de démo dans l'instance
+        Object.assign(component, demoMethods);
+
+        document.getElementById('result').appendChild(component.element);
+      });
+  </script>
