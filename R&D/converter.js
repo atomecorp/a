@@ -286,21 +286,15 @@ class ${className} {
     
     return `
   setupAnimations() {
-    const anim = this.props.animation;
-    if (!anim) return;
-    
-    this.element.style.transition = \`all \${anim.duration}ms \${anim.easing}\`;
-    
-    if (anim.delay > 0) {
-      setTimeout(() => this.playAnimation(), anim.delay);
-    } else {
-      this.playAnimation();
-    }
+    // Ne rien faire ici : aucune transition par défaut
   }
-  
+
   playAnimation() {
     const anim = this.props.animation;
-    
+    if (!anim) return;
+    // Appliquer la transition uniquement pour l'animation explicite
+    this.element.style.transition = \`all \${anim.duration}ms \${anim.easing}\`;
+    // Animation selon le type
     switch (anim.type) {
       case 'slide-in':
         this.element.style.transform = 'translateY(0)';
@@ -310,6 +304,10 @@ class ${className} {
         this.element.style.opacity = '1';
         break;
     }
+    // Nettoyer la transition après l'animation
+    setTimeout(() => {
+      this.element.style.transition = '';
+    }, anim.duration);
   }`;
   }
 
