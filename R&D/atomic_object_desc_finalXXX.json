@@ -120,10 +120,7 @@
           "data.startH = el.offsetHeight || el.height;"
         ],
         "onDragMove": [
-          "const dx = ('clientX' in event ? event.clientX : event.x) - data.startX;",
-          "const dy = ('clientY' in event ? event.clientY : event.y) - data.startY;",
-          "el.style.width  = Math.max(20, data.startW + dx) + 'px';",
-          "el.style.height = Math.max(20, data.startH + dy) + 'px';"
+          "const dx = ('clientX' in event ? event.clientX : event.x) - data.startX; const dy = ('clientY' in event ? event.clientY : event.y) - data.startY; el.style.width = Math.max(20, data.startW + dx) + 'px'; el.style.height = Math.max(20, data.startH + dy) + 'px';"
         ],
         "onDragEnd": [
           "el.classList.remove('dragging');",
