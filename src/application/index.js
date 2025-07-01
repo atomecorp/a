@@ -20,10 +20,10 @@
 // import('./examples/design_slider.js');
 
 // import('./examples/material_page.js');
-import('./examples/DB.js');
+// import('./examples/DB.js');
 
 
-// import('./vie/vie.js');
+import('./vie/vie.js');
 
 
 
