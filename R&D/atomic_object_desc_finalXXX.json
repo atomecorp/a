@@ -113,14 +113,14 @@
         "group": "cards",
         "data": { "type": "card", "category": "dashboard" },
         "onDragStart": [
-          "el.classList.add('dragging');",
-          "data.startX = ('clientX' in event ? event.clientX : event.x);",
-          "data.startY = ('clientY' in event ? event.clientY : event.y);",
-          "data.startW = el.offsetWidth  || el.width;",
-          "data.startH = el.offsetHeight || el.height;"
+          "data.startX = ('clientX' in event ? event.clientX : event.x);data.startY = ('clientY' in event ? event.clientY : event.y);data.startLeft = parseInt(el.style.left || 0, 10);data.startTop  = parseInt(el.style.top  || 0, 10);data.startW = el.offsetWidth  || el.width;data.startH = el.offsetHeight || el.height;"
         ],
         "onDragMove": [
+
+          "const dx = ('clientX' in event ? event.clientX : event.x) - data.startX;const dy = ('clientY' in event ? event.clientY : event.y) - data.startY;el.style.left = (data.startLeft + dx) + 'px';el.style.top  = (data.startTop  + dy) + 'px';// Pour resize en même temps (optionnel) :el.style.width = Math.max(20, data.startW + dx) + 'px';el.style.height = Math.max(20, data.startH + dy) + 'px';"
+
           "const dx = ('clientX' in event ? event.clientX : event.x) - data.startX; const dy = ('clientY' in event ? event.clientY : event.y) - data.startY; el.style.width = Math.max(20, data.startW + dx) + 'px'; el.style.height = Math.max(20, data.startH + dy) + 'px';"
+
         ],
         "onDragEnd": [
           "el.classList.remove('dragging');",

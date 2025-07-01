@@ -1,9 +1,9 @@
 class JSONToVanillaConverter {
   constructor() {
-    this.cache = new Map();
-    this.globalHandlers = new Map();
-    this.themeTokens = new Map();
-    this.compiledComponents = new Map();
+    this.cache = {};
+    this.globalHandlers = {};
+    this.themeTokens = {};
+    this.compiledComponents = {};
   }
 
   // Point d'entrée principal
@@ -34,7 +34,7 @@ class ${className} {
     this.element = null;
     this.props = ${JSON.stringify(props, null, 2)};
     this.children = [];
-    this.handlers = new Map();
+    this.handlers = {};
     this.vars = ${JSON.stringify(data.props?.variables || {})};
     this.isDestroyed = false;
     
@@ -116,7 +116,7 @@ class ${className} {
     if (this.isDestroyed) return;
     
     this.children.forEach(child => child.destroy?.());
-    this.handlers.clear();
+    this.handlers = {};
     this.element?._component && (this.element._component = null);
     this.element?.remove();
     this.isDestroyed = true;
@@ -235,22 +235,41 @@ class ${className} {
       methods.push(`
     // Drag handlers - Performance optimisée
     let dragData = {};
+    let moveHandler, upHandler;
     
     this.element.addEventListener('mousedown', (e) => {
       if (!this.props.interactions?.drag?.enabled) return;
+      e.preventDefault();
+      dragData.dragging = true;
+      
+      // Désactiver les transitions pendant le drag
+      const originalTransition = this.element.style.transition;
+      this.element.style.transition = 'none';
+      
       ${this.compileEventActions(interactions.drag.onDragStart, 'dragData')}
-    }, { passive: false });
-    
-    this.element.addEventListener('mousemove', (e) => {
-      if (!dragData.dragging) return;
-      ${this.compileEventActions(interactions.drag.onDragMove, 'dragData')}
-    }, { passive: true });
-    
-    this.element.addEventListener('mouseup', (e) => {
-      if (!dragData.dragging) return;
-      ${this.compileEventActions(interactions.drag.onDragEnd, 'dragData')}
-      dragData = {};
-    });`);
+      
+      moveHandler = (e) => {
+        if (!dragData.dragging) return;
+        ${this.compileEventActions(interactions.drag.onDragMove, 'dragData')}
+      };
+      
+      upHandler = (e) => {
+        if (!dragData.dragging) return;
+        ${this.compileEventActions(interactions.drag.onDragEnd, 'dragData')}
+        dragData = {};
+        
+        // Restaurer les transitions
+        this.element.style.transition = originalTransition;
+        
+        // Nettoyer les listeners
+        document.removeEventListener('mousemove', moveHandler);
+        document.removeEventListener('mouseup', upHandler);
+      };
+      
+      // Ajouter les listeners seulement pendant le drag
+      document.addEventListener('mousemove', moveHandler, { passive: true });
+      document.addEventListener('mouseup', upHandler);
+    }, { passive: false });`);
     }
 
     // Autres événements
@@ -286,21 +305,15 @@ class ${className} {
     
     return `
   setupAnimations() {
-    const anim = this.props.animation;
-    if (!anim) return;
-    
-    this.element.style.transition = \`all \${anim.duration}ms \${anim.easing}\`;
-    
-    if (anim.delay > 0) {
-      setTimeout(() => this.playAnimation(), anim.delay);
-    } else {
-      this.playAnimation();
-    }
+    // Ne rien faire ici : aucune transition par défaut
   }
-  
+
   playAnimation() {
     const anim = this.props.animation;
-    
+    if (!anim) return;
+    // Appliquer la transition uniquement sur les propriétés nécessaires
+    this.element.style.transition = \`opacity \${anim.duration}ms \${anim.easing}, transform \${anim.duration}ms \${anim.easing}\`;
+    // Animation selon le type
     switch (anim.type) {
       case 'slide-in':
         this.element.style.transform = 'translateY(0)';
@@ -310,6 +323,10 @@ class ${className} {
         this.element.style.opacity = '1';
         break;
     }
+    // Nettoyer la transition après l'animation
+    setTimeout(() => {
+      this.element.style.transition = '';
+    }, anim.duration);
   }`;
   }
 

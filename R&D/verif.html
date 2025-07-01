@@ -15,6 +15,7 @@
   <script type="module">
     import { JSONToVanillaConverter } from './converter.js';
     import * as demoMethods from './atomic_object_demo_methods.js';
+    import { applyExtensions } from './extension.js';
 
     fetch('./atomic_object_desc_finalXXX.json')
       .then(r => r.json())
@@ -26,6 +27,7 @@
 
         // Injection des méthodes de démo dans l'instance
         Object.assign(component, demoMethods);
+        applyExtensions(component);
 
         document.getElementById('result').appendChild(component.element);
       });
