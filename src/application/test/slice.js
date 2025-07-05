@@ -336,7 +336,109 @@ const DEFAULT_CONFIG = {
       name: 'fadeOut',
       duration: '0.3s',
       timing: 'ease'
+    },
+    
+    // Événements sur les objets créés
+    events: {
+      onClick: null,           // Function(object, index, slice) => {}
+      onDoubleClick: null,     // Function(object, index, slice) => {}
+      onMouseDown: null,       // Function(object, index, slice, event) => {}
+      onMouseUp: null,         // Function(object, index, slice, event) => {}
+      onRightClick: null,      // Function(object, index, slice, event) => {}
+      onHover: null,           // Function(object, index, slice, isEntering) => {}
+      onRemove: null,          // Function(object, index, slice) => {} - avant suppression
+      onRemoved: null,         // Function(index, slice) => {} - après suppression
     }
+  },
+  
+  // Événements sur les zones
+  zones: {
+    // ...existing zone config...
+    topHeight: 0.25,           
+    bottomHeight: 0.25,        
+    margin: 5,                 
+    backgroundColor: null,     
+    textColor: 'white',
+    fontSize: null,            
+    fontWeight: 'bold',
+    boxShadow: '0 2px 8px rgba(5,8,0,0.3)',
+    borderRadius: null,        
+    
+    // Textes des zones
+    topText: '▼ INPUT',
+    bottomText: '▲ OUTPUT',
+    
+    // Événements sur la zone top
+    topEvents: {
+      onClick: null,           // Function(slice, event) => {}
+      onDoubleClick: null,     // Function(slice, event) => {}
+      onMouseDown: null,       // Function(slice, event) => {}
+      onMouseUp: null,         // Function(slice, event) => {}
+      onRightClick: null,      // Function(slice, event) => {}
+      onHover: null,           // Function(slice, isEntering, event) => {}
+    },
+    
+    // Événements sur la zone bottom
+    bottomEvents: {
+      onClick: null,           
+      onDoubleClick: null,     
+      onMouseDown: null,       
+      onMouseUp: null,         
+      onRightClick: null,      
+      onHover: null,           
+    },
+    
+    // Styles spécifiques par zone
+    top: {
+      backgroundColor: null,
+      textColor: null,
+      fontSize: null,
+      borderRadius: { topLeft: true, topRight: true, bottomLeft: false, bottomRight: false }
+    },
+    bottom: {
+      backgroundColor: null,
+      textColor: null,
+      fontSize: null,
+      borderRadius: { topLeft: false, topRight: false, bottomLeft: true, bottomRight: true }
+    }
+  },
+  
+  // Zone de contenu
+  content: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    hoverColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 5,
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: 0,
+    
+    // Événements sur la zone de contenu
+    events: {
+      onClick: null,           // Function(slice, event) => {} - Par défaut: crée un objet
+      onDoubleClick: null,     // Function(slice, event) => {}
+      onMouseDown: null,       // Function(slice, event) => {}
+      onMouseUp: null,         // Function(slice, event) => {}
+      onRightClick: null,      // Function(slice, event) => {}
+      onHover: null,           // Function(slice, isEntering, event) => {}
+      onScroll: null,          // Function(slice, scrollTop, scrollHeight, event) => {}
+    },
+    
+    // Scrollbar
+    scrollbar: {
+      width: 4,
+      trackColor: 'rgba(255, 255, 255, 0.1)',
+      thumbColor: 'rgba(255, 255, 255, 0.3)',
+      thumbHoverColor: 'rgba(255, 255, 255, 0.5)'
+    }
+  },
+  
+  // Comportements globaux
+  behaviors: {
+    createOnContentClick: true,  // Crée un objet au clic sur le contenu
+    removeOnObjectClick: true,   // Supprime l'objet au clic dessus
+    preventContextMenu: false,   // Empêche le menu contextuel
+    selectMultiple: false,       // Permet la sélection multiple d'objets
+    dragAndDrop: false,          // Active le drag & drop des objets
+    autoScroll: true,            // Auto-scroll vers le bas lors de l'ajout
   }
 };
 
@@ -509,19 +611,142 @@ class Slice {
   }
   
   setupInteractions() {
-    // Clic sur la zone de contenu pour ajouter des blocs
+    this.setupContentEvents();
+    this.setupZoneEvents();
+  }
+  
+  setupContentEvents() {
+    const contentEvents = this.config.content.events || {};
+    
+    // Clic sur la zone de contenu
     this.contentZone.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.addObject();
+      
+      // Événement personnalisé ou comportement par défaut
+      if (contentEvents.onClick) {
+        contentEvents.onClick(this, e);
+      } else if (this.config.behaviors.createOnContentClick) {
+        this.addObject();
+      }
     });
     
-    // Feedback visuel basé sur la configuration
-    this.contentZone.addEventListener('mouseenter', () => {
+    // Double clic
+    this.contentZone.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      if (contentEvents.onDoubleClick) {
+        contentEvents.onDoubleClick(this, e);
+      }
+    });
+    
+    // Mouse down/up
+    this.contentZone.addEventListener('mousedown', (e) => {
+      if (contentEvents.onMouseDown) {
+        contentEvents.onMouseDown(this, e);
+      }
+    });
+    
+    this.contentZone.addEventListener('mouseup', (e) => {
+      if (contentEvents.onMouseUp) {
+        contentEvents.onMouseUp(this, e);
+      }
+    });
+    
+    // Clic droit
+    this.contentZone.addEventListener('contextmenu', (e) => {
+      if (this.config.behaviors.preventContextMenu) {
+        e.preventDefault();
+      }
+      if (contentEvents.onRightClick) {
+        contentEvents.onRightClick(this, e);
+      }
+    });
+    
+    // Hover
+    this.contentZone.addEventListener('mouseenter', (e) => {
       this.contentZone.style.backgroundColor = this.config.content.hoverColor;
+      if (contentEvents.onHover) {
+        contentEvents.onHover(this, true, e);
+      }
     });
     
-    this.contentZone.addEventListener('mouseleave', () => {
+    this.contentZone.addEventListener('mouseleave', (e) => {
       this.contentZone.style.backgroundColor = this.config.content.backgroundColor;
+      if (contentEvents.onHover) {
+        contentEvents.onHover(this, false, e);
+      }
+    });
+    
+    // Scroll
+    this.contentZone.addEventListener('scroll', (e) => {
+      if (contentEvents.onScroll) {
+        contentEvents.onScroll(this, this.contentZone.scrollTop, this.contentZone.scrollHeight, e);
+      }
+    });
+  }
+  
+  setupZoneEvents() {
+    this.setupZoneEventHandlers(this.topZone, this.config.zones.topEvents || {}, 'top');
+    this.setupZoneEventHandlers(this.bottomZone, this.config.zones.bottomEvents || {}, 'bottom');
+  }
+  
+  setupZoneEventHandlers(zoneElement, events, zoneName) {
+    // Clic
+    zoneElement.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (events.onClick) {
+        events.onClick(this, e);
+      }
+      console.log(`🎯 Clic sur zone ${zoneName}`);
+    });
+    
+    // Double clic
+    zoneElement.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      if (events.onDoubleClick) {
+        events.onDoubleClick(this, e);
+      }
+      console.log(`🎯🎯 Double clic sur zone ${zoneName}`);
+    });
+    
+    // Mouse down/up
+    zoneElement.addEventListener('mousedown', (e) => {
+      if (events.onMouseDown) {
+        events.onMouseDown(this, e);
+      }
+      console.log(`⬇️ Mouse down sur zone ${zoneName}`);
+    });
+    
+    zoneElement.addEventListener('mouseup', (e) => {
+      if (events.onMouseUp) {
+        events.onMouseUp(this, e);
+      }
+      console.log(`⬆️ Mouse up sur zone ${zoneName}`);
+    });
+    
+    // Clic droit
+    zoneElement.addEventListener('contextmenu', (e) => {
+      if (this.config.behaviors.preventContextMenu) {
+        e.preventDefault();
+      }
+      if (events.onRightClick) {
+        events.onRightClick(this, e);
+      }
+      console.log(`🖱️ Clic droit sur zone ${zoneName}`);
+    });
+    
+    // Hover
+    zoneElement.addEventListener('mouseenter', (e) => {
+      if (events.onHover) {
+        events.onHover(this, true, e);
+      }
+      console.log(`🔄 Hover enter sur zone ${zoneName}`);
+    });
+    
+    zoneElement.addEventListener('mouseleave', (e) => {
+      if (events.onHover) {
+        events.onHover(this, false, e);
+      }
+      console.log(`🔄 Hover leave sur zone ${zoneName}`);
     });
   }
   
@@ -591,35 +816,119 @@ class Slice {
       }
     });
     
-    // Effet hover sur les objets basé sur la configuration
-    newObject.addEventListener('mouseenter', () => {
-      newObject.style.transform = hoverTransform;
-    });
+    // Ajouter les données de l'objet
+    newObject.objectIndex = this.objectCounter;
+    newObject.sliceRef = this;
     
-    newObject.addEventListener('mouseleave', () => {
-      newObject.style.transform = 'scale(1)';
-    });
-    
-    // Clic pour supprimer avec animation paramétrable
-    newObject.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const animConfig = this.config.objects.removeAnimation || {};
-      const animName = animConfig.name || 'fadeOut';
-      const animDuration = animConfig.duration || '0.3s';
-      const animTiming = animConfig.timing || 'ease';
-      
-      newObject.style.animation = `${animName} ${animDuration} ${animTiming}`;
-      
-      const duration = parseFloat(animDuration) * 1000; // Convertir en ms
-      setTimeout(() => newObject.remove(), duration);
-    });
+    // Configurer tous les événements sur l'objet
+    this.setupObjectEvents(newObject);
     
     this.contentZone.appendChild(newObject);
     
-    // Auto-scroll vers le bas
-    this.contentZone.scrollTop = this.contentZone.scrollHeight;
+    // Auto-scroll vers le bas si activé
+    if (this.config.behaviors.autoScroll) {
+      this.contentZone.scrollTop = this.contentZone.scrollHeight;
+    }
     
     console.log(`✨ Objet ${this.objectCounter} ajouté à la slice`);
+  }
+  
+  setupObjectEvents(objectElement) {
+    const events = this.config.objects.events || {};
+    const hoverConfig = this.config.objects.hover || {};
+    const hoverTransform = hoverConfig.transform || 'scale(1.05)';
+    
+    const index = objectElement.objectIndex;
+    
+    // Clic sur l'objet
+    objectElement.addEventListener('click', (e) => {
+      e.stopPropagation();
+      
+      // Événement personnalisé ou comportement par défaut
+      if (events.onClick) {
+        events.onClick(objectElement, index, this);
+      } else if (this.config.behaviors.removeOnObjectClick) {
+        this.removeObject(objectElement);
+      }
+    });
+    
+    // Double clic
+    objectElement.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      if (events.onDoubleClick) {
+        events.onDoubleClick(objectElement, index, this);
+      }
+      console.log(`🎯🎯 Double clic sur objet ${index}`);
+    });
+    
+    // Mouse down/up
+    objectElement.addEventListener('mousedown', (e) => {
+      if (events.onMouseDown) {
+        events.onMouseDown(objectElement, index, this, e);
+      }
+      console.log(`⬇️ Mouse down sur objet ${index}`);
+    });
+    
+    objectElement.addEventListener('mouseup', (e) => {
+      if (events.onMouseUp) {
+        events.onMouseUp(objectElement, index, this, e);
+      }
+      console.log(`⬆️ Mouse up sur objet ${index}`);
+    });
+    
+    // Clic droit
+    objectElement.addEventListener('contextmenu', (e) => {
+      if (this.config.behaviors.preventContextMenu) {
+        e.preventDefault();
+      }
+      if (events.onRightClick) {
+        events.onRightClick(objectElement, index, this, e);
+      }
+      console.log(`🖱️ Clic droit sur objet ${index}`);
+    });
+    
+    // Hover
+    objectElement.addEventListener('mouseenter', (e) => {
+      objectElement.style.transform = hoverTransform;
+      if (events.onHover) {
+        events.onHover(objectElement, index, this, true);
+      }
+    });
+    
+    objectElement.addEventListener('mouseleave', (e) => {
+      objectElement.style.transform = 'scale(1)';
+      if (events.onHover) {
+        events.onHover(objectElement, index, this, false);
+      }
+    });
+  }
+  
+  removeObject(objectElement) {
+    const events = this.config.objects.events || {};
+    const index = objectElement.objectIndex;
+    
+    // Événement avant suppression
+    if (events.onRemove) {
+      events.onRemove(objectElement, index, this);
+    }
+    
+    // Animation de suppression
+    const animConfig = this.config.objects.removeAnimation || {};
+    const animName = animConfig.name || 'fadeOut';
+    const animDuration = animConfig.duration || '0.3s';
+    const animTiming = animConfig.timing || 'ease';
+    
+    objectElement.style.animation = `${animName} ${animDuration} ${animTiming}`;
+    
+    const duration = parseFloat(animDuration) * 1000;
+    setTimeout(() => {
+      objectElement.remove();
+      // Événement après suppression
+      if (events.onRemoved) {
+        events.onRemoved(index, this);
+      }
+      console.log(`🗑️ Objet ${index} supprimé`);
+    }, duration);
   }
   
   // API publique
@@ -732,7 +1041,7 @@ export default createSlice;
 const slice1 = createSlice();
 document.body.appendChild(slice1.element);
 
-// 2. Slice avec zones personnalisées
+// 2. Slice avec événements personnalisés sur les zones
 const slice2 = createSlice({
   width: 120,
   height: 80,
@@ -741,140 +1050,210 @@ const slice2 = createSlice({
   borderRadius: 8,
   
   zones: {
-    topHeight: 0.3,        // Zone top = 30% de la largeur
-    bottomHeight: 0.2,     // Zone bottom = 20% de la largeur
-    margin: 8,
-    textColor: 'yellow',
-    fontWeight: 'normal',
+    topHeight: 0.3,
+    bottomHeight: 0.2,
     topText: '🔥 ENTRÉE',
     bottomText: '⚡ SORTIE',
     
-    // Styles spécifiques
-    top: {
-      backgroundColor: 'rgba(255, 0, 0, 0.3)',
-      textColor: 'white'
+    // Événements sur la zone top
+    topEvents: {
+      onClick: (slice, event) => {
+        console.log('🔥 Zone TOP cliquée !');
+        slice.addObject(); // Crée un objet depuis le top
+      },
+      onDoubleClick: (slice, event) => {
+        console.log('🔥🔥 Zone TOP double-cliquée !');
+        slice.clear(); // Vide la slice
+      },
+      onHover: (slice, isEntering, event) => {
+        console.log(`🔥 Zone TOP ${isEntering ? 'survolée' : 'quittée'}`);
+      }
     },
-    bottom: {
-      backgroundColor: 'rgba(0, 255, 0, 0.3)',
-      textColor: 'black'
+    
+    // Événements sur la zone bottom
+    bottomEvents: {
+      onClick: (slice, event) => {
+        console.log('⚡ Zone BOTTOM cliquée !');
+        // Exporter les données vers la console
+        console.log('📊 Objets:', slice.getObjectCount());
+      },
+      onRightClick: (slice, event) => {
+        console.log('⚡ Zone BOTTOM clic droit !');
+        // Changer la couleur de fond
+        slice.updateBackgroundColor(`hsl(${Math.random() * 360}, 70%, 50%)`);
+      }
     }
-  },
-  
-  content: {
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-    hoverColor: 'rgba(0, 0, 0, 0.4)',
-    padding: 8
   },
   
   objects: {
     sizeRatio: 0.4,
     alignment: 'center',
-    spacing: 6,
-    backgroundColor: 'rgba(100, 200, 255, 0.9)',
-    borderRadius: 8,
-    border: '3px solid white'
+    
+    // Événements sur les objets
+    events: {
+      onClick: (object, index, slice) => {
+        console.log(`🎯 Objet ${index} cliqué !`);
+        // Changer la couleur de l'objet
+        object.style.backgroundColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+      },
+      onDoubleClick: (object, index, slice) => {
+        console.log(`🎯🎯 Objet ${index} double-cliqué !`);
+        // Supprimer l'objet
+        slice.removeObject(object);
+      },
+      onRightClick: (object, index, slice, event) => {
+        console.log(`🖱️ Objet ${index} clic droit !`);
+        // Cloner l'objet
+        slice.addObject();
+      },
+      onHover: (object, index, slice, isEntering) => {
+        if (isEntering) {
+          object.style.boxShadow = '0 4px 12px rgba(255, 255, 255, 0.5)';
+        } else {
+          object.style.boxShadow = 'none';
+        }
+      }
+    }
+  },
+  
+  behaviors: {
+    createOnContentClick: false,  // Désactivé car on utilise les zones
+    removeOnObjectClick: false,   // Désactivé car on utilise le double-clic
+    preventContextMenu: true,     // Empêche le menu contextuel
   }
 });
 document.body.appendChild(slice2.element);
 
-// 3. Slice avec objets complètement personnalisés
+// 3. Slice avec drag & drop simulé et sélection multiple
 const slice3 = createSlice({
   width: 200,
   height: 60,
   backgroundColor: 'rgba(100, 255, 100, 0.8)',
   position: { x: 400, y: 100 },
   
-  zones: {
-    topHeight: 0.15,    // Zones minces
-    bottomHeight: 0.15,
-    topText: '↓ IN',
-    bottomText: '↑ OUT',
-    fontSize: 10
-  },
-  
   objects: {
-    sizeRatio: 0.5,     // Gros objets
-    minSize: 30,
-    maxSize: 100,
-    alignment: 'right',
-    spacing: 8,
-    backgroundColor: 'rgba(255, 165, 0, 0.9)', // Orange fixe
-    textColor: 'black',
-    fontWeight: 'bold',
-    borderRadius: 12,
-    border: '2px solid #ff6600',
+    sizeRatio: 0.5,
+    alignment: 'left',
     
-    hover: {
-      transform: 'scale(1.1) rotate(5deg)',
-      transition: 'all 0.3s ease'
-    },
-    
-    removeAnimation: {
-      name: 'fadeOut',
-      duration: '0.5s',
-      timing: 'ease-in-out'
+    events: {
+      onMouseDown: (object, index, slice, event) => {
+        object.isDragging = true;
+        object.style.cursor = 'grabbing';
+        object.style.transform = 'scale(1.1) rotate(5deg)';
+      },
+      onMouseUp: (object, index, slice, event) => {
+        object.isDragging = false;
+        object.style.cursor = 'pointer';
+        object.style.transform = 'scale(1)';
+      },
+      onClick: (object, index, slice) => {
+        // Système de sélection multiple
+        if (object.isSelected) {
+          object.isSelected = false;
+          object.style.border = '2px solid #ff6600';
+          object.style.boxShadow = 'none';
+        } else {
+          object.isSelected = true;
+          object.style.border = '3px solid yellow';
+          object.style.boxShadow = '0 0 10px yellow';
+        }
+      }
     }
   },
   
   content: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    hoverColor: 'rgba(255, 255, 255, 0.5)',
-    scrollbar: {
-      width: 8,
-      trackColor: 'rgba(0, 0, 0, 0.2)',
-      thumbColor: 'rgba(255, 165, 0, 0.7)',
-      thumbHoverColor: 'rgba(255, 165, 0, 1)'
+    events: {
+      onRightClick: (slice, event) => {
+        console.log('🖱️ Contenu clic droit - Suppression des objets sélectionnés');
+        // Supprimer tous les objets sélectionnés
+        const objects = slice.contentZone.querySelectorAll('div');
+        objects.forEach(obj => {
+          if (obj.isSelected) {
+            slice.removeObject(obj);
+          }
+        });
+      }
     }
+  },
+  
+  behaviors: {
+    preventContextMenu: true,
   }
 });
 document.body.appendChild(slice3.element);
 
-// 4. Slice avec configuration extrême
+// 4. Slice avec comportements avancés et données personnalisées
 const slice4 = createSlice({
   width: 150,
   height: 90,
-  backgroundColor: 'rgba(75, 0, 130, 0.9)', // Violet
+  backgroundColor: 'rgba(75, 0, 130, 0.9)',
   position: { x: 50, y: 300 },
-  borderRadius: 15,
-  
-  zones: {
-    topHeight: 0.4,     // Zone top très large
-    bottomHeight: 0.1,  // Zone bottom très petite
-    backgroundColor: 'rgba(138, 43, 226, 0.8)',
-    textColor: 'cyan',
-    fontWeight: 'bold',
-    topText: '🌟 MAGIQUE',
-    bottomText: '✨',
-    
-    top: {
-      backgroundColor: 'rgba(255, 0, 255, 0.6)',
-      fontSize: 14
-    }
-  },
   
   objects: {
-    sizeRatio: 0.6,     // Très gros objets
-    minSize: 40,
-    maxSize: 120,
+    sizeRatio: 0.6,
     alignment: 'center',
-    spacing: 10,
-    backgroundColor: null, // Couleurs HSL dynamiques
-    textColor: 'white',
-    fontSize: 16,
-    borderRadius: 20,
-    border: '4px solid rgba(255, 255, 255, 0.8)',
     
-    hover: {
-      transform: 'scale(1.2) rotate(-10deg)',
-      transition: 'all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
+    events: {
+      onClick: (object, index, slice) => {
+        // Données personnalisées sur l'objet
+        if (!object.customData) {
+          object.customData = {
+            clicks: 0,
+            created: new Date(),
+            color: object.style.backgroundColor
+          };
+        }
+        object.customData.clicks++;
+        object.textContent = `${index}\n${object.customData.clicks}`;
+        console.log(`📊 Objet ${index}: ${object.customData.clicks} clics`);
+      },
+      onRemove: (object, index, slice) => {
+        console.log(`🗑️ Suppression objet ${index} - Données:`, object.customData);
+      },
+      onRemoved: (index, slice) => {
+        console.log(`✅ Objet ${index} supprimé avec succès`);
+      }
     }
   },
   
   content: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    hoverColor: 'rgba(255, 255, 255, 0.2)',
-    padding: 12,
-    borderRadius: 5
+    events: {
+      onScroll: (slice, scrollTop, scrollHeight, event) => {
+        // Effet de parallaxe sur le scroll
+        const scrollPercent = scrollTop / (scrollHeight - slice.contentZone.clientHeight);
+        slice.topZone.style.opacity = 1 - scrollPercent * 0.5;
+        slice.bottomZone.style.opacity = 1 - scrollPercent * 0.5;
+      }
+    }
+  },
+  
+  zones: {
+    topEvents: {
+      onClick: (slice, event) => {
+        // Tri des objets par nombre de clics
+        const objects = Array.from(slice.contentZone.querySelectorAll('div'));
+        objects.sort((a, b) => {
+          const aClicks = a.customData ? a.customData.clicks : 0;
+          const bClicks = b.customData ? b.customData.clicks : 0;
+          return bClicks - aClicks;
+        });
+        
+        // Réorganiser dans le DOM
+        objects.forEach(obj => slice.contentZone.appendChild(obj));
+        console.log('🔄 Objets triés par nombre de clics');
+      }
+    },
+    
+    bottomEvents: {
+      onClick: (slice, event) => {
+        // Statistiques
+        const objects = Array.from(slice.contentZone.querySelectorAll('div'));
+        const totalClicks = objects.reduce((sum, obj) => {
+          return sum + (obj.customData ? obj.customData.clicks : 0);
+        }, 0);
+        console.log(`📊 Statistiques: ${objects.length} objets, ${totalClicks} clics totaux`);
+      }
+    }
   }
 });
 document.body.appendChild(slice4.element);
