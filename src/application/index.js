@@ -23,7 +23,9 @@
 // import('./examples/DB.js');
 
 
-import('./vie/vie.js');
+// import('./vie/vie.js');
+// import('./test/component_test.js');
+import('./test/slice.js');
 
 
 
