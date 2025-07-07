@@ -19,7 +19,7 @@ import Unit, {
   getSelectedUnits, 
   deleteUnit, 
   connectUnits, 
-  disconnectUnits,
+  disconnectUnits, 
   getAllConnections,
   getUnit,
   getAllUnits 
@@ -29,6 +29,9 @@ import Badge from './components/badge_builder.js';
 import Tooltip from './components/tooltip_builder.js';
 import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
+import Slice, { createSlice } from './components/slice_builder.js';
+
+
 
 // === IMMEDIATE GLOBAL EXPOSURE ===
 window.Squirrel = window.Squirrel || {};
@@ -54,6 +57,8 @@ window.Badge = Badge;
 window.Tooltip = Tooltip;
 window.Template = Template;
 window.Minimal = Minimal;
+window.Slice = Slice;
+window.createSlice = createSlice;
 
 window.Squirrel.Button = Button;
 window.Squirrel.Slider = Slider;
@@ -70,6 +75,8 @@ window.Squirrel.Badge = Badge;
 window.Squirrel.Tooltip = Tooltip;
 window.Squirrel.Template = Template;
 window.Squirrel.Minimal = Minimal;
+window.Squirrel.Slice = Slice;
+window.Squirrel.createSlice = createSlice;
 
 // === ADD STATIC METHODS TO UNIT FOR COMPATIBILITY ===
 Unit.selectUnits = selectUnits;
