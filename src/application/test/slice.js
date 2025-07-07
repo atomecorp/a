@@ -1038,7 +1038,9 @@ export default createSlice;
 // ==================== EXEMPLES D'UTILISATION ====================
 
 // 1. Slice basique avec configuration par défaut
-const slice1 = createSlice();
+const slice1 = createSlice( {zones: {
+    topText: '🔥 1 ENTRÉE',
+    bottomText: '1 SORTIE'}});
 document.body.appendChild(slice1.element);
 
 // 2. Slice avec événements personnalisés sur les zones
@@ -1052,8 +1054,8 @@ const slice2 = createSlice({
   zones: {
     topHeight: 0.3,
     bottomHeight: 0.2,
-    topText: '🔥 ENTRÉE',
-    bottomText: '⚡ SORTIE',
+    topText: '🔥 2 ENTRÉE',
+    bottomText: '⚡2 SORTIE',
     
     // Événements sur la zone top
     topEvents: {
@@ -1128,6 +1130,9 @@ document.body.appendChild(slice2.element);
 const slice3 = createSlice({
   width: 200,
   height: 60,
+   zones: {
+    topText: '3 in',
+    bottomText: '3 out'},
   backgroundColor: 'rgba(100, 255, 100, 0.8)',
   position: { x: 400, y: 100 },
   
@@ -1186,9 +1191,10 @@ document.body.appendChild(slice3.element);
 const slice4 = createSlice({
   width: 150,
   height: 90,
+  
   backgroundColor: 'rgba(75, 0, 130, 0.9)',
   position: { x: 50, y: 300 },
-  
+
   objects: {
     sizeRatio: 0.6,
     alignment: 'center',
@@ -1228,6 +1234,8 @@ const slice4 = createSlice({
   },
   
   zones: {
+        topText: '4 in',
+    bottomText: '⚡ 4 out',
     topEvents: {
       onClick: (slice, event) => {
         // Tri des objets par nombre de clics
