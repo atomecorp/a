@@ -1,4 +1,5 @@
 import { $, define } from '../squirrel.js';
+import { makeDraggable, makeDraggableWithDrop, makeDropZone } from './draggable_builder.js';
 
 /**
  * Slice Component - Parametric UI Element with Top/Bottom Zones and Scrollable Content
@@ -143,6 +144,33 @@ const DEFAULT_CONFIG = {
     selectMultiple: false,       // Permet la sélection multiple d'objets
     dragAndDrop: false,          // Active le drag & drop des objets
     autoScroll: true,            // Auto-scroll vers le bas lors de l'ajout
+  },
+  
+  // Configuration du drag & drop
+  dragDrop: {
+    enabled: false,              // Active le drag & drop de la slice
+    enableHTML5: true,           // Utilise HTML5 drag & drop (pour drop zones)
+    handle: null,                // Element à utiliser comme handle (null = toute la slice)
+    transferData: {},            // Données à transférer lors du drag
+    ghostImage: null,            // Image fantôme personnalisée
+    
+    // Événements drag & drop
+    onDragStart: null,           // Function(slice, event) => {}
+    onDragEnd: null,             // Function(slice, event) => {}
+    
+    // Drop zone configuration
+    dropZone: {
+      enabled: false,            // Cette slice peut recevoir des drops
+      acceptTypes: [],           // Types de données acceptées
+      onDrop: null,              // Function(slice, draggedData, event) => {}
+      onDragEnter: null,         // Function(slice, event) => {}
+      onDragLeave: null,         // Function(slice, event) => {}
+      
+      // Styles des états de drop
+      hoverClass: 'slice-drop-hover',
+      acceptClass: 'slice-drop-accept',
+      rejectClass: 'slice-drop-reject'
+    }
   }
 };
 
@@ -318,6 +346,108 @@ class Slice {
   setupInteractions() {
     this.setupContentEvents();
     this.setupZoneEvents();
+    this.setupDragDrop(); // Nouveau : configurer le drag & drop
+  }
+  
+  // Nouvelle méthode pour configurer le drag & drop
+  setupDragDrop() {
+    const dragConfig = this.config.dragDrop || {};
+    
+    // 1. Configurer la slice comme draggable si demandé
+    if (dragConfig.enabled) {
+      const handle = dragConfig.handle || this.topZone; // Handle par défaut = zone du haut
+      
+      if (dragConfig.enableHTML5) {
+        // Utiliser le drag HTML5 avancé
+        this.dragDestroy = makeDraggableWithDrop(this.element, {
+          enableHTML5: true,
+          transferData: {
+            type: 'slice',
+            id: this.element.id || `slice-${Date.now()}`,
+            ...dragConfig.transferData
+          },
+          onDragStart: (element, event) => {
+            this.element.isDragging = true;
+            this.dragJustEnded = false;
+            if (dragConfig.onDragStart) {
+              dragConfig.onDragStart(this, event);
+            }
+          },
+          onDragEnd: (element, event) => {
+            this.element.isDragging = false;
+            this.dragJustEnded = true;
+            setTimeout(() => {
+              this.dragJustEnded = false;
+            }, 50);
+            if (dragConfig.onDragEnd) {
+              dragConfig.onDragEnd(this, event);
+            }
+          }
+        });
+      } else {
+        // Utiliser le drag classique simple
+        this.dragDestroy = makeDraggable(this.element, {
+          onDragStart: () => {
+            this.element.isDragging = true;
+            this.dragJustEnded = false;
+            if (dragConfig.onDragStart) {
+              dragConfig.onDragStart(this);
+            }
+          },
+          onDragEnd: () => {
+            this.element.isDragging = false;
+            this.dragJustEnded = true;
+            setTimeout(() => {
+              this.dragJustEnded = false;
+            }, 50);
+            if (dragConfig.onDragEnd) {
+              dragConfig.onDragEnd(this);
+            }
+          }
+        });
+      }
+    }
+    
+    // 2. Configurer la slice comme drop zone si demandé
+    if (dragConfig.dropZone && dragConfig.dropZone.enabled) {
+      const dropConfig = dragConfig.dropZone;
+      
+      this.dropDestroy = makeDropZone(this.contentZone, {
+        onDragEnter: (event, element) => {
+          element.classList.add(dropConfig.hoverClass || 'slice-drop-hover');
+          this.bottomZone.textContent = '📦 Zone de drop active';
+          if (dropConfig.onDragEnter) {
+            dropConfig.onDragEnter(this, event);
+          }
+        },
+        onDragLeave: (event, element) => {
+          element.classList.remove(dropConfig.hoverClass || 'slice-drop-hover');
+          this.bottomZone.textContent = this.config.zones.bottomText;
+          if (dropConfig.onDragLeave) {
+            dropConfig.onDragLeave(this, event);
+          }
+        },
+        onDrop: (event, element, transferData) => {
+          element.classList.remove(dropConfig.hoverClass || 'slice-drop-hover');
+          this.bottomZone.textContent = '✅ Drop réussi !';
+          
+          // Créer un objet avec les données droppées
+          this.addObject();
+          const newObj = this.contentZone.lastElementChild;
+          if (newObj && transferData.text) {
+            newObj.textContent = `📦 ${transferData.text}`;
+          }
+          
+          setTimeout(() => {
+            this.bottomZone.textContent = this.config.zones.bottomText;
+          }, 2000);
+          
+          if (dropConfig.onDrop) {
+            dropConfig.onDrop(this, transferData, event);
+          }
+        }
+      });
+    }
   }
   
   setupContentEvents() {
@@ -679,6 +809,14 @@ class Slice {
   }
   
   destroy() {
+    // Nettoyer les listeners drag & drop
+    if (this.dragDestroy) {
+      this.dragDestroy();
+    }
+    if (this.dropDestroy) {
+      this.dropDestroy();
+    }
+    
     this.element.remove();
   }
 }
@@ -716,6 +854,24 @@ function generateSliceStyles(config = DEFAULT_CONFIG) {
     .slice-content::-webkit-scrollbar-thumb:hover {
       background: ${scrollbar.thumbHoverColor};
     }
+    
+    /* Styles pour les drop zones */
+    .slice-drop-hover {
+      background-color: rgba(46, 204, 113, 0.2) !important;
+      border: 2px dashed #27ae60 !important;
+      transform: scale(1.02);
+      transition: all 0.3s ease;
+    }
+    
+    .slice-drop-accept {
+      background-color: rgba(52, 152, 219, 0.2) !important;
+      border: 2px solid #3498db !important;
+    }
+    
+    .slice-drop-reject {
+      background-color: rgba(231, 76, 60, 0.2) !important;
+      border: 2px solid #e74c3c !important;
+    }
   `;
 }
 
@@ -742,3 +898,103 @@ injectSliceStyles();
 // Exports
 export { createSlice, Slice };
 export default createSlice;
+
+// Export des nouvelles fonctions
+export { 
+  createDraggableSlice, 
+  createDropZoneSlice, 
+  createDragDropSlice,
+  // Export des composants draggable pour usage direct
+  makeDraggable,
+  makeDraggableWithDrop,
+  makeDropZone
+};
+
+// === FONCTIONS HELPER POUR DRAG & DROP ===
+
+/**
+ * Créer une slice draggable avec HTML5 drag & drop
+ * @param {Object} options - Options de configuration de la slice
+ * @returns {Slice} Instance de slice avec drag activé
+ */
+function createDraggableSlice(options = {}) {
+  const sliceOptions = {
+    ...options,
+    dragDrop: {
+      enabled: true,
+      enableHTML5: true,
+      transferData: { type: 'slice' },
+      ...options.dragDrop
+    }
+  };
+  
+  return new Slice(sliceOptions);
+}
+
+/**
+ * Créer une slice drop zone qui peut recevoir d'autres slices
+ * @param {Object} options - Options de configuration de la slice
+ * @returns {Slice} Instance de slice avec drop zone activée
+ */
+function createDropZoneSlice(options = {}) {
+  const sliceOptions = {
+    ...options,
+    zones: {
+      topText: '📦 DROP ZONE',
+      bottomText: '⬇️ Déposez ici',
+      ...options.zones
+    },
+    behaviors: {
+      createOnContentClick: false, // Pas de création d'objets par défaut
+      ...options.behaviors
+    },
+    dragDrop: {
+      dropZone: {
+        enabled: true,
+        acceptTypes: ['slice'],
+        onDrop: (slice, transferData, event) => {
+          console.log('✅ Drop reçu:', transferData);
+          slice.addObject();
+          const newObj = slice.contentZone.lastElementChild;
+          if (newObj && transferData.text) {
+            newObj.textContent = `📦 ${transferData.text || transferData.type}`;
+          }
+        }
+      },
+      ...options.dragDrop
+    }
+  };
+  
+  return new Slice(sliceOptions);
+}
+
+/**
+ * Créer une slice complète avec drag & drop intégré
+ * @param {Object} options - Options de configuration
+ * @returns {Slice} Instance de slice avec drag et drop
+ */
+function createDragDropSlice(options = {}) {
+  const sliceOptions = {
+    ...options,
+    dragDrop: {
+      enabled: true,
+      enableHTML5: true,
+      transferData: { type: 'slice' },
+      dropZone: {
+        enabled: true,
+        acceptTypes: ['slice'],
+        onDrop: (slice, transferData, event) => {
+          console.log('🔄 Drop reçu dans slice hybride:', transferData);
+          slice.addObject();
+          const newObj = slice.contentZone.lastElementChild;
+          if (newObj && transferData.content) {
+            newObj.textContent = `🔄 ${transferData.content}`;
+          }
+        }
+      },
+      ...options.dragDrop
+    }
+  };
+  
+  return new Slice(sliceOptions);
+}

@@ -1,5 +1,15 @@
-
 // import '../../../squirrel/squirrel.js';
+
+// Import des fonctionnalités
+import { 
+  createSlice,
+  createDraggableSlice, 
+  createDropZoneSlice, 
+  createDragDropSlice, 
+  makeDraggable,
+  makeDraggableWithDrop, 
+  makeDropZone 
+} from '../../../squirrel/components/slice_builder.js';
 
 // ==================== SLICES DRAGGABLES AVEC COMPOSANT DRAGGABLE ====================
 
@@ -20,18 +30,17 @@ makeDraggable(slice1.element, {
   handle: slice1.topZone,
   onDragStart: () => {
     slice1.element.isDragging = true;
-    slice1.dragJustEnded = false; // Réinitialiser le flag
+    slice1.dragJustEnded = false;
     console.log('🔥 Slice1 drag start');
   },
   onDragEnd: () => {
     slice1.element.isDragging = false;
-    slice1.dragJustEnded = true; // Marquer comme ayant fini récemment
+    slice1.dragJustEnded = true;
     console.log('🔥 Slice1 drag end');
     
-    // Réinitialiser le flag après les événements de clic
     setTimeout(() => {
       slice1.dragJustEnded = false;
-    }, 50); // Délai très court pour laisser les clics se traiter
+    }, 50);
   }
 });
 
@@ -234,6 +243,9 @@ const slice4 = createSlice({
     
     events: {
       onClick: (object, index, slice) => {
+        // Protection contre le drag ET vérification de propagation
+        if (object.isDragging || slice.element.isDragging) return;
+        
         // Données personnalisées sur l'objet
         if (!object.customData) {
           object.customData = {
@@ -271,8 +283,12 @@ const slice4 = createSlice({
     bottomText: '⚡ 4 out',
     topEvents: {
       onClick: (slice, event) => {
-        // Vérifier si on est en train de dragger
+        // Vérifier si on est en train de dragger la slice OU un objet
         if (slice.element.isDragging) return;
+        
+        // Vérifier qu'aucun objet n'est en cours de drag
+        const isDraggingChild = Array.from(slice.contentZone.querySelectorAll('div')).some(obj => obj.isDragging);
+        if (isDraggingChild) return;
         
         // Tri des objets par nombre de clics
         const objects = Array.from(slice.contentZone.querySelectorAll('div'));
@@ -290,8 +306,12 @@ const slice4 = createSlice({
     
     bottomEvents: {
       onClick: (slice, event) => {
-        // Vérifier si on est en train de dragger
+        // Vérifier si on est en train de dragger la slice OU un objet
         if (slice.element.isDragging) return;
+        
+        // Vérifier qu'aucun objet n'est en cours de drag
+        const isDraggingChild = Array.from(slice.contentZone.querySelectorAll('div')).some(obj => obj.isDragging);
+        if (isDraggingChild) return;
         
         // Statistiques
         const objects = Array.from(slice.contentZone.querySelectorAll('div'));
@@ -310,10 +330,86 @@ const slice4 = createSlice({
 });
 document.body.appendChild(slice4.element);
 
-// Rendre la slice4 draggable - SIMPLE
+// Fonction pour rendre un objet draggable avec HTML5
+function makeObjectDraggable(object, slice) {
+  makeDraggableWithDrop(object, {
+    enableHTML5: true,
+    cursor: 'grab',
+    transferData: {
+      type: 'slice-object',
+      objectIndex: object.objectIndex,
+      sourceSlice: 'slice4',
+      content: object.textContent,
+      customData: object.customData
+    },
+    onHTML5DragStart: (e, element) => {
+      element.isDragging = true;
+      element.style.opacity = '0.5';
+      element.moveSuccessful = false; // Initialiser à false
+      
+      // IMPORTANT: Empêcher la propagation pour éviter de draguer la slice
+      e.stopPropagation();
+      
+      console.log(`🚀 Objet ${element.objectIndex} drag start`);
+    },
+    onHTML5DragEnd: (e, element) => {
+      console.log(`🚀 Objet ${element.objectIndex} drag end`);
+      
+      // Attendre un peu pour voir si l'objet a été déplacé avec succès
+      setTimeout(() => {
+        // Vérifier si l'objet a été déplacé avec succès
+        if (element.moveSuccessful || element.isBeingMoved) {
+          console.log(`✅ Objet ${element.objectIndex} déplacé avec succès - ne pas restaurer`);
+          return; // Ne pas restaurer l'état
+        }
+        
+        // Si l'objet n'a pas été déplacé, restaurer l'état normal
+        element.isDragging = false;
+        element.style.opacity = '1';
+        
+        console.log(`↩️ Objet ${element.objectIndex} restauré à sa position originale`);
+      }, 50); // Petit délai pour permettre au drop de se terminer
+    }
+  });
+  
+  // Empêcher le drag de la slice quand on clique sur l'objet
+  object.addEventListener('mousedown', (e) => {
+    e.stopPropagation(); // Empêche le bubble vers la slice
+    console.log(`👆 Mousedown sur objet ${object.objectIndex} - propagation stoppée`);
+  });
+  
+  // Empêcher les autres événements de remonter
+  object.addEventListener('click', (e) => {
+    if (object.isDragging) {
+      e.stopPropagation();
+      return;
+    }
+  });
+}
+
+// Override de la méthode addObject de slice4 pour rendre les nouveaux objets draggables
+const originalAddObject = slice4.addObject.bind(slice4);
+slice4.addObject = function() {
+  originalAddObject();
+  // Rendre le dernier objet créé draggable
+  const lastObject = this.contentZone.lastElementChild;
+  if (lastObject) {
+    makeObjectDraggable(lastObject, this);
+    console.log(`✨ Objet ${lastObject.objectIndex} rendu draggable`);
+  }
+};
+
+// Rendre la slice4 draggable - AVEC GESTION DES OBJETS ENFANTS
 makeDraggable(slice4.element, {
-  handle: slice4.topZone,
-  onDragStart: () => {
+  handle: slice4.topZone, // Utiliser seulement la zone du haut comme handle
+  onDragStart: (element, x, y) => {
+    // Vérifier qu'on ne drag pas un objet enfant
+    const isDraggingChild = Array.from(slice4.contentZone.querySelectorAll('div')).some(obj => obj.isDragging);
+    if (isDraggingChild) {
+      console.log('🚫 Drag de slice4 annulé - objet enfant en cours de drag');
+      return false; // Annuler le drag de la slice
+    }
+    
     slice4.element.isDragging = true;
     slice4.dragJustEnded = false;
     console.log('🔥 Slice4 drag start');
@@ -347,16 +443,87 @@ const dropSlice = createSlice({
 });
 document.body.appendChild(dropSlice.element);
 
-// Rendre cette slice draggable ET drop zone - SIMPLE
+// Rendre cette slice draggable - SIMPLE drag
 makeDraggable(dropSlice.element, {
   handle: dropSlice.topZone
 });
 
+// Configurer la drop zone pour recevoir les objets de slice4
 makeDropZone(dropSlice.contentZone, {
-  onDrop: (draggedElement) => {
-    dropSlice.bottomZone.textContent = '📦 Reçu !';
-    setTimeout(() => {
-      dropSlice.bottomZone.textContent = '⬇️ Déposez ici';
-    }, 1000);
-  }
+  onDragEnter: (e, dropElement) => {
+    console.log('🎯 Entrée dans la drop zone');
+    dropSlice.contentZone.style.backgroundColor = 'rgba(0, 255, 0, 0.3)';
+    dropSlice.bottomZone.textContent = '🎯 Prêt à recevoir';
+  },
+  
+  onDragLeave: (e, dropElement) => {
+    console.log('🚪 Sortie de la drop zone');
+    dropSlice.contentZone.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+    dropSlice.bottomZone.textContent = '⬇️ Déposez ici';
+  },
+  
+  onDrop: (e, dropElement, transferData) => {
+    console.log('📦 Drop détecté !', transferData);
+    
+    // Vérifier si c'est un objet de slice
+    if (transferData.type === 'slice-object' && transferData.sourceSlice === 'slice4') {
+      // Trouver l'objet original dans slice4
+      const sourceObjects = Array.from(slice4.contentZone.querySelectorAll('div'));
+      const originalObject = sourceObjects.find(obj => obj.objectIndex === transferData.objectIndex);
+      
+      if (originalObject) {
+        console.log(`🔄 Début du déplacement de l'objet ${transferData.objectIndex}`);
+        
+        // IMPORTANT: Marquer l'objet comme "déplacé avec succès" AVANT de le retirer
+        originalObject.isBeingMoved = true;
+        originalObject.moveSuccessful = true;
+        
+        // Nettoyer les styles de drag immédiatement
+        originalObject.style.opacity = '1';
+        originalObject.isDragging = false;
+        
+        // Supprimer les event listeners de drag pour éviter les conflits
+        originalObject.draggable = false;
+        
+        // Adapter le style pour la drop zone AVANT de le déplacer
+        originalObject.style.backgroundColor = 'rgba(255, 0, 255, 0.6)';
+        originalObject.style.border = '2px solid rgba(255, 0, 255, 0.8)';
+        originalObject.style.marginBottom = '4px';
+        originalObject.style.cursor = 'default';
+        originalObject.textContent = `📦 ${transferData.content}`;
+        
+        // Déplacer l'objet physiquement vers la drop zone
+        dropSlice.contentZone.appendChild(originalObject);
+        
+        console.log(`✅ Objet ${transferData.objectIndex} déplacé vers la drop zone`);
+        
+        // Feedback visuel
+        dropSlice.bottomZone.textContent = '✅ Objet reçu !';
+        setTimeout(() => {
+          dropSlice.bottomZone.textContent = '⬇️ Déposez ici';
+        }, 2000);
+        
+        // Prévenir l'événement dragend de restaurer l'état
+        setTimeout(() => {
+          originalObject.isBeingMoved = false;
+        }, 100);
+        
+      } else {
+        console.log('❌ Objet source non trouvé');
+      }
+    } else {
+      console.log('❌ Type d\'objet non supporté');
+    }
+    
+    // Remettre le style normal
+    dropSlice.contentZone.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+  },
+  
+  acceptTypes: ['slice-object'] // N'accepte que les objets de slice
 });
+
+console.log('🎮 Instructions pour tester le drag & drop d\'objets:');
+console.log('1. Cliquez sur le contenu de la slice 4 (violette) pour créer des objets');
+console.log('2. Draggez les objets créés vers la drop zone (magenta)');
+console.log('3. Les objets seront déplacés de slice4 vers la drop zone');
+console.log('4. Regardez la console pour voir les événements');
