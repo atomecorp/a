@@ -334,21 +334,33 @@ function makeDraggable(element, options = {}) {
   let currentY = 0;
 
   const onMouseDown = (e) => {
-    let isDragging = true;
+    let isDragging = false;  // Changé: ne commence pas à true
+    let hasStarted = false;  // Nouveau: track si le drag a vraiment commencé
     let lastX = e.clientX;
     let lastY = e.clientY;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const DRAG_THRESHOLD = 5; // Seuil de mouvement pour commencer le drag
 
     // Changer le curseur
     const originalCursor = element.style.cursor;
-    element.style.cursor = cursor === 'grab' ? 'grabbing' : cursor;
-
-    onDragStart(element, lastX, lastY, currentX, currentY);
 
     const onMouseMove = (e) => {
-      if (!isDragging) return;
-
       const deltaX = e.clientX - lastX;
       const deltaY = e.clientY - lastY;
+      const totalMoveX = e.clientX - startX;
+      const totalMoveY = e.clientY - startY;
+      const totalDistance = Math.sqrt(totalMoveX * totalMoveX + totalMoveY * totalMoveY);
+
+      // Vérifier si on dépasse le seuil pour commencer le drag
+      if (!hasStarted && totalDistance > DRAG_THRESHOLD) {
+        hasStarted = true;
+        isDragging = true;
+        element.style.cursor = cursor === 'grab' ? 'grabbing' : cursor;
+        onDragStart(element, startX, startY, currentX, currentY);
+      }
+
+      if (!isDragging) return;
 
       currentX += deltaX;
       currentY += deltaY;
@@ -387,10 +399,15 @@ function makeDraggable(element, options = {}) {
     };
 
     const onMouseUp = (e) => {
-      isDragging = false;
       element.style.cursor = originalCursor;
 
-      onDragEnd(element, currentX, currentY, currentX, currentY);
+      // Ne déclencher onDragEnd que si le drag a vraiment commencé
+      if (hasStarted) {
+        onDragEnd(element, currentX, currentY, currentX, currentY);
+      }
+
+      isDragging = false;
+      hasStarted = false;
 
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);

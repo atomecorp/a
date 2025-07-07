@@ -180,6 +180,7 @@ class Slice {
     // Deep merge configuration with proper fallbacks
     this.config = this.deepMerge(DEFAULT_CONFIG, options);
     this.objectCounter = 0;
+    this.dragJustEnded = false; // Flag pour détecter la fin récente d'un drag
     
     this.createElement();
     this.setupInteractions();
@@ -322,15 +323,21 @@ class Slice {
   setupContentEvents() {
     const contentEvents = this.config.content.events || {};
     
-    // Clic sur la zone de contenu
+    // Clic sur la zone de contenu - logique simplifiée et robuste
     this.contentZone.addEventListener('click', (e) => {
       e.stopPropagation();
+      
+      // Protection principale: vérifier si la slice entière est en cours de drag OU vient de finir
+      if (this.element.isDragging || this.dragJustEnded) {
+        return; // Pas de log pour éviter le spam
+      }
       
       // Événement personnalisé ou comportement par défaut
       if (contentEvents.onClick) {
         contentEvents.onClick(this, e);
       } else if (this.config.behaviors.createOnContentClick) {
         this.addObject();
+        console.log('✅ Objet créé par clic sur contenu');
       }
     });
     
@@ -342,13 +349,14 @@ class Slice {
       }
     });
     
-    // Mouse down/up
+    // Mouse down pour les événements personnalisés
     this.contentZone.addEventListener('mousedown', (e) => {
       if (contentEvents.onMouseDown) {
         contentEvents.onMouseDown(this, e);
       }
     });
     
+    // Mouse up
     this.contentZone.addEventListener('mouseup', (e) => {
       if (contentEvents.onMouseUp) {
         contentEvents.onMouseUp(this, e);
@@ -394,13 +402,18 @@ class Slice {
   }
   
   setupZoneEventHandlers(zoneElement, events, zoneName) {
-    // Clic
+    // Clic - logique simplifiée et robuste
     zoneElement.addEventListener('click', (e) => {
       e.stopPropagation();
+      
+      // Protection principale: vérifier si la slice entière est en cours de drag OU vient de finir
+      if (this.element.isDragging || this.dragJustEnded) {
+        return; // Pas de log pour éviter le spam
+      }
+      
       if (events.onClick) {
         events.onClick(this, e);
       }
-      console.log(`🎯 Clic sur zone ${zoneName}`);
     });
     
     // Double clic
@@ -409,22 +422,19 @@ class Slice {
       if (events.onDoubleClick) {
         events.onDoubleClick(this, e);
       }
-      console.log(`🎯🎯 Double clic sur zone ${zoneName}`);
     });
     
-    // Mouse down/up
+    // Mouse down/up pour les événements personnalisés
     zoneElement.addEventListener('mousedown', (e) => {
       if (events.onMouseDown) {
         events.onMouseDown(this, e);
       }
-      console.log(`⬇️ Mouse down sur zone ${zoneName}`);
     });
     
     zoneElement.addEventListener('mouseup', (e) => {
       if (events.onMouseUp) {
         events.onMouseUp(this, e);
       }
-      console.log(`⬆️ Mouse up sur zone ${zoneName}`);
     });
     
     // Clic droit
@@ -435,7 +445,6 @@ class Slice {
       if (events.onRightClick) {
         events.onRightClick(this, e);
       }
-      console.log(`🖱️ Clic droit sur zone ${zoneName}`);
     });
     
     // Hover
@@ -443,14 +452,12 @@ class Slice {
       if (events.onHover) {
         events.onHover(this, true, e);
       }
-      console.log(`🔄 Hover enter sur zone ${zoneName}`);
     });
     
     zoneElement.addEventListener('mouseleave', (e) => {
       if (events.onHover) {
         events.onHover(this, false, e);
       }
-      console.log(`🔄 Hover leave sur zone ${zoneName}`);
     });
   }
   

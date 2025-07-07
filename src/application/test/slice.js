@@ -1,17 +1,39 @@
 
 // import '../../../squirrel/squirrel.js';
 
+// ==================== SLICES DRAGGABLES AVEC COMPOSANT DRAGGABLE ====================
 
-
-
-
-// ==================== EXEMPLES D'UTILISATION ====================
-
-// 1. Slice basique avec configuration par défaut
-const slice1 = createSlice( {zones: {
+// 1. Slice basique avec configuration par défaut - DRAGGABLE
+const slice1 = createSlice({
+  zones: {
     topText: '🔥 1 ENTRÉE',
-    bottomText: '1 SORTIE'}});
+    bottomText: '1 SORTIE'
+  },
+  behaviors: {
+    createOnContentClick: true  // Activé pour permettre création au clic
+  }
+});
 document.body.appendChild(slice1.element);
+
+// Rendre la slice1 draggable - SIMPLE
+makeDraggable(slice1.element, {
+  handle: slice1.topZone,
+  onDragStart: () => {
+    slice1.element.isDragging = true;
+    slice1.dragJustEnded = false; // Réinitialiser le flag
+    console.log('🔥 Slice1 drag start');
+  },
+  onDragEnd: () => {
+    slice1.element.isDragging = false;
+    slice1.dragJustEnded = true; // Marquer comme ayant fini récemment
+    console.log('🔥 Slice1 drag end');
+    
+    // Réinitialiser le flag après les événements de clic
+    setTimeout(() => {
+      slice1.dragJustEnded = false;
+    }, 50); // Délai très court pour laisser les clics se traiter
+  }
+});
 
 // 2. Slice avec événements personnalisés sur les zones
 const slice2 = createSlice({
@@ -30,6 +52,9 @@ const slice2 = createSlice({
     // Événements sur la zone top
     topEvents: {
       onClick: (slice, event) => {
+        // Vérifier si on est en train de dragger
+        if (slice.element.isDragging) return;
+        
         console.log('🔥 Zone TOP cliquée !');
         slice.addObject(); // Crée un objet depuis le top
       },
@@ -89,12 +114,31 @@ const slice2 = createSlice({
   },
   
   behaviors: {
-    createOnContentClick: false,  // Désactivé car on utilise les zones
+    createOnContentClick: false,  // Désactivé pour éviter conflit avec drag
     removeOnObjectClick: false,   // Désactivé car on utilise le double-clic
     preventContextMenu: true,     // Empêche le menu contextuel
   }
 });
 document.body.appendChild(slice2.element);
+
+// Rendre la slice2 draggable - SIMPLE
+makeDraggable(slice2.element, {
+  handle: slice2.bottomZone,
+  onDragStart: () => {
+    slice2.element.isDragging = true;
+    slice2.dragJustEnded = false;
+    console.log('🔥 Slice2 drag start');
+  },
+  onDragEnd: () => {
+    slice2.element.isDragging = false;
+    slice2.dragJustEnded = true;
+    console.log('🔥 Slice2 drag end');
+    
+    setTimeout(() => {
+      slice2.dragJustEnded = false;
+    }, 50);
+  }
+});
 
 // 3. Slice avec drag & drop simulé et sélection multiple
 const slice3 = createSlice({
@@ -152,10 +196,29 @@ const slice3 = createSlice({
   },
   
   behaviors: {
+    createOnContentClick: true,   // Réactiver la création par clic sur contenu
     preventContextMenu: true,
   }
 });
 document.body.appendChild(slice3.element);
+
+// Rendre la slice3 draggable - SIMPLE
+makeDraggable(slice3.element, {
+  onDragStart: () => {
+    slice3.element.isDragging = true;
+    slice3.dragJustEnded = false;
+    console.log('🔥 Slice3 drag start');
+  },
+  onDragEnd: () => {
+    slice3.element.isDragging = false;
+    slice3.dragJustEnded = true;
+    console.log('🔥 Slice3 drag end');
+    
+    setTimeout(() => {
+      slice3.dragJustEnded = false;
+    }, 50);
+  }
+});
 
 // 4. Slice avec comportements avancés et données personnalisées
 const slice4 = createSlice({
@@ -208,6 +271,9 @@ const slice4 = createSlice({
     bottomText: '⚡ 4 out',
     topEvents: {
       onClick: (slice, event) => {
+        // Vérifier si on est en train de dragger
+        if (slice.element.isDragging) return;
+        
         // Tri des objets par nombre de clics
         const objects = Array.from(slice.contentZone.querySelectorAll('div'));
         objects.sort((a, b) => {
@@ -224,6 +290,9 @@ const slice4 = createSlice({
     
     bottomEvents: {
       onClick: (slice, event) => {
+        // Vérifier si on est en train de dragger
+        if (slice.element.isDragging) return;
+        
         // Statistiques
         const objects = Array.from(slice.contentZone.querySelectorAll('div'));
         const totalClicks = objects.reduce((sum, obj) => {
@@ -232,6 +301,62 @@ const slice4 = createSlice({
         console.log(`📊 Statistiques: ${objects.length} objets, ${totalClicks} clics totaux`);
       }
     }
+  },
+  
+  behaviors: {
+    createOnContentClick: true,   // Réactiver la création par clic sur contenu
+    preventContextMenu: true,
   }
 });
 document.body.appendChild(slice4.element);
+
+// Rendre la slice4 draggable - SIMPLE
+makeDraggable(slice4.element, {
+  handle: slice4.topZone,
+  onDragStart: () => {
+    slice4.element.isDragging = true;
+    slice4.dragJustEnded = false;
+    console.log('🔥 Slice4 drag start');
+  },
+  onDragEnd: () => {
+    slice4.element.isDragging = false;
+    slice4.dragJustEnded = true;
+    console.log('🔥 Slice4 drag end');
+    
+    setTimeout(() => {
+      slice4.dragJustEnded = false;
+    }, 50);
+  }
+});
+
+// ==================== BONUS: SLICE AVEC DROP ZONE ====================
+
+// Créer une slice spéciale qui peut recevoir d'autres éléments
+const dropSlice = createSlice({
+  width: 180,
+  height: 100,
+  backgroundColor: 'rgba(255, 0, 255, 0.3)',
+  position: { x: 650, y: 100 },
+  zones: {
+    topText: '📦 DROP ZONE',
+    bottomText: '⬇️ Déposez ici'
+  },
+  behaviors: {
+    createOnContentClick: false // Pas de création d'objets
+  }
+});
+document.body.appendChild(dropSlice.element);
+
+// Rendre cette slice draggable ET drop zone - SIMPLE
+makeDraggable(dropSlice.element, {
+  handle: dropSlice.topZone
+});
+
+makeDropZone(dropSlice.contentZone, {
+  onDrop: (draggedElement) => {
+    dropSlice.bottomZone.textContent = '📦 Reçu !';
+    setTimeout(() => {
+      dropSlice.bottomZone.textContent = '⬇️ Déposez ici';
+    }, 1000);
+  }
+});
