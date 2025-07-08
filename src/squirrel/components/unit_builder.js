@@ -621,7 +621,8 @@ class Unit {
       outputs = [],
       icon = null,
       iconSrc = null,
-      backgroundColor = null
+      backgroundColor = null,
+      parent = null
     } = options;
 
     this.id = id;
@@ -633,6 +634,7 @@ class Unit {
     this.dragOffset = { x: 0, y: 0 };
     this.isEditingName = false;
     this.backgroundColor = backgroundColor;
+    this.parent = parent;
 
     this.createElement();
     this.setupDragging();
@@ -647,7 +649,10 @@ class Unit {
     
     // Ajouter au DOM d'abord
     unitManager.registerUnit(this);
-    document.body.appendChild(this.element);
+    
+    // Utiliser le parent spécifié ou document.body par défaut
+    const parentElement = this.getParentElement();
+    parentElement.appendChild(this.element);
     
     // Puis ajouter les connecteurs
     inputs.forEach(input => this.addInput(input));
@@ -674,6 +679,29 @@ class Unit {
     this.header.appendChild(this.nameElement);
     this.element.appendChild(this.header);
     this.element.appendChild(this.body);
+  }
+
+  getParentElement() {
+    if (!this.parent) {
+      return document.body;
+    }
+    
+    // Si parent est une string, traiter comme ID ou sélecteur
+    if (typeof this.parent === 'string') {
+      if (this.parent.startsWith('#')) {
+        return document.querySelector(this.parent) || document.body;
+      } else {
+        return document.getElementById(this.parent) || document.body;
+      }
+    }
+    
+    // Si parent est un élément DOM
+    if (this.parent && this.parent.nodeType === Node.ELEMENT_NODE) {
+      return this.parent;
+    }
+    
+    // Fallback
+    return document.body;
   }
 
   setupDragging() {
