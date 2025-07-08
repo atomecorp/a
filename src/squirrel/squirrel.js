@@ -1,7 +1,13 @@
 // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
 
 // Cache pour templates et conversions de styles
-const createElement = (tag) => document.createElement(tag);
+const createElement = (tag) => {
+  // Use createElementNS for SVG elements to ensure proper namespace
+  if (tag === 'svg') {
+    return document.createElementNS('http://www.w3.org/2000/svg', tag);
+  }
+  return document.createElement(tag);
+};
 const templateRegistry = new Map();
 const cssCache = new Map();
 
@@ -79,6 +85,7 @@ const $ = (id, props = {}) => {
   // Attributs basiques
   merged.id && (element.id = merged.id);
   merged.text && (element.textContent = merged.text);
+  merged.innerHTML && (element.innerHTML = merged.innerHTML);
   
   // Classes via classList (optimisé)
   addClasses(element, merged.class);
@@ -135,6 +142,7 @@ const $ = (id, props = {}) => {
   // Méthode de mise à jour
   element.$ = updateProps => {
     if ('text' in updateProps) element.textContent = updateProps.text;
+    if ('innerHTML' in updateProps) element.innerHTML = updateProps.innerHTML;
     
     if (updateProps.class) {
       addClasses(element, updateProps.class);

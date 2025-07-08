@@ -1,6 +1,4 @@
-// / === 🎉 Démonstrations ===
 $('span', {
-  // pas besoin de 'tag'
   id: 'test1',
   css: {
     backgroundColor: '#00f',
