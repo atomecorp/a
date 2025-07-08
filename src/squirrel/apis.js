@@ -115,5 +115,63 @@ window.AJS = window.AJS || {
 };
 
 
+// Function to completely clear the screen
+window.clearScreen = function () {
+  const viewContainer = document.getElementById('view');
+  
+  if (viewContainer) {
+    // 1. Clean all events from children recursively
+    cleanupElementEvents(viewContainer);
+    
+    // 2. Empty the container
+    viewContainer.innerHTML = '';
+    
+    // 3. Clean global variables if needed
+    cleanupGlobalVariables();
+  }
+}
+
+// Recursive function to clean events
+function cleanupElementEvents(element) {
+  // Clean events on the current element
+  if (element.removeAllEventListeners) {
+    element.removeAllEventListeners();
+  } else {
+    // Alternative method - clone the element to remove all events
+    const clone = element.cloneNode(false);
+    // Note: this method removes events but we'll rather use a manual approach
+  }
+  
+  // Recursively clean all children
+  Array.from(element.children).forEach(child => {
+    cleanupElementEvents(child);
+  });
+}
+
+// Function to clean global variables
+function cleanupGlobalVariables() {
+  // Stop GSAP animations
+  if (window.gsap) {
+    gsap.killTweensOf("*");
+    gsap.globalTimeline.clear();
+  }
+  
+  // Clear timers
+  if (window.rotationAnimation) {
+    cancelAnimationFrame(window.rotationAnimation);
+    window.rotationAnimation = null;
+  }
+  
+  // Clear deformation variables
+  if (window.deformTweens) {
+    window.deformTweens.forEach(tween => {
+      if (tween && tween.kill) tween.kill();
+    });
+    window.deformTweens = [];
+  }
+}
+
+
+
 // Export for ES6 modules
 export { };
