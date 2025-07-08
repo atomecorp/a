@@ -14,23 +14,20 @@
 
 // import('./examples/lists.js');
 
-
 // import('./examples/ws.js');
 
 // import('./examples/design_slider.js');
 
 // import('./examples/material_page.js');
-// import('./examples/DB.js');
 
+// import('./examples/DB.js');
 
 // import('./test/component_test.js');
 
-
 // import('./vie/vie.js');
 
-import('./test/slice.js');
-
-
+import('./examples/svg.js');
+// import('./test/slice.js');
 
 // const mySpan = $('span', {
 // // no need for 'tag'
