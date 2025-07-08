@@ -87,6 +87,18 @@ const $ = (id, props = {}) => {
   merged.text && (element.textContent = merged.text);
   merged.innerHTML && (element.innerHTML = merged.innerHTML);
   
+  // Chargement SVG depuis fichier
+  if (merged.svgSrc) {
+    fetch(merged.svgSrc)
+      .then(response => response.text())
+      .then(svgContent => {
+        element.innerHTML = svgContent;
+      })
+      .catch(error => {
+        console.error(`Erreur lors du chargement du SVG ${merged.svgSrc}:`, error);
+      });
+  }
+  
   // Classes via classList (optimisé)
   addClasses(element, merged.class);
   
@@ -143,6 +155,18 @@ const $ = (id, props = {}) => {
   element.$ = updateProps => {
     if ('text' in updateProps) element.textContent = updateProps.text;
     if ('innerHTML' in updateProps) element.innerHTML = updateProps.innerHTML;
+    
+    // Mise à jour SVG depuis fichier
+    if ('svgSrc' in updateProps) {
+      fetch(updateProps.svgSrc)
+        .then(response => response.text())
+        .then(svgContent => {
+          element.innerHTML = svgContent;
+        })
+        .catch(error => {
+          console.error(`Erreur lors du chargement du SVG ${updateProps.svgSrc}:`, error);
+        });
+    }
     
     if (updateProps.class) {
       addClasses(element, updateProps.class);
