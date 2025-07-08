@@ -140,6 +140,20 @@ const buttonSizes = {
  * @param {Object} config.skin - Styles personnalisés pour chaque partie
  * @param {string} config.id - ID personnalisé (sinon auto-généré)
  * @param {boolean} config.disabled - Bouton désactivé
+ * 
+ * === NOUVELLES PROPRIÉTÉS TOGGLE ===
+ * @param {string} config.onText - Texte quand activé
+ * @param {string} config.offText - Texte quand désactivé
+ * @param {Function} config.onAction - Action quand passe à ON
+ * @param {Function} config.offAction - Action quand passe à OFF
+ * @param {Object} config.onStyle - Styles CSS pour état ON
+ * @param {Object} config.offStyle - Styles CSS pour état OFF
+ * @param {boolean} config.initialState - État initial (true=ON, false=OFF)
+ * @param {Function} config.onStateChange - Callback lors du changement d'état
+ * 
+ * === PROPRIÉTÉS MULTI-ÉTATS ===
+ * @param {Array} config.states - Array d'états {text, css, action, icon}
+ * @param {string} config.cycleMode - Mode de cycle ('forward', 'backward', 'ping-pong')
  */
 const createButton = (config = {}) => {
   const {
@@ -152,23 +166,70 @@ const createButton = (config = {}) => {
     skin = {},
     id,
     disabled = false,
+    
+    // === NOUVELLES PROPRIÉTÉS TOGGLE ===
+    onText,
+    offText,
+    onAction,
+    offAction,
+    onStyle = {},
+    offStyle = {},
+    initialState = false, // false = OFF, true = ON
+    onStateChange,
+    
+    // === PROPRIÉTÉS POUR ÉTATS MULTIPLES ===
+    states, // Array d'états personnalisés
+    cycleMode = 'forward',
+    
     ...otherProps
   } = config;
 
   // Génération d'ID unique si non fourni
   const buttonId = id || `btn_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
 
+  // Déterminer le mode de fonctionnement
+  const isToggleMode = onText !== undefined || offText !== undefined;
+  const isMultiStateMode = states && states.length > 0;
+  
+  // État interne pour le toggle
+  let currentToggleState = initialState;
+  let currentStateIndex = 0;
+  let pingPongDirection = 1;
+
+  // Configuration initiale selon le mode
+  let finalText = text;
+  let finalStyles = {};
+
+  if (isToggleMode) {
+    // Mode toggle: utiliser l'état initial pour déterminer le texte et les styles
+    finalText = currentToggleState ? (onText || text) : (offText || text);
+    const toggleStyles = currentToggleState ? onStyle : offStyle;
+    finalStyles = { ...toggleStyles };
+  } else if (isMultiStateMode) {
+    // Mode multi-états: utiliser le premier état
+    const firstState = states[0];
+    finalText = firstState.text || text;
+    finalStyles = { ...firstState.css };
+  }
+
   // Styles de base selon variant et size
   let containerStyles = { ...buttonStyles[variant] || {}, ...buttonSizes[size] || {} };
 
-  // Application des styles personnalisés
-  // On fusionne skin.container et config.css, mais on donne la priorité à config.css (pour permettre l'override dynamique)
-  if (skin.container && config.css) {
-    containerStyles = { ...containerStyles, ...skin.container, ...config.css };
-  } else if (config.css) {
-    containerStyles = { ...containerStyles, ...config.css };
-  } else if (skin.container) {
+  // Application des styles personnalisés dans l'ordre de priorité
+  // 1. Styles de base (variant + size)
+  // 2. Styles de skin.container
+  // 3. Styles de toggle/états (onStyle/offStyle ou states.css)
+  // 4. Styles de config.css (priorité absolue)
+  if (skin.container) {
     containerStyles = { ...containerStyles, ...skin.container };
+  }
+  
+  if (Object.keys(finalStyles).length > 0) {
+    containerStyles = { ...containerStyles, ...finalStyles };
+  }
+  
+  if (config.css) {
+    containerStyles = { ...containerStyles, ...config.css };
   }
 
   // Styles pour état disabled
@@ -178,12 +239,85 @@ const createButton = (config = {}) => {
     containerStyles.pointerEvents = 'none';
   }
 
+  // Fonction de gestion du clic
+  const handleClick = (event) => {
+    if (disabled) return;
+
+    if (isToggleMode) {
+      // Mode toggle: basculer entre ON/OFF
+      currentToggleState = !currentToggleState;
+      
+      // Mettre à jour le texte
+      const newText = currentToggleState ? onText : offText;
+      if (newText) {
+        button.updateText(newText);
+      }
+      
+      // Mettre à jour les styles
+      const newStyles = currentToggleState ? onStyle : offStyle;
+      if (Object.keys(newStyles).length > 0) {
+        button.$({ css: newStyles });
+      }
+      
+      // Exécuter l'action appropriée
+      if (currentToggleState && onAction) {
+        onAction(currentToggleState, button);
+      } else if (!currentToggleState && offAction) {
+        offAction(currentToggleState, button);
+      }
+      
+      // Callback de changement d'état
+      if (onStateChange) {
+        onStateChange(currentToggleState, button);
+      }
+      
+    } else if (isMultiStateMode) {
+      // Mode multi-états: passer à l'état suivant
+      currentStateIndex = getNextStateIndex(currentStateIndex, states.length, cycleMode, pingPongDirection);
+      
+      // Pour ping-pong, ajuster la direction si nécessaire
+      if (cycleMode === 'ping-pong') {
+        if (currentStateIndex === states.length - 1) {
+          pingPongDirection = -1;
+        } else if (currentStateIndex === 0) {
+          pingPongDirection = 1;
+        }
+      }
+      
+      const newState = states[currentStateIndex];
+      
+      // Mettre à jour l'apparence
+      if (newState.text) button.updateText(newState.text);
+      if (newState.css) button.$({ css: newState.css });
+      if (newState.icon) {
+        const iconEl = button.querySelector('.hs-button-icon');
+        if (iconEl) iconEl.textContent = newState.icon;
+      }
+      
+      // Exécuter l'action de l'état
+      if (newState.action) {
+        newState.action(newState, currentStateIndex, button);
+      }
+      
+      // Callback de changement d'état
+      if (onStateChange) {
+        onStateChange(newState, currentStateIndex, button);
+      }
+      
+    } else {
+      // Mode bouton classique
+      if (onClick) {
+        onClick(event, button);
+      }
+    }
+  };
+
   // Création du conteneur principal
   const button = $('button-container', {
     id: buttonId,
     css: containerStyles,
     attrs: { disabled },
-    onClick: disabled ? undefined : onClick,
+    onClick: handleClick,
     ...otherProps
   });
 
@@ -196,7 +330,7 @@ const createButton = (config = {}) => {
     });
     
     // Ajustement de la marge si pas de texte
-    if (!text) {
+    if (!finalText) {
       iconElement.$({ css: { marginRight: '0' } });
     }
     
@@ -204,14 +338,14 @@ const createButton = (config = {}) => {
   }
 
   // Ajout du texte si présent
-  if (text) {
+  if (finalText) {
     // Si le bouton n'a pas déjà de texte, on le met directement sur le bouton principal
     if (!button.querySelector('.hs-button-text')) {
-      button.textContent = text;
+      button.textContent = finalText;
     } else {
       const textElement = $('button-text', {
         id: `${buttonId}_text`,
-        text,
+        text: finalText,
         css: skin.text || {}
       });
       button.appendChild(textElement);
@@ -228,7 +362,7 @@ const createButton = (config = {}) => {
     button.appendChild(badgeElement);
   }
 
-  // Méthodes utilitaires spécifiques au bouton
+  // Méthodes utilitaires de base
   button.updateText = (newText) => {
     // Si le bouton n'a pas de .hs-button-text, on modifie directement textContent
     const textEl = button.querySelector('.hs-button-text');
@@ -271,8 +405,89 @@ const createButton = (config = {}) => {
     return button;
   };
 
+  // === MÉTHODES SPÉCIFIQUES AU TOGGLE ===
+  if (isToggleMode) {
+    button.toggle = () => {
+      handleClick();
+      return button;
+    };
+    
+    button.setState = (state) => {
+      if (currentToggleState !== state) {
+        handleClick();
+      }
+      return button;
+    };
+    
+    button.getState = () => currentToggleState;
+    
+    button.setOnState = () => {
+      if (!currentToggleState) {
+        handleClick();
+      }
+      return button;
+    };
+    
+    button.setOffState = () => {
+      if (currentToggleState) {
+        handleClick();
+      }
+      return button;
+    };
+  }
+  
+  // === MÉTHODES SPÉCIFIQUES MULTI-ÉTATS ===
+  if (isMultiStateMode) {
+    button.nextState = () => {
+      handleClick();
+      return button;
+    };
+    
+    button.setStateIndex = (index) => {
+      if (index >= 0 && index < states.length && index !== currentStateIndex) {
+        currentStateIndex = index;
+        const newState = states[currentStateIndex];
+        
+        if (newState.text) button.updateText(newState.text);
+        if (newState.css) button.$({ css: newState.css });
+        if (newState.icon) {
+          const iconEl = button.querySelector('.hs-button-icon');
+          if (iconEl) iconEl.textContent = newState.icon;
+        }
+        
+        if (newState.action) {
+          newState.action(newState, currentStateIndex, button);
+        }
+        
+        if (onStateChange) {
+          onStateChange(newState, currentStateIndex, button);
+        }
+      }
+      return button;
+    };
+    
+    button.getCurrentState = () => states[currentStateIndex];
+    button.getCurrentStateIndex = () => currentStateIndex;
+    button.getStates = () => states;
+  }
+
   return button;
 };
+
+// === FONCTION UTILITAIRE POUR CALCULER LE PROCHAIN ÉTAT ===
+function getNextStateIndex(current, total, mode, direction = 1) {
+  switch (mode) {
+    case 'backward':
+      return (current - 1 + total) % total;
+    case 'ping-pong':
+      const next = current + direction;
+      if (next >= total) return total - 2;
+      if (next < 0) return 1;
+      return next;
+    default: // 'forward'
+      return (current + 1) % total;
+  }
+}
 
 // === FACTORY FUNCTIONS POUR VARIANTES COMMUNES ===
 

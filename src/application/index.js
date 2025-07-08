@@ -24,8 +24,8 @@
 
 // import('./test/component_test.js');
 
-import('./vie/vie.js');
-
+// import('./vie/vie.js');
+import('./lyrix/lyrix.js');
 // import('./examples/svg.js');
 // import('./test/slice.js');
 
