@@ -366,21 +366,17 @@ const attachSvgEvents = () => {
     }
   });
   
-  // Événement de double-clic pour démarrer/arrêter la déformation GSAP
+  // Événement de double-clic pour démarrer/arrêter la déformation CSS
   atomeSvg.addEventListener('dblclick', () => {
+    // Vérifier que l'atome n'est pas en cours d'animation de rotation
+    if (isAnimating) {
+      puts('⚠️ Arrêtez d\'abord l\'animation de rotation');
+      return;
+    }
+    
     isDeforming = !isDeforming;
     if (isDeforming) {
-      // Arrêter la rotation si elle est active
-      if (isAnimating) {
-        isAnimating = false;
-        if (window.gsap) {
-          gsap.killTweensOf(atomeSvg);
-        }
-        // Restaurer transform
-        if (atomeSvg) {
-          atomeSvg.style.transform = '';
-        }
-      }
+      puts('🎨 Déformation CSS activée (double-clic)');
       deformPaths();
       svgWrapper.$({
         css: {
@@ -389,6 +385,7 @@ const attachSvgEvents = () => {
         }
       });
     } else {
+      puts('⏹️ Déformation CSS arrêtée (double-clic)');
       stopDeformation();
       svgWrapper.$({
         css: {
@@ -700,13 +697,14 @@ $('div', {
     <h3>🎮 Instructions :</h3>
     <ul>
       <li><strong>Cliquez sur l'atome</strong> pour démarrer/arrêter l'animation de rotation</li>
-      <li><strong>Double-cliquez sur l'atome</strong> pour démarrer/arrêter la déformation GSAP</li>
-      <li><strong>Utilisez le bouton "🌀 Déformer (GSAP)"</strong> pour activer la déformation avancée</li>
+      <li><strong>Double-cliquez sur l'atome</strong> pour démarrer/arrêter la déformation CSS</li>
+      <li><strong>Utilisez le bouton "🌀 Déformer (CSS)"</strong> pour activer la déformation avancée</li>
       <li><strong>Survolez l'atome</strong> pour un effet de zoom</li>
       <li><strong>Utilisez les boutons</strong> pour changer la couleur de l'atome</li>
       <li><strong>Le cercle à droite</strong> pulse automatiquement</li>
       <li><strong>Le SVG est chargé</strong> depuis le fichier assets/images/atome.svg</li>
-      <li><strong>GSAP est utilisé</strong> pour des animations fluides et professionnelles</li>
+      <li><strong>Les animations CSS</strong> évitent les conflits GSAP pour plus de stabilité</li>
+      <li><strong>⚠️ Arrêtez une animation</strong> avant d'en démarrer une autre</li>
     </ul>
   `
 });
@@ -780,5 +778,6 @@ tl.to(path, {
   `
 });
 
-puts('✅ Exemple SVG avec GSAP chargé avec succès !');
-puts('🎨 Double-cliquez sur l\'atome pour voir la déformation GSAP en action !');
+puts('✅ Exemple SVG avec animations CSS chargé avec succès !');
+puts('🎨 Double-cliquez sur l\'atome pour voir la déformation CSS en action !');
+puts('⚠️ Arrêtez une animation avant d\'en démarrer une autre pour éviter les conflits');
