@@ -1,6 +1,6 @@
 const barsHeight = '39px';
 const basicWidth = '69px'
-const vieBackColor = 'rgb(0, 142, 220)';
+const vieBackColor = 'rgb(14, 61, 86)';
 const itemskColor = 'rgb(30, 172, 250)';
 
 const vieViewer = $('div', {
@@ -21,7 +21,6 @@ const vieViewer = $('div', {
     display: 'block'
   },
 
-  // text: 'Je suis la vie !'
 });
 
 
@@ -43,7 +42,6 @@ const topBar = $('div', {
     boxShadow: '-2px 0px 6px rgb(6, 5, 5)',
     display: 'block'
   },
-  // text: 'Je suis la vie !'
 });
 
 
@@ -51,7 +49,7 @@ const vieLogo = $('img', {
   id: 'vieLogo',
   parent: topBar,
   attrs: {
-    src: './assets/images/icons/microphone.svg',
+    src: './assets/images/logos/vie.svg',
     alt: 'Vie Logo'
   },
   css: {

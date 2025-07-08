@@ -53,7 +53,7 @@ const svgWrapper = $('div', {
     display: 'inline-block',
     margin: '20px',
     padding: '10px',
-    border: '2px solid #333',
+    // border: '2px solid #333',
     borderRadius: '10px',
     cursor: 'pointer',
     transition: 'all 0.5s ease',
@@ -68,7 +68,7 @@ let atomeSvg = null;
 // Charger le SVG depuis le fichier atome.svg
 const loadAtomeSvg = async () => {
   try {
-    const response = await fetch('../../assets/images/atome.svg');
+    const response = await fetch('../../assets/images/logos/atome.svg');
     const svgText = await response.text();
     
     // Créer un parser DOM pour le SVG
