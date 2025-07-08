@@ -26,9 +26,9 @@
 // import('./test/component_test.js');
 
 
-import('./vie/vie.js');
+// import('./vie/vie.js');
 
-// import('./test/slice.js');
+import('./test/slice.js');
 
 
 
