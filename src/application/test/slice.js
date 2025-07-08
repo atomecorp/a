@@ -1,3 +1,8 @@
+// Détection d'environnement Tauri
+const isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
+
+console.log(`🌍 Environnement détecté: ${isTauri ? 'Tauri WebView' : 'Navigateur standard'}`);
+
 // import '../../../squirrel/squirrel.js';
 
 // Import des fonctionnalités
@@ -330,8 +335,10 @@ const slice4 = createSlice({
 });
 document.body.appendChild(slice4.element);
 
-// Fonction pour rendre un objet draggable avec HTML5
+// Fonction pour rendre un objet draggable avec HTML5 (universel)
 function makeObjectDraggable(object, slice) {
+  const dragId = Math.random().toString(36).substr(2, 9);
+  
   makeDraggableWithDrop(object, {
     enableHTML5: true,
     cursor: 'grab',
@@ -340,12 +347,13 @@ function makeObjectDraggable(object, slice) {
       objectIndex: object.objectIndex,
       sourceSlice: 'slice4',
       content: object.textContent,
-      customData: object.customData
+      customData: object.customData,
+      dragId: dragId,
+      isTauri: isTauri
     },
     onHTML5DragStart: (e, element) => {
       element.isDragging = true;
       element.style.opacity = '0.5';
-      element.moveSuccessful = false; // Initialiser à false
       
       // IMPORTANT: Empêcher la propagation pour éviter de draguer la slice
       e.stopPropagation();
@@ -355,26 +363,22 @@ function makeObjectDraggable(object, slice) {
     onHTML5DragEnd: (e, element) => {
       console.log(`🚀 Objet ${element.objectIndex} drag end`);
       
-      // Attendre un peu pour voir si l'objet a été déplacé avec succès
-      setTimeout(() => {
-        // Vérifier si l'objet a été déplacé avec succès
-        if (element.moveSuccessful || element.isBeingMoved) {
-          console.log(`✅ Objet ${element.objectIndex} déplacé avec succès - ne pas restaurer`);
-          return; // Ne pas restaurer l'état
-        }
-        
-        // Si l'objet n'a pas été déplacé, restaurer l'état normal
-        element.isDragging = false;
-        element.style.opacity = '1';
-        
-        console.log(`↩️ Objet ${element.objectIndex} restauré à sa position originale`);
-      }, 50); // Petit délai pour permettre au drop de se terminer
+      // Simple vérification : si l'objet n'est plus dans slice4, c'est qu'il a été déplacé
+      if (!element.parentNode || element.parentNode !== slice4.contentZone) {
+        console.log(`✅ Objet ${element.objectIndex} déplacé avec succès`);
+        return;
+      }
+      
+      // Sinon, restaurer l'état normal
+      element.isDragging = false;
+      element.style.opacity = '1';
+      console.log(`↩️ Objet ${element.objectIndex} restauré à sa position originale`);
     }
   });
   
   // Empêcher le drag de la slice quand on clique sur l'objet
   object.addEventListener('mousedown', (e) => {
-    e.stopPropagation(); // Empêche le bubble vers la slice
+    e.stopPropagation();
     console.log(`👆 Mousedown sur objet ${object.objectIndex} - propagation stoppée`);
   });
   
@@ -462,30 +466,27 @@ makeDropZone(dropSlice.contentZone, {
     dropSlice.bottomZone.textContent = '⬇️ Déposez ici';
   },
   
-  onDrop: (e, dropElement, transferData) => {
+  onDrop: (e, dropElement, transferData, sourceElement) => {
     console.log('📦 Drop détecté !', transferData);
     
     // Vérifier si c'est un objet de slice
     if (transferData.type === 'slice-object' && transferData.sourceSlice === 'slice4') {
-      // Trouver l'objet original dans slice4
-      const sourceObjects = Array.from(slice4.contentZone.querySelectorAll('div'));
-      const originalObject = sourceObjects.find(obj => obj.objectIndex === transferData.objectIndex);
+      // Utiliser sourceElement si disponible, sinon chercher par index
+      let originalObject = sourceElement;
+      if (!originalObject) {
+        const sourceObjects = Array.from(slice4.contentZone.querySelectorAll('div'));
+        originalObject = sourceObjects.find(obj => obj.objectIndex === transferData.objectIndex);
+      }
       
       if (originalObject) {
-        console.log(`🔄 Début du déplacement de l'objet ${transferData.objectIndex}`);
+        console.log(`🔄 Déplacement de l'objet ${transferData.objectIndex} (universel)`);
         
-        // IMPORTANT: Marquer l'objet comme "déplacé avec succès" AVANT de le retirer
-        originalObject.isBeingMoved = true;
-        originalObject.moveSuccessful = true;
-        
-        // Nettoyer les styles de drag immédiatement
+        // Nettoyer les styles de drag
         originalObject.style.opacity = '1';
         originalObject.isDragging = false;
-        
-        // Supprimer les event listeners de drag pour éviter les conflits
         originalObject.draggable = false;
         
-        // Adapter le style pour la drop zone AVANT de le déplacer
+        // Adapter le style pour la drop zone
         originalObject.style.backgroundColor = 'rgba(255, 0, 255, 0.6)';
         originalObject.style.border = '2px solid rgba(255, 0, 255, 0.8)';
         originalObject.style.marginBottom = '4px';
@@ -502,11 +503,6 @@ makeDropZone(dropSlice.contentZone, {
         setTimeout(() => {
           dropSlice.bottomZone.textContent = '⬇️ Déposez ici';
         }, 2000);
-        
-        // Prévenir l'événement dragend de restaurer l'état
-        setTimeout(() => {
-          originalObject.isBeingMoved = false;
-        }, 100);
         
       } else {
         console.log('❌ Objet source non trouvé');
@@ -527,3 +523,19 @@ console.log('1. Cliquez sur le contenu de la slice 4 (violette) pour créer des 
 console.log('2. Draggez les objets créés vers la drop zone (magenta)');
 console.log('3. Les objets seront déplacés de slice4 vers la drop zone');
 console.log('4. Regardez la console pour voir les événements');
+
+// Instructions spécifiques pour Tauri
+if (isTauri) {
+  console.log('🎮 Instructions spécifiques pour Tauri WebView:');
+  console.log('1. Cliquez sur le contenu de la slice 4 (violette) pour créer des objets');
+  console.log('2. Draggez les objets créés vers la drop zone (magenta)');
+  console.log('3. Les objets seront déplacés de slice4 vers la drop zone');
+  console.log('4. Observez la console pour les événements de drag & drop');
+  console.log('5. Dans Tauri, les événements peuvent avoir des délais différents');
+} else {
+  console.log('🎮 Instructions pour navigateur standard:');
+  console.log('1. Cliquez sur le contenu de la slice 4 (violette) pour créer des objets');
+  console.log('2. Draggez les objets créés vers la drop zone (magenta)');
+  console.log('3. Les objets seront déplacés de slice4 vers la drop zone');
+  console.log('4. Regardez la console pour voir les événements');
+}

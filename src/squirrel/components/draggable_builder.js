@@ -58,6 +58,7 @@ function makeDropZone(element, options = {}) {
 
   const handleDrop = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     dragCounter = 0;
     
     dropElement.classList.remove(hoverClass, acceptClass, rejectClass);
@@ -76,7 +77,27 @@ function makeDropZone(element, options = {}) {
     // Récupérer les données texte
     transferData.text = e.dataTransfer.getData('text/plain');
     
-    onDrop(e, dropElement, transferData);
+    // Trouver l'élément source par son ID de drag
+    let sourceElement = null;
+    if (transferData.dragId) {
+      sourceElement = document.querySelector(`[data-drag-id="${transferData.dragId}"]`);
+    }
+    
+    // CRUCIAL: Marquer l'élément source comme ayant un drop réussi IMMÉDIATEMENT
+    if (sourceElement) {
+      sourceElement.setAttribute('data-drop-successful', 'true');
+      sourceElement.setAttribute('data-moved', 'true');
+      
+      // Utiliser la fonction pour marquer le drop comme réussi
+      if (sourceElement._markDropSuccessful) {
+        sourceElement._markDropSuccessful();
+      }
+      
+      console.log('🎯 Marked source element as successfully dropped');
+    }
+    
+    // Appeler la fonction de drop
+    onDrop(e, dropElement, transferData, sourceElement);
   };
 
   // Attacher les événements
@@ -136,28 +157,75 @@ function makeDraggableWithDrop(element, options = {}) {
 
   // === DRAG HTML5 ===
   if (enableHTML5) {
-    element.addEventListener('dragstart', (e) => {
+    let dragEndHandler = null;
+    let dragStartHandler = null;
+    let isDropSuccessful = false;
+    
+    dragStartHandler = (e) => {
       if (dragStartClass) element.classList.add(dragStartClass);
+      isDropSuccessful = false;
       
       // Configurer l'image fantôme
       if (ghostImage) {
         e.dataTransfer.setDragImage(ghostImage, 0, 0);
       }
       
-      // Transférer les données
+      // Transférer les données avec un identifiant unique
       e.dataTransfer.effectAllowed = 'move';
+      let uniqueTransferData = {};
       if (transferData) {
-        e.dataTransfer.setData('application/json', JSON.stringify(transferData));
+        uniqueTransferData = {
+          ...transferData,
+          dragStartTime: Date.now(),
+          dragId: transferData.dragId || Math.random().toString(36).substr(2, 9)
+        };
+        e.dataTransfer.setData('application/json', JSON.stringify(uniqueTransferData));
       }
       e.dataTransfer.setData('text/plain', element.textContent || '');
       
+      // Marquer l'élément comme en cours de drag
+      element.setAttribute('data-dragging', 'true');
+      element.setAttribute('data-drag-id', uniqueTransferData.dragId || 'unknown');
+      
+      // Réinitialiser les flags
+      element.removeAttribute('data-moved');
+      element.removeAttribute('data-drop-successful');
+      
       onHTML5DragStart(e, element);
-    });
-
-    element.addEventListener('dragend', (e) => {
+    };
+    
+    dragEndHandler = (e) => {
       if (dragStartClass) element.classList.remove(dragStartClass);
+      
+      // Si le drop est réussi, on ignore complètement dragend
+      if (isDropSuccessful || element.getAttribute('data-drop-successful') === 'true') {
+        console.log('Drop successful - ignoring dragend completely');
+        // Nettoyer et sortir immédiatement
+        element.removeAttribute('data-dragging');
+        element.removeAttribute('data-drag-id');
+        element.removeAttribute('data-moved');
+        element.removeAttribute('data-drop-successful');
+        return;
+      }
+      
+      // Si pas de drop réussi, restaurer normalement
+      console.log('No successful drop - restoring element');
+      element.removeAttribute('data-dragging');
+      element.removeAttribute('data-drag-id');
+      element.removeAttribute('data-moved');
+      element.removeAttribute('data-drop-successful');
+      
       onHTML5DragEnd(e, element);
-    });
+    };
+
+    element.addEventListener('dragstart', dragStartHandler);
+    element.addEventListener('dragend', dragEndHandler);
+    
+    // Stocker la référence pour pouvoir marquer le drop comme réussi
+    element._markDropSuccessful = () => {
+      isDropSuccessful = true;
+      element.setAttribute('data-drop-successful', 'true');
+    };
   }
 
   // === DRAG CLASSIQUE OPTIMISÉ (avec ghost) ===
