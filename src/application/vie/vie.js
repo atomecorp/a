@@ -189,6 +189,7 @@ function createUnitsFromJSON(jsonData) {
 
     const unit = Unit({
       id: `unit_${component.id}`,
+      parent: vieViewer,
       name: component.name,
       position: {
         x: component.x * 200,
@@ -335,7 +336,7 @@ const units_to_creaet = {
 }
 
 
-//createUnitsFromJSON(units_to_creaet)
+createUnitsFromJSON(units_to_creaet)
 
 // const unit1 = Unit({
 //   id: 'audio-input',
