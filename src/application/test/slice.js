@@ -1,12 +1,8 @@
 // Détection d'environnement Tauri
 const isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
 
-console.log(`🌍 Environnement détecté: ${isTauri ? 'Tauri WebView' : 'Navigateur standard'}`);
-
 // Force l'activation des événements HTML5 drag & drop dans Tauri
 if (isTauri) {
-  console.log('🔧 Forçage de l\'activation HTML5 drag & drop pour Tauri...');
-  
   // Désactiver l'interception native de Tauri pour les événements de drag
   document.addEventListener('DOMContentLoaded', () => {
     // Forcer l'activation des événements HTML5
@@ -17,11 +13,8 @@ if (isTauri) {
     ['dragstart', 'dragend', 'dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventType => {
       document.addEventListener(eventType, (e) => {
         // Laisser passer les événements HTML5 normaux
-        console.log(`🔧 [TAURI] Événement HTML5 ${eventType} détecté et autorisé`);
       }, { passive: false });
     });
-    
-    console.log('✅ [TAURI] Activation HTML5 drag & drop terminée');
   });
 }
 
@@ -56,12 +49,10 @@ makeDraggable(slice1.element, {
   onDragStart: () => {
     slice1.element.isDragging = true;
     slice1.dragJustEnded = false;
-    console.log('🔥 Slice1 drag start');
   },
   onDragEnd: () => {
     slice1.element.isDragging = false;
     slice1.dragJustEnded = true;
-    console.log('🔥 Slice1 drag end');
     
     setTimeout(() => {
       slice1.dragJustEnded = false;
@@ -89,27 +80,22 @@ const slice2 = createSlice({
         // Vérifier si on est en train de dragger
         if (slice.element.isDragging) return;
         
-        console.log('🔥 Zone TOP cliquée !');
         slice.addObject(); // Crée un objet depuis le top
       },
       onDoubleClick: (slice, event) => {
-        console.log('🔥🔥 Zone TOP double-cliquée !');
         slice.clear(); // Vide la slice
       },
       onHover: (slice, isEntering, event) => {
-        console.log(`🔥 Zone TOP ${isEntering ? 'survolée' : 'quittée'}`);
+        // Zone TOP survolée ou quittée
       }
     },
     
     // Événements sur la zone bottom
     bottomEvents: {
       onClick: (slice, event) => {
-        console.log('⚡ Zone BOTTOM cliquée !');
         // Exporter les données vers la console
-        console.log('📊 Objets:', slice.getObjectCount());
       },
       onRightClick: (slice, event) => {
-        console.log('⚡ Zone BOTTOM clic droit !');
         // Changer la couleur de fond
         slice.updateBackgroundColor(`hsl(${Math.random() * 360}, 70%, 50%)`);
       }
@@ -123,17 +109,14 @@ const slice2 = createSlice({
     // Événements sur les objets
     events: {
       onClick: (object, index, slice) => {
-        console.log(`🎯 Objet ${index} cliqué !`);
         // Changer la couleur de l'objet
         object.style.backgroundColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
       },
       onDoubleClick: (object, index, slice) => {
-        console.log(`🎯🎯 Objet ${index} double-cliqué !`);
         // Supprimer l'objet
         slice.removeObject(object);
       },
       onRightClick: (object, index, slice, event) => {
-        console.log(`🖱️ Objet ${index} clic droit !`);
         // Cloner l'objet
         slice.addObject();
       },
@@ -217,7 +200,6 @@ const slice3 = createSlice({
   content: {
     events: {
       onRightClick: (slice, event) => {
-        console.log('🖱️ Contenu clic droit - Suppression des objets sélectionnés');
         // Supprimer tous les objets sélectionnés
         const objects = slice.contentZone.querySelectorAll('div');
         objects.forEach(obj => {
@@ -355,18 +337,15 @@ const slice4 = createSlice({
 });
 document.body.appendChild(slice4.element);
 
-// Fonction pour rendre un objet draggable avec logs détaillés pour Tauri
+// Fonction pour rendre un objet draggable
 function makeObjectDraggable(object, slice) {
   const dragId = Math.random().toString(36).substr(2, 9);
-  
-  console.log(`🔧 [${isTauri ? 'TAURI' : 'BROWSER'}] Initialisation drag pour objet ${object.objectIndex}, dragId: ${dragId}`);
   
   // Force explicite pour Tauri : Activer HTML5 drag & drop
   if (isTauri) {
     object.draggable = true;
     object.style.webkitUserDrag = 'element';
     object.setAttribute('draggable', 'true');
-    console.log(`🔧 [TAURI] HTML5 drag forcé pour objet ${object.objectIndex}`);
   }
   
   makeDraggableWithDrop(object, {
@@ -387,51 +366,18 @@ function makeObjectDraggable(object, slice) {
       
       // IMPORTANT: Empêcher la propagation pour éviter de draguer la slice
       e.stopPropagation();
-      
-      console.log(`🚀 [${isTauri ? 'TAURI' : 'BROWSER'}] Objet ${element.objectIndex} drag start`);
-      console.log(`🔍 [${isTauri ? 'TAURI' : 'BROWSER'}] dataTransfer.effectAllowed:`, e.dataTransfer.effectAllowed);
-      console.log(`🔍 [${isTauri ? 'TAURI' : 'BROWSER'}] dataTransfer.dropEffect:`, e.dataTransfer.dropEffect);
-      console.log(`🔍 [${isTauri ? 'TAURI' : 'BROWSER'}] dataTransfer.types:`, e.dataTransfer.types);
-      
-      if (isTauri) {
-        console.log(`🔍 [TAURI] Element parent avant drag:`, element.parentNode ? element.parentNode.className : 'null');
-        console.log(`🔍 [TAURI] Element position dans DOM:`, element.parentNode === slice4.contentZone ? 'slice4' : 'ailleurs');
-        console.log(`🔍 [TAURI] Element dragId:`, dragId);
-        console.log(`🔍 [TAURI] Element data-drag-id:`, element.getAttribute('data-drag-id'));
-      }
     },
     onHTML5DragEnd: (e, element) => {
-      console.log(`🏁 [${isTauri ? 'TAURI' : 'BROWSER'}] Objet ${element.objectIndex} drag end`);
-      console.log(`🔍 [${isTauri ? 'TAURI' : 'BROWSER'}] dragend - dropEffect:`, e.dataTransfer.dropEffect);
-      console.log(`🔍 [${isTauri ? 'TAURI' : 'BROWSER'}] dragend - element.parentNode:`, element.parentNode ? element.parentNode.className : 'null');
-      
-      if (isTauri) {
-        console.log(`🔍 [TAURI] Element encore dans slice4:`, element.parentNode === slice4.contentZone);
-        console.log(`🔍 [TAURI] Element déplacé vers drop zone:`, element.parentNode === dropSlice.contentZone);
-        console.log(`🔍 [TAURI] Attribut data-moved:`, element.getAttribute('data-moved'));
-        console.log(`🔍 [TAURI] Attribut data-drop-successful:`, element.getAttribute('data-drop-successful'));
-        console.log(`🔍 [TAURI] Attribut data-dragging:`, element.getAttribute('data-dragging'));
-        console.log(`🔍 [TAURI] Attribut data-drag-id:`, element.getAttribute('data-drag-id'));
-        
-        // Vérifier si l'élément est toujours dans le DOM
-        console.log(`🔍 [TAURI] Element dans le DOM:`, document.body.contains(element));
-        console.log(`🔍 [TAURI] Element position sur la page:`, element.getBoundingClientRect());
-      }
-      
       // Attendre un peu pour laisser le temps au drop de se terminer
       setTimeout(() => {
-        console.log(`⏰ [${isTauri ? 'TAURI' : 'BROWSER'}] Vérification finale après délai`);
-        
         // Vérification simple : si l'objet n'est plus dans slice4, c'est qu'il a été déplacé
         if (!element.parentNode || element.parentNode !== slice4.contentZone) {
-          console.log(`✅ [${isTauri ? 'TAURI' : 'BROWSER'}] Objet ${element.objectIndex} déplacé avec succès`);
           return;
         }
         
         // Sinon, restaurer l'état normal
         element.isDragging = false;
         element.style.opacity = '1';
-        console.log(`↩️ [${isTauri ? 'TAURI' : 'BROWSER'}] Objet ${element.objectIndex} restauré à sa position originale`);
       }, 100);
     }
   });
@@ -439,14 +385,12 @@ function makeObjectDraggable(object, slice) {
   // Empêcher le drag de la slice quand on clique sur l'objet
   object.addEventListener('mousedown', (e) => {
     e.stopPropagation();
-    console.log(`👆 [${isTauri ? 'TAURI' : 'BROWSER'}] Mousedown sur objet ${object.objectIndex} - propagation stoppée`);
   });
   
   // Empêcher les autres événements de remonter
   object.addEventListener('click', (e) => {
     if (object.isDragging) {
       e.stopPropagation();
-      console.log(`🚫 [${isTauri ? 'TAURI' : 'BROWSER'}] Click empêché sur objet ${object.objectIndex} en cours de drag`);
       return;
     }
   });
@@ -460,7 +404,6 @@ slice4.addObject = function() {
   const lastObject = this.contentZone.lastElementChild;
   if (lastObject) {
     makeObjectDraggable(lastObject, this);
-    console.log(`✨ [${isTauri ? 'TAURI' : 'BROWSER'}] Objet ${lastObject.objectIndex} rendu draggable`);
   }
 };
 
