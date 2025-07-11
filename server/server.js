@@ -66,7 +66,25 @@ async function startServer() {
     await server.register(fastifyWebsocket);
 
     // ===========================
-    // 2. ROUTES API
+    // 2. AUTHENTICATION ROUTES
+    // ===========================
+    
+    // Import and register authentication routes
+    const authRoutes = await import('./routes/auth.js');
+    await server.register(authRoutes.default, { prefix: '/api/auth' });
+
+    // Serve password reset page
+    server.get('/account/reset/:token', async (request, reply) => {
+      return reply.sendFile('reset-password.html', path.join(__dirname, 'static'));
+    });
+
+    // Serve authentication test page
+    server.get('/auth-test', async (request, reply) => {
+      return reply.sendFile('auth-test.html', path.join(__dirname, 'static'));
+    });
+
+    // ===========================
+    // 3. API ROUTES
     // ===========================
 
     // Health check
@@ -98,7 +116,7 @@ async function startServer() {
     });
 
     // ===========================
-    // 3. DATABASE API ROUTES
+    // 4. DATABASE API ROUTES
     // ===========================
 
     // Database status endpoint
@@ -131,8 +149,6 @@ async function startServer() {
         };
       }
     });
-
-    // ...existing database routes...
 
     // Users API
     server.get('/api/users', async (request, reply) => {
