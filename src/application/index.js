@@ -25,10 +25,11 @@
 // import('./test/component_test.js');
 // import('./examples/image.js');
 
-import('./vie/vie.js');
-// import('./lyrix/lyrix.js');
+// import('./vie/vie.js');
 // import('./examples/svg.js');
 // import('./examples/anim_svg.js');
+import('./lyrix/lyrix.js');
+
 // import('./test/slice.js');
 
 // const mySpan = $('span', {

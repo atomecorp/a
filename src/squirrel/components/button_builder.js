@@ -9,6 +9,37 @@ import { $, define } from '../squirrel.js';
 
 // Registre des templates globaux
 const buttonTemplates = {
+   'squirrel_design': {
+    name: 'Material Design Green',
+    description: 'Style Material Design avec couleurs vertes',
+    css: {
+      fontFamily: 'Roboto, sans-serif',
+      fontSize: '12px',
+      fontWeight: '300',
+      textTransform: 'uppercase',
+      letterSpacing: '0.3px',
+      borderRadius: '3px',
+      border: 'none',
+      padding: '8px 9px',
+      cursor: 'pointer',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+      backgroundColor: 'rgba(69,69,69,1)',
+      color: 'orange',
+      minWidth: '30px',
+      height: '19px'
+    },
+    onStyle: {
+        backgroundColor: 'rgba(99,99,99,1)',
+      boxShadow: '0 4px 8px rgba(0,0,0,0.6)',
+         color: 'pink',
+    },
+    offStyle: {
+      backgroundColor: 'rgba(69,69,69,1)',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+            color: 'orange',
+    }
+  },
   // === MATERIAL DESIGN ===
   'material_design_blue': {
     name: 'Material Design Blue',
@@ -47,6 +78,7 @@ const buttonTemplates = {
       boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
     }
   },
+  
 
   'material_design_green': {
     name: 'Material Design Green',
