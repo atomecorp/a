@@ -31,7 +31,7 @@ const buttonTemplates = {
     onStyle: {
         backgroundColor: 'rgba(99,99,99,1)',
       boxShadow: '0 4px 8px rgba(0,0,0,0.6)',
-         color: 'pink',
+         color: 'yellow',
     },
     offStyle: {
       backgroundColor: 'rgba(69,69,69,1)',
