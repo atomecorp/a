@@ -31,8 +31,7 @@ function updateTimecode(timecodeMs) {
     const seconds = (timecodeMs / 1000).toFixed(3);
     console.log('🎵 Position:', seconds, 'secondes');
     
-    // Vous pouvez aussi afficher dans l'interface utilisateur
-    // Par exemple, mettre à jour un élément HTML avec l'ID "timecode"
+    // Utiliser la div timecode créée dynamiquement
     const timecodeElement = document.getElementById('timecode');
     if (timecodeElement) {
         timecodeElement.textContent = `${seconds}s`;

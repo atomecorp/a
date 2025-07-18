@@ -4,6 +4,8 @@ import WebKit
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, WKScriptMessageHandler, WKNavigationDelegate {
     var audioUnit: AUAudioUnit?
     var webView: WKWebView!
+    var timecodeTimer: Timer?
+    var simulatedTimeInMilliseconds: Double = 0
 
     public override func viewDidLoad() {
         super.viewDidLoad()
@@ -98,5 +100,38 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, WKSc
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         print("Page web chargée avec succès")
         sendHelloToJavaScript() // Appeler la fonction après le chargement
+        
+        // Démarrer le timer pour envoyer le timecode toutes les 100ms
+        startTimecodeTimer()
+    }
+    
+    // Méthode pour démarrer le timer du timecode
+    private func startTimecodeTimer() {
+        timecodeTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.simulatedTimeInMilliseconds += 100 // Simulation d'avancement de 100ms
+            self.sendTimecodeToJS(milliseconds: self.simulatedTimeInMilliseconds)
+        }
+    }
+    
+    // Méthode pour arrêter le timer
+    private func stopTimecodeTimer() {
+        timecodeTimer?.invalidate()
+        timecodeTimer = nil
+    }
+    
+    // Méthode pour envoyer le timecode au JavaScript
+    public func sendTimecodeToJS(milliseconds: Double) {
+        let jsCode = "if (typeof updateTimecode === 'function') { updateTimecode(\(milliseconds)); }"
+        webView.evaluateJavaScript(jsCode) { result, error in
+            if let error = error {
+                print("Erreur timecode JS: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    // Nettoyage quand la vue se décharge
+    deinit {
+        stopTimecodeTimer()
     }
 }
