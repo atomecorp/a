@@ -23,9 +23,9 @@ const buttonTemplates = {
       padding: '8px 9px',
       cursor: 'pointer',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-      backgroundColor: 'rgba(69,69,69,1)',
-      color: 'orange',
+      // boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+      // backgroundColor: 'rgba(69,69,69,1)',
+      // color: 'orange',
       minWidth: '30px',
       height: '19px'
     },
@@ -55,8 +55,8 @@ const buttonTemplates = {
       padding: '8px 16px',
       cursor: 'pointer',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      backgroundColor: '#2196F3',
+      // boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      // backgroundColor: '#2196F3',
       color: 'white',
       minWidth: '64px',
       height: '36px'
@@ -94,8 +94,8 @@ const buttonTemplates = {
       padding: '8px 16px',
       cursor: 'pointer',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      backgroundColor: '#4CAF50',
+      // boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      // backgroundColor: '#4CAF50',
       color: 'white',
       minWidth: '64px',
       height: '36px'
@@ -123,8 +123,10 @@ const buttonTemplates = {
       padding: '6px 12px',
       cursor: 'pointer',
       transition: 'all 0.15s ease-in-out',
-      backgroundColor: '#007bff',
-      borderColor: '#007bff',
+      // backgroundColor: '#007bff',
+      //  border: '12px solid rgba(255,255,255,0.2)',
+
+      // borderColor: '#007bff',
       color: 'white',
       minWidth: 'auto',
       height: 'auto'
@@ -136,6 +138,7 @@ const buttonTemplates = {
     offStyle: {
       backgroundColor: '#6c757d',
       borderColor: '#5a6268'
+      
     },
     hover: {
       backgroundColor: '#0056b3',
@@ -156,7 +159,7 @@ const buttonTemplates = {
       padding: '10px 20px',
       cursor: 'pointer',
       transition: 'all 0.2s ease',
-      backgroundColor: '#3498db',
+      // backgroundColor: '#3498db',
       color: 'white',
       boxShadow: 'none'
     },
@@ -183,9 +186,9 @@ const buttonTemplates = {
       padding: '12px 24px',
       cursor: 'pointer',
       transition: 'all 0.3s ease',
-      backgroundColor: '#e0e5ec',
-      color: '#333',
-      boxShadow: '6px 6px 12px #c5cad1, -6px -6px 12px #ffffff'
+      // backgroundColor: '#e0e5ec',
+      // color: '#333',
+      // boxShadow: '6px 6px 12px #c5cad1, -6px -6px 12px #ffffff'
     },
     onStyle: {
       backgroundColor: '#d1d9e6',
@@ -208,14 +211,14 @@ const buttonTemplates = {
       fontSize: '14px',
       fontWeight: '500',
       borderRadius: '15px',
-      border: '1px solid rgba(255,255,255,0.2)',
+      // border: '1px solid rgba(255,255,255,0.2)',
       padding: '10px 20px',
       cursor: 'pointer',
       transition: 'all 0.3s ease',
-      backgroundColor: 'rgba(255,255,255,0.1)',
+      // backgroundColor: 'rgba(255,255,255,0.1)',
       backdropFilter: 'blur(10px)',
       color: 'white',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+      // boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
     },
     onStyle: {
       backgroundColor: 'rgba(46, 213, 115, 0.3)',
@@ -244,9 +247,9 @@ const buttonTemplates = {
       padding: '8px 16px',
       cursor: 'pointer',
       transition: 'all 0.2s ease',
-      backgroundColor: '#000',
-      color: '#ff006e',
-      boxShadow: '0 0 10px rgba(255, 0, 110, 0.5)'
+      // backgroundColor: '#000',
+      // color: '#ff006e',
+      // boxShadow: '0 0 10px rgba(255, 0, 110, 0.5)'
     },
     onStyle: {
       backgroundColor: '#ff006e',

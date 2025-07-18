@@ -25,9 +25,20 @@ function fct_to_trig2(state) {
 // });
 
 const toggle = Button({
+    left: '10px',
+    top: '10px',
+    position: 'absolute',
     onText: 'ON',
     offText: 'OFF',
-    onAction: fct_to_trig,      // ✅ Uncomment this
-    offAction: fct_to_trig2,    // ✅ Uncomment this
+    // template: 'squirrel_design',
+    onAction: fct_to_trig,     
+    offAction: fct_to_trig2,   
     parent: '#view'
 });
+
+
+
+
+
+
+
