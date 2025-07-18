@@ -21,11 +21,10 @@ const buttonTemplates = {
       borderRadius: '3px',
       border: 'none',
       padding: '8px 9px',
+     
+
       cursor: 'pointer',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      // boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-      // backgroundColor: 'rgba(69,69,69,1)',
-      // color: 'orange',
       minWidth: '30px',
       height: '19px'
     },
@@ -357,8 +356,8 @@ define('button-container', {
     padding: '8px 16px',
     border: '1px solid #ccc',
     borderRadius: '4px',
-    backgroundColor: '#f8f9fa',
-    color: '#333',
+    // backgroundColor: '#f8f9fa', // ❌ Retiré pour éviter les conflits
+    // color: '#333', // ❌ Retiré pour éviter les conflits
     fontSize: '14px',
     fontFamily: 'system-ui, sans-serif',
     cursor: 'pointer',
@@ -555,10 +554,9 @@ const createButton = (config = {}) => {
   let finalStyles = {};
 
   if (isToggleMode) {
-    // Mode toggle: utiliser l'état initial pour déterminer le texte et les styles
+    // Mode toggle: utiliser l'état initial pour déterminer le texte
     finalText = currentToggleState ? (onText || text) : (offText || text);
-    const toggleStyles = currentToggleState ? processedConfig.onStyle : processedConfig.offStyle;
-    finalStyles = { ...toggleStyles };
+    // Note: Les styles d'état seront appliqués plus tard dans containerStyles
   } else if (isMultiStateMode) {
     // Mode multi-états: utiliser le premier état
     const firstState = states[0];
@@ -569,27 +567,46 @@ const createButton = (config = {}) => {
   // Styles de base selon variant et size
   let containerStyles = { ...buttonStyles[variant] || {}, ...buttonSizes[size] || {} };
 
-  // Application des styles personnalisés dans l'ordre de priorité
+  // ✅ FUSION COMPLÈTE AVANT CRÉATION DU BOUTON
   // 1. Styles de base (variant + size)
-  // 2. Styles de template
-  // 3. Styles de skin.container
-  // 4. Styles de toggle/états (onStyle/offStyle ou states.css)
-  // 5. Styles de config.css (priorité absolue)
-  
-  if (templateName && buttonTemplates[templateName]) {
+  if (templateName && processedConfig.css) {
+    // 2. Ajouter les styles du template fusionnés avec config
+    containerStyles = { ...containerStyles, ...processedConfig.css };
+  } else if (templateName && buttonTemplates[templateName]) {
+    // Fallback si pas de processedConfig.css
     containerStyles = { ...containerStyles, ...buttonTemplates[templateName].css };
+  } else if (processedConfig.css) {
+    // Pas de template, juste les styles utilisateur
+    containerStyles = { ...containerStyles, ...processedConfig.css };
   }
   
+  // 3. Ajouter les styles skin
   if (skin.container) {
     containerStyles = { ...containerStyles, ...skin.container };
   }
   
-  if (Object.keys(finalStyles).length > 0) {
+  // 4. ✅ FUSION FINALE : Ajouter les styles d'état initial AVANT création
+  if (isToggleMode && templateName && buttonTemplates[templateName]) {
+    // Récupérer les styles d'état du template
+    const templateStateStyles = currentToggleState ? 
+      (buttonTemplates[templateName].onStyle || {}) : 
+      (buttonTemplates[templateName].offStyle || {});
+    
+    // Récupérer les styles d'état de l'utilisateur
+    const userStateStyles = currentToggleState ? 
+      (processedConfig.onStyle || {}) : 
+      (processedConfig.offStyle || {});
+    
+    // Appliquer les styles d'état par-dessus tout
+    if (templateStateStyles && Object.keys(templateStateStyles).length > 0) {
+      containerStyles = { ...containerStyles, ...templateStateStyles };
+    }
+    if (userStateStyles && Object.keys(userStateStyles).length > 0) {
+      containerStyles = { ...containerStyles, ...userStateStyles };
+    }
+  } else if (Object.keys(finalStyles).length > 0) {
+    // Pour les modes non-toggle, appliquer finalStyles
     containerStyles = { ...containerStyles, ...finalStyles };
-  }
-  
-  if (processedConfig.css) {
-    containerStyles = { ...containerStyles, ...processedConfig.css };
   }
 
   // Styles pour état disabled
@@ -614,11 +631,26 @@ const createButton = (config = {}) => {
       }
       
       // Mettre à jour les styles
-      const newStyles = currentToggleState ? processedConfig.onStyle : processedConfig.offStyle;
-      const baseStyles = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
-      if (newStyles && Object.keys(newStyles).length > 0) {
-        button.$({ css: { ...baseStyles, ...newStyles, ...processedConfig.css } });
-      }
+      // ✅ Récupérer les styles du template pour le nouvel état
+      const templateStateStyles = currentToggleState ? 
+        (templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].onStyle || {} : {}) : 
+        (templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].offStyle || {} : {});
+      
+      // ✅ Récupérer les styles utilisateur pour le nouvel état
+      const userStateStyles = currentToggleState ? 
+        (processedConfig.onStyle || {}) : 
+        (processedConfig.offStyle || {});
+      
+      // ✅ Fusionner les styles: template base + template state + user state + user css
+      const templateBase = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
+      const finalStyles = {
+        ...templateBase,        // 1. Template base styles
+        ...templateStateStyles, // 2. Template state styles (onStyle/offStyle from template)
+        ...userStateStyles,     // 3. User state styles (onStyle/offStyle from config)
+        ...processedConfig.css  // 4. User CSS overrides (highest priority)
+      };
+      
+      button.$({ css: finalStyles });
       
       // Exécuter l'action appropriée
       if (currentToggleState && onAction) {
@@ -677,13 +709,37 @@ const createButton = (config = {}) => {
   };
 
   // Création du conteneur principal
+  console.log('🔍 CSS final avant création DOM:', { backgroundColor: containerStyles.backgroundColor, color: containerStyles.color });
+  
+  // ✅ Nettoyer les styles CSS pour éviter les propriétés parasites
+  const cleanStyles = {};
+  // Utiliser Object.keys() au lieu de for...in pour éviter les propriétés héritées
+  Object.keys(containerStyles).forEach(key => {
+    if (typeof containerStyles[key] !== 'function' && key !== 'define_method' && key !== 'inspect') {
+      cleanStyles[key] = containerStyles[key];
+    }
+  });
+  
+  console.log('🔍 cleanStyles:', { backgroundColor: cleanStyles.backgroundColor, color: cleanStyles.color });
+  
   const button = $('button-container', {
     id: buttonId,
-    css: containerStyles,
+    css: cleanStyles,
     attrs: { disabled },
     onClick: handleClick,
     ...otherProps
   });
+
+  // ✅ FORCER TOUS les styles critiques manuellement
+  Object.keys(cleanStyles).forEach(key => {
+    if (typeof cleanStyles[key] !== 'function' && key !== 'define_method' && key !== 'inspect') {
+      const kebabKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+      button.style.setProperty(kebabKey, cleanStyles[key]);
+    }
+  });
+
+  // ✅ Debug: vérifier les styles appliqués dans le DOM
+  console.log('🔍 Styles appliqués au DOM:', button.style.cssText);
 
   // Stocker la config pour référence
   button._config = processedConfig;

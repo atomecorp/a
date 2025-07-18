@@ -25,12 +25,14 @@ function fct_to_trig2(state) {
 // });
 
 const toggle = Button({
-    left: '10px',
-    top: '10px',
-    position: 'absolute',
     onText: 'ON',
     offText: 'OFF',
-    // template: 'squirrel_design',
+    css: {
+        position: 'absolute',
+        top: '10px',
+        left: '10px',
+    },
+    template: 'squirrel_design',
     onAction: fct_to_trig,     
     offAction: fct_to_trig2,   
     parent: '#view'
