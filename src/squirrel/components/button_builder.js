@@ -613,7 +613,7 @@ const createButton = (config = {}) => {
       // Mettre à jour les styles
       const newStyles = currentToggleState ? processedConfig.onStyle : processedConfig.offStyle;
       const baseStyles = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
-      if (Object.keys(newStyles).length > 0) {
+      if (newStyles && Object.keys(newStyles).length > 0) {
         button.$({ css: { ...baseStyles, ...newStyles, ...processedConfig.css } });
       }
       

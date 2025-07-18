@@ -27,7 +27,6 @@ function fct_to_trig2(state) {
 const toggle = Button({
     onText: 'ON',
     offText: 'OFF',
-    template: 'bootstrap_primary',
     onAction: fct_to_trig,      // ✅ Uncomment this
     offAction: fct_to_trig2,    // ✅ Uncomment this
     parent: '#view'
