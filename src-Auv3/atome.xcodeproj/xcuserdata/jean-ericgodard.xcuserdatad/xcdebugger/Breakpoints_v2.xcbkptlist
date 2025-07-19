@@ -1,6 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Bucket
-   uuid = "E726D680-A9AC-4D91-B2C0-72754A9C78D9"
+   uuid = "0F78E13A-5D80-41EE-8CF9-C0EF8DE6B6F7"
    type = "1"
    version = "2.0">
+   <Breakpoints>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "0036D69C-71A8-41B8-8350-7D381D924063"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "Common/MainAppFileManager.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "7"
+            endingLineNumber = "7"
+            landmarkName = "unknown"
+            landmarkType = "0">
+         </BreakpointContent>
+      </BreakpointProxy>
+   </Breakpoints>
 </Bucket>
