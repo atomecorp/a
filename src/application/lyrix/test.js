@@ -213,6 +213,55 @@ function testLyricsAtTime(timeMs) {
 	}
 }
 
+// Fonction pour changer la taille de police
+function setFontSize(size) {
+	if (!lyricsDisplay) {
+		console.log('❌ LyricsDisplay non initialisé');
+		return;
+	}
+	
+	lyricsDisplay.fontSize = size;
+	const slider = document.getElementById('font-size-slider');
+	const display = document.getElementById('font-size-display');
+	
+	if (slider) slider.value = size;
+	if (display) display.textContent = size + 'px';
+	
+	lyricsDisplay.updateFontSize();
+	console.log('✅ Taille de police changée à', size + 'px');
+}
+
+// Fonction pour activer/désactiver le mode édition
+function toggleEditMode() {
+	if (!lyricsDisplay) {
+		console.log('❌ LyricsDisplay non initialisé');
+		return;
+	}
+	
+	const editBtn = document.getElementById('edit-mode-btn');
+	if (editBtn) {
+		editBtn.click();
+	}
+}
+
+// Fonction pour ajouter une nouvelle ligne de paroles
+function addNewLyricLine(timeMs, text, type = 'vocal') {
+	if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+		console.log('❌ Aucune chanson chargée');
+		return;
+	}
+	
+	lyricsDisplay.currentLyrics.addLine(timeMs, text, type);
+	lyricsDisplay.renderLines();
+	
+	// Sauvegarder
+	if (lyricsLibrary) {
+		lyricsLibrary.saveSong(lyricsDisplay.currentLyrics);
+	}
+	
+	console.log('✅ Nouvelle ligne ajoutée:', text, 'à', (timeMs/1000).toFixed(1) + 's');
+}
+
 // Exemple d'utilisation et création d'un objet de paroles synchronisées
 function createDarkboxLyrics() {
 	console.warn('⚠️ createDarkboxLyrics() est obsolète. Utilisez createDemoSongs() à la place.');
@@ -633,6 +682,8 @@ class LyricsDisplay {
 		this.currentLyrics = null;
 		this.currentTime = 0;
 		this.activeLine = null;
+		this.fontSize = 16; // Taille de police par défaut
+		this.editMode = false; // Mode édition
 		this.setupDisplay();
 	}
 
@@ -647,10 +698,179 @@ class LyricsDisplay {
 				<h3 id="song-title">Aucune chanson</h3>
 				<p id="song-artist">-</p>
 			</div>
+			<div id="lyrics-controls" style="padding: 10px; background: #444; color: white; display: flex; gap: 10px; align-items: center;">
+				<label>Taille:</label>
+				<input type="range" id="font-size-slider" min="10" max="32" value="${this.fontSize}" style="width: 100px;">
+				<span id="font-size-display">${this.fontSize}px</span>
+				<button id="edit-mode-btn" style="padding: 5px 10px; margin-left: 20px;">Mode Édition</button>
+				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
+			</div>
 			<div id="lyrics-content" style="height: 300px; overflow-y: auto; padding: 20px;">
 				<p style="text-align: center; color: #666;">Chargez des paroles synchronisées</p>
 			</div>
 		`;
+		
+		this.setupEventListeners();
+	}
+
+	setupEventListeners() {
+		// Contrôle de la taille de police
+		const fontSizeSlider = document.getElementById('font-size-slider');
+		const fontSizeDisplay = document.getElementById('font-size-display');
+		
+		if (fontSizeSlider) {
+			fontSizeSlider.addEventListener('input', (e) => {
+				this.fontSize = parseInt(e.target.value);
+				fontSizeDisplay.textContent = this.fontSize + 'px';
+				this.updateFontSize();
+			});
+		}
+		
+		// Bouton mode édition
+		const editModeBtn = document.getElementById('edit-mode-btn');
+		const saveLyricsBtn = document.getElementById('save-lyrics-btn');
+		
+		if (editModeBtn) {
+			editModeBtn.addEventListener('click', () => {
+				this.editMode = !this.editMode;
+				editModeBtn.textContent = this.editMode ? 'Mode Lecture' : 'Mode Édition';
+				editModeBtn.style.backgroundColor = this.editMode ? '#f39c12' : '#2c3e50';
+				saveLyricsBtn.style.display = this.editMode ? 'inline-block' : 'none';
+				this.toggleEditMode();
+			});
+		}
+		
+		// Bouton sauvegarder
+		if (saveLyricsBtn) {
+			saveLyricsBtn.addEventListener('click', () => {
+				this.saveLyricsChanges();
+			});
+		}
+	}
+
+	updateFontSize() {
+		document.querySelectorAll('.lyrics-line').forEach(el => {
+			el.style.fontSize = this.fontSize + 'px';
+		});
+	}
+
+	toggleEditMode() {
+		const lyricsLines = document.querySelectorAll('.lyrics-line');
+		
+		lyricsLines.forEach(line => {
+			if (this.editMode) {
+				// Activer l'édition
+				line.contentEditable = true;
+				line.style.border = '1px dashed #555';
+				line.style.padding = '10px';
+				line.style.cursor = 'text';
+				
+				// Ajouter contrôles de timecode
+				this.addTimecodeControl(line);
+			} else {
+				// Désactiver l'édition
+				line.contentEditable = false;
+				line.style.border = 'none';
+				line.style.padding = '8px 0';
+				line.style.cursor = 'default';
+				
+				// Retirer contrôles de timecode
+				this.removeTimecodeControl(line);
+			}
+		});
+	}
+
+	addTimecodeControl(lineElement) {
+		// Vérifier si le contrôle n'existe pas déjà
+		if (lineElement.querySelector('.timecode-control')) return;
+		
+		const lineId = lineElement.id;
+		const lineData = this.currentLyrics.lines.find(l => l.id === lineId);
+		
+		if (lineData) {
+			const timecodeControl = document.createElement('div');
+			timecodeControl.className = 'timecode-control';
+			timecodeControl.style.cssText = `
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				margin-top: 5px;
+				padding: 5px;
+				background: rgba(0, 0, 0, 0.3);
+				border-radius: 4px;
+				font-size: 12px;
+			`;
+			
+			const timeSeconds = (lineData.time / 1000).toFixed(1);
+			timecodeControl.innerHTML = `
+				<label>Temps:</label>
+				<input type="number" class="time-input" value="${timeSeconds}" step="0.1" style="width: 70px; padding: 2px;">
+				<span>s</span>
+				<label>Type:</label>
+				<select class="type-select" style="padding: 2px;">
+					<option value="vocal" ${lineData.type === 'vocal' ? 'selected' : ''}>Vocal</option>
+					<option value="chorus" ${lineData.type === 'chorus' ? 'selected' : ''}>Refrain</option>
+					<option value="bridge" ${lineData.type === 'bridge' ? 'selected' : ''}>Pont</option>
+					<option value="instrumental" ${lineData.type === 'instrumental' ? 'selected' : ''}>Instrumental</option>
+				</select>
+			`;
+			
+			lineElement.appendChild(timecodeControl);
+		}
+	}
+
+	removeTimecodeControl(lineElement) {
+		const control = lineElement.querySelector('.timecode-control');
+		if (control) {
+			control.remove();
+		}
+	}
+
+	saveLyricsChanges() {
+		if (!this.currentLyrics || !this.editMode) return;
+		
+		const lyricsLines = document.querySelectorAll('.lyrics-line');
+		const updatedLines = [];
+		
+		lyricsLines.forEach(lineElement => {
+			const lineId = lineElement.id;
+			const originalLine = this.currentLyrics.lines.find(l => l.id === lineId);
+			
+			if (originalLine) {
+				// Récupérer le nouveau texte (sans le contrôle de timecode)
+				const textContent = lineElement.childNodes[0].textContent.trim();
+				
+				// Récupérer les nouvelles valeurs de temps et type
+				const timeInput = lineElement.querySelector('.time-input');
+				const typeSelect = lineElement.querySelector('.type-select');
+				
+				const newTime = timeInput ? parseFloat(timeInput.value) * 1000 : originalLine.time;
+				const newType = typeSelect ? typeSelect.value : originalLine.type;
+				
+				updatedLines.push({
+					id: lineId,
+					time: newTime,
+					text: textContent,
+					type: newType
+				});
+			}
+		});
+		
+		// Mettre à jour les paroles
+		this.currentLyrics.lines = updatedLines;
+		this.currentLyrics.sortLines();
+		this.currentLyrics.updateLastModified();
+		
+		// Sauvegarder dans localStorage si c'est une chanson de la bibliothèque
+		if (lyricsLibrary) {
+			lyricsLibrary.saveSong(this.currentLyrics);
+		}
+		
+		console.log('✅ Modifications sauvegardées');
+		
+		// Rafraîchir l'affichage
+		this.renderLines();
+		this.toggleEditMode(); // Réactiver le mode édition pour voir les changements
 	}
 
 	loadLyrics(syncedLyrics) {
@@ -678,12 +898,22 @@ class LyricsDisplay {
 			lineElement.id = line.id;
 			lineElement.style.cssText = `
 				padding: 8px 0;
-				font-size: 16px;
+				font-size: ${this.fontSize}px;
 				transition: all 0.3s ease;
 				color: #666;
 				line-height: 1.4;
+				cursor: ${this.editMode ? 'text' : 'default'};
 			`;
 			lineElement.textContent = line.text;
+			
+			// Si en mode édition, ajouter les contrôles
+			if (this.editMode) {
+				lineElement.contentEditable = true;
+				lineElement.style.border = '1px dashed #555';
+				lineElement.style.padding = '10px';
+				this.addTimecodeControl(lineElement);
+			}
+			
 			content.appendChild(lineElement);
 		});
 	}
@@ -735,6 +965,9 @@ if (typeof window !== 'undefined') {
 	window.createDemoSongs = createDemoSongs;
 	window.loadSongInDisplay = loadSongInDisplay;
 	window.testLyricsAtTime = testLyricsAtTime;
+	window.setFontSize = setFontSize;
+	window.toggleEditMode = toggleEditMode;
+	window.addNewLyricLine = addNewLyricLine;
 	
 	// Debug: Vérifier que les fonctions sont bien exposées
 	console.log('🔧 Fonctions exposées globalement:');
@@ -743,6 +976,9 @@ if (typeof window !== 'undefined') {
 	console.log('  - lyricsLibrary:', typeof window.lyricsLibrary);
 	console.log('  - loadSongInDisplay:', typeof window.loadSongInDisplay);
 	console.log('  - testLyricsAtTime:', typeof window.testLyricsAtTime);
+	console.log('  - setFontSize:', typeof window.setFontSize);
+	console.log('  - toggleEditMode:', typeof window.toggleEditMode);
+	console.log('  - addNewLyricLine:', typeof window.addNewLyricLine);
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
