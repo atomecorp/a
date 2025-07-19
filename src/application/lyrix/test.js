@@ -1,6 +1,13 @@
 // Déclaration de la variable pour la bibliothèque de paroles (sera initialisée après la définition des classes)
 let lyricsLibrary = null;
 
+// État global pour le mode record
+let recordMode = {
+	isRecording: false,
+	currentTimecode: 0,
+	scrollBlocked: false
+};
+
 // Configuration globale pour les chemins audio
 const AUDIO_CONFIG = {
 	BASE_PATH: 'assets/audios/',
@@ -242,8 +249,11 @@ const SongUtils = {
 		}
 		
 		const success = lyricsLibrary.deleteSong(songId);
-		if (success && lyricsDisplay?.currentLyrics?.songId === songId) {
-			lyricsDisplay.clear();
+		if (success && lyricsDisplay?.currentLyrics?.metadata.songId === songId) {
+			// Nettoyer l'affichage si la chanson supprimée était affichée
+			lyricsDisplay.currentLyrics = null;
+			lyricsDisplay.updateHeader();
+			lyricsDisplay.renderLines();
 		}
 		
 		console.log(success ? '✅ Chanson supprimée' : '❌ Échec suppression');
@@ -352,6 +362,56 @@ const UIUtils = {
 		}
 		
 		console.log('✅ Nouvelle ligne ajoutée:', text, 'à', (timeMs/1000).toFixed(1) + 's');
+	},
+	
+	// Fonctions du mode record
+	toggleRecord() {
+		if (!lyricsDisplay) {
+			console.log('❌ LyricsDisplay non initialisé');
+			return;
+		}
+		
+		lyricsDisplay.toggleRecordMode();
+		console.log('✅ Mode record:', recordMode.isRecording ? 'activé' : 'désactivé');
+	},
+	
+	// Obtenir l'état du mode record
+	getRecordState() {
+		return {
+			isRecording: recordMode.isRecording,
+			currentTimecode: recordMode.currentTimecode,
+			scrollBlocked: recordMode.scrollBlocked
+		};
+	},
+	
+	// Synchroniser manuellement une ligne avec le timecode actuel
+	syncLineToCurrentTime(lineIndex) {
+		if (!lyricsDisplay?.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		const line = lyricsDisplay.currentLyrics.lyrics[lineIndex];
+		if (!line) {
+			console.log('❌ Ligne non trouvée à l\'index:', lineIndex);
+			return;
+		}
+		
+		const oldTime = line.startTime;
+		line.startTime = recordMode.currentTimecode;
+		
+		console.log(`🎯 Ligne ${lineIndex + 1} synchronisée:`, {
+			texte: line.text,
+			ancien: (oldTime / 1000).toFixed(3) + 's',
+			nouveau: (recordMode.currentTimecode / 1000).toFixed(3) + 's'
+		});
+		
+		// Sauvegarder automatiquement
+		if (lyricsLibrary) {
+			lyricsLibrary.addSong(lyricsDisplay.currentLyrics);
+		}
+		
+		return true;
 	}
 };
 
@@ -367,6 +427,22 @@ const testLyricsAtTime = (timeMs) => UIUtils.testAtTime(timeMs);
 const setFontSize = (size) => UIUtils.setFontSize(size);
 const toggleEditMode = () => UIUtils.toggleEdit();
 const addNewLyricLine = (timeMs, text, type) => UIUtils.addLyricLine(timeMs, text, type);
+
+// Nouvelles fonctions pour le mode record
+const toggleRecordMode = () => UIUtils.toggleRecord();
+const getRecordModeState = () => UIUtils.getRecordState();
+const syncLineToCurrentTimecode = (lineIndex) => UIUtils.syncLineToCurrentTime(lineIndex);
+
+// Fonctions de diagnostic pour les boutons de suppression
+const debugDeleteButtons = () => lyricsDisplay?.debugDeleteButtons();
+const repairDeleteButtons = () => {
+	if (lyricsDisplay) {
+		lyricsDisplay.debugDeleteButtons();
+		console.log('🔧 Diagnostic et réparation des boutons terminés');
+	} else {
+		console.log('❌ lyricsDisplay non disponible');
+	}
+};
 
 // Fonction pour associer un fichier audio à une chanson
 const AudioController = {
@@ -882,19 +958,73 @@ class LyricsLibrary {
 
 	// Supprimer une chanson
 	deleteSong(songId) {
+		console.log('🔍 DEBUT deleteSong - songId:', songId);
 		const storageKey = this.storagePrefix + songId;
+		console.log('🔍 storageKey calculée:', storageKey);
+		console.log('🔍 storagePrefix:', this.storagePrefix);
+		
+		// Lister toutes les clés dans localStorage pour debug
+		const allKeys = Object.keys(localStorage).filter(key => key.startsWith('lyrics_'));
+		console.log('🔍 Toutes les clés lyrics_ dans localStorage:', allKeys);
+		
+		// Vérifier d'abord si la chanson existe
+		const existingSong = localStorage.getItem(storageKey);
+		console.log('🔍 Chanson existante trouvée:', existingSong ? 'OUI' : 'NON');
+		
+		if (!existingSong) {
+			console.warn('⚠️ Chanson non trouvée pour suppression:', songId);
+			console.warn('⚠️ Clé recherchée:', storageKey);
+			console.warn('⚠️ Clés disponibles:', allKeys);
+			return false;
+		}
+		
+		console.log('🔍 Contenu de la chanson à supprimer:', JSON.parse(existingSong));
+		
 		try {
+			// Supprimer de localStorage
 			localStorage.removeItem(storageKey);
-			console.log('🗑️ Chanson supprimée:', songId);
+			console.log('🗑️ localStorage.removeItem appelé pour:', storageKey);
+			
+			// Vérifier immédiatement après la suppression
+			const verificationImmediante = localStorage.getItem(storageKey);
+			console.log('🔍 Vérification immédiate - chanson encore là?', verificationImmediante ? 'OUI' : 'NON');
 			
 			// Supprimer des chansons intégrées si applicable
-			this.builtInSongs.delete(songId);
+			if (this.builtInSongs.has(songId)) {
+				this.builtInSongs.delete(songId);
+				console.log('🗑️ Chanson supprimée des chansons intégrées:', songId);
+			} else {
+				console.log('🔍 Chanson non trouvée dans builtInSongs:', songId);
+			}
+			
+			// Sauvegarder les paramètres
+			console.log('🔍 Appel de saveSettings...');
 			this.saveSettings();
+			console.log('🔍 saveSettings terminé');
 			
 			// Mettre à jour la liste des chansons
+			console.log('🔍 Appel de saveSongList...');
 			this.saveSongList();
+			console.log('🔍 saveSongList terminé');
 			
-			return true;
+			// Vérifier que la suppression a bien eu lieu
+			const verification = localStorage.getItem(storageKey);
+			console.log('🔍 Vérification finale - chanson encore là?', verification ? 'OUI' : 'NON');
+			
+			if (verification === null) {
+				console.log('✅ Suppression confirmée pour:', songId);
+				
+				// Vérifier aussi que la chanson n'apparaît plus dans getAllSongs
+				const allSongsAfter = this.getAllSongs();
+				const stillThere = allSongsAfter.find(s => s.songId === songId);
+				console.log('🔍 Chanson encore dans getAllSongs?', stillThere ? 'OUI' : 'NON');
+				
+				return true;
+			} else {
+				console.error('❌ La suppression a échoué, la chanson existe encore:', songId);
+				console.error('❌ Contenu encore présent:', verification);
+				return false;
+			}
 		} catch (error) {
 			console.error('❌ Erreur de suppression:', error);
 			return false;
@@ -1236,6 +1366,7 @@ class LyricsDisplay {
 				<input type="range" id="font-size-slider" min="10" max="120" value="${this.fontSize}" style="width: 100px;">
 				<span id="font-size-display">${this.fontSize}px</span>
 				<button id="edit-mode-btn" style="padding: 5px 10px; margin-left: 20px;">Mode Édition</button>
+				<button id="record-mode-btn" style="padding: 5px 10px; margin-left: 10px; background: #e74c3c; color: white;">🔴 Record</button>
 				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
 				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
 				<button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
@@ -1368,6 +1499,14 @@ class LyricsDisplay {
 			});
 		}
 		
+		// Bouton mode record
+		const recordModeBtn = document.getElementById('record-mode-btn');
+		if (recordModeBtn) {
+			recordModeBtn.addEventListener('click', () => {
+				this.toggleRecordMode();
+			});
+		}
+		
 		// Bouton sauvegarder
 		if (saveLyricsBtn) {
 			saveLyricsBtn.addEventListener('click', () => {
@@ -1453,7 +1592,7 @@ class LyricsDisplay {
 		const album = document.getElementById('new-song-album').value.trim();
 		
 		if (!title || !artist) {
-			alert('Veuillez remplir au moins le titre et l\'artiste');
+			this.showCustomAlert('Champ manquant', 'Veuillez remplir au moins le titre et l\'artiste');
 			return;
 		}
 		
@@ -1531,20 +1670,162 @@ class LyricsDisplay {
 			const deleteBtn = document.createElement('button');
 			deleteBtn.textContent = '🗑️';
 			deleteBtn.style.cssText = 'padding: 4px 8px; background: #e74c3c; color: white; border: none; border-radius: 3px; cursor: pointer;';
-			deleteBtn.addEventListener('click', (e) => {
+			deleteBtn.title = `Supprimer "${song.title}"`;
+			
+			// Stocker une référence à this pour l'utiliser dans l'événement
+			const self = this;
+			
+			deleteBtn.addEventListener('click', function(e) {
+				e.preventDefault();
 				e.stopPropagation();
-				if (confirm(`Supprimer "${song.title}" par ${song.artist} ?`)) {
-					lyricsLibrary.deleteSong(song.songId);
-					this.refreshSongsList();
-					console.log('🗑️ Chanson supprimée:', song.title);
-				}
+				
+				console.log('🔍 Clic sur bouton suppression détecté pour:', song.title);
+				console.log('🔍 Song ID:', song.songId);
+				console.log('🔍 Type de song.songId:', typeof song.songId);
+				
+				// Créer une boîte de dialogue personnalisée pour Tauri
+				self.showCustomConfirm(
+					`Supprimer "${song.title}" ?`,
+					`Êtes-vous sûr de vouloir supprimer la chanson "${song.title}" par ${song.artist} ?`,
+					() => {
+						// Callback de confirmation (OUI)
+						console.log('✅ Confirmation de suppression pour:', song.songId);
+						
+						try {
+							// Supprimer de la bibliothèque
+							const success = lyricsLibrary.deleteSong(song.songId);
+							console.log('🔍 Résultat de deleteSong:', success);
+							
+							if (success) {
+								console.log('🗑️ Chanson supprimée avec succès:', song.title);
+								
+								// Si la chanson supprimée était en cours d'affichage, nettoyer l'affichage
+								if (lyricsDisplay && lyricsDisplay.currentLyrics && 
+									lyricsDisplay.currentLyrics.metadata.songId === song.songId) {
+									lyricsDisplay.currentLyrics = null;
+									lyricsDisplay.updateHeader();
+									lyricsDisplay.renderLines();
+									console.log('🧹 Affichage nettoyé');
+								}
+								
+								// Rafraîchir la liste immédiatement
+								self.refreshSongsList();
+								console.log('🔄 Liste rafraîchie');
+								
+							} else {
+								console.error('❌ Échec de la suppression de:', song.title);
+								self.showCustomAlert('Erreur', 'Erreur lors de la suppression de la chanson');
+							}
+						} catch (error) {
+							console.error('❌ Erreur lors de la suppression:', error);
+							self.showCustomAlert('Erreur', 'Erreur lors de la suppression: ' + error.message);
+						}
+					},
+					() => {
+						// Callback d'annulation (NON)
+						console.log('❌ Suppression annulée pour:', song.title);
+					}
+				);
 			});
+			
+			// Marquer que ce bouton a des event listeners attachés
+			deleteBtn.setAttribute('data-has-listeners', 'true');
 			
 			controls.appendChild(deleteBtn);
 			songItem.appendChild(songInfo);
 			songItem.appendChild(controls);
 			songsList.appendChild(songItem);
 		});
+	}
+
+	// Méthode de diagnostic pour vérifier et réparer les boutons de suppression
+	debugDeleteButtons() {
+		console.log('🔍 DIAGNOSTIC DES BOUTONS DE SUPPRESSION');
+		
+		const songsList = document.getElementById('songs-list');
+		if (!songsList) {
+			console.log('❌ Element songs-list non trouvé');
+			return;
+		}
+		
+		const deleteButtons = songsList.querySelectorAll('button[title*="Supprimer"]');
+		console.log(`Nombre de boutons trouvés: ${deleteButtons.length}`);
+		
+		deleteButtons.forEach((btn, index) => {
+			console.log(`Bouton ${index + 1}:`, btn.title);
+			
+			// Vérifier si le bouton a des événements
+			const hasOnClick = btn.onclick !== null;
+			const hasListeners = btn.hasAttribute('data-has-listeners');
+			
+			console.log(`  - onclick: ${hasOnClick}`);
+			console.log(`  - listeners: ${hasListeners}`);
+			
+			if (!hasListeners) {
+				console.log(`  - RÉPARATION du bouton ${index + 1}`);
+				this.repairDeleteButton(btn);
+			}
+		});
+	}
+	
+	// Réparer un bouton de suppression qui n'a pas d'événements
+	repairDeleteButton(deleteBtn) {
+		const title = deleteBtn.title;
+		const songTitle = title.replace('Supprimer "', '').replace('"', '');
+		
+		console.log(`🔧 Réparation du bouton pour: ${songTitle}`);
+		
+		// Trouver la chanson correspondante
+		const songs = lyricsLibrary.getAllSongs();
+		const song = songs.find(s => s.title === songTitle);
+		
+		if (!song) {
+			console.log(`❌ Chanson non trouvée pour: ${songTitle}`);
+			return;
+		}
+		
+		console.log(`✅ Chanson trouvée:`, song);
+		
+		// Supprimer tous les événements existants
+		const newBtn = deleteBtn.cloneNode(true);
+		
+		// Réattacher l'événement
+		const self = this;
+		newBtn.addEventListener('click', function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			
+			console.log('🔍 BOUTON RÉPARÉ - Clic détecté pour:', song.title);
+			
+			self.showCustomConfirm(
+				`Supprimer "${song.title}" ?`,
+				`Êtes-vous sûr de vouloir supprimer "${song.title}" par ${song.artist} ?`,
+				() => {
+					// Callback de confirmation (OUI)
+					const success = lyricsLibrary.deleteSong(song.songId);
+					
+					if (success) {
+						console.log('🗑️ Suppression réussie:', song.title);
+						self.refreshSongsList();
+					} else {
+						console.log('❌ Échec de la suppression:', song.title);
+						self.showCustomAlert('Erreur', 'Erreur lors de la suppression');
+					}
+				},
+				() => {
+					// Callback d'annulation (NON)
+					console.log('❌ Suppression annulée pour:', song.title);
+				}
+			);
+		});
+		
+		// Marquer comme réparé
+		newBtn.setAttribute('data-has-listeners', 'true');
+		
+		// Remplacer l'ancien bouton
+		deleteBtn.parentNode.replaceChild(newBtn, deleteBtn);
+		
+		console.log(`✅ Bouton réparé pour: ${songTitle}`);
 	}
 
 	setupFullscreenListeners() {
@@ -1719,7 +2000,7 @@ class LyricsDisplay {
 					this.createSongFromText(file.name, content);
 				} catch (error) {
 					console.error('❌ Erreur lecture fichier:', error);
-					alert(`Erreur lors de la lecture du fichier ${file.name}: ${error.message}`);
+					this.showCustomAlert('Erreur', `Erreur lors de la lecture du fichier ${file.name}: ${error.message}`);
 				}
 			}
 			// Vérifier si c'est un fichier audio
@@ -1728,12 +2009,12 @@ class LyricsDisplay {
 					this.loadAudioFile(file);
 				} catch (error) {
 					console.error('❌ Erreur chargement audio:', error);
-					alert(`Erreur lors du chargement du fichier audio ${file.name}: ${error.message}`);
+					this.showCustomAlert('Erreur', `Erreur lors du chargement du fichier audio ${file.name}: ${error.message}`);
 				}
 			}
 			else {
 				console.warn('⚠️ Fichier ignoré (format non supporté):', file.name);
-				alert(`Le fichier "${file.name}" n'est pas un format supporté (texte ou audio).`);
+				this.showCustomAlert('Format non supporté', `Le fichier "${file.name}" n'est pas un format supporté (texte ou audio).`);
 			}
 		}
 	}
@@ -1787,7 +2068,7 @@ class LyricsDisplay {
 			
 		} catch (error) {
 			console.error('❌ Erreur création chanson:', error);
-			alert(`Erreur lors de la création de la chanson: ${error.message}`);
+			this.showCustomAlert('Erreur', `Erreur lors de la création de la chanson: ${error.message}`);
 		}
 	}
 
@@ -1816,7 +2097,7 @@ class LyricsDisplay {
 			this.refreshSongsList();
 			
 			console.log('✅ Chanson LRC créée:', syncedLyrics.metadata.title);
-			alert(`Chanson LRC "${syncedLyrics.metadata.title}" créée avec succès!`);
+			this.showCustomAlert('Succès', `Chanson LRC "${syncedLyrics.metadata.title}" créée avec succès!`);
 			
 		} catch (error) {
 			console.error('❌ Erreur parsing LRC:', error);
@@ -1851,7 +2132,7 @@ class LyricsDisplay {
 		this.refreshSongsList();
 		
 		console.log('✅ Chanson texte créée:', title, `(${lines.length} lignes)`);
-		alert(`Chanson "${title}" créée avec ${lines.length} lignes!\nVous pouvez maintenant éditer les timecodes en mode édition.`);
+		this.showCustomAlert('Succès', `Chanson "${title}" créée avec ${lines.length} lignes!\nVous pouvez maintenant éditer les timecodes en mode édition.`);
 	}
 
 	loadAudioFile(file) {
@@ -1929,7 +2210,7 @@ class LyricsDisplay {
 		}
 		
 		console.log('✅ Fichier audio chargé:', fileName, `(${(fileSize/(1024*1024)).toFixed(1)} MB)`);
-		alert(`Fichier audio "${fileName}" associé!\nTaille: ${(fileSize/(1024*1024)).toFixed(1)} MB\n\nLe fichier sera reconnu automatiquement s'il n'est pas modifié.`);
+		this.showCustomAlert('Audio associé', `Fichier audio "${fileName}" associé!\nTaille: ${(fileSize/(1024*1024)).toFixed(1)} MB\n\nLe fichier sera reconnu automatiquement s'il n'est pas modifié.`);
 	}
 
 	setupAudioPlayerListeners() {
@@ -2726,6 +3007,134 @@ class LyricsDisplay {
 		this.adjustContentHeight();
 	}
 
+	// Mode record pour synchronisation en temps réel
+	toggleRecordMode() {
+		recordMode.isRecording = !recordMode.isRecording;
+		recordMode.scrollBlocked = recordMode.isRecording;
+		
+		const recordBtn = document.getElementById('record-mode-btn');
+		if (recordBtn) {
+			if (recordMode.isRecording) {
+				recordBtn.textContent = '⏹️ Stop Record';
+				recordBtn.style.backgroundColor = '#27ae60';
+				recordBtn.style.animation = 'pulse 1s infinite';
+			} else {
+				recordBtn.textContent = '🔴 Record';
+				recordBtn.style.backgroundColor = '#e74c3c';
+				recordBtn.style.animation = 'none';
+			}
+		}
+		
+		// Ajouter/supprimer les événements de clic sur les lignes
+		const lyricsLines = document.querySelectorAll('.lyrics-line');
+		lyricsLines.forEach(line => {
+			if (recordMode.isRecording) {
+				line.addEventListener('click', this.recordLineTimecode.bind(this));
+				line.style.cursor = 'crosshair';
+				line.title = 'Cliquez pour synchroniser avec le timecode actuel';
+			} else {
+				line.removeEventListener('click', this.recordLineTimecode.bind(this));
+				line.style.cursor = this.editMode ? 'text' : 'default';
+				line.title = '';
+			}
+		});
+		
+		// Ajouter CSS pour l'animation pulse
+		if (recordMode.isRecording && !document.getElementById('record-mode-styles')) {
+			const style = document.createElement('style');
+			style.id = 'record-mode-styles';
+			style.textContent = `
+				@keyframes pulse {
+					0% { opacity: 1; }
+					50% { opacity: 0.6; }
+					100% { opacity: 1; }
+				}
+				@keyframes flash {
+					0% { background-color: transparent; }
+					50% { background-color: rgba(39, 174, 96, 0.4); }
+					100% { background-color: transparent; }
+				}
+				.recording-mode .lyrics-line:hover {
+					background-color: rgba(231, 76, 60, 0.2) !important;
+					border-left: 4px solid #e74c3c;
+				}
+			`;
+			document.head.appendChild(style);
+		}
+		
+		// Ajouter/supprimer la classe recording-mode
+		const lyricsContainer = document.getElementById('lyrics-content');
+		if (lyricsContainer) {
+			if (recordMode.isRecording) {
+				lyricsContainer.classList.add('recording-mode');
+			} else {
+				lyricsContainer.classList.remove('recording-mode');
+			}
+		}
+		
+		console.log(`🎵 Mode record ${recordMode.isRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}`);
+	}
+
+	// Enregistrer le timecode d'une ligne lors du clic en mode record
+	recordLineTimecode(event) {
+		if (!recordMode.isRecording) return;
+		
+		event.preventDefault();
+		event.stopPropagation();
+		
+		const lineElement = event.target;
+		const lineId = lineElement.id;
+		
+		// Obtenir le timecode actuel (de l'hôte ou du lecteur audio)
+		let currentTimeMs = this.currentTime;
+		
+		// Si un lecteur audio est actif, utiliser son timecode
+		if (this.audioPlayer && !this.audioPlayer.paused) {
+			currentTimeMs = this.audioPlayer.currentTime * 1000;
+		}
+		
+		// Mettre à jour le timecode de la ligne dans les paroles synchronisées
+		if (this.currentLyrics) {
+			const lineIndex = Array.from(lineElement.parentNode.children).indexOf(lineElement);
+			const lyricLine = this.currentLyrics.lyrics[lineIndex];
+			
+			if (lyricLine) {
+				// Sauvegarder l'ancien timecode pour la possibilité d'annulation
+				const oldTimecode = lyricLine.startTime;
+				lyricLine.startTime = currentTimeMs;
+				
+				// Feedback visuel
+				lineElement.style.animation = 'flash 0.5s';
+				lineElement.style.borderLeft = '4px solid #27ae60';
+				
+				// Mettre à jour l'affichage du timecode si en mode édition
+				const timecodeDisplay = lineElement.querySelector('.timecode-control input');
+				if (timecodeDisplay) {
+					timecodeDisplay.value = (currentTimeMs / 1000).toFixed(3);
+				}
+				
+				// Log pour debug
+				console.log(`🎯 Ligne "${lyricLine.text}" synchronisée:`, {
+					ancien: (oldTimecode / 1000).toFixed(3) + 's',
+					nouveau: (currentTimeMs / 1000).toFixed(3) + 's',
+					ligne: lineIndex + 1
+				});
+				
+				// Sauvegarder automatiquement si la chanson est dans la bibliothèque
+				if (lyricsLibrary && this.currentLyrics.metadata) {
+					lyricsLibrary.addSong(this.currentLyrics);
+					console.log('💾 Timecode sauvegardé automatiquement');
+				}
+				
+				// Supprimer le feedback visuel après un délai
+				setTimeout(() => {
+					lineElement.style.animation = '';
+					lineElement.style.borderLeft = '';
+				}, 500);
+			}
+		}
+	}
+
 	adjustContentHeight() {
 		const lyricsContent = document.getElementById('lyrics-content');
 		if (!lyricsContent) return;
@@ -2922,6 +3331,8 @@ class LyricsDisplay {
 
 	updateTime(timeMs) {
 		this.currentTime = timeMs;
+		recordMode.currentTimecode = timeMs; // Mettre à jour le timecode global pour le mode record
+		
 		if (!this.currentLyrics) return;
 
 		const activeLine = this.currentLyrics.getActiveLineAt(timeMs);
@@ -2936,7 +3347,8 @@ class LyricsDisplay {
 			const seconds = (timeMs / 1000).toFixed(3);
 			const isHostPlaying = !this.isPlayingInternal; // Si ce n'est pas le lecteur interne, c'est l'hôte
 			const playIcon = (this.isPlayingInternal || isHostPlaying) ? '▶️' : '⏸️';
-			timecodeElement.textContent = `${playIcon} ${seconds}s`;
+			const recordIndicator = recordMode.isRecording ? ' 🔴' : '';
+			timecodeElement.textContent = `${playIcon} ${seconds}s${recordIndicator}`;
 			timecodeElement.style.backgroundColor = (this.isPlayingInternal || isHostPlaying) ? '#0a0' : '#a00';
 		}
 	}
@@ -2956,9 +3368,260 @@ class LyricsDisplay {
 			lineElement.style.fontWeight = 'bold';
 			lineElement.style.backgroundColor = 'rgba(0, 150, 255, 0.2)';
 			
-			// Scroll vers la ligne active
-			lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			// Scroll vers la ligne active seulement si le scroll n'est pas bloqué (mode record)
+			if (!recordMode.scrollBlocked) {
+				lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			}
 		}
+	}
+
+	// Boîtes de dialogue personnalisées pour Tauri
+	showCustomConfirm(title, message, onConfirm, onCancel) {
+		// Créer un overlay
+		const overlay = document.createElement('div');
+		overlay.style.cssText = `
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100vw;
+			height: 100vh;
+			background: rgba(0, 0, 0, 0.7);
+			z-index: 10000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		`;
+
+		// Créer la boîte de dialogue
+		const dialog = document.createElement('div');
+		dialog.style.cssText = `
+			background: #2c3e50;
+			border-radius: 10px;
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+			max-width: 400px;
+			width: 90%;
+			padding: 0;
+			color: white;
+			text-align: center;
+			border: 1px solid #34495e;
+		`;
+
+		// En-tête
+		const header = document.createElement('div');
+		header.style.cssText = `
+			background: #34495e;
+			padding: 15px;
+			border-radius: 10px 10px 0 0;
+			border-bottom: 1px solid #1a252f;
+		`;
+		header.innerHTML = `<h3 style="margin: 0; font-size: 18px; color: #ecf0f1;">${title}</h3>`;
+
+		// Contenu
+		const content = document.createElement('div');
+		content.style.cssText = `
+			padding: 20px;
+			font-size: 16px;
+			line-height: 1.4;
+			color: #bdc3c7;
+		`;
+		content.textContent = message;
+
+		// Boutons
+		const buttons = document.createElement('div');
+		buttons.style.cssText = `
+			display: flex;
+			gap: 10px;
+			padding: 15px 20px 20px;
+			justify-content: center;
+		`;
+
+		const cancelBtn = document.createElement('button');
+		cancelBtn.textContent = 'Annuler';
+		cancelBtn.style.cssText = `
+			padding: 10px 20px;
+			border: none;
+			border-radius: 5px;
+			background: #7f8c8d;
+			color: white;
+			cursor: pointer;
+			font-size: 14px;
+			transition: all 0.2s;
+		`;
+		cancelBtn.onmouseover = () => cancelBtn.style.background = '#95a5a6';
+		cancelBtn.onmouseout = () => cancelBtn.style.background = '#7f8c8d';
+
+		const confirmBtn = document.createElement('button');
+		confirmBtn.textContent = 'Supprimer';
+		confirmBtn.style.cssText = `
+			padding: 10px 20px;
+			border: none;
+			border-radius: 5px;
+			background: #e74c3c;
+			color: white;
+			cursor: pointer;
+			font-size: 14px;
+			transition: all 0.2s;
+			font-weight: bold;
+		`;
+		confirmBtn.onmouseover = () => confirmBtn.style.background = '#c0392b';
+		confirmBtn.onmouseout = () => confirmBtn.style.background = '#e74c3c';
+
+		// Événements
+		cancelBtn.addEventListener('click', () => {
+			document.body.removeChild(overlay);
+			if (onCancel) onCancel();
+		});
+
+		confirmBtn.addEventListener('click', () => {
+			document.body.removeChild(overlay);
+			if (onConfirm) onConfirm();
+		});
+
+		// Fermer avec Escape
+		const escapeHandler = (e) => {
+			if (e.key === 'Escape') {
+				document.body.removeChild(overlay);
+				document.removeEventListener('keydown', escapeHandler);
+				if (onCancel) onCancel();
+			}
+		};
+		document.addEventListener('keydown', escapeHandler);
+
+		// Fermer en cliquant sur l'overlay
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) {
+				document.body.removeChild(overlay);
+				if (onCancel) onCancel();
+			}
+		});
+
+		// Assembler la boîte de dialogue
+		buttons.appendChild(cancelBtn);
+		buttons.appendChild(confirmBtn);
+		dialog.appendChild(header);
+		dialog.appendChild(content);
+		dialog.appendChild(buttons);
+		overlay.appendChild(dialog);
+
+		// Ajouter au DOM
+		document.body.appendChild(overlay);
+
+		// Focus sur le bouton Annuler par défaut
+		setTimeout(() => cancelBtn.focus(), 100);
+	}
+
+	showCustomAlert(title, message, onOk) {
+		// Créer un overlay
+		const overlay = document.createElement('div');
+		overlay.style.cssText = `
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100vw;
+			height: 100vh;
+			background: rgba(0, 0, 0, 0.7);
+			z-index: 10000;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		`;
+
+		// Créer la boîte de dialogue
+		const dialog = document.createElement('div');
+		dialog.style.cssText = `
+			background: #2c3e50;
+			border-radius: 10px;
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+			max-width: 400px;
+			width: 90%;
+			padding: 0;
+			color: white;
+			text-align: center;
+			border: 1px solid #34495e;
+		`;
+
+		// En-tête
+		const header = document.createElement('div');
+		header.style.cssText = `
+			background: #e74c3c;
+			padding: 15px;
+			border-radius: 10px 10px 0 0;
+			border-bottom: 1px solid #c0392b;
+		`;
+		header.innerHTML = `<h3 style="margin: 0; font-size: 18px; color: white;">⚠️ ${title}</h3>`;
+
+		// Contenu
+		const content = document.createElement('div');
+		content.style.cssText = `
+			padding: 20px;
+			font-size: 16px;
+			line-height: 1.4;
+			color: #bdc3c7;
+		`;
+		content.textContent = message;
+
+		// Bouton
+		const button = document.createElement('div');
+		button.style.cssText = `
+			padding: 15px 20px 20px;
+			display: flex;
+			justify-content: center;
+		`;
+
+		const okBtn = document.createElement('button');
+		okBtn.textContent = 'OK';
+		okBtn.style.cssText = `
+			padding: 10px 30px;
+			border: none;
+			border-radius: 5px;
+			background: #3498db;
+			color: white;
+			cursor: pointer;
+			font-size: 14px;
+			transition: all 0.2s;
+			font-weight: bold;
+		`;
+		okBtn.onmouseover = () => okBtn.style.background = '#2980b9';
+		okBtn.onmouseout = () => okBtn.style.background = '#3498db';
+
+		// Événements
+		okBtn.addEventListener('click', () => {
+			document.body.removeChild(overlay);
+			if (onOk) onOk();
+		});
+
+		// Fermer avec Escape ou Entrée
+		const keyHandler = (e) => {
+			if (e.key === 'Escape' || e.key === 'Enter') {
+				document.body.removeChild(overlay);
+				document.removeEventListener('keydown', keyHandler);
+				if (onOk) onOk();
+			}
+		};
+		document.addEventListener('keydown', keyHandler);
+
+		// Fermer en cliquant sur l'overlay
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) {
+				document.body.removeChild(overlay);
+				if (onOk) onOk();
+			}
+		});
+
+		// Assembler la boîte de dialogue
+		button.appendChild(okBtn);
+		dialog.appendChild(header);
+		dialog.appendChild(content);
+		dialog.appendChild(button);
+		overlay.appendChild(dialog);
+
+		// Ajouter au DOM
+		document.body.appendChild(overlay);
+
+		// Focus sur le bouton OK
+		setTimeout(() => okBtn.focus(), 100);
 	}
 }
 
@@ -3002,6 +3665,15 @@ if (typeof window !== 'undefined') {
 	window.associateAudioToSong = associateAudioToSong;
 	window.removeAudioFromSong = removeAudioFromSong;
 	
+	// Nouvelles fonctions mode record
+	window.toggleRecordMode = toggleRecordMode;
+	window.getRecordModeState = getRecordModeState;
+	window.syncLineToCurrentTimecode = syncLineToCurrentTimecode;
+	
+	// Fonctions de diagnostic et réparation
+	window.debugDeleteButtons = debugDeleteButtons;
+	window.repairDeleteButtons = repairDeleteButtons;
+	
 	// Fonctions d'aide pour les chemins audio (rétrocompatibilité)
 	window.normalizeAudioPath = normalizeAudioPath;
 	window.createAudioPath = createAudioPath;
@@ -3027,6 +3699,11 @@ if (typeof window !== 'undefined') {
 		loadSongByName: typeof window.loadSongByName,
 		audioControl: typeof window.audioControl,
 		associateAudioToSong: typeof window.associateAudioToSong
+	});
+	console.log('  - Mode record:', {
+		toggleRecordMode: typeof window.toggleRecordMode,
+		getRecordModeState: typeof window.getRecordModeState,
+		syncLineToCurrentTimecode: typeof window.syncLineToCurrentTimecode
 	});
 } else {
 	// Environnement Node.js ou autre
