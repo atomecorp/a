@@ -1,6 +1,83 @@
 // Déclaration de la variable pour la bibliothèque de paroles (sera initialisée après la définition des classes)
 let lyricsLibrary = null;
 
+// Configuration globale pour les chemins audio
+const AUDIO_CONFIG = {
+	BASE_PATH: 'assets/audios/',
+	BASE_URL: 'http://localhost:3001/assets/audios/'
+};
+
+// Fonction utilitaire pour normaliser les chemins audio
+function normalizeAudioPath(audioPath) {
+	if (!audioPath) return null;
+	
+	// Si c'est des métadonnées JSON, extraire le nom du fichier
+	if (audioPath.startsWith('{')) {
+		try {
+			const metadata = JSON.parse(audioPath);
+			const fileName = metadata.fileName;
+			if (fileName) {
+				// Encoder le nom de fichier pour gérer les espaces et caractères spéciaux
+				const encodedFileName = encodeURIComponent(fileName);
+				return AUDIO_CONFIG.BASE_URL + encodedFileName;
+			}
+		} catch (e) {
+			console.warn('⚠️ Métadonnées audio corrompues:', e);
+			return null;
+		}
+	}
+	
+	// Si le chemin commence déjà par l'URL complète, le retourner tel quel
+	if (audioPath.startsWith('http://localhost:3001/assets/audios/')) {
+		return audioPath;
+	}
+	
+	// Si le chemin commence par assets/audios/, ajouter l'URL de base
+	if (audioPath.startsWith('assets/audios/')) {
+		const fileName = audioPath.replace('assets/audios/', '');
+		const encodedFileName = encodeURIComponent(fileName);
+		return AUDIO_CONFIG.BASE_URL + encodedFileName;
+	}
+	
+	// Si c'est un chemin absolu ou relatif, extraire juste le nom du fichier
+	const fileName = audioPath.split('/').pop().split('\\').pop();
+	
+	// Encoder et préfixer avec l'URL complète
+	const encodedFileName = encodeURIComponent(fileName);
+	return AUDIO_CONFIG.BASE_URL + encodedFileName;
+}
+
+// Fonction d'aide pour créer rapidement un chemin audio
+function createAudioPath(fileName) {
+	// Encoder le nom de fichier pour gérer les espaces et caractères spéciaux
+	const encodedFileName = encodeURIComponent(fileName);
+	return AUDIO_CONFIG.BASE_URL + encodedFileName;
+}
+
+// Exemples de fichiers audio supportés pour les chansons de démo
+const DEMO_AUDIO_FILES = {
+	darkbox: 'darkbox.mp3',
+	digitalDreams: 'digital_dreams.mp3',
+	// Ajoutez d'autres fichiers audio ici selon vos besoins
+};
+
+// Fonction pour obtenir les chemins audio de démo
+function getDemoAudioPaths() {
+	const paths = {};
+	for (const [key, fileName] of Object.entries(DEMO_AUDIO_FILES)) {
+		paths[key] = createAudioPath(fileName);
+	}
+	return paths;
+}
+
+// Fonction de debug pour tester la normalisation des chemins
+function debugAudioPath(input) {
+	console.log('🔍 Debug chemin audio:');
+	console.log('  Input:', input);
+	console.log('  Normalized:', normalizeAudioPath(input));
+	return normalizeAudioPath(input);
+}
+
 // Création des éléments DOM nécessaires (compatible avec les deux environnements)
 function initializeDOM() {
     // Vérifier que nous sommes dans un environnement navigateur
@@ -22,22 +99,23 @@ function initializeDOM() {
         },
     });
 
-    // Créer le conteneur pour l'affichage des paroles
-    $('div', {
-        id: 'lyrics-container',
-        css: {
-            width: '100%',
-            height: '400px',
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #333',
-            borderRadius: '8px',
-            margin: '20px 0',
-            overflow: 'hidden'
-        },
-        parent: '#view'
-    });
-
-    console.log('✅ Éléments DOM initialisés');
+	// Créer le conteneur pour l'affichage des paroles
+	$('div', {
+		id: 'lyrics-container',
+		css: {
+			width: '100%',
+			minHeight: '600px',
+			height: 'auto',
+			backgroundColor: '#1a1a1a',
+			border: '1px solid #333',
+			borderRadius: '8px',
+			margin: '20px 0',
+			overflow: 'visible',
+			display: 'flex',
+			flexDirection: 'column'
+		},
+		parent: '#view'
+	});    console.log('✅ Éléments DOM initialisés');
 }
 
 // Initialiser le DOM dès que possible
@@ -63,80 +141,8 @@ setTimeout(() => {
 
 // Fonction générique pour créer des chansons de démonstration
 function createDemoSongs() {
-	console.log('🎵 Création des chansons de démonstration...');
-	
-	// Chanson 1: The Darkbox
-	const darkboxData = {
-		title: "The Darkbox",
-		artist: "Atome Artist",
-		album: "Demo Album",
-		lyrics: [
-			{ time: 0, text: "Spread the words", type: "vocal" },
-			{ time: 2000, text: "That'll burn your mind", type: "vocal" },
-			{ time: 4000, text: "Seal your eyes", type: "vocal" },
-			{ time: 6000, text: "Shut your ears", type: "vocal" },
-			{ time: 8000, text: "Swallow this and dive inside", type: "vocal" },
-			{ time: 10000, text: "dive inside", type: "vocal" },
-			{ time: 11000, text: "dive inside", type: "vocal" },
-			{ time: 12000, text: "dive inside", type: "vocal" },
-			{ time: 14000, text: "", type: "instrumental" },
-			{ time: 16000, text: "The darkbox...", type: "chorus" },
-			{ time: 18000, text: "", type: "instrumental" },
-			{ time: 20000, text: "Do you wanna be scared", type: "vocal" },
-			{ time: 22000, text: "No real fun won't begin", type: "vocal" },
-			{ time: 24000, text: "Stay away from what is there", type: "vocal" },
-			{ time: 26000, text: "", type: "instrumental" },
-			{ time: 28000, text: "Close your mind", type: "vocal" },
-			{ time: 30000, text: "Widely shut,", type: "vocal" },
-			{ time: 32000, text: "You won't see it's a trap", type: "vocal" },
-			{ time: 34000, text: "A golden coffin for your mind", type: "vocal" },
-			{ time: 36000, text: "", type: "instrumental" },
-			{ time: 38000, text: "The darkbox", type: "chorus" },
-			{ time: 40000, text: "", type: "instrumental" },
-			{ time: 42000, text: "Ghost box, don't get inside this dark box", type: "vocal" },
-			{ time: 45000, text: "No satisfaction out of the box", type: "vocal" },
-			{ time: 48000, text: "", type: "instrumental" },
-			{ time: 50000, text: "Ghost box, stay away from this dark box", type: "vocal" },
-			{ time: 53000, text: "Destroy this fuckin' Pandora's box", type: "vocal" },
-			{ time: 56000, text: "", type: "instrumental" },
-			{ time: 58000, text: "Ghost box, don't get inside this dark box", type: "vocal" },
-			{ time: 61000, text: "No satisfaction out of the box", type: "vocal" },
-			{ time: 64000, text: "", type: "instrumental" },
-			{ time: 66000, text: "Ghost box, don't get inside this dark box", type: "vocal" },
-			{ time: 69000, text: "Smash that nightmare box", type: "vocal" },
-			{ time: 72000, text: "", type: "instrumental" },
-			{ time: 74000, text: "Smash that nightmare box", type: "vocal" },
-			{ time: 76000, text: "Smash that nightmare box", type: "vocal" }
-		]
-	};
-	
-	// Chanson 2: Une autre chanson de demo
-	const demoSong2Data = {
-		title: "Digital Dreams",
-		artist: "Cyber Collective",
-		album: "Electronic Visions",
-		lyrics: [
-			{ time: 0, text: "In the neon lights we find", type: "vocal" },
-			{ time: 3000, text: "Digital dreams of a different kind", type: "vocal" },
-			{ time: 6000, text: "Circuits dancing in the night", type: "vocal" },
-			{ time: 9000, text: "Electric souls burning bright", type: "vocal" },
-			{ time: 12000, text: "", type: "instrumental" },
-			{ time: 15000, text: "Download my heart", type: "chorus" },
-			{ time: 18000, text: "Upload your soul", type: "chorus" },
-			{ time: 21000, text: "In this digital world", type: "chorus" },
-			{ time: 24000, text: "We lose control", type: "chorus" }
-		]
-	};
-	
-	// Créer les chansons
-	const darkboxSong = lyricsLibrary.createDemoSong(darkboxData);
-	const digitalDreamsSong = lyricsLibrary.createDemoSong(demoSong2Data);
-	
-	console.log('✅ Chansons créées:');
-	console.log('  - The Darkbox (ID:', darkboxSong.songId, ')');
-	console.log('  - Digital Dreams (ID:', digitalDreamsSong.songId, ')');
-	
-	return { darkboxSong, digitalDreamsSong };
+	// Utiliser la méthode de la bibliothèque qui gère la synchronisation
+	return lyricsLibrary.createDemoSongsIfNeeded();
 }
 
 // Fonction pour chercher et charger une chanson
@@ -324,6 +330,9 @@ function toggleSongManager() {
 
 // Fonction pour associer un fichier audio à une chanson
 function associateAudioToSong(songIdentifier, audioPath) {
+	// Normaliser le chemin audio
+	const normalizedAudioPath = normalizeAudioPath(audioPath);
+	
 	let songId = songIdentifier;
 	
 	// Si c'est un nom, chercher l'ID
@@ -343,16 +352,16 @@ function associateAudioToSong(songIdentifier, audioPath) {
 		return false;
 	}
 	
-	// Associer l'audio
-	song.setAudioPath(audioPath);
+	// Associer l'audio (la normalisation se fait automatiquement dans setAudioPath)
+	song.setAudioPath(normalizedAudioPath);
 	lyricsLibrary.saveSong(song);
 	
 	// Si c'est la chanson actuellement affichée, recharger l'audio
 	if (lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.songId === songId) {
-		lyricsDisplay.loadAssociatedAudio(audioPath);
+		lyricsDisplay.loadAssociatedAudio(normalizedAudioPath);
 	}
 	
-	console.log('✅ Audio associé à la chanson:', song.metadata.title);
+	console.log('✅ Audio associé à la chanson:', song.metadata.title, 'avec le chemin:', normalizedAudioPath);
 	return true;
 }
 
@@ -511,6 +520,193 @@ function displayTransportInfo(isPlaying, playheadPosition, sampleRate) {
 class LyricsLibrary {
 	constructor() {
 		this.storagePrefix = 'lyrics_';
+		this.settingsKey = 'lyrics_library_settings';
+		this.songListKey = 'lyrics_song_list';
+		this.builtInSongs = new Set(); // Pour tracker les chansons intégrées
+		this.initializeLibrary();
+	}
+
+	// Initialiser la bibliothèque au démarrage
+	initializeLibrary() {
+		console.log('🔄 Initialisation de la bibliothèque de paroles...');
+		
+		// Charger les paramètres existants
+		this.loadSettings();
+		
+		// Synchroniser avec les chansons intégrées
+		this.syncBuiltInSongs();
+		
+		// Charger la liste des chansons depuis localStorage
+		this.loadSongList();
+		
+		console.log('✅ Bibliothèque de paroles initialisée');
+	}
+
+	// Charger les paramètres de la bibliothèque
+	loadSettings() {
+		try {
+			const settings = localStorage.getItem(this.settingsKey);
+			if (settings) {
+				const parsed = JSON.parse(settings);
+				this.builtInSongs = new Set(parsed.builtInSongs || []);
+				console.log('📋 Paramètres chargés:', parsed);
+			}
+		} catch (error) {
+			console.error('❌ Erreur chargement paramètres:', error);
+		}
+	}
+
+	// Sauvegarder les paramètres de la bibliothèque
+	saveSettings() {
+		try {
+			const settings = {
+				builtInSongs: Array.from(this.builtInSongs),
+				lastSync: new Date().toISOString()
+			};
+			localStorage.setItem(this.settingsKey, JSON.stringify(settings));
+			console.log('💾 Paramètres sauvegardés');
+		} catch (error) {
+			console.error('❌ Erreur sauvegarde paramètres:', error);
+		}
+	}
+
+	// Synchroniser avec les chansons intégrées au démarrage
+	syncBuiltInSongs() {
+		console.log('🔄 Synchronisation des chansons intégrées...');
+		
+		// Créer les chansons de démonstration si elles n'existent pas déjà
+		const demoSongs = this.createDemoSongsIfNeeded();
+		
+		// Marquer les chansons de démo comme intégrées
+		if (demoSongs) {
+			if (demoSongs.darkboxSong) {
+				this.builtInSongs.add(demoSongs.darkboxSong.songId);
+			}
+			if (demoSongs.digitalDreamsSong) {
+				this.builtInSongs.add(demoSongs.digitalDreamsSong.songId);
+			}
+		}
+		
+		this.saveSettings();
+		console.log('✅ Synchronisation terminée');
+	}
+
+	// Créer les chansons de démo seulement si nécessaire
+	createDemoSongsIfNeeded() {
+		// Vérifier si les chansons de démo existent déjà
+		const existingSongs = this.getAllSongs();
+		const darkboxExists = existingSongs.some(song => song.title === "The Darkbox");
+		const digitalExists = existingSongs.some(song => song.title === "Digital Dreams");
+		
+		if (darkboxExists && digitalExists) {
+			console.log('📚 Chansons de démo déjà présentes');
+			return null;
+		}
+		
+		console.log('🎵 Création des chansons de démonstration...');
+		
+		let darkboxSong = null;
+		let digitalDreamsSong = null;
+		
+		// Créer The Darkbox si elle n'existe pas
+		if (!darkboxExists) {
+			const darkboxData = {
+				title: "The Darkbox",
+				artist: "Atome Artist",
+				album: "Demo Album",
+				audioFile: "darkbox.mp3", // Ce fichier sera automatiquement préfixé par assets/audios/
+				lyrics: [
+					{ time: 0, text: "Spread the words", type: "vocal" },
+					{ time: 2000, text: "That'll burn your mind", type: "vocal" },
+					{ time: 4000, text: "Seal your eyes", type: "vocal" },
+					{ time: 6000, text: "Shut your ears", type: "vocal" },
+					{ time: 8000, text: "Swallow this and dive inside", type: "vocal" },
+					{ time: 10000, text: "dive inside", type: "vocal" },
+					{ time: 11000, text: "dive inside", type: "vocal" },
+					{ time: 12000, text: "dive inside", type: "vocal" },
+					{ time: 14000, text: "", type: "instrumental" },
+					{ time: 16000, text: "The darkbox...", type: "chorus" },
+					{ time: 18000, text: "", type: "instrumental" },
+					{ time: 20000, text: "Do you wanna be scared", type: "vocal" },
+					{ time: 22000, text: "No real fun won't begin", type: "vocal" },
+					{ time: 24000, text: "Stay away from what is there", type: "vocal" },
+					{ time: 26000, text: "", type: "instrumental" },
+					{ time: 28000, text: "Close your mind", type: "vocal" },
+					{ time: 30000, text: "Widely shut,", type: "vocal" },
+					{ time: 32000, text: "You won't see it's a trap", type: "vocal" },
+					{ time: 34000, text: "A golden coffin for your mind", type: "vocal" },
+					{ time: 36000, text: "", type: "instrumental" },
+					{ time: 38000, text: "The darkbox", type: "chorus" },
+					{ time: 40000, text: "", type: "instrumental" },
+					{ time: 42000, text: "Ghost box, don't get inside this dark box", type: "vocal" },
+					{ time: 45000, text: "No satisfaction out of the box", type: "vocal" },
+					{ time: 48000, text: "", type: "instrumental" },
+					{ time: 50000, text: "Ghost box, stay away from this dark box", type: "vocal" },
+					{ time: 53000, text: "Destroy this fuckin' Pandora's box", type: "vocal" },
+					{ time: 56000, text: "", type: "instrumental" },
+					{ time: 58000, text: "Ghost box, don't get inside this dark box", type: "vocal" },
+					{ time: 61000, text: "No satisfaction out of the box", type: "vocal" },
+					{ time: 64000, text: "", type: "instrumental" },
+					{ time: 66000, text: "Ghost box, don't get inside this dark box", type: "vocal" },
+					{ time: 69000, text: "Smash that nightmare box", type: "vocal" },
+					{ time: 72000, text: "", type: "instrumental" },
+					{ time: 74000, text: "Smash that nightmare box", type: "vocal" },
+					{ time: 76000, text: "Smash that nightmare box", type: "vocal" }
+				]
+			};
+			darkboxSong = this.createDemoSong(darkboxData);
+		}
+		
+		// Créer Digital Dreams si elle n'existe pas
+		if (!digitalExists) {
+			const demoSong2Data = {
+				title: "Digital Dreams",
+				artist: "Cyber Collective",
+				album: "Electronic Visions",
+				audioFile: "digital_dreams.mp3", // Ce fichier sera automatiquement préfixé par assets/audios/
+				lyrics: [
+					{ time: 0, text: "In the neon lights we find", type: "vocal" },
+					{ time: 3000, text: "Digital dreams of a different kind", type: "vocal" },
+					{ time: 6000, text: "Circuits dancing in the night", type: "vocal" },
+					{ time: 9000, text: "Electric souls burning bright", type: "vocal" },
+					{ time: 12000, text: "", type: "instrumental" },
+					{ time: 15000, text: "Download my heart", type: "chorus" },
+					{ time: 18000, text: "Upload your soul", type: "chorus" },
+					{ time: 21000, text: "In this digital world", type: "chorus" },
+					{ time: 24000, text: "We lose control", type: "chorus" }
+				]
+			};
+			digitalDreamsSong = this.createDemoSong(demoSong2Data);
+		}
+		
+		console.log('✅ Chansons de démo créées');
+		return { darkboxSong, digitalDreamsSong };
+	}
+
+	// Charger la liste des chansons depuis localStorage
+	loadSongList() {
+		try {
+			const songList = localStorage.getItem(this.songListKey);
+			if (songList) {
+				const parsed = JSON.parse(songList);
+				console.log('📋 Liste des chansons chargée:', parsed.length, 'chansons');
+				return parsed;
+			}
+		} catch (error) {
+			console.error('❌ Erreur chargement liste:', error);
+		}
+		return [];
+	}
+
+	// Sauvegarder la liste des chansons dans localStorage
+	saveSongList() {
+		try {
+			const songs = this.getAllSongs();
+			localStorage.setItem(this.songListKey, JSON.stringify(songs));
+			console.log('💾 Liste des chansons sauvegardée:', songs.length, 'chansons');
+		} catch (error) {
+			console.error('❌ Erreur sauvegarde liste:', error);
+		}
 	}
 
 	// Créer une nouvelle chanson avec paroles synchronisées
@@ -533,6 +729,10 @@ class LyricsLibrary {
 		try {
 			localStorage.setItem(storageKey, JSON.stringify(syncedLyrics));
 			console.log('✅ Chanson sauvegardée:', syncedLyrics.metadata.title, 'avec ID:', syncedLyrics.songId);
+			
+			// Mettre à jour la liste des chansons
+			this.saveSongList();
+			
 			return storageKey;
 		} catch (error) {
 			console.error('❌ Erreur de sauvegarde:', error);
@@ -628,6 +828,14 @@ class LyricsLibrary {
 		try {
 			localStorage.removeItem(storageKey);
 			console.log('🗑️ Chanson supprimée:', songId);
+			
+			// Supprimer des chansons intégrées si applicable
+			this.builtInSongs.delete(songId);
+			this.saveSettings();
+			
+			// Mettre à jour la liste des chansons
+			this.saveSongList();
+			
 			return true;
 		} catch (error) {
 			console.error('❌ Erreur de suppression:', error);
@@ -651,7 +859,7 @@ class LyricsLibrary {
 
 	// Créer une chanson de démonstration
 	createDemoSong(songData) {
-		const { title, artist, album, lyrics } = songData;
+		const { title, artist, album, lyrics, audioFile } = songData;
 		const song = this.createSong(title, artist, album);
 		
 		// Ajouter les paroles
@@ -659,9 +867,67 @@ class LyricsLibrary {
 			song.addLine(lyric.time, lyric.text, lyric.type || 'vocal');
 		});
 		
+		// Ajouter le fichier audio s'il est fourni
+		if (audioFile) {
+			song.setAudioPath(audioFile);
+		}
+		
 		// Sauvegarder
 		this.saveSong(song);
 		return song;
+	}
+
+	// Vérifier si une chanson est intégrée
+	isBuiltInSong(songId) {
+		return this.builtInSongs.has(songId);
+	}
+
+	// Obtenir le nombre de chansons par type
+	getSongStats() {
+		const allSongs = this.getAllSongs();
+		const builtInCount = allSongs.filter(song => this.isBuiltInSong(song.songId)).length;
+		const userCount = allSongs.length - builtInCount;
+		
+		return {
+			total: allSongs.length,
+			builtIn: builtInCount,
+			user: userCount
+		};
+	}
+
+	// Nettoyer la bibliothèque (supprimer les entrées orphelines)
+	cleanup() {
+		console.log('🧹 Nettoyage de la bibliothèque...');
+		
+		const songKeys = Object.keys(localStorage).filter(key => key.startsWith(this.storagePrefix));
+		let cleanedCount = 0;
+		
+		songKeys.forEach(key => {
+			try {
+				const data = localStorage.getItem(key);
+				if (!data) {
+					localStorage.removeItem(key);
+					cleanedCount++;
+					return;
+				}
+				
+				const parsed = JSON.parse(data);
+				if (!parsed.songId || !parsed.metadata || !parsed.lines) {
+					localStorage.removeItem(key);
+					cleanedCount++;
+				}
+			} catch (error) {
+				console.warn('⚠️ Suppression entrée corrompue:', key);
+				localStorage.removeItem(key);
+				cleanedCount++;
+			}
+		});
+		
+		// Mettre à jour la liste après nettoyage
+		this.saveSongList();
+		
+		console.log('✅ Nettoyage terminé:', cleanedCount, 'entrées supprimées');
+		return cleanedCount;
 	}
 }
 
@@ -732,7 +998,8 @@ class SyncedLyrics {
 
 	// Associer un fichier audio à cette chanson
 	setAudioPath(audioPath) {
-		this.metadata.audioPath = audioPath;
+		// Normaliser le chemin audio pour qu'il commence par assets/audios/
+		this.metadata.audioPath = normalizeAudioPath(audioPath);
 		this.updateLastModified();
 		return this;
 	}
@@ -915,29 +1182,30 @@ class LyricsDisplay {
 				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
 				<button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
 			</div>
-			<div id="song-metadata-edit" style="display: none; padding: 10px; background: #34495e; color: white;">
-				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+			<div id="song-metadata-edit" style="display: none; padding: 15px; background: #34495e; color: white; min-height: 200px; max-height: 50vh; overflow-y: auto;">
+				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
 					<div>
-						<label style="display: block; margin-bottom: 5px;">Titre:</label>
-						<input type="text" id="edit-title" style="width: 100%; padding: 5px;">
+						<label style="display: block; margin-bottom: 5px; font-weight: bold;">Titre:</label>
+						<input type="text" id="edit-title" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555;">
 					</div>
 					<div>
-						<label style="display: block; margin-bottom: 5px;">Artiste:</label>
-						<input type="text" id="edit-artist" style="width: 100%; padding: 5px;">
+						<label style="display: block; margin-bottom: 5px; font-weight: bold;">Artiste:</label>
+						<input type="text" id="edit-artist" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555;">
 					</div>
 				</div>
-				<div style="margin-bottom: 10px;">
-					<label style="display: block; margin-bottom: 5px;">Album:</label>
-					<input type="text" id="edit-album" style="width: 100%; padding: 5px;">
+				<div style="margin-bottom: 15px;">
+					<label style="display: block; margin-bottom: 5px; font-weight: bold;">Album:</label>
+					<input type="text" id="edit-album" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #555;">
 				</div>
 				<div style="margin-bottom: 10px;">
-					<label style="display: block; margin-bottom: 5px;">Chemin Audio:</label>
-					<div style="display: flex; gap: 10px; align-items: center;">
-						<input type="text" id="edit-audio-path" placeholder="Chemin vers le fichier audio" style="flex: 1; padding: 5px;">
-						<button id="load-audio-btn" style="padding: 5px 10px; background: #3498db; color: white; border: none;">Charger</button>
-						<button id="remove-audio-btn-edit" style="padding: 5px 10px; background: #e74c3c; color: white; border: none;">Supprimer</button>
+					<label style="display: block; margin-bottom: 5px; font-weight: bold;">Fichier Audio:</label>
+					<div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+						<input type="text" id="edit-audio-path" placeholder="Chemin vers le fichier audio" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #555;">
+						<input type="file" id="audio-file-input" accept="audio/*,video/*" style="display: none;">
+						<button id="select-audio-btn" style="padding: 8px 12px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">Sélectionner</button>
+						<button id="remove-audio-btn-edit" style="padding: 8px 12px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">Supprimer</button>
 					</div>
-					<small style="color: #bdc3c7;">Glissez un fichier audio ou entrez un chemin</small>
+					<small style="color: #bdc3c7; font-style: italic;">Les métadonnées du fichier (nom, taille, date) sont sauvegardées pour faciliter l'identification</small>
 				</div>
 			</div>
 			<div id="audio-player" style="display: none; padding: 10px; background: #2c3e50; color: white; border-top: 1px solid #555;">
@@ -956,28 +1224,28 @@ class LyricsDisplay {
 					<button id="remove-audio-btn" style="padding: 2px 6px; margin-left: 10px; background: #e74c3c; color: white; border: none; border-radius: 3px; font-size: 10px;">Supprimer</button>
 				</div>
 			</div>
-			<div id="song-manager" style="display: none; padding: 15px; background: #2c3e50; color: white; border-top: 1px solid #555;">
-				<div style="display: flex; gap: 15px; margin-bottom: 15px;">
-					<div style="flex: 1;">
+			<div id="song-manager" style="display: none; padding: 15px; background: #2c3e50; color: white; border-top: 1px solid #555; min-height: 400px; max-height: 70vh; overflow-y: auto;">
+				<div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+					<div style="flex: 1; min-width: 250px;">
 						<h4 style="margin: 0 0 10px 0;">Nouvelle Chanson</h4>
 						<input type="text" id="new-song-title" placeholder="Titre" style="width: 100%; margin-bottom: 5px; padding: 5px;">
 						<input type="text" id="new-song-artist" placeholder="Artiste" style="width: 100%; margin-bottom: 5px; padding: 5px;">
 						<input type="text" id="new-song-album" placeholder="Album (optionnel)" style="width: 100%; margin-bottom: 10px; padding: 5px;">
 						<button id="create-song-btn" style="padding: 8px 15px; background: #27ae60; color: white; border: none;">Créer</button>
 					</div>
-					<div style="flex: 2;">
+					<div style="flex: 2; min-width: 300px;">
 						<h4 style="margin: 0 0 10px 0;">Bibliothèque de Chansons</h4>
-						<div id="songs-list" style="max-height: 200px; overflow-y: auto; background: #34495e; padding: 10px; border-radius: 4px;">
+						<div id="songs-list" style="min-height: 300px; max-height: 50vh; overflow-y: auto; background: #34495e; padding: 10px; border-radius: 4px;">
 							<p style="color: #bdc3c7;">Chargement...</p>
 						</div>
 					</div>
 				</div>
-				<div style="text-align: center;">
+				<div style="text-align: center; border-top: 1px solid #555; padding-top: 10px; margin-top: 15px;">
 					<button id="refresh-songs-btn" style="padding: 5px 10px; margin-right: 10px;">Actualiser</button>
 					<button id="close-manager-btn" style="padding: 5px 10px; background: #95a5a6;">Fermer</button>
 				</div>
 			</div>
-			<div id="lyrics-content" style="height: 300px; overflow-y: auto; padding: 20px; position: relative;">
+			<div id="lyrics-content" style="flex: 1; min-height: 300px; max-height: 80vh; overflow-y: auto; padding: 20px; position: relative; box-sizing: border-box;">
 				<div id="drop-zone" style="
 					position: absolute;
 					top: 0;
@@ -1529,18 +1797,34 @@ class LyricsDisplay {
 	}
 
 	loadAudioFile(file) {
-		// Créer une URL pour le fichier
-		const audioUrl = URL.createObjectURL(file);
+		// Les navigateurs ne donnent que le nom du fichier pour des raisons de sécurité
+		const fileName = file.name;
+		const fileSize = file.size;
+		const lastModified = file.lastModified;
 		
-		// Si une chanson est actuellement chargée, associer l'audio à cette chanson
+		// Créer un identifiant unique pour le fichier basé sur ses propriétés
+		const fileId = `${fileName}_${fileSize}_${lastModified}`;
+		
+		// Créer les métadonnées du fichier
+		const audioMetadata = {
+			fileName: fileName,
+			fileSize: fileSize,
+			lastModified: lastModified,
+			fileId: fileId
+		};
+		
+		// Si une chanson est actuellement chargée, associer les infos du fichier
 		if (this.currentLyrics) {
-			this.currentLyrics.setAudioPath(audioUrl);
+			this.currentLyrics.setAudioPath(JSON.stringify(audioMetadata));
 			// Sauvegarder les changements
 			if (lyricsLibrary) {
 				lyricsLibrary.saveSong(this.currentLyrics);
 			}
-			console.log('✅ Audio associé à la chanson:', this.currentLyrics.metadata.title);
+			console.log('✅ Métadonnées audio associées à la chanson:', this.currentLyrics.metadata.title, '→', fileName);
 		}
+		
+		// Créer une URL temporaire pour la session actuelle
+		const audioUrl = URL.createObjectURL(file);
 		
 		// Créer ou réutiliser l'élément audio
 		if (!this.audioPlayer) {
@@ -1560,21 +1844,34 @@ class LyricsDisplay {
 				this.isPlayingInternal = false;
 				this.updatePlayPauseButton();
 			});
+			
+			this.audioPlayer.addEventListener('error', (e) => {
+				console.warn('⚠️ Erreur audio:', e);
+				this.showAudioNotFoundMessage();
+			});
 		}
 		
-		// Charger le nouveau fichier
+		// Charger le fichier temporairement
 		this.audioPlayer.src = audioUrl;
 		this.audioPath = audioUrl;
+		this.currentAudioFileName = fileName;
+		this.currentAudioMetadata = audioMetadata;
 		
 		// Afficher le lecteur
 		const audioPlayerDiv = document.getElementById('audio-player');
 		const audioFilename = document.getElementById('audio-filename');
 		
-		if (audioPlayerDiv) audioPlayerDiv.style.display = 'block';
-		if (audioFilename) audioFilename.textContent = file.name;
+		if (audioPlayerDiv) {
+			audioPlayerDiv.style.display = 'block';
+			this.restoreAudioControls();
+		}
+		if (audioFilename) {
+			const sizeInMB = (fileSize / (1024 * 1024)).toFixed(1);
+			audioFilename.textContent = `${fileName} (${sizeInMB} MB)`;
+		}
 		
-		console.log('✅ Fichier audio chargé:', file.name);
-		alert(`Fichier audio "${file.name}" chargé!\nUtilisez les contrôles pour jouer la musique et synchroniser les paroles.`);
+		console.log('✅ Fichier audio chargé:', fileName, `(${(fileSize/(1024*1024)).toFixed(1)} MB)`);
+		alert(`Fichier audio "${fileName}" associé!\nTaille: ${(fileSize/(1024*1024)).toFixed(1)} MB\n\nLe fichier sera reconnu automatiquement s'il n'est pas modifié.`);
 	}
 
 	setupAudioPlayerListeners() {
@@ -1634,14 +1931,43 @@ class LyricsDisplay {
 	}
 
 	togglePlayPause() {
-		if (!this.audioPlayer) return;
+		if (!this.audioPlayer || !this.audioPath) {
+			console.warn('⚠️ Aucun fichier audio chargé');
+			return;
+		}
 		
-		if (this.isPlayingInternal) {
-			this.audioPlayer.pause();
-			this.isPlayingInternal = false;
-		} else {
-			this.audioPlayer.play();
-			this.isPlayingInternal = true;
+		// Vérifier si l'audio est disponible
+		if (this.audioPlayer.readyState === 0) {
+			console.warn('⚠️ Fichier audio non prêt ou non trouvé');
+			this.showAudioNotFoundMessage(this.currentAudioFileName);
+			return;
+		}
+		
+		try {
+			if (this.isPlayingInternal) {
+				this.audioPlayer.pause();
+				this.isPlayingInternal = false;
+			} else {
+				// Tentative de lecture
+				const playPromise = this.audioPlayer.play();
+				if (playPromise !== undefined) {
+					playPromise
+						.then(() => {
+							this.isPlayingInternal = true;
+							this.restoreAudioControls();
+						})
+						.catch((error) => {
+							console.warn('⚠️ Erreur de lecture audio:', error);
+							this.showAudioNotFoundMessage(this.currentAudioFileName);
+						});
+				} else {
+					this.isPlayingInternal = true;
+					this.restoreAudioControls();
+				}
+			}
+		} catch (error) {
+			console.warn('⚠️ Erreur contrôle audio:', error);
+			this.showAudioNotFoundMessage(this.currentAudioFileName);
 		}
 		
 		this.updatePlayPauseButton();
@@ -1708,6 +2034,128 @@ class LyricsDisplay {
 		return `${mins}:${secs.toString().padStart(2, '0')}`;
 	}
 
+	openFileSelector(expectedMetadata) {
+		// Créer un input file invisible
+		const fileInput = document.createElement('input');
+		fileInput.type = 'file';
+		fileInput.accept = 'audio/*,video/*';
+		fileInput.style.display = 'none';
+		
+		// Gestionnaire pour quand un fichier est sélectionné
+		fileInput.addEventListener('change', (e) => {
+			const file = e.target.files[0];
+			if (file) {
+				// Vérifier si c'est le bon fichier
+				const isCorrectFile = this.validateAudioFile(file, expectedMetadata);
+				
+				if (isCorrectFile.isValid) {
+					this.loadAudioFile(file);
+					console.log('✅ Fichier audio retrouvé et chargé:', file.name);
+				} else {
+					// Demander confirmation si le fichier ne correspond pas exactement
+					const message = `Le fichier sélectionné semble différent:\n\n` +
+						`Attendu: ${expectedMetadata.fileName}\n` +
+						`Sélectionné: ${file.name}\n\n` +
+						`Raison: ${isCorrectFile.reason}\n\n` +
+						`Voulez-vous quand même l'utiliser ?`;
+					
+					if (confirm(message)) {
+						this.loadAudioFile(file);
+					}
+				}
+			}
+			// Nettoyer
+			document.body.removeChild(fileInput);
+		});
+		
+		// Ajouter temporairement à la page et déclencher
+		document.body.appendChild(fileInput);
+		fileInput.click();
+	}
+
+	validateAudioFile(file, expectedMetadata) {
+		// Vérifier le nom du fichier
+		if (file.name !== expectedMetadata.fileName) {
+			return { isValid: false, reason: 'Nom de fichier différent' };
+		}
+		
+		// Vérifier la taille si disponible
+		if (expectedMetadata.fileSize && Math.abs(file.size - expectedMetadata.fileSize) > 1024) {
+			return { isValid: false, reason: 'Taille de fichier différente' };
+		}
+		
+		// Vérifier la date de modification si disponible
+		if (expectedMetadata.lastModified && file.lastModified !== expectedMetadata.lastModified) {
+			return { isValid: false, reason: 'Date de modification différente' };
+		}
+		
+		return { isValid: true, reason: 'Fichier correspond' };
+	}
+
+	disableAudioControls() {
+		const playPauseBtn = document.getElementById('play-pause-btn');
+		const audioScrubber = document.getElementById('audio-scrubber');
+		const volumeSlider = document.getElementById('volume-slider');
+		
+		[playPauseBtn, audioScrubber, volumeSlider].forEach(control => {
+			if (control) {
+				control.disabled = true;
+				control.style.opacity = '0.5';
+			}
+		});
+		
+		if (playPauseBtn) {
+			playPauseBtn.textContent = '📁 Charger audio';
+			playPauseBtn.style.backgroundColor = '#95a5a6';
+		}
+	}
+
+	showAudioNotFoundMessage(audioInfo = null) {
+		// Afficher le lecteur avec un message d'aide
+		const audioPlayerDiv = document.getElementById('audio-player');
+		const audioFilename = document.getElementById('audio-filename');
+		
+		if (audioPlayerDiv) {
+			audioPlayerDiv.style.display = 'block';
+			audioPlayerDiv.style.backgroundColor = '#8e44ad'; // Couleur violette pour indiquer l'état "manquant"
+		}
+		
+		if (audioFilename) {
+			const displayName = audioInfo || 'Fichier audio';
+			audioFilename.innerHTML = `
+				<span style="color: #f39c12;">⚠️ ${displayName} - Erreur</span><br>
+				<small style="color: #bdc3c7;">Glissez le fichier audio dans la zone ou utilisez "Sélectionner" dans les métadonnées</small>
+			`;
+		}
+		
+		this.disableAudioControls();
+		console.log('⚠️ Fichier audio non disponible:', audioInfo);
+	}
+
+	restoreAudioControls() {
+		// Réactiver les contrôles audio
+		const playPauseBtn = document.getElementById('play-pause-btn');
+		const audioScrubber = document.getElementById('audio-scrubber');
+		const volumeSlider = document.getElementById('volume-slider');
+		const audioPlayerDiv = document.getElementById('audio-player');
+		
+		[playPauseBtn, audioScrubber, volumeSlider].forEach(control => {
+			if (control) {
+				control.disabled = false;
+				control.style.opacity = '1';
+			}
+		});
+		
+		if (audioPlayerDiv) {
+			audioPlayerDiv.style.backgroundColor = '#2c3e50'; // Couleur normale
+		}
+		
+		if (playPauseBtn) {
+			playPauseBtn.textContent = '▶️ Play';
+			playPauseBtn.style.backgroundColor = '#27ae60';
+		}
+	}
+
 	removeAudio() {
 		if (this.audioPlayer) {
 			this.audioPlayer.pause();
@@ -1719,6 +2167,7 @@ class LyricsDisplay {
 		
 		this.audioPath = null;
 		this.isPlayingInternal = false;
+		this.currentAudioFileName = null;
 		
 		// Cacher le lecteur
 		const audioPlayerDiv = document.getElementById('audio-player');
@@ -1727,8 +2176,75 @@ class LyricsDisplay {
 		console.log('✅ Fichier audio supprimé');
 	}
 
+	loadAudioFromUrl(audioUrl) {
+		// Créer ou réutiliser l'élément audio
+		if (!this.audioPlayer) {
+			this.audioPlayer = document.createElement('audio');
+			this.audioPlayer.preload = 'metadata';
+			this.audioPlayer.crossOrigin = 'anonymous'; // Pour éviter les problèmes CORS
+			
+			// Événements du lecteur audio
+			this.audioPlayer.addEventListener('loadedmetadata', () => {
+				this.updateAudioPlayerUI();
+			});
+			
+			this.audioPlayer.addEventListener('timeupdate', () => {
+				this.updateAudioTime();
+			});
+			
+			this.audioPlayer.addEventListener('ended', () => {
+				this.isPlayingInternal = false;
+				this.updatePlayPauseButton();
+			});
+			
+			this.audioPlayer.addEventListener('error', (e) => {
+				console.warn('⚠️ Erreur chargement audio depuis URL:', audioUrl, e);
+				this.showAudioNotFoundMessage(audioUrl);
+			});
+		}
+		
+		// Charger l'audio depuis l'URL
+		this.audioPlayer.src = audioUrl;
+		this.audioPath = audioUrl;
+		
+		// Afficher le lecteur
+		const audioPlayerDiv = document.getElementById('audio-player');
+		const audioFilename = document.getElementById('audio-filename');
+		
+		if (audioPlayerDiv) audioPlayerDiv.style.display = 'block';
+		if (audioFilename) {
+			// Extraire le nom du fichier depuis l'URL (decoder pour gérer les espaces)
+			const fileName = decodeURIComponent(audioUrl.split('/').pop());
+			audioFilename.textContent = fileName;
+		}
+		
+		console.log('✅ Audio chargé depuis URL:', audioUrl);
+	}
+
 	loadAssociatedAudio(audioPath) {
 		if (!audioPath) return;
+		
+		// Normaliser le chemin audio
+		const normalizedPath = normalizeAudioPath(audioPath);
+		
+		if (!normalizedPath) {
+			console.warn('⚠️ Impossible de normaliser le chemin audio:', audioPath);
+			return;
+		}
+		
+		console.log('🎵 Chargement audio:', normalizedPath);
+		
+		// Si c'est une URL http, essayer de charger directement
+		if (normalizedPath.startsWith('http')) {
+			this.loadAudioFromUrl(normalizedPath);
+			return;
+		}
+		
+		// Si c'est un chemin de fichier (pas une URL blob), essayer de le charger
+		if (!normalizedPath.startsWith('blob:')) {
+			this.loadAudioFromUrl(normalizedPath);
+			return;
+		}
 		
 		// Créer ou réutiliser l'élément audio
 		if (!this.audioPlayer) {
@@ -1748,6 +2264,11 @@ class LyricsDisplay {
 				this.isPlayingInternal = false;
 				this.updatePlayPauseButton();
 			});
+			
+			this.audioPlayer.addEventListener('error', (e) => {
+				console.warn('⚠️ Erreur chargement audio:', e);
+				this.showAudioNotFoundMessage(audioPath);
+			});
 		}
 		
 		// Charger l'audio associé
@@ -1761,23 +2282,189 @@ class LyricsDisplay {
 		if (audioPlayerDiv) audioPlayerDiv.style.display = 'block';
 		if (audioFilename) {
 			// Extraire le nom du fichier depuis l'URL blob ou le chemin
-			const filename = audioPath.startsWith('blob:') ? 'Fichier audio associé' : audioPath.split('/').pop();
+			const filename = audioPath.startsWith('blob:') ? 'Fichier audio temporaire' : audioPath;
 			audioFilename.textContent = filename;
 		}
 		
 		console.log('✅ Audio associé chargé pour la chanson');
 	}
 
+	// Méthode pour essayer de charger un audio depuis un chemin normalisé
+	tryLoadAudioFromPath(normalizedPath) {
+		// Créer ou réutiliser l'élément audio
+		if (!this.audioPlayer) {
+			this.audioPlayer = document.createElement('audio');
+			this.audioPlayer.preload = 'metadata';
+			
+			// Événements du lecteur audio
+			this.audioPlayer.addEventListener('loadedmetadata', () => {
+				this.updateAudioPlayerUI();
+			});
+			
+			this.audioPlayer.addEventListener('timeupdate', () => {
+				this.updateAudioTime();
+			});
+			
+			this.audioPlayer.addEventListener('ended', () => {
+				this.isPlayingInternal = false;
+				this.updatePlayPauseButton();
+			});
+			
+			this.audioPlayer.addEventListener('error', (e) => {
+				console.warn('⚠️ Erreur chargement audio depuis le chemin:', normalizedPath, e);
+				this.showAudioNotFoundMessage(normalizedPath);
+			});
+		}
+		
+		// Charger l'audio avec le chemin normalisé
+		this.audioPlayer.src = normalizedPath;
+		this.audioPath = normalizedPath;
+		
+		// Afficher le lecteur
+		const audioPlayerDiv = document.getElementById('audio-player');
+		const audioFilename = document.getElementById('audio-filename');
+		
+		if (audioPlayerDiv) audioPlayerDiv.style.display = 'block';
+		if (audioFilename) {
+			// Extraire le nom du fichier depuis le chemin normalisé
+			const filename = normalizedPath.split('/').pop();
+			audioFilename.textContent = filename;
+		}
+		
+		console.log('✅ Audio chargé depuis le chemin normalisé:', normalizedPath);
+	}
+
+	loadAssociatedAudio(audioPath) {
+		if (!audioPath) return;
+		
+		// Si c'est des métadonnées JSON, analyser et proposer de charger le fichier
+		if (audioPath.startsWith('{')) {
+			try {
+				const audioMetadata = JSON.parse(audioPath);
+				this.showAudioLoadInterface(audioMetadata);
+				return;
+			} catch (e) {
+				console.warn('⚠️ Métadonnées audio corrompues:', e);
+				this.showAudioNotFoundMessage(audioPath);
+				return;
+			}
+		}
+		
+		// Si c'est un chemin de fichier classique, proposer de le charger
+		if (!audioPath.startsWith('blob:') && !audioPath.startsWith('http')) {
+			this.showAudioLoadInterface({ fileName: audioPath });
+			return;
+		}
+		
+		// Créer ou réutiliser l'élément audio
+		if (!this.audioPlayer) {
+			this.audioPlayer = document.createElement('audio');
+			this.audioPlayer.preload = 'metadata';
+			
+			// Événements du lecteur audio
+			this.audioPlayer.addEventListener('loadedmetadata', () => {
+				this.updateAudioPlayerUI();
+			});
+			
+			this.audioPlayer.addEventListener('timeupdate', () => {
+				this.updateAudioTime();
+			});
+			
+			this.audioPlayer.addEventListener('ended', () => {
+				this.isPlayingInternal = false;
+				this.updatePlayPauseButton();
+			});
+			
+			this.audioPlayer.addEventListener('error', (e) => {
+				console.warn('⚠️ Erreur chargement audio:', e);
+				this.showAudioNotFoundMessage(audioPath);
+			});
+		}
+		
+		// Charger l'audio associé
+		this.audioPlayer.src = audioPath;
+		this.audioPath = audioPath;
+		
+		// Afficher le lecteur
+		const audioPlayerDiv = document.getElementById('audio-player');
+		const audioFilename = document.getElementById('audio-filename');
+		
+		if (audioPlayerDiv) audioPlayerDiv.style.display = 'block';
+		if (audioFilename) {
+			// Extraire le nom du fichier depuis l'URL blob ou le chemin
+			const filename = audioPath.startsWith('blob:') ? 'Fichier audio temporaire' : audioPath;
+			audioFilename.textContent = filename;
+		}
+		
+		console.log('✅ Audio associé chargé pour la chanson');
+	}
+
+	showAudioLoadInterface(audioMetadata) {
+		// Afficher le lecteur avec interface de chargement améliorée
+		const audioPlayerDiv = document.getElementById('audio-player');
+		const audioFilename = document.getElementById('audio-filename');
+		
+		if (audioPlayerDiv) {
+			audioPlayerDiv.style.display = 'block';
+			audioPlayerDiv.style.backgroundColor = '#3498db'; // Couleur bleue pour "à charger"
+		}
+		
+		if (audioFilename) {
+			const fileName = audioMetadata.fileName || 'Fichier audio';
+			const fileSize = audioMetadata.fileSize ? `(${(audioMetadata.fileSize/(1024*1024)).toFixed(1)} MB)` : '';
+			
+			audioFilename.innerHTML = `
+				<div style="text-align: left;">
+					<span style="color: #fff; font-weight: bold;">🎵 ${fileName} ${fileSize}</span><br>
+					<button id="load-file-btn" style="padding: 4px 12px; background: #2ecc71; color: white; border: none; border-radius: 4px; font-size: 12px; margin-top: 4px; cursor: pointer;">📁 Charger ce fichier</button>
+					<small style="color: #ecf0f1; display: block; margin-top: 3px;">Cliquez pour sélectionner le fichier audio correspondant</small>
+				</div>
+			`;
+			
+			// Ajouter l'événement pour charger le fichier
+			const loadBtn = document.getElementById('load-file-btn');
+			if (loadBtn) {
+				loadBtn.addEventListener('click', () => {
+					this.openFileSelector(audioMetadata);
+				});
+			}
+		}
+		
+		// Désactiver les contrôles audio
+		this.disableAudioControls();
+		
+		console.log('📁 Métadonnées audio trouvées:', fileName, '- En attente de chargement');
+	}
+
 	setupMetadataEditListeners() {
-		// Bouton charger audio depuis l'édition
-		const loadAudioBtn = document.getElementById('load-audio-btn');
-		if (loadAudioBtn) {
-			loadAudioBtn.addEventListener('click', () => {
-				const audioPath = document.getElementById('edit-audio-path').value.trim();
-				if (audioPath && this.currentLyrics) {
-					this.currentLyrics.setAudioPath(audioPath);
-					this.loadAssociatedAudio(audioPath);
-					console.log('✅ Chemin audio mis à jour:', audioPath);
+		// Bouton sélectionner fichier audio
+		const selectAudioBtn = document.getElementById('select-audio-btn');
+		const audioFileInput = document.getElementById('audio-file-input');
+		
+		if (selectAudioBtn && audioFileInput) {
+			selectAudioBtn.addEventListener('click', () => {
+				audioFileInput.click();
+			});
+			
+			audioFileInput.addEventListener('change', (e) => {
+				const file = e.target.files[0];
+				if (file && this.currentLyrics) {
+					// Créer les métadonnées du fichier
+					const audioMetadata = {
+						fileName: file.name,
+						fileSize: file.size,
+						lastModified: file.lastModified,
+						fileId: `${file.name}_${file.size}_${file.lastModified}`
+					};
+					
+					// Stocker les métadonnées JSON dans les métadonnées de la chanson
+					this.currentLyrics.setAudioPath(JSON.stringify(audioMetadata));
+					document.getElementById('edit-audio-path').value = file.name;
+					
+					// Charger le fichier temporairement pour cette session
+					this.loadAudioFile(file);
+					
+					console.log('✅ Fichier audio sélectionné et métadonnées sauvegardées:', file.name);
 				}
 			});
 		}
@@ -1809,7 +2496,21 @@ class LyricsDisplay {
 		if (titleInput) titleInput.value = this.currentLyrics.metadata.title || '';
 		if (artistInput) artistInput.value = this.currentLyrics.metadata.artist || '';
 		if (albumInput) albumInput.value = this.currentLyrics.metadata.album || '';
-		if (audioPathInput) audioPathInput.value = this.currentLyrics.metadata.audioPath || '';
+		if (audioPathInput) {
+			const audioPath = this.currentLyrics.metadata.audioPath || '';
+			
+			// Si c'est des métadonnées JSON, extraire le nom du fichier
+			if (audioPath.startsWith('{')) {
+				try {
+					const audioMetadata = JSON.parse(audioPath);
+					audioPathInput.value = audioMetadata.fileName || '';
+				} catch (e) {
+					audioPathInput.value = 'Métadonnées corrompues';
+				}
+			} else {
+				audioPathInput.value = audioPath;
+			}
+		}
 	}
 
 	toggleFullscreen() {
@@ -1909,7 +2610,8 @@ class LyricsDisplay {
 			if (controls) controls.style.display = '';
 			
 			// Restaurer la zone de contenu
-			lyricsContent.style.height = this.originalStyles.contentHeight || '300px';
+			lyricsContent.style.minHeight = this.editMode ? '500px' : '300px';
+			lyricsContent.style.maxHeight = this.editMode ? '85vh' : '80vh';
 			lyricsContent.style.width = '';
 			lyricsContent.style.padding = this.originalStyles.contentPadding || '20px';
 			lyricsContent.style.margin = this.originalStyles.contentMargin || '';
@@ -1922,6 +2624,7 @@ class LyricsDisplay {
 			lyricsContent.style.position = '';
 			lyricsContent.style.top = '';
 			lyricsContent.style.left = '';
+			lyricsContent.style.flex = '1';
 			
 			this.isFullscreen = false;
 			if (fullscreenBtn) fullscreenBtn.textContent = 'Plein Écran';
@@ -1960,6 +2663,31 @@ class LyricsDisplay {
 				this.removeTimecodeControl(line);
 			}
 		});
+		
+		// Ajuster la hauteur du conteneur en mode édition
+		this.adjustContentHeight();
+	}
+
+	adjustContentHeight() {
+		const lyricsContent = document.getElementById('lyrics-content');
+		if (!lyricsContent) return;
+		
+		if (this.editMode) {
+			// En mode édition, utiliser plus d'espace vertical
+			lyricsContent.style.minHeight = '500px';
+			lyricsContent.style.maxHeight = '85vh';
+		} else {
+			// En mode lecture, taille plus compacte
+			lyricsContent.style.minHeight = '300px';
+			lyricsContent.style.maxHeight = '80vh';
+		}
+		
+		// Ajuster aussi le conteneur parent
+		const container = this.container;
+		if (container && !this.isFullscreen) {
+			container.style.minHeight = this.editMode ? '700px' : '600px';
+			container.style.height = 'auto';
+		}
 	}
 
 	addTimecodeControl(lineElement) {
@@ -2075,9 +2803,15 @@ class LyricsDisplay {
 		this.updateHeader();
 		this.renderLines();
 		
-		// Charger l'audio associé si disponible
+		// Vérifier s'il y a un audio associé
 		if (syncedLyrics.hasAudio()) {
-			this.loadAssociatedAudio(syncedLyrics.getAudioPath());
+			const audioPath = syncedLyrics.getAudioPath();
+			// Si c'est un nom de fichier simple, afficher le message d'aide
+			if (!audioPath.startsWith('blob:') && !audioPath.startsWith('http')) {
+				this.showAudioNotFoundMessage(audioPath);
+			} else {
+				this.loadAssociatedAudio(audioPath);
+			}
 		} else {
 			// Pas d'audio associé, cacher le lecteur
 			const audioPlayerDiv = document.getElementById('audio-player');
@@ -2109,6 +2843,7 @@ class LyricsDisplay {
 				color: #666;
 				line-height: 1.4;
 				cursor: ${this.editMode ? 'text' : 'default'};
+				margin-bottom: ${this.editMode ? '10px' : '4px'};
 			`;
 			lineElement.textContent = line.text;
 			
@@ -2122,6 +2857,9 @@ class LyricsDisplay {
 			
 			content.appendChild(lineElement);
 		});
+		
+		// Ajuster la hauteur après le rendu
+		this.adjustContentHeight();
 	}
 
 	updateTime(timeMs) {
@@ -2192,6 +2930,10 @@ if (typeof window !== 'undefined') {
 	window.audioControl = audioControl;
 	window.associateAudioToSong = associateAudioToSong;
 	window.removeAudioFromSong = removeAudioFromSong;
+	window.normalizeAudioPath = normalizeAudioPath; // Fonction pour normaliser les chemins audio
+	window.createAudioPath = createAudioPath; // Fonction d'aide pour créer des chemins audio
+	window.getDemoAudioPaths = getDemoAudioPaths; // Obtenir les chemins audio de démo
+	window.debugAudioPath = debugAudioPath; // Debug des chemins audio
 	
 	// Debug: Vérifier que les fonctions sont bien exposées
 	console.log('🔧 Fonctions exposées globalement:');
@@ -2211,7 +2953,10 @@ if (typeof window !== 'undefined') {
 	console.log('  - audioControl:', typeof window.audioControl);
 	console.log('  - associateAudioToSong:', typeof window.associateAudioToSong);
 	console.log('  - removeAudioFromSong:', typeof window.removeAudioFromSong);
+	console.log('  - normalizeAudioPath:', typeof window.normalizeAudioPath);
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
 }
+
+console.log('✅ Lyrix application initialisée avec succès');
