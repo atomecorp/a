@@ -808,7 +808,25 @@ class LyricsDisplay {
 					<button id="close-manager-btn" style="padding: 5px 10px; background: #95a5a6;">Fermer</button>
 				</div>
 			</div>
-			<div id="lyrics-content" style="height: 300px; overflow-y: auto; padding: 20px;">
+			<div id="lyrics-content" style="height: 300px; overflow-y: auto; padding: 20px; position: relative;">
+				<div id="drop-zone" style="
+					position: absolute;
+					top: 0;
+					left: 0;
+					right: 0;
+					bottom: 0;
+					background: rgba(52, 152, 219, 0.1);
+					border: 2px dashed #3498db;
+					display: none;
+					justify-content: center;
+					align-items: center;
+					font-size: 18px;
+					color: #3498db;
+					z-index: 10;
+					pointer-events: none;
+				">
+					📄 Déposez un fichier texte ici pour créer une nouvelle chanson
+				</div>
 				<p style="text-align: center; color: #666;">Chargez des paroles synchronisées</p>
 			</div>
 		`;
@@ -856,6 +874,9 @@ class LyricsDisplay {
 		
 		// Mode plein écran
 		this.setupFullscreenListeners();
+		
+		// Drag and drop de fichiers
+		this.setupDragAndDropListeners();
 	}
 
 	setupSongManagerListeners() {
@@ -1077,6 +1098,203 @@ class LyricsDisplay {
 				this.setFullscreen(false);
 			}
 		});
+	}
+
+	setupDragAndDropListeners() {
+		const container = this.container;
+		const dropZone = document.getElementById('drop-zone');
+		const lyricsContent = document.getElementById('lyrics-content');
+		
+		if (!container || !dropZone || !lyricsContent) return;
+		
+		// Événements de drag and drop sur le conteneur principal
+		['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+			container.addEventListener(eventName, (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+			});
+		});
+		
+		// Montrer la zone de drop
+		container.addEventListener('dragenter', (e) => {
+			if (this.isDraggedFileText(e)) {
+				dropZone.style.display = 'flex';
+				container.style.filter = 'brightness(0.8)';
+			}
+		});
+		
+		container.addEventListener('dragover', (e) => {
+			if (this.isDraggedFileText(e)) {
+				dropZone.style.display = 'flex';
+			}
+		});
+		
+		// Cacher la zone de drop
+		container.addEventListener('dragleave', (e) => {
+			// Vérifier que nous sortons vraiment du conteneur
+			if (!container.contains(e.relatedTarget)) {
+				dropZone.style.display = 'none';
+				container.style.filter = '';
+			}
+		});
+		
+		// Gérer le drop
+		container.addEventListener('drop', (e) => {
+			dropZone.style.display = 'none';
+			container.style.filter = '';
+			
+			const files = e.dataTransfer.files;
+			if (files.length > 0) {
+				this.handleDroppedFiles(files);
+			}
+		});
+		
+		console.log('✅ Drag and drop configuré');
+	}
+
+	isDraggedFileText(event) {
+		const items = event.dataTransfer.items;
+		if (!items) return false;
+		
+		for (let i = 0; i < items.length; i++) {
+			const item = items[i];
+			if (item.kind === 'file') {
+				const type = item.type;
+				// Vérifier les types MIME pour les fichiers texte
+				if (type.startsWith('text/') || 
+					type === 'application/json' ||
+					type === '' || // Fichiers sans extension ou .txt
+					item.getAsFile()?.name.match(/\.(txt|lrc|json|md|lyrics)$/i)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	async handleDroppedFiles(files) {
+		for (let i = 0; i < files.length; i++) {
+			const file = files[i];
+			
+			// Vérifier que c'est un fichier texte
+			if (this.isTextFile(file)) {
+				try {
+					const content = await this.readFileContent(file);
+					this.createSongFromText(file.name, content);
+				} catch (error) {
+					console.error('❌ Erreur lecture fichier:', error);
+					alert(`Erreur lors de la lecture du fichier ${file.name}: ${error.message}`);
+				}
+			} else {
+				console.warn('⚠️ Fichier ignoré (pas un fichier texte):', file.name);
+				alert(`Le fichier "${file.name}" n'est pas un fichier texte supporté.`);
+			}
+		}
+	}
+
+	isTextFile(file) {
+		// Vérifier le type MIME
+		if (file.type.startsWith('text/') || 
+			file.type === 'application/json' ||
+			file.type === '') {
+			return true;
+		}
+		
+		// Vérifier l'extension
+		const validExtensions = /\.(txt|lrc|json|md|lyrics)$/i;
+		return validExtensions.test(file.name);
+	}
+
+	readFileContent(file) {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = (e) => resolve(e.target.result);
+			reader.onerror = (e) => reject(new Error('Erreur de lecture du fichier'));
+			reader.readAsText(file, 'UTF-8');
+		});
+	}
+
+	createSongFromText(filename, content) {
+		try {
+			// Extraire le nom du fichier sans extension pour le titre
+			const title = filename.replace(/\.[^/.]+$/, '');
+			
+			// Vérifier si c'est un fichier LRC (karaoké)
+			if (filename.toLowerCase().endsWith('.lrc')) {
+				this.createSongFromLRC(title, content);
+				return;
+			}
+			
+			// Traiter comme fichier texte simple
+			this.createSongFromPlainText(title, content);
+			
+		} catch (error) {
+			console.error('❌ Erreur création chanson:', error);
+			alert(`Erreur lors de la création de la chanson: ${error.message}`);
+		}
+	}
+
+	createSongFromLRC(title, lrcContent) {
+		try {
+			// Utiliser la méthode existante pour parser le LRC
+			const syncedLyrics = SyncedLyrics.fromLRC(lrcContent);
+			
+			// Si le titre/artiste n'est pas dans le LRC, utiliser le nom du fichier
+			if (!syncedLyrics.metadata.title) {
+				syncedLyrics.metadata.title = title;
+			}
+			if (!syncedLyrics.metadata.artist) {
+				syncedLyrics.metadata.artist = 'Artiste Inconnu';
+			}
+			
+			// Régénérer l'ID avec les nouvelles métadonnées
+			syncedLyrics.songId = lyricsLibrary.generateSongId(
+				syncedLyrics.metadata.title, 
+				syncedLyrics.metadata.artist
+			);
+			
+			// Sauvegarder et charger
+			lyricsLibrary.saveSong(syncedLyrics);
+			this.loadLyrics(syncedLyrics);
+			this.refreshSongsList();
+			
+			console.log('✅ Chanson LRC créée:', syncedLyrics.metadata.title);
+			alert(`Chanson LRC "${syncedLyrics.metadata.title}" créée avec succès!`);
+			
+		} catch (error) {
+			console.error('❌ Erreur parsing LRC:', error);
+			// Fallback vers texte simple
+			this.createSongFromPlainText(title, lrcContent);
+		}
+	}
+
+	createSongFromPlainText(title, textContent) {
+		// Créer une nouvelle chanson
+		const newSong = lyricsLibrary.createSong(title, 'Artiste Inconnu', '');
+		
+		// Diviser le texte en lignes
+		const lines = textContent.split('\n')
+			.map(line => line.trim())
+			.filter(line => line.length > 0);
+		
+		// Ajouter chaque ligne avec un timecode automatique (5 secondes entre chaque ligne)
+		lines.forEach((line, index) => {
+			const timeMs = index * 5000; // 5 secondes entre chaque ligne
+			newSong.addLine(timeMs, line, 'vocal');
+		});
+		
+		// Si aucune ligne n'a été ajoutée, ajouter une ligne par défaut
+		if (lines.length === 0) {
+			newSong.addLine(0, 'Paroles importées du fichier...', 'vocal');
+		}
+		
+		// Sauvegarder et charger
+		lyricsLibrary.saveSong(newSong);
+		this.loadLyrics(newSong);
+		this.refreshSongsList();
+		
+		console.log('✅ Chanson texte créée:', title, `(${lines.length} lignes)`);
+		alert(`Chanson "${title}" créée avec ${lines.length} lignes!\nVous pouvez maintenant éditer les timecodes en mode édition.`);
 	}
 
 	toggleFullscreen() {
