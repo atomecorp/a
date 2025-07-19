@@ -262,6 +262,66 @@ function addNewLyricLine(timeMs, text, type = 'vocal') {
 	console.log('✅ Nouvelle ligne ajoutée:', text, 'à', (timeMs/1000).toFixed(1) + 's');
 }
 
+// Fonction pour créer une nouvelle chanson via code
+function createNewSong(title, artist, album = '') {
+	if (!title || !artist) {
+		console.log('❌ Titre et artiste requis');
+		return null;
+	}
+	
+	const newSong = lyricsLibrary.createSong(title, artist, album);
+	newSong.addLine(0, 'Première ligne de paroles...', 'vocal');
+	lyricsLibrary.saveSong(newSong);
+	
+	console.log('✅ Nouvelle chanson créée:', title, 'par', artist);
+	return newSong;
+}
+
+// Fonction pour supprimer une chanson
+function deleteSong(songIdentifier) {
+	let songId = songIdentifier;
+	
+	// Si c'est un nom, chercher l'ID
+	if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
+		const results = lyricsLibrary.searchSongs(songIdentifier);
+		if (results.length === 0) {
+			console.log('❌ Chanson non trouvée:', songIdentifier);
+			return false;
+		}
+		songId = results[0].songId;
+	}
+	
+	const success = lyricsLibrary.deleteSong(songId);
+	if (success && lyricsDisplay) {
+		lyricsDisplay.refreshSongsList();
+	}
+	
+	return success;
+}
+
+// Fonction pour lister toutes les chansons
+function listAllSongs() {
+	const songs = lyricsLibrary.getAllSongs();
+	console.log('📚 Chansons dans la bibliothèque:');
+	songs.forEach((song, index) => {
+		console.log(`  ${index + 1}. "${song.title}" - ${song.artist} (${song.linesCount} lignes)`);
+	});
+	return songs;
+}
+
+// Fonction pour ouvrir/fermer le gestionnaire de chansons
+function toggleSongManager() {
+	if (!lyricsDisplay) {
+		console.log('❌ LyricsDisplay non initialisé');
+		return;
+	}
+	
+	const btn = document.getElementById('song-manager-btn');
+	if (btn) {
+		btn.click();
+	}
+}
+
 // Exemple d'utilisation et création d'un objet de paroles synchronisées
 function createDarkboxLyrics() {
 	console.warn('⚠️ createDarkboxLyrics() est obsolète. Utilisez createDemoSongs() à la place.');
@@ -698,12 +758,34 @@ class LyricsDisplay {
 				<h3 id="song-title">Aucune chanson</h3>
 				<p id="song-artist">-</p>
 			</div>
-			<div id="lyrics-controls" style="padding: 10px; background: #444; color: white; display: flex; gap: 10px; align-items: center;">
+			<div id="lyrics-controls" style="padding: 10px; background: #444; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
 				<label>Taille:</label>
 				<input type="range" id="font-size-slider" min="10" max="32" value="${this.fontSize}" style="width: 100px;">
 				<span id="font-size-display">${this.fontSize}px</span>
 				<button id="edit-mode-btn" style="padding: 5px 10px; margin-left: 20px;">Mode Édition</button>
 				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
+				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
+			</div>
+			<div id="song-manager" style="display: none; padding: 15px; background: #2c3e50; color: white; border-top: 1px solid #555;">
+				<div style="display: flex; gap: 15px; margin-bottom: 15px;">
+					<div style="flex: 1;">
+						<h4 style="margin: 0 0 10px 0;">Nouvelle Chanson</h4>
+						<input type="text" id="new-song-title" placeholder="Titre" style="width: 100%; margin-bottom: 5px; padding: 5px;">
+						<input type="text" id="new-song-artist" placeholder="Artiste" style="width: 100%; margin-bottom: 5px; padding: 5px;">
+						<input type="text" id="new-song-album" placeholder="Album (optionnel)" style="width: 100%; margin-bottom: 10px; padding: 5px;">
+						<button id="create-song-btn" style="padding: 8px 15px; background: #27ae60; color: white; border: none;">Créer</button>
+					</div>
+					<div style="flex: 2;">
+						<h4 style="margin: 0 0 10px 0;">Bibliothèque de Chansons</h4>
+						<div id="songs-list" style="max-height: 200px; overflow-y: auto; background: #34495e; padding: 10px; border-radius: 4px;">
+							<p style="color: #bdc3c7;">Chargement...</p>
+						</div>
+					</div>
+				</div>
+				<div style="text-align: center;">
+					<button id="refresh-songs-btn" style="padding: 5px 10px; margin-right: 10px;">Actualiser</button>
+					<button id="close-manager-btn" style="padding: 5px 10px; background: #95a5a6;">Fermer</button>
+				</div>
 			</div>
 			<div id="lyrics-content" style="height: 300px; overflow-y: auto; padding: 20px;">
 				<p style="text-align: center; color: #666;">Chargez des paroles synchronisées</p>
@@ -711,6 +793,7 @@ class LyricsDisplay {
 		`;
 		
 		this.setupEventListeners();
+		this.refreshSongsList();
 	}
 
 	setupEventListeners() {
@@ -746,6 +829,164 @@ class LyricsDisplay {
 				this.saveLyricsChanges();
 			});
 		}
+		
+		// Gestionnaire de chansons
+		this.setupSongManagerListeners();
+	}
+
+	setupSongManagerListeners() {
+		// Bouton ouvrir/fermer gestionnaire
+		const songManagerBtn = document.getElementById('song-manager-btn');
+		const songManager = document.getElementById('song-manager');
+		const closeManagerBtn = document.getElementById('close-manager-btn');
+		
+		if (songManagerBtn) {
+			songManagerBtn.addEventListener('click', () => {
+				const isVisible = songManager.style.display !== 'none';
+				songManager.style.display = isVisible ? 'none' : 'block';
+				songManagerBtn.textContent = isVisible ? 'Gérer Chansons' : 'Fermer Gestion';
+				if (!isVisible) {
+					this.refreshSongsList();
+				}
+			});
+		}
+		
+		if (closeManagerBtn) {
+			closeManagerBtn.addEventListener('click', () => {
+				songManager.style.display = 'none';
+				songManagerBtn.textContent = 'Gérer Chansons';
+			});
+		}
+		
+		// Bouton créer chanson
+		const createSongBtn = document.getElementById('create-song-btn');
+		if (createSongBtn) {
+			createSongBtn.addEventListener('click', () => {
+				this.createNewSong();
+			});
+		}
+		
+		// Bouton actualiser
+		const refreshSongsBtn = document.getElementById('refresh-songs-btn');
+		if (refreshSongsBtn) {
+			refreshSongsBtn.addEventListener('click', () => {
+				this.refreshSongsList();
+			});
+		}
+		
+		// Entrée sur Enter pour créer chanson
+		const titleInput = document.getElementById('new-song-title');
+		const artistInput = document.getElementById('new-song-artist');
+		const albumInput = document.getElementById('new-song-album');
+		
+		[titleInput, artistInput, albumInput].forEach(input => {
+			if (input) {
+				input.addEventListener('keypress', (e) => {
+					if (e.key === 'Enter') {
+						this.createNewSong();
+					}
+				});
+			}
+		});
+	}
+
+	createNewSong() {
+		const title = document.getElementById('new-song-title').value.trim();
+		const artist = document.getElementById('new-song-artist').value.trim();
+		const album = document.getElementById('new-song-album').value.trim();
+		
+		if (!title || !artist) {
+			alert('Veuillez remplir au moins le titre et l\'artiste');
+			return;
+		}
+		
+		// Créer la nouvelle chanson
+		const newSong = lyricsLibrary.createSong(title, artist, album);
+		
+		// Ajouter une ligne de départ
+		newSong.addLine(0, 'Première ligne de paroles...', 'vocal');
+		
+		// Sauvegarder
+		lyricsLibrary.saveSong(newSong);
+		
+		// Charger dans l'affichage
+		this.loadLyrics(newSong);
+		
+		// Vider les champs
+		document.getElementById('new-song-title').value = '';
+		document.getElementById('new-song-artist').value = '';
+		document.getElementById('new-song-album').value = '';
+		
+		// Actualiser la liste
+		this.refreshSongsList();
+		
+		console.log('✅ Nouvelle chanson créée:', title, 'par', artist);
+	}
+
+	refreshSongsList() {
+		const songsList = document.getElementById('songs-list');
+		if (!songsList || !lyricsLibrary) return;
+		
+		const allSongs = lyricsLibrary.getAllSongs();
+		
+		if (allSongs.length === 0) {
+			songsList.innerHTML = '<p style="color: #bdc3c7;">Aucune chanson dans la bibliothèque</p>';
+			return;
+		}
+		
+		songsList.innerHTML = '';
+		
+		allSongs.forEach(song => {
+			const songItem = document.createElement('div');
+			songItem.style.cssText = `
+				padding: 8px;
+				margin-bottom: 8px;
+				background: #2c3e50;
+				border-radius: 4px;
+				border-left: 3px solid #3498db;
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+			`;
+			
+			const songInfo = document.createElement('div');
+			songInfo.style.cssText = 'flex: 1; cursor: pointer;';
+			songInfo.innerHTML = `
+				<strong>${song.title}</strong><br>
+				<small style="color: #bdc3c7;">${song.artist}${song.album ? ' - ' + song.album : ''}</small><br>
+				<small style="color: #95a5a6;">${song.linesCount} lignes</small>
+			`;
+			
+			// Charger la chanson au clic
+			songInfo.addEventListener('click', () => {
+				const loadedSong = lyricsLibrary.loadSongById(song.songId);
+				if (loadedSong) {
+					this.loadLyrics(loadedSong);
+					console.log('✅ Chanson chargée:', song.title);
+				}
+			});
+			
+			const controls = document.createElement('div');
+			controls.style.cssText = 'display: flex; gap: 5px;';
+			
+			// Bouton supprimer
+			const deleteBtn = document.createElement('button');
+			deleteBtn.textContent = '🗑️';
+			deleteBtn.style.cssText = 'padding: 4px 8px; background: #e74c3c; color: white; border: none; border-radius: 3px; cursor: pointer;';
+			deleteBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				if (confirm(`Supprimer "${song.title}" par ${song.artist} ?`)) {
+					lyricsLibrary.deleteSong(song.songId);
+					this.refreshSongsList();
+					console.log('🗑️ Chanson supprimée:', song.title);
+				}
+			});
+			
+			controls.appendChild(deleteBtn);
+			songItem.appendChild(songInfo);
+			songItem.appendChild(controls);
+			songsList.appendChild(songItem);
+		});
 	}
 
 	updateFontSize() {
@@ -968,6 +1209,10 @@ if (typeof window !== 'undefined') {
 	window.setFontSize = setFontSize;
 	window.toggleEditMode = toggleEditMode;
 	window.addNewLyricLine = addNewLyricLine;
+	window.createNewSong = createNewSong;
+	window.deleteSong = deleteSong;
+	window.listAllSongs = listAllSongs;
+	window.toggleSongManager = toggleSongManager;
 	
 	// Debug: Vérifier que les fonctions sont bien exposées
 	console.log('🔧 Fonctions exposées globalement:');
@@ -979,6 +1224,10 @@ if (typeof window !== 'undefined') {
 	console.log('  - setFontSize:', typeof window.setFontSize);
 	console.log('  - toggleEditMode:', typeof window.toggleEditMode);
 	console.log('  - addNewLyricLine:', typeof window.addNewLyricLine);
+	console.log('  - createNewSong:', typeof window.createNewSong);
+	console.log('  - deleteSong:', typeof window.deleteSong);
+	console.log('  - listAllSongs:', typeof window.listAllSongs);
+	console.log('  - toggleSongManager:', typeof window.toggleSongManager);
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
