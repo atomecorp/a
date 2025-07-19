@@ -1100,8 +1100,12 @@ class LyricsDisplay {
 				containerHeight: container.style.height,
 				containerZIndex: container.style.zIndex,
 				containerBackground: container.style.backgroundColor,
+				containerMargin: container.style.margin,
+				containerPadding: container.style.padding,
 				contentHeight: lyricsContent.style.height,
-				contentPadding: lyricsContent.style.padding
+				contentPadding: lyricsContent.style.padding,
+				contentMargin: lyricsContent.style.margin,
+				bodyOverflow: document.body.style.overflow
 			};
 			
 			// Appliquer les styles plein écran
@@ -1112,6 +1116,12 @@ class LyricsDisplay {
 			container.style.height = '100vh';
 			container.style.zIndex = '9999';
 			container.style.backgroundColor = '#000';
+			container.style.margin = '0';
+			container.style.padding = '0';
+			container.style.boxSizing = 'border-box';
+			
+			// Empêcher le scroll du body
+			document.body.style.overflow = 'hidden';
 			
 			// Cacher les contrôles en plein écran
 			const header = document.getElementById('lyrics-header');
@@ -1122,14 +1132,20 @@ class LyricsDisplay {
 			if (controls) controls.style.display = 'none';
 			if (songManager) songManager.style.display = 'none';
 			
-			// Ajuster la zone de contenu
+			// Ajuster la zone de contenu pour coller parfaitement
 			lyricsContent.style.height = '100vh';
+			lyricsContent.style.width = '100vw';
 			lyricsContent.style.padding = '40px';
+			lyricsContent.style.margin = '0';
+			lyricsContent.style.boxSizing = 'border-box';
 			lyricsContent.style.display = 'flex';
 			lyricsContent.style.flexDirection = 'column';
 			lyricsContent.style.justifyContent = 'center';
 			lyricsContent.style.alignItems = 'center';
 			lyricsContent.style.textAlign = 'center';
+			lyricsContent.style.position = 'absolute';
+			lyricsContent.style.top = '0';
+			lyricsContent.style.left = '0';
 			
 			this.isFullscreen = true;
 			if (fullscreenBtn) fullscreenBtn.textContent = 'Sortir Plein Écran';
@@ -1145,6 +1161,12 @@ class LyricsDisplay {
 			container.style.height = this.originalStyles.containerHeight || '';
 			container.style.zIndex = this.originalStyles.containerZIndex || '';
 			container.style.backgroundColor = this.originalStyles.containerBackground || '';
+			container.style.margin = this.originalStyles.containerMargin || '';
+			container.style.padding = this.originalStyles.containerPadding || '';
+			container.style.boxSizing = '';
+			
+			// Restaurer le scroll du body
+			document.body.style.overflow = this.originalStyles.bodyOverflow || '';
 			
 			// Restaurer les contrôles
 			const header = document.getElementById('lyrics-header');
@@ -1155,12 +1177,18 @@ class LyricsDisplay {
 			
 			// Restaurer la zone de contenu
 			lyricsContent.style.height = this.originalStyles.contentHeight || '300px';
+			lyricsContent.style.width = '';
 			lyricsContent.style.padding = this.originalStyles.contentPadding || '20px';
+			lyricsContent.style.margin = this.originalStyles.contentMargin || '';
+			lyricsContent.style.boxSizing = '';
 			lyricsContent.style.display = '';
 			lyricsContent.style.flexDirection = '';
 			lyricsContent.style.justifyContent = '';
 			lyricsContent.style.alignItems = '';
 			lyricsContent.style.textAlign = '';
+			lyricsContent.style.position = '';
+			lyricsContent.style.top = '';
+			lyricsContent.style.left = '';
 			
 			this.isFullscreen = false;
 			if (fullscreenBtn) fullscreenBtn.textContent = 'Plein Écran';
