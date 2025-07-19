@@ -46,7 +46,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         webView.configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         
         let myProjectBundle: Bundle = Bundle.main
-        if let myUrl = myProjectBundle.url(forResource: "view/index", withExtension: "html") {
+        if let myUrl = myProjectBundle.url(forResource: "src/index", withExtension: "html") {
             webView.loadFileURL(myUrl, allowingReadAccessTo: myUrl)
         }
     }

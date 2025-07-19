@@ -38,8 +38,34 @@ function updateTimecode(timecodeMs) {
     }
 }
 
-// Rendre la fonction globale pour qu'elle soit accessible depuis Swift
+// Fonction pour recevoir les informations de transport depuis AUv3
+function displayTransportInfo(isPlaying, playheadPosition, sampleRate) {
+    console.log('🎵 Transport Info:');
+    console.log('  - Is Playing:', isPlaying);
+    console.log('  - Playhead Position:', playheadPosition);
+    console.log('  - Sample Rate:', sampleRate);
+    
+    // Convertir la position en millisecondes si nécessaire
+    const positionMs = (playheadPosition / sampleRate) * 1000;
+    
+    // Mettre à jour l'affichage du timecode
+    updateTimecode(positionMs);
+    
+    // Optionnel : ajouter un indicateur de lecture/pause
+    const timecodeElement = document.getElementById('timecode');
+    if (timecodeElement) {
+        const seconds = (positionMs / 1000).toFixed(3);
+        const playIcon = isPlaying ? '▶️' : '⏸️';
+        timecodeElement.textContent = `${playIcon} ${seconds}s`;
+        
+        // Changer la couleur selon l'état
+        timecodeElement.style.backgroundColor = isPlaying ? '#0a0' : '#a00';
+    }
+}
+
+// Rendre les fonctions globales pour qu'elles soient accessibles depuis Swift
 window.updateTimecode = updateTimecode;
+window.displayTransportInfo = displayTransportInfo;
 // console.log(Button.templates)
 // const toggle = Button({
 //     onText: 'ON',
