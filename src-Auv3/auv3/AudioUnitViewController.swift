@@ -8,7 +8,7 @@
 import CoreAudioKit
 import WebKit
 
-public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, AudioDataDelegate {
+public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, AudioDataDelegate, TransportDataDelegate {
     var audioUnit: AUAudioUnit?
     var webView: WKWebView!
     
@@ -43,6 +43,7 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             au.mute = true
             _isMuted = true
             au.audioDataDelegate = self
+            au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
         }
 
         return audioUnit!
@@ -164,6 +165,17 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         metrics["zeroCrossings"] = zeroCrossings
         
         return metrics
+    }
+    
+    // MARK: - Transport Data Delegate
+    
+    public func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
+        // Send transport data to WebView via WebViewManager
+        WebViewManager.sendTransportDataToJS(
+            isPlaying: isPlaying,
+            playheadPosition: playheadPosition,
+            sampleRate: sampleRate
+        )
     }
     
     // MARK: - Utility Methods

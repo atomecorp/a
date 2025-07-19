@@ -14,6 +14,11 @@ protocol AudioDataDelegate: AnyObject {
     func didReceiveAudioData(_ data: [Float], timestamp: Double)
 }
 
+// Protocol for transport data delegation
+protocol TransportDataDelegate: AnyObject {
+    func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double)
+}
+
 public class auv3Utils: AUAudioUnit {
     // MARK: - Properties
     
@@ -30,6 +35,7 @@ public class auv3Utils: AUAudioUnit {
     
     // Audio visualization properties
     weak var audioDataDelegate: AudioDataDelegate?
+    weak var transportDataDelegate: TransportDataDelegate?
     private let audioBufferSize = 1024
     private var audioBuffer = [Float](repeating: 0, count: 1024)
     private var bufferIndex = 0
@@ -184,13 +190,21 @@ public class auv3Utils: AUAudioUnit {
             if success {
                 DispatchQueue.main.async {
                     if transportStateChanged.rawValue != 0 {
-                        if transportStateChanged.rawValue & 2 != 0 {
+                        let isPlaying = transportStateChanged.rawValue & 2 != 0
+                        
+                        if isPlaying {
                             print("Transport is playing")
                         }
                         print("Playhead position: \(currentSampleTime)")
                         
                         if let sampleRate = self.getSampleRate() {
                             print("Sample Rate: \(sampleRate)")
+                            
+                            // Simple call to JavaScript function
+                            if let webView = WebViewManager.webView {
+                                let jsCode = "displayTransportInfo(\(isPlaying), \(currentSampleTime), \(sampleRate));"
+                                webView.evaluateJavaScript(jsCode, completionHandler: nil)
+                            }
                         }
                     }
                 }

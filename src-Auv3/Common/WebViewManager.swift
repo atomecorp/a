@@ -130,6 +130,21 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             WebViewManager.sendToJS(jsonString, "updateTestState")
         }
     }
+    
+    // MARK: - Transport Data Communication
+    
+    public static func sendTransportDataToJS(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
+        let transportData: [String: Any] = [
+            "isPlaying": isPlaying,
+            "playheadPosition": playheadPosition,
+            "sampleRate": sampleRate
+        ]
+        
+        if let jsonData = try? JSONSerialization.data(withJSONObject: transportData),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            sendToJS(jsonString, "updateTransportFromSwift")
+        }
+    }
 
     public static func sendToJS(_ message: Any, _ function: String) {
         var jsValue: String

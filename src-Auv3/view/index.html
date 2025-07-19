@@ -144,12 +144,16 @@
     </header>
 
     <div class="content">
-        <div class="control-container">
+                <div class="control-container">
             <div id="audioControl" class="audio-control">
-                UNMUTED
+                <div class="status-indicator"></div>
             </div>
             <div id="testControl" class="test-control">
                 RUN TEST
+                <div class="status-indicator"></div>
+            </div>
+            <div id="transportControl" class="test-control" style="background-color: #2196F3; width: 140px;">
+                TRANSPORT INFO
                 <div class="status-indicator"></div>
             </div>
         </div>
@@ -251,7 +255,127 @@
         let isTestPlaying = false;
         let hostSampleRate = null;
 
+        // Transport Info Display Class
+        class TransportInfoDisplay {
+            constructor(containerId = 'transport-info') {
+                this.container = document.getElementById(containerId) || this.createContainer();
+                this.isPlaying = false;
+                this.playheadPosition = 0.0;
+                this.sampleRate = 48000.0;
+                this.initializeDisplay();
+            }
+
+            createContainer() {
+                const container = document.createElement('div');
+                container.id = 'transport-info';
+                container.style.cssText = `
+                    position: fixed;
+                    top: 10px;
+                    right: 10px;
+                    background: rgba(0, 0, 0, 0.9);
+                    color: #00ff00;
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    padding: 15px;
+                    border-radius: 8px;
+                    z-index: 1000;
+                    min-width: 250px;
+                    border: 1px solid #333;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                `;
+                document.body.appendChild(container);
+                return container;
+            }
+
+            initializeDisplay() {
+                this.container.innerHTML = `
+                    <div style="border-bottom: 1px solid #333; margin-bottom: 8px; padding-bottom: 5px;">
+                        <strong>🎵 Audio Transport Info</strong>
+                    </div>
+                    <div id="transport-status" style="margin-bottom: 4px;">Transport is stopped</div>
+                    <div id="playhead-position" style="margin-bottom: 4px;">Playhead position: 0.0</div>
+                    <div id="sample-rate" style="margin-bottom: 8px;">Sample Rate: 48000.0</div>
+                    <div id="timestamp" style="font-size: 10px; color: #888; border-top: 1px solid #333; padding-top: 5px;">
+                        Last update: --
+                    </div>
+                `;
+            }
+
+            updateTransportInfo(data) {
+                const { isPlaying, playheadPosition, sampleRate } = data;
+                
+                this.isPlaying = isPlaying;
+                this.playheadPosition = playheadPosition;
+                this.sampleRate = sampleRate;
+
+                // Update display elements
+                const statusElement = document.getElementById('transport-status');
+                const positionElement = document.getElementById('playhead-position');
+                const rateElement = document.getElementById('sample-rate');
+                const timestampElement = document.getElementById('timestamp');
+
+                if (statusElement) {
+                    statusElement.textContent = isPlaying ? 'Transport is playing' : 'Transport is stopped';
+                    statusElement.style.color = isPlaying ? '#00ff00' : '#ff6600';
+                }
+
+                if (positionElement) {
+                    positionElement.textContent = `Playhead position: ${playheadPosition.toFixed(3)}`;
+                }
+
+                if (rateElement) {
+                    rateElement.textContent = `Sample Rate: ${sampleRate.toFixed(1)}`;
+                }
+
+                if (timestampElement) {
+                    timestampElement.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+                }
+
+                // Log to console (similar to Swift print statements)
+                if (isPlaying) {
+                    console.log('Transport is playing');
+                    console.log(`Playhead position: ${playheadPosition}`);
+                    console.log(`Sample Rate: ${sampleRate}`);
+                }
+            }
+
+            hide() {
+                this.container.style.display = 'none';
+            }
+
+            show() {
+                this.container.style.display = 'block';
+            }
+
+            destroy() {
+                if (this.container && this.container.parentNode) {
+                    this.container.parentNode.removeChild(this.container);
+                }
+            }
+        }
+
+        // Initialize transport display
+        let transportDisplay = null;
+
+        // Simple function to display transport info called directly from Swift
+        function displayTransportInfo(isPlaying, playheadPosition, sampleRate) {
+            console.log('Transport is playing: ' + isPlaying);
+            console.log('Playhead position: ' + playheadPosition);
+            console.log('Sample Rate: ' + sampleRate);
+            
+            if (transportDisplay) {
+                transportDisplay.updateTransportInfo({
+                    isPlaying: isPlaying,
+                    playheadPosition: playheadPosition,
+                    sampleRate: sampleRate
+                });
+            }
+        }
+
         document.addEventListener("DOMContentLoaded", async function() {
+            // Initialize transport display
+            transportDisplay = new TransportInfoDisplay();
+            
             window.sendToSwift = function(message, type = "log") {
                 if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge) {
                     try {
@@ -265,6 +389,13 @@
                     }
                 } else {
                     console.warn("Swift bridge is not available.");
+                }
+            };
+
+            // Function to receive transport data from Swift
+            window.updateTransportFromSwift = function(transportData) {
+                if (transportDisplay) {
+                    transportDisplay.updateTransportInfo(transportData);
                 }
             };
 
@@ -445,6 +576,23 @@
         });
 
         testControl.addEventListener('click', toggleTestTone);
+
+        // Transport control event listener
+        const transportControl = document.getElementById('transportControl');
+        transportControl.addEventListener('click', function() {
+            if (transportDisplay) {
+                const isVisible = transportDisplay.container.style.display !== 'none';
+                if (isVisible) {
+                    transportDisplay.hide();
+                    transportControl.style.backgroundColor = '#666';
+                    transportControl.textContent = 'SHOW TRANSPORT';
+                } else {
+                    transportDisplay.show();
+                    transportControl.style.backgroundColor = '#2196F3';
+                    transportControl.textContent = 'TRANSPORT INFO';
+                }
+            }
+        });
 
         // Initial state setup
         updateAudioState({ muted: true });
