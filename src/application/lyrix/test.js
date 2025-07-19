@@ -4,139 +4,151 @@ let lyricsLibrary = null;
 // Configuration globale pour les chemins audio
 const AUDIO_CONFIG = {
 	BASE_PATH: 'assets/audios/',
-	BASE_URL: 'http://localhost:3001/assets/audios/'
+	BASE_URL: 'http://localhost:3001/assets/audios/',
+	DEMO_FILES: {
+		darkbox: 'darkbox.mp3',
+		digitalDreams: 'digital_dreams.mp3'
+	}
 };
 
-// Fonction utilitaire pour normaliser les chemins audio
-function normalizeAudioPath(audioPath) {
-	if (!audioPath) return null;
-	
-	// Si c'est des métadonnées JSON, extraire le nom du fichier
-	if (audioPath.startsWith('{')) {
-		try {
-			const metadata = JSON.parse(audioPath);
-			const fileName = metadata.fileName;
-			if (fileName) {
-				// Encoder le nom de fichier pour gérer les espaces et caractères spéciaux
-				const encodedFileName = encodeURIComponent(fileName);
-				return AUDIO_CONFIG.BASE_URL + encodedFileName;
+// Utilitaires audio regroupés
+const AudioUtils = {
+	// Normaliser les chemins audio
+	normalize(audioPath) {
+		if (!audioPath) return null;
+		
+		// Traitement des métadonnées JSON
+		if (audioPath.startsWith('{')) {
+			try {
+				const { fileName } = JSON.parse(audioPath);
+				return fileName ? this.createUrl(fileName) : null;
+			} catch (e) {
+				console.warn('⚠️ Métadonnées audio corrompues:', e);
+				return null;
 			}
-		} catch (e) {
-			console.warn('⚠️ Métadonnées audio corrompues:', e);
+		}
+		
+		// URL complète déjà formée
+		if (audioPath.startsWith(AUDIO_CONFIG.BASE_URL)) return audioPath;
+		
+		// Chemin relatif
+		if (audioPath.startsWith(AUDIO_CONFIG.BASE_PATH)) {
+			return this.createUrl(audioPath.replace(AUDIO_CONFIG.BASE_PATH, ''));
+		}
+		
+		// Extraction du nom de fichier depuis un chemin
+		const fileName = audioPath.split(/[/\\]/).pop();
+		return this.createUrl(fileName);
+	},
+	
+	// Créer une URL audio complète
+	createUrl(fileName) {
+		return AUDIO_CONFIG.BASE_URL + encodeURIComponent(fileName);
+	},
+	
+	// Obtenir les chemins de démo
+	getDemoPaths() {
+		return Object.fromEntries(
+			Object.entries(AUDIO_CONFIG.DEMO_FILES).map(([key, file]) => [key, this.createUrl(file)])
+		);
+	},
+	
+	// Debug d'un chemin
+	debug(input) {
+		const result = this.normalize(input);
+		console.log('🔍 Debug chemin audio:', { input, result });
+		return result;
+	}
+};
+
+// Fonctions compatibilité (garde l'API existante)
+const normalizeAudioPath = (path) => AudioUtils.normalize(path);
+const createAudioPath = (fileName) => AudioUtils.createUrl(fileName);
+const getDemoAudioPaths = () => AudioUtils.getDemoPaths();
+const debugAudioPath = (input) => AudioUtils.debug(input);
+
+// Utilitaires DOM regroupés
+const DOMUtils = {
+	// Vérifier la compatibilité DOM
+	isCompatible() {
+		return typeof document !== 'undefined' && typeof $ !== 'undefined';
+	},
+	
+	// Créer les éléments DOM nécessaires
+	initialize() {
+		if (!this.isCompatible()) {
+			console.log('⚠️ Environnement sans DOM ou fonction $ détecté');
+			return false;
+		}
+
+		// Timecode
+		$('div', {
+			id: 'timecode',
+			css: {
+				backgroundColor: '#00f',
+				marginLeft: '0',
+				padding: '10px',
+				color: 'white',
+				margin: '10px',
+				display: 'inline-block'
+			},
+		});
+
+		// Conteneur paroles
+		$('div', {
+			id: 'lyrics-container',
+			css: {
+				width: '100%',
+				minHeight: '600px',
+				height: 'auto',
+				backgroundColor: '#1a1a1a',
+				border: '1px solid #333',
+				borderRadius: '8px',
+				margin: '20px 0',
+				overflow: 'visible',
+				display: 'flex',
+				flexDirection: 'column'
+			},
+			parent: '#view'
+		});
+		
+		console.log('✅ Éléments DOM initialisés');
+		return true;
+	},
+	
+	// Initialiser l'affichage des paroles
+	initLyricsDisplay() {
+		const container = document.getElementById('lyrics-container');
+		if (!container) {
+			console.log('⚠️ lyrics-container non trouvé');
 			return null;
 		}
+		
+		const display = new LyricsDisplay('lyrics-container');
+		console.log('✅ LyricsDisplay initialisé');
+		
+		// Charger chanson de démo
+		const demoSongs = createDemoSongs();
+		if (demoSongs?.darkboxSong) {
+			display.loadLyrics(demoSongs.darkboxSong);
+			console.log('✅ Chanson "The Darkbox" chargée');
+		}
+		
+		return display;
 	}
-	
-	// Si le chemin commence déjà par l'URL complète, le retourner tel quel
-	if (audioPath.startsWith('http://localhost:3001/assets/audios/')) {
-		return audioPath;
-	}
-	
-	// Si le chemin commence par assets/audios/, ajouter l'URL de base
-	if (audioPath.startsWith('assets/audios/')) {
-		const fileName = audioPath.replace('assets/audios/', '');
-		const encodedFileName = encodeURIComponent(fileName);
-		return AUDIO_CONFIG.BASE_URL + encodedFileName;
-	}
-	
-	// Si c'est un chemin absolu ou relatif, extraire juste le nom du fichier
-	const fileName = audioPath.split('/').pop().split('\\').pop();
-	
-	// Encoder et préfixer avec l'URL complète
-	const encodedFileName = encodeURIComponent(fileName);
-	return AUDIO_CONFIG.BASE_URL + encodedFileName;
-}
-
-// Fonction d'aide pour créer rapidement un chemin audio
-function createAudioPath(fileName) {
-	// Encoder le nom de fichier pour gérer les espaces et caractères spéciaux
-	const encodedFileName = encodeURIComponent(fileName);
-	return AUDIO_CONFIG.BASE_URL + encodedFileName;
-}
-
-// Exemples de fichiers audio supportés pour les chansons de démo
-const DEMO_AUDIO_FILES = {
-	darkbox: 'darkbox.mp3',
-	digitalDreams: 'digital_dreams.mp3',
-	// Ajoutez d'autres fichiers audio ici selon vos besoins
 };
 
-// Fonction pour obtenir les chemins audio de démo
-function getDemoAudioPaths() {
-	const paths = {};
-	for (const [key, fileName] of Object.entries(DEMO_AUDIO_FILES)) {
-		paths[key] = createAudioPath(fileName);
-	}
-	return paths;
-}
-
-// Fonction de debug pour tester la normalisation des chemins
-function debugAudioPath(input) {
-	console.log('🔍 Debug chemin audio:');
-	console.log('  Input:', input);
-	console.log('  Normalized:', normalizeAudioPath(input));
-	return normalizeAudioPath(input);
-}
-
-// Création des éléments DOM nécessaires (compatible avec les deux environnements)
+// Initialisation compatible (garde l'API existante)
 function initializeDOM() {
-    // Vérifier que nous sommes dans un environnement navigateur
-    if (typeof document === 'undefined' || typeof $ === 'undefined') {
-        console.log('⚠️ Environnement sans DOM ou fonction $ détecté, initialisation DOM ignorée');
-        return;
-    }
-
-    // Créer le div pour le timecode
-    $('div', {
-        id: 'timecode',
-        css: {
-            backgroundColor: '#00f',
-            marginLeft: '0',
-            padding: '10px',
-            color: 'white',
-            margin: '10px',
-            display: 'inline-block'
-        },
-    });
-
-	// Créer le conteneur pour l'affichage des paroles
-	$('div', {
-		id: 'lyrics-container',
-		css: {
-			width: '100%',
-			minHeight: '600px',
-			height: 'auto',
-			backgroundColor: '#1a1a1a',
-			border: '1px solid #333',
-			borderRadius: '8px',
-			margin: '20px 0',
-			overflow: 'visible',
-			display: 'flex',
-			flexDirection: 'column'
-		},
-		parent: '#view'
-	});    console.log('✅ Éléments DOM initialisés');
+	return DOMUtils.initialize();
 }
 
-// Initialiser le DOM dès que possible
-setTimeout(initializeDOM, 10);
-
-// Initialiser l'affichage des paroles après création du DOM
+// Initialisation progressive
+setTimeout(() => DOMUtils.initialize(), 10);
 setTimeout(() => {
-    // Créer l'affichage des paroles
-    if (typeof document !== 'undefined' && document.getElementById('lyrics-container')) {
-        lyricsDisplay = new LyricsDisplay('lyrics-container');
-        console.log('✅ LyricsDisplay initialisé');
-        
-        // Créer les chansons de démonstration et charger la première
-        const demoSongs = createDemoSongs();
-        if (demoSongs && demoSongs.darkboxSong) {
-            lyricsDisplay.loadLyrics(demoSongs.darkboxSong);
-            console.log('✅ Chanson "The Darkbox" chargée dans l\'affichage');
-        }
-    } else {
-        console.log('⚠️ lyrics-container non trouvé, affichage des paroles non initialisé');
-    }
+	if (DOMUtils.isCompatible()) {
+		lyricsDisplay = DOMUtils.initLyricsDisplay();
+	}
 }, 50);
 
 // Fonction générique pour créer des chansons de démonstration
@@ -145,295 +157,341 @@ function createDemoSongs() {
 	return lyricsLibrary.createDemoSongsIfNeeded();
 }
 
-// Fonction pour chercher et charger une chanson
-function loadSongByName(searchTerm) {
-	const results = lyricsLibrary.searchSongs(searchTerm);
-	
-	if (results.length === 0) {
-		console.log('❌ Aucune chanson trouvée pour:', searchTerm);
-		return null;
-	}
-	
-	if (results.length === 1) {
-		const song = lyricsLibrary.loadSongById(results[0].songId);
-		console.log('✅ Chanson chargée:', song.metadata.title, 'par', song.metadata.artist);
-		return song;
-	}
-	
-	// Plusieurs résultats
-	console.log('🔍 Plusieurs chansons trouvées pour "' + searchTerm + '":');
-	results.forEach((result, index) => {
-		console.log(`  ${index + 1}. ${result.title} - ${result.artist} (ID: ${result.songId})`);
-	});
-	
-	// Retourner la première par défaut
-	const song = lyricsLibrary.loadSongById(results[0].songId);
-	console.log('✅ Première chanson chargée:', song.metadata.title);
-	return song;
-}
-
-// Fonction pour afficher les statistiques de la bibliothèque
-function showLibraryStats() {
-	const stats = lyricsLibrary.getStats();
-	console.log('📊 Statistiques de la bibliothèque:');
-	console.log(`  - ${stats.totalSongs} chansons`);
-	console.log(`  - ${stats.uniqueArtists} artistes uniques`);
-	console.log(`  - ${stats.totalLines} lignes de paroles`);
-	console.log(`  - Durée totale: ${(stats.totalDuration / 1000 / 60).toFixed(1)} minutes`);
-	
-	return stats;
-}
-
-// Fonction pour charger une chanson dans l'affichage
-function loadSongInDisplay(songName) {
-	if (!lyricsDisplay) {
-		console.log('❌ LyricsDisplay non initialisé');
-		return null;
-	}
-	
-	const song = loadSongByName(songName);
-	if (song) {
-		lyricsDisplay.loadLyrics(song);
-		console.log('✅ Chanson chargée dans l\'affichage:', song.metadata.title);
-		return song;
-	}
-	
-	return null;
-}
-
-// Fonction pour tester l'affichage des paroles avec un timecode spécifique
-function testLyricsAtTime(timeMs) {
-	if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
-		console.log('❌ Aucune chanson chargée dans l\'affichage');
-		return;
-	}
-	
-	console.log(`🎵 Test à ${timeMs}ms (${(timeMs/1000).toFixed(1)}s)`);
-	lyricsDisplay.updateTime(timeMs);
-	
-	const activeLine = lyricsDisplay.currentLyrics.getActiveLineAt(timeMs);
-	if (activeLine) {
-		console.log('  Ligne active:', activeLine.text);
-	} else {
-		console.log('  Aucune ligne active à ce moment');
-	}
-}
-
-// Fonction pour changer la taille de police
-function setFontSize(size) {
-	if (!lyricsDisplay) {
-		console.log('❌ LyricsDisplay non initialisé');
-		return;
-	}
-	
-	lyricsDisplay.fontSize = size;
-	const slider = document.getElementById('font-size-slider');
-	const display = document.getElementById('font-size-display');
-	
-	if (slider) slider.value = size;
-	if (display) display.textContent = size + 'px';
-	
-	lyricsDisplay.updateFontSize();
-	console.log('✅ Taille de police changée à', size + 'px');
-}
-
-// Fonction pour activer/désactiver le mode édition
-function toggleEditMode() {
-	if (!lyricsDisplay) {
-		console.log('❌ LyricsDisplay non initialisé');
-		return;
-	}
-	
-	const editBtn = document.getElementById('edit-mode-btn');
-	if (editBtn) {
-		editBtn.click();
-	}
-}
-
-// Fonction pour ajouter une nouvelle ligne de paroles
-function addNewLyricLine(timeMs, text, type = 'vocal') {
-	if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
-		console.log('❌ Aucune chanson chargée');
-		return;
-	}
-	
-	lyricsDisplay.currentLyrics.addLine(timeMs, text, type);
-	lyricsDisplay.renderLines();
-	
-	// Sauvegarder
-	if (lyricsLibrary) {
-		lyricsLibrary.saveSong(lyricsDisplay.currentLyrics);
-	}
-	
-	console.log('✅ Nouvelle ligne ajoutée:', text, 'à', (timeMs/1000).toFixed(1) + 's');
-}
-
-// Fonction pour créer une nouvelle chanson via code
-function createNewSong(title, artist, album = '') {
-	if (!title || !artist) {
-		console.log('❌ Titre et artiste requis');
-		return null;
-	}
-	
-	const newSong = lyricsLibrary.createSong(title, artist, album);
-	newSong.addLine(0, 'Première ligne de paroles...', 'vocal');
-	lyricsLibrary.saveSong(newSong);
-	
-	console.log('✅ Nouvelle chanson créée:', title, 'par', artist);
-	return newSong;
-}
-
-// Fonction pour supprimer une chanson
-function deleteSong(songIdentifier) {
-	let songId = songIdentifier;
-	
-	// Si c'est un nom, chercher l'ID
-	if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
-		const results = lyricsLibrary.searchSongs(songIdentifier);
+// Utilitaires de gestion des chansons
+const SongUtils = {
+	// Chercher et charger une chanson
+	loadByName(searchTerm) {
+		const results = lyricsLibrary.searchSongs(searchTerm);
+		
 		if (results.length === 0) {
-			console.log('❌ Chanson non trouvée:', songIdentifier);
-			return false;
+			console.log('❌ Aucune chanson trouvée pour:', searchTerm);
+			return null;
 		}
-		songId = results[0].songId;
-	}
+		
+		if (results.length === 1) {
+			const song = lyricsLibrary.loadSongById(results[0].songId);
+			console.log('✅ Chanson chargée:', song.metadata.title, 'par', song.metadata.artist);
+			return song;
+		}
+		
+		// Plusieurs résultats
+		console.log('🔍 Plusieurs chansons trouvées pour "' + searchTerm + '":');
+		results.forEach((result, index) => {
+			console.log(`  ${index + 1}. ${result.title} - ${result.artist} (ID: ${result.songId})`);
+		});
+		
+		// Retourner la première par défaut
+		const song = lyricsLibrary.loadSongById(results[0].songId);
+		console.log('✅ Première chanson chargée:', song.metadata.title);
+		return song;
+	},
 	
-	const success = lyricsLibrary.deleteSong(songId);
-	if (success && lyricsDisplay) {
-		lyricsDisplay.refreshSongsList();
-	}
+	// Afficher les statistiques
+	showStats() {
+		const stats = lyricsLibrary.getStats();
+		console.log('📊 Statistiques de la bibliothèque:');
+		console.log(`  - ${stats.totalSongs} chansons`);
+		console.log(`  - ${stats.uniqueArtists} artistes uniques`);
+		console.log(`  - ${stats.totalLines} lignes de paroles`);
+		console.log(`  - Durée totale: ${(stats.totalDuration / 1000 / 60).toFixed(1)} minutes`);
+		return stats;
+	},
 	
-	return success;
-}
+	// Charger dans l'affichage
+	loadInDisplay(songName) {
+		if (!lyricsDisplay) {
+			console.log('❌ LyricsDisplay non initialisé');
+			return null;
+		}
+		
+		const song = this.loadByName(songName);
+		if (song) {
+			lyricsDisplay.loadLyrics(song);
+			console.log('✅ Chanson chargée dans l\'affichage:', song.metadata.title);
+		}
+		return song;
+	},
+	
+	// Créer une nouvelle chanson
+	create(title, artist, album = '') {
+		if (!title || !artist) {
+			console.log('❌ Titre et artiste requis');
+			return null;
+		}
+		
+		const newSong = lyricsLibrary.createSong(title, artist, album);
+		newSong.addLine(0, 'Première ligne de paroles...', 'vocal');
+		lyricsLibrary.saveSong(newSong);
+		
+		console.log('✅ Nouvelle chanson créée:', title, 'par', artist);
+		return newSong;
+	},
+	
+	// Supprimer une chanson
+	delete(songIdentifier) {
+		let songId = songIdentifier;
+		
+		// Si c'est un nom, chercher l'ID
+		if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
+			const results = lyricsLibrary.searchSongs(songIdentifier);
+			if (results.length === 0) {
+				console.log('❌ Chanson non trouvée:', songIdentifier);
+				return false;
+			}
+			songId = results[0].songId;
+		}
+		
+		const success = lyricsLibrary.deleteSong(songId);
+		if (success && lyricsDisplay?.currentLyrics?.songId === songId) {
+			lyricsDisplay.clear();
+		}
+		
+		console.log(success ? '✅ Chanson supprimée' : '❌ Échec suppression');
+		return success;
+	},
+	
+	// Lister toutes les chansons
+	listAll() {
+		const songs = lyricsLibrary.getAllSongs();
+		console.log('📋 Liste des chansons (' + songs.length + '):');
+		songs.forEach((song, index) => {
+			const audioIcon = song.hasAudio() ? '🎵' : '📝';
+			console.log(`  ${index + 1}. ${audioIcon} ${song.metadata.title} - ${song.metadata.artist}`);
+		});
+		return songs;
+	},
+	
+	// Basculer le gestionnaire de chansons
+	toggleManager() {
+		if (!lyricsDisplay) {
+			console.log('❌ LyricsDisplay non initialisé');
+			return;
+		}
+		
+		lyricsDisplay.toggleSongManager();
+		
+		const btn = document.getElementById('song-manager-btn');
+		if (btn) {
+			btn.textContent = lyricsDisplay.songManagerVisible ? 
+				'🔒 Fermer gestionnaire' : '📋 Gérer chansons';
+		}
+	}
+};
 
-// Fonction pour lister toutes les chansons
-function listAllSongs() {
-	const songs = lyricsLibrary.getAllSongs();
-	console.log('📚 Chansons dans la bibliothèque:');
-	songs.forEach((song, index) => {
-		console.log(`  ${index + 1}. "${song.title}" - ${song.artist} (${song.linesCount} lignes)`);
-	});
-	return songs;
-}
-
-// Fonction pour ouvrir/fermer le gestionnaire de chansons
-function toggleSongManager() {
-	if (!lyricsDisplay) {
-		console.log('❌ LyricsDisplay non initialisé');
-		return;
-	}
+// Utilitaires de contrôle UI
+const UIUtils = {
+	// Tester l'affichage à un moment donné
+	testAtTime(timeMs) {
+		if (!lyricsDisplay?.currentLyrics) {
+			console.log('❌ Aucune chanson chargée dans l\'affichage');
+			return;
+		}
+		
+		console.log(`🎵 Test à ${timeMs}ms (${(timeMs/1000).toFixed(1)}s)`);
+		lyricsDisplay.updateTime(timeMs);
+		
+		const activeLine = lyricsDisplay.currentLyrics.getActiveLineAt(timeMs);
+		if (activeLine) {
+			console.log('  Ligne active:', activeLine.text);
+		} else {
+			console.log('  Aucune ligne active à ce moment');
+		}
+	},
 	
-	const btn = document.getElementById('song-manager-btn');
-	if (btn) {
-		btn.click();
+	// Changer la taille de police
+	setFontSize(size) {
+		if (!lyricsDisplay) {
+			console.log('❌ LyricsDisplay non initialisé');
+			return;
+		}
+		
+		lyricsDisplay.fontSize = size;
+		const slider = document.getElementById('font-size-slider');
+		const display = document.getElementById('font-size-display');
+		
+		if (slider) slider.value = size;
+		if (display) display.textContent = size + 'px';
+		
+		lyricsDisplay.updateFontSize();
+		console.log('✅ Taille de police changée à', size + 'px');
+	},
+	
+	// Basculer le mode édition
+	toggleEdit() {
+		if (!lyricsDisplay) {
+			console.log('❌ LyricsDisplay non initialisé');
+			return;
+		}
+		
+		lyricsDisplay.editMode = !lyricsDisplay.editMode;
+		lyricsDisplay.renderLines();
+		
+		const editBtn = document.getElementById('edit-mode-btn');
+		if (editBtn) {
+			editBtn.textContent = lyricsDisplay.editMode ? 
+				'🔒 Quitter le mode édition' : '✏️ Mode édition';
+			editBtn.style.backgroundColor = lyricsDisplay.editMode ? '#e74c3c' : '#3498db';
+		}
+		
+		console.log('✅ Mode édition:', lyricsDisplay.editMode ? 'activé' : 'désactivé');
+	},
+	
+	// Ajouter une ligne de paroles
+	addLyricLine(timeMs, text, type = 'vocal') {
+		if (!lyricsDisplay?.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		lyricsDisplay.currentLyrics.addLine(timeMs, text, type);
+		lyricsDisplay.renderLines();
+		
+		// Sauvegarder
+		if (lyricsLibrary) {
+			lyricsLibrary.saveSong(lyricsDisplay.currentLyrics);
+		}
+		
+		console.log('✅ Nouvelle ligne ajoutée:', text, 'à', (timeMs/1000).toFixed(1) + 's');
 	}
-}
+};
+
+// Fonctions compatibilité (garde l'API existante)
+const loadSongByName = (term) => SongUtils.loadByName(term);
+const showLibraryStats = () => SongUtils.showStats();
+const loadSongInDisplay = (name) => SongUtils.loadInDisplay(name);
+const createNewSong = (title, artist, album) => SongUtils.create(title, artist, album);
+const deleteSong = (identifier) => SongUtils.delete(identifier);
+const listAllSongs = () => SongUtils.listAll();
+const toggleSongManager = () => SongUtils.toggleManager();
+const testLyricsAtTime = (timeMs) => UIUtils.testAtTime(timeMs);
+const setFontSize = (size) => UIUtils.setFontSize(size);
+const toggleEditMode = () => UIUtils.toggleEdit();
+const addNewLyricLine = (timeMs, text, type) => UIUtils.addLyricLine(timeMs, text, type);
 
 // Fonction pour associer un fichier audio à une chanson
-function associateAudioToSong(songIdentifier, audioPath) {
-	// Normaliser le chemin audio
-	const normalizedAudioPath = normalizeAudioPath(audioPath);
-	
-	let songId = songIdentifier;
-	
-	// Si c'est un nom, chercher l'ID
-	if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
-		const results = lyricsLibrary.searchSongs(songIdentifier);
-		if (results.length === 0) {
-			console.log('❌ Chanson non trouvée:', songIdentifier);
+const AudioController = {
+	// Associer un fichier audio à une chanson
+	associate(songIdentifier, audioPath) {
+		const normalizedAudioPath = AudioUtils.normalize(audioPath);
+		
+		let songId = songIdentifier;
+		
+		// Si c'est un nom, chercher l'ID
+		if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
+			const results = lyricsLibrary.searchSongs(songIdentifier);
+			if (results.length === 0) {
+				console.log('❌ Chanson non trouvée:', songIdentifier);
+				return false;
+			}
+			songId = results[0].songId;
+		}
+		
+		// Charger la chanson
+		const song = lyricsLibrary.loadSongById(songId);
+		if (!song) {
+			console.log('❌ Impossible de charger la chanson:', songId);
 			return false;
 		}
-		songId = results[0].songId;
+		
+		// Associer l'audio (la normalisation se fait automatiquement dans setAudioPath)
+		song.setAudioPath(normalizedAudioPath);
+		lyricsLibrary.saveSong(song);
+		
+		// Si c'est la chanson actuellement affichée, recharger l'audio
+		if (lyricsDisplay?.currentLyrics?.songId === songId) {
+			lyricsDisplay.loadAssociatedAudio(normalizedAudioPath);
+		}
+		
+		console.log('✅ Audio associé à la chanson:', song.metadata.title, 'avec le chemin:', normalizedAudioPath);
+		return true;
+	},
+	
+	// Dissocier l'audio d'une chanson
+	remove(songIdentifier) {
+		return this.associate(songIdentifier, null);
+	},
+	
+	// Contrôler le lecteur audio
+	control(action, value = null) {
+		if (!lyricsDisplay) {
+			console.log('❌ LyricsDisplay non initialisé');
+			return false;
+		}
+		
+		switch (action.toLowerCase()) {
+			case 'play':
+				if (lyricsDisplay.audioPlayer) {
+					lyricsDisplay.audioPlayer.play();
+					lyricsDisplay.isPlayingInternal = true;
+					lyricsDisplay.updatePlayPauseButton();
+					console.log('▶️ Lecture audio');
+				}
+				break;
+				
+			case 'pause':
+				if (lyricsDisplay.audioPlayer) {
+					lyricsDisplay.audioPlayer.pause();
+					lyricsDisplay.isPlayingInternal = false;
+					lyricsDisplay.updatePlayPauseButton();
+					console.log('⏸️ Pause audio');
+				}
+				break;
+				
+			case 'toggle':
+				lyricsDisplay.togglePlayPause();
+				return lyricsDisplay.isPlayingInternal;
+				
+			case 'seek':
+			case 'time':
+				if (lyricsDisplay.audioPlayer && value !== null) {
+					lyricsDisplay.audioPlayer.currentTime = value;
+					console.log('⏩ Saut à', value + 's');
+				}
+				break;
+				
+			case 'volume':
+				if (lyricsDisplay.audioPlayer && value !== null) {
+					lyricsDisplay.audioPlayer.volume = Math.max(0, Math.min(1, value));
+					const volumeSlider = document.getElementById('volume-slider');
+					if (volumeSlider) volumeSlider.value = value * 100;
+					console.log('🔊 Volume:', (value * 100) + '%');
+				}
+				break;
+				
+			case 'currenttime':
+				return lyricsDisplay.audioPlayer ? lyricsDisplay.audioPlayer.currentTime : 0;
+				
+			case 'duration':
+				return lyricsDisplay.audioPlayer ? lyricsDisplay.audioPlayer.duration : 0;
+				
+			case 'isplaying':
+				return lyricsDisplay.isPlayingInternal;
+				
+			case 'hasaudio':
+				return !!lyricsDisplay.audioPlayer && !!lyricsDisplay.audioPath;
+				
+			default:
+				console.log('❌ Action audio inconnue:', action);
+				return false;
+		}
+		
+		return true;
 	}
-	
-	// Charger la chanson
-	const song = lyricsLibrary.loadSongById(songId);
-	if (!song) {
-		console.log('❌ Impossible de charger la chanson:', songId);
-		return false;
-	}
-	
-	// Associer l'audio (la normalisation se fait automatiquement dans setAudioPath)
-	song.setAudioPath(normalizedAudioPath);
-	lyricsLibrary.saveSong(song);
-	
-	// Si c'est la chanson actuellement affichée, recharger l'audio
-	if (lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.songId === songId) {
-		lyricsDisplay.loadAssociatedAudio(normalizedAudioPath);
-	}
-	
-	console.log('✅ Audio associé à la chanson:', song.metadata.title, 'avec le chemin:', normalizedAudioPath);
-	return true;
+};
+
+// Fonctions de compatibilité audio
+function associateAudioToSong(songIdentifier, audioPath) {
+	return AudioController.associate(songIdentifier, audioPath);
 }
 
 // Fonction pour dissocier l'audio d'une chanson
 function removeAudioFromSong(songIdentifier) {
-	return associateAudioToSong(songIdentifier, null);
+	return AudioController.remove(songIdentifier);
 }
 
 // Fonction pour contrôler le lecteur audio
 function audioControl(action, value = null) {
-	if (!lyricsDisplay) {
-		console.log('❌ LyricsDisplay non initialisé');
-		return false;
-	}
-	
-	switch (action) {
-		case 'play':
-			if (lyricsDisplay.audioPlayer) {
-				lyricsDisplay.audioPlayer.play();
-				lyricsDisplay.isPlayingInternal = true;
-				lyricsDisplay.updatePlayPauseButton();
-				return true;
-			}
-			break;
-			
-		case 'pause':
-			if (lyricsDisplay.audioPlayer) {
-				lyricsDisplay.audioPlayer.pause();
-				lyricsDisplay.isPlayingInternal = false;
-				lyricsDisplay.updatePlayPauseButton();
-				return true;
-			}
-			break;
-			
-		case 'toggle':
-			lyricsDisplay.togglePlayPause();
-			return lyricsDisplay.isPlayingInternal;
-			
-		case 'seek':
-			if (lyricsDisplay.audioPlayer && value !== null) {
-				lyricsDisplay.audioPlayer.currentTime = value;
-				return true;
-			}
-			break;
-			
-		case 'volume':
-			if (lyricsDisplay.audioPlayer && value !== null) {
-				lyricsDisplay.audioPlayer.volume = Math.max(0, Math.min(1, value));
-				const volumeSlider = document.getElementById('volume-slider');
-				if (volumeSlider) volumeSlider.value = value * 100;
-				return true;
-			}
-			break;
-			
-		case 'currentTime':
-			return lyricsDisplay.audioPlayer ? lyricsDisplay.audioPlayer.currentTime : 0;
-			
-		case 'duration':
-			return lyricsDisplay.audioPlayer ? lyricsDisplay.audioPlayer.duration : 0;
-			
-		case 'isPlaying':
-			return lyricsDisplay.isPlayingInternal;
-			
-		case 'hasAudio':
-			return !!lyricsDisplay.audioPlayer && !!lyricsDisplay.audioPath;
-			
-		default:
-			console.log('❌ Action non reconnue:', action);
-			return false;
-	}
-	
-	return false;
+	return AudioController.control(action, value);
 }
 
 // Exemple d'utilisation et création d'un objet de paroles synchronisées
@@ -2908,12 +2966,25 @@ class LyricsDisplay {
 // Vérification de compatibilité pour les deux environnements (avec/sans AUv3)
 if (typeof window !== 'undefined') {
 	// Environnement navigateur (pur JS ou AUv3)
-	window.updateTimecode = updateTimecode;
-	window.displayTransportInfo = displayTransportInfo;
+	
+	// Classes principales
 	window.SyncedLyrics = SyncedLyrics;
 	window.LyricsDisplay = LyricsDisplay;
 	window.LyricsLibrary = LyricsLibrary;
 	window.lyricsLibrary = lyricsLibrary;
+	
+	// Objets utilitaires (refactorisation)
+	window.AudioUtils = AudioUtils;
+	window.DOMUtils = DOMUtils;
+	window.SongUtils = SongUtils;
+	window.UIUtils = UIUtils;
+	window.AudioController = AudioController;
+	
+	// Fonctions de transport
+	window.updateTimecode = updateTimecode;
+	window.displayTransportInfo = displayTransportInfo;
+	
+	// API de compatibilité (alias vers les objets utilitaires)
 	window.loadSongByName = loadSongByName;
 	window.showLibraryStats = showLibraryStats;
 	window.createDemoSongs = createDemoSongs;
@@ -2930,30 +3001,33 @@ if (typeof window !== 'undefined') {
 	window.audioControl = audioControl;
 	window.associateAudioToSong = associateAudioToSong;
 	window.removeAudioFromSong = removeAudioFromSong;
-	window.normalizeAudioPath = normalizeAudioPath; // Fonction pour normaliser les chemins audio
-	window.createAudioPath = createAudioPath; // Fonction d'aide pour créer des chemins audio
-	window.getDemoAudioPaths = getDemoAudioPaths; // Obtenir les chemins audio de démo
-	window.debugAudioPath = debugAudioPath; // Debug des chemins audio
 	
-	// Debug: Vérifier que les fonctions sont bien exposées
-	console.log('🔧 Fonctions exposées globalement:');
-	console.log('  - updateTimecode:', typeof window.updateTimecode);
-	console.log('  - displayTransportInfo:', typeof window.displayTransportInfo);
-	console.log('  - lyricsLibrary:', typeof window.lyricsLibrary);
-	console.log('  - loadSongInDisplay:', typeof window.loadSongInDisplay);
-	console.log('  - testLyricsAtTime:', typeof window.testLyricsAtTime);
-	console.log('  - setFontSize:', typeof window.setFontSize);
-	console.log('  - toggleEditMode:', typeof window.toggleEditMode);
-	console.log('  - addNewLyricLine:', typeof window.addNewLyricLine);
-	console.log('  - createNewSong:', typeof window.createNewSong);
-	console.log('  - deleteSong:', typeof window.deleteSong);
-	console.log('  - listAllSongs:', typeof window.listAllSongs);
-	console.log('  - toggleSongManager:', typeof window.toggleSongManager);
-	console.log('  - fullscreen:', typeof window.fullscreen);
-	console.log('  - audioControl:', typeof window.audioControl);
-	console.log('  - associateAudioToSong:', typeof window.associateAudioToSong);
-	console.log('  - removeAudioFromSong:', typeof window.removeAudioFromSong);
-	console.log('  - normalizeAudioPath:', typeof window.normalizeAudioPath);
+	// Fonctions d'aide pour les chemins audio (rétrocompatibilité)
+	window.normalizeAudioPath = normalizeAudioPath;
+	window.createAudioPath = createAudioPath;
+	window.getDemoAudioPaths = getDemoAudioPaths;
+	window.debugAudioPath = debugAudioPath;
+	
+	// Debug: Vérifier que les composants principaux sont bien exposés
+	console.log('🔧 Composants exposés globalement:');
+	console.log('  - Classes:', {
+		SyncedLyrics: typeof window.SyncedLyrics,
+		LyricsDisplay: typeof window.LyricsDisplay,
+		LyricsLibrary: typeof window.LyricsLibrary,
+		lyricsLibrary: typeof window.lyricsLibrary
+	});
+	console.log('  - Objets utilitaires:', {
+		AudioUtils: typeof window.AudioUtils,
+		DOMUtils: typeof window.DOMUtils,
+		SongUtils: typeof window.SongUtils,
+		UIUtils: typeof window.UIUtils,
+		AudioController: typeof window.AudioController
+	});
+	console.log('  - API de compatibilité:', {
+		loadSongByName: typeof window.loadSongByName,
+		audioControl: typeof window.audioControl,
+		associateAudioToSong: typeof window.associateAudioToSong
+	});
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
