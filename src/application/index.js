@@ -28,8 +28,8 @@
 // import('./vie/vie.js');
 // import('./examples/svg.js');
 // import('./examples/anim_svg.js');
-import('./lyrix/lyrix.js');
-
+// import('./lyrix/lyrix.js');
+import('./lyrix/test.js');
 // import('./test/slice.js');
 
 // const mySpan = $('span', {
