@@ -322,21 +322,70 @@ function toggleSongManager() {
 	}
 }
 
-// Fonction pour contrôler le mode plein écran
-function fullscreen(enable) {
+// Fonction pour contrôler le lecteur audio
+function audioControl(action, value = null) {
 	if (!lyricsDisplay) {
 		console.log('❌ LyricsDisplay non initialisé');
 		return false;
 	}
 	
-	if (typeof enable === 'boolean') {
-		lyricsDisplay.setFullscreen(enable);
-		return enable;
-	} else {
-		// Si pas de paramètre, basculer
-		lyricsDisplay.toggleFullscreen();
-		return lyricsDisplay.isFullscreen;
+	switch (action) {
+		case 'play':
+			if (lyricsDisplay.audioPlayer) {
+				lyricsDisplay.audioPlayer.play();
+				lyricsDisplay.isPlayingInternal = true;
+				lyricsDisplay.updatePlayPauseButton();
+				return true;
+			}
+			break;
+			
+		case 'pause':
+			if (lyricsDisplay.audioPlayer) {
+				lyricsDisplay.audioPlayer.pause();
+				lyricsDisplay.isPlayingInternal = false;
+				lyricsDisplay.updatePlayPauseButton();
+				return true;
+			}
+			break;
+			
+		case 'toggle':
+			lyricsDisplay.togglePlayPause();
+			return lyricsDisplay.isPlayingInternal;
+			
+		case 'seek':
+			if (lyricsDisplay.audioPlayer && value !== null) {
+				lyricsDisplay.audioPlayer.currentTime = value;
+				return true;
+			}
+			break;
+			
+		case 'volume':
+			if (lyricsDisplay.audioPlayer && value !== null) {
+				lyricsDisplay.audioPlayer.volume = Math.max(0, Math.min(1, value));
+				const volumeSlider = document.getElementById('volume-slider');
+				if (volumeSlider) volumeSlider.value = value * 100;
+				return true;
+			}
+			break;
+			
+		case 'currentTime':
+			return lyricsDisplay.audioPlayer ? lyricsDisplay.audioPlayer.currentTime : 0;
+			
+		case 'duration':
+			return lyricsDisplay.audioPlayer ? lyricsDisplay.audioPlayer.duration : 0;
+			
+		case 'isPlaying':
+			return lyricsDisplay.isPlayingInternal;
+			
+		case 'hasAudio':
+			return !!lyricsDisplay.audioPlayer && !!lyricsDisplay.audioPath;
+			
+		default:
+			console.log('❌ Action non reconnue:', action);
+			return false;
 	}
+	
+	return false;
 }
 
 // Exemple d'utilisation et création d'un objet de paroles synchronisées
@@ -352,6 +401,23 @@ function createDarkboxLyrics() {
 	// Si pas trouvé, créer les chansons de démo
 	const { darkboxSong: newSong } = createDemoSongs();
 	return newSong;
+}
+
+// Fonction pour contrôler le mode plein écran
+function fullscreen(enable) {
+	if (!lyricsDisplay) {
+		console.log('❌ LyricsDisplay non initialisé');
+		return false;
+	}
+	
+	if (typeof enable === 'boolean') {
+		lyricsDisplay.setFullscreen(enable);
+		return enable;
+	} else {
+		// Si pas de paramètre, basculer
+		lyricsDisplay.toggleFullscreen();
+		return lyricsDisplay.isFullscreen;
+	}
 }
 
 // Initialiser l'affichage des paroles
@@ -764,6 +830,9 @@ class LyricsDisplay {
 		this.isFullscreen = false; // Mode plein écran
 		this.longPressTimer = null; // Timer pour le clic long
 		this.originalStyles = {}; // Styles originaux pour la restauration
+		this.audioPlayer = null; // Lecteur audio intégré
+		this.isPlayingInternal = false; // État de lecture interne
+		this.audioPath = null; // Chemin du fichier audio
 		this.setupDisplay();
 	}
 
@@ -786,6 +855,22 @@ class LyricsDisplay {
 				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
 				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
 				<button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
+			</div>
+			<div id="audio-player" style="display: none; padding: 10px; background: #2c3e50; color: white; border-top: 1px solid #555;">
+				<div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+					<button id="play-pause-btn" style="padding: 8px 15px; background: #27ae60; color: white; border: none; border-radius: 4px; font-size: 16px;">▶️ Play</button>
+					<span id="current-time">0:00</span>
+					<div style="flex: 1; position: relative;">
+						<input type="range" id="audio-scrubber" min="0" max="100" value="0" style="width: 100%; height: 6px; background: #34495e; outline: none; border-radius: 3px;">
+					</div>
+					<span id="total-time">0:00</span>
+					<input type="range" id="volume-slider" min="0" max="100" value="70" style="width: 80px;">
+					<span>🔊</span>
+				</div>
+				<div style="font-size: 12px; color: #bdc3c7;">
+					<span id="audio-filename">Aucun fichier audio</span>
+					<button id="remove-audio-btn" style="padding: 2px 6px; margin-left: 10px; background: #e74c3c; color: white; border: none; border-radius: 3px; font-size: 10px;">Supprimer</button>
+				</div>
 			</div>
 			<div id="song-manager" style="display: none; padding: 15px; background: #2c3e50; color: white; border-top: 1px solid #555;">
 				<div style="display: flex; gap: 15px; margin-bottom: 15px;">
@@ -825,7 +910,8 @@ class LyricsDisplay {
 					z-index: 10;
 					pointer-events: none;
 				">
-					📄 Déposez un fichier texte ici pour créer une nouvelle chanson
+					📄 Déposez un fichier texte ici pour créer une nouvelle chanson<br>
+					🎵 Ou un fichier audio (MP3, MP4, WAV) pour ajouter la musique
 				</div>
 				<p style="text-align: center; color: #666;">Chargez des paroles synchronisées</p>
 			</div>
@@ -877,6 +963,9 @@ class LyricsDisplay {
 		
 		// Drag and drop de fichiers
 		this.setupDragAndDropListeners();
+		
+		// Lecteur audio
+		this.setupAudioPlayerListeners();
 	}
 
 	setupSongManagerListeners() {
@@ -1117,14 +1206,14 @@ class LyricsDisplay {
 		
 		// Montrer la zone de drop
 		container.addEventListener('dragenter', (e) => {
-			if (this.isDraggedFileText(e)) {
+			if (this.isDraggedFile(e)) {
 				dropZone.style.display = 'flex';
 				container.style.filter = 'brightness(0.8)';
 			}
 		});
 		
 		container.addEventListener('dragover', (e) => {
-			if (this.isDraggedFileText(e)) {
+			if (this.isDraggedFile(e)) {
 				dropZone.style.display = 'flex';
 			}
 		});
@@ -1172,11 +1261,34 @@ class LyricsDisplay {
 		return false;
 	}
 
+	isDraggedFileAudio(event) {
+		const items = event.dataTransfer.items;
+		if (!items) return false;
+		
+		for (let i = 0; i < items.length; i++) {
+			const item = items[i];
+			if (item.kind === 'file') {
+				const type = item.type;
+				// Vérifier les types MIME pour les fichiers audio
+				if (type.startsWith('audio/') || 
+					type.startsWith('video/') ||
+					item.getAsFile()?.name.match(/\.(mp3|mp4|wav|m4a|aac|flac|ogg|webm)$/i)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	isDraggedFile(event) {
+		return this.isDraggedFileText(event) || this.isDraggedFileAudio(event);
+	}
+
 	async handleDroppedFiles(files) {
 		for (let i = 0; i < files.length; i++) {
 			const file = files[i];
 			
-			// Vérifier que c'est un fichier texte
+			// Vérifier si c'est un fichier texte
 			if (this.isTextFile(file)) {
 				try {
 					const content = await this.readFileContent(file);
@@ -1185,9 +1297,19 @@ class LyricsDisplay {
 					console.error('❌ Erreur lecture fichier:', error);
 					alert(`Erreur lors de la lecture du fichier ${file.name}: ${error.message}`);
 				}
-			} else {
-				console.warn('⚠️ Fichier ignoré (pas un fichier texte):', file.name);
-				alert(`Le fichier "${file.name}" n'est pas un fichier texte supporté.`);
+			}
+			// Vérifier si c'est un fichier audio
+			else if (this.isAudioFile(file)) {
+				try {
+					this.loadAudioFile(file);
+				} catch (error) {
+					console.error('❌ Erreur chargement audio:', error);
+					alert(`Erreur lors du chargement du fichier audio ${file.name}: ${error.message}`);
+				}
+			}
+			else {
+				console.warn('⚠️ Fichier ignoré (format non supporté):', file.name);
+				alert(`Le fichier "${file.name}" n'est pas un format supporté (texte ou audio).`);
 			}
 		}
 	}
@@ -1202,6 +1324,17 @@ class LyricsDisplay {
 		
 		// Vérifier l'extension
 		const validExtensions = /\.(txt|lrc|json|md|lyrics)$/i;
+		return validExtensions.test(file.name);
+	}
+
+	isAudioFile(file) {
+		// Vérifier le type MIME
+		if (file.type.startsWith('audio/') || file.type.startsWith('video/')) {
+			return true;
+		}
+		
+		// Vérifier l'extension
+		const validExtensions = /\.(mp3|mp4|wav|m4a|aac|flac|ogg|webm)$/i;
 		return validExtensions.test(file.name);
 	}
 
@@ -1295,6 +1428,195 @@ class LyricsDisplay {
 		
 		console.log('✅ Chanson texte créée:', title, `(${lines.length} lignes)`);
 		alert(`Chanson "${title}" créée avec ${lines.length} lignes!\nVous pouvez maintenant éditer les timecodes en mode édition.`);
+	}
+
+	loadAudioFile(file) {
+		// Créer une URL pour le fichier
+		const audioUrl = URL.createObjectURL(file);
+		
+		// Créer ou réutiliser l'élément audio
+		if (!this.audioPlayer) {
+			this.audioPlayer = document.createElement('audio');
+			this.audioPlayer.preload = 'metadata';
+			
+			// Événements du lecteur audio
+			this.audioPlayer.addEventListener('loadedmetadata', () => {
+				this.updateAudioPlayerUI();
+			});
+			
+			this.audioPlayer.addEventListener('timeupdate', () => {
+				this.updateAudioTime();
+			});
+			
+			this.audioPlayer.addEventListener('ended', () => {
+				this.isPlayingInternal = false;
+				this.updatePlayPauseButton();
+			});
+		}
+		
+		// Charger le nouveau fichier
+		this.audioPlayer.src = audioUrl;
+		this.audioPath = audioUrl;
+		
+		// Afficher le lecteur
+		const audioPlayerDiv = document.getElementById('audio-player');
+		const audioFilename = document.getElementById('audio-filename');
+		
+		if (audioPlayerDiv) audioPlayerDiv.style.display = 'block';
+		if (audioFilename) audioFilename.textContent = file.name;
+		
+		console.log('✅ Fichier audio chargé:', file.name);
+		alert(`Fichier audio "${file.name}" chargé!\nUtilisez les contrôles pour jouer la musique et synchroniser les paroles.`);
+	}
+
+	setupAudioPlayerListeners() {
+		// Bouton play/pause
+		const playPauseBtn = document.getElementById('play-pause-btn');
+		if (playPauseBtn) {
+			playPauseBtn.addEventListener('click', () => {
+				this.togglePlayPause();
+			});
+		}
+		
+		// Scrubber audio
+		const audioScrubber = document.getElementById('audio-scrubber');
+		if (audioScrubber) {
+			let isDragging = false;
+			
+			audioScrubber.addEventListener('mousedown', () => {
+				isDragging = true;
+			});
+			
+			audioScrubber.addEventListener('mouseup', () => {
+				if (isDragging && this.audioPlayer) {
+					const time = (audioScrubber.value / 100) * this.audioPlayer.duration;
+					this.audioPlayer.currentTime = time;
+				}
+				isDragging = false;
+			});
+			
+			audioScrubber.addEventListener('input', (e) => {
+				if (isDragging && this.audioPlayer) {
+					const time = (e.target.value / 100) * this.audioPlayer.duration;
+					// Mettre à jour les paroles même pendant le scrubbing
+					this.updateTime(time * 1000); // Convertir en millisecondes
+				}
+			});
+		}
+		
+		// Contrôle du volume
+		const volumeSlider = document.getElementById('volume-slider');
+		if (volumeSlider) {
+			volumeSlider.addEventListener('input', (e) => {
+				if (this.audioPlayer) {
+					this.audioPlayer.volume = e.target.value / 100;
+				}
+			});
+		}
+		
+		// Bouton supprimer audio
+		const removeAudioBtn = document.getElementById('remove-audio-btn');
+		if (removeAudioBtn) {
+			removeAudioBtn.addEventListener('click', () => {
+				this.removeAudio();
+			});
+		}
+		
+		console.log('✅ Contrôles audio configurés');
+	}
+
+	togglePlayPause() {
+		if (!this.audioPlayer) return;
+		
+		if (this.isPlayingInternal) {
+			this.audioPlayer.pause();
+			this.isPlayingInternal = false;
+		} else {
+			this.audioPlayer.play();
+			this.isPlayingInternal = true;
+		}
+		
+		this.updatePlayPauseButton();
+	}
+
+	updatePlayPauseButton() {
+		const playPauseBtn = document.getElementById('play-pause-btn');
+		if (playPauseBtn) {
+			playPauseBtn.textContent = this.isPlayingInternal ? '⏸️ Pause' : '▶️ Play';
+			playPauseBtn.style.backgroundColor = this.isPlayingInternal ? '#e74c3c' : '#27ae60';
+		}
+	}
+
+	updateAudioPlayerUI() {
+		if (!this.audioPlayer) return;
+		
+		const totalTime = document.getElementById('total-time');
+		if (totalTime && this.audioPlayer.duration) {
+			totalTime.textContent = this.formatTime(this.audioPlayer.duration);
+		}
+		
+		// Réinitialiser le scrubber
+		const audioScrubber = document.getElementById('audio-scrubber');
+		if (audioScrubber) {
+			audioScrubber.value = 0;
+		}
+		
+		// Réinitialiser le temps actuel
+		const currentTime = document.getElementById('current-time');
+		if (currentTime) {
+			currentTime.textContent = '0:00';
+		}
+	}
+
+	updateAudioTime() {
+		if (!this.audioPlayer) return;
+		
+		const currentTime = document.getElementById('current-time');
+		const audioScrubber = document.getElementById('audio-scrubber');
+		
+		// Mettre à jour l'affichage du temps
+		if (currentTime) {
+			currentTime.textContent = this.formatTime(this.audioPlayer.currentTime);
+		}
+		
+		// Mettre à jour le scrubber (seulement si on ne le manipule pas)
+		if (audioScrubber && !audioScrubber.matches(':active')) {
+			const progress = (this.audioPlayer.currentTime / this.audioPlayer.duration) * 100;
+			audioScrubber.value = progress || 0;
+		}
+		
+		// Synchroniser les paroles avec la musique (seulement si on joue depuis le lecteur interne)
+		if (this.isPlayingInternal && this.currentLyrics) {
+			const timeMs = this.audioPlayer.currentTime * 1000;
+			this.updateTime(timeMs);
+		}
+	}
+
+	formatTime(seconds) {
+		if (!seconds || isNaN(seconds)) return '0:00';
+		
+		const mins = Math.floor(seconds / 60);
+		const secs = Math.floor(seconds % 60);
+		return `${mins}:${secs.toString().padStart(2, '0')}`;
+	}
+
+	removeAudio() {
+		if (this.audioPlayer) {
+			this.audioPlayer.pause();
+			this.audioPlayer.src = '';
+			if (this.audioPath && this.audioPath.startsWith('blob:')) {
+				URL.revokeObjectURL(this.audioPath);
+			}
+		}
+		
+		this.audioPath = null;
+		this.isPlayingInternal = false;
+		
+		// Cacher le lecteur
+		const audioPlayerDiv = document.getElementById('audio-player');
+		if (audioPlayerDiv) audioPlayerDiv.style.display = 'none';
+		
+		console.log('✅ Fichier audio supprimé');
 	}
 
 	toggleFullscreen() {
@@ -1594,6 +1916,16 @@ class LyricsDisplay {
 			this.highlightLine(activeLine);
 			this.activeLine = activeLine;
 		}
+		
+		// Mettre à jour le timecode externe (pour compatibilité avec l'hôte)
+		const timecodeElement = document.getElementById('timecode');
+		if (timecodeElement) {
+			const seconds = (timeMs / 1000).toFixed(3);
+			const isHostPlaying = !this.isPlayingInternal; // Si ce n'est pas le lecteur interne, c'est l'hôte
+			const playIcon = (this.isPlayingInternal || isHostPlaying) ? '▶️' : '⏸️';
+			timecodeElement.textContent = `${playIcon} ${seconds}s`;
+			timecodeElement.style.backgroundColor = (this.isPlayingInternal || isHostPlaying) ? '#0a0' : '#a00';
+		}
 	}
 
 	highlightLine(line) {
@@ -1640,6 +1972,7 @@ if (typeof window !== 'undefined') {
 	window.listAllSongs = listAllSongs;
 	window.toggleSongManager = toggleSongManager;
 	window.fullscreen = fullscreen;
+	window.audioControl = audioControl;
 	
 	// Debug: Vérifier que les fonctions sont bien exposées
 	console.log('🔧 Fonctions exposées globalement:');
@@ -1656,6 +1989,7 @@ if (typeof window !== 'undefined') {
 	console.log('  - listAllSongs:', typeof window.listAllSongs);
 	console.log('  - toggleSongManager:', typeof window.toggleSongManager);
 	console.log('  - fullscreen:', typeof window.fullscreen);
+	console.log('  - audioControl:', typeof window.audioControl);
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
