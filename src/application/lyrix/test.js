@@ -43,6 +43,24 @@ function initializeDOM() {
 // Initialiser le DOM dès que possible
 setTimeout(initializeDOM, 10);
 
+// Initialiser l'affichage des paroles après création du DOM
+setTimeout(() => {
+    // Créer l'affichage des paroles
+    if (typeof document !== 'undefined' && document.getElementById('lyrics-container')) {
+        lyricsDisplay = new LyricsDisplay('lyrics-container');
+        console.log('✅ LyricsDisplay initialisé');
+        
+        // Créer les chansons de démonstration et charger la première
+        const demoSongs = createDemoSongs();
+        if (demoSongs && demoSongs.darkboxSong) {
+            lyricsDisplay.loadLyrics(demoSongs.darkboxSong);
+            console.log('✅ Chanson "The Darkbox" chargée dans l\'affichage');
+        }
+    } else {
+        console.log('⚠️ lyrics-container non trouvé, affichage des paroles non initialisé');
+    }
+}, 50);
+
 // Fonction générique pour créer des chansons de démonstration
 function createDemoSongs() {
 	console.log('🎵 Création des chansons de démonstration...');
@@ -158,6 +176,41 @@ function showLibraryStats() {
 	console.log(`  - Durée totale: ${(stats.totalDuration / 1000 / 60).toFixed(1)} minutes`);
 	
 	return stats;
+}
+
+// Fonction pour charger une chanson dans l'affichage
+function loadSongInDisplay(songName) {
+	if (!lyricsDisplay) {
+		console.log('❌ LyricsDisplay non initialisé');
+		return null;
+	}
+	
+	const song = loadSongByName(songName);
+	if (song) {
+		lyricsDisplay.loadLyrics(song);
+		console.log('✅ Chanson chargée dans l\'affichage:', song.metadata.title);
+		return song;
+	}
+	
+	return null;
+}
+
+// Fonction pour tester l'affichage des paroles avec un timecode spécifique
+function testLyricsAtTime(timeMs) {
+	if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+		console.log('❌ Aucune chanson chargée dans l\'affichage');
+		return;
+	}
+	
+	console.log(`🎵 Test à ${timeMs}ms (${(timeMs/1000).toFixed(1)}s)`);
+	lyricsDisplay.updateTime(timeMs);
+	
+	const activeLine = lyricsDisplay.currentLyrics.getActiveLineAt(timeMs);
+	if (activeLine) {
+		console.log('  Ligne active:', activeLine.text);
+	} else {
+		console.log('  Aucune ligne active à ce moment');
+	}
 }
 
 // Exemple d'utilisation et création d'un objet de paroles synchronisées
@@ -680,12 +733,16 @@ if (typeof window !== 'undefined') {
 	window.loadSongByName = loadSongByName;
 	window.showLibraryStats = showLibraryStats;
 	window.createDemoSongs = createDemoSongs;
+	window.loadSongInDisplay = loadSongInDisplay;
+	window.testLyricsAtTime = testLyricsAtTime;
 	
 	// Debug: Vérifier que les fonctions sont bien exposées
 	console.log('🔧 Fonctions exposées globalement:');
 	console.log('  - updateTimecode:', typeof window.updateTimecode);
 	console.log('  - displayTransportInfo:', typeof window.displayTransportInfo);
 	console.log('  - lyricsLibrary:', typeof window.lyricsLibrary);
+	console.log('  - loadSongInDisplay:', typeof window.loadSongInDisplay);
+	console.log('  - testLyricsAtTime:', typeof window.testLyricsAtTime);
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
