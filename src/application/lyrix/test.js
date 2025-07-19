@@ -727,13 +727,37 @@ class LyricsLibrary {
 
 	// Créer les chansons de démo seulement si nécessaire
 	createDemoSongsIfNeeded() {
-		// Vérifier si les chansons de démo existent déjà
+		// Vérifier d'abord dans les chansons intégrées trackées
+		const hasTrackedDarkbox = Array.from(this.builtInSongs).some(songId => {
+			const song = this.loadSongById(songId);
+			return song && song.metadata.title === "The Darkbox";
+		});
+		
+		const hasTrackedDigital = Array.from(this.builtInSongs).some(songId => {
+			const song = this.loadSongById(songId);
+			return song && song.metadata.title === "Digital Dreams";
+		});
+		
+		// Vérification secondaire par titre et artiste (au cas où le tracking aurait échoué)
 		const existingSongs = this.getAllSongs();
-		const darkboxExists = existingSongs.some(song => song.title === "The Darkbox");
-		const digitalExists = existingSongs.some(song => song.title === "Digital Dreams");
+		const darkboxExists = hasTrackedDarkbox || existingSongs.some(song => 
+			song.title === "The Darkbox" && song.artist === "Atome Artist"
+		);
+		const digitalExists = hasTrackedDigital || existingSongs.some(song => 
+			song.title === "Digital Dreams" && song.artist === "Cyber Collective"
+		);
 		
 		if (darkboxExists && digitalExists) {
 			console.log('📚 Chansons de démo déjà présentes');
+			
+			// S'assurer qu'elles sont bien trackées
+			existingSongs.forEach(song => {
+				if ((song.title === "The Darkbox" && song.artist === "Atome Artist") ||
+					(song.title === "Digital Dreams" && song.artist === "Cyber Collective")) {
+					this.builtInSongs.add(song.songId);
+				}
+			});
+			this.saveSettings();
 			return null;
 		}
 		
@@ -815,6 +839,71 @@ class LyricsLibrary {
 		
 		console.log('✅ Chansons de démo créées');
 		return { darkboxSong, digitalDreamsSong };
+	}
+
+	// Nettoyer les chansons de démo dupliquées
+	cleanupDuplicateDemoSongs() {
+		console.log('🧹 Nettoyage des chansons de démo dupliquées...');
+		
+		const allSongs = this.getAllSongs();
+		const darkboxSongs = allSongs.filter(s => s.title === "The Darkbox" && s.artist === "Atome Artist");
+		const digitalSongs = allSongs.filter(s => s.title === "Digital Dreams" && s.artist === "Cyber Collective");
+		
+		let cleaned = false;
+		
+		// Garder seulement la plus récente de chaque type
+		if (darkboxSongs.length > 1) {
+			const latest = darkboxSongs.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified))[0];
+			darkboxSongs.filter(s => s.songId !== latest.songId).forEach(duplicate => {
+				console.log('🗑️ Suppression doublon Darkbox:', duplicate.songId);
+				this.deleteSong(duplicate.songId);
+				cleaned = true;
+			});
+			this.builtInSongs.add(latest.songId);
+		}
+		
+		if (digitalSongs.length > 1) {
+			const latest = digitalSongs.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified))[0];
+			digitalSongs.filter(s => s.songId !== latest.songId).forEach(duplicate => {
+				console.log('🗑️ Suppression doublon Digital Dreams:', duplicate.songId);
+				this.deleteSong(duplicate.songId);
+				cleaned = true;
+			});
+			this.builtInSongs.add(latest.songId);
+		}
+		
+		if (cleaned) {
+			this.saveSettings();
+			console.log('✅ Nettoyage terminé - doublons supprimés');
+		} else {
+			console.log('✅ Aucun doublon trouvé');
+		}
+		
+		return cleaned;
+	}
+
+	// Supprimer toutes les chansons
+	deleteAllSongs() {
+		console.log('🗑️ Suppression de toutes les chansons...');
+		
+		const allSongs = this.getAllSongs();
+		let deletedCount = 0;
+		
+		allSongs.forEach(song => {
+			try {
+				this.deleteSong(song.songId);
+				deletedCount++;
+			} catch (error) {
+				console.error('❌ Erreur suppression chanson:', song.title, error);
+			}
+		});
+		
+		// Vider aussi les sets de tracking
+		this.builtInSongs.clear();
+		this.saveSettings();
+		
+		console.log(`✅ ${deletedCount} chansons supprimées`);
+		return deletedCount;
 	}
 
 	// Charger la liste des chansons depuis localStorage
@@ -1431,6 +1520,8 @@ class LyricsDisplay {
 				</div>
 				<div style="text-align: center; border-top: 1px solid #555; padding-top: 10px; margin-top: 15px;">
 					<button id="refresh-songs-btn" style="padding: 5px 10px; margin-right: 10px;">Actualiser</button>
+					<button id="cleanup-duplicates-btn" style="padding: 5px 10px; margin-right: 10px; background: #f39c12; color: white; border: none; border-radius: 3px;">Nettoyer Doublons</button>
+					<button id="delete-all-songs-btn" style="padding: 5px 10px; margin-right: 10px; background: #e74c3c; color: white; border: none; border-radius: 3px;">Supprimer Toutes</button>
 					<button id="close-manager-btn" style="padding: 5px 10px; background: #95a5a6;">Fermer</button>
 				</div>
 			</div>
@@ -1567,6 +1658,65 @@ class LyricsDisplay {
 		if (refreshSongsBtn) {
 			refreshSongsBtn.addEventListener('click', () => {
 				this.refreshSongsList();
+			});
+		}
+		
+		// Bouton nettoyer les doublons
+		const cleanupDuplicatesBtn = document.getElementById('cleanup-duplicates-btn');
+		if (cleanupDuplicatesBtn) {
+			cleanupDuplicatesBtn.addEventListener('click', () => {
+				this.showCustomConfirm(
+					'Nettoyer les doublons ?',
+					'Voulez-vous supprimer les chansons de démo dupliquées ?',
+					() => {
+						const cleaned = lyricsLibrary.cleanupDuplicateDemoSongs();
+						if (cleaned) {
+							this.refreshSongsList();
+							this.showCustomAlert('Succès', 'Doublons supprimés avec succès');
+						} else {
+							this.showCustomAlert('Information', 'Aucun doublon trouvé');
+						}
+					},
+					() => {
+						console.log('❌ Nettoyage annulé');
+					}
+				);
+			});
+		}
+		
+		// Bouton supprimer toutes les chansons
+		const deleteAllSongsBtn = document.getElementById('delete-all-songs-btn');
+		if (deleteAllSongsBtn) {
+			deleteAllSongsBtn.addEventListener('click', () => {
+				const songCount = lyricsLibrary.getAllSongs().length;
+				if (songCount === 0) {
+					this.showCustomAlert('Information', 'Aucune chanson à supprimer');
+					return;
+				}
+				
+				this.showCustomConfirm(
+					'⚠️ SUPPRIMER TOUTES LES CHANSONS ?',
+					`Êtes-vous ABSOLUMENT sûr de vouloir supprimer TOUTES les ${songCount} chansons ?\n\nCette action est IRRÉVERSIBLE !`,
+					() => {
+						const deletedCount = lyricsLibrary.deleteAllSongs();
+						
+						// Nettoyer l'affichage
+						if (this.currentLyrics) {
+							this.currentLyrics = null;
+							this.updateHeader();
+							this.renderLines();
+						}
+						
+						// Rafraîchir la liste
+						this.refreshSongsList();
+						
+						this.showCustomAlert('Succès', `${deletedCount} chansons supprimées`);
+						console.log(`🗑️ ${deletedCount} chansons supprimées`);
+					},
+					() => {
+						console.log('❌ Suppression totale annulée');
+					}
+				);
 			});
 		}
 		
