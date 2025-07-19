@@ -322,6 +322,23 @@ function toggleSongManager() {
 	}
 }
 
+// Fonction pour contrôler le mode plein écran
+function fullscreen(enable) {
+	if (!lyricsDisplay) {
+		console.log('❌ LyricsDisplay non initialisé');
+		return false;
+	}
+	
+	if (typeof enable === 'boolean') {
+		lyricsDisplay.setFullscreen(enable);
+		return enable;
+	} else {
+		// Si pas de paramètre, basculer
+		lyricsDisplay.toggleFullscreen();
+		return lyricsDisplay.isFullscreen;
+	}
+}
+
 // Exemple d'utilisation et création d'un objet de paroles synchronisées
 function createDarkboxLyrics() {
 	console.warn('⚠️ createDarkboxLyrics() est obsolète. Utilisez createDemoSongs() à la place.');
@@ -744,6 +761,9 @@ class LyricsDisplay {
 		this.activeLine = null;
 		this.fontSize = 16; // Taille de police par défaut
 		this.editMode = false; // Mode édition
+		this.isFullscreen = false; // Mode plein écran
+		this.longPressTimer = null; // Timer pour le clic long
+		this.originalStyles = {}; // Styles originaux pour la restauration
 		this.setupDisplay();
 	}
 
@@ -760,11 +780,12 @@ class LyricsDisplay {
 			</div>
 			<div id="lyrics-controls" style="padding: 10px; background: #444; color: white; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
 				<label>Taille:</label>
-				<input type="range" id="font-size-slider" min="10" max="32" value="${this.fontSize}" style="width: 100px;">
+				<input type="range" id="font-size-slider" min="10" max="120" value="${this.fontSize}" style="width: 100px;">
 				<span id="font-size-display">${this.fontSize}px</span>
 				<button id="edit-mode-btn" style="padding: 5px 10px; margin-left: 20px;">Mode Édition</button>
 				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
 				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
+				<button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
 			</div>
 			<div id="song-manager" style="display: none; padding: 15px; background: #2c3e50; color: white; border-top: 1px solid #555;">
 				<div style="display: flex; gap: 15px; margin-bottom: 15px;">
@@ -832,6 +853,9 @@ class LyricsDisplay {
 		
 		// Gestionnaire de chansons
 		this.setupSongManagerListeners();
+		
+		// Mode plein écran
+		this.setupFullscreenListeners();
 	}
 
 	setupSongManagerListeners() {
@@ -987,6 +1011,162 @@ class LyricsDisplay {
 			songItem.appendChild(controls);
 			songsList.appendChild(songItem);
 		});
+	}
+
+	setupFullscreenListeners() {
+		const fullscreenBtn = document.getElementById('fullscreen-btn');
+		const lyricsContent = document.getElementById('lyrics-content');
+		
+		// Bouton plein écran
+		if (fullscreenBtn) {
+			fullscreenBtn.addEventListener('click', () => {
+				this.toggleFullscreen();
+			});
+		}
+		
+		// Clic long sur la zone des paroles
+		if (lyricsContent) {
+			// Mouse events
+			lyricsContent.addEventListener('mousedown', (e) => {
+				if (e.button === 0) { // Clic gauche seulement
+					this.longPressTimer = setTimeout(() => {
+						this.toggleFullscreen();
+					}, 800); // 800ms pour le clic long
+				}
+			});
+			
+			lyricsContent.addEventListener('mouseup', () => {
+				if (this.longPressTimer) {
+					clearTimeout(this.longPressTimer);
+					this.longPressTimer = null;
+				}
+			});
+			
+			lyricsContent.addEventListener('mouseleave', () => {
+				if (this.longPressTimer) {
+					clearTimeout(this.longPressTimer);
+					this.longPressTimer = null;
+				}
+			});
+			
+			// Touch events pour mobile
+			lyricsContent.addEventListener('touchstart', (e) => {
+				this.longPressTimer = setTimeout(() => {
+					this.toggleFullscreen();
+				}, 800);
+			});
+			
+			lyricsContent.addEventListener('touchend', () => {
+				if (this.longPressTimer) {
+					clearTimeout(this.longPressTimer);
+					this.longPressTimer = null;
+				}
+			});
+			
+			lyricsContent.addEventListener('touchcancel', () => {
+				if (this.longPressTimer) {
+					clearTimeout(this.longPressTimer);
+					this.longPressTimer = null;
+				}
+			});
+		}
+		
+		// Échapper du plein écran avec la touche Escape
+		document.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape' && this.isFullscreen) {
+				this.setFullscreen(false);
+			}
+		});
+	}
+
+	toggleFullscreen() {
+		this.setFullscreen(!this.isFullscreen);
+	}
+
+	setFullscreen(enable) {
+		const container = this.container;
+		const lyricsContent = document.getElementById('lyrics-content');
+		const fullscreenBtn = document.getElementById('fullscreen-btn');
+		
+		if (!container || !lyricsContent) return;
+		
+		if (enable && !this.isFullscreen) {
+			// Sauvegarder les styles originaux
+			this.originalStyles = {
+				containerPosition: container.style.position,
+				containerTop: container.style.top,
+				containerLeft: container.style.left,
+				containerWidth: container.style.width,
+				containerHeight: container.style.height,
+				containerZIndex: container.style.zIndex,
+				containerBackground: container.style.backgroundColor,
+				contentHeight: lyricsContent.style.height,
+				contentPadding: lyricsContent.style.padding
+			};
+			
+			// Appliquer les styles plein écran
+			container.style.position = 'fixed';
+			container.style.top = '0';
+			container.style.left = '0';
+			container.style.width = '100vw';
+			container.style.height = '100vh';
+			container.style.zIndex = '9999';
+			container.style.backgroundColor = '#000';
+			
+			// Cacher les contrôles en plein écran
+			const header = document.getElementById('lyrics-header');
+			const controls = document.getElementById('lyrics-controls');
+			const songManager = document.getElementById('song-manager');
+			
+			if (header) header.style.display = 'none';
+			if (controls) controls.style.display = 'none';
+			if (songManager) songManager.style.display = 'none';
+			
+			// Ajuster la zone de contenu
+			lyricsContent.style.height = '100vh';
+			lyricsContent.style.padding = '40px';
+			lyricsContent.style.display = 'flex';
+			lyricsContent.style.flexDirection = 'column';
+			lyricsContent.style.justifyContent = 'center';
+			lyricsContent.style.alignItems = 'center';
+			lyricsContent.style.textAlign = 'center';
+			
+			this.isFullscreen = true;
+			if (fullscreenBtn) fullscreenBtn.textContent = 'Sortir Plein Écran';
+			
+			console.log('✅ Mode plein écran activé');
+			
+		} else if (!enable && this.isFullscreen) {
+			// Restaurer les styles originaux
+			container.style.position = this.originalStyles.containerPosition || '';
+			container.style.top = this.originalStyles.containerTop || '';
+			container.style.left = this.originalStyles.containerLeft || '';
+			container.style.width = this.originalStyles.containerWidth || '';
+			container.style.height = this.originalStyles.containerHeight || '';
+			container.style.zIndex = this.originalStyles.containerZIndex || '';
+			container.style.backgroundColor = this.originalStyles.containerBackground || '';
+			
+			// Restaurer les contrôles
+			const header = document.getElementById('lyrics-header');
+			const controls = document.getElementById('lyrics-controls');
+			
+			if (header) header.style.display = '';
+			if (controls) controls.style.display = '';
+			
+			// Restaurer la zone de contenu
+			lyricsContent.style.height = this.originalStyles.contentHeight || '300px';
+			lyricsContent.style.padding = this.originalStyles.contentPadding || '20px';
+			lyricsContent.style.display = '';
+			lyricsContent.style.flexDirection = '';
+			lyricsContent.style.justifyContent = '';
+			lyricsContent.style.alignItems = '';
+			lyricsContent.style.textAlign = '';
+			
+			this.isFullscreen = false;
+			if (fullscreenBtn) fullscreenBtn.textContent = 'Plein Écran';
+			
+			console.log('✅ Mode plein écran désactivé');
+		}
 	}
 
 	updateFontSize() {
@@ -1213,6 +1393,7 @@ if (typeof window !== 'undefined') {
 	window.deleteSong = deleteSong;
 	window.listAllSongs = listAllSongs;
 	window.toggleSongManager = toggleSongManager;
+	window.fullscreen = fullscreen;
 	
 	// Debug: Vérifier que les fonctions sont bien exposées
 	console.log('🔧 Fonctions exposées globalement:');
@@ -1228,6 +1409,7 @@ if (typeof window !== 'undefined') {
 	console.log('  - deleteSong:', typeof window.deleteSong);
 	console.log('  - listAllSongs:', typeof window.listAllSongs);
 	console.log('  - toggleSongManager:', typeof window.toggleSongManager);
+	console.log('  - fullscreen:', typeof window.fullscreen);
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
