@@ -131,17 +131,18 @@ const DOMUtils = {
 			return null;
 		}
 		
-		const display = new LyricsDisplay('lyrics-container');
+		// Initialiser l'instance globale
+		lyricsDisplay = new LyricsDisplay('lyrics-container');
 		console.log('✅ LyricsDisplay initialisé');
 		
 		// Charger chanson de démo
 		const demoSongs = createDemoSongs();
 		if (demoSongs?.darkboxSong) {
-			display.loadLyrics(demoSongs.darkboxSong);
+			lyricsDisplay.loadLyrics(demoSongs.darkboxSong);
 			console.log('✅ Chanson "The Darkbox" chargée');
 		}
 		
-		return display;
+		return lyricsDisplay;
 	}
 };
 
@@ -1208,9 +1209,6 @@ class LyricsLibrary {
 	}
 }
 
-// Initialisation de la bibliothèque de paroles après la définition de la classe
-lyricsLibrary = new LyricsLibrary();
-
 // Modifier la classe SyncedLyrics pour inclure un songId
 class SyncedLyrics {
 	constructor(title, artist, album = '', duration = 0, songId = null) {
@@ -1429,13 +1427,15 @@ class LyricsDisplay {
 		this.currentTime = 0;
 		this.activeLine = null;
 		this.fontSize = 16; // Taille de police par défaut
-		this.editMode = false; // Mode édition
+		this.editMode = false; // Mode édition complet
+		this.quickEditMode = false; // Mode édition rapide (double-clic)
 		this.isFullscreen = false; // Mode plein écran
 		this.longPressTimer = null; // Timer pour le clic long
 		this.originalStyles = {}; // Styles originaux pour la restauration
 		this.audioPlayer = null; // Lecteur audio intégré
 		this.isPlayingInternal = false; // État de lecture interne
 		this.audioPath = null; // Chemin du fichier audio
+		this.quickEditEscapeHandler = null; // Handler pour sortir du mode édition rapide
 		this.setupDisplay();
 	}
 
@@ -3447,33 +3447,124 @@ class LyricsDisplay {
 		if (!this.currentLyrics) return;
 		
 		const content = document.getElementById('lyrics-content');
-		content.innerHTML = '';
 		
-		this.currentLyrics.lines.forEach((line, index) => {
-			const lineElement = document.createElement('div');
-			lineElement.className = 'lyrics-line';
-			lineElement.id = line.id;
-			lineElement.style.cssText = `
-				padding: 8px 0;
-				font-size: ${this.fontSize}px;
-				transition: all 0.3s ease;
-				color: #666;
-				line-height: 1.4;
-				cursor: ${this.editMode ? 'text' : 'default'};
-				margin-bottom: ${this.editMode ? '10px' : '4px'};
+		// Si en mode édition rapide, créer un container éditable unifié
+		if (this.quickEditMode) {
+			content.innerHTML = '';
+			
+			// Créer le bouton de sortie du mode édition
+			const exitButton = document.createElement('div');
+			exitButton.style.cssText = `
+				position: sticky;
+				top: 0;
+				background: #2c3e50;
+				padding: 10px;
+				text-align: center;
+				border-bottom: 2px solid #3498db;
+				margin-bottom: 15px;
+				z-index: 100;
 			`;
-			lineElement.textContent = line.text;
+			exitButton.innerHTML = `
+				<button id="exit-quick-edit-btn" style="
+					padding: 8px 20px;
+					background: #27ae60;
+					color: white;
+					border: none;
+					border-radius: 5px;
+					cursor: pointer;
+					font-size: 14px;
+				">✅ Terminer l'édition</button>
+				<span style="margin-left: 15px; color: #bdc3c7; font-size: 12px;">
+					Double-cliquez sur les paroles pour éditer • Sauvegarde automatique
+				</span>
+			`;
 			
-			// Si en mode édition, ajouter les contrôles
-			if (this.editMode) {
-				lineElement.contentEditable = true;
-				lineElement.style.border = '1px dashed #555';
-				lineElement.style.padding = '10px';
-				this.addTimecodeControl(lineElement);
-			}
+			// Ajouter l'événement au bouton après l'avoir créé
+			const exitBtn = exitButton.querySelector('#exit-quick-edit-btn');
+			exitBtn.addEventListener('click', () => {
+				this.exitQuickEditMode();
+			});
 			
-			content.appendChild(lineElement);
-		});
+			// Créer le container éditable principal
+			const editableContainer = document.createElement('div');
+			editableContainer.contentEditable = true;
+			editableContainer.id = 'lyrics-editor';
+			editableContainer.style.cssText = `
+				min-height: 300px;
+				padding: 20px;
+				border: 2px solid #3498db;
+				border-radius: 8px;
+				background: rgba(52, 152, 219, 0.05);
+				color: #ecf0f1;
+				font-size: ${this.fontSize}px;
+				line-height: 1.6;
+				white-space: pre-wrap;
+				outline: none;
+			`;
+			
+			// Construire le texte des paroles avec timecodes
+			let lyricsText = '';
+			this.currentLyrics.lines.forEach((line, index) => {
+				const timeInSeconds = (line.time / 1000).toFixed(1);
+				lyricsText += `[${timeInSeconds}s] ${line.text}`;
+				if (index < this.currentLyrics.lines.length - 1) {
+					lyricsText += '\n';
+				}
+			});
+			
+			editableContainer.textContent = lyricsText;
+			
+			// Sauvegarde automatique
+			editableContainer.addEventListener('input', () => {
+				this.autoSaveLyricsFromEditor();
+			});
+			
+			// Empêcher le scroll pendant l'édition
+			recordMode.scrollBlocked = true;
+			
+			content.appendChild(exitButton);
+			content.appendChild(editableContainer);
+			
+			// Focus sur l'éditeur
+			setTimeout(() => editableContainer.focus(), 100);
+			
+		} else {
+			// Mode normal - lignes individuelles
+			content.innerHTML = '';
+			
+			this.currentLyrics.lines.forEach((line, index) => {
+				const lineElement = document.createElement('div');
+				lineElement.className = 'lyrics-line';
+				lineElement.id = line.id;
+				lineElement.style.cssText = `
+					padding: 8px 0;
+					font-size: ${this.fontSize}px;
+					transition: all 0.3s ease;
+					color: #666;
+					line-height: 1.4;
+					cursor: default;
+					margin-bottom: 4px;
+				`;
+				lineElement.textContent = line.text;
+				
+				// Double-clic pour activer le mode édition
+				lineElement.addEventListener('dblclick', (e) => {
+					e.preventDefault();
+					this.enterQuickEditMode();
+				});
+				
+				// Si en mode édition traditionnel, ajouter les contrôles
+				if (this.editMode) {
+					lineElement.contentEditable = true;
+					lineElement.style.border = '1px dashed #555';
+					lineElement.style.padding = '10px';
+					lineElement.style.cursor = 'text';
+					this.addTimecodeControl(lineElement);
+				}
+				
+				content.appendChild(lineElement);
+			});
+		}
 		
 		// Ajuster la hauteur après le rendu
 		this.adjustContentHeight();
@@ -3523,6 +3614,123 @@ class LyricsDisplay {
 				lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
 			}
 		}
+	}
+
+	// Mode édition rapide (double-clic)
+	enterQuickEditMode() {
+		console.log('✏️ Activation du mode édition rapide');
+		
+		this.quickEditMode = true;
+		recordMode.scrollBlocked = true; // Bloquer le scroll
+		
+		// Afficher un indicateur visuel
+		const content = document.getElementById('lyrics-content');
+		if (content) {
+			// Ajouter une bordure bleue pour indiquer le mode édition
+			content.style.border = '2px solid #3498db';
+			content.style.borderRadius = '5px';
+			
+			// Ajouter un message en haut
+			const editIndicator = document.createElement('div');
+			editIndicator.id = 'quick-edit-indicator';
+			editIndicator.style.cssText = `
+				position: sticky;
+				top: 0;
+				background: #3498db;
+				color: white;
+				padding: 8px;
+				text-align: center;
+				font-size: 14px;
+				margin-bottom: 10px;
+				border-radius: 3px;
+				z-index: 100;
+			`;
+			editIndicator.innerHTML = '✏️ Mode édition rapide - Modifiez les paroles, sauvegarde automatique • <span style="cursor: pointer; text-decoration: underline;" onclick="lyricsDisplay.exitQuickEditMode()">Cliquer ici pour sortir</span>';
+			content.insertBefore(editIndicator, content.firstChild);
+		}
+		
+		// Re-rendre les lignes pour activer l'édition
+		this.renderLines();
+		
+		// Ajouter un événement global pour sortir avec Escape
+		this.quickEditEscapeHandler = (e) => {
+			if (e.key === 'Escape') {
+				this.exitQuickEditMode();
+			}
+		};
+		document.addEventListener('keydown', this.quickEditEscapeHandler);
+	}
+
+	// Sortir du mode édition rapide
+	exitQuickEditMode() {
+		console.log('✅ Sortie du mode édition rapide');
+		
+		this.quickEditMode = false;
+		recordMode.scrollBlocked = false; // Débloquer le scroll
+		
+		// Retirer l'indicateur visuel
+		const content = document.getElementById('lyrics-content');
+		if (content) {
+			content.style.border = '';
+			content.style.borderRadius = '';
+			
+			const indicator = document.getElementById('quick-edit-indicator');
+			if (indicator) {
+				indicator.remove();
+			}
+		}
+		
+		// Sauvegarder une dernière fois
+		this.autoSaveLyricsChanges();
+		
+		// Re-rendre les lignes en mode normal
+		this.renderLines();
+		
+		// Retirer l'événement Escape
+		if (this.quickEditEscapeHandler) {
+			document.removeEventListener('keydown', this.quickEditEscapeHandler);
+			this.quickEditEscapeHandler = null;
+		}
+	}
+
+	// Sauvegarde automatique des modifications (version allégée)
+	autoSaveLyricsChanges() {
+		if (!this.currentLyrics || !this.quickEditMode) return;
+		
+		// Récupérer toutes les lignes modifiées
+		const lyricsLines = document.querySelectorAll('.lyrics-line');
+		const updatedLines = [];
+		
+		lyricsLines.forEach(lineElement => {
+			const lineId = lineElement.id;
+			const originalLine = this.currentLyrics.lines.find(l => l.id === lineId);
+			
+			if (originalLine) {
+				// Récupérer le nouveau texte
+				const newText = lineElement.textContent.trim();
+				
+				// Garder les propriétés existantes
+				updatedLines.push({
+					id: lineId,
+					time: originalLine.time,
+					text: newText,
+					type: originalLine.type
+				});
+			}
+		});
+		
+		// Mettre à jour les paroles
+		this.currentLyrics.lines = updatedLines;
+		this.currentLyrics.sortLines();
+		this.currentLyrics.updateLastModified();
+		
+		// Sauvegarder dans localStorage si c'est une chanson de la bibliothèque
+		if (lyricsLibrary && this.currentLyrics.metadata) {
+			lyricsLibrary.saveSong(this.currentLyrics);
+		}
+		
+		// Mettre à jour silencieusement l'en-tête (sans log)
+		this.updateHeader();
 	}
 
 	// Boîtes de dialogue personnalisées pour Tauri
@@ -3773,7 +3981,116 @@ class LyricsDisplay {
 		// Focus sur le bouton OK
 		setTimeout(() => okBtn.focus(), 100);
 	}
+
+	// Mode édition rapide - activer l'édition unifiée
+	enterQuickEditMode() {
+		if (!this.currentLyrics) {
+			console.warn('⚠️ Aucune chanson chargée pour l\'édition');
+			return;
+		}
+		
+		console.log('✏️ Activation du mode édition rapide');
+		this.quickEditMode = true;
+		
+		// Bloquer le scroll automatique
+		recordMode.scrollBlocked = true;
+		
+		// Re-render avec le mode édition
+		this.renderLines();
+	}
+
+	// Sortir du mode édition rapide
+	exitQuickEditMode() {
+		console.log('✅ Sortie du mode édition rapide');
+		this.quickEditMode = false;
+		
+		// Débloquer le scroll automatique
+		recordMode.scrollBlocked = false;
+		
+		// Sauvegarder une dernière fois
+		this.autoSaveLyricsFromEditor();
+		
+		// Re-render en mode normal
+		this.renderLines();
+	}
+
+	// Sauvegarde automatique depuis l'éditeur unifié
+	autoSaveLyricsFromEditor() {
+		if (!this.currentLyrics || !this.quickEditMode) return;
+		
+		const editor = document.getElementById('lyrics-editor');
+		if (!editor) return;
+		
+		try {
+			const editorContent = editor.textContent || editor.innerText;
+			const lines = editorContent.split('\n');
+			
+			// Parser les lignes avec timecodes
+			const updatedLines = [];
+			let lineIndex = 0;
+			
+			lines.forEach((lineText, index) => {
+				lineText = lineText.trim();
+				if (!lineText) return; // Ignorer les lignes vides
+				
+				// Chercher le pattern [X.Xs] au début de la ligne
+				const timecodeMatch = lineText.match(/^\[(\d+(?:\.\d+)?)s\]\s*(.*)$/);
+				
+				if (timecodeMatch) {
+					const timeInSeconds = parseFloat(timecodeMatch[1]);
+					const text = timecodeMatch[2].trim();
+					
+					// Utiliser l'ID existant si possible, sinon créer un nouveau
+					const existingLine = this.currentLyrics.lines[lineIndex];
+					const lineId = existingLine ? existingLine.id : `line_${Date.now()}_${lineIndex}`;
+					
+					updatedLines.push({
+						id: lineId,
+						time: timeInSeconds * 1000, // Convertir en millisecondes
+						text: text,
+						type: existingLine ? existingLine.type : 'vocal'
+					});
+					
+					lineIndex++;
+				} else {
+					// Ligne sans timecode - utiliser le temps de la ligne précédente + 2s
+					const previousTime = updatedLines.length > 0 ? updatedLines[updatedLines.length - 1].time : 0;
+					const newTime = previousTime + 2000; // +2 secondes
+					
+					const existingLine = this.currentLyrics.lines[lineIndex];
+					const lineId = existingLine ? existingLine.id : `line_${Date.now()}_${lineIndex}`;
+					
+					updatedLines.push({
+						id: lineId,
+						time: newTime,
+						text: lineText,
+						type: existingLine ? existingLine.type : 'vocal'
+					});
+					
+					lineIndex++;
+				}
+			});
+			
+			// Mettre à jour les paroles
+			this.currentLyrics.lines = updatedLines;
+			this.currentLyrics.sortLines();
+			this.currentLyrics.updateLastModified();
+			
+			// Sauvegarder dans la bibliothèque
+			if (lyricsLibrary) {
+				lyricsLibrary.saveSong(this.currentLyrics);
+				console.log('💾 Sauvegarde automatique effectuée');
+			}
+			
+		} catch (error) {
+			console.error('❌ Erreur lors de la sauvegarde automatique:', error);
+		}
+	}
 }
+
+// Initialisation des instances après les définitions de classes
+lyricsLibrary = new LyricsLibrary();
+// lyricsDisplay sera initialisé quand le DOM sera prêt (dans initLyricsDisplay)
 
 // Rendre les fonctions globales pour qu'elles soient accessibles depuis Swift
 // Vérification de compatibilité pour les deux environnements (avec/sans AUv3)
@@ -3823,6 +4140,10 @@ if (typeof window !== 'undefined') {
 	// Fonctions de diagnostic et réparation
 	window.debugDeleteButtons = debugDeleteButtons;
 	window.repairDeleteButtons = repairDeleteButtons;
+	
+	// Fonctions du mode édition rapide
+	window.enterQuickEditMode = () => lyricsDisplay.enterQuickEditMode();
+	window.exitQuickEditMode = () => lyricsDisplay.exitQuickEditMode();
 	
 	// Fonctions d'aide pour les chemins audio (rétrocompatibilité)
 	window.normalizeAudioPath = normalizeAudioPath;
