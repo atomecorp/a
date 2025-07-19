@@ -322,6 +322,45 @@ function toggleSongManager() {
 	}
 }
 
+// Fonction pour associer un fichier audio à une chanson
+function associateAudioToSong(songIdentifier, audioPath) {
+	let songId = songIdentifier;
+	
+	// Si c'est un nom, chercher l'ID
+	if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
+		const results = lyricsLibrary.searchSongs(songIdentifier);
+		if (results.length === 0) {
+			console.log('❌ Chanson non trouvée:', songIdentifier);
+			return false;
+		}
+		songId = results[0].songId;
+	}
+	
+	// Charger la chanson
+	const song = lyricsLibrary.loadSongById(songId);
+	if (!song) {
+		console.log('❌ Impossible de charger la chanson:', songId);
+		return false;
+	}
+	
+	// Associer l'audio
+	song.setAudioPath(audioPath);
+	lyricsLibrary.saveSong(song);
+	
+	// Si c'est la chanson actuellement affichée, recharger l'audio
+	if (lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.songId === songId) {
+		lyricsDisplay.loadAssociatedAudio(audioPath);
+	}
+	
+	console.log('✅ Audio associé à la chanson:', song.metadata.title);
+	return true;
+}
+
+// Fonction pour dissocier l'audio d'une chanson
+function removeAudioFromSong(songIdentifier) {
+	return associateAudioToSong(songIdentifier, null);
+}
+
 // Fonction pour contrôler le lecteur audio
 function audioControl(action, value = null) {
 	if (!lyricsDisplay) {
@@ -573,7 +612,9 @@ class LyricsLibrary {
 					album: data.metadata.album,
 					duration: data.metadata.duration,
 					lastModified: data.metadata.lastModified,
-					linesCount: data.lines.length
+					linesCount: data.lines.length,
+					hasAudio: !!data.metadata.audioPath,
+					audioPath: data.metadata.audioPath
 				};
 			} catch {
 				return null;
@@ -638,7 +679,8 @@ class SyncedLyrics {
 			duration: duration, // en millisecondes
 			format: 'syncedlyrics-v1.0',
 			created: new Date().toISOString(),
-			lastModified: new Date().toISOString()
+			lastModified: new Date().toISOString(),
+			audioPath: null // Chemin vers le fichier audio associé
 		};
 		this.lines = []; // Array d'objets {time, text, type}
 		this.version = '1.0';
@@ -686,6 +728,23 @@ class SyncedLyrics {
 	// Mettre à jour la date de modification
 	updateLastModified() {
 		this.metadata.lastModified = new Date().toISOString();
+	}
+
+	// Associer un fichier audio à cette chanson
+	setAudioPath(audioPath) {
+		this.metadata.audioPath = audioPath;
+		this.updateLastModified();
+		return this;
+	}
+
+	// Obtenir le chemin audio associé
+	getAudioPath() {
+		return this.metadata.audioPath;
+	}
+
+	// Vérifier si la chanson a un fichier audio associé
+	hasAudio() {
+		return !!this.metadata.audioPath;
 	}
 
 	// Obtenir la ligne active pour un timecode donné
@@ -856,6 +915,31 @@ class LyricsDisplay {
 				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
 				<button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
 			</div>
+			<div id="song-metadata-edit" style="display: none; padding: 10px; background: #34495e; color: white;">
+				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+					<div>
+						<label style="display: block; margin-bottom: 5px;">Titre:</label>
+						<input type="text" id="edit-title" style="width: 100%; padding: 5px;">
+					</div>
+					<div>
+						<label style="display: block; margin-bottom: 5px;">Artiste:</label>
+						<input type="text" id="edit-artist" style="width: 100%; padding: 5px;">
+					</div>
+				</div>
+				<div style="margin-bottom: 10px;">
+					<label style="display: block; margin-bottom: 5px;">Album:</label>
+					<input type="text" id="edit-album" style="width: 100%; padding: 5px;">
+				</div>
+				<div style="margin-bottom: 10px;">
+					<label style="display: block; margin-bottom: 5px;">Chemin Audio:</label>
+					<div style="display: flex; gap: 10px; align-items: center;">
+						<input type="text" id="edit-audio-path" placeholder="Chemin vers le fichier audio" style="flex: 1; padding: 5px;">
+						<button id="load-audio-btn" style="padding: 5px 10px; background: #3498db; color: white; border: none;">Charger</button>
+						<button id="remove-audio-btn-edit" style="padding: 5px 10px; background: #e74c3c; color: white; border: none;">Supprimer</button>
+					</div>
+					<small style="color: #bdc3c7;">Glissez un fichier audio ou entrez un chemin</small>
+				</div>
+			</div>
 			<div id="audio-player" style="display: none; padding: 10px; background: #2c3e50; color: white; border-top: 1px solid #555;">
 				<div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
 					<button id="play-pause-btn" style="padding: 8px 15px; background: #27ae60; color: white; border: none; border-radius: 4px; font-size: 16px;">▶️ Play</button>
@@ -944,6 +1028,16 @@ class LyricsDisplay {
 				editModeBtn.textContent = this.editMode ? 'Mode Lecture' : 'Mode Édition';
 				editModeBtn.style.backgroundColor = this.editMode ? '#f39c12' : '#2c3e50';
 				saveLyricsBtn.style.display = this.editMode ? 'inline-block' : 'none';
+				
+				// Afficher/cacher l'édition des métadonnées
+				const metadataEdit = document.getElementById('song-metadata-edit');
+				if (metadataEdit) {
+					metadataEdit.style.display = this.editMode ? 'block' : 'none';
+					if (this.editMode) {
+						this.populateMetadataEdit();
+					}
+				}
+				
 				this.toggleEditMode();
 			});
 		}
@@ -966,6 +1060,9 @@ class LyricsDisplay {
 		
 		// Lecteur audio
 		this.setupAudioPlayerListeners();
+		
+		// Édition des métadonnées
+		this.setupMetadataEditListeners();
 	}
 
 	setupSongManagerListeners() {
@@ -1089,6 +1186,7 @@ class LyricsDisplay {
 				<strong>${song.title}</strong><br>
 				<small style="color: #bdc3c7;">${song.artist}${song.album ? ' - ' + song.album : ''}</small><br>
 				<small style="color: #95a5a6;">${song.linesCount} lignes</small>
+				${song.hasAudio ? '<br><small style="color: #3498db;">🎵 Audio associé</small>' : ''}
 			`;
 			
 			// Charger la chanson au clic
@@ -1434,6 +1532,16 @@ class LyricsDisplay {
 		// Créer une URL pour le fichier
 		const audioUrl = URL.createObjectURL(file);
 		
+		// Si une chanson est actuellement chargée, associer l'audio à cette chanson
+		if (this.currentLyrics) {
+			this.currentLyrics.setAudioPath(audioUrl);
+			// Sauvegarder les changements
+			if (lyricsLibrary) {
+				lyricsLibrary.saveSong(this.currentLyrics);
+			}
+			console.log('✅ Audio associé à la chanson:', this.currentLyrics.metadata.title);
+		}
+		
 		// Créer ou réutiliser l'élément audio
 		if (!this.audioPlayer) {
 			this.audioPlayer = document.createElement('audio');
@@ -1617,6 +1725,91 @@ class LyricsDisplay {
 		if (audioPlayerDiv) audioPlayerDiv.style.display = 'none';
 		
 		console.log('✅ Fichier audio supprimé');
+	}
+
+	loadAssociatedAudio(audioPath) {
+		if (!audioPath) return;
+		
+		// Créer ou réutiliser l'élément audio
+		if (!this.audioPlayer) {
+			this.audioPlayer = document.createElement('audio');
+			this.audioPlayer.preload = 'metadata';
+			
+			// Événements du lecteur audio
+			this.audioPlayer.addEventListener('loadedmetadata', () => {
+				this.updateAudioPlayerUI();
+			});
+			
+			this.audioPlayer.addEventListener('timeupdate', () => {
+				this.updateAudioTime();
+			});
+			
+			this.audioPlayer.addEventListener('ended', () => {
+				this.isPlayingInternal = false;
+				this.updatePlayPauseButton();
+			});
+		}
+		
+		// Charger l'audio associé
+		this.audioPlayer.src = audioPath;
+		this.audioPath = audioPath;
+		
+		// Afficher le lecteur
+		const audioPlayerDiv = document.getElementById('audio-player');
+		const audioFilename = document.getElementById('audio-filename');
+		
+		if (audioPlayerDiv) audioPlayerDiv.style.display = 'block';
+		if (audioFilename) {
+			// Extraire le nom du fichier depuis l'URL blob ou le chemin
+			const filename = audioPath.startsWith('blob:') ? 'Fichier audio associé' : audioPath.split('/').pop();
+			audioFilename.textContent = filename;
+		}
+		
+		console.log('✅ Audio associé chargé pour la chanson');
+	}
+
+	setupMetadataEditListeners() {
+		// Bouton charger audio depuis l'édition
+		const loadAudioBtn = document.getElementById('load-audio-btn');
+		if (loadAudioBtn) {
+			loadAudioBtn.addEventListener('click', () => {
+				const audioPath = document.getElementById('edit-audio-path').value.trim();
+				if (audioPath && this.currentLyrics) {
+					this.currentLyrics.setAudioPath(audioPath);
+					this.loadAssociatedAudio(audioPath);
+					console.log('✅ Chemin audio mis à jour:', audioPath);
+				}
+			});
+		}
+		
+		// Bouton supprimer audio depuis l'édition
+		const removeAudioBtnEdit = document.getElementById('remove-audio-btn-edit');
+		if (removeAudioBtnEdit) {
+			removeAudioBtnEdit.addEventListener('click', () => {
+				if (this.currentLyrics) {
+					this.currentLyrics.setAudioPath(null);
+					document.getElementById('edit-audio-path').value = '';
+					this.removeAudio();
+					console.log('✅ Audio dissocié de la chanson');
+				}
+			});
+		}
+		
+		console.log('✅ Contrôles d\'édition des métadonnées configurés');
+	}
+
+	populateMetadataEdit() {
+		if (!this.currentLyrics) return;
+		
+		const titleInput = document.getElementById('edit-title');
+		const artistInput = document.getElementById('edit-artist');
+		const albumInput = document.getElementById('edit-album');
+		const audioPathInput = document.getElementById('edit-audio-path');
+		
+		if (titleInput) titleInput.value = this.currentLyrics.metadata.title || '';
+		if (artistInput) artistInput.value = this.currentLyrics.metadata.artist || '';
+		if (albumInput) albumInput.value = this.currentLyrics.metadata.album || '';
+		if (audioPathInput) audioPathInput.value = this.currentLyrics.metadata.audioPath || '';
 	}
 
 	toggleFullscreen() {
@@ -1818,6 +2011,18 @@ class LyricsDisplay {
 	saveLyricsChanges() {
 		if (!this.currentLyrics || !this.editMode) return;
 		
+		// Sauvegarder les métadonnées modifiées
+		const titleInput = document.getElementById('edit-title');
+		const artistInput = document.getElementById('edit-artist');
+		const albumInput = document.getElementById('edit-album');
+		const audioPathInput = document.getElementById('edit-audio-path');
+		
+		if (titleInput) this.currentLyrics.metadata.title = titleInput.value.trim();
+		if (artistInput) this.currentLyrics.metadata.artist = artistInput.value.trim();
+		if (albumInput) this.currentLyrics.metadata.album = albumInput.value.trim();
+		if (audioPathInput) this.currentLyrics.metadata.audioPath = audioPathInput.value.trim() || null;
+		
+		// Sauvegarder les paroles modifiées
 		const lyricsLines = document.querySelectorAll('.lyrics-line');
 		const updatedLines = [];
 		
@@ -1855,7 +2060,10 @@ class LyricsDisplay {
 			lyricsLibrary.saveSong(this.currentLyrics);
 		}
 		
-		console.log('✅ Modifications sauvegardées');
+		// Mettre à jour l'affichage de l'en-tête
+		this.updateHeader();
+		
+		console.log('✅ Modifications sauvegardées (métadonnées et paroles)');
 		
 		// Rafraîchir l'affichage
 		this.renderLines();
@@ -1866,6 +2074,15 @@ class LyricsDisplay {
 		this.currentLyrics = syncedLyrics;
 		this.updateHeader();
 		this.renderLines();
+		
+		// Charger l'audio associé si disponible
+		if (syncedLyrics.hasAudio()) {
+			this.loadAssociatedAudio(syncedLyrics.getAudioPath());
+		} else {
+			// Pas d'audio associé, cacher le lecteur
+			const audioPlayerDiv = document.getElementById('audio-player');
+			if (audioPlayerDiv) audioPlayerDiv.style.display = 'none';
+		}
 	}
 
 	updateHeader() {
@@ -1973,6 +2190,8 @@ if (typeof window !== 'undefined') {
 	window.toggleSongManager = toggleSongManager;
 	window.fullscreen = fullscreen;
 	window.audioControl = audioControl;
+	window.associateAudioToSong = associateAudioToSong;
+	window.removeAudioFromSong = removeAudioFromSong;
 	
 	// Debug: Vérifier que les fonctions sont bien exposées
 	console.log('🔧 Fonctions exposées globalement:');
@@ -1990,6 +2209,8 @@ if (typeof window !== 'undefined') {
 	console.log('  - toggleSongManager:', typeof window.toggleSongManager);
 	console.log('  - fullscreen:', typeof window.fullscreen);
 	console.log('  - audioControl:', typeof window.audioControl);
+	console.log('  - associateAudioToSong:', typeof window.associateAudioToSong);
+	console.log('  - removeAudioFromSong:', typeof window.removeAudioFromSong);
 } else {
 	// Environnement Node.js ou autre
 	console.log('⚠️ Environnement sans window object détecté');
