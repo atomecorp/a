@@ -148,6 +148,9 @@
             <div id="audioControl" class="audio-control">
                 <div class="status-indicator"></div>
             </div>
+            <div id="nativeAudioControl" class="audio-control" style="background-color: #FF9800;">
+                <div class="status-indicator"></div>
+            </div>
             <div id="testControl" class="test-control">
                 RUN TEST
                 <div class="status-indicator"></div>
@@ -409,9 +412,11 @@
                 const workletUrl = URL.createObjectURL(blob);
                 await audioContext.audioWorklet.addModule(workletUrl);
                 testNode = new AudioWorkletNode(audioContext, 'test-tone-processor');
-                // uncpmment to connect to send audio to the system instead of the AUV3 plugin
-                testNode.connect(audioContext.destination);
+                // Ne pas connecter automatiquement - sera géré par updateNativeAudioState()
                 console.log("AudioWorklet initialized successfully");
+                
+                // Mettre à jour l'état initial du mute natif
+                updateNativeAudioState();
             } catch (error) {
                 console.error("Failed to initialize AudioWorklet:", error);
             }
@@ -434,7 +439,9 @@
 
         // Audio control state management
         let isMuted = true;
+        let isNativeMuted = false;
         const audioControl = document.getElementById('audioControl');
+        const nativeAudioControl = document.getElementById('nativeAudioControl');
         const testControl = document.getElementById('testControl');
 
         function updateAudioState(state) {
@@ -442,8 +449,22 @@
                 state = JSON.parse(state);
             }
             isMuted = state.muted;
-            audioControl.textContent = isMuted ? 'MUTED' : 'UNMUTED';
+            audioControl.textContent = isMuted ? 'AUV3 MUTED' : 'AUV3 UNMUTED';
             audioControl.style.backgroundColor = isMuted ? '#ff4444' : '#4CAF50';
+        }
+
+        function updateNativeAudioState() {
+            nativeAudioControl.textContent = isNativeMuted ? 'JS MUTED' : 'JS UNMUTED';
+            nativeAudioControl.style.backgroundColor = isNativeMuted ? '#ff4444' : '#FF9800';
+            
+            // Connecter/déconnecter le test node selon l'état de mute
+            if (testNode) {
+                if (isNativeMuted) {
+                    testNode.disconnect();
+                } else {
+                    testNode.connect(audioContext.destination);
+                }
+            }
         }
 
         async function toggleTestTone() {
@@ -575,6 +596,12 @@
             }
         });
 
+        nativeAudioControl.addEventListener('click', function() {
+            isNativeMuted = !isNativeMuted;
+            updateNativeAudioState();
+            console.log("Native audio is now " + (isNativeMuted ? "muted" : "unmuted"));
+        });
+
         testControl.addEventListener('click', toggleTestTone);
 
         // Transport control event listener
@@ -596,6 +623,7 @@
 
         // Initial state setup
         updateAudioState({ muted: true });
+        updateNativeAudioState();
                            
         setTimeout(function() {
             console.log("hello from JS !");

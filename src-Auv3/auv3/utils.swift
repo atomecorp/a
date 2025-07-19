@@ -75,7 +75,7 @@ public class auv3Utils: AUAudioUnit {
         return { [weak self] actionFlags, timestamp, frameCount, outputBusNumber, outputData, realtimeEventListHead, pullInputBlock in
             guard let strongSelf = self else { return kAudioUnitErr_NoConnection }
             
-            var bufferList = AudioBufferListWrapper(ptr: outputData)
+            let bufferList = AudioBufferListWrapper(ptr: outputData)
             
             // Generate test tone if active
             if strongSelf.isTestToneActive {
