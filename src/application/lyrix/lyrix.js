@@ -1,6 +1,106 @@
-//   <div id="timecode" style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 14px; z-index: 1000;">
-//     Timecode: --
-//   </div>
+// current_lryx = "Spread the words
+// That'll burn your mind
+// Seal your eyes 
+// Shut you ears 
+// Swallow this and dive inside 
+// dive inside
+// dive inside
+// dive inside
+
+//  The  darkbox...
+
+// Do you wanna be scared  
+// No real fun won’t begin 
+// Stay away from what is there
+
+// Close your mind 
+// Widely shut, 
+// You won't see its'a trap
+// A golden coffin for your mind
+
+// The darkbox
+
+// Ghost box, don't get inside this dark box  
+// No satisfaction out of the box  
+
+// Ghost box, stay away from this dark box  
+// Destroy this fuckin’ Pandora’s box 
+
+
+// Ghost box, don't get inside this dark box  
+// No satisfaction out of the box  
+
+
+// Ghost box, don't get inside this dark box  
+// No satisfaction out of the box  
+
+// Ghost box, don't get inside this dark box  
+// No satisfaction out of the box  
+
+// Ghost box, don't get inside this dark box  
+// No satisfaction out of the box  
+
+// Ghost box, don't get inside this dark box  
+// No satisfaction out of the box
+
+// Ghost box, don't get inside this dark box  
+// Smash that nightmare box 
+
+// Smash that nightmare box  
+// Smash that nightmare box"
+
+
+let currentLyrix=`
+Spread the words
+That'll burn your mind
+Seal your eyes 
+Shut you ears 
+Swallow this and dive inside 
+dive inside
+dive inside
+dive inside
+
+ The  darkbox...
+
+Do you wanna be scared  
+No real fun won’t begin 
+Stay away from what is there
+
+Close your mind 
+Widely shut, 
+You won't see its'a trap
+A golden coffin for your mind
+
+The darkbox
+
+Ghost box, don't get inside this dark box  
+No satisfaction out of the box  
+
+Ghost box, stay away from this dark box  
+Destroy this fuckin’ Pandora’s box 
+
+
+Ghost box, don't get inside this dark box  
+No satisfaction out of the box  
+
+
+Ghost box, don't get inside this dark box  
+No satisfaction out of the box  
+
+Ghost box, don't get inside this dark box  
+No satisfaction out of the box  
+
+Ghost box, don't get inside this dark box  
+No satisfaction out of the box  
+
+Ghost box, don't get inside this dark box  
+No satisfaction out of the box
+
+Ghost box, don't get inside this dark box  
+Smash that nightmare box 
+
+Smash that nightmare box  
+Smash that nightmare box`
 
 $('div', {
   // pas besoin de 'tag'
