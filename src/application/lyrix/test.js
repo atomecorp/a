@@ -1655,6 +1655,7 @@ class LyricsDisplay {
 				<input type="range" id="font-size-slider" min="10" max="120" value="${this.fontSize}" style="width: 100px;">
 				<span id="font-size-display">${this.fontSize}px</span>
 				<button id="edit-mode-btn" style="padding: 5px 10px; margin-left: 20px;">Mode Édition</button>
+				<button id="lyrics-editor-btn" style="padding: 5px 10px; margin-left: 5px; background: #9b59b6; color: white;">📝 Lyrics Editor</button>
 				<button id="record-mode-btn" style="padding: 5px 10px; margin-left: 10px; background: #e74c3c; color: white;">🔴 Record</button>
 				<button id="timecode-manager-btn" style="padding: 5px 10px; margin-left: 5px; background: #f39c12; color: white;">⏱️ Timecodes</button>
 				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
@@ -1756,6 +1757,9 @@ class LyricsDisplay {
 		this.setupEventListeners();
 		this.refreshSongsList();
 		
+		// Initialiser l'état du bouton Lyrics Editor
+		this.updateLyricsEditorButton();
+		
 		// S'assurer que l'affichage de la taille de police est correct
 		this.updateFontSize();
 		const fontSizeDisplay = document.getElementById('font-size-display');
@@ -1806,6 +1810,20 @@ class LyricsDisplay {
 		if (recordModeBtn) {
 			recordModeBtn.addEventListener('click', () => {
 				this.toggleRecordMode();
+			});
+		}
+		
+		// Bouton Lyrics Editor (mode édition rapide toggle)
+		const lyricsEditorBtn = document.getElementById('lyrics-editor-btn');
+		if (lyricsEditorBtn) {
+			lyricsEditorBtn.addEventListener('click', () => {
+				if (this.quickEditMode) {
+					// Si on est en mode édition, sortir
+					this.exitQuickEditMode();
+				} else {
+					// Si on n'est pas en mode édition, entrer
+					this.enterQuickEditMode();
+				}
 			});
 		}
 		
@@ -3811,9 +3829,9 @@ class LyricsDisplay {
 			
 			content.innerHTML = '';
 			
-			// Créer le bouton de sortie du mode édition
-			const exitButton = document.createElement('div');
-			exitButton.style.cssText = `
+			// Créer un message d'information simple
+			const infoMessage = document.createElement('div');
+			infoMessage.style.cssText = `
 				position: sticky;
 				top: 0;
 				background: #2c3e50;
@@ -3822,27 +3840,12 @@ class LyricsDisplay {
 				border-bottom: 2px solid #3498db;
 				margin-bottom: 15px;
 				z-index: 100;
+				color: #bdc3c7;
+				font-size: 12px;
 			`;
-			exitButton.innerHTML = `
-				<button id="exit-quick-edit-btn" style="
-					padding: 8px 20px;
-					background: #27ae60;
-					color: white;
-					border: none;
-					border-radius: 5px;
-					cursor: pointer;
-					font-size: 14px;
-				">✅ Terminer l'édition</button>
-				<span style="margin-left: 15px; color: #bdc3c7; font-size: 12px;">
-					Double-cliquez sur les paroles pour éditer • Sauvegarde automatique
-				</span>
+			infoMessage.innerHTML = `
+				✏️ Mode édition rapide • Sauvegarde automatique • Cliquez sur "💾 Save Edit" pour terminer
 			`;
-			
-			// Ajouter l'événement au bouton après l'avoir créé
-			const exitBtn = exitButton.querySelector('#exit-quick-edit-btn');
-			exitBtn.addEventListener('click', () => {
-				this.exitQuickEditMode();
-			});
 			
 			// Créer le container éditable principal
 			const editableContainer = document.createElement('div');
@@ -3891,7 +3894,7 @@ class LyricsDisplay {
 			// Empêcher le scroll pendant l'édition
 			recordMode.scrollBlocked = true;
 			
-			content.appendChild(exitButton);
+			content.appendChild(infoMessage);
 			content.appendChild(editableContainer);
 			
 			// Focus sur l'éditeur
@@ -4442,6 +4445,9 @@ class LyricsDisplay {
 		// Activer immédiatement le mode édition - maintenant que currentLyrics est défini
 		this.quickEditMode = true;
 		
+		// Mettre à jour le bouton
+		this.updateLyricsEditorButton();
+		
 		// Bloquer le scroll automatique
 		recordMode.scrollBlocked = true;
 		
@@ -4562,6 +4568,9 @@ class LyricsDisplay {
 		console.log('✏️ Activation du mode édition rapide');
 		this.quickEditMode = true;
 		
+		// Mettre à jour le bouton
+		this.updateLyricsEditorButton();
+		
 		// Bloquer le scroll automatique
 		recordMode.scrollBlocked = true;
 		
@@ -4569,10 +4578,31 @@ class LyricsDisplay {
 		this.renderLines();
 	}
 
+	// Mettre à jour l'apparence du bouton Lyrics Editor selon l'état
+	updateLyricsEditorButton() {
+		const lyricsEditorBtn = document.getElementById('lyrics-editor-btn');
+		if (lyricsEditorBtn) {
+			if (this.quickEditMode) {
+				// En mode édition - bouton vert "Save Edit"
+				lyricsEditorBtn.textContent = '💾 Save Edit';
+				lyricsEditorBtn.style.backgroundColor = '#27ae60';
+				lyricsEditorBtn.title = 'Sauvegarder et sortir du mode édition';
+			} else {
+				// Mode normal - bouton violet "Lyrics Editor"
+				lyricsEditorBtn.textContent = '📝 Lyrics Editor';
+				lyricsEditorBtn.style.backgroundColor = '#9b59b6';
+				lyricsEditorBtn.title = 'Entrer en mode édition rapide';
+			}
+		}
+	}
+
 	// Sortir du mode édition rapide
 	exitQuickEditMode() {
 		console.log('✅ Sortie du mode édition rapide');
 		this.quickEditMode = false;
+		
+		// Mettre à jour le bouton
+		this.updateLyricsEditorButton();
 		
 		// Débloquer le scroll automatique
 		recordMode.scrollBlocked = false;
