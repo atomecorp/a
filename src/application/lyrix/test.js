@@ -18,6 +18,84 @@ const AUDIO_CONFIG = {
 	}
 };
 
+// Utilitaires de persistance localStorage
+const PersistenceUtils = {
+	// Clés de stockage
+	KEYS: {
+		FONT_SIZE: 'lyrix_font_size',
+		LAST_SONG: 'lyrix_last_song'
+	},
+	
+	// Sauvegarder la taille de police
+	saveFontSize(size) {
+		try {
+			localStorage.setItem(this.KEYS.FONT_SIZE, size.toString());
+			console.log('💾 Taille de police sauvegardée:', size + 'px');
+		} catch (error) {
+			console.warn('⚠️ Erreur sauvegarde taille police:', error);
+		}
+	},
+	
+	// Restaurer la taille de police
+	loadFontSize() {
+		try {
+			const saved = localStorage.getItem(this.KEYS.FONT_SIZE);
+			if (saved) {
+				const size = parseInt(saved, 10);
+				if (size >= 12 && size <= 100) { // Validation
+					console.log('📖 Taille de police restaurée:', size + 'px');
+					return size;
+				}
+			}
+		} catch (error) {
+			console.warn('⚠️ Erreur lecture taille police:', error);
+		}
+		return 24; // Taille par défaut
+	},
+	
+	// Sauvegarder la dernière chanson
+	saveLastSong(songData) {
+		try {
+			const data = {
+				id: songData.id || songData.songId,
+				title: songData.title,
+				artist: songData.artist,
+				timestamp: Date.now()
+			};
+			localStorage.setItem(this.KEYS.LAST_SONG, JSON.stringify(data));
+			console.log('💾 Dernière chanson sauvegardée:', data.title);
+		} catch (error) {
+			console.warn('⚠️ Erreur sauvegarde dernière chanson:', error);
+		}
+	},
+	
+	// Restaurer la dernière chanson
+	loadLastSong() {
+		try {
+			const saved = localStorage.getItem(this.KEYS.LAST_SONG);
+			if (saved) {
+				const data = JSON.parse(saved);
+				console.log('📖 Dernière chanson trouvée:', data.title);
+				return data;
+			}
+		} catch (error) {
+			console.warn('⚠️ Erreur lecture dernière chanson:', error);
+		}
+		return null;
+	},
+	
+	// Effacer toutes les données de persistance
+	clear() {
+		try {
+			localStorage.removeItem(this.KEYS.FONT_SIZE);
+			localStorage.removeItem(this.KEYS.LAST_SONG);
+			console.log('🗑️ Données de persistance effacées');
+		} catch (error) {
+			console.warn('⚠️ Erreur effacement persistance:', error);
+		}
+	}
+};
+
 // Utilitaires audio regroupés
 const AudioUtils = {
 	// Normaliser les chemins audio
@@ -135,14 +213,39 @@ const DOMUtils = {
 		lyricsDisplay = new LyricsDisplay('lyrics-container');
 		console.log('✅ LyricsDisplay initialisé');
 		
-		// Charger chanson de démo
+		// Essayer de restaurer la dernière chanson
+		const lastSong = PersistenceUtils.loadLastSong();
+		if (lastSong && lastSong.id) {
+			// Essayer de charger la chanson par son ID
+			const song = lyricsLibrary.loadSongById(lastSong.id);
+			if (song) {
+				lyricsDisplay.loadLyrics(song);
+				console.log('🔄 Dernière chanson restaurée:', lastSong.title);
+			} else {
+				console.log('⚠️ Dernière chanson non trouvée, chargement de la démo');
+				this.loadDemoSong();
+			}
+		} else {
+			console.log('📝 Aucune chanson précédente, chargement de la démo');
+			this.loadDemoSong();
+		}
+		
+		// Restaurer la taille de police dans l'interface
+		setTimeout(() => {
+			const savedFontSize = PersistenceUtils.loadFontSize();
+			UIUtils.setFontSize(savedFontSize);
+		}, 100);
+		
+		return lyricsDisplay;
+	},
+	
+	// Charger la chanson de démo par défaut
+	loadDemoSong() {
 		const demoSongs = createDemoSongs();
 		if (demoSongs?.darkboxSong) {
 			lyricsDisplay.loadLyrics(demoSongs.darkboxSong);
 			console.log('✅ Chanson "The Darkbox" chargée');
 		}
-		
-		return lyricsDisplay;
 	}
 };
 
@@ -324,6 +427,10 @@ const UIUtils = {
 		if (display) display.textContent = size + 'px';
 		
 		lyricsDisplay.updateFontSize();
+		
+		// Sauvegarder la taille de police
+		PersistenceUtils.saveFontSize(size);
+		
 		console.log('✅ Taille de police changée à', size + 'px');
 	},
 	
@@ -1426,7 +1533,7 @@ class LyricsDisplay {
 		this.currentLyrics = null;
 		this.currentTime = 0;
 		this.activeLine = null;
-		this.fontSize = 16; // Taille de police par défaut
+		this.fontSize = PersistenceUtils.loadFontSize(); // Restaurer la taille sauvegardée
 		this.editMode = false; // Mode édition complet
 		this.quickEditMode = false; // Mode édition rapide (double-clic)
 		this.isFullscreen = false; // Mode plein écran
@@ -1554,6 +1661,13 @@ class LyricsDisplay {
 		
 		this.setupEventListeners();
 		this.refreshSongsList();
+		
+		// S'assurer que l'affichage de la taille de police est correct
+		this.updateFontSize();
+		const fontSizeDisplay = document.getElementById('font-size-display');
+		if (fontSizeDisplay) {
+			fontSizeDisplay.textContent = this.fontSize + 'px';
+		}
 	}
 
 	setupEventListeners() {
@@ -1563,9 +1677,9 @@ class LyricsDisplay {
 		
 		if (fontSizeSlider) {
 			fontSizeSlider.addEventListener('input', (e) => {
-				this.fontSize = parseInt(e.target.value);
-				fontSizeDisplay.textContent = this.fontSize + 'px';
-				this.updateFontSize();
+				const newSize = parseInt(e.target.value);
+				// Utiliser UIUtils.setFontSize pour la sauvegarde automatique
+				UIUtils.setFontSize(newSize);
 			});
 		}
 		
@@ -3477,6 +3591,9 @@ class LyricsDisplay {
 		this.updateHeader();
 		this.renderLines();
 		
+		// Sauvegarder comme dernière chanson chargée
+		PersistenceUtils.saveLastSong(syncedLyrics);
+		
 		// Vérifier s'il y a un audio associé
 		if (syncedLyrics.hasAudio()) {
 			const audioPath = syncedLyrics.getAudioPath();
@@ -4272,6 +4389,21 @@ if (typeof window !== 'undefined') {
 	window.enterQuickEditMode = () => lyricsDisplay.enterQuickEditMode();
 	window.exitQuickEditMode = () => lyricsDisplay.exitQuickEditMode();
 	window.createNewSongForEditing = () => lyricsDisplay.createNewSongForEditing();
+	
+	// Fonctions de persistance
+	window.clearPersistence = () => PersistenceUtils.clear();
+	window.showPersistenceInfo = () => {
+		console.log('📊 Informations de persistance:');
+		console.log('  - Taille de police:', PersistenceUtils.loadFontSize() + 'px');
+		const lastSong = PersistenceUtils.loadLastSong();
+		if (lastSong) {
+			console.log('  - Dernière chanson:', lastSong.title, 'par', lastSong.artist);
+			console.log('  - ID:', lastSong.id);
+			console.log('  - Timestamp:', new Date(lastSong.timestamp).toLocaleString());
+		} else {
+			console.log('  - Aucune dernière chanson sauvegardée');
+		}
+	};
 	
 	// Fonction de debug pour le mode record
 	window.debugRecordMode = () => {
