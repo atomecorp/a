@@ -1639,6 +1639,11 @@ class LyricsDisplay {
 		this.setupDisplay();
 	}
 
+	// Vérifier si nous sommes dans un mode qui bloque les interactions
+	isInBlockingMode() {
+		return this.editMode || this.quickEditMode || recordMode.isRecording;
+	}
+
 	setupDisplay() {
 		if (!this.container) {
 			console.error('Container non trouvé pour LyricsDisplay');
@@ -1846,6 +1851,16 @@ class LyricsDisplay {
 		const defaultMessage = document.getElementById('default-message');
 		if (defaultMessage) {
 			defaultMessage.addEventListener('dblclick', (e) => {
+				// Bloquer si nous sommes dans un mode d'édition ou d'enregistrement
+				if (this.isInBlockingMode()) {
+					console.log('🚫 Double-clic bloqué - mode actif:', {
+						editMode: this.editMode,
+						quickEditMode: this.quickEditMode,
+						recordMode: recordMode.isRecording
+					});
+					return;
+				}
+				
 				e.preventDefault();
 				console.log('🎵 Double-clic détecté sur le message par défaut');
 				this.enterQuickEditMode(); // Cela déclenchera la création d'une nouvelle chanson
@@ -2251,6 +2266,16 @@ class LyricsDisplay {
 		if (lyricsContent) {
 			// Mouse events
 			lyricsContent.addEventListener('mousedown', (e) => {
+				// Bloquer si nous sommes dans un mode d'édition ou d'enregistrement
+				if (this.isInBlockingMode()) {
+					console.log('🚫 Clic long bloqué - mode actif:', {
+						editMode: this.editMode,
+						quickEditMode: this.quickEditMode,
+						recordMode: recordMode.isRecording
+					});
+					return;
+				}
+				
 				if (e.button === 0) { // Clic gauche seulement
 					this.longPressTimer = setTimeout(() => {
 						this.toggleFullscreen();
@@ -2274,6 +2299,16 @@ class LyricsDisplay {
 			
 			// Touch events pour mobile
 			lyricsContent.addEventListener('touchstart', (e) => {
+				// Bloquer si nous sommes dans un mode d'édition ou d'enregistrement
+				if (this.isInBlockingMode()) {
+					console.log('🚫 Touch long press bloqué - mode actif:', {
+						editMode: this.editMode,
+						quickEditMode: this.quickEditMode,
+						recordMode: recordMode.isRecording
+					});
+					return;
+				}
+				
 				this.longPressTimer = setTimeout(() => {
 					this.toggleFullscreen();
 				}, 800);
@@ -3928,6 +3963,16 @@ class LyricsDisplay {
 				
 				// Double-clic pour activer le mode édition
 				lineElement.addEventListener('dblclick', (e) => {
+					// Bloquer si nous sommes dans un mode d'édition ou d'enregistrement
+					if (this.isInBlockingMode()) {
+						console.log('🚫 Double-clic sur ligne bloqué - mode actif:', {
+							editMode: this.editMode,
+							quickEditMode: this.quickEditMode,
+							recordMode: recordMode.isRecording
+						});
+						return;
+					}
+					
 					e.preventDefault();
 					this.enterQuickEditMode();
 				});
