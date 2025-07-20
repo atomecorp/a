@@ -3662,13 +3662,6 @@ class LyricsDisplay {
 				<label>Temps:</label>
 				<input type="number" class="time-input" value="${timeSeconds}" step="0.1" style="width: 70px; padding: 2px;">
 				<span>s</span>
-				<label>Type:</label>
-				<select class="type-select" style="padding: 2px;">
-					<option value="vocal" ${lineData.type === 'vocal' ? 'selected' : ''}>Vocal</option>
-					<option value="chorus" ${lineData.type === 'chorus' ? 'selected' : ''}>Refrain</option>
-					<option value="bridge" ${lineData.type === 'bridge' ? 'selected' : ''}>Pont</option>
-					<option value="instrumental" ${lineData.type === 'instrumental' ? 'selected' : ''}>Instrumental</option>
-				</select>
 			`;
 			
 			lineElement.appendChild(timecodeControl);
@@ -3723,12 +3716,11 @@ class LyricsDisplay {
 					textContent = textNode ? textNode.textContent.trim() : '';
 				}
 				
-				// Récupérer les nouvelles valeurs de temps et type
+				// Récupérer les nouvelles valeurs de temps
 				const timeInput = lineElement.querySelector('.time-input');
-				const typeSelect = lineElement.querySelector('.type-select');
 				
 				const newTime = timeInput ? parseFloat(timeInput.value) * 1000 : originalLine.time;
-				const newType = typeSelect ? typeSelect.value : originalLine.type;
+				const newType = originalLine.type || 'vocal'; // Conserver le type existant ou utiliser 'vocal' par défaut
 				
 				// Si le texte contient des retours à la ligne, créer plusieurs lignes
 				if (textContent.includes('\n')) {
