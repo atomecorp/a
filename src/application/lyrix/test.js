@@ -3925,7 +3925,7 @@ class LyricsDisplay {
 				
 				// Ajouter un indicateur visuel pour les lignes non-synchronisées
 				if (isUnsynchronized) {
-					lineElement.textContent = `⏱️ ${line.text}`;
+					lineElement.textContent = line.text;
 					lineElement.title = 'Ligne non-synchronisée - Cliquez en mode record pour synchroniser';
 				} else {
 					lineElement.textContent = line.text;
