@@ -1370,7 +1370,88 @@ class SyncedLyrics {
 
 	// Trier les lignes par timecode
 	sortLines() {
-		this.lines.sort((a, b) => a.time - b.time);
+		this.lines.sort((a, b) => {
+			// Les lignes avec time = -1 (non-synchronisées) vont à la fin
+			if (a.time === -1 && b.time === -1) return 0;
+			if (a.time === -1) return 1; // a va à la fin
+			if (b.time === -1) return -1; // b va à la fin
+			// Tri normal pour les autres
+			return a.time - b.time;
+		});
+	}
+
+	// Supprimer tous les timecodes (remettre à zéro pour nouvel enregistrement)
+	clearAllTimecodes() {
+		this.lines.forEach((line, index) => {
+			// Utiliser -1 comme valeur spéciale pour ignorer les lignes lors du scroll
+			line.time = -1;
+			
+			// IMPORTANT: Nettoyer le texte de tous les timecodes parasites
+			if (line.text) {
+				// Supprimer tous les patterns [X.Xs] ou [-X.Xs] du texte
+				line.text = line.text.replace(/\[[-]?\d+(?:\.\d+)?s\]\s*/g, '').trim();
+			}
+		});
+		this.updateLastModified();
+		console.log(`✨ Tous les timecodes supprimés - ${this.lines.length} lignes marquées comme non-synchronisées (-1) et textes nettoyés`);
+	}
+
+	// Réinitialiser les timecodes avec un espacement uniforme
+	resetTimecodesToDefault(intervalMs = 2000) {
+		this.lines.forEach((line, index) => {
+			line.time = index * intervalMs;
+		});
+		this.updateLastModified();
+		console.log(`🔄 Timecodes réinitialisés avec intervalle de ${intervalMs}ms`);
+	}
+
+	// Fonction de nettoyage d'urgence pour réparer les textes corrompus
+	cleanCorruptedTexts() {
+		let cleanedCount = 0;
+		this.lines.forEach((line, index) => {
+			if (line.text) {
+				const originalText = line.text;
+				// Supprimer tous les patterns [X.Xs] ou [-X.Xs] du texte
+				line.text = line.text.replace(/\[[-]?\d+(?:\.\d+)?s\]\s*/g, '').trim();
+				
+				if (originalText !== line.text) {
+					cleanedCount++;
+				}
+			}
+		});
+		
+		if (cleanedCount > 0) {
+			this.updateLastModified();
+			console.log(`🧹 Nettoyage d'urgence effectué - ${cleanedCount} lignes réparées`);
+		}
+		
+		return cleanedCount;
+	}
+
+	// Supprimer le timecode d'une ligne spécifique (la placer à la fin)
+	clearLineTimecode(lineIndex) {
+		if (lineIndex >= 0 && lineIndex < this.lines.length) {
+			// Utiliser -1 pour marquer comme non-synchronisé
+			this.lines[lineIndex].time = -1;
+			this.updateLastModified();
+			console.log(`❌ Timecode supprimé pour la ligne ${lineIndex + 1}`);
+		}
+	}
+
+	// Vérifier si des timecodes sont définis (différents de l'espacement par défaut)
+	hasCustomTimecodes() {
+		// Vérifier s'il y a des lignes avec des timecodes valides (pas -1)
+		const validLines = this.lines.filter(line => line.time >= 0);
+		if (validLines.length === 0) return false; // Toutes les lignes sont non-synchronisées
+		
+		// Vérifier si les timecodes sont différents de l'espacement par défaut
+		for (let i = 0; i < validLines.length; i++) {
+			const expectedTime = i * 2000;
+			if (Math.abs(validLines[i].time - expectedTime) > 100) { // Tolérance de 100ms
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// Mettre à jour la date de modification
@@ -1398,15 +1479,27 @@ class SyncedLyrics {
 
 	// Obtenir la ligne active pour un timecode donné
 	getActiveLineAt(timeMs) {
+		// Si pas de lignes, retourner null
+		if (this.lines.length === 0) return null;
+		
+		// Filtrer les lignes avec des timecodes valides (pas -1)
+		const validLines = this.lines.filter(line => line.time >= 0);
+		if (validLines.length === 0) return null; // Aucune ligne synchronisée
+		
+		// Si le timecode est avant la première ligne valide, retourner la première ligne valide
+		if (timeMs < validLines[0].time) {
+			return validLines[0];
+		}
+		
 		let activeLine = null;
-		for (let i = 0; i < this.lines.length; i++) {
-			if (this.lines[i].time <= timeMs) {
-				activeLine = this.lines[i];
+		for (let i = 0; i < validLines.length; i++) {
+			if (validLines[i].time <= timeMs) {
+				activeLine = validLines[i];
 			} else {
 				break;
 			}
 		}
-		return activeLine;
+		return activeLine || validLines[0]; // Fallback à la première ligne valide
 	}
 
 	// Obtenir la prochaine ligne
@@ -1563,6 +1656,7 @@ class LyricsDisplay {
 				<span id="font-size-display">${this.fontSize}px</span>
 				<button id="edit-mode-btn" style="padding: 5px 10px; margin-left: 20px;">Mode Édition</button>
 				<button id="record-mode-btn" style="padding: 5px 10px; margin-left: 10px; background: #e74c3c; color: white;">🔴 Record</button>
+				<button id="timecode-manager-btn" style="padding: 5px 10px; margin-left: 5px; background: #f39c12; color: white;">⏱️ Timecodes</button>
 				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
 				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
 				<button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
@@ -1712,6 +1806,14 @@ class LyricsDisplay {
 		if (recordModeBtn) {
 			recordModeBtn.addEventListener('click', () => {
 				this.toggleRecordMode();
+			});
+		}
+		
+		// Bouton gestionnaire de timecodes
+		const timecodeManagerBtn = document.getElementById('timecode-manager-btn');
+		if (timecodeManagerBtn) {
+			timecodeManagerBtn.addEventListener('click', () => {
+				this.showTimecodeManagerDialog();
 			});
 		}
 		
@@ -3407,15 +3509,22 @@ class LyricsDisplay {
 			currentTimeMs = this.audioPlayer.currentTime * 1000;
 		}
 		
+		console.log('🎯 Debug mode record:', {
+			currentTimeMs,
+			audioPlayerTime: this.audioPlayer ? this.audioPlayer.currentTime * 1000 : 'none',
+			hostTime: this.currentTime,
+			lineId: lineId
+		});
+		
 		// Mettre à jour le timecode de la ligne dans les paroles synchronisées
 		if (this.currentLyrics) {
 			const lineIndex = Array.from(lineElement.parentNode.children).indexOf(lineElement);
-			const lyricLine = this.currentLyrics.lines[lineIndex]; // Corrected: lines instead of lyrics
+			const lyricLine = this.currentLyrics.lines[lineIndex];
 			
 			if (lyricLine) {
 				// Sauvegarder l'ancien timecode pour la possibilité d'annulation
-				const oldTimecode = lyricLine.time; // Corrected: time instead of startTime
-				lyricLine.time = currentTimeMs; // Corrected: time instead of startTime
+				const oldTimecode = lyricLine.time;
+				lyricLine.time = currentTimeMs;
 				
 				// Feedback visuel
 				lineElement.style.animation = 'flash 0.5s';
@@ -3431,16 +3540,47 @@ class LyricsDisplay {
 				console.log(`🎯 Ligne "${lyricLine.text}" synchronisée:`, {
 					ancien: (oldTimecode / 1000).toFixed(3) + 's',
 					nouveau: (currentTimeMs / 1000).toFixed(3) + 's',
-					ligne: lineIndex + 1
+					ligne: lineIndex + 1,
+					lineId: lyricLine.id
 				});
 				
 				// Sauvegarder automatiquement si la chanson est dans la bibliothèque
 				if (lyricsLibrary && this.currentLyrics.metadata) {
+					// Stocker l'ID de la ligne modifiée pour la retrouver après tri
+					const modifiedLineId = lyricLine.id;
+					
 					// Important: Trier les lignes après modification pour maintenir l'ordre chronologique
+					console.log('📊 Avant tri:', this.currentLyrics.lines.map(l => ({ text: l.text.substring(0, 20), time: l.time })));
+					
+					// Vérifier si le tri va changer l'ordre
+					const linesBeforeSort = this.currentLyrics.lines.map(l => l.id);
 					this.currentLyrics.sortLines();
+					const linesAfterSort = this.currentLyrics.lines.map(l => l.id);
+					const orderChanged = !linesBeforeSort.every((id, index) => id === linesAfterSort[index]);
+					
+					console.log('📊 Après tri:', this.currentLyrics.lines.map(l => ({ text: l.text.substring(0, 20), time: l.time })));
 					this.currentLyrics.updateLastModified();
 					lyricsLibrary.saveSong(this.currentLyrics);
 					console.log('💾 Timecode sauvegardé automatiquement');
+					
+					// Re-render seulement si l'ordre a changé
+					if (orderChanged) {
+						console.log('🔄 Ordre modifié, re-render nécessaire');
+						setTimeout(() => {
+							this.renderLines();
+							// Mettre en évidence la ligne qui a été modifiée dans le nouvel ordre
+							const newLineElement = document.getElementById(modifiedLineId);
+							if (newLineElement) {
+								newLineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+								newLineElement.style.backgroundColor = 'rgba(39, 174, 96, 0.3)';
+								setTimeout(() => {
+									newLineElement.style.backgroundColor = '';
+								}, 2000);
+							}
+						}, 100);
+					} else {
+						console.log('✅ Ordre inchangé, pas de re-render nécessaire');
+					}
 				}
 				
 				// Supprimer le feedback visuel après un délai
@@ -3547,8 +3687,23 @@ class LyricsDisplay {
 			const originalLine = this.currentLyrics.lines.find(l => l.id === lineId);
 			
 			if (originalLine) {
-				// Récupérer le nouveau texte (sans le contrôle de timecode)
-				const textContent = lineElement.childNodes[0].textContent.trim();
+				// Récupérer le nouveau texte en préservant les retours à la ligne
+				let textContent;
+				
+				// Si l'élément contient des éléments HTML (retours à la ligne), les traiter
+				if (lineElement.innerHTML.includes('<br>') || lineElement.innerHTML.includes('<div>')) {
+					// Convertir les <br> en \n et traiter les <div> comme des nouvelles lignes
+					textContent = lineElement.innerHTML
+						.replace(/<br\s*\/?>/gi, '\n')  // Remplacer <br> par \n
+						.replace(/<div[^>]*>/gi, '\n')  // Remplacer les ouvertures <div> par \n
+						.replace(/<\/div>/gi, '')       // Supprimer les fermetures </div>
+						.replace(/<[^>]*>/g, '')        // Supprimer toutes les autres balises HTML
+						.trim();
+				} else {
+					// Texte simple sans HTML
+					const textNode = lineElement.childNodes[0];
+					textContent = textNode ? textNode.textContent.trim() : '';
+				}
 				
 				// Récupérer les nouvelles valeurs de temps et type
 				const timeInput = lineElement.querySelector('.time-input');
@@ -3557,12 +3712,37 @@ class LyricsDisplay {
 				const newTime = timeInput ? parseFloat(timeInput.value) * 1000 : originalLine.time;
 				const newType = typeSelect ? typeSelect.value : originalLine.type;
 				
-				updatedLines.push({
-					id: lineId,
-					time: newTime,
-					text: textContent,
-					type: newType
-				});
+				// Si le texte contient des retours à la ligne, créer plusieurs lignes
+				if (textContent.includes('\n')) {
+					const lines = textContent.split('\n');
+					lines.forEach((lineText, index) => {
+						if (index === 0) {
+							// Première ligne - garder l'ID original
+							updatedLines.push({
+								id: lineId,
+								time: newTime,
+								text: lineText.trim(),
+								type: newType
+							});
+						} else {
+							// Lignes supplémentaires - créer de nouveaux IDs
+							updatedLines.push({
+								id: `line_${Date.now()}_${index}_${Math.random()}`,
+								time: -1, // Marquer comme non-synchronisée
+								text: lineText.trim(),
+								type: newType
+							});
+						}
+					});
+				} else {
+					// Ligne simple
+					updatedLines.push({
+						id: lineId,
+						time: newTime,
+						text: textContent,
+						type: newType
+					});
+				}
 			}
 		});
 		
@@ -3624,6 +3804,11 @@ class LyricsDisplay {
 		
 		// Si en mode édition rapide, créer un container éditable unifié
 		if (this.quickEditMode) {
+			// NETTOYAGE D'URGENCE: Réparer les textes corrompus avant affichage
+			if (this.currentLyrics.cleanCorruptedTexts() > 0) {
+				console.log('🔧 Textes corrompus détectés et réparés automatiquement');
+			}
+			
 			content.innerHTML = '';
 			
 			// Créer le bouton de sortie du mode édition
@@ -3679,8 +3864,18 @@ class LyricsDisplay {
 			// Construire le texte des paroles avec timecodes
 			let lyricsText = '';
 			this.currentLyrics.lines.forEach((line, index) => {
-				const timeInSeconds = (line.time / 1000).toFixed(1);
-				lyricsText += `[${timeInSeconds}s] ${line.text}`;
+				// Affichage différent selon l'état de synchronisation
+				if (line.time === -1) {
+					// Ligne non-synchronisée - pas de timecode
+					// Si la ligne est vide, afficher juste une ligne vide
+					lyricsText += line.text || '';
+				} else {
+					// Ligne synchronisée - avec timecode
+					const timeInSeconds = (line.time / 1000).toFixed(1);
+					lyricsText += `[${timeInSeconds}s] ${line.text || ''}`;
+				}
+				
+				// Ajouter une nouvelle ligne sauf pour la dernière
 				if (index < this.currentLyrics.lines.length - 1) {
 					lyricsText += '\n';
 				}
@@ -3710,16 +3905,31 @@ class LyricsDisplay {
 				const lineElement = document.createElement('div');
 				lineElement.className = 'lyrics-line';
 				lineElement.id = line.id;
+				
+				// Style différent pour les lignes non-synchronisées (time = -1)
+				const isUnsynchronized = line.time === -1;
+				const baseColor = isUnsynchronized ? '#555' : '#666';
+				const backgroundColor = isUnsynchronized ? 'rgba(231, 76, 60, 0.1)' : 'transparent';
+				
 				lineElement.style.cssText = `
 					padding: 8px 0;
 					font-size: ${this.fontSize}px;
 					transition: all 0.3s ease;
-					color: #666;
+					color: ${baseColor};
 					line-height: 1.4;
 					cursor: default;
 					margin-bottom: 4px;
+					background-color: ${backgroundColor};
+					${isUnsynchronized ? 'opacity: 0.7; font-style: italic;' : ''}
 				`;
-				lineElement.textContent = line.text;
+				
+				// Ajouter un indicateur visuel pour les lignes non-synchronisées
+				if (isUnsynchronized) {
+					lineElement.textContent = `⏱️ ${line.text}`;
+					lineElement.title = 'Ligne non-synchronisée - Cliquez en mode record pour synchroniser';
+				} else {
+					lineElement.textContent = line.text;
+				}
 				
 				// Double-clic pour activer le mode édition
 				lineElement.addEventListener('dblclick', (e) => {
@@ -3766,6 +3976,17 @@ class LyricsDisplay {
 		}
 
 		const activeLine = this.currentLyrics.getActiveLineAt(timeMs);
+		
+		// Debug pour comprendre la sélection de ligne
+		if (timeMs < 1000) { // Dans la première seconde
+			console.log(`🏠 Timecode proche de zéro (${timeMs}ms):`, {
+				timeMs,
+				activeLine: activeLine ? { text: activeLine.text.substring(0, 30), time: activeLine.time } : null,
+				firstLineTime: this.currentLyrics.lines[0]?.time,
+				shouldBeFirstLine: timeMs < this.currentLyrics.lines[0]?.time
+			});
+		}
+		
 		if (activeLine && activeLine !== this.activeLine) {
 			this.highlightLine(activeLine);
 			this.activeLine = activeLine;
@@ -4159,7 +4380,10 @@ class LyricsDisplay {
 		// Fermer avec Escape ou Entrée
 		const keyHandler = (e) => {
 			if (e.key === 'Escape' || e.key === 'Enter') {
-				document.body.removeChild(overlay);
+				// Vérifier que l'overlay existe encore avant de le supprimer
+				if (overlay && overlay.parentNode) {
+					document.body.removeChild(overlay);
+				}
 				document.removeEventListener('keydown', keyHandler);
 				if (onOk) onOk();
 			}
@@ -4225,6 +4449,108 @@ class LyricsDisplay {
 		this.render();
 	}
 
+	// Dialogue de gestion des timecodes
+	showTimecodeManagerDialog() {
+		if (!this.currentLyrics) {
+			this.showCustomAlert('Aucune chanson', 'Aucune chanson n\'est chargée pour gérer les timecodes.');
+			return;
+		}
+
+		const overlay = document.createElement('div');
+		overlay.style.cssText = `
+			position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+			background: rgba(0,0,0,0.8); z-index: 10000;
+			display: flex; align-items: center; justify-content: center;
+		`;
+
+		const dialog = document.createElement('div');
+		dialog.style.cssText = `
+			background: #2c3e50; border-radius: 8px; overflow: hidden;
+			min-width: 500px; max-width: 600px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+		`;
+
+		const hasCustom = this.currentLyrics.hasCustomTimecodes();
+		const lineCount = this.currentLyrics.lines.length;
+
+		dialog.innerHTML = `
+			<div style="background: #f39c12; padding: 15px; border-bottom: 1px solid #e67e22;">
+				<h3 style="margin: 0; font-size: 18px; color: white;">⏱️ Gestionnaire de Timecodes</h3>
+			</div>
+			<div style="padding: 20px; color: #ecf0f1;">
+				<div style="margin-bottom: 15px;">
+					<strong>État actuel:</strong><br>
+					• Nombre de lignes: ${lineCount}<br>
+					• Timecodes personnalisés: ${hasCustom ? 'OUI' : 'NON'}<br>
+					${hasCustom ? '• ⚠️ La chanson contient des timecodes personnalisés' : '• ✅ Timecodes par défaut - prêt pour enregistrement'}
+				</div>
+				<div style="border-top: 1px solid #555; padding-top: 15px; margin-bottom: 20px;">
+					<strong>Actions disponibles:</strong>
+				</div>
+				<div style="display: flex; flex-direction: column; gap: 10px;">
+					<button id="clear-timecodes" style="padding: 10px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer;">
+						🗑️ Supprimer tous les timecodes
+					</button>
+					<button id="reset-timecodes" style="padding: 10px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+						🔄 Réinitialiser avec espacement 2s
+					</button>
+					<button id="check-status" style="padding: 10px; background: #95a5a6; color: white; border: none; border-radius: 5px; cursor: pointer;">
+						📊 Vérifier l'état des timecodes
+					</button>
+				</div>
+			</div>
+			<div style="padding: 15px 20px 20px; display: flex; justify-content: flex-end;">
+				<button id="close-dialog" style="padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer;">
+					Fermer
+				</button>
+			</div>
+		`;
+
+		// Événements des boutons
+		const clearBtn = dialog.querySelector('#clear-timecodes');
+		const resetBtn = dialog.querySelector('#reset-timecodes');
+		const checkBtn = dialog.querySelector('#check-status');
+		const closeBtn = dialog.querySelector('#close-dialog');
+
+		clearBtn.addEventListener('click', () => {
+			this.currentLyrics.clearAllTimecodes();
+			this.renderLines();
+			if (lyricsLibrary) lyricsLibrary.saveSong(this.currentLyrics);
+			document.body.removeChild(overlay);
+			this.showCustomAlert('Timecodes supprimés', 'Tous les timecodes ont été supprimés. Vous pouvez maintenant enregistrer de nouveaux timecodes.');
+		});
+
+		resetBtn.addEventListener('click', () => {
+			this.currentLyrics.resetTimecodesToDefault(2000);
+			this.renderLines();
+			if (lyricsLibrary) lyricsLibrary.saveSong(this.currentLyrics);
+			document.body.removeChild(overlay);
+			this.showCustomAlert('Timecodes réinitialisés', 'Les timecodes ont été réinitialisés avec un espacement de 2 secondes.');
+		});
+
+		checkBtn.addEventListener('click', () => {
+			window.checkTimecodeStatus();
+		});
+
+		closeBtn.addEventListener('click', () => {
+			document.body.removeChild(overlay);
+		});
+
+		// Fermer avec Escape
+		const keyHandler = (e) => {
+			if (e.key === 'Escape') {
+				document.removeEventListener('keydown', keyHandler);
+				// Vérifier que l'overlay existe encore avant de le supprimer
+				if (overlay && overlay.parentNode) {
+					document.body.removeChild(overlay);
+				}
+			}
+		};
+		document.addEventListener('keydown', keyHandler);
+
+		overlay.appendChild(dialog);
+		document.body.appendChild(overlay);
+	}
+
 	// Mode édition rapide - activer l'édition unifiée
 	enterQuickEditMode() {
 		if (!this.currentLyrics) {
@@ -4266,56 +4592,100 @@ class LyricsDisplay {
 		if (!editor) return;
 		
 		try {
-			const editorContent = editor.textContent || editor.innerText;
+			// IMPORTANT: Utiliser innerHTML pour préserver les retours à la ligne
+			// puis convertir les balises HTML en caractères de nouvelle ligne
+			let editorContent = editor.innerHTML;
+			
+			// Convertir les balises HTML en caractères de nouvelle ligne
+			editorContent = editorContent
+				.replace(/<div[^>]*><br[^>]*><\/div>/gi, '\n')  // <div><br></div> = nouvelle ligne
+				.replace(/<div[^>]*>/gi, '\n')                  // <div> = nouvelle ligne  
+				.replace(/<\/div>/gi, '')                       // Supprimer </div>
+				.replace(/<br[^>]*>/gi, '\n')                   // <br> = nouvelle ligne
+				.replace(/<[^>]*>/g, '')                        // Supprimer toutes les autres balises HTML
+				.replace(/&nbsp;/g, ' ')                        // Convertir &nbsp; en espaces
+				.replace(/&lt;/g, '<')                          // Décoder les entités HTML
+				.replace(/&gt;/g, '>')
+				.replace(/&amp;/g, '&');
+			
 			const lines = editorContent.split('\n');
 			
 			// Parser les lignes avec timecodes
 			const updatedLines = [];
 			let lineIndex = 0;
 			
-			lines.forEach((lineText, index) => {
-				lineText = lineText.trim();
-				if (!lineText) return; // Ignorer les lignes vides
-				
-				// Chercher le pattern [X.Xs] au début de la ligne
-				const timecodeMatch = lineText.match(/^\[(\d+(?:\.\d+)?)s\]\s*(.*)$/);
-				
-				if (timecodeMatch) {
-					const timeInSeconds = parseFloat(timecodeMatch[1]);
-					const text = timecodeMatch[2].trim();
-					
-					// Utiliser l'ID existant si possible, sinon créer un nouveau
-					const existingLine = this.currentLyrics.lines[lineIndex];
-					const lineId = existingLine ? existingLine.id : `line_${Date.now()}_${lineIndex}`;
-					
-					updatedLines.push({
-						id: lineId,
-						time: timeInSeconds * 1000, // Convertir en millisecondes
-						text: text,
-						type: existingLine ? existingLine.type : 'vocal'
-					});
-					
-					lineIndex++;
-				} else {
-					// Ligne sans timecode - utiliser le temps de la ligne précédente + 2s
-					const previousTime = updatedLines.length > 0 ? updatedLines[updatedLines.length - 1].time : 0;
-					const newTime = previousTime + 2000; // +2 secondes
-					
-					const existingLine = this.currentLyrics.lines[lineIndex];
-					const lineId = existingLine ? existingLine.id : `line_${Date.now()}_${lineIndex}`;
-					
-					updatedLines.push({
-						id: lineId,
-						time: newTime,
-						text: lineText,
-						type: existingLine ? existingLine.type : 'vocal'
-					});
-					
-					lineIndex++;
-				}
-			});
+		lines.forEach((lineText, index) => {
+			// Ne pas faire trim() sur lineText d'abord pour préserver les lignes vides
+			const originalLineText = lineText;
+			lineText = lineText.trim();
 			
-			// Mettre à jour les paroles
+			// Gérer les lignes vides (retours à la ligne)
+			if (!lineText) {
+				// Créer une ligne vide pour préserver le retour à la ligne
+				const existingLine = this.currentLyrics.lines[lineIndex];
+				const lineId = existingLine ? existingLine.id : `line_${Date.now()}_${lineIndex}`;
+				
+				updatedLines.push({
+					id: lineId,
+					time: -1, // Non-synchronisée
+					text: '', // Ligne vide
+					type: existingLine ? existingLine.type : 'vocal'
+				});
+				
+				lineIndex++;
+				return;
+			}
+			
+			// Nettoyer TOUS les timecodes parasites de la ligne d'abord
+			// Supprimer tous les patterns [X.Xs] ou [-X.Xs] de la ligne
+			let cleanText = lineText.replace(/\[[-]?\d+(?:\.\d+)?s\]\s*/g, '');
+			cleanText = cleanText.trim();
+			
+			// Si après nettoyage il ne reste rien, traiter comme ligne vide
+			if (!cleanText) {
+				const existingLine = this.currentLyrics.lines[lineIndex];
+				const lineId = existingLine ? existingLine.id : `line_${Date.now()}_${lineIndex}`;
+				
+				updatedLines.push({
+					id: lineId,
+					time: -1, // Non-synchronisée
+					text: '', // Ligne vide après nettoyage
+					type: existingLine ? existingLine.type : 'vocal'
+				});
+				
+				lineIndex++;
+				return;
+			}
+			
+			// Chercher le pattern [X.Xs] au début de la ligne ORIGINALE (avant nettoyage)
+			const timecodeMatch = lineText.match(/^\[(\d+(?:\.\d+)?)s\]/);
+			
+			// Utiliser l'ID existant si possible, sinon créer un nouveau
+			const existingLine = this.currentLyrics.lines[lineIndex];
+			const lineId = existingLine ? existingLine.id : `line_${Date.now()}_${lineIndex}`;
+			
+			if (timecodeMatch) {
+				// Ligne avec timecode valide (pas négatif)
+				const timeInSeconds = parseFloat(timecodeMatch[1]);
+				
+				updatedLines.push({
+					id: lineId,
+					time: timeInSeconds * 1000, // Convertir en millisecondes
+					text: cleanText, // Utiliser le texte nettoyé
+					type: existingLine ? existingLine.type : 'vocal'
+				});
+			} else {
+				// Ligne sans timecode valide - marquer comme non-synchronisée
+				updatedLines.push({
+					id: lineId,
+					time: -1, // Non-synchronisée
+					text: cleanText, // Utiliser le texte nettoyé
+					type: existingLine ? existingLine.type : 'vocal'
+				});
+			}
+			
+			lineIndex++;
+		});			// Mettre à jour les paroles
 			this.currentLyrics.lines = updatedLines;
 			this.currentLyrics.sortLines();
 			this.currentLyrics.updateLastModified();
@@ -4416,10 +4786,152 @@ if (typeof window !== 'undefined') {
 			console.log('  - lyricsDisplay.currentLyrics:', !!lyricsDisplay.currentLyrics);
 			if (lyricsDisplay.currentLyrics) {
 				console.log('  - Nombre de lignes:', lyricsDisplay.currentLyrics.lines.length);
+				console.log('  - Timecodes des lignes:');
 				lyricsDisplay.currentLyrics.lines.forEach((line, i) => {
-					console.log(`    Ligne ${i}: ${(line.time/1000).toFixed(1)}s - "${line.text}"`);
+					const timeStr = (line.time / 1000).toFixed(3) + 's';
+					console.log(`    ${i + 1}. [${timeStr}] ${line.text.substring(0, 50)}...`);
 				});
 			}
+		}
+	};
+	
+	// Fonction pour vérifier la synchronisation des timecodes
+	window.checkTimecodeSync = () => {
+		if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		console.log('🔍 Vérification synchronisation des timecodes:');
+		const lines = lyricsDisplay.currentLyrics.lines;
+		let errors = 0;
+		
+		for (let i = 0; i < lines.length - 1; i++) {
+			const current = lines[i];
+			const next = lines[i + 1];
+			
+			if (current.time >= next.time) {
+				console.log(`❌ Erreur timecode ligne ${i + 1} → ${i + 2}:`, {
+					ligne1: { text: current.text.substring(0, 30), time: current.time },
+					ligne2: { text: next.text.substring(0, 30), time: next.time }
+				});
+				errors++;
+			}
+		}
+		
+		if (errors === 0) {
+			console.log('✅ Tous les timecodes sont dans l\'ordre chronologique');
+		} else {
+			console.log(`❌ ${errors} erreur(s) de timecode détectée(s)`);
+		}
+		
+		// Afficher aussi l'ordre actuel
+		console.log('📋 Ordre actuel des timecodes:');
+		lines.forEach((line, i) => {
+			const timeStr = (line.time / 1000).toFixed(3) + 's';
+			console.log(`  ${i + 1}. [${timeStr}] ${line.text.substring(0, 40)}...`);
+		});
+	};
+	
+	// Fonction pour forcer le réordonnancement des lignes
+	window.forceReorderLines = () => {
+		if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		console.log('🔄 Forçage du réordonnancement des lignes...');
+		const beforeCount = lyricsDisplay.currentLyrics.lines.length;
+		lyricsDisplay.currentLyrics.sortLines();
+		lyricsDisplay.renderLines();
+		console.log(`✅ ${beforeCount} lignes réordonnées selon leurs timecodes`);
+	};
+	
+	// Fonction pour réinitialiser la position de lecture à la première ligne
+	window.resetToFirstLine = () => {
+		if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		// Simuler un timecode de 0 pour revenir à la première ligne
+		lyricsDisplay.updateTime(0);
+		console.log('🏠 Position de lecture réinitialisée à la première ligne');
+	};
+	
+	// Fonctions de gestion des timecodes
+	window.clearAllTimecodes = () => {
+		if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		lyricsDisplay.currentLyrics.clearAllTimecodes();
+		lyricsDisplay.renderLines();
+		
+		// Sauvegarder automatiquement
+		if (lyricsLibrary) {
+			lyricsLibrary.saveSong(lyricsDisplay.currentLyrics);
+		}
+		console.log('✨ Tous les timecodes supprimés - prêt pour nouvel enregistrement');
+	};
+	
+	window.resetTimecodes = (intervalSec = 2) => {
+		if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		const intervalMs = intervalSec * 1000;
+		lyricsDisplay.currentLyrics.resetTimecodesToDefault(intervalMs);
+		lyricsDisplay.renderLines();
+		
+		// Sauvegarder automatiquement
+		if (lyricsLibrary) {
+			lyricsLibrary.saveSong(lyricsDisplay.currentLyrics);
+		}
+		console.log(`🔄 Timecodes réinitialisés avec intervalle de ${intervalSec}s`);
+	};
+	
+	window.checkTimecodeStatus = () => {
+		if (!lyricsDisplay || !lyricsDisplay.currentLyrics) {
+			console.log('❌ Aucune chanson chargée');
+			return;
+		}
+		
+		const allLines = lyricsDisplay.currentLyrics.lines;
+		const syncedLines = allLines.filter(line => line.time >= 0);
+		const unsyncedLines = allLines.filter(line => line.time === -1);
+		const hasCustom = lyricsDisplay.currentLyrics.hasCustomTimecodes();
+		
+		console.log('📊 État des timecodes:');
+		console.log(`  - Nombre total de lignes: ${allLines.length}`);
+		console.log(`  - Lignes synchronisées: ${syncedLines.length}`);
+		console.log(`  - Lignes non-synchronisées: ${unsyncedLines.length}`);
+		console.log(`  - Timecodes personnalisés: ${hasCustom ? 'OUI' : 'NON'}`);
+		
+		if (unsyncedLines.length > 0) {
+			console.log('  ⚠️ Des lignes ne sont pas synchronisées (marquées ⏱️)');
+			console.log('  💡 Activez le mode record et cliquez sur chaque ligne pour les synchroniser');
+		} else if (syncedLines.length > 0) {
+			console.log('  ✅ Toutes les lignes sont synchronisées');
+		} else {
+			console.log('  ❌ Aucune ligne synchronisée');
+		}
+		
+		// Afficher quelques exemples
+		if (syncedLines.length > 0) {
+			console.log('  📋 Lignes synchronisées (exemples):');
+			syncedLines.slice(0, 3).forEach((line, i) => {
+				console.log(`    ${i + 1}. [${(line.time / 1000).toFixed(1)}s] ${line.text.substring(0, 40)}...`);
+			});
+		}
+		
+		if (unsyncedLines.length > 0) {
+			console.log('  📋 Lignes non-synchronisées:');
+			unsyncedLines.slice(0, 5).forEach((line, i) => {
+				console.log(`    ${i + 1}. ⏱️ ${line.text.substring(0, 40)}...`);
+			});
 		}
 	};
 	
