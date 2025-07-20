@@ -210,7 +210,8 @@ const DOMUtils = {
 		}
 		
 		// Initialiser l'instance globale
-		lyricsDisplay = new LyricsDisplay('lyrics-container');
+	   lyricsDisplay = new LyricsDisplay('lyrics-container');
+	   window.lyricsDisplay = lyricsDisplay;
 		console.log('✅ LyricsDisplay initialisé');
 		
 		// Essayer de restaurer la dernière chanson
@@ -1664,8 +1665,10 @@ class LyricsDisplay {
 				<button id="record-mode-btn" style="padding: 5px 10px; margin-left: 10px; background: #e74c3c; color: white;">🔴 Record</button>
 				<button id="timecode-manager-btn" style="padding: 5px 10px; margin-left: 5px; background: #f39c12; color: white;">⏱️ Timecodes</button>
 				<button id="save-lyrics-btn" style="padding: 5px 10px; display: none;">Sauvegarder</button>
-				<button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
-				<button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
+			   <button id="song-manager-btn" style="padding: 5px 10px; margin-left: 20px; background: #27ae60;">Gérer Chansons</button>
+			   <button id="song-list-btn" style="padding: 5px 10px; margin-left: 5px; background: #2980b9; color: white;">Liste des chansons</button>
+			   <button id="fullscreen-btn" style="padding: 5px 10px; margin-left: 20px; background: #9b59b6;">Plein Écran</button>
+	
 			</div>
 			<div id="song-metadata-edit" style="display: none; padding: 15px; background: #34495e; color: white; min-height: 200px; max-height: 50vh; overflow-y: auto;">
 				<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
@@ -1758,6 +1761,61 @@ class LyricsDisplay {
 				</p>
 			</div>
 		`;
+
+			// Bouton Liste des chansons
+		const songListBtn = document.getElementById('song-list-btn');
+		if (songListBtn) {
+			songListBtn.addEventListener('click', () => {
+				const allSongs = (window.lyricsLibrary && lyricsLibrary.getAllSongs) ? lyricsLibrary.getAllSongs() : [];
+				let modal = document.getElementById('song-list-modal');
+				if (modal) modal.remove();
+				modal = document.createElement('div');
+				modal.id = 'song-list-modal';
+				Object.assign(modal.style, {
+					position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000
+				});
+				const content = document.createElement('div');
+				Object.assign(content.style, {
+					background: '#222', color: 'white', padding: '30px 40px', borderRadius: '10px', minWidth: '320px', maxHeight: '70vh', overflowY: 'auto', boxShadow: '0 4px 32px #000a', textAlign: 'left'
+				});
+				const title = document.createElement('h2');
+				title.textContent = 'Liste des chansons';
+				title.style.marginTop = '0';
+				content.appendChild(title);
+				const ul = document.createElement('ul');
+				ul.style.listStyle = 'none';
+				ul.style.padding = '0';
+				ul.style.margin = '0 0 20px 0';
+				allSongs.forEach(song => {
+					const li = document.createElement('li');
+					li.style.marginBottom = '10px';
+					const songBtn = document.createElement('button');
+					songBtn.textContent = song.title + (song.artist ? ' - ' + song.artist : '');
+					Object.assign(songBtn.style, {
+						width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', borderRadius: '4px', background: '#34495e', color: 'white', cursor: 'pointer'
+					});
+				   songBtn.onclick = function() {
+					   const s = lyricsLibrary.loadSongById(song.songId);
+					   if (s && window.lyricsDisplay && lyricsDisplay.loadLyrics) {
+						   lyricsDisplay.loadLyrics(s);
+						   modal.remove();
+						}
+					};
+					li.appendChild(songBtn);
+					ul.appendChild(li);
+				});
+				content.appendChild(ul);
+				const closeBtn = document.createElement('button');
+				closeBtn.textContent = 'Fermer';
+				Object.assign(closeBtn.style, {
+					marginTop: '10px', padding: '6px 18px', background: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
+				});
+				closeBtn.onclick = function() { modal.remove(); };
+				content.appendChild(closeBtn);
+				modal.appendChild(content);
+				document.body.appendChild(modal);
+			});
+		}
 		
 		this.setupEventListeners();
 		this.refreshSongsList();
