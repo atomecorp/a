@@ -29,7 +29,7 @@
 // import('./examples/svg.js');
 // import('./examples/anim_svg.js');
 // import('./lyrix/lyrix.js');
-import('./lyrix/test.js');
+import('./lyrix/lyrixProto.js');
 // import('./test/slice.js');
 
 // const mySpan = $('span', {

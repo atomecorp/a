@@ -715,17 +715,17 @@ let lyricsDisplay = null;
 
 // Fonction pour recevoir et afficher le timecode depuis AUv3
 function updateTimecode(timecodeMs) {
-    console.log('🎵 Timecode reçu:', timecodeMs, 'ms');
-    
-    // Convertir en secondes pour un affichage plus lisible
-    const seconds = (timecodeMs / 1000).toFixed(3);
-    console.log('🎵 Position:', seconds, 'secondes');
-    
-    // Utiliser la div timecode créée dynamiquement
-    const timecodeElement = document.getElementById('timecode');
-    if (timecodeElement) {
-        timecodeElement.textContent = `${seconds}s`;
-    }
+	console.log('🎵 Timecode reçu:', timecodeMs, 'ms');
+	
+	// Convertir en secondes pour un affichage plus lisible
+	const seconds = (timecodeMs / 1000).toFixed(3);
+	console.log('🎵 Position:', seconds, 'secondes');
+	
+	// Utiliser la div timecode créée dynamiquement
+	const timecodeElement = document.getElementById('timecode');
+	if (timecodeElement) {
+		timecodeElement.textContent = `${seconds}s`;
+	}
 }
 
 // Modifier la fonction displayTransportInfo pour mettre à jour les paroles
@@ -3365,7 +3365,9 @@ class LyricsDisplay {
 			
 			this.isFullscreen = true;
 			if (fullscreenBtn) fullscreenBtn.textContent = 'Sortir Plein Écran';
-			
+			// Cacher le lecteur audio en plein écran
+			const audioPlayerDiv = document.getElementById('audio-player');
+			if (audioPlayerDiv) audioPlayerDiv.style.display = 'none';
 			console.log('✅ Mode plein écran activé');
 			
 		} else if (!enable && this.isFullscreen) {
@@ -3410,7 +3412,9 @@ class LyricsDisplay {
 			
 			this.isFullscreen = false;
 			if (fullscreenBtn) fullscreenBtn.textContent = 'Plein Écran';
-			
+			// Réafficher le lecteur audio en quittant le plein écran si un audio est chargé
+			const audioPlayerDiv = document.getElementById('audio-player');
+			if (audioPlayerDiv && this.audioPath) audioPlayerDiv.style.display = 'block';
 			console.log('✅ Mode plein écran désactivé');
 		}
 	}
