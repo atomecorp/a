@@ -1545,7 +1545,10 @@ class LyricsDisplay {
 					📄 Déposez un fichier texte ici pour créer une nouvelle chanson<br>
 					🎵 Ou un fichier audio (MP3, MP4, WAV) pour ajouter la musique
 				</div>
-				<p style="text-align: center; color: #666;">Chargez des paroles synchronisées</p>
+				<p id="default-message" style="text-align: center; color: #666; cursor: pointer; padding: 20px; border: 1px dashed #555; border-radius: 8px; margin: 20px;">
+					Chargez des paroles synchronisées<br>
+					<small style="color: #888;">ou double-cliquez ici pour créer une nouvelle chanson</small>
+				</p>
 			</div>
 		`;
 		
@@ -1602,6 +1605,27 @@ class LyricsDisplay {
 		if (saveLyricsBtn) {
 			saveLyricsBtn.addEventListener('click', () => {
 				this.saveLyricsChanges();
+			});
+		}
+		
+		// Double-clic sur le message par défaut pour créer une nouvelle chanson
+		const defaultMessage = document.getElementById('default-message');
+		if (defaultMessage) {
+			defaultMessage.addEventListener('dblclick', (e) => {
+				e.preventDefault();
+				console.log('🎵 Double-clic détecté sur le message par défaut');
+				this.enterQuickEditMode(); // Cela déclenchera la création d'une nouvelle chanson
+			});
+			
+			// Effet hover pour indiquer que c'est cliquable
+			defaultMessage.addEventListener('mouseenter', () => {
+				defaultMessage.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
+				defaultMessage.style.borderColor = '#3498db';
+			});
+			
+			defaultMessage.addEventListener('mouseleave', () => {
+				defaultMessage.style.backgroundColor = 'transparent';
+				defaultMessage.style.borderColor = '#555';
 			});
 		}
 		
@@ -3668,6 +3692,23 @@ class LyricsDisplay {
 	enterQuickEditMode() {
 		console.log('✏️ Activation du mode édition rapide');
 		
+		// Si aucune chanson n'est chargée, proposer de créer une nouvelle chanson
+		if (!this.currentLyrics) {
+			this.showCustomConfirm(
+				'Créer une nouvelle chanson ?',
+				'Aucune chanson n\'est actuellement chargée.\nVoulez-vous créer une nouvelle chanson pour commencer à écrire des paroles ?',
+				() => {
+					// Callback de confirmation - créer une nouvelle chanson
+					this.createNewSongForEditing();
+				},
+				() => {
+					// Callback d'annulation
+					console.log('❌ Création de chanson annulée');
+				}
+			);
+			return;
+		}
+		
 		this.quickEditMode = true;
 		recordMode.scrollBlocked = true; // Bloquer le scroll
 		
@@ -4030,10 +4071,48 @@ class LyricsDisplay {
 		setTimeout(() => okBtn.focus(), 100);
 	}
 
+	// Créer une nouvelle chanson pour l'édition rapide
+	createNewSongForEditing() {
+		// Créer une chanson basique avec un titre temporaire
+		const now = new Date();
+		const defaultTitle = `Nouvelle Chanson ${now.toLocaleDateString()} ${now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+		
+		const newSong = new SyncedLyrics(
+			defaultTitle,
+			'Artiste Inconnu',
+			'',
+			0,
+			null // L'ID sera généré automatiquement
+		);
+		
+		// Ajouter quelques lignes de base pour commencer
+		newSong.addLine(0, 'Première ligne de paroles...', 'vocal');
+		newSong.addLine(2000, 'Deuxième ligne...', 'vocal');
+		newSong.addLine(4000, 'Troisième ligne...', 'vocal');
+		
+		// Sauvegarder dans la bibliothèque
+		lyricsLibrary.saveSong(newSong);
+		
+		// Charger dans l'affichage
+		this.loadLyrics(newSong);
+		
+		console.log('✅ Nouvelle chanson créée pour édition:', defaultTitle);
+		
+		// Activer immédiatement le mode édition - maintenant que currentLyrics est défini
+		this.quickEditMode = true;
+		
+		// Bloquer le scroll automatique
+		recordMode.scrollBlocked = true;
+		
+		// Re-render avec le mode édition
+		this.render();
+	}
+
 	// Mode édition rapide - activer l'édition unifiée
 	enterQuickEditMode() {
 		if (!this.currentLyrics) {
-			console.warn('⚠️ Aucune chanson chargée pour l\'édition');
+			console.log('🎵 Aucune chanson chargée, création d\'une nouvelle chanson...');
+			this.createNewSongForEditing();
 			return;
 		}
 		
@@ -4192,6 +4271,7 @@ if (typeof window !== 'undefined') {
 	// Fonctions du mode édition rapide
 	window.enterQuickEditMode = () => lyricsDisplay.enterQuickEditMode();
 	window.exitQuickEditMode = () => lyricsDisplay.exitQuickEditMode();
+	window.createNewSongForEditing = () => lyricsDisplay.createNewSongForEditing();
 	
 	// Fonction de debug pour le mode record
 	window.debugRecordMode = () => {
