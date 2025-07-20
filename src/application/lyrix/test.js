@@ -3162,6 +3162,9 @@ class LyricsDisplay {
 		recordMode.isRecording = !recordMode.isRecording;
 		recordMode.scrollBlocked = recordMode.isRecording;
 		
+		console.log(`🎵 Mode record ${recordMode.isRecording ? 'ACTIVÉ' : 'DÉSACTIVÉ'}`);
+		console.log(`📜 Scroll automatique ${recordMode.scrollBlocked ? 'BLOQUÉ' : 'ACTIVÉ'}`);
+		
 		const recordBtn = document.getElementById('record-mode-btn');
 		if (recordBtn) {
 			if (recordMode.isRecording) {
@@ -3189,7 +3192,7 @@ class LyricsDisplay {
 			}
 		});
 		
-		// Ajouter CSS pour l'animation pulse
+		// Ajouter CSS pour l'animation pulse et le mode record
 		if (recordMode.isRecording && !document.getElementById('record-mode-styles')) {
 			const style = document.createElement('style');
 			style.id = 'record-mode-styles';
@@ -3204,9 +3207,27 @@ class LyricsDisplay {
 					50% { background-color: rgba(39, 174, 96, 0.4); }
 					100% { background-color: transparent; }
 				}
+				.recording-mode {
+					border: 2px solid #e74c3c !important;
+					box-shadow: 0 0 10px rgba(231, 76, 60, 0.5) !important;
+				}
+				.recording-mode::before {
+					content: "🔴 MODE RECORD - SCROLL BLOQUÉ - Cliquez sur une ligne pour synchroniser";
+					position: sticky;
+					top: 0;
+					display: block;
+					background: #e74c3c;
+					color: white;
+					padding: 10px;
+					text-align: center;
+					font-weight: bold;
+					z-index: 100;
+					margin-bottom: 10px;
+				}
 				.recording-mode .lyrics-line:hover {
 					background-color: rgba(231, 76, 60, 0.2) !important;
 					border-left: 4px solid #e74c3c;
+					cursor: crosshair !important;
 				}
 			`;
 			document.head.appendChild(style);
@@ -3219,6 +3240,11 @@ class LyricsDisplay {
 				lyricsContainer.classList.add('recording-mode');
 			} else {
 				lyricsContainer.classList.remove('recording-mode');
+				// Supprimer le style quand on sort du mode record
+				const existingStyle = document.getElementById('record-mode-styles');
+				if (existingStyle) {
+					existingStyle.remove();
+				}
 			}
 		}
 		
@@ -3246,12 +3272,12 @@ class LyricsDisplay {
 		// Mettre à jour le timecode de la ligne dans les paroles synchronisées
 		if (this.currentLyrics) {
 			const lineIndex = Array.from(lineElement.parentNode.children).indexOf(lineElement);
-			const lyricLine = this.currentLyrics.lyrics[lineIndex];
+			const lyricLine = this.currentLyrics.lines[lineIndex]; // Corrected: lines instead of lyrics
 			
 			if (lyricLine) {
 				// Sauvegarder l'ancien timecode pour la possibilité d'annulation
-				const oldTimecode = lyricLine.startTime;
-				lyricLine.startTime = currentTimeMs;
+				const oldTimecode = lyricLine.time; // Corrected: time instead of startTime
+				lyricLine.time = currentTimeMs; // Corrected: time instead of startTime
 				
 				// Feedback visuel
 				lineElement.style.animation = 'flash 0.5s';
@@ -3272,7 +3298,10 @@ class LyricsDisplay {
 				
 				// Sauvegarder automatiquement si la chanson est dans la bibliothèque
 				if (lyricsLibrary && this.currentLyrics.metadata) {
-					lyricsLibrary.addSong(this.currentLyrics);
+					// Important: Trier les lignes après modification pour maintenir l'ordre chronologique
+					this.currentLyrics.sortLines();
+					this.currentLyrics.updateLastModified();
+					lyricsLibrary.saveSong(this.currentLyrics);
 					console.log('💾 Timecode sauvegardé automatiquement');
 				}
 				
@@ -3281,7 +3310,11 @@ class LyricsDisplay {
 					lineElement.style.animation = '';
 					lineElement.style.borderLeft = '';
 				}, 500);
+			} else {
+				console.warn('⚠️ Ligne non trouvée à l\'index:', lineIndex);
 			}
+		} else {
+			console.warn('⚠️ Aucune chanson chargée pour l\'enregistrement');
 		}
 	}
 
@@ -3575,6 +3608,21 @@ class LyricsDisplay {
 		recordMode.currentTimecode = timeMs; // Mettre à jour le timecode global pour le mode record
 		
 		if (!this.currentLyrics) return;
+
+		// En mode record, ne pas mettre à jour automatiquement les lignes actives pour éviter le scroll
+		if (recordMode.isRecording) {
+			// Mettre à jour seulement le timecode, pas les lignes actives
+			const timecodeElement = document.getElementById('timecode');
+			if (timecodeElement) {
+				const seconds = (timeMs / 1000).toFixed(3);
+				const isHostPlaying = !this.isPlayingInternal;
+				const playIcon = (this.isPlayingInternal || isHostPlaying) ? '▶️' : '⏸️';
+				const recordIndicator = recordMode.isRecording ? ' 🔴' : '';
+				timecodeElement.textContent = `${playIcon} ${seconds}s${recordIndicator}`;
+				timecodeElement.style.backgroundColor = (this.isPlayingInternal || isHostPlaying) ? '#0a0' : '#a00';
+			}
+			return; // Sortir tôt en mode record
+		}
 
 		const activeLine = this.currentLyrics.getActiveLineAt(timeMs);
 		if (activeLine && activeLine !== this.activeLine) {
@@ -4144,6 +4192,24 @@ if (typeof window !== 'undefined') {
 	// Fonctions du mode édition rapide
 	window.enterQuickEditMode = () => lyricsDisplay.enterQuickEditMode();
 	window.exitQuickEditMode = () => lyricsDisplay.exitQuickEditMode();
+	
+	// Fonction de debug pour le mode record
+	window.debugRecordMode = () => {
+		console.log('🔍 Debug Mode Record:');
+		console.log('  - recordMode.isRecording:', recordMode.isRecording);
+		console.log('  - recordMode.currentTimecode:', recordMode.currentTimecode);
+		console.log('  - recordMode.scrollBlocked:', recordMode.scrollBlocked);
+		if (lyricsDisplay) {
+			console.log('  - lyricsDisplay.currentTime:', lyricsDisplay.currentTime);
+			console.log('  - lyricsDisplay.currentLyrics:', !!lyricsDisplay.currentLyrics);
+			if (lyricsDisplay.currentLyrics) {
+				console.log('  - Nombre de lignes:', lyricsDisplay.currentLyrics.lines.length);
+				lyricsDisplay.currentLyrics.lines.forEach((line, i) => {
+					console.log(`    Ligne ${i}: ${(line.time/1000).toFixed(1)}s - "${line.text}"`);
+				});
+			}
+		}
+	};
 	
 	// Fonctions d'aide pour les chemins audio (rétrocompatibilité)
 	window.normalizeAudioPath = normalizeAudioPath;
