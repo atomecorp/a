@@ -29,7 +29,8 @@
 // import('./examples/svg.js');
 // import('./examples/anim_svg.js');
 // import('./lyrix/lyrix.js');
-import('./lyrix/lyrixProto.js');
+// import('./lyrix/lyrixProto.js');
+import('./lyrix/index.js');
 // import('./test/slice.js');
 
 // const mySpan = $('span', {
