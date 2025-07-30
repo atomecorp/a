@@ -2,6 +2,7 @@
 import { CONSTANTS } from './constants.js';
 import { StorageManager } from './storage.js';
 import { UIManager } from './ui.js';
+import { default_theme } from './style.js';
 
 export class LyricsDisplay {
     constructor(container, audioController = null) {
@@ -27,54 +28,65 @@ export class LyricsDisplay {
     
     // Create display elements using Squirrel syntax
     createDisplayElements() {
-        // Create fixed toolbar (stays at top, doesn't scroll)
-        this.toolbar = $('div', {
-            id: 'lyrics_toolbar',
+        // ===== CREATE MAIN DISPLAY STRUCTURE (AUCUN SCROLL SUR BODY OU VIEW) =====
+        // Create the main display container - FIXED pour empêcher tout scroll externe
+        this.displayContainer = $('div', {
+            id: 'display-container',
             css: {
-                padding: '8px',
-                backgroundColor: '#e9e9e9',
-                borderRadius: '0',
-                display: 'flex',
-                flexDirection: 'column', // Stack rows vertically
-                gap: '4px',
-                borderBottom: '1px solid #ccc',
-                flexShrink: 0,
-                maxHeight: '120px', // Reduced to accommodate smaller audio row with half-height slider
-                overflowY: 'auto',
                 position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                zIndex: 1000,
-                width: '100%'
+                top: '0',
+                left: '0',
+                width: '100vw',
+                height: '100vh',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: UIManager.THEME.colors.surface,
+                border: `1px solid ${UIManager.THEME.colors.border}`,
+                borderRadius: UIManager.THEME.borderRadius.md,
+                overflow: 'hidden', // CRITIQUE : empêche tout scroll sur le container principal
+                zIndex: '50' // Au-dessus du contenu normal mais sous les modales
             }
         });
         
-        // Scrollable lyrics content area
+        // Create toolbar - SOLIDAIRE et FIXE en haut (ne scroll jamais)
+        this.toolbar = $('div', {
+            id: 'lyrics-toolbar',
+            css: {
+                position: 'relative', // Relatif dans le flex container
+                display: 'flex',
+                flexDirection: 'column', // Colonnes pour main row + audio row
+                backgroundColor: UIManager.THEME.colors.background,
+                borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
+                borderRadius: `${UIManager.THEME.borderRadius.md} ${UIManager.THEME.borderRadius.md} 0 0`,
+                flexShrink: 0, // Ne rétrécit JAMAIS
+                zIndex: '100' // Au-dessus du contenu de scroll
+            }
+        });
+        
+        // Create lyrics content area - SEULE zone autorisée à scroller
         this.lyricsContent = $('div', {
             id: 'lyrics_content_area',
             css: {
-                padding: '20px',
-                overflow: 'auto',  // Only this area scrolls
+                flex: '1', // Prend tout l'espace restant après la toolbar
+                padding: UIManager.THEME.spacing.lg,
                 backgroundColor: '#f9f9f9',
-                fontFamily: 'Arial, sans-serif',
+                overflow: 'auto', // SEULE zone qui peut scroller
+                height: '0', // Force le flex à calculer la hauteur disponible
                 fontSize: `${this.fontSize}px`,
                 lineHeight: '1.6',
-                position: 'absolute',
-                top: '60px',  // Initial position, will be updated based on audio tools visibility
-                left: 0,
-                right: 0,
-                bottom: 0,  // Stretch to bottom
-                width: '100%'
+                fontFamily: 'Arial, sans-serif'
             }
         });
+        
+        // Assemble the structure: toolbar solidaire + content scrollable
+        this.displayContainer.append(this.toolbar, this.lyricsContent);
         
         // Edit mode button
         this.editButton = UIManager.createInterfaceButton('✏️', {
             id: 'edit_mode',
             onClick: () => this.toggleEditMode(),
             css: {
-                backgroundColor: this.editMode ? '#4CAF50' : '#4a6fa5'
+                backgroundColor: this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor
             }
         });
         
@@ -83,7 +95,7 @@ export class LyricsDisplay {
             id: 'record_mode',
             onClick: () => this.toggleRecordMode(),
             css: {
-                backgroundColor: this.recordMode ? '#f44336' : '#4a6fa5'
+                backgroundColor: this.recordMode ? default_theme.recordModeActiveColor : default_theme.button.backgroundColor
             }
         });
         
@@ -112,6 +124,7 @@ export class LyricsDisplay {
         
         // Font size controls
         this.fontSizeContainer = $('div', {
+            id: 'font-size-controls-container',
             css: {
                 display: 'flex',
                 alignItems: 'center',
@@ -218,11 +231,15 @@ export class LyricsDisplay {
         
         // Create main toolbar row (non-audio tools + lyrics controls + timecode display)
         const mainToolRow = $('div', {
+            id: 'main-toolbar-row',
             css: {
                 display: 'flex',
                 gap: '8px',
                 alignItems: 'center',
-                flexWrap: 'wrap'
+                flexWrap: 'wrap',
+                padding: '8px', // Padding interne pour la rangée principale
+                backgroundColor: UIManager.THEME.colors.background,
+                borderBottom: `1px solid ${UIManager.THEME.colors.border}`
             }
         });
         
@@ -287,7 +304,9 @@ export class LyricsDisplay {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '4px',
-                width: '100%'
+                width: '100%',
+                padding: '4px 8px', // Padding interne pour la rangée audio
+                backgroundColor: UIManager.THEME.colors.surface
             }
         });
         
@@ -311,20 +330,26 @@ export class LyricsDisplay {
         // Update lyrics content positioning based on audio tools visibility
         this.updateLyricsContentPosition();
         
-        // Get lyrix_app and append toolbar and content directly to it
+        // ===== EMPÊCHER TOUT SCROLL SUR BODY ET LYRIX_APP =====
+        // Empêcher le scroll sur le body
+        document.body.style.overflow = 'hidden';
+        document.body.style.height = '100vh';
+        document.body.style.margin = '0';
+        document.body.style.padding = '0';
+        
+        // Empêcher le scroll sur lyrix_app s'il existe
         const lyrixApp = document.getElementById('lyrix_app');
         if (lyrixApp) {
-            lyrixApp.append(this.toolbar, this.lyricsContent);
-        } else {
-            // Fallback - try to find a container or create a warning
-            console.error('lyrix_app not found! Unable to append lyrics display elements.');
-            if (this.container) {
-                console.warn('Using fallback container for lyrics display');
-                this.container.append(this.toolbar, this.lyricsContent);
-            } else {
-                console.error('No container available for lyrics display elements');
-            }
+            lyrixApp.style.overflow = 'hidden';
+            lyrixApp.style.height = '100vh';
+            lyrixApp.style.width = '100vw';
+            lyrixApp.style.position = 'relative';
         }
+        
+        // Ajouter le display container directement au body pour un contrôle total
+        document.body.append(this.displayContainer);
+        
+        console.log('📐 Display structure created with NO SCROLL on body/view - only lyrics content can scroll');
     }
     
     // Setup event listeners
@@ -534,7 +559,6 @@ export class LyricsDisplay {
             if (tool && tool.style) {
                 // Make tools more compact for toolbar
                 tool.style.margin = '2px';
-                tool.style.marginBottom = '0';
                 
                 // Scale down larger elements
                 if (tool.id === 'audio-scrub-slider-container') {
@@ -564,13 +588,11 @@ export class LyricsDisplay {
                 if (tool.classList && tool.classList.contains('timecode-display')) {
                     tool.style.fontSize = '11px';
                     tool.style.padding = '3px 6px';
-                    tool.style.height = '32px'; // Same height as interface buttons
-                    tool.style.width = '120px'; // Twice the width of normal buttons (~60px)
-                    tool.style.minWidth = '120px';
                     tool.style.boxSizing = 'border-box';
                     tool.style.display = 'flex';
                     tool.style.alignItems = 'center';
                     tool.style.justifyContent = 'center';
+                    // Note: height et width viennent déjà de default_theme.button dans createEnhancedTimecodeDisplay
                 }
                 
                 // Ensure audio buttons (play/stop) remain visible and properly styled
@@ -591,7 +613,7 @@ export class LyricsDisplay {
     
     // Update lyrics content area position based on audio tools visibility
     updateLyricsContentPosition() {
-        if (!this.lyricsContent || !this.audioToolRow) return;
+        if (!this.audioToolRow) return;
         
         // Check if audio player is enabled
         const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
@@ -599,15 +621,11 @@ export class LyricsDisplay {
         // Show/hide audio tools row
         if (isAudioPlayerEnabled && this.audioTools.length > 0) {
             this.audioToolRow.style.display = 'flex';
-            // Adjust lyrics content to account for audio tools row (~30px for reduced slider height)
-            this.lyricsContent.style.top = '90px'; // Increased from base to accommodate audio row
         } else {
             this.audioToolRow.style.display = 'none';
-            // Adjust lyrics content to only account for main toolbar (~60px)
-            this.lyricsContent.style.top = '60px'; // Reduced space when audio tools hidden
         }
         
-        console.log(`📐 Updated lyrics content position: top=${this.lyricsContent.style.top}, audio tools visible=${isAudioPlayerEnabled && this.audioTools.length > 0}`);
+        console.log(`📐 Updated audio tools visibility: ${isAudioPlayerEnabled && this.audioTools.length > 0}`);
     }
     
     // Public method to refresh audio tools visibility (called when settings change)
@@ -704,6 +722,7 @@ export class LyricsDisplay {
         
         // Add song metadata
         const metadata = $('div', {
+            id: 'lyrics-metadata-container',
             css: {
                 marginBottom: '20px',
                 padding: '15px',
@@ -736,6 +755,7 @@ export class LyricsDisplay {
         
         if (this.currentLyrics.metadata.album) {
             const album = $('div', {
+                id: 'lyrics-album-display',
                 text: `Album: ${this.currentLyrics.metadata.album}`,
                 css: {
                     color: '#666',
@@ -791,6 +811,7 @@ export class LyricsDisplay {
         
         // Create line content container
         const lineContent = $('div', {
+            id: `line-content-${index}`,
             css: {
                 display: 'flex',
                 alignItems: 'center',
@@ -933,6 +954,7 @@ export class LyricsDisplay {
             lineDiv.style.border = '1px solid #dee2e6';
             
             const controls = $('div', {
+                id: `line-controls-${index}`,
                 css: {
                     marginTop: '5px',
                     fontSize: '0.8em'
@@ -1271,8 +1293,8 @@ export class LyricsDisplay {
         }
         
         this.editMode = !this.editMode;
-        // Garder l'icône, changer seulement la couleur
-        this.editButton.style.backgroundColor = this.editMode ? '#4CAF50' : '#4a6fa5';
+        // Garder l'icône, changer seulement la couleur (utilise les couleurs du thème)
+        this.editButton.style.backgroundColor = this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor;
         
         // Show/hide edit mode buttons in toolbar
         if (this.saveChangesButton && this.cancelEditButton) {
@@ -1348,8 +1370,8 @@ export class LyricsDisplay {
     // Toggle record mode
     toggleRecordMode() {
         this.recordMode = !this.recordMode;
-        // Garder l'icône, changer seulement la couleur
-        const newColor = this.recordMode ? '#f44336' : '#4a6fa5';
+        // Garder l'icône, changer seulement la couleur (utilise les couleurs du thème)
+        const newColor = this.recordMode ? default_theme.recordModeActiveColor : default_theme.button.backgroundColor;
         this.recordButton.style.backgroundColor = newColor;
         // Update the stored original color for hover behavior
         this.recordButton.dataset.originalBgColor = newColor;
@@ -1462,10 +1484,10 @@ export class LyricsDisplay {
         // Update button appearance
         if (this.showTimecodes) {
             this.timecodeButton.textContent = '🚫'; // Icône pour cacher
-            this.timecodeButton.style.backgroundColor = '#4CAF50';
+            this.timecodeButton.style.backgroundColor = default_theme.editModeActiveColor; // Utilise la couleur active du thème
         } else {
             this.timecodeButton.textContent = '🕐'; // Icône pour afficher
-            this.timecodeButton.style.backgroundColor = '#4a6fa5'; // Couleur standard
+            this.timecodeButton.style.backgroundColor = default_theme.button.backgroundColor; // Utilise la couleur par défaut du thème
         }
 
         // Re-render lyrics to show/hide timecodes
@@ -1478,6 +1500,7 @@ export class LyricsDisplay {
     showTimecodeOptionsPanel() {
         // Create panel content using Squirrel syntax
         const panelContent = $('div', {
+            id: 'timecode-options-panel-content',
             css: {
                 padding: '20px',
                 minWidth: '300px'
@@ -1496,6 +1519,7 @@ export class LyricsDisplay {
 
         // Show/Hide Timecodes button with label
         const toggleContainer = $('div', {
+            id: 'timecode-toggle-container',
             css: {
                 display: 'flex',
                 alignItems: 'center',
@@ -1529,6 +1553,7 @@ export class LyricsDisplay {
 
         // Clear All Timecodes button with label
         const clearContainer = $('div', {
+            id: 'timecode-clear-container',
             css: {
                 display: 'flex',
                 alignItems: 'center',
@@ -1986,13 +2011,12 @@ export class LyricsDisplay {
     
     // Update timecode display
     updateTimecodeDisplay(timeMs) {
-        const timecodeElement = document.getElementById('timecode');
+        const timecodeElement = document.getElementById('timecode-display');
         if (timecodeElement) {
             const seconds = (timeMs / 1000).toFixed(3);
-            const isPlaying = this.audioController && this.audioController.isPlaying();
             const recordIndicator = this.recordMode ? ' 🔴' : '';
             timecodeElement.textContent = `${seconds}s${recordIndicator}`; // Removed play/pause icons
-            timecodeElement.style.backgroundColor = isPlaying ? '#0a0' : '#a00';
+            // Ne plus modifier la couleur de fond pour garder le style du thème
         }
     }
     

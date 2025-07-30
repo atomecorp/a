@@ -2,48 +2,36 @@
 // Base theme system for consistent styling across all components
 
 const default_theme = {
+    // Couleurs du thème (optionnelles - si non définies, utilise button.backgroundColor)
+    // primaryColor: '#27ae60',     // Vert pour boutons primaires
+    // secondaryColor: '#3498db',   // Bleu pour boutons secondaires
+    // dangerColor: '#e74c3c',      // Rouge pour boutons danger
+    // warningColor: '#f39c12',     // Orange pour boutons warning
+    
+    // Couleurs pour les modes spéciaux
+    editModeActiveColor: '#4CAF50',    // Vert pour mode édition actif
+    recordModeActiveColor: '#f44336',  // Rouge pour mode enregistrement actif
+    
     button: {
-        backgroundColor: '#00f',
-        marginLeft: '0',
-        padding: '10px',
+        backgroundColor: 'gray',
         color: 'white',
-        margin: '10px',
-        display: 'inline-block',
-        border: 'none',
-        borderRadius: '4px',
+        border: '2px solid rgba(255,255,255,0.3)', // Bordure uniforme pour tous les boutons
+        borderRadius: '9px',
         cursor: 'pointer',
         fontSize: '14px',
-        transition: 'all 0.2s ease'
-    },
-    
-    // Style uniforme pour tous les boutons d'interface avec icônes
-    interfaceButton: {
-        width: '60px',           // Largeur = 2 × hauteur
-        height: '30px',          // Hauteur de base
-        backgroundColor: '#4a6fa5', // Couleur primaire cohérente
-        color: 'white',
-        border: 'none',
-        borderRadius: '6px',
-        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.2)', // Ombre uniforme pour tous les boutons
+        // Layout uniforme pour tous les boutons
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: '16px',        // Taille des icônes
-        transition: 'all 0.2s ease',
+        // Espacement uniforme
         margin: '2px',
-        padding: '0',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        // Effet hover
-        ':hover': {
-            backgroundColor: '#5a7fb5',
-            transform: 'translateY(-1px)',
-            boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
-        },
-        // Effet active
-        ':active': {
-            transform: 'translateY(0)',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
-        }
+        padding: '8px',
+        // Tailles par défaut (appliquées à tous les boutons)
+        width: '30px',
+        height: '36px',
+        minWidth: '50px'
     },
     
     defaultColor: {

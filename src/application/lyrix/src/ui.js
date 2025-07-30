@@ -5,14 +5,10 @@ export class UIManager {
     
     // Create a button using Squirrel Button component
     static createButton(config) {
+        // Use default_theme.button as base configuration
         const defaultConfig = {
             css: {
-                padding: '8px 15px',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                transition: 'all 0.2s ease'
+                ...default_theme.button
             }
         };
         
@@ -40,7 +36,7 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: '#27ae60',
+                backgroundColor: default_theme.primaryColor || default_theme.button.backgroundColor || '#27ae60',
                 color: 'white',
                 ...config.css
             }
@@ -52,20 +48,22 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: '#3498db',
+                backgroundColor: default_theme.secondaryColor || default_theme.button.backgroundColor || '#3498db',
                 color: 'white',
                 ...config.css
             }
         });
     }
 
-    // Create standardized interface button with icon (2:1 ratio)
+    // Create standardized interface button with icon
     static createInterfaceButton(icon, config = {}) {
         return $('button', {
             text: icon,
             ...config,
             css: {
-                ...default_theme.interfaceButton,
+                // Utilise le style de bouton unifié (y compris width/height)
+                ...default_theme.button,
+                fontSize: '16px', // Icônes un peu plus grandes
                 ...config.css
             },
             onmouseover: (e) => {
@@ -98,7 +96,7 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: '#e74c3c',
+                backgroundColor: default_theme.dangerColor || default_theme.button.backgroundColor || '#e74c3c',
                 color: 'white',
                 ...config.css
             }
@@ -110,7 +108,7 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: '#f39c12',
+                backgroundColor: default_theme.warningColor || default_theme.button.backgroundColor || '#f39c12',
                 color: 'white',
                 ...config.css
             }
@@ -459,15 +457,10 @@ export class UIManager {
         return $('div', {
             id: 'timecode',
             css: {
-                backgroundColor: '#00f',
-                marginLeft: '0',
-                padding: '10px',
-                color: 'white',
-                margin: '10px',
-                display: 'inline-block',
-                borderRadius: '4px',
-                fontFamily: 'monospace',
-                fontSize: '14px'
+                // Utilise le style de bouton unifié (y compris width/height)
+                ...default_theme.button,
+                // Spécificités du timecode
+                fontFamily: 'monospace'
             },
             text: '0.000s'
         });
@@ -1081,6 +1074,7 @@ export class UIManager {
     // Audio controls container
     static createAudioControlsContainer(config = {}) {
         return $('div', {
+            id: 'audio-controls-container',
             ...config,
             css: {
                 display: 'flex',
@@ -1100,6 +1094,7 @@ export class UIManager {
     // Scrub container for audio timeline
     static createScrubContainer(config = {}) {
         return $('div', {
+            id: 'scrub-container',
             ...config,
             css: {
                 display: 'flex',
@@ -1117,6 +1112,7 @@ export class UIManager {
     // Time labels container
     static createTimeLabels(config = {}) {
         return $('div', {
+            id: 'time-labels-container',
             ...config,
             css: {
                 display: 'flex',
@@ -1159,26 +1155,28 @@ export class UIManager {
 
     // Enhanced timecode display
     static createEnhancedTimecodeDisplay(config = {}) {
-        return $('div', {
+        const element = $('div', {
             id: 'timecode-display',
             ...config,
             css: {
-                backgroundColor: this.THEME.colors.primary,
-                color: 'white',
-                padding: '0 12px', // Horizontal padding only to maintain height
-                borderRadius: this.THEME.borderRadius.sm,
+                // Utilise le style de bouton unifié SAUF la largeur
+                ...default_theme.button,
+                // Spécificités du timecode
                 fontFamily: 'monospace',
-                fontSize: this.THEME.fontSize.md,
                 textAlign: 'center',
-                border: `2px solid ${this.THEME.colors.border}`,
-                minWidth: '120px',
-                height: '30px', // Match interface button height
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                // Largeur adaptative pour le timecode
+                width: 'auto',
+                minWidth: '80px', // Plus large que les boutons normaux
+                paddingLeft: '12px',
+                paddingRight: '12px',
                 ...config.css
             }
         });
+        
+        // Ajouter la classe CSS pour que styleModeToolsForToolbar puisse l'identifier
+        element.classList.add('timecode-display');
+        
+        return element;
     }
 
     // Display container for lyrics
@@ -1212,6 +1210,10 @@ export class UIManager {
                 backgroundColor: this.THEME.colors.background,
                 borderBottom: `1px solid ${this.THEME.colors.border}`,
                 borderRadius: `${this.THEME.borderRadius.md} ${this.THEME.borderRadius.md} 0 0`,
+                // Rendre la barre d'outils sticky pour qu'elle reste en haut lors du scroll
+                position: 'sticky',
+                top: '0',
+                zIndex: '100', // S'assurer qu'elle reste au-dessus du contenu
                 ...config.css
             }
         });
@@ -1235,6 +1237,7 @@ export class UIManager {
     // Font size container
     static createFontSizeContainer(config = {}) {
         return $('div', {
+            id: 'font-size-container',
             ...config,
             css: {
                 display: 'flex',
@@ -1298,6 +1301,7 @@ export class UIManager {
     // Lyrics lines container
     static createLyricsLinesContainer(config = {}) {
         return $('div', {
+            id: 'lyrics-lines-container',
             ...config,
             css: {
                 display: 'flex',
@@ -1331,6 +1335,7 @@ export class UIManager {
     // Lyrics line content
     static createLyricsLineContent(config = {}) {
         return $('div', {
+            id: 'lyrics-line-content',
             ...config,
             css: {
                 display: 'flex',
@@ -1380,6 +1385,7 @@ export class UIManager {
     // Line controls container
     static createLineControls(config = {}) {
         return $('div', {
+            id: 'line-controls',
             ...config,
             css: {
                 display: 'flex',
@@ -1393,6 +1399,7 @@ export class UIManager {
     // Bulk edit controls
     static createBulkEditControls(config = {}) {
         return $('div', {
+            id: 'bulk-edit-controls',
             ...config,
             css: {
                 display: 'flex',

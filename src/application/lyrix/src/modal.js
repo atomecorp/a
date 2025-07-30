@@ -1,6 +1,7 @@
 // Modal Component for Squirrel Framework
 // Skinnable modal component compatible with Tauri
 import { UIManager } from './ui.js';
+import { default_theme } from './style.js';
 
 export function Modal(options = {}) {
     const {
@@ -618,8 +619,8 @@ export function SelectModal(options = {}) {
                 // MIDI learn button
                 const midiLearnButton = UIManager.createInterfaceButton('🎹', {
                     css: {
-                        width: '40px',      // Slightly smaller for modal context
-                        height: '20px',
+                        width: `${parseInt(default_theme.button.height) * 1.3}px`,  // 1.3x la hauteur pour les modales
+                        height: `${parseInt(default_theme.button.height) * 0.7}px`, // 70% de la hauteur normale
                         fontSize: '12px'
                     }
                 });
@@ -678,8 +679,8 @@ export function SelectModal(options = {}) {
             if (onDelete && typeof onDelete === 'function') {
                 const deleteButton = UIManager.createInterfaceButton('🗑️', {
                     css: {
-                        width: '40px',      // Slightly smaller for modal context
-                        height: '20px',
+                        width: `${parseInt(default_theme.button.height) * 1.3}px`,  // 1.3x la hauteur pour les modales
+                        height: `${parseInt(default_theme.button.height) * 0.7}px`, // 70% de la hauteur normale
                         backgroundColor: '#f44336',  // Red color for delete
                         fontSize: '14px'
                     }

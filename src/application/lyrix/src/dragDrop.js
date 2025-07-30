@@ -238,8 +238,18 @@ export class DragDropManager {
     }
 
     async processFile(file) {
+        // Vérifier si c'est un fichier LRX (Lyrix library)
+        if (this.isLRXFile(file)) {
+            try {
+                const content = await this.readFileContent(file);
+                await this.importLRXFile(content);
+            } catch (error) {
+                console.error('❌ Erreur lecture fichier LRX:', error);
+                console.error(`Erreur lors de la lecture du fichier LRX ${file.name}: ${error.message}`);
+            }
+        }
         // Vérifier si c'est un fichier texte
-        if (this.isTextFile(file)) {
+        else if (this.isTextFile(file)) {
             try {
                 const content = await this.readFileContent(file);
                 await this.createSongFromText(file.name, content);
@@ -259,7 +269,7 @@ export class DragDropManager {
         }
         else {
             console.warn('⚠️ Fichier ignoré (format non supporté):', file.name);
-            console.warn(`Le fichier "${file.name}" n'est pas un format supporté (texte ou audio).`);
+            console.warn(`Le fichier "${file.name}" n'est pas un format supporté (texte, audio ou .lrx).`);
         }
     }
 
@@ -297,6 +307,15 @@ export class DragDropManager {
             }
         });
 
+        const dropLRXText = $('div', {
+            text: '📦 Ou un fichier .lrx pour importer une bibliothèque complète',
+            css: {
+                fontSize: '16px',
+                marginBottom: '10px',
+                color: '#e67e22'
+            }
+        });
+
         const dropHint = $('div', {
             text: '💡 Glissez et déposez vos fichiers depuis l\'explorateur',
             css: {
@@ -306,7 +325,7 @@ export class DragDropManager {
             }
         });
 
-        this.dropZone.append(dropText, dropSubText, dropHint);
+        this.dropZone.append(dropText, dropSubText, dropLRXText, dropHint);
     }
 
     isTextFile(file) {
@@ -333,6 +352,11 @@ export class DragDropManager {
         return validExtensions.test(file.name);
     }
 
+    isLRXFile(file) {
+        // Vérifier l'extension .lrx
+        return /\.lrx$/i.test(file.name);
+    }
+
     readFileContent(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -340,6 +364,77 @@ export class DragDropManager {
             reader.onerror = (e) => reject(new Error('Erreur de lecture du fichier'));
             reader.readAsText(file, 'UTF-8');
         });
+    }
+
+    async importLRXFile(content) {
+        try {
+            console.log('📥 Importing LRX file...');
+            
+            const importData = JSON.parse(content);
+            
+            // Validate LRX format
+            if (!importData.songs || !Array.isArray(importData.songs)) {
+                throw new Error('Invalid LRX format: missing songs array');
+            }
+
+            let importedCount = 0;
+            const errors = [];
+
+            // Import each song
+            for (const [index, songData] of importData.songs.entries()) {
+                try {
+                    // Create song object compatible with our library
+                    const song = {
+                        songId: songData.songId || `imported_${Date.now()}_${index}`,
+                        metadata: songData.metadata || {},
+                        lyrics: songData.lyrics || {},
+                        audioPath: songData.audioPath,
+                        syncData: songData.syncData,
+                        lines: songData.lines || []
+                    };
+
+                    // Add to library
+                    const success = this.lyricsLibrary.addSong(song);
+                    if (success) {
+                        importedCount++;
+                        console.log(`✅ Imported song: ${song.metadata.title || 'Unknown'}`);
+                    } else {
+                        errors.push(`Failed to import song: ${song.metadata.title || 'Unknown'}`);
+                    }
+                } catch (error) {
+                    errors.push(`Error importing song ${index + 1}: ${error.message}`);
+                }
+            }
+
+            // Show results
+            const message = errors.length > 0 
+                ? `Imported ${importedCount} songs successfully. Errors: ${errors.join(', ')}`
+                : `Successfully imported ${importedCount} songs from LRX file.`;
+
+            console.log(`📥 LRX Import: ${message}`);
+            
+            // Show modal with results
+            Modal({
+                title: '📥 LRX Import Complete',
+                content: `<p>${message}</p>`,
+                buttons: [{ text: 'OK' }],
+                size: 'medium'
+            });
+
+            return { success: true, imported: importedCount, errors };
+
+        } catch (error) {
+            console.error('❌ Error importing LRX file:', error);
+            
+            Modal({
+                title: '❌ LRX Import Error',
+                content: `<p>Failed to import LRX file: ${error.message}</p>`,
+                buttons: [{ text: 'OK' }],
+                size: 'small'
+            });
+            
+            throw error;
+        }
     }
 
     async createSongFromText(filename, content) {

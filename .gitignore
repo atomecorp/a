@@ -32,3 +32,4 @@ src-tauri/target/
 
 # Process files
 .watcher.pid
+src/assets/audios/Alive.mp3
