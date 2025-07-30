@@ -994,21 +994,25 @@ export class LyricsDisplay {
             this.setActiveLineIndex(index);
             
             if (this.recordMode) {
-                // RECORD MODE: Assign current audio time to this line
-                if (this.audioController) {
-                    const currentTime = this.audioController.getCurrentTime() * 1000; // Convert to ms
-                    this.currentLyrics.lines[index].time = currentTime;
-                    this.currentLyrics.updateLastModified();
-                    
-                    // Re-render to show the new timecode (if timecodes are visible)
-                    if (this.showTimecodes) {
-                        this.renderLyrics();
+                // RECORD MODE: Assign the timecode currently displayed in #timecode-display
+                let timecodeMs = 0;
+                const timecodeElement = document.getElementById('timecode-display');
+                if (timecodeElement) {
+                    const text = timecodeElement.textContent.replace('s', '').trim();
+                    const seconds = parseFloat(text);
+                    if (isFinite(seconds)) {
+                        timecodeMs = Math.round(seconds * 1000);
                     }
-                    
-                    // console.log(`🔴 RECORD: Assigned timecode ${this.formatTimeDisplay(currentTime)} to line ${index + 1}: "${line.text}"`);
-                } else {
-                    // console.log('❌ No audio controller available for recording timecode');
                 }
+                this.currentLyrics.lines[index].time = timecodeMs;
+                this.currentLyrics.updateLastModified();
+                if (typeof window.updateTimecodeDisplay === 'function') {
+                    window.updateTimecodeDisplay(timecodeMs);
+                }
+                if (this.showTimecodes) {
+                    this.renderLyrics();
+                }
+                // console.log(`🔴 RECORD: Assigned timecode ${this.formatTimeDisplay(timecodeMs)} to line ${index + 1}: "${line.text}"`);
             } else {
                 // NORMAL MODE: Seek to timecode if available and audio controller exists
                 if (line.time >= 0 && this.audioController) {
@@ -1466,7 +1470,7 @@ export class LyricsDisplay {
             this.lyricsContent.style.backgroundColor = 'transparent';
             this.lyricsContent.style.color = '#000';
             this.lyricsContent.style.padding = '20px';
-            this.lyricsContent.style.fontSize = ''; // Clear inline fontSize to restore inheritance
+            this.lyricsContent.style.fontSize = `${this.fontSize}px`;
             this.lyricsContent.style.textAlign = 'left';
             this.lyricsContent.style.cursor = 'default';
             this.lyricsContent.style.flex = '1';
@@ -1850,15 +1854,15 @@ export class LyricsDisplay {
         input.type = 'text';
         input.value = currentText;
         input.style.cssText = `
-            fontSize: inherit;
-            fontFamily: inherit;
+            font-size: ${this.fontSize}px;
+            font-family: inherit;
             padding: 4px 8px;
             border: 2px solid #007bff;
-            borderRadius: 4px;
-            backgroundColor: white;
+            border-radius: 4px;
+            background-color: white;
             color: #333;
             width: 100%;
-            boxSizing: border-box;
+            box-sizing: border-box;
         `;
         
         console.log(`📝 Input created with value: "${input.value}"`);

@@ -1726,22 +1726,21 @@ function showFileImportDialog() {
     // Create a hidden file input element
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.lrc,.txt,.mp3,.wav,.ogg,.m4a,.flac';
+    // Broaden accept attribute for iOS AUv3 compatibility
+    // Accept all relevant audio and text types for maximum compatibility
+    fileInput.accept = 'audio/*,text/*,.lrc,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac';
     fileInput.multiple = true;
     fileInput.style.display = 'none';
-    
-    // iOS-specific attributes for better file handling
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (isIOS) {
-        // Configure for iOS file system access without camera trigger
-        fileInput.setAttribute('webkitdirectory', 'false');
-        // Disable thumbnail generation to prevent iOS errors
+        // Remove attributes that could trigger camera or directory selection
+        fileInput.removeAttribute('capture');
+        fileInput.removeAttribute('webkitdirectory');
+        // Optionally, disable thumbnail generation to prevent iOS errors
         fileInput.setAttribute('data-no-thumbnail', 'true');
-        // Use accept attribute only for file type filtering
-        fileInput.removeAttribute('capture'); // Remove any capture attribute to prevent camera access
+        // iPhone-specific: force input mode to files only
+        fileInput.setAttribute('accept', 'audio/*,text/*,.lrc,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac');
     }
-    
-    // Add to document temporarily
     document.body.appendChild(fileInput);
 
     // Enhanced iOS error handler
@@ -1769,15 +1768,28 @@ function showFileImportDialog() {
     fileInput.addEventListener('change', async (event) => {
         try {
             const files = Array.from(event.target.files);
+            // Diagnostics: log file info for iOS/iPhone
+            if (isIOS) {
+                if (navigator.userAgent.includes('iPhone')) {
+                    console.log('🍏 iPhone detected. Files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
+                } else {
+                    console.log('🍎 iPad/iOS detected. Files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
+                }
+            } else {
+                console.log('📁 Files selected:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
+            }
             if (files.length > 0) {
-                console.log('📁 Files selected:', files.map(f => f.name));
-                
                 if (isIOS) {
                     console.log('🍎 iOS file processing with enhanced error handling');
                     await processIOSFilesRobustly(files);
                 } else {
                     // Desktop: Process immediately
                     dragDropManager.handleDroppedFiles(files);
+                }
+            } else {
+                // Diagnostics: show alert if no files returned
+                if (isIOS) {
+                    showCustomAlert('iOS File Picker', 'No files returned by the picker. Try using drag-and-drop or check iOS permissions.');
                 }
             }
         } catch (error) {
@@ -1839,30 +1851,28 @@ function showFileImportDialog() {
     // Process single file with iOS error handling
     async function processFileWithIOSErrorHandling(file) {
         return new Promise((resolve, reject) => {
-            // Wrap in setTimeout to handle iOS quirks
             setTimeout(() => {
                 try {
                     // Override problematic file properties for iOS
                     const fileProxy = new Proxy(file, {
                         get(target, prop) {
-                            // Prevent access to properties that trigger thumbnail generation
                             if (prop === 'webkitRelativePath') return '';
                             if (prop === 'webkitDirectory') return false;
                             return target[prop];
                         }
                     });
-                    
                     dragDropManager.handleDroppedFiles([fileProxy]);
                     resolve();
-                    
                 } catch (error) {
                     if (handleIOSError(error, 'file processing')) {
-                        resolve(); // Treat expected iOS errors as success
+                        // Always call import logic even on expected iOS errors
+                        dragDropManager.handleDroppedFiles([file]);
+                        resolve();
                     } else {
                         reject(error);
                     }
                 }
-            }, 50); // Small delay to let iOS settle
+            }, 50);
         });
     }
     
