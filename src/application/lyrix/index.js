@@ -566,7 +566,10 @@ function importFromLRX(file) {
                             }
                         })
                     };
-
+                    // Patch: copy audioPath into metadata.audioPath for app compatibility
+                    if (song.audioPath) {
+                        song.metadata.audioPath = song.audioPath;
+                    }
                     // Add to library
                     const success = lyricsLibrary.addSong(song);
                     if (success) {
@@ -1208,7 +1211,40 @@ function showSongLibrary() {
         }
     });
 
-    actionButtons.append(exportLRXButton, exportTextButton);
+    // Bouton supprimer toutes les chansons
+    const deleteAllButton = $('button', {
+        text: '🗑️ Supprimer toutes les chansons',
+        css: {
+            backgroundColor: '#e74c3c',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            cursor: 'pointer'
+        },
+        onClick: () => {
+            Modal({
+                title: 'Confirmation',
+                content: '<p>Voulez-vous vraiment supprimer toutes les chansons ? Cette action est irréversible.</p>',
+                buttons: [
+                    { text: 'Annuler' },
+                    { text: 'Supprimer', onClick: () => {
+                        lyricsLibrary.deleteAllSongs();
+                        document.body.removeChild(modalContainer);
+                        Modal({
+                            title: 'Suppression terminée',
+                            content: '<p>Toutes les chansons ont été supprimées.</p>',
+                            buttons: [{ text: 'OK' }],
+                            size: 'small'
+                        });
+                    }, css: { backgroundColor: '#e74c3c', color: 'white' } }
+                ],
+                size: 'small'
+            });
+        }
+    });
+    actionButtons.append(exportLRXButton, exportTextButton, deleteAllButton);
     headerTop.append(headerTitle, actionButtons);
 
     // Instructions
@@ -2197,6 +2233,12 @@ function createMainInterface() {
                     if (audioController.isPlaying()) {
                         audioController.pause();
                     } else {
+                        // Log the audio file path before playing
+                        if (currentSong && currentSong.metadata && currentSong.metadata.audioPath) {
+                            console.log('▶️ Audio file path:', currentSong.metadata.audioPath);
+                        } else {
+                            console.log('▶️ Audio file path: [unknown or not set]');
+                        }
                         audioController.play();
                     }
                 } catch (error) {
