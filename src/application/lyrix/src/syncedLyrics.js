@@ -5,6 +5,9 @@ import { AudioManager } from './audio.js';
 export class SyncedLyrics {
     constructor(title, artist, album = '', duration = 0, songId = null) {
         this.songId = songId || this.generateSongId(title, artist);
+        this.title = title;
+        this.artist = artist;
+        this.album = album;
         this.metadata = {
             title: title,
             artist: artist,
@@ -208,8 +211,11 @@ export class SyncedLyrics {
         // Use songId as key if no key provided
         const storageKey = key || `${CONSTANTS.STORAGE.LIBRARY_PREFIX}${this.songId}`;
         try {
+            // Ajoute les champs à la racine avant sauvegarde
+            // this.title = this.metadata.title;
+            // this.artist = this.metadata.artist;
+            // this.album = this.metadata.album;
             localStorage.setItem(storageKey, JSON.stringify(this));
-            console.log('✅ Lyrics saved:', storageKey);
             return storageKey;
         } catch (error) {
             console.error('❌ Save error:', error);
@@ -231,9 +237,12 @@ export class SyncedLyrics {
                 parsed.metadata.duration,
                 parsed.songId
             );
-            
             lyrics.lines = parsed.lines;
             lyrics.metadata = parsed.metadata;
+            // Ajoute aussi les champs à la racine pour compatibilité
+            lyrics.title = parsed.metadata.title;
+            lyrics.artist = parsed.metadata.artist;
+            lyrics.album = parsed.metadata.album;
             return lyrics;
         } catch (error) {
             console.error('❌ Load error:', error);

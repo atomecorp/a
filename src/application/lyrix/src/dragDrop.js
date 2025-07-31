@@ -400,10 +400,10 @@ export class DragDropManager {
                 try {
                     // Crée une instance SyncedLyrics pour chaque chanson importée
                     const syncedLyrics = new SyncedLyrics(
-                        songData.metadata?.title || `Imported ${index + 1}`,
-                        songData.metadata?.artist || 'Unknown',
-                        songData.metadata?.album || '',
-                        songData.metadata?.duration || 0,
+                        songData.title || `Imported ${index + 1}`,
+                        songData.artist || 'Unknown',
+                        songData.album || '',
+                        songData.duration || 0,
                         songData.songId || `imported_${Date.now()}_${index}`
                     );
                     syncedLyrics.lines = songData.lines || [];

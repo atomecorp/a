@@ -17,6 +17,9 @@ export function exportSongsToLRX(songSummaries, lyricsLibrary) {
       console.log('EXPORT LRX', summary.songId, 'lines:', lines.length, lines.slice(0, 3));
       return {
         songId: summary.songId,
+        title: song?.metadata?.title || summary.title || '',
+        artist: song?.metadata?.artist || summary.artist || '',
+        album: song?.metadata?.album || summary.album || '',
         audioPath: summary.audioPath,
         syncData: summary.syncData || null,
         lines: lines

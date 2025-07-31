@@ -19,7 +19,7 @@ import { exportSongsToLRX } from './SongUtils.js';
 // iOS Error Handling Setup
 // Handle iOS thumbnail and view service termination errors globally
 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    console.log('🍎 iOS detected - Setting up global error handling for thumbnail/view service issues');
+   // console.log('🍎 iOS detected - Setting up global error handling for thumbnail/view service issues');
     
     // Function to check if error is related to iOS thumbnail/view service issues
     const isIOSSystemError = (error) => {
@@ -36,7 +36,6 @@ if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
     // Handle unhandled promise rejections (iOS file picker errors)
     window.addEventListener('unhandledrejection', (event) => {
         if (isIOSSystemError(event.reason)) {
-            console.log('🍎 Suppressed iOS system error:', event.reason?.message || event.reason);
             event.preventDefault(); // Prevent the error from being logged
         }
     });
@@ -44,7 +43,8 @@ if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
     // Handle global errors (iOS view service termination)
     window.addEventListener('error', (event) => {
         if (isIOSSystemError(event.error)) {
-            console.log('🍎 Suppressed iOS system error:', event.error?.message || event.error);
+                    // Log metadata before saving
+               
             event.preventDefault(); // Prevent the error from being logged
         }
     });
@@ -87,7 +87,6 @@ function initializeLyrix() {
         // iOS-specific initialization
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         if (isIOS) {
-            console.log('🍎 iOS initialization started');
             setupiOSOptimizations();
         }
         
@@ -143,7 +142,6 @@ function initializeLyrix() {
             const midiElement = document.getElementById('midi-logger-container');
             const isMidiInspectorEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
             if (midiElement) {
-                console.log('🔍 MIDI Inspector DOM:', midiElement, 'Enabled:', isMidiInspectorEnabled);
                 if (isMidiInspectorEnabled) {
                     midiElement.style.display = 'block';
                     midiElement.style.zIndex = '9999'; // Bring to front for debug
@@ -301,12 +299,10 @@ function exportAllSongsToLRX() {
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
 
-    console.log(`✅ Successfully exported ${songSummaries.length} songs to LRX format`);
 }
 
 // Export all songs to LRX format with folder dialog
 function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
-    console.log('🔍 exportAllSongsToLRXWithFolderDialog called');
     
     if (!lyricsLibrary) {
         console.error('❌ LyricsLibrary non disponible');
@@ -314,14 +310,13 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
     }
 
     const songs = lyricsLibrary.getAllSongs();
-    console.log('🔍 Found songs:', songs.length);
-    
+   // console.log('🔍 Found songs:', songs.length);
     if (songs.length === 0) {
         console.warn('❌ No songs available to export');
         return;
     }
 
-    console.log('🔍 Creating export data...');
+   // ('🔍 Creating export data...');
     // Create export data structure
     const exportData = {
         version: '1.0',
@@ -337,18 +332,15 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         }))
     };
 
-    console.log('🔍 Export data created, size:', JSON.stringify(exportData).length, 'chars');
     
     const jsonString = JSON.stringify(exportData, null, 2);
     
     // Detect Safari browser
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const isWebKit = /webkit/i.test(navigator.userAgent) && !/chrome/i.test(navigator.userAgent);
-    console.log(`🌐 Browser detection - Safari: ${isSafari}, WebKit: ${isWebKit}`);
     
     if (isSafari || isWebKit) {
         // Safari-specific method - utilise la fenêtre passée depuis le handler
-        console.log('🍎 Using Safari/WebKit method - opening save dialog...');
         try {
             const newWindow = safariWin || window.open('', '_blank');
             if (newWindow) {
@@ -421,7 +413,6 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
                     </html>
                 `);
                 newWindow.document.close();
-                console.log('✅ Safari: Opened download page in new window');
             } else {
                 throw new Error('Popup blocked or failed to open new window');
             }
@@ -437,14 +428,11 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
             document.body.appendChild(saveLink);
             saveLink.click();
             document.body.removeChild(saveLink);
-            console.log('📝 Safari fallback: Used direct download method');
         }
     } else {
         // Standard method for other browsers
-        console.log('🔄 Using standard blob method for modern browsers...');
         const blob = new Blob([jsonString], { type: 'application/json' });
         
-        console.log('🔍 Blob created, size:', blob.size, 'bytes');
         
         const saveLink = document.createElement('a');
         const url = URL.createObjectURL(blob);
@@ -452,14 +440,11 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         saveLink.download = `lyrix_library_${new Date().toISOString().split('T')[0]}.lrx`;
         saveLink.style.display = 'none';
         
-        console.log('🔍 Download link created:', {
-            href: saveLink.href.substring(0, 50) + '...',
-            download: saveLink.download
-        });
+  
         
         // Add to document, click, and remove
         document.body.appendChild(saveLink);
-        console.log('🔍 Link added to document, triggering click...');
+      //  console.log('🔍 Link added to document, triggering click...');
         
         try {
             saveLink.click();
@@ -539,43 +524,58 @@ function importFromLRX(file) {
             // Import each song
             importData.songs.forEach((songData, index) => {
                 try {
-                    // Create song object compatible with our library
-                    const song = {
-                        songId: songData.songId || `imported_${Date.now()}_${index}`,
-                        metadata: songData.metadata || {},
-                        lyrics: songData.lyrics || {},
-                        audioPath: songData.audioPath,
-                        syncData: songData.syncData,
-                        lines: (songData.lines || []).map(line => {
-                            if (typeof line === 'object' && 'time' in line && 'text' in line) {
-                                return { time: Number(line.time) || 0, text: line.text || '' };
-                            } else if (typeof line === 'string') {
-                                // Fallback: try to parse timecode from string
-                                const match = line.match(/^\[(\d+):(\d+)\.(\d+)\]\s*(.*)$/);
-                                if (match) {
-                                    const min = parseInt(match[1], 10);
-                                    const sec = parseInt(match[2], 10);
-                                    const cs = parseInt(match[3], 10);
-                                    const time = min * 60000 + sec * 1000 + cs * 10;
-                                    return { time, text: match[4] };
-                                } else {
-                                    return { time: 0, text: line };
-                                }
+                    // Crée une instance SyncedLyrics pour chaque chanson importée
+                    // Utilise uniquement les champs racine du format exporté
+                    const syncedLyrics = new SyncedLyrics(
+                       songData.title || `Imported ${index + 1}`,
+                        songData.artist || 'Unknown',
+                        songData.album || '',
+                        songData.duration || 0,
+                        songData.songId || `imported_${Date.now()}_${index}`
+                    );
+                    syncedLyrics.lines = (songData.lines || []).map(line => {
+                        if (typeof line === 'object' && 'time' in line && 'text' in line) {
+                            return { time: Number(line.time) || 0, text: line.text || '' };
+                        } else if (typeof line === 'string') {
+                            // Fallback: try to parse timecode from string
+                            const match = line.match(/^\[(\d+):(\d+)\.(\d+)\]\s*(.*)$/);
+                            if (match) {
+                                const min = parseInt(match[1], 10);
+                                const sec = parseInt(match[2], 10);
+                                const cs = parseInt(match[3], 10);
+                                const time = min * 60000 + sec * 1000 + cs * 10;
+                                return { time, text: match[4] };
                             } else {
-                                return { time: 0, text: '' };
+                                return { time: 0, text: line };
                             }
-                        })
-                    };
-                    // Patch: copy audioPath into metadata.audioPath for app compatibility
-                    if (song.audioPath) {
-                        song.metadata.audioPath = song.audioPath;
-                    }
+                        } else {
+                            return { time: 0, text: '' };
+                        }
+                    });
+                    syncedLyrics.audioPath = songData.audioPath;
+                    syncedLyrics.syncData = songData.syncData;
+                    // Merge any extra metadata, mais NE PAS écraser title/artist/album
+                    syncedLyrics.metadata = Object.assign({}, syncedLyrics.metadata, songData.metadata || {}, {
+                        audioPath: songData.audioPath,
+                        title: syncedLyrics.title,
+                        artist: syncedLyrics.artist,
+                        album: syncedLyrics.album
+                    });
+                    // Les champs racine sont déjà corrects
+                    // Log avant sauvegarde pour debug
+                    console.log('[IMPORT DEBUG] Before save:', {
+                        title: syncedLyrics.title,
+                        artist: syncedLyrics.artist,
+                        album: syncedLyrics.album,
+                        metadata: syncedLyrics.metadata
+                    });
                     // Add to library
-                    const success = lyricsLibrary.addSong(song);
+                    const success = lyricsLibrary.saveSong(syncedLyrics);
                     if (success) {
                         importedCount++;
+                        console.log(`✅ Imported song: ${syncedLyrics.metadata.title || syncedLyrics.title || 'Unknown'} | Artist: ${syncedLyrics.metadata.artist || syncedLyrics.artist || 'Unknown Artist'}`);
                     } else {
-                        errors.push(`Failed to import song: ${song.metadata.title || 'Unknown'}`);
+                        errors.push(`Failed to import song: ${syncedLyrics.metadata.title || syncedLyrics.title || 'Unknown'}`);
                     }
                 } catch (error) {
                     errors.push(`Error importing song ${index + 1}: ${error.message}`);
@@ -627,7 +627,7 @@ function exportSelectedSongsAsText() {
 
     // Create selection modal
     const songItems = songs.map(song => ({
-        text: `${song.title} - ${song.artist}${song.album ? ` (${song.album})` : ''}`,
+        text: `${(song.metadata?.title || song.title || 'Untitled')} - ${(song.metadata?.artist || song.artist || 'Unknown Artist')}${(song.metadata?.album || song.album) ? ` (${song.metadata?.album || song.album})` : ''}`,
         value: song.key,
         song: song,
         selected: false
@@ -821,9 +821,9 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     // For each summary, load the full song object (with metadata)
     const songItems = songSummaries.map(songSummary => {
         const fullSong = lyricsLibrary.getSong(songSummary.key);
-        if (!fullSong || !fullSong.metadata) return null;
+        if (!fullSong) return null;
         return {
-            text: `${songSummary.title || 'Untitled'} - ${songSummary.artist || 'Unknown'}${songSummary.album ? ` (${songSummary.album})` : ''}`,
+            text: `${(fullSong.metadata?.title || fullSong.title || 'Untitled')} - ${(fullSong.metadata?.artist || fullSong.artist || 'Unknown Artist')}${(fullSong.metadata?.album || fullSong.album) ? ` (${fullSong.metadata?.album || fullSong.album})` : ''}`,
             value: songSummary.songId,
             song: fullSong,
             selected: false
@@ -1282,7 +1282,7 @@ function showSongLibrary() {
     
     // Prepare items for display
     const songItems = songs.map(song => ({
-        text: `${song.title} - ${song.artist}${song.album ? ` (${song.album})` : ''}`,
+        text: `${(song.metadata?.title || song.title || 'Untitled')} - ${(song.metadata?.artist || song.artist || 'Unknown Artist')}${(song.metadata?.album || song.album) ? ` (${song.metadata?.album || song.album})` : ''}`,
         value: song.key,
         song: song
     }));
@@ -1759,7 +1759,6 @@ function toggleMidiInspector(buttonElement, labelElement) {
 
 // Apply initial settings on application startup
 function applyInitialSettings() {
-    console.log('⚙️ Applying initial settings...');
     
     // Set default values for new settings if they don't exist
     if (localStorage.getItem('lyrix_audio_player_enabled') === null) {
@@ -1821,7 +1820,6 @@ function applyInitialSettings() {
             midiElement.style.display = isMidiInspectorEnabled ? 'block' : 'none';
         }
         
-        console.log(`⚙️ Settings applied: Audio Player ${isAudioPlayerEnabled ? 'visible' : 'hidden'}, MIDI Inspector ${isMidiInspectorEnabled ? 'visible' : 'hidden'}`);
     }, 100); // Small delay to ensure DOM is ready
 }
 

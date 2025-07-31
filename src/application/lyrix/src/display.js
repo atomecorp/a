@@ -220,11 +220,7 @@ export class LyricsDisplay {
         this.audioButtons = this.getAudioButtons();
         this.timecodeDisplay = this.getTimecodeDisplay();
         
-        console.log('🔧 Retrieved tools:');
-        console.log('  - nonAudioTools:', this.nonAudioTools.length);
-        console.log('  - audioTools:', this.audioTools.length);
-        console.log('  - audioButtons:', this.audioButtons.length, this.audioButtons);
-        console.log('  - timecodeDisplay:', this.timecodeDisplay);
+
         
         // Apply compact styling to moved tools
         this.styleModeToolsForToolbar();
@@ -264,38 +260,37 @@ export class LyricsDisplay {
         mainToolElements.push(this.saveChangesButton, this.cancelEditButton);
         
         // Add audio buttons after font size container (play button, then stop button)
-        if (this.audioButtons && this.audioButtons.length > 0) {
-            console.log('🎵 Adding audio buttons to main toolbar:', this.audioButtons.length);
-            console.log('🎵 Audio buttons details:', this.audioButtons.map(btn => ({
-                id: btn.id,
-                className: btn.className,
-                style: btn.style.cssText,
-                visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
-                parent: btn.parentElement?.id
-            })));
-            mainToolElements.push(...this.audioButtons);
-        } else {
-            console.log('🎵 No audio buttons to add to toolbar');
-        }
+        // if (this.audioButtons && this.audioButtons.length > 0) {
+        //     // console.log('🎵 Adding audio buttons to main toolbar:', this.audioButtons.length);
+        //     // console.log('🎵 Audio buttons details:', this.audioButtons.map(btn => ({
+        //     //     id: btn.id,
+        //     //     className: btn.className,
+        //     //     style: btn.style.cssText,
+        //     //     visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
+        //     //     parent: btn.parentElement?.id
+        //     // })));
+        //     mainToolElements.push(...this.audioButtons);
+        // } else {
+        //     console.log('🎵 No audio buttons to add to toolbar');
+        // }
         
-        console.log('🔧 Final mainToolElements:', mainToolElements.length, 'elements');
+        // console.log('🔧 Final mainToolElements:', mainToolElements.length, 'elements');
         
         mainToolRow.append(...mainToolElements);
         
-        // Debug: Check if audio buttons are actually in the toolbar after appending
-        setTimeout(() => {
-            const buttonsInToolbar = mainToolRow.querySelectorAll('button');
-            console.log('🔍 Buttons found in main toolbar after append:', buttonsInToolbar.length);
-            buttonsInToolbar.forEach((btn, index) => {
-                console.log(`  Button ${index}:`, {
-                    id: btn.id,
-                    text: btn.textContent,
-                    visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
-                    display: window.getComputedStyle(btn).display,
-                    visibility: window.getComputedStyle(btn).visibility
-                });
-            });
-        }, 100);
+        // // Debug: Check if audio buttons are actually in the toolbar after appending
+        // setTimeout(() => {
+        //     const buttonsInToolbar = mainToolRow.querySelectorAll('button');
+        //     buttonsInToolbar.forEach((btn, index) => {
+        //         console.log(`  Button ${index}:`, {
+        //             id: btn.id,
+        //             text: btn.textContent,
+        //             visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
+        //             display: window.getComputedStyle(btn).display,
+        //             visibility: window.getComputedStyle(btn).visibility
+        //         });
+        //     });
+        // }, 100);
         
         // Create audio tools row (will be hidden by default)
         const audioToolRow = $('div', {
@@ -349,7 +344,6 @@ export class LyricsDisplay {
         // Ajouter le display container directement au body pour un contrôle total
         document.body.append(this.displayContainer);
         
-        console.log('📐 Display structure created with NO SCROLL on body/view - only lyrics content can scroll');
     }
     
     // Setup event listeners
@@ -478,44 +472,34 @@ export class LyricsDisplay {
         if (isAudioPlayerEnabled === null) {
             isAudioPlayerEnabled = 'true';
             localStorage.setItem('lyrix_audio_player_enabled', 'true');
-            console.log('🎵 Audio player setting not found, defaulting to enabled');
         }
         
         isAudioPlayerEnabled = isAudioPlayerEnabled === 'true';
-        console.log('🎵 Audio player enabled:', isAudioPlayerEnabled);
         
         if (!isAudioPlayerEnabled) {
-            console.log('🎵 Audio player disabled, returning empty buttons array');
             return buttons; // Return empty array if audio player is disabled
         }
         
         // Get audio controls from stored references and use direct button references
         if (window.leftPanelAudioTools) {
-            console.log('🎵 Found leftPanelAudioTools:', window.leftPanelAudioTools);
             const { playButton, stopButton } = window.leftPanelAudioTools;
             
-            console.log('🎵 Play button:', playButton);
-            console.log('🎵 Stop button:', stopButton);
             
             if (playButton) {
                 buttons.push(playButton);
-                console.log('🎵 Added play button to toolbar');
                 // Ensure button is visible
                 playButton.style.display = 'inline-block';
                 playButton.style.visibility = 'visible';
             }
             if (stopButton) {
                 buttons.push(stopButton);
-                console.log('🎵 Added stop button to toolbar');
                 // Ensure button is visible
                 stopButton.style.display = 'inline-block';
                 stopButton.style.visibility = 'visible';
             }
         } else {
-            console.log('🎵 window.leftPanelAudioTools not found');
         }
         
-        console.log('🎵 Returning buttons array:', buttons, 'length:', buttons.length);
         return buttons;
     }
     
@@ -601,11 +585,7 @@ export class LyricsDisplay {
                     tool.style.visibility = 'visible';
                     tool.style.opacity = '1';
                     tool.style.margin = '2px';
-                    console.log(`🎵 Styling audio button ${tool.id}:`, {
-                        display: tool.style.display,
-                        visibility: tool.style.visibility,
-                        opacity: tool.style.opacity
-                    });
+                  
                 }
             }
         });
@@ -625,7 +605,6 @@ export class LyricsDisplay {
             this.audioToolRow.style.display = 'none';
         }
         
-        console.log(`📐 Updated audio tools visibility: ${isAudioPlayerEnabled && this.audioTools.length > 0}`);
     }
     
     // Public method to refresh audio tools visibility (called when settings change)
@@ -635,24 +614,10 @@ export class LyricsDisplay {
     
     // Debug method to force audio buttons visibility
     debugAudioButtons() {
-        console.log('🔍 Debug audio buttons:');
-        console.log('  - audioButtons array:', this.audioButtons);
-        console.log('  - localStorage setting:', localStorage.getItem('lyrix_audio_player_enabled'));
-        console.log('  - window.leftPanelAudioTools:', window.leftPanelAudioTools);
-        
+       
         if (this.audioButtons && this.audioButtons.length > 0) {
             this.audioButtons.forEach((btn, index) => {
-                console.log(`  Button ${index}:`, {
-                    element: btn,
-                    id: btn.id,
-                    parentElement: btn.parentElement,
-                    offsetWidth: btn.offsetWidth,
-                    offsetHeight: btn.offsetHeight,
-                    display: window.getComputedStyle(btn).display,
-                    visibility: window.getComputedStyle(btn).visibility,
-                    opacity: window.getComputedStyle(btn).opacity
-                });
-                
+            
                 // Force visibility
                 btn.style.display = 'inline-block';
                 btn.style.visibility = 'visible';
@@ -978,7 +943,6 @@ export class LyricsDisplay {
                     isDragging = false;
                     timeSpan.style.backgroundColor = '#f0f0f0';
                     timeSpan.style.color = '#666';
-                    console.log(`⏰ Updated timecode for line ${index + 1}: ${this.formatTimeDisplay(line.time)}`);
                 }
             });
             

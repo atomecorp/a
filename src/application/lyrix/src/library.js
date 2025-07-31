@@ -3,6 +3,22 @@ import { CONSTANTS } from './constants.js';
 import { SyncedLyrics } from './syncedLyrics.js';
 import { StorageManager } from './storage.js';
 
+// Centralise la création d'une instance SyncedLyrics à partir d'un objet songData
+export function createSyncedLyricsFromData(songData) {
+    const lyrics = new SyncedLyrics(
+        songData.metadata?.title || songData.title || '',
+        songData.metadata?.artist || songData.artist || '',
+        songData.metadata?.album || songData.album || '',
+        songData.metadata?.duration || songData.duration || 0,
+        songData.songId || ''
+    );
+    lyrics.lines = songData.lines || [];
+    lyrics.metadata = { ...songData.metadata };
+    lyrics.audioPath = songData.audioPath;
+    lyrics.syncData = songData.syncData;
+    return lyrics;
+}
+
 export class LyricsLibrary {
     constructor() {
         this.builtInSongs = new Set(); // Track which built-in songs exist
@@ -66,9 +82,9 @@ export class LyricsLibrary {
                         songs.push({
                             key: key,
                             songId: data.songId,
-                            title: data.metadata.title,
-                            artist: data.metadata.artist,
-                            album: data.metadata.album || '',
+                            title: data.metadata.title || data.title || '[no title]',
+                            artist: data.metadata.artist || data.artist || '[no artist]',
+                            album: data.metadata.album || data.album || '',
                             duration: data.metadata.duration || 0,
                             lastModified: data.metadata.lastModified,
                             created: data.metadata.created,
@@ -134,7 +150,10 @@ export class LyricsLibrary {
         try {
             const storageKey = syncedLyrics.saveToStorage();
             if (storageKey) {
-                console.log('✅ Chanson sauvegardée:', syncedLyrics.metadata.title, 'avec ID:', syncedLyrics.songId);
+                // Always fallback to root fields if metadata fields are missing or empty
+                const title = (syncedLyrics.metadata.title && syncedLyrics.metadata.title !== '[no title]') ? syncedLyrics.metadata.title : (syncedLyrics.title || '[no title]');
+                const artist = (syncedLyrics.metadata.artist && syncedLyrics.metadata.artist !== '[no artist]') ? syncedLyrics.metadata.artist : (syncedLyrics.artist || '[no artist]');
+                console.log('✅ Chanson sauvegardée:', title, '| Auteur:', artist, 'avec ID:', syncedLyrics.songId);
                 return storageKey;
             } else {
                 throw new Error('Failed to save to storage');
@@ -236,43 +255,28 @@ export class LyricsLibrary {
         
         importData.songs.forEach((songData, index) => {
             try {
-                // Create SyncedLyrics instance
-                const lyrics = new SyncedLyrics(
-                    songData.metadata.title,
-                    songData.metadata.artist,
-                    songData.metadata.album,
-                    songData.metadata.duration,
-                    songData.songId
-                );
-                
-                lyrics.lines = songData.lines || [];
-                lyrics.metadata = { ...songData.metadata };
-                
+                // Utilise la fonction centralisée
+                const lyrics = createSyncedLyricsFromData(songData);
                 // Check if song already exists
                 const existingKey = `${CONSTANTS.STORAGE.LIBRARY_PREFIX}${lyrics.songId}`;
                 const exists = localStorage.getItem(existingKey);
-                
                 if (exists && !options.overwrite) {
                     skippedCount++;
                     console.log(`⏭️ Skipped existing song: ${lyrics.metadata.title}`);
                     return;
                 }
-                
                 // Save song
                 const savedKey = lyrics.saveToStorage();
                 if (savedKey) {
                     importedCount++;
-                    
                     // Mark as built-in if requested
                     if (options.markAsBuiltIn) {
                         this.addBuiltInSong(lyrics.songId);
                     }
-                    
                     console.log(`✅ Imported: ${lyrics.metadata.title}`);
                 } else {
                     throw new Error('Failed to save to storage');
                 }
-                
             } catch (error) {
                 errors.push(`Song ${index + 1}: ${error.message}`);
                 console.error(`❌ Import error for song ${index + 1}:`, error);
