@@ -5,6 +5,7 @@ import { SongManager } from './songs.js';
 import { SyncedLyrics } from './syncedLyrics.js';
 import { Modal } from './modal.js';
 import { CONSTANTS } from './constants.js';
+import { createSyncedLyricsFromData } from './library.js';
 
 export class DragDropManager {
     // Permet de modifier le titre d'une chanson existante
@@ -384,34 +385,17 @@ export class DragDropManager {
     async importLRXFile(content) {
         try {
             console.log('📥 Importing LRX file...');
-            
             const importData = JSON.parse(content);
-            
             // Validate LRX format
             if (!importData.songs || !Array.isArray(importData.songs)) {
                 throw new Error('Invalid LRX format: missing songs array');
             }
-
             let importedCount = 0;
             const errors = [];
-
-            // Import each song
+            // Utilise la fonction centralisée pour chaque chanson
             for (const [index, songData] of importData.songs.entries()) {
                 try {
-                    // Crée une instance SyncedLyrics pour chaque chanson importée
-                    const syncedLyrics = new SyncedLyrics(
-                        songData.title || `Imported ${index + 1}`,
-                        songData.artist || 'Unknown',
-                        songData.album || '',
-                        songData.duration || 0,
-                        songData.songId || `imported_${Date.now()}_${index}`
-                    );
-                    syncedLyrics.lines = songData.lines || [];
-                    syncedLyrics.audioPath = songData.audioPath;
-                    syncedLyrics.syncData = songData.syncData;
-                    syncedLyrics.metadata = songData.metadata || {};
-
-                    // Ajoute à la bibliothèque
+                    const syncedLyrics = createSyncedLyricsFromData(songData);
                     const success = this.lyricsLibrary.saveSong(syncedLyrics);
                     if (success) {
                         importedCount++;
@@ -423,34 +407,26 @@ export class DragDropManager {
                     errors.push(`Error importing song ${index + 1}: ${error.message}`);
                 }
             }
-
             // Show results
             const message = errors.length > 0 
                 ? `Imported ${importedCount} songs successfully. Errors: ${errors.join(', ')}`
                 : `Successfully imported ${importedCount} songs from LRX file.`;
-
             console.log(`📥 LRX Import: ${message}`);
-            
-            // Show modal with results
             Modal({
                 title: '📥 LRX Import Complete',
                 content: `<p>${message}</p>`,
                 buttons: [{ text: 'OK' }],
                 size: 'medium'
             });
-
             return { success: true, imported: importedCount, errors };
-
         } catch (error) {
             console.error('❌ Error importing LRX file:', error);
-            
             Modal({
                 title: '❌ LRX Import Error',
                 content: `<p>Failed to import LRX file: ${error.message}</p>`,
                 buttons: [{ text: 'OK' }],
                 size: 'small'
             });
-            
             throw error;
         }
     }
