@@ -7,6 +7,21 @@ import { Modal } from './modal.js';
 import { CONSTANTS } from './constants.js';
 
 export class DragDropManager {
+    // Permet de modifier le titre d'une chanson existante
+    async editSongTitle(song, newTitle) {
+        if (!song || !newTitle || typeof newTitle !== 'string') return false;
+        song.metadata.title = newTitle;
+        // Regénérer l'ID si besoin
+        if (this.lyricsLibrary && this.lyricsLibrary.generateSongId) {
+            song.songId = this.lyricsLibrary.generateSongId(newTitle, song.metadata.artist || 'Artiste Inconnu');
+        }
+        // Sauvegarder la chanson modifiée
+        this.lyricsLibrary.saveSong(song);
+        if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
+            this.lyricsDisplay.displayLyrics(song);
+        }
+        return true;
+    }
     constructor(audioController, lyricsLibrary, lyricsDisplay) {
         this.audioController = audioController;
         this.lyricsLibrary = lyricsLibrary;
@@ -383,23 +398,26 @@ export class DragDropManager {
             // Import each song
             for (const [index, songData] of importData.songs.entries()) {
                 try {
-                    // Create song object compatible with our library
-                    const song = {
-                        songId: songData.songId || `imported_${Date.now()}_${index}`,
-                        metadata: songData.metadata || {},
-                        lyrics: songData.lyrics || {},
-                        audioPath: songData.audioPath,
-                        syncData: songData.syncData,
-                        lines: songData.lines || []
-                    };
+                    // Crée une instance SyncedLyrics pour chaque chanson importée
+                    const syncedLyrics = new SyncedLyrics(
+                        songData.metadata?.title || `Imported ${index + 1}`,
+                        songData.metadata?.artist || 'Unknown',
+                        songData.metadata?.album || '',
+                        songData.metadata?.duration || 0,
+                        songData.songId || `imported_${Date.now()}_${index}`
+                    );
+                    syncedLyrics.lines = songData.lines || [];
+                    syncedLyrics.audioPath = songData.audioPath;
+                    syncedLyrics.syncData = songData.syncData;
+                    syncedLyrics.metadata = songData.metadata || {};
 
-                    // Add to library
-                    const success = this.lyricsLibrary.addSong(song);
+                    // Ajoute à la bibliothèque
+                    const success = this.lyricsLibrary.saveSong(syncedLyrics);
                     if (success) {
                         importedCount++;
-                        console.log(`✅ Imported song: ${song.metadata.title || 'Unknown'}`);
+                        console.log(`✅ Imported song: ${syncedLyrics.metadata.title || 'Unknown'}`);
                     } else {
-                        errors.push(`Failed to import song: ${song.metadata.title || 'Unknown'}`);
+                        errors.push(`Failed to import song: ${syncedLyrics.metadata.title || 'Unknown'}`);
                     }
                 } catch (error) {
                     errors.push(`Error importing song ${index + 1}: ${error.message}`);

@@ -33,3 +33,14 @@ src-tauri/target/
 # Process files
 .watcher.pid
 src/assets/audios/Alive.mp3
+src/assets/audios/Evolutions.m4a
+src/assets/audios/GhostBox.m4a
+src/assets/audios/Last chances.m4a
+src/assets/audios/Runaway.m4a
+src/assets/audios/Social Smiles.m4a
+src/assets/audios/Vampire.m4a
+src/assets/audios/wWw.m4a
+src/assets/audios/Big Brother.m4a
+src/assets/audios/Alive.m4a
+src/assets/audios/After The War.m4a
+src/assets/audios/Change the world.m4a

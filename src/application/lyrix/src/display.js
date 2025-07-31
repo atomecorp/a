@@ -732,24 +732,82 @@ export class LyricsDisplay {
             }
         });
         
-        const title = $('h2', {
-            text: this.currentLyrics.metadata.title,
-            css: {
-                margin: '0 0 5px 0',
-                color: '#1976D2',
-                fontSize: '1.3em'
-            }
-        });
+        let title;
+        if (this.editMode) {
+            title = $('input', {
+                id: 'edit_title_input',
+                type: 'text',
+                value: this.currentLyrics.metadata.title || '',
+                css: {
+                    margin: '0 0 5px 0',
+                    color: '#1976D2',
+                    fontSize: '1.3em',
+                    fontWeight: 'bold',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    border: '2px solid #1976D2',
+                    backgroundColor: '#f5faff',
+                    width: '100%'
+                }
+            });
+            title.addEventListener('input', (e) => {
+                this.currentLyrics.metadata.title = e.target.value;
+            });
+            title.addEventListener('change', (e) => {
+                this.currentLyrics.metadata.title = e.target.value;
+                if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
+                    this.lyricsLibrary.saveSong(this.currentLyrics);
+                }
+            });
+        } else {
+            title = $('h2', {
+                text: this.currentLyrics.metadata.title,
+                css: {
+                    margin: '0 0 5px 0',
+                    color: '#1976D2',
+                    fontSize: '1.3em'
+                }
+            });
+        }
         
-        const artist = $('h3', {
-            text: `by ${this.currentLyrics.metadata.artist}`,
-            css: {
-                margin: '0 0 5px 0',
-                color: '#666',
-                fontSize: '1.1em',
-                fontWeight: 'normal'
-            }
-        });
+        let artist;
+        if (this.editMode) {
+            artist = $('input', {
+                id: 'edit_artist_input',
+                type: 'text',
+                value: this.currentLyrics.metadata.artist || '',
+                css: {
+                    margin: '0 0 5px 0',
+                    color: '#666',
+                    fontSize: '1.1em',
+                    fontWeight: 'normal',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    border: '2px solid #666',
+                    backgroundColor: '#f5faff',
+                    width: '100%'
+                }
+            });
+            artist.addEventListener('input', (e) => {
+                this.currentLyrics.metadata.artist = e.target.value;
+            });
+            artist.addEventListener('change', (e) => {
+                this.currentLyrics.metadata.artist = e.target.value;
+                if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
+                    this.lyricsLibrary.saveSong(this.currentLyrics);
+                }
+            });
+        } else {
+            artist = $('h3', {
+                text: `by ${this.currentLyrics.metadata.artist}`,
+                css: {
+                    margin: '0 0 5px 0',
+                    color: '#666',
+                    fontSize: '1.1em',
+                    fontWeight: 'normal'
+                }
+            });
+        }
         
         metadata.append(title, artist);
         
@@ -1285,7 +1343,6 @@ export class LyricsDisplay {
     // Toggle edit mode
     toggleEditMode() {
         // console.log('🎯 toggleEditMode called, current editMode:', this.editMode);
-        
         // If exiting edit mode, apply changes
         if (this.editMode) {
             // console.log('🎯 Exiting edit mode, applying changes');
@@ -1295,11 +1352,9 @@ export class LyricsDisplay {
         } else {
             // console.log('🎯 Entering edit mode');
         }
-        
         this.editMode = !this.editMode;
         // Garder l'icône, changer seulement la couleur (utilise les couleurs du thème)
         this.editButton.style.backgroundColor = this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor;
-        
         // Show/hide edit mode buttons in toolbar
         if (this.saveChangesButton && this.cancelEditButton) {
             if (this.editMode) {
@@ -1310,9 +1365,17 @@ export class LyricsDisplay {
                 this.cancelEditButton.style.display = 'none';
             }
         }
-        
         // console.log('🎯 New editMode:', this.editMode, 'calling renderLyrics');
         this.renderLyrics();
+        // Synchronise la valeur des inputs avec les métadonnées à chaque entrée en mode édition
+        if (this.editMode) {
+            setTimeout(() => {
+                const titleInput = document.getElementById('edit_title_input');
+                if (titleInput) titleInput.value = this.currentLyrics.metadata.title || '';
+                const artistInput = document.getElementById('edit_artist_input');
+                if (artistInput) artistInput.value = this.currentLyrics.metadata.artist || '';
+            }, 0);
+        }
     }
     
     // Apply bulk edit changes

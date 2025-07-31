@@ -11,8 +11,10 @@ import { SyncedLyrics } from './src/syncedLyrics.js';
 import { LyricsLibrary } from './src/library.js';
 import { LyricsDisplay } from './src/display.js';
 import { DragDropManager } from './src/dragDrop.js';
+window.dragDropManager = new DragDropManager();
 import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/modal.js';
 import { MidiUtilities } from './src/midi_utilities.js';
+import { exportSongsToLRX } from './SongUtils.js';
 
 // iOS Error Handling Setup
 // Handle iOS thumbnail and view service termination errors globally
@@ -124,12 +126,38 @@ function initializeLyrix() {
         
         // Initialize MIDI utilities
         midiUtilities = new MidiUtilities();
-        
+        // Ensure MIDI inspector is in the toolbar
+        const appContainer = document.getElementById('lyrix_app');
+        const toolbarRow = document.getElementById('main-toolbar-row');
+        if (toolbarRow && midiUtilities && midiUtilities.midiContainer) {
+            toolbarRow.appendChild(midiUtilities.midiContainer);
+        } else if (appContainer && midiUtilities && midiUtilities.midiContainer) {
+            // Fallback: append to appContainer if toolbar not found
+            appContainer.appendChild(midiUtilities.midiContainer);
+        }
         // Apply saved settings on startup
         applyInitialSettings();
+
+        // Debug: Force MIDI inspector visible if enabled
+        setTimeout(() => {
+            const midiElement = document.getElementById('midi-logger-container');
+            const isMidiInspectorEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
+            if (midiElement) {
+                console.log('🔍 MIDI Inspector DOM:', midiElement, 'Enabled:', isMidiInspectorEnabled);
+                if (isMidiInspectorEnabled) {
+                    midiElement.style.display = 'block';
+                    midiElement.style.zIndex = '9999'; // Bring to front for debug
+                    midiElement.style.position = 'relative';
+                    midiElement.style.backgroundColor = ''; // Restore original background color
+                    midiElement.style.border = '3px solid #f00'; // Red border for visibility
+                    midiElement.style.color = '#000'; // Black text for contrast
+                }
+            } else {
+                console.warn('⚠️ MIDI Inspector not found in DOM');
+            }
+        }, 500);
         
         // Initialize drag and drop for external files (.txt, .lrc, .lrx, music)
-        const appContainer = document.getElementById('lyrix_app');
         if (appContainer) {
             dragDropManager = new DragDropManager(audioController, lyricsLibrary, lyricsDisplay);
             dragDropManager.onSongLoaded = (song) => {
@@ -251,26 +279,14 @@ function exportAllSongsToLRX() {
         return;
     }
 
-    const songs = lyricsLibrary.getAllSongs();
-    if (songs.length === 0) {
+    const songSummaries = lyricsLibrary.getAllSongs();
+    if (songSummaries.length === 0) {
         console.warn('❌ No songs available to export');
         return;
     }
 
-    // Create export data structure
-    const exportData = {
-        version: '1.0',
-        exportDate: new Date().toISOString(),
-        totalSongs: songs.length,
-        songs: songs.map(song => ({
-            songId: song.songId,
-            metadata: song.metadata,
-            lyrics: song.lyrics,
-            audioPath: song.audioPath || null,
-            syncData: song.syncData || null,
-            lines: song.lines || []
-        }))
-    };
+    // Utilise la fonction utilitaire pour garantir l'inclusion des paroles
+    const exportData = exportSongsToLRX(songSummaries, lyricsLibrary);
 
     // Create download
     const dataStr = JSON.stringify(exportData, null, 2);
@@ -285,7 +301,7 @@ function exportAllSongsToLRX() {
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
 
-    console.log(`✅ Successfully exported ${songs.length} songs to LRX format`);
+    console.log(`✅ Successfully exported ${songSummaries.length} songs to LRX format`);
 }
 
 // Export all songs to LRX format with folder dialog
@@ -530,7 +546,25 @@ function importFromLRX(file) {
                         lyrics: songData.lyrics || {},
                         audioPath: songData.audioPath,
                         syncData: songData.syncData,
-                        lines: songData.lines || []
+                        lines: (songData.lines || []).map(line => {
+                            if (typeof line === 'object' && 'time' in line && 'text' in line) {
+                                return { time: Number(line.time) || 0, text: line.text || '' };
+                            } else if (typeof line === 'string') {
+                                // Fallback: try to parse timecode from string
+                                const match = line.match(/^\[(\d+):(\d+)\.(\d+)\]\s*(.*)$/);
+                                if (match) {
+                                    const min = parseInt(match[1], 10);
+                                    const sec = parseInt(match[2], 10);
+                                    const cs = parseInt(match[3], 10);
+                                    const time = min * 60000 + sec * 1000 + cs * 10;
+                                    return { time, text: match[4] };
+                                } else {
+                                    return { time: 0, text: line };
+                                }
+                            } else {
+                                return { time: 0, text: '' };
+                            }
+                        })
                     };
 
                     // Add to library
@@ -1627,18 +1661,36 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     // Also toggle the audio tools row
     const audioToolRow = document.getElementById('audio-tools-row');
     
-    const displayValue = newState ? 'flex' : 'none'; // Use flex for the audio row
-    
-    // Toggle visibility for audio elements only
+    // Use 'flex' for the container, 'inline-block' for buttons
     audioElementsToToggle.forEach(element => {
-        if (element) {
+        if (!element) return;
+        if (element.id === 'audio-controls-container') {
+            element.style.display = newState ? 'flex' : 'none';
+        } else if (element.id === 'audio-play-button' || element.id === 'audio-stop-button') {
+            element.style.display = newState ? 'inline-block' : 'none';
+        } else {
             element.style.display = newState ? 'block' : 'none';
         }
     });
-    
     // Toggle the audio tools row
     if (audioToolRow) {
-        audioToolRow.style.display = displayValue;
+        audioToolRow.style.display = newState ? 'flex' : 'none';
+    }
+    // Ajout : si audioControls existe et audio activé, on l'ajoute au toolbarRow
+    const toolbarRow = document.getElementById('main-toolbar-row');
+    const audioControls = window.leftPanelAudioTools && window.leftPanelAudioTools.audioControls;
+    const playButton = window.leftPanelAudioTools && window.leftPanelAudioTools.playButton;
+    const stopButton = window.leftPanelAudioTools && window.leftPanelAudioTools.stopButton;
+    if (isAudioPlayerEnabled && toolbarRow) {
+        if (audioControls && !toolbarRow.contains(audioControls)) {
+            toolbarRow.appendChild(audioControls);
+        }
+        if (playButton && !toolbarRow.contains(playButton)) {
+            toolbarRow.appendChild(playButton);
+        }
+        if (stopButton && !toolbarRow.contains(stopButton)) {
+            toolbarRow.appendChild(stopButton);
+        }
     }
     
     console.log(`🎵 Audio Player Controls: ${newState ? 'ENABLED' : 'DISABLED'} - Audio controls ${newState ? 'shown' : 'hidden'}`);
@@ -1708,6 +1760,22 @@ function applyInitialSettings() {
         
         if (audioToolRow) {
             audioToolRow.style.display = audioRowDisplayValue;
+        }
+        // Ajout : si audioControls existe et audio activé, on l'ajoute au toolbarRow
+        const toolbarRow = document.getElementById('main-toolbar-row');
+        const audioControls = window.leftPanelAudioTools && window.leftPanelAudioTools.audioControls;
+        const playButton = window.leftPanelAudioTools && window.leftPanelAudioTools.playButton;
+        const stopButton = window.leftPanelAudioTools && window.leftPanelAudioTools.stopButton;
+        if (isAudioPlayerEnabled && toolbarRow) {
+            if (audioControls && !toolbarRow.contains(audioControls)) {
+                toolbarRow.appendChild(audioControls);
+            }
+            if (playButton && !toolbarRow.contains(playButton)) {
+                toolbarRow.appendChild(playButton);
+            }
+            if (stopButton && !toolbarRow.contains(stopButton)) {
+                toolbarRow.appendChild(stopButton);
+            }
         }
         
         // Apply MIDI inspector settings
@@ -2119,7 +2187,8 @@ function createMainInterface() {
     // Add audio controls section
     if (audioController) {
         // Check audio player controls setting state
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true'; // Default to false (hidden)
+        // Par défaut, les contrôles audio sont masqués sauf si activés dans les paramètres
+        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
         const initialDisplay = isAudioPlayerEnabled ? 'block' : 'none';
         
         const playButton = UIManager.createInterfaceButton('▶️', {
@@ -2832,5 +2901,5 @@ function handleIOSAudioError(error) {
         }
     }
 }
-
+// console.log('🎵 Lyrix module initialized');
 // Lyrix module loaded
