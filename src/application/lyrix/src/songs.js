@@ -59,56 +59,56 @@ export class SongManager {
     }
     
     // Create new song
-    static create(title, artist, album = '', library) {
-        if (!title || !artist) {
-            console.log('❌ Title and artist required');
-            return null;
-        }
-        
-        const newSong = library.createSong(title, artist, album);
-        newSong.addLine(0, 'First lyric line...', 'vocal');
-        library.saveSong(newSong);
-        
-        console.log('✅ New song created:', title, 'by', artist);
-        return newSong;
-    }
+    // static create(title, artist, album = '', library) {
+    //     console.log('🆕 Creating new song:', title, 'by', library);
+    //     if (!title || !artist) {
+    //         console.log('❌ Title and artist required');
+    //         return null;
+    //     }
+    //     // Crée la chanson avec metadata uniquement
+    //     const newSong = library.createSong(title, artist, album);
+    //     newSong.addLine(0, 'First lyric line...', 'vocal');
+    //     library.saveSong(newSong);
+    //     console.log('✅ New song created:', newSong);
+    //     return newSong;
+    // }
     
     // Delete song
-    static delete(songIdentifier, library, display) {
-        let songId = songIdentifier;
+    // static delete(songIdentifier, library, display) {
+    //     let songId = songIdentifier;
         
-        // If it's a name, search for ID
-        if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
-            const results = library.searchSongs(songIdentifier);
-            if (results.length === 0) {
-                console.log('❌ Song not found:', songIdentifier);
-                return false;
-            }
-            songId = results[0].songId;
-        }
+    //     // If it's a name, search for ID
+    //     if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
+    //         const results = library.searchSongs(songIdentifier);
+    //         if (results.length === 0) {
+    //             console.log('❌ Song not found:', songIdentifier);
+    //             return false;
+    //         }
+    //         songId = results[0].songId;
+    //     }
         
-        const success = library.deleteSong(songId);
-        if (success && display?.currentLyrics?.metadata.songId === songId) {
-            // Clean display if deleted song was showing
-            display.currentLyrics = null;
-            display.updateHeader();
-            display.renderLines();
-        }
+    //     const success = library.deleteSong(songId);
+    //     if (success && display?.currentLyrics?.metadata.songId === songId) {
+    //         // Clean display if deleted song was showing
+    //         display.currentLyrics = null;
+    //         display.updateHeader();
+    //         display.renderLines();
+    //     }
         
-        console.log(success ? '✅ Song deleted' : '❌ Deletion failed');
-        return success;
-    }
+    //     console.log(success ? '✅ Song deleted' : '❌ Deletion failed');
+    //     return success;
+    // }
     
     // List all songs
-    static listAll(library) {
-        const songs = library.getAllSongs();
-        console.log('📋 Song list (' + songs.length + '):');
-        songs.forEach((song, index) => {
-            const audioIcon = song.hasAudio ? '🎵' : '📝';
-            console.log(`  ${index + 1}. ${audioIcon} ${song.title} - ${song.artist}`);
-        });
-        return songs;
-    }
+    // static listAll(library) {
+    //     const songs = library.getAllSongs();
+    //     console.log('📋 Song list (' + songs.length + '):');
+    //     songs.forEach((song, index) => {
+    //         const audioIcon = song.hasAudio ? '🎵' : '📝';
+    //         console.log(`  ${index + 1}. ${audioIcon} ${song.title} - ${song.artist}`);
+    //     });
+    //     return songs;
+    // }
     
     // Search songs by title
     static searchByTitle(searchTerm, library) {

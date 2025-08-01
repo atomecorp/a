@@ -709,7 +709,7 @@ const createButton = (config = {}) => {
   };
 
   // Création du conteneur principal
-  console.log('🔍 CSS final avant création DOM:', { backgroundColor: containerStyles.backgroundColor, color: containerStyles.color });
+  // console.log('🔍 CSS final avant création DOM:', { backgroundColor: containerStyles.backgroundColor, color: containerStyles.color });
   
   // ✅ Nettoyer les styles CSS pour éviter les propriétés parasites
   const cleanStyles = {};
@@ -720,7 +720,7 @@ const createButton = (config = {}) => {
     }
   });
   
-  console.log('🔍 cleanStyles:', { backgroundColor: cleanStyles.backgroundColor, color: cleanStyles.color });
+  // console.log('🔍 cleanStyles:', { backgroundColor: cleanStyles.backgroundColor, color: cleanStyles.color });
   
   const button = $('button-container', {
     id: buttonId,
@@ -739,7 +739,7 @@ const createButton = (config = {}) => {
   });
 
   // ✅ Debug: vérifier les styles appliqués dans le DOM
-  console.log('🔍 Styles appliqués au DOM:', button.style.cssText);
+  // console.log('🔍 Styles appliqués au DOM:', button.style.cssText);
 
   // Stocker la config pour référence
   button._config = processedConfig;
@@ -1099,7 +1099,7 @@ createButton.getTemplateList = () => Object.keys(buttonTemplates);
 createButton.getTemplate = (name) => buttonTemplates[name];
 createButton.addTemplate = (name, template) => {
   buttonTemplates[name] = template;
-  console.log(`✅ Template "${name}" ajouté`);
+  // console.log(`✅ Template "${name}" ajouté`);
   return createButton;
 };
 
@@ -1117,7 +1117,7 @@ createButton.listTemplates = () => {
 createButton.removeTemplate = (name) => {
   if (buttonTemplates[name]) {
     delete buttonTemplates[name];
-    console.log(`✅ Template "${name}" supprimé`);
+    // console.log(`✅ Template "${name}" supprimé`);
   } else {
     console.warn(`⚠️ Template "${name}" introuvable`);
   }

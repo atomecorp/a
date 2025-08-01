@@ -18,17 +18,19 @@ export class AudioManager {
             }
         }
         
-        // Already formed complete URL
+        // Already formed complete URL - return as is
         if (audioPath.startsWith(CONSTANTS.AUDIO.BASE_URL)) return audioPath;
+        if (audioPath.startsWith('http://') || audioPath.startsWith('https://')) return audioPath;
         
         // Relative path with BASE_PATH
         if (audioPath.startsWith(CONSTANTS.AUDIO.BASE_PATH)) {
             return this.createUrl(audioPath.replace(CONSTANTS.AUDIO.BASE_PATH, ''));
         }
         
-        // Extract filename from path
+        // Extract filename from path and decode it to avoid double encoding
         const fileName = audioPath.split(/[/\\]/).pop();
-        return this.createUrl(fileName);
+        const decodedFileName = decodeURIComponent(fileName);
+        return this.createUrl(decodedFileName);
     }
     
     // Create complete audio URL with fallback

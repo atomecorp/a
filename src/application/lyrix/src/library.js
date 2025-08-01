@@ -5,17 +5,26 @@ import { StorageManager } from './storage.js';
 
 // Centralise la création d'une instance SyncedLyrics à partir d'un objet songData
 export function createSyncedLyricsFromData(songData) {
-    const lyrics = new SyncedLyrics(
-        songData.metadata?.title || songData.title || '',
-        songData.metadata?.artist || songData.artist || '',
-        songData.metadata?.album || songData.album || '',
-        songData.metadata?.duration || songData.duration || 0,
-        songData.songId || ''
-    );
+    // Crée une instance SyncedLyrics vide
+    const lyrics = new SyncedLyrics();
+    // Stocke toutes les infos dans metadata UNIQUEMENT
+    lyrics.metadata = {
+        ...(songData.metadata || {}),
+        title: songData.metadata?.title || songData.title || '',
+        artist: songData.metadata?.artist || songData.artist || '',
+        album: songData.metadata?.album || songData.album || '',
+        duration: songData.metadata?.duration || songData.duration || 0
+    };
+    lyrics.songId = songData.songId || '';
     lyrics.lines = songData.lines || [];
-    lyrics.metadata = { ...songData.metadata };
     lyrics.audioPath = songData.audioPath;
     lyrics.syncData = songData.syncData;
+    // Supprime les champs dupliqués au niveau racine si présents (y compris à l'export)
+    Object.keys(lyrics).forEach(key => {
+        if (["title","artist","album","duration"].includes(key)) {
+            delete lyrics[key];
+        }
+    });
     return lyrics;
 }
 
@@ -139,27 +148,36 @@ export class LyricsLibrary {
     
     // Generate unique song ID
     generateSongId(title, artist) {
-        const normalizedTitle = title.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        const normalizedArtist = artist.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const safeTitle = (typeof title === 'string') ? title : '';
+        const safeArtist = (typeof artist === 'string') ? artist : '';
+        const normalizedTitle = safeTitle.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const normalizedArtist = safeArtist.toLowerCase().replace(/[^a-z0-9]/g, '_');
         const timestamp = Date.now();
         return `${normalizedArtist}_${normalizedTitle}_${timestamp}`;
     }
     
     // Save a song to the library
     saveSong(syncedLyrics) {
+        console.log('Saving song:', syncedLyrics.title);    
         try {
+            // Nettoyage strict AVANT sauvegarde
+            ['title','artist','album','duration'].forEach(key => {
+                if (syncedLyrics.hasOwnProperty(key)) {
+                    delete syncedLyrics[key];
+                }
+            });
             const storageKey = syncedLyrics.saveToStorage();
             if (storageKey) {
                 // Always fallback to root fields if metadata fields are missing or empty
-                const title = (syncedLyrics.metadata.title && syncedLyrics.metadata.title !== '[no title]') ? syncedLyrics.metadata.title : (syncedLyrics.title || '[no title]');
-                const artist = (syncedLyrics.metadata.artist && syncedLyrics.metadata.artist !== '[no artist]') ? syncedLyrics.metadata.artist : (syncedLyrics.artist || '[no artist]');
-                console.log('✅ Chanson sauvegardée:', title, '| Auteur:', artist, 'avec ID:', syncedLyrics.songId);
+                // const title = (syncedLyrics.metadata.title && syncedLyrics.metadata.title !== '[no title]') ? syncedLyrics.metadata.title : (syncedLyrics.title || '[no title]');
+                // const artist = (syncedLyrics.metadata.artist && syncedLyrics.metadata.artist !== '[no artist]') ? syncedLyrics.metadata.artist : (syncedLyrics.artist || '[no artist]');
+                //console.log('✅ Chanson sauvegardée:', title, '| Auteur:', artist, 'avec ID:', syncedLyrics.songId);
                 return storageKey;
             } else {
                 throw new Error('Failed to save to storage');
             }
         } catch (error) {
-            console.error('❌ Erreur de sauvegarde:', error);
+            // console.error('❌ Erreur de sauvegarde:', error);
             return null;
         }
     }

@@ -247,12 +247,21 @@ function createNewSong() {
         ],
         onSubmit: (values) => {
             try {
-                const song = SongManager.create(values.title, values.artist || 'Unknown Artist', values.album || '', lyricsLibrary);
-                
+                // Crée la chanson avec metadata uniquement
+                const metadata = {
+                    title: values.title || '',
+                    artist: values.artist || 'Unknown Artist',
+                    album: values.album || '',
+                    duration: 0
+                };
+                const songId = lyricsLibrary.generateSongId(metadata.title, metadata.artist);
+                const song = new SyncedLyrics(metadata.title, metadata.artist, metadata.album, metadata.duration, songId);
+                song.metadata = metadata;
+                song.songId = songId;
+                song.lines = [];
+                lyricsLibrary.saveSong(song);
                 if (song) {
-                    const result = loadAndDisplaySong(song.songId);
-                    
-                    // Success message removed - direct loading only
+                    loadAndDisplaySong(song.songId);
                 }
             } catch (error) {
                 console.error('❌ ERREUR lors de la création:', error);
@@ -1870,39 +1879,17 @@ function showFileImportDialog() {
     fileInput.addEventListener('change', async (event) => {
         try {
             const files = Array.from(event.target.files);
-            // Diagnostics: log file info for iOS/iPhone
-            if (isIOS) {
-                if (navigator.userAgent.includes('iPhone')) {
-                    console.log('🍏 iPhone detected. Files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
-                } else {
-                    console.log('🍎 iPad/iOS detected. Files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
-                }
-            } else {
-                console.log('📁 Files selected:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
-            }
             if (files.length > 0) {
-                if (isIOS) {
-                    console.log('🍎 iOS file processing with enhanced error handling');
-                    await processIOSFilesRobustly(files);
-                } else {
-                    // Desktop: Process immediately
-                    dragDropManager.handleDroppedFiles(files);
-                }
+                dragDropManager.handleDroppedFiles(files);
             } else {
-                // Diagnostics: show alert if no files returned
                 if (isIOS) {
                     showCustomAlert('iOS File Picker', 'No files returned by the picker. Try using drag-and-drop or check iOS permissions.');
                 }
             }
         } catch (error) {
-            if (isIOS && handleIOSError(error, 'file import')) {
-                console.log('🍎 File import completed despite iOS system errors');
-            } else {
-                console.error('❌ File import error:', error);
-                showCustomAlert('Import Error', `Failed to import files: ${error.message}`);
-            }
+            console.error('❌ File import error:', error);
+            showCustomAlert('Import Error', `Failed to import files: ${error.message}`);
         } finally {
-            // Enhanced cleanup with longer delay for iOS
             setTimeout(() => {
                 try {
                     if (fileInput.parentNode) {
@@ -1911,105 +1898,10 @@ function showFileImportDialog() {
                 } catch (cleanupError) {
                     console.warn('⚠️ File input cleanup error:', cleanupError);
                 }
-            }, isIOS ? 1000 : 100); // Longer delay on iOS
+            }, isIOS ? 1000 : 100);
         }
     });
 
-    // Process iOS files with robust error handling
-    async function processIOSFilesRobustly(files) {
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            
-            try {
-                console.log(`🍎 Processing iOS file ${i + 1}/${files.length}: ${file.name}`);
-                
-                // Add delay between files to prevent system overload
-                if (i > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
-                
-                // Process with timeout and error recovery
-                await Promise.race([
-                    processFileWithIOSErrorHandling(file),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('iOS processing timeout')), 15000)
-                    )
-                ]);
-                
-                console.log(`✅ iOS file processed: ${file.name}`);
-                
-            } catch (error) {
-                if (handleIOSError(error, `file processing for ${file.name}`)) {
-                    // For expected iOS errors, continue processing
-                    console.log(`🍎 File ${file.name} processed with expected iOS errors`);
-                } else {
-                    console.error(`❌ Failed to process ${file.name}:`, error);
-                    showCustomAlert('File Error', `Could not process ${file.name}. Try selecting one file at a time.`);
-                }
-            }
-        }
-    }
-
-    // Process single file with iOS error handling
-    async function processFileWithIOSErrorHandling(file) {
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                try {
-                    // Override problematic file properties for iOS
-                    const fileProxy = new Proxy(file, {
-                        get(target, prop) {
-                            if (prop === 'webkitRelativePath') return '';
-                            if (prop === 'webkitDirectory') return false;
-                            return target[prop];
-                        }
-                    });
-                    dragDropManager.handleDroppedFiles([fileProxy]);
-                    resolve();
-                } catch (error) {
-                    if (handleIOSError(error, 'file processing')) {
-                        // Always call import logic even on expected iOS errors
-                        dragDropManager.handleDroppedFiles([file]);
-                        resolve();
-                    } else {
-                        reject(error);
-                    }
-                }
-            }, 50);
-        });
-    }
-    
-    // Enhanced error handlers for iOS
-    fileInput.addEventListener('error', (event) => {
-        handleIOSError(event, 'file input');
-    });
-    
-    // Global iOS error suppression for view service termination
-    if (isIOS) {
-        const originalConsoleError = console.error;
-        const originalConsoleWarn = console.warn;
-        
-        // Temporarily suppress iOS thumbnail errors during file processing
-        console.error = (...args) => {
-            const message = args.join(' ');
-            if (!handleIOSError({ message }, 'console error')) {
-                originalConsoleError.apply(console, args);
-            }
-        };
-        
-        console.warn = (...args) => {
-            const message = args.join(' ');
-            if (!handleIOSError({ message }, 'console warning')) {
-                originalConsoleWarn.apply(console, args);
-            }
-        };
-        
-        // Restore console after a delay
-        setTimeout(() => {
-            console.error = originalConsoleError;
-            console.warn = originalConsoleWarn;
-        }, 5000);
-    }
-    
     // Trigger the file picker with error handling
     try {
         fileInput.click();
@@ -2019,39 +1911,7 @@ function showFileImportDialog() {
     }
 }
 
-// Helper function to process files sequentially (iOS fallback)
-function processFilesSequentially(files) {
-    if (!files || files.length === 0) return;
-    
-    let currentIndex = 0;
-    
-    const processNext = () => {
-        if (currentIndex >= files.length) return;
-        
-        const file = files[currentIndex];
-        console.log(`📁 Processing file ${currentIndex + 1}/${files.length}: ${file.name}`);
-        
-        try {
-            // Process single file
-            dragDropManager.handleDroppedFiles([file]);
-            currentIndex++;
-            
-            // Process next file after a short delay
-            if (currentIndex < files.length) {
-                setTimeout(processNext, 200);
-            }
-        } catch (error) {
-            console.error(`❌ Error processing file ${file.name}:`, error);
-            currentIndex++;
-            // Continue with next file
-            if (currentIndex < files.length) {
-                setTimeout(processNext, 200);
-            }
-        }
-    };
-    
-    processNext();
-}
+// ...existing code...
 
 // Helper function for MIDI learning in settings
 function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
