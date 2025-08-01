@@ -1839,18 +1839,26 @@ function showFileImportDialog() {
     fileInput.type = 'file';
     // Broaden accept attribute for iOS AUv3 compatibility
     // Accept all relevant audio and text types for maximum compatibility
-    fileInput.accept = 'audio/*,text/*,.lrc,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac';
+    fileInput.accept = 'audio/*,text/*,.lrc,.lrx,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac';
     fileInput.multiple = true;
     fileInput.style.display = 'none';
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (isIOS) {
-        // Remove attributes that could trigger camera or directory selection
+        // iOS-specific file input optimizations
         fileInput.removeAttribute('capture');
         fileInput.removeAttribute('webkitdirectory');
-        // Optionally, disable thumbnail generation to prevent iOS errors
-        fileInput.setAttribute('data-no-thumbnail', 'true');
-        // iPhone-specific: force input mode to files only
-        fileInput.setAttribute('accept', 'audio/*,text/*,.lrc,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac');
+        
+        // iOS AUv3 compatibility: use simpler file selection
+        fileInput.style.display = 'none';
+        fileInput.style.position = 'absolute';
+        fileInput.style.left = '-9999px';
+        
+        // Force document interaction for iOS file picker
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+        
+        // iPhone-specific: simplified accept list for iOS compatibility
+        fileInput.setAttribute('accept', 'audio/*,text/*,.lrc,.lrx,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac');
     }
     document.body.appendChild(fileInput);
 

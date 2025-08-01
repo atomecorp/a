@@ -29,8 +29,14 @@ export class AudioManager {
         
         // Extract filename from path and decode it to avoid double encoding
         const fileName = audioPath.split(/[/\\]/).pop();
-        const decodedFileName = decodeURIComponent(fileName);
-        return this.createUrl(decodedFileName);
+        try {
+            const decodedFileName = decodeURIComponent(fileName);
+            return this.createUrl(decodedFileName);
+        } catch (decodeError) {
+            // If decoding fails, use the original filename
+            console.warn('⚠️ Audio path decode error, using original:', fileName);
+            return this.createUrl(fileName);
+        }
     }
     
     // Create complete audio URL with fallback
@@ -489,23 +495,23 @@ export class AudioController {
         switch (action.toLowerCase()) {
             case 'play':
                 this.audioPlayer.play();
-                this.isPlaying = true;
+                this.playing = true;
                 console.log('▶️ Audio playing');
                 break;
                 
             case 'pause':
                 this.audioPlayer.pause();
-                this.isPlaying = false;
+                this.playing = false;
                 console.log('⏸️ Audio paused');
                 break;
                 
             case 'toggle':
-                if (this.isPlaying) {
+                if (this.playing) {
                     this.control('pause');
                 } else {
                     this.control('play');
                 }
-                return this.isPlaying;
+                return this.playing;
                 
             case 'seek':
             case 'time':
@@ -529,7 +535,7 @@ export class AudioController {
                 return this.audioPlayer ? this.audioPlayer.duration : 0;
                 
             case 'isplaying':
-                return this.isPlaying;
+                return this.playing;
                 
             case 'hasaudio':
                 return !!this.audioPlayer && !!this.audioPath;

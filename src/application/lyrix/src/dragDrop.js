@@ -207,21 +207,25 @@ export class DragDropManager {
 
     async handleDroppedFiles(files) {
         // console.log('📥 Dropped files:', files);
-        // iOS detection for enhanced error handling
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         
-        // Afficher un indicateur de traitement
+        // Show processing indicator
         this.showProcessingIndicator(true);
         
-        // Process files sequentially on iOS to avoid thumbnail/view service issues
-        if (isIOS) {
-            await this.processFilesSequentiallyWithDelay(files);
-        } else {
-            await this.processFilesInParallel(files);
+        try {
+            if (isIOS) {
+                // iOS: Process files sequentially with delays to minimize system conflicts
+                console.log('🍎 iOS sequential processing mode');
+                await this.processFilesSequentiallyWithDelay(files);
+            } else {
+                // Desktop: Process files in parallel
+                await this.processFilesInParallel(files);
+            }
+        } catch (error) {
+            console.error('❌ File processing error:', error);
+        } finally {
+            this.showProcessingIndicator(false);
         }
-        
-        // Masquer l'indicateur de traitement
-        this.showProcessingIndicator(false);
     }
 
     async processFilesSequentiallyWithDelay(files) {
@@ -336,39 +340,63 @@ export class DragDropManager {
     }
 
     async processFile(file) {
-        console.log(`==> 📂 entry point)`+file);
+        console.log(`📂 Processing file: ${file.name} (${file.type}) - ${(file.size / 1024).toFixed(1)} KB`);
+        
         // Vérifier si c'est un fichier LRX (Lyrix library)
         if (this.isLRXFile(file)) {
             try {
+                console.log('📦 Processing LRX file...');
                 const content = await this.readFileContent(file);
                 await this.importLRXFile(content);
+                return;
             } catch (error) {
                 console.error('❌ Erreur lecture fichier LRX:', error);
-                console.error(`Erreur lors de la lecture du fichier LRX ${file.name}: ${error.message}`);
+                throw error;
             }
         }
-        // Vérifier si c'est un fichier texte
-        else if (this.isTextFile(file)) {
-            try {
-                const content = await this.readFileContent(file);
-                await this.createSongFromText(file.name, content);
-            } catch (error) {
-                console.error('❌ Erreur lecture fichier:', error);
-                console.error(`Erreur lors de la lecture du fichier ${file.name}: ${error.message}`);
-            }
+
+        // Vérifier si c'est un fichier texte (paroles)
+        if (this.isTextFile(file)) {
+            console.log('📄 Processing text file...');
+            await this.processTextFile(file);
+            return;
         }
+
         // Vérifier si c'est un fichier audio
-        else if (this.isAudioFile(file)) {
-            try {
-                await this.loadAudioFileWithRetry(file);
-            } catch (error) {
-                console.error('❌ Erreur chargement audio:', error);
-                console.error(`Erreur lors du chargement du fichier audio ${file.name}: ${error.message}`);
-            }
+        if (this.isAudioFile(file)) {
+            console.log('🎵 Processing audio file...');
+            await this.processAudioFile(file);
+            return;
         }
-        else {
-            console.warn('⚠️ Fichier ignoré (format non supporté):', file.name);
-            console.warn(`Le fichier "${file.name}" n'est pas un format supporté (texte, audio ou .lrx).`);
+
+        // Type de fichier non supporté
+        console.warn('⚠️ Unsupported file type:', file.name, file.type);
+        throw new Error(`Type de fichier non supporté: ${file.type}`);
+    }
+
+    // Process text file (lyrics)
+    async processTextFile(file) {
+        try {
+            console.log('📄 Reading text file content...');
+            const content = await this.readFileContent(file);
+            console.log(`📄 Text content length: ${content.length} characters`);
+            
+            const filename = file.name;
+            await this.createSongFromText(filename, content);
+        } catch (error) {
+            console.error('❌ Error processing text file:', error);
+            throw error;
+        }
+    }
+
+    // Process audio file
+    async processAudioFile(file) {
+        try {
+            console.log('🎵 Processing audio file...');
+            await this.loadAudioFileAsync(file);
+        } catch (error) {
+            console.error('❌ Error processing audio file:', error);
+            throw error;
         }
     }
 
@@ -459,8 +487,29 @@ export class DragDropManager {
     readFileContent(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = (e) => reject(new Error('Erreur de lecture du fichier'));
+            
+            // iOS: Add timeout to prevent hanging
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            if (isIOS) {
+                const timeout = setTimeout(() => {
+                    reader.abort();
+                    reject(new Error('iOS file read timeout'));
+                }, 10000); // 10 second timeout for iOS
+                
+                reader.onload = (e) => {
+                    clearTimeout(timeout);
+                    resolve(e.target.result);
+                };
+                
+                reader.onerror = (e) => {
+                    clearTimeout(timeout);
+                    reject(new Error('iOS file read error'));
+                };
+            } else {
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = (e) => reject(new Error('Erreur de lecture du fichier'));
+            }
+            
             reader.readAsText(file, 'UTF-8');
         });
     }
@@ -489,6 +538,8 @@ export class DragDropManager {
 
     async createSongFromLRC(title, lrcContent) {
         try {
+            console.log('🆕 Creating new song from LRC:', title);
+            
             // Utiliser la méthode existante pour parser le LRC
             const syncedLyrics = SyncedLyrics.fromLRC(lrcContent);
 
@@ -506,21 +557,30 @@ export class DragDropManager {
                 syncedLyrics.metadata.artist
             );
 
+            console.log(`✅ LRC parsed - Song: ${syncedLyrics.metadata.title}, Lines: ${syncedLyrics.lines.length}`);
+
             // Sauvegarder et charger
-            this.lyricsLibrary.saveSong(syncedLyrics);
+            console.log('💾 Saving LRC song to library...');
+            const saved = this.lyricsLibrary.saveSong(syncedLyrics);
+            console.log('💾 LRC Save result:', saved);
             
             if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
+                console.log('📺 Displaying LRC lyrics...');
                 this.lyricsDisplay.displayLyrics(syncedLyrics);
                 this.currentLyrics = syncedLyrics;
                 
                 // Notify main application that a song was loaded
                 if (this.onSongLoaded) {
+                    console.log('📢 Notifying main app that LRC song was loaded');
                     this.onSongLoaded(syncedLyrics);
                 }
+            } else {
+                console.error('❌ LyricsDisplay not available for LRC');
             }
             
             // Success message in console instead of modal
             console.log(`✅ Chanson LRC "${syncedLyrics.metadata.title}" créée avec ${syncedLyrics.lines.length} lignes synchronisées!`);
+            return syncedLyrics;
 
         } catch (error) {
             console.error('❌ Erreur parsing LRC:', error);
@@ -531,50 +591,66 @@ export class DragDropManager {
 
     async createSongFromPlainText(title, textContent) {
         try {
-            // Créer une nouvelle chanson via SongManager
-            const newSong = SongManager.create(title, 'Artiste Inconnu', '', this.lyricsLibrary);
+            console.log('🆕 Creating new song from plain text:', title);
+            
+            // Créer une nouvelle chanson directement via la bibliothèque
+            const newSong = this.lyricsLibrary.createSong(title, 'Artiste Inconnu', '');
 
             if (!newSong) {
                 throw new Error('Impossible de créer la chanson');
             }
+
+            console.log('✅ New song instance created:', newSong.metadata.title);
 
             // Diviser le texte en lignes
             const lines = textContent.split('\n')
                 .map(line => line.trim())
                 .filter(line => line.length > 0);
 
-            // Remplacer les lignes existantes (vider le tableau)
-            newSong.lines = [];
+            console.log(`📄 Processing ${lines.length} lines of text`);
 
             // Ajouter chaque ligne avec un timecode automatique (5 secondes entre chaque ligne)
             lines.forEach((line, index) => {
                 const timeMs = index * 5000; // 5 secondes entre chaque ligne
                 newSong.addLine(timeMs, line, 'vocal');
+                console.log(`➕ Added line ${index + 1}: ${line.substring(0, 30)}...`);
             });
 
             // Si aucune ligne n'a été ajoutée, ajouter une ligne par défaut
             if (lines.length === 0) {
                 newSong.addLine(0, 'Paroles importées du fichier...', 'vocal');
+                console.log('➕ Added default line');
             }
 
+            console.log(`🎵 Song has ${newSong.lines.length} lines total`);
+
             // Sauvegarder et charger
-            this.lyricsLibrary.saveSong(newSong);
+            console.log('💾 Saving song to library...');
+            const saved = this.lyricsLibrary.saveSong(newSong);
+            console.log('💾 Save result:', saved);
             
             if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
+                console.log('📺 Displaying lyrics...');
                 this.lyricsDisplay.displayLyrics(newSong);
                 this.currentLyrics = newSong;
                 
                 // Notify main application that a song was loaded
                 if (this.onSongLoaded) {
+                    console.log('📢 Notifying main app that song was loaded');
                     this.onSongLoaded(newSong);
                 }
+            } else {
+                console.error('❌ LyricsDisplay not available or displayLyrics method missing');
             }
             
             // Success message in console instead of modal
             console.log(`✅ Chanson "${title}" créée avec ${lines.length} lignes! Vous pouvez maintenant éditer les timecodes en mode édition.`);
+            return newSong;
+            
         } catch (error) {
             console.error('❌ Erreur création chanson texte:', error);
             console.error(`Erreur lors de la création de la chanson: ${error.message}`);
+            throw error;
         }
     }
 
