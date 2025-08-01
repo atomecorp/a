@@ -163,6 +163,7 @@ function initializeLyrix() {
         
         // Initialize MIDI utilities
         midiUtilities = new MidiUtilities();
+        window.midiUtilities = midiUtilities;  // Expose globally
         // Ensure MIDI inspector is in the toolbar
         const appContainer = document.getElementById('lyrix_app');
         const toolbarRow = document.getElementById('main-toolbar-row');
@@ -1171,6 +1172,12 @@ function exportSelectedSongsAsTextFallback(selectedSongIds) {
 
 // Show song library
 function showSongLibrary() {
+    console.log('📚 Opening song library...');
+    console.log('🎹 MIDI utilities available:', !!window.midiUtilities);
+    if (window.midiUtilities) {
+        console.log('🎹 Current MIDI assignments:', window.midiUtilities.getAllAssignments());
+    }
+    
     if (!lyricsLibrary) {
         console.error('❌ LyricsLibrary non disponible');
         Modal({
@@ -1358,6 +1365,116 @@ function showSongLibrary() {
                 text: item.text
             });
 
+            // MIDI controls container
+            const midiControls = $('div', {
+                css: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    marginLeft: '10px'
+                }
+            });
+
+            // MIDI note input box - reload value each time
+            let currentMidiNote = null;
+            if (window.midiUtilities) {
+                currentMidiNote = window.midiUtilities.getMidiAssignment(item.value);
+            }
+            
+            const midiInput = $('input', {
+                type: 'number',
+                min: '0',
+                max: '127',
+                placeholder: 'Note',
+                value: currentMidiNote || '',
+                css: {
+                    width: '50px',
+                    padding: '2px 4px',
+                    border: '1px solid #ccc',
+                    borderRadius: '3px',
+                    fontSize: '11px',
+                    textAlign: 'center'
+                }
+            });
+
+            // Update MIDI assignment when input changes
+            midiInput.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const midiNote = parseInt(e.target.value);
+                if (window.midiUtilities && !isNaN(midiNote) && midiNote >= 0 && midiNote <= 127) {
+                    // Remove any existing assignment for this song
+                    window.midiUtilities.removeMidiAssignment(item.value);
+                    // Set new assignment
+                    window.midiUtilities.setMidiAssignment(item.value, midiNote);
+                    console.log(`🎹 Manual MIDI assignment: Note ${midiNote} -> ${item.song.title}`);
+                } else if (window.midiUtilities && e.target.value === '') {
+                    // Remove assignment if input is cleared
+                    window.midiUtilities.removeMidiAssignment(item.value);
+                    console.log(`🎹 MIDI assignment removed for: ${item.song.title}`);
+                }
+            });
+
+            // MIDI learn button
+            const midiLearnButton = $('button', {
+                text: '🎹',
+                css: {
+                    width: '25px',
+                    height: '25px',
+                    border: '1px solid #007acc',
+                    borderRadius: '3px',
+                    backgroundColor: '#f0f8ff',
+                    color: '#007acc',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0'
+                },
+                title: `Learn MIDI note for ${item.song.title}`
+            });
+
+            // MIDI learn functionality
+            midiLearnButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!window.midiUtilities) {
+                    console.error('❌ MIDI utilities not available');
+                    return;
+                }
+
+                if (window.midiUtilities.isLearning) {
+                    // Stop learning
+                    window.midiUtilities.stopMidiLearn();
+                    midiLearnButton.style.backgroundColor = '#f0f8ff';
+                    midiLearnButton.style.color = '#007acc';
+                    midiLearnButton.textContent = '🎹';
+                    console.log('🎹 MIDI learn stopped');
+                } else {
+                    // Start learning
+                    midiLearnButton.style.backgroundColor = '#ff6b6b';
+                    midiLearnButton.style.color = 'white';
+                    midiLearnButton.textContent = '⏹️';
+                    console.log(`🎹 MIDI learn started for: ${item.song.title}`);
+                    
+                    window.midiUtilities.startMidiLearn((midiNote) => {
+                        console.log(`🎹 MIDI learn callback triggered with note: ${midiNote}`);
+                        // Remove any existing assignment for this song
+                        window.midiUtilities.removeMidiAssignment(item.value);
+                        // Set new assignment
+                        window.midiUtilities.setMidiAssignment(item.value, midiNote);
+                        // Update input field
+                        midiInput.value = midiNote;
+                        // Reset button appearance
+                        midiLearnButton.style.backgroundColor = '#f0f8ff';
+                        midiLearnButton.style.color = '#007acc';
+                        midiLearnButton.textContent = '🎹';
+                        console.log(`🎹 MIDI learn completed: Note ${midiNote} -> ${item.song.title}`);
+                    });
+                }
+            });
+
+            midiControls.append(midiInput, midiLearnButton);
+
             // Delete button
             const deleteButton = UIManager.createDeleteButton({
                 onClick: (e) => {
@@ -1370,6 +1487,10 @@ function showSongLibrary() {
                         cancelText: 'Cancel',
                         onConfirm: () => {
                             try {
+                                // Remove MIDI assignment when deleting song
+                                if (window.midiUtilities) {
+                                    window.midiUtilities.removeMidiAssignment(item.value);
+                                }
                                 const success = lyricsLibrary.deleteSong(item.value);
                                 if (success) {
                                     document.body.removeChild(modalContainer);
@@ -1385,15 +1506,29 @@ function showSongLibrary() {
                 }
             });
 
+            // Controls container for MIDI and delete buttons
+            const controlsContainer = $('div', {
+                css: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                }
+            });
+
+            controlsContainer.append(midiControls, deleteButton);
+
             // Click handler for song selection
             itemDiv.addEventListener('click', (e) => {
-                if (e.target !== deleteButton) {
+                if (e.target !== deleteButton && 
+                    e.target !== midiLearnButton && 
+                    e.target !== midiInput && 
+                    !midiControls.contains(e.target)) {
                     document.body.removeChild(modalContainer);
                     loadAndDisplaySong(item.value);
                 }
             });
 
-            itemDiv.append(textSpan, deleteButton);
+            itemDiv.append(textSpan, controlsContainer);
             listContainer.appendChild(itemDiv);
         });
     }
