@@ -1867,13 +1867,87 @@ export class LyricsDisplay {
             text-align: center;
             background-color: white;
             color: #333;
+            cursor: text;
+            user-select: text;
         `;
+        
+        // Add a hint tooltip
+        input.title = "Type to edit or drag up/down to adjust timecode\nHold Shift for fine adjustment, Ctrl/Cmd for coarse adjustment";
         
         // Replace the span with input temporarily
         timeSpan.style.display = 'none';
         timeSpan.parentNode.insertBefore(input, timeSpan);
         input.focus();
         input.select();
+        
+        // Add slide up/down functionality for timecode increment/decrement
+        let isDragging = false;
+        let startY = 0;
+        let startTime = this.currentLyrics.lines[lineIndex].time;
+        let lastUpdateY = 0;
+        
+        const handleMouseDown = (e) => {
+            isDragging = true;
+            startY = e.clientY;
+            startTime = this.currentLyrics.lines[lineIndex].time;
+            lastUpdateY = e.clientY;
+            input.style.cursor = 'ns-resize';
+            input.style.borderColor = '#28a745'; // Green border when dragging
+            input.style.backgroundColor = '#f8fff8'; // Light green background
+            e.preventDefault();
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        };
+        
+        const handleMouseMove = (e) => {
+            if (!isDragging) return;
+            
+            const deltaY = lastUpdateY - e.clientY; // Invert: up = positive
+            let sensitivity = 50; // Base sensitivity: milliseconds per pixel
+            
+            // Increase precision when holding Shift
+            if (e.shiftKey) {
+                sensitivity = 10; // Fine adjustment
+            }
+            // Decrease precision when holding Ctrl/Cmd for coarse adjustments
+            else if (e.ctrlKey || e.metaKey) {
+                sensitivity = 200; // Coarse adjustment
+            }
+            
+            // Update every pixel to provide smooth feedback
+            if (Math.abs(deltaY) >= 1) {
+                const timeChange = deltaY * sensitivity;
+                let newTime = Math.max(0, startTime + timeChange);
+                
+                // Update the input display and actual time
+                this.currentLyrics.lines[lineIndex].time = newTime;
+                const formattedTime = this.formatTimeDisplay(newTime);
+                input.value = formattedTime.replace(/[\[\]]/g, '').trim();
+                
+                lastUpdateY = e.clientY;
+                startTime = newTime; // Update reference point for continuous adjustment
+            }
+        };
+        
+        const handleMouseUp = (e) => {
+            if (!isDragging) return;
+            
+            isDragging = false;
+            input.style.cursor = 'text';
+            input.style.borderColor = '#007bff'; // Back to blue
+            input.style.backgroundColor = 'white'; // Back to white
+            
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            
+            // Update lyrics and save
+            this.currentLyrics.updateLastModified();
+            console.log(`🎯 Timecode adjusted via drag: ${this.formatTimeDisplay(this.currentLyrics.lines[lineIndex].time)}`);
+        };
+        
+        // Add mouse event listeners to input
+        input.addEventListener('mousedown', handleMouseDown);
         
         const saveEdit = () => {
             const newTimeText = input.value.trim();
@@ -1889,12 +1963,20 @@ export class LyricsDisplay {
                 console.warn('⚠️ Invalid time format, keeping original value');
             }
             
+            // Clean up mouse event listeners
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            
             // Restore the span
             input.parentNode.removeChild(input);
             timeSpan.style.display = 'inline-block';
         };
         
         const cancelEdit = () => {
+            // Clean up mouse event listeners
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            
             // Restore the span without changes
             input.parentNode.removeChild(input);
             timeSpan.style.display = 'inline-block';
