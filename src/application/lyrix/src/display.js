@@ -73,7 +73,7 @@ export class LyricsDisplay {
             text: '☰',
             css: {
                 position: 'absolute',
-                top: '3px',
+                top: '6px',
                 left: '3px',
                 width: '25px',
                 height: '25px',
@@ -373,7 +373,7 @@ export class LyricsDisplay {
         const audioToolRow = $('div', {
             id: 'audio-tools-row',
             css: {
-                display: 'flex',
+                display: 'none', // Hidden by default since toolbar starts hidden
                 flexDirection: 'column',
                 gap: '4px',
                 width: '100%',
@@ -389,6 +389,12 @@ export class LyricsDisplay {
                 tool.style.width = '98%';
                 tool.style.marginLeft = '0';
                 tool.style.marginRight = '0';
+                // Reset display property to ensure it follows parent container visibility
+                tool.style.display = 'block';
+            }
+            // Reset display for all audio tools to ensure they follow parent container
+            if (tool && tool.style) {
+                tool.style.display = 'block';
             }
             audioToolRow.append(tool);
         });
@@ -679,13 +685,16 @@ export class LyricsDisplay {
     updateLyricsContentPosition() {
         if (!this.audioToolRow) return;
         
-        // Check if audio player is enabled and toolbar is visible
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        
-        // Show/hide audio tools row (only if toolbar is visible)
-        if (isAudioPlayerEnabled && this.audioTools.length > 0 && this.toolbarVisible) {
-            this.audioToolRow.style.display = 'flex';
+        // Show/hide audio tools row - only if toolbar is visible and audio is enabled
+        if (this.toolbarVisible) {
+            const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+            if (isAudioPlayerEnabled && this.audioTools.length > 0) {
+                this.audioToolRow.style.display = 'flex';
+            } else {
+                this.audioToolRow.style.display = 'none';
+            }
         } else {
+            // Always hide if toolbar is hidden
             this.audioToolRow.style.display = 'none';
         }
         
@@ -1663,10 +1672,16 @@ export class LyricsDisplay {
             this.mainToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
         }
         
-        // Update audio toolbar row visibility if audio is enabled
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        if (this.audioToolRow && isAudioPlayerEnabled) {
-            this.audioToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
+        // Update audio toolbar row visibility - always hide if toolbar is hidden
+        if (this.audioToolRow) {
+            if (this.toolbarVisible) {
+                // Only show if toolbar is visible AND audio is enabled
+                const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+                this.audioToolRow.style.display = isAudioPlayerEnabled ? 'flex' : 'none';
+            } else {
+                // Always hide if toolbar is hidden
+                this.audioToolRow.style.display = 'none';
+            }
         }
         
         // Update hamburger button icon
