@@ -3932,16 +3932,25 @@ function createMainInterface() {
             id: 'audio-scrub-slider-container',
             css: {
                 marginBottom: '15px',
-                padding: '10px',
+                padding: '2px 0px', // Minimal padding, no left/right padding
                 backgroundColor: '#f8f9fa',
                 borderRadius: '4px',
                 border: '1px solid #dee2e6',
-                display: initialDisplay
+                display: initialDisplay,
+                width: '98%', // Set container width to 98%
+                boxSizing: 'border-box'
             }
         });
         
         // Add data attribute for identification
         scrubContainer.setAttribute('data-element', 'scrub-slider');
+        
+        // Force left alignment and adjust padding to accommodate 100% width slider
+        scrubContainer.style.paddingLeft = '0px';
+        scrubContainer.style.paddingRight = '0px'; // Remove right padding too
+        scrubContainer.style.marginLeft = '0px';
+        scrubContainer.style.marginRight = '0px';
+        scrubContainer.style.boxSizing = 'border-box';
         
         // Create Squirrel slider for audio scrubbing
         const scrubSlider = Slider({
@@ -3953,7 +3962,7 @@ function createMainInterface() {
             id: 'audio_scrub_slider',
             skin: {
                 container: {
-                    width: '100%',
+                    width: '100%', // Full width of the 98% container
                     height: '20px',
                     marginBottom: '10px'
                 },

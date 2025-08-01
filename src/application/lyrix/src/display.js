@@ -340,7 +340,7 @@ export class LyricsDisplay {
         this.audioTools.forEach(tool => {
             if (tool && tool.id === 'audio-scrub-slider-container') {
                 // Make slider take full width
-                tool.style.width = '100%';
+                tool.style.width = '98%';
                 tool.style.marginLeft = '0';
                 tool.style.marginRight = '0';
             }
