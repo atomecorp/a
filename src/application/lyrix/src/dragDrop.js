@@ -464,7 +464,7 @@ export class DragDropManager {
         }
 
         // Vérifier l'extension
-        const validExtensions = /\.(txt|lrc|json|md|lyrics)$/i;
+        const validExtensions = /\.(txt|lrc|lrx|json|md|lyrics)$/i;
         return validExtensions.test(file.name);
     }
 

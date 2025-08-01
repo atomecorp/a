@@ -35,7 +35,7 @@ export const CONSTANTS = {
     
     // File types
     FILE_TYPES: {
-        TEXT: /\.(txt|lrc|json|md|lyrics)$/i,
+        TEXT: /\.(txt|lrc|lrx|json|md|lyrics)$/i,
         AUDIO: /\.(mp3|mp4|wav|m4a|aac|flac|ogg|webm)$/i,
         TEXT_MIME: ['text/', 'application/json'],
         AUDIO_MIME: ['audio/', 'video/']

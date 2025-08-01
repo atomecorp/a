@@ -1837,9 +1837,9 @@ function showFileImportDialog() {
     // Create a hidden file input element
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    // Broaden accept attribute for iOS AUv3 compatibility
-    // Accept all relevant audio and text types for maximum compatibility
-    fileInput.accept = 'audio/*,text/*,.lrc,.lrx,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac';
+    // Maximum permissive accept attribute to prevent files from appearing grayed out
+    // Use */* to accept ALL files, then filter manually in JavaScript
+    fileInput.accept = '*/*';
     fileInput.multiple = true;
     fileInput.style.display = 'none';
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -1857,8 +1857,8 @@ function showFileImportDialog() {
         document.body.style.userSelect = 'none';
         document.body.style.webkitUserSelect = 'none';
         
-        // iPhone-specific: simplified accept list for iOS compatibility
-        fileInput.setAttribute('accept', 'audio/*,text/*,.lrc,.lrx,.txt,.md,.json,.mp3,.wav,.ogg,.m4a,.flac');
+        // Accept all file types to prevent graying out
+        fileInput.setAttribute('accept', '*/*');
     }
     document.body.appendChild(fileInput);
 
@@ -1883,12 +1883,37 @@ function showFileImportDialog() {
         return false; // This is an unexpected error
     };
     
-    // Set up the change event with enhanced iOS error handling
+    // Set up the change event with enhanced iOS error handling and permissive file selection
     fileInput.addEventListener('change', async (event) => {
         try {
             const files = Array.from(event.target.files);
             if (files.length > 0) {
-                dragDropManager.handleDroppedFiles(files);
+                // Filter files manually to ensure .lrx files are accepted even if they appear grayed out
+                const validFiles = files.filter(file => {
+                    const fileName = file.name.toLowerCase();
+                    // Check for valid extensions - be very permissive
+                    return fileName.endsWith('.lrx') || 
+                           fileName.endsWith('.txt') || 
+                           fileName.endsWith('.lrc') ||
+                           fileName.endsWith('.json') ||
+                           fileName.endsWith('.md') ||
+                           fileName.endsWith('.mp3') ||
+                           fileName.endsWith('.wav') ||
+                           fileName.endsWith('.m4a') ||
+                           fileName.endsWith('.flac') ||
+                           fileName.endsWith('.ogg') ||
+                           file.type.startsWith('audio/') ||
+                           file.type.startsWith('text/') ||
+                           file.type === 'application/json' ||
+                           file.type === '';
+                });
+                
+                if (validFiles.length > 0) {
+                    console.log(`✅ Accepting ${validFiles.length} valid files:`, validFiles.map(f => f.name));
+                    dragDropManager.handleDroppedFiles(validFiles);
+                } else {
+                    showCustomAlert('Invalid File Type', 'Please select text files (.lrx, .txt, .lrc, .json) or audio files (.mp3, .wav, .m4a, .flac, .ogg)');
+                }
             } else {
                 if (isIOS) {
                     showCustomAlert('iOS File Picker', 'No files returned by the picker. Try using drag-and-drop or check iOS permissions.');
@@ -1913,6 +1938,13 @@ function showFileImportDialog() {
     // Trigger the file picker with error handling
     try {
         fileInput.click();
+        
+        // Show helpful tip about file selection, especially for .lrx files
+        if (isIOS) {
+            console.log('💡 iOS Tip: If .lrx files appear grayed out, try changing the file type filter in the picker or use drag-and-drop instead.');
+        } else {
+            console.log('💡 Tip: If .lrx files appear grayed out, try changing the file type filter to "All Files" in the file picker.');
+        }
     } catch (error) {
         console.error('❌ File picker error:', error);
         document.body.removeChild(fileInput);
