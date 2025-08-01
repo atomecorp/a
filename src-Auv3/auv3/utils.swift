@@ -75,6 +75,11 @@ public class auv3Utils: AUAudioUnit {
         return { [weak self] actionFlags, timestamp, frameCount, outputBusNumber, outputData, realtimeEventListHead, pullInputBlock in
             guard let strongSelf = self else { return kAudioUnitErr_NoConnection }
             
+            // Process MIDI events first
+            if let eventList = realtimeEventListHead?.pointee {
+                strongSelf.processMIDIEvents(eventList)
+            }
+            
             let bufferList = AudioBufferListWrapper(ptr: outputData)
             
             // Generate test tone if active
@@ -270,6 +275,69 @@ public class auv3Utils: AUAudioUnit {
         _outputBusArray = AUAudioUnitBusArray(audioUnit: self,
                                               busType: .output,
                                               busses: [try AUAudioUnitBus(format: format)])
+    }
+
+    // MARK: - MIDI Support
+    
+    public override var supportsMPE: Bool {
+        return true
+    }
+    
+    // Process MIDI events from the render block
+    private func processMIDIEvents(_ eventList: AURenderEvent) {
+        var event: AURenderEvent? = eventList
+        
+        while let currentEvent = event {
+            if currentEvent.head.eventType == .MIDI {
+                let midiEvent = currentEvent.MIDI
+                let midiData = withUnsafePointer(to: midiEvent.data) { ptr in
+                    Array(UnsafeBufferPointer(start: ptr.withMemoryRebound(to: UInt8.self, capacity: Int(midiEvent.length)) { $0 }, 
+                                            count: Int(midiEvent.length)))
+                }
+                
+                print("🎹 AUv3 MIDI Event: \(midiData.map { String(format: "0x%02X", $0) }.joined(separator: ", "))")
+                parseMIDIData(midiData)
+            }
+            
+            event = currentEvent.head.next?.pointee
+        }
+    }
+    
+    private func parseMIDIData(_ data: [UInt8]) {
+        guard data.count >= 1 else { return }
+        
+        let status = data[0] & 0xF0
+        let channel = (data[0] & 0x0F) + 1
+        
+        switch status {
+        case 0x90: // Note On
+            if data.count >= 3 {
+                let note = data[1]
+                let velocity = data[2]
+                if velocity > 0 {
+                    print("🎵 AUv3 Note ON  - Channel: \(channel), Note: \(note), Velocity: \(velocity)")
+                } else {
+                    print("🎵 AUv3 Note OFF - Channel: \(channel), Note: \(note) (velocity 0)")
+                }
+            }
+            
+        case 0x80: // Note Off
+            if data.count >= 3 {
+                let note = data[1]
+                let velocity = data[2]
+                print("🎵 AUv3 Note OFF - Channel: \(channel), Note: \(note), Velocity: \(velocity)")
+            }
+            
+        case 0xB0: // Control Change
+            if data.count >= 3 {
+                let controller = data[1]
+                let value = data[2]
+                print("🎛️ AUv3 CC Change - Channel: \(channel), Controller: \(controller), Value: \(value)")
+            }
+            
+        default:
+            print("❓ AUv3 Unknown MIDI - Status: 0x\(String(format: "%02X", status))")
+        }
     }
 
     // MARK: - Test Tone Control

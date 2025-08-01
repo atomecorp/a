@@ -12,6 +12,9 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     var audioUnit: AUAudioUnit?
     var webView: WKWebView!
     
+    // MIDI Controller
+    private var midiController: MIDIController?
+    
     // Audio control state
     private var _isMuted: Bool = false
     private var _isTestActive: Bool = false
@@ -28,6 +31,16 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     
     public override func viewDidLoad() {
         super.viewDidLoad()
+        
+        // Initialize MIDI Controller
+        midiController = MIDIController()
+        midiController?.startMIDIMonitoring()
+        print("🎹 MIDI Controller initialized and monitoring started")
+        
+        // Run MIDI system diagnostic after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.midiController?.checkMIDISystemStatus()
+        }
       
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: view.bounds, configuration: config)
@@ -185,5 +198,13 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             return nil
         }
         return au.outputBusses[0].format.sampleRate
+    }
+    
+    // MARK: - Cleanup
+    
+    deinit {
+        midiController?.stopMIDIMonitoring()
+        midiController = nil
+        print("🧹 AudioUnitViewController cleanup: MIDI monitoring stopped")
     }
 }
