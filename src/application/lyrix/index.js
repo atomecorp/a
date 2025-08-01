@@ -2209,8 +2209,35 @@ function showSettingsModal() {
         text: '🎵 Audio Player Controls',
         css: {
             fontWeight: 'bold',
-            marginBottom: '10px',
+            marginBottom: '5px',
             color: '#1976D2'
+        }
+    });
+
+    // Experimental warning
+    const audioWarning = $('div', {
+        text: '⚠️ EXPERIMENTAL FEATURE - NOT RECOMMENDED FOR USE',
+        css: {
+            fontSize: '11px',
+            color: '#ff5722',
+            fontWeight: '600',
+            marginBottom: '10px',
+            padding: '4px 8px',
+            backgroundColor: '#fff3e0',
+            borderRadius: '3px',
+            border: '1px solid #ff9800',
+            textAlign: 'center'
+        }
+    });
+
+    const audioDisclaimer = $('div', {
+        text: 'This feature is unstable and may cause interface issues. Use at your own risk.',
+        css: {
+            fontSize: '10px',
+            color: '#666',
+            fontStyle: 'italic',
+            marginBottom: '10px',
+            textAlign: 'center'
         }
     });
 
@@ -2242,7 +2269,7 @@ function showSettingsModal() {
     });
 
     audioContainer.append(audioButton, audioLabel);
-    audioSection.append(audioTitle, audioContainer);
+    audioSection.append(audioTitle, audioWarning, audioDisclaimer, audioContainer);
 
     // MIDI Inspector section
     const midiSection = $('div', {
@@ -2612,6 +2639,103 @@ function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
     }
 }
 
+// Song navigation functions
+function navigateToPreviousSong() {
+    if (!lyricsLibrary) {
+        console.error('❌ LyricsLibrary not initialized');
+        return false;
+    }
+    
+    const songs = lyricsLibrary.getAllSongs();
+    console.log(`🎵 Total songs in library: ${songs.length}`);
+    if (songs.length === 0) {
+        console.log('📚 No songs in library');
+        return false;
+    }
+    
+    // Debug: Show all songs
+    console.log('📚 All songs in library:', songs.map(s => ({ key: s.key, title: s.title })));
+    
+    // Get current song key from display or global backup
+    const currentSongKey = window.lyricsDisplay?.currentSongKey || window.currentSongKey || null;
+    console.log(`🎵 Current song key: ${currentSongKey} (from ${window.lyricsDisplay?.currentSongKey ? 'lyricsDisplay' : window.currentSongKey ? 'global backup' : 'null'})`);
+    
+    if (!currentSongKey) {
+        // No current song, load the last song
+        const lastSong = songs[songs.length - 1];
+        console.log(`⏮️ No current song, loading last song: ${lastSong.title} (key: ${lastSong.key})`);
+        loadAndDisplaySong(lastSong.key);
+        return true;
+    }
+    
+    // Find current song index
+    const currentIndex = songs.findIndex(song => song.key === currentSongKey);
+    console.log(`🎵 Current song index: ${currentIndex}`);
+    
+    if (currentIndex === -1) {
+        // Current song not found, load first song
+        console.log(`⏮️ Current song not found in library, loading first song: ${songs[0].title}`);
+        loadAndDisplaySong(songs[0].key);
+        return true;
+    }
+    
+    // Navigate to previous song (wrap around to last if at beginning)
+    const previousIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
+    const previousSong = songs[previousIndex];
+    
+    console.log(`⏮️ Navigating from index ${currentIndex} to ${previousIndex}: ${previousSong.title} (key: ${previousSong.key})`);
+    loadAndDisplaySong(previousSong.key);
+    return true;
+}
+
+function navigateToNextSong() {
+    if (!lyricsLibrary) {
+        console.error('❌ LyricsLibrary not initialized');
+        return false;
+    }
+    
+    const songs = lyricsLibrary.getAllSongs();
+    console.log(`🎵 Total songs in library: ${songs.length}`);
+    if (songs.length === 0) {
+        console.log('📚 No songs in library');
+        return false;
+    }
+    
+    // Debug: Show all songs
+    console.log('📚 All songs in library:', songs.map(s => ({ key: s.key, title: s.title })));
+    
+    // Get current song key from display or global backup
+    const currentSongKey = window.lyricsDisplay?.currentSongKey || window.currentSongKey || null;
+    console.log(`🎵 Current song key: ${currentSongKey} (from ${window.lyricsDisplay?.currentSongKey ? 'lyricsDisplay' : window.currentSongKey ? 'global backup' : 'null'})`);
+    
+    if (!currentSongKey) {
+        // No current song, load the first song
+        const firstSong = songs[0];
+        console.log(`⏭️ No current song, loading first song: ${firstSong.title} (key: ${firstSong.key})`);
+        loadAndDisplaySong(firstSong.key);
+        return true;
+    }
+    
+    // Find current song index
+    const currentIndex = songs.findIndex(song => song.key === currentSongKey);
+    console.log(`🎵 Current song index: ${currentIndex}`);
+    
+    if (currentIndex === -1) {
+        // Current song not found, load first song
+        console.log(`⏭️ Current song not found in library, loading first song: ${songs[0].title}`);
+        loadAndDisplaySong(songs[0].key);
+        return true;
+    }
+    
+    // Navigate to next song (wrap around to first if at end)
+    const nextIndex = currentIndex === songs.length - 1 ? 0 : currentIndex + 1;
+    const nextSong = songs[nextIndex];
+    
+    console.log(`⏭️ Navigating from index ${currentIndex} to ${nextIndex}: ${nextSong.title} (key: ${nextSong.key})`);
+    loadAndDisplaySong(nextSong.key);
+    return true;
+}
+
 // Helper function to load and display a song
 function loadAndDisplaySong(songKey) {
     if (!lyricsLibrary) {
@@ -2641,6 +2765,16 @@ function loadAndDisplaySong(songKey) {
         
         currentSong = song;
         lyricsDisplay.displayLyrics(song);
+        // Store current song key for navigation (both in lyricsDisplay and globally)
+        if (lyricsDisplay) {
+            lyricsDisplay.currentSongKey = songKey;
+            console.log(`🎵 Stored currentSongKey in lyricsDisplay: ${songKey}`);
+        } else {
+            console.warn('⚠️ lyricsDisplay not available when storing currentSongKey');
+        }
+        // Also store globally as backup
+        window.currentSongKey = songKey;
+        console.log(`🎵 Stored currentSongKey globally: ${songKey}`);
         StorageManager.setLastOpenedSong(songKey);
         
         // Update audio title with current song filename
@@ -3385,6 +3519,8 @@ function displayTransportInfo(isPlaying, playheadPosition, sampleRate) {
 window.updateTimecode = updateTimecode;
 window.displayTransportInfo = displayTransportInfo;
 window.loadAndDisplaySong = loadAndDisplaySong;
+window.navigateToPreviousSong = navigateToPreviousSong;
+window.navigateToNextSong = navigateToNextSong;
 
 // Export for global access
 window.Lyrix = {
@@ -3396,6 +3532,8 @@ window.Lyrix = {
     dragDropManager,
     midiUtilities,
     loadAndDisplaySong,
+    navigateToPreviousSong,
+    navigateToNextSong,
     updateTimecode,
     displayTransportInfo,
     testMidi: () => {

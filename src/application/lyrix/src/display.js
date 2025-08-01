@@ -126,6 +126,31 @@ export class LyricsDisplay {
             onClick: () => this.showTimecodeOptionsPanel()
         });
         
+        // Song navigation buttons
+        this.previousSongButton = UIManager.createInterfaceButton('⏮️', {
+            id: 'previous_song',
+            onClick: () => {
+                if (window.navigateToPreviousSong) {
+                    window.navigateToPreviousSong();
+                } else {
+                    console.error('❌ navigateToPreviousSong function not available');
+                }
+            },
+            title: 'Previous Song'
+        });
+        
+        this.nextSongButton = UIManager.createInterfaceButton('⏭️', {
+            id: 'next_song',
+            onClick: () => {
+                if (window.navigateToNextSong) {
+                    window.navigateToNextSong();
+                } else {
+                    console.error('❌ navigateToNextSong function not available');
+                }
+            },
+            title: 'Next Song'
+        });
+        
         // Font size controls
         this.fontSizeContainer = $('div', {
             id: 'font-size-controls-container',
@@ -249,6 +274,8 @@ export class LyricsDisplay {
             this.editButton,
             this.recordButton,
             this.fullscreenButton,
+            this.previousSongButton,
+            this.nextSongButton,
             this.timecodeButton
         ];
         
