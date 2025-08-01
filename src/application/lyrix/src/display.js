@@ -12,7 +12,11 @@ export class LyricsDisplay {
         this.editMode = false;
         this.recordMode = false;
         this.fullscreenMode = false;
-        this.showTimecodes = false;
+        
+        // Load timecode display state from localStorage
+        const savedTimecodeState = localStorage.getItem('lyrix_show_timecodes');
+        this.showTimecodes = savedTimecodeState === 'true';
+        
         this.currentLineIndex = -1;
         this.fontSize = StorageManager.loadFontSize();
         this.lastScrollTime = 0;
@@ -343,6 +347,9 @@ export class LyricsDisplay {
         
         // Ajouter le display container directement au body pour un contrôle total
         document.body.append(this.displayContainer);
+        
+        // Initialize timecode button appearance based on loaded state
+        this.updateTimecodeButtonAppearance();
         
     }
     
@@ -1538,20 +1545,30 @@ export class LyricsDisplay {
     // Toggle timecode display
     toggleTimecodes() {
         this.showTimecodes = !this.showTimecodes;
+        
+        // Save state to localStorage
+        localStorage.setItem('lyrix_show_timecodes', this.showTimecodes.toString());
 
         // Update button appearance
-        if (this.showTimecodes) {
-            this.timecodeButton.textContent = '🚫'; // Icône pour cacher
-            this.timecodeButton.style.backgroundColor = default_theme.editModeActiveColor; // Utilise la couleur active du thème
-        } else {
-            this.timecodeButton.textContent = '🕐'; // Icône pour afficher
-            this.timecodeButton.style.backgroundColor = default_theme.button.backgroundColor; // Utilise la couleur par défaut du thème
-        }
+        this.updateTimecodeButtonAppearance();
 
         // Re-render lyrics to show/hide timecodes
         this.renderLyrics();
         
         console.log(`⏱️ Timecode display: ${this.showTimecodes ? 'ON' : 'OFF'}`);
+    }
+    
+    // Update timecode button appearance based on current state
+    updateTimecodeButtonAppearance() {
+        if (this.timecodeButton) {
+            if (this.showTimecodes) {
+                this.timecodeButton.textContent = '🚫'; // Icône pour cacher
+                this.timecodeButton.style.backgroundColor = default_theme.editModeActiveColor;
+            } else {
+                this.timecodeButton.textContent = '🕐'; // Icône pour afficher
+                this.timecodeButton.style.backgroundColor = default_theme.button.backgroundColor;
+            }
+        }
     }
     
     // Show timecode options panel
