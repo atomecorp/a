@@ -334,19 +334,430 @@ function exportAllSongsToLRX() {
     // Utilise la fonction utilitaire pour garantir l'inclusion des paroles
     const exportData = exportSongsToLRX(songSummaries, lyricsLibrary);
 
-    // Create download
+    // Create download - iOS compatible version
     const dataStr = JSON.stringify(exportData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
+    const filename = `lyrix_library_${new Date().toISOString().split('T')[0]}.lrx`;
     
-    const downloadLink = document.createElement('a');
-    downloadLink.href = url;
-    downloadLink.download = `lyrix_library_${new Date().toISOString().split('T')[0]}.lrx`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
+    // Check if we're on iOS/mobile
+    const isIOSorMobile = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || 
+                         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    if (isIOSorMobile) {
+        // iOS/Mobile: Show modal with copy/share options
+        showMobileExportModal(dataStr, filename, 'LRX');
+    } else {
+        // Desktop: Traditional download
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = filename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+    }
+}
 
+// Mobile-friendly export modal for iOS compatibility
+function showMobileExportModal(dataString, filename, fileType) {
+    const modalContainer = UIManager.createEnhancedModalOverlay();
+    const modal = UIManager.createEnhancedModalContainer({
+        css: { maxWidth: '500px', width: '90%' }
+    });
+
+    // Header
+    const header = $('div', {
+        css: {
+            padding: UIManager.THEME.spacing.lg,
+            backgroundColor: UIManager.THEME.colors.primary,
+            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
+            color: 'white'
+        }
+    });
+
+    const headerTitle = $('h3', {
+        text: `📱 Export ${fileType} File`,
+        css: { margin: '0', color: 'white' }
+    });
+
+    const instructions = $('div', {
+        text: 'Choose how to save your file on mobile:',
+        css: {
+            fontSize: '14px',
+            opacity: '0.9',
+            marginTop: '10px'
+        }
+    });
+
+    header.append(headerTitle, instructions);
+
+    // Content
+    const content = $('div', {
+        css: {
+            padding: UIManager.THEME.spacing.lg
+        }
+    });
+
+    // Copy to clipboard button
+    const copyButton = $('button', {
+        text: '📋 Copy to Clipboard',
+        css: {
+            width: '100%',
+            padding: '15px',
+            marginBottom: '10px',
+            backgroundColor: '#3498db',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+        }
+    });
+
+    copyButton.addEventListener('click', async () => {
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(dataString);
+                copyButton.textContent = '✅ Copied!';
+                copyButton.style.backgroundColor = '#27ae60';
+                setTimeout(() => {
+                    copyButton.textContent = '📋 Copy to Clipboard';
+                    copyButton.style.backgroundColor = '#3498db';
+                }, 2000);
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = dataString;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                copyButton.textContent = '✅ Copied!';
+                copyButton.style.backgroundColor = '#27ae60';
+                setTimeout(() => {
+                    copyButton.textContent = '📋 Copy to Clipboard';
+                    copyButton.style.backgroundColor = '#3498db';
+                }, 2000);
+            }
+        } catch (err) {
+            console.error('Failed to copy to clipboard:', err);
+            copyButton.textContent = '❌ Copy failed';
+            copyButton.style.backgroundColor = '#e74c3c';
+            setTimeout(() => {
+                copyButton.textContent = '📋 Copy to Clipboard';
+                copyButton.style.backgroundColor = '#3498db';
+            }, 2000);
+        }
+    });
+
+    // Share button (iOS native sharing)
+    const shareButton = $('button', {
+        text: '📤 Share File',
+        css: {
+            width: '100%',
+            padding: '15px',
+            marginBottom: '10px',
+            backgroundColor: '#9b59b6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+        }
+    });
+
+    shareButton.addEventListener('click', async () => {
+        try {
+            if (navigator.share) {
+                // Create a blob for sharing
+                const blob = new Blob([dataString], { 
+                    type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
+                });
+                const file = new File([blob], filename, { 
+                    type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
+                });
+                
+                await navigator.share({
+                    title: `Lyrix ${fileType} Export`,
+                    text: `Exported ${fileType} file from Lyrix`,
+                    files: [file]
+                });
+            } else {
+                // Fallback: create download link that might work better on some mobile browsers
+                const blob = new Blob([dataString], { 
+                    type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
+                });
+                const url = URL.createObjectURL(blob);
+                
+                // Try to open in new tab/window for manual save
+                const newWindow = window.open(url, '_blank');
+                if (!newWindow) {
+                    // If popup blocked, create download link
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = url;
+                    downloadLink.download = filename;
+                    downloadLink.click();
+                }
+                
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                
+                shareButton.textContent = '✅ Opened in new tab';
+                shareButton.style.backgroundColor = '#27ae60';
+                setTimeout(() => {
+                    shareButton.textContent = '📤 Share File';
+                    shareButton.style.backgroundColor = '#9b59b6';
+                }, 2000);
+            }
+        } catch (err) {
+            console.error('Failed to share:', err);
+            shareButton.textContent = '❌ Share failed';
+            shareButton.style.backgroundColor = '#e74c3c';
+            setTimeout(() => {
+                shareButton.textContent = '📤 Share File';
+                shareButton.style.backgroundColor = '#9b59b6';
+            }, 2000);
+        }
+    });
+
+    // View content button
+    const viewButton = $('button', {
+        text: '👁️ View Content',
+        css: {
+            width: '100%',
+            padding: '15px',
+            marginBottom: '20px',
+            backgroundColor: '#f39c12',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+        }
+    });
+
+    viewButton.addEventListener('click', () => {
+        // Show content in a new modal
+        showContentViewModal(dataString, filename, fileType);
+    });
+
+    // Instructions
+    const instructionsText = $('div', {
+        text: 'Instructions:\n• Copy to Clipboard: Copy the file content to paste in another app\n• Share File: Use iOS sharing to save to Files app or send to other apps\n• View Content: Preview the file content before saving',
+        css: {
+            fontSize: '14px',
+            color: '#666',
+            lineHeight: '1.4',
+            backgroundColor: '#f8f9fa',
+            padding: '15px',
+            borderRadius: '8px',
+            whiteSpace: 'pre-line',
+            marginBottom: '15px'
+        }
+    });
+
+    content.append(copyButton, shareButton, viewButton, instructionsText);
+
+    // Footer
+    const footer = $('div', {
+        css: {
+            padding: UIManager.THEME.spacing.lg,
+            backgroundColor: UIManager.THEME.colors.background,
+            borderTop: `1px solid ${UIManager.THEME.colors.border}`,
+            borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
+            textAlign: 'center'
+        }
+    });
+
+    const closeButton = $('button', {
+        text: 'Close',
+        css: {
+            padding: '10px 20px',
+            backgroundColor: '#95a5a6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+        }
+    });
+
+    closeButton.addEventListener('click', () => {
+        document.body.removeChild(modalContainer);
+    });
+
+    footer.appendChild(closeButton);
+
+    // Assemble modal
+    modal.append(header, content, footer);
+    modalContainer.appendChild(modal);
+    
+    // Add to DOM
+    document.body.appendChild(modalContainer);
+
+    // Close on overlay click
+    modalContainer.addEventListener('click', (e) => {
+        if (e.target === modalContainer) {
+            document.body.removeChild(modalContainer);
+        }
+    });
+}
+
+// Show content view modal
+function showContentViewModal(dataString, filename, fileType) {
+    const modalContainer = UIManager.createEnhancedModalOverlay();
+    const modal = UIManager.createEnhancedModalContainer({
+        css: { maxWidth: '800px', width: '95%', maxHeight: '90vh' }
+    });
+
+    // Header
+    const header = $('div', {
+        css: {
+            padding: UIManager.THEME.spacing.md,
+            backgroundColor: UIManager.THEME.colors.primary,
+            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
+            color: 'white',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+        }
+    });
+
+    const headerTitle = $('h3', {
+        text: `📄 ${filename}`,
+        css: { margin: '0', color: 'white' }
+    });
+
+    const selectAllButton = $('button', {
+        text: 'Select All',
+        css: {
+            padding: '5px 10px',
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            color: 'white',
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '12px'
+        }
+    });
+
+    header.append(headerTitle, selectAllButton);
+
+    // Content
+    const content = $('div', {
+        css: {
+            padding: UIManager.THEME.spacing.md,
+            maxHeight: '60vh',
+            overflow: 'auto'
+        }
+    });
+
+    const textArea = $('textarea', {
+        value: dataString,
+        css: {
+            width: '100%',
+            height: '50vh',
+            padding: '10px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            resize: 'vertical',
+            boxSizing: 'border-box'
+        }
+    });
+
+    // Select all functionality
+    selectAllButton.addEventListener('click', () => {
+        textArea.select();
+    });
+
+    content.appendChild(textArea);
+
+    // Footer
+    const footer = $('div', {
+        css: {
+            padding: UIManager.THEME.spacing.md,
+            backgroundColor: UIManager.THEME.colors.background,
+            borderTop: `1px solid ${UIManager.THEME.colors.border}`,
+            borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '10px'
+        }
+    });
+
+    const copyFromViewButton = $('button', {
+        text: '📋 Copy',
+        css: {
+            padding: '10px 15px',
+            backgroundColor: '#3498db',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+        }
+    });
+
+    copyFromViewButton.addEventListener('click', async () => {
+        textArea.select();
+        try {
+            await navigator.clipboard.writeText(textArea.value);
+            copyFromViewButton.textContent = '✅ Copied!';
+            setTimeout(() => {
+                copyFromViewButton.textContent = '📋 Copy';
+            }, 2000);
+        } catch (err) {
+            document.execCommand('copy');
+            copyFromViewButton.textContent = '✅ Copied!';
+            setTimeout(() => {
+                copyFromViewButton.textContent = '📋 Copy';
+            }, 2000);
+        }
+    });
+
+    const closeViewButton = $('button', {
+        text: 'Close',
+        css: {
+            padding: '10px 15px',
+            backgroundColor: '#95a5a6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+        }
+    });
+
+    closeViewButton.addEventListener('click', () => {
+        document.body.removeChild(modalContainer);
+    });
+
+    footer.append(copyFromViewButton, closeViewButton);
+
+    // Assemble modal
+    modal.append(header, content, footer);
+    modalContainer.appendChild(modal);
+    
+    // Add to DOM
+    document.body.appendChild(modalContainer);
+
+    // Close on overlay click
+    modalContainer.addEventListener('click', (e) => {
+        if (e.target === modalContainer) {
+            document.body.removeChild(modalContainer);
+        }
+    });
+
+    // Focus textarea for easy selection
+    setTimeout(() => textArea.focus(), 100);
 }
 
 // Export all songs to LRX format with folder dialog
@@ -824,26 +1235,38 @@ function exportSelectedSongsAsText() {
                 }
             });
 
-            // Create download
-            const dataBlob = new Blob([exportText], { type: 'text/plain' });
-            const url = URL.createObjectURL(dataBlob);
+            // Create download - iOS compatible version
+            const filename = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
             
-            const downloadLink = document.createElement('a');
-            downloadLink.href = url;
-            downloadLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
-            URL.revokeObjectURL(url);
-
+            // Check if we're on iOS/mobile
+            const isIOSorMobile = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || 
+                                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            
             document.body.removeChild(modalContainer);
             
-            Modal({
-                title: '✅ Export Complete',
-                content: `<p>Successfully exported ${selectedSongKeys.length} songs as text.</p>`,
-                buttons: [{ text: 'OK' }],
-                size: 'small'
-            });
+            if (isIOSorMobile) {
+                // iOS/Mobile: Show mobile export modal
+                showMobileExportModal(exportText, filename, 'TEXT');
+            } else {
+                // Desktop: Traditional download
+                const dataBlob = new Blob([exportText], { type: 'text/plain' });
+                const url = URL.createObjectURL(dataBlob);
+                
+                const downloadLink = document.createElement('a');
+                downloadLink.href = url;
+                downloadLink.download = filename;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+                URL.revokeObjectURL(url);
+                
+                Modal({
+                    title: '✅ Export Complete',
+                    content: `<p>Successfully exported ${selectedSongKeys.length} songs as text.</p>`,
+                    buttons: [{ text: 'OK' }],
+                    size: 'small'
+                });
+            }
         }
     });
 
