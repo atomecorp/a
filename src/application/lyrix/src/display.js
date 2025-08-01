@@ -46,7 +46,7 @@ export class LyricsDisplay {
                 flexDirection: 'column',
                 backgroundColor: UIManager.THEME.colors.surface,
                 border: `1px solid ${UIManager.THEME.colors.border}`,
-                borderRadius: UIManager.THEME.borderRadius.md,
+                // borderRadius: UIManager.THEME.borderRadius.md,
                 overflow: 'hidden', // CRITIQUE : empêche tout scroll sur le container principal
                 zIndex: '50' // Au-dessus du contenu normal mais sous les modales
             }
