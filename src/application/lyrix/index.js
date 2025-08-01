@@ -2866,9 +2866,13 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     const audioControls = window.leftPanelAudioTools && window.leftPanelAudioTools.audioControls;
     const playButton = window.leftPanelAudioTools && window.leftPanelAudioTools.playButton;
     const stopButton = window.leftPanelAudioTools && window.leftPanelAudioTools.stopButton;
+    const volumeContainer = window.leftPanelAudioTools && window.leftPanelAudioTools.volumeContainer;
     if (newState && toolbarRow) {
         if (audioControls && !toolbarRow.contains(audioControls)) {
             toolbarRow.appendChild(audioControls);
+        }
+        if (volumeContainer && !toolbarRow.contains(volumeContainer)) {
+            toolbarRow.appendChild(volumeContainer);
         }
         if (playButton && !toolbarRow.contains(playButton)) {
             toolbarRow.appendChild(playButton);
@@ -3316,9 +3320,13 @@ function applyInitialSettings() {
         const audioControls = window.leftPanelAudioTools && window.leftPanelAudioTools.audioControls;
         const playButton = window.leftPanelAudioTools && window.leftPanelAudioTools.playButton;
         const stopButton = window.leftPanelAudioTools && window.leftPanelAudioTools.stopButton;
+        const volumeContainer = window.leftPanelAudioTools && window.leftPanelAudioTools.volumeContainer;
         if (isAudioPlayerEnabled && toolbarRow) {
             if (audioControls && !toolbarRow.contains(audioControls)) {
                 toolbarRow.appendChild(audioControls);
+            }
+            if (volumeContainer && !toolbarRow.contains(volumeContainer)) {
+                toolbarRow.appendChild(volumeContainer);
             }
             if (playButton && !toolbarRow.contains(playButton)) {
                 toolbarRow.appendChild(playButton);
@@ -4229,6 +4237,11 @@ function createMainInterface() {
 
         volumeValueContainer.append(volumeMinLabel, volumeValueLabel, volumeMaxLabel);
         volumeContainer.append(volumeLabel, volumeSlider, volumeValueContainer);
+
+        // Add volume container to audio tools for display
+        if (window.leftPanelAudioTools) {
+            window.leftPanelAudioTools.volumeContainer = volumeContainer;
+        }
 
         // Apply saved volume to audio player when it's loaded
         if (audioController && audioController.audioPlayer) {
