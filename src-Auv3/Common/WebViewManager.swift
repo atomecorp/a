@@ -107,6 +107,27 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         }
     }
     
+    // MARK: - MIDI Communication
+    
+    /// Send MIDI data to JavaScript
+    static func sendMIDIToJS(data1: UInt8, data2: UInt8, data3: UInt8, timestamp: Double = 0) {
+        let jsCode = """
+        if (typeof window.midiUtilities !== 'undefined' && typeof window.midiUtilities.logMidiMessage === 'function') {
+            window.midiUtilities.logMidiMessage(\(data1), \(data2), \(data3), \(timestamp));
+        } else if (typeof window.Lyrix !== 'undefined' && typeof window.Lyrix.midiUtilities !== 'undefined' && typeof window.Lyrix.midiUtilities.logMidiMessage === 'function') {
+            window.Lyrix.midiUtilities.logMidiMessage(\(data1), \(data2), \(data3), \(timestamp));
+        } else {
+            console.log('🎹 MIDI received but no logger available:', \(data1), \(data2), \(data3));
+        }
+        """
+        
+        webView?.evaluateJavaScript(jsCode) { result, error in
+            if let error = error {
+                print("❌ MIDI JS Error: \(error.localizedDescription)")
+            }
+        }
+    }
+
     private func sendMuteStateToJS() {
         if let isMuted = WebViewManager.audioController?.isMuted {
             let state = ["muted": isMuted]

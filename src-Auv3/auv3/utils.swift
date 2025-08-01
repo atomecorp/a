@@ -8,6 +8,7 @@
 import AVFoundation
 import Foundation
 import CoreAudio
+import WebKit
 
 // Protocol for real-time audio data delegation
 protocol AudioDataDelegate: AnyObject {
@@ -308,6 +309,14 @@ public class auv3Utils: AUAudioUnit {
         
         let status = data[0] & 0xF0
         let channel = (data[0] & 0x0F) + 1
+        let timestamp = Date().timeIntervalSince1970
+        
+        // Send all MIDI data to JavaScript (3 bytes, padding with 0 if needed)
+        let data1 = data.count > 0 ? data[0] : 0
+        let data2 = data.count > 1 ? data[1] : 0
+        let data3 = data.count > 2 ? data[2] : 0
+        
+        WebViewManager.sendMIDIToJS(data1: data1, data2: data2, data3: data3, timestamp: timestamp)
         
         switch status {
         case 0x90: // Note On
