@@ -876,8 +876,8 @@ export class LyricsDisplay {
             }
         });
         
-        // Show timecode if enabled and line has a time
-        if (this.showTimecodes && line.time >= 0) {
+        // Show timecode if enabled and line has a time (but not in fullscreen mode)
+        if (this.showTimecodes && line.time >= 0 && !this.fullscreenMode) {
             const timeSpan = $('span', {
                 text: this.formatTimeDisplay(line.time),
                 css: {
@@ -1540,6 +1540,11 @@ export class LyricsDisplay {
         }
         
         console.log(`🖼️ Fullscreen mode: ${this.fullscreenMode ? 'ON' : 'OFF'}`);
+        
+        // Re-render lyrics to update timecode visibility based on fullscreen state
+        if (this.currentLyrics) {
+            this.renderLyrics();
+        }
     }
     
     // Toggle timecode display
