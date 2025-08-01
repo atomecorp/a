@@ -112,12 +112,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     /// Send MIDI data to JavaScript
     static func sendMIDIToJS(data1: UInt8, data2: UInt8, data3: UInt8, timestamp: Double = 0) {
         let jsCode = """
-        if (typeof window.midiUtilities !== 'undefined' && typeof window.midiUtilities.logMidiMessage === 'function') {
-            window.midiUtilities.logMidiMessage(\(data1), \(data2), \(data3), \(timestamp));
-        } else if (typeof window.Lyrix !== 'undefined' && typeof window.Lyrix.midiUtilities !== 'undefined' && typeof window.Lyrix.midiUtilities.logMidiMessage === 'function') {
-            window.Lyrix.midiUtilities.logMidiMessage(\(data1), \(data2), \(data3), \(timestamp));
+        if (typeof window.midiUtilities !== 'undefined' && typeof window.midiUtilities.receiveMidiData === 'function') {
+            window.midiUtilities.receiveMidiData(\(data1), \(data2), \(data3), \(timestamp));
+        } else if (typeof window.Lyrix !== 'undefined' && typeof window.Lyrix.midiUtilities !== 'undefined' && typeof window.Lyrix.midiUtilities.receiveMidiData === 'function') {
+            window.Lyrix.midiUtilities.receiveMidiData(\(data1), \(data2), \(data3), \(timestamp));
         } else {
-            console.log('🎹 MIDI received but no logger available:', \(data1), \(data2), \(data3));
+            console.log('🎹 MIDI received but no handler available:', \(data1), \(data2), \(data3));
         }
         """
         
