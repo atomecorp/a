@@ -1773,19 +1773,23 @@ export class LyricsDisplay {
         // Clean up the displayed time by removing brackets if present: [02:30.50] -> 02:30.50
         const currentTimeFormatted = currentDisplayedTime.replace(/[\[\]]/g, '').trim();
         
+        // Get the computed font size from the original timeSpan to match it exactly
+        const computedStyle = window.getComputedStyle(timeSpan);
+        const actualFontSize = computedStyle.fontSize;
+        
         // Create input field for editing using DOM directly to ensure value is set
         const input = document.createElement('input');
         input.type = 'text';
         input.value = currentTimeFormatted;
         input.style.cssText = `
-            fontSize: 0.8em;
-            fontFamily: monospace;
+            font-size: ${actualFontSize};
+            font-family: monospace;
             padding: 2px 6px;
             border: 2px solid #007bff;
-            borderRadius: 3px;
-            minWidth: 60px;
-            textAlign: center;
-            backgroundColor: white;
+            border-radius: 3px;
+            min-width: 60px;
+            text-align: center;
+            background-color: white;
             color: #333;
         `;
         
