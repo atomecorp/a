@@ -609,6 +609,33 @@ export class LyricsDisplay {
     
     // Public method to refresh audio tools visibility (called when settings change)
     refreshAudioToolsVisibility() {
+        // Re-fetch the audio buttons with the new settings
+        this.audioButtons = this.getAudioButtons();
+        
+        // Update toolbar if it exists
+        if (this.toolbar) {
+            // Clear old audio buttons from toolbar
+            const existingAudioButtons = this.toolbar.querySelectorAll('#audio-play-button, #audio-stop-button');
+            existingAudioButtons.forEach(btn => {
+                if (btn.parentNode === this.toolbar) {
+                    this.toolbar.removeChild(btn);
+                }
+            });
+            
+            // Add new audio buttons to toolbar if they exist
+            if (this.audioButtons && this.audioButtons.length > 0) {
+                this.audioButtons.forEach(button => {
+                    if (button && !this.toolbar.contains(button)) {
+                        this.toolbar.appendChild(button);
+                    }
+                });
+            }
+            
+            // Re-apply styling
+            this.styleModeToolsForToolbar();
+        }
+        
+        // Update the lyrics content position
         this.updateLyricsContentPosition();
     }
     

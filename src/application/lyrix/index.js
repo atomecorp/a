@@ -2334,7 +2334,7 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     const audioControls = window.leftPanelAudioTools && window.leftPanelAudioTools.audioControls;
     const playButton = window.leftPanelAudioTools && window.leftPanelAudioTools.playButton;
     const stopButton = window.leftPanelAudioTools && window.leftPanelAudioTools.stopButton;
-    if (isAudioPlayerEnabled && toolbarRow) {
+    if (newState && toolbarRow) {
         if (audioControls && !toolbarRow.contains(audioControls)) {
             toolbarRow.appendChild(audioControls);
         }
@@ -2344,6 +2344,11 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
         if (stopButton && !toolbarRow.contains(stopButton)) {
             toolbarRow.appendChild(stopButton);
         }
+    }
+    
+    // Notify the lyrics display to refresh audio tools visibility
+    if (window.lyricsDisplay && window.lyricsDisplay.refreshAudioToolsVisibility) {
+        window.lyricsDisplay.refreshAudioToolsVisibility();
     }
     
     console.log(`🎵 Audio Player Controls: ${newState ? 'ENABLED' : 'DISABLED'} - Audio controls ${newState ? 'shown' : 'hidden'}`);
