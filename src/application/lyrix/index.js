@@ -369,14 +369,26 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         version: '1.0',
         exportDate: new Date().toISOString(),
         totalSongs: songs.length,
-        songs: songs.map(song => ({
-            songId: song.songId,
-            metadata: song.metadata || {},
-            lyrics: song.lyrics || {},
-            audioPath: song.audioPath,
-            syncData: song.syncData,
-            lines: song.lines || []
-        }))
+        songs: songs.map(song => {
+            // Log the audioPath format for debugging
+            if (song.audioPath) {
+                console.log(`📤 Exporting song "${song.metadata?.title || 'Unknown'}" with audioPath: "${song.audioPath}"`);
+                
+                // Verify that audioPath is just a filename (not a full URL)
+                if (song.audioPath.startsWith('http://') || song.audioPath.startsWith('https://') || song.audioPath.includes('assets/audios/')) {
+                    console.warn(`⚠️ Warning: audioPath contains full URL instead of just filename: ${song.audioPath}`);
+                }
+            }
+            
+            return {
+                songId: song.songId,
+                metadata: song.metadata || {},
+                lyrics: song.lyrics || {},
+                audioPath: song.audioPath,
+                syncData: song.syncData,
+                lines: song.lines || []
+            };
+        })
     };
 
     

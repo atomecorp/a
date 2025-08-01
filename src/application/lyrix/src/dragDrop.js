@@ -6,6 +6,7 @@ import { SyncedLyrics } from './syncedLyrics.js';
 import { Modal } from './modal.js';
 import { CONSTANTS } from './constants.js';
 import { createSyncedLyricsFromData } from './library.js';
+import { debugLog, extractCleanFileName } from './audio.js';
 
 // iOS-compatible logging function
 function dragLog(message) {
@@ -313,10 +314,21 @@ export class DragDropManager {
                     
                     // Assigner le audioPath dans les métadonnées (pas directement sur l'objet)
                     if (songData.audioPath) {
-                        syncedLyrics.metadata.audioPath = songData.audioPath;
-                        dragLog(`📦 Audio path assigned: ${songData.audioPath}`);
-                        dragLog(`📦 Audio path contains spaces: ${songData.audioPath.includes(' ')}`);
-                        dragLog(`📦 Audio path contains %20: ${songData.audioPath.includes('%20')}`);
+                        // MIGRATION: Clean old audioPath format to new format (filename only with spaces)
+                        const cleanAudioPath = extractCleanFileName(songData.audioPath);
+                        syncedLyrics.metadata.audioPath = cleanAudioPath;
+                        
+                        dragLog(`📦 Audio path assigned: ${cleanAudioPath}`);
+                        
+                        // Log migration status
+                        if (songData.audioPath !== cleanAudioPath) {
+                            dragLog(`🔄 MIGRATED audioPath from: "${songData.audioPath}" to: "${cleanAudioPath}"`);
+                        } else {
+                            dragLog(`✅ Audio path already in correct format: ${cleanAudioPath}`);
+                        }
+                        
+                        dragLog(`📦 Audio path contains spaces: ${cleanAudioPath.includes(' ')}`);
+                        dragLog(`📦 Audio path contains %20: ${cleanAudioPath.includes('%20')}`);
                     }
                     
                     if (songData.syncData) {
@@ -705,7 +717,12 @@ export class DragDropManager {
         
         // Si une chanson est actuellement chargée, associer le chemin du fichier
         if (this.currentLyrics) {
-            this.currentLyrics.setAudioPath(audioFilePath);
+            // Store ONLY the filename (not the full path) for .lrx files
+            // This prevents issues with URL encoding and allows proper path normalization
+            const cleanFileName = extractCleanFileName(fileName);
+            this.currentLyrics.setAudioPath(cleanFileName);
+            debugLog('AUDIO-LOAD', 'Set audioPath to clean filename', { original: fileName, clean: cleanFileName });
+            
             // Sauvegarder les changements
             if (this.lyricsLibrary) {
                 this.lyricsLibrary.saveSong(this.currentLyrics);
@@ -832,7 +849,11 @@ export class DragDropManager {
             // Associate with current lyrics if available
             if (this.currentLyrics) {
                 try {
-                    this.currentLyrics.setAudioPath(JSON.stringify(audioMetadata));
+                    // Store ONLY the filename (not the full metadata) for .lrx files
+                    // This prevents URL encoding issues and allows proper path normalization
+                    const cleanFileName = extractCleanFileName(fileName);
+                    this.currentLyrics.setAudioPath(cleanFileName);
+                    debugLog('iOS-AUDIO-LOAD', 'Set audioPath to clean filename', { original: fileName, clean: cleanFileName });
                     
                     if (this.lyricsLibrary) {
                         this.lyricsLibrary.saveSong(this.currentLyrics);

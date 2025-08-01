@@ -27,7 +27,7 @@ function iosLog(message) {
 }
 
 // Enhanced logging for debugging .lrx file issues
-function debugLog(category, message, data = null) {
+export function debugLog(category, message, data = null) {
     const timestamp = new Date().toISOString().split('T')[1].split('.')[0]; // HH:MM:SS format
     let logMessage = `[${timestamp}] ${category}: ${message}`;
     
@@ -36,6 +36,34 @@ function debugLog(category, message, data = null) {
     }
     
     iosLog(logMessage);
+}
+
+// Extract clean filename for .lrx storage (spaces, no %20, no URL)
+export function extractCleanFileName(audioPath) {
+    if (!audioPath) return null;
+    
+    // If it's a full URL, extract just the filename
+    if (audioPath.startsWith('http://') || audioPath.startsWith('https://')) {
+        const url = new URL(audioPath);
+        const fileName = url.pathname.split('/').pop();
+        // Decode %20 back to spaces
+        return decodeURIComponent(fileName);
+    }
+    
+    // If it's a path with BASE_PATH, extract the filename
+    if (audioPath.includes('/assets/audios/')) {
+        const fileName = audioPath.split('/').pop();
+        return decodeURIComponent(fileName);
+    }
+    
+    // If it contains %20, decode it to spaces
+    if (audioPath.includes('%20')) {
+        return decodeURIComponent(audioPath);
+    }
+    
+    // Extract filename from any path
+    const fileName = audioPath.split(/[/\\]/).pop();
+    return fileName;
 }
 
 export class AudioManager {

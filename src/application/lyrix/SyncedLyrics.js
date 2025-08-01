@@ -40,10 +40,38 @@ export class SyncedLyrics {
         });
     }
 
-    // Set audio path
+    // Set audio path with automatic migration from old format
     setAudioPath(path) {
-        this.audioPath = path;
-        this.metadata.audioPath = path;
+        // Clean up old format (URLs) to new format (filename only)
+        let cleanPath = path;
+        
+        if (path && typeof path === 'string') {
+            // Remove full URLs and keep only filename
+            if (path.startsWith('http://') || path.startsWith('https://')) {
+                cleanPath = path.split('/').pop();
+                console.log('🔧 Migrating audioPath from URL to filename:', path, '→', cleanPath);
+            }
+            // Remove BASE_PATH prefix if present
+            else if (path.startsWith('./assets/audios/')) {
+                cleanPath = path.replace('./assets/audios/', '');
+                console.log('🔧 Migrating audioPath from relative path to filename:', path, '→', cleanPath);
+            }
+            
+            // Decode %20 back to spaces for storage
+            if (cleanPath.includes('%20')) {
+                try {
+                    cleanPath = decodeURIComponent(cleanPath);
+                    console.log('🔧 Decoded %20 to spaces in audioPath:', path, '→', cleanPath);
+                } catch (e) {
+                    // If decode fails, manually replace %20 with spaces
+                    cleanPath = cleanPath.replace(/%20/g, ' ');
+                    console.log('🔧 Manually replaced %20 with spaces in audioPath:', path, '→', cleanPath);
+                }
+            }
+        }
+        
+        this.audioPath = cleanPath;
+        this.metadata.audioPath = cleanPath;
         this.metadata.lastModified = new Date().toISOString();
     }
 

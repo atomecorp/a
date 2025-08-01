@@ -1,6 +1,6 @@
 // SyncedLyrics class for Lyrix application
 import { CONSTANTS } from './constants.js';
-import { AudioManager } from './audio.js';
+import { AudioManager, extractCleanFileName } from './audio.js';
 
 export class SyncedLyrics {
     constructor(title, artist, album = '', duration = 0, songId = null) {
@@ -160,8 +160,16 @@ export class SyncedLyrics {
     
     // Associate audio file with this song
     setAudioPath(audioPath) {
-        // Normalize audio path to start with assets/audios/
-        this.metadata.audioPath = AudioManager.normalize(audioPath);
+        // Store ONLY clean filename (not full URL) for .lrx files
+        // This ensures proper format: "filename with spaces.mp3" not "http://...%20..."
+        const cleanFileName = extractCleanFileName(audioPath);
+        this.metadata.audioPath = cleanFileName;
+        
+        // Log migration if old format was detected
+        if (audioPath !== cleanFileName) {
+            console.log('🔧 Migrated audioPath from old format:', audioPath, '→', cleanFileName);
+        }
+        
         this.updateLastModified();
         return this;
     }
