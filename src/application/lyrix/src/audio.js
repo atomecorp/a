@@ -1,34 +1,120 @@
 // Audio management for Lyrix application
 import { CONSTANTS } from './constants.js';
 
+// iOS-compatible logging function with clear prefix for filtering
+function iosLog(message) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    
+    // Add distinctive prefix to filter app logs from iOS system errors
+    const prefixedMessage = `⚛️ ATOME-APP: ${message}`;
+    
+    if (isIOS) {
+        // For iOS AUv3 apps - send to Xcode console via WebKit message handler
+        try {
+            if (window.webkit?.messageHandlers?.console) {
+                window.webkit.messageHandlers.console.postMessage(prefixedMessage);
+            } else {
+                // Fallback for development
+                console.log('[iOS]', prefixedMessage);
+            }
+        } catch (e) {
+            console.log('[iOS-fallback]', prefixedMessage);
+        }
+    } else {
+        // Standard console.log for desktop
+        console.log(prefixedMessage);
+    }
+}
+
+// Enhanced logging for debugging .lrx file issues
+function debugLog(category, message, data = null) {
+    const timestamp = new Date().toISOString().split('T')[1].split('.')[0]; // HH:MM:SS format
+    let logMessage = `[${timestamp}] ${category}: ${message}`;
+    
+    if (data) {
+        logMessage += ` | Data: ${JSON.stringify(data)}`;
+    }
+    
+    iosLog(logMessage);
+}
+
 export class AudioManager {
     
     // Normalize audio paths
     static normalize(audioPath) {
+        debugLog('NORMALIZE', 'Called with audioPath', audioPath);
+        
         if (!audioPath) return null;
         
         // Handle JSON metadata
         if (audioPath.startsWith('{')) {
             try {
                 const { fileName } = JSON.parse(audioPath);
+                debugLog('NORMALIZE', 'JSON metadata parsed', { fileName });
                 return fileName ? this.createUrl(fileName) : null;
             } catch (e) {
+                debugLog('NORMALIZE', 'Corrupted audio metadata', e.message);
                 console.warn('⚠️ Corrupted audio metadata:', e);
                 return null;
             }
         }
         
         // Already formed complete URL - return as is
-        if (audioPath.startsWith(CONSTANTS.AUDIO.BASE_URL)) return audioPath;
-        if (audioPath.startsWith('http://') || audioPath.startsWith('https://')) return audioPath;
+        if (audioPath.startsWith(CONSTANTS.AUDIO.BASE_URL)) {
+            debugLog('NORMALIZE', 'Path already has BASE_URL, returning as-is');
+            return audioPath;
+        }
+        if (audioPath.startsWith('http://') || audioPath.startsWith('https://')) {
+            debugLog('NORMALIZE', 'Path is HTTP URL, returning as-is');
+            return audioPath;
+        }
         
         // Relative path with BASE_PATH
         if (audioPath.startsWith(CONSTANTS.AUDIO.BASE_PATH)) {
+            debugLog('NORMALIZE', 'Path has BASE_PATH, processing...');
             return this.createUrl(audioPath.replace(CONSTANTS.AUDIO.BASE_PATH, ''));
         }
         
-        // Extract filename from path and decode it to avoid double encoding
+        // Extract filename from path and handle iOS-specific encoding issues
         const fileName = audioPath.split(/[/\\]/).pop();
+        debugLog('NORMALIZE', 'Extracted fileName', fileName);
+        
+        // Debug logging for iOS audio paths
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        if (isIOS) {
+            debugLog('iOS-AUDIO', 'Original fileName', fileName);
+            debugLog('iOS-AUDIO', 'Has spaces', fileName.includes(' '));
+            debugLog('iOS-AUDIO', 'Has %20', fileName.includes('%20'));
+            
+            // On iOS, handle spaces more aggressively
+            let iosFileName = fileName;
+            
+            // If filename already contains %20 (from .lrx file), use it directly
+            if (fileName.includes('%20')) {
+                debugLog('iOS-AUDIO', 'File already encoded with %20, using directly');
+                iosFileName = fileName;
+            }
+            // If the filename has spaces, encode them properly
+            else if (fileName.includes(' ')) {
+                // First, ensure we don't have mixed encoding
+                try {
+                    // Try to decode if already encoded
+                    const decoded = decodeURIComponent(fileName);
+                    iosFileName = decoded.replace(/\s+/g, '%20');
+                    debugLog('iOS-AUDIO', 'Decoded and re-encoded', iosFileName);
+                } catch (e) {
+                    // If decode fails, just replace spaces
+                    iosFileName = fileName.replace(/\s+/g, '%20');
+                    debugLog('iOS-AUDIO', 'Direct space replacement', iosFileName);
+                }
+            }
+            
+            const finalUrl = this.createUrl(iosFileName);
+            debugLog('iOS-AUDIO', 'Final URL', finalUrl);
+            return finalUrl;
+        }
+        
+        // Desktop handling - decode then re-encode
         try {
             const decodedFileName = decodeURIComponent(fileName);
             return this.createUrl(decodedFileName);
@@ -41,8 +127,37 @@ export class AudioManager {
     
     // Create complete audio URL with fallback
     static createUrl(fileName) {
-        // Primary URL with server
-        return CONSTANTS.AUDIO.BASE_URL + encodeURIComponent(fileName);
+        // Check if running on iOS
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        
+        if (isIOS) {
+            debugLog('iOS-CREATE', 'Input fileName', fileName);
+            debugLog('iOS-CREATE', 'Contains %20', fileName.includes('%20'));
+            debugLog('iOS-CREATE', 'Contains spaces', fileName.includes(' '));
+            
+            let finalFileName;
+            
+            // If filename already has %20 (from .lrx files), don't re-encode
+            if (fileName.includes('%20')) {
+                finalFileName = fileName;
+                debugLog('iOS-CREATE', 'Using pre-encoded filename from .lrx');
+            } else if (fileName.includes(' ')) {
+                // Replace spaces with %20 for iOS (for drag&drop files)
+                finalFileName = fileName.replace(/\s+/g, '%20');
+                debugLog('iOS-CREATE', 'Replaced spaces with %20', finalFileName);
+            } else {
+                // Encode normally for files without spaces
+                finalFileName = encodeURIComponent(fileName);
+                debugLog('iOS-CREATE', 'Normal encoding applied');
+            }
+            
+            const finalUrl = CONSTANTS.AUDIO.BASE_URL + finalFileName;
+            debugLog('iOS-CREATE', 'Final URL', finalUrl);
+            return finalUrl;
+        } else {
+            // Standard encoding for desktop
+            return CONSTANTS.AUDIO.BASE_URL + encodeURIComponent(fileName);
+        }
     }
     
     // Create fallback relative URL (for when server is not available)
@@ -158,10 +273,16 @@ export class AudioController {
     // Load audio file with enhanced iOS support
     loadAudio(audioPath) {
         try {
+            // Log the original audio path for debugging
+            debugLog('LOAD-AUDIO', 'Called with audioPath', audioPath);
+            
             this.audioPath = audioPath;
             const normalizedPath = AudioManager.normalize(audioPath);
             
+            debugLog('LOAD-AUDIO', 'Normalized path result', normalizedPath);
+            
             if (!normalizedPath) {
+                debugLog('LOAD-AUDIO', 'Failed to normalize audio path', audioPath);
                 console.error('❌ Failed to normalize audio path:', audioPath);
                 return false;
             }
@@ -169,16 +290,18 @@ export class AudioController {
             // Extract filename for cleaner console logging
             const fileName = audioPath.split(/[/\\]/).pop();
             
-            // console.log('🎵 Loading audio from:', fileName);
+            debugLog('LOAD-AUDIO', 'Extracted fileName', fileName);
             
             // Enhanced iOS audio loading
             if (this.isIOS()) {
+                debugLog('LOAD-AUDIO', 'Calling loadAudioIOS with path', normalizedPath);
                 return this.loadAudioIOS(normalizedPath, fileName);
             } else {
                 return this.loadAudioDesktop(normalizedPath, fileName);
             }
             
         } catch (error) {
+            iosLog('❌ Error in loadAudio: ' + error);
             console.error('❌ Error loading audio:', error);
             return false;
         }
@@ -187,7 +310,7 @@ export class AudioController {
     // iOS-specific audio loading with enhanced error handling
     loadAudioIOS(normalizedPath, fileName) {
         try {
-            console.log('🍎 iOS audio loading for:', fileName);
+            iosLog('🍎 iOS audio loading for: ' + fileName);
             
             // Create audio element with iOS-specific attributes
             this.audioPlayer = new Audio();
@@ -205,9 +328,11 @@ export class AudioController {
             // Set source with delay for iOS
             setTimeout(() => {
                 try {
+                    iosLog('🍎 Setting audio.src to: ' + normalizedPath);
                     this.audioPlayer.src = normalizedPath;
-                    console.log('🍎 iOS audio source set:', fileName);
+                    iosLog('🍎 iOS audio source set successfully for: ' + fileName);
                 } catch (srcError) {
+                    iosLog('❌ iOS audio source error: ' + srcError);
                     console.error('❌ iOS audio source error:', srcError);
                     this.handleIOSAudioError(srcError, fileName);
                 }
@@ -243,17 +368,17 @@ export class AudioController {
         });
         
         this.audioPlayer.addEventListener('loadedmetadata', () => {
-            console.log('✅ iOS audio metadata loaded:', fileName);
+            iosLog('✅ iOS audio metadata loaded: ' + fileName);
             this.emit('loaded', this.audioPlayer.duration);
         });
         
         this.audioPlayer.addEventListener('loadeddata', () => {
-            console.log('✅ iOS audio data loaded:', fileName);
+            iosLog('✅ iOS audio data loaded: ' + fileName);
             this.emit('ready');
         });
         
         this.audioPlayer.addEventListener('canplay', () => {
-            console.log('✅ iOS audio can play:', fileName);
+            iosLog('✅ iOS audio can play: ' + fileName);
             this.emit('canplay');
         });
         
@@ -273,6 +398,10 @@ export class AudioController {
         });
         
         this.audioPlayer.addEventListener('error', (e) => {
+            iosLog('❌ iOS audio error event fired for: ' + fileName);
+            iosLog('❌ Error type: ' + (e.target.error ? e.target.error.code : 'unknown'));
+            iosLog('❌ Error message: ' + (e.target.error ? e.target.error.message : 'no message'));
+            iosLog('❌ Audio src was: ' + e.target.src);
             console.error('❌ iOS audio error:', e.target.error);
             this.handleIOSAudioError(e.target.error, fileName);
         });
@@ -288,7 +417,7 @@ export class AudioController {
 
     // Handle iOS audio errors with fallback strategies
     handleIOSAudioError(error, fileName) {
-        console.error('🍎 iOS audio error for', fileName, ':', error);
+        iosLog('🍎 iOS audio error for ' + fileName + ': ' + error);
         
         // Try different loading strategies for iOS
         if (this.audioPlayer && this.audioPath) {
@@ -297,7 +426,7 @@ export class AudioController {
                     // Strategy 1: Reload with different preload setting
                     this.audioPlayer.preload = 'auto';
                     this.audioPlayer.load();
-                    console.log('🔄 iOS audio reload attempt:', fileName);
+                    iosLog('🔄 iOS audio reload attempt: ' + fileName);
                 } catch (reloadError) {
                     console.error('❌ iOS audio reload failed:', reloadError);
                     this.emit('error', error);
@@ -316,9 +445,16 @@ export class AudioController {
             this.emit('timeupdate', this.audioPlayer.currentTime);
         });
         
-        this.audioPlayer.addEventListener('loadeddata', () => {
-            console.log('✅ Audio loaded successfully:', fileName);
+        // Emit 'loaded' when metadata (including duration) is available
+        this.audioPlayer.addEventListener('loadedmetadata', () => {
+            console.log('✅ Audio metadata loaded successfully:', fileName);
+            debugLog('DESKTOP-AUDIO', 'loadedmetadata event - duration', this.audioPlayer.duration);
             this.emit('loaded', this.audioPlayer.duration);
+        });
+        
+        this.audioPlayer.addEventListener('loadeddata', () => {
+            console.log('✅ Audio data loaded successfully:', fileName);
+            this.emit('ready');
         });
         
         this.audioPlayer.addEventListener('ended', () => {

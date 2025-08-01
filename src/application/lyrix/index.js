@@ -1,6 +1,44 @@
 // Lyrix Application - New Entry Point
 // This is the new modular entry point for the Lyrix application
 
+// iOS-compatible logging function (duplicate from audio.js for startup logging)
+function startupLog(message) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const prefixedMessage = `⚛️ ATOME-APP: ${message}`;
+    
+    if (isIOS) {
+        try {
+            if (window.webkit?.messageHandlers?.console) {
+                window.webkit.messageHandlers.console.postMessage(prefixedMessage);
+            } else {
+                console.log('[iOS]', prefixedMessage);
+            }
+        } catch (e) {
+            console.log('[iOS-fallback]', prefixedMessage);
+        }
+    } else {
+        console.log(prefixedMessage);
+    }
+}
+
+// Application startup message
+startupLog('===============================================');
+startupLog('🚀 ATOME APPLICATION STARTING...');
+startupLog('📱 Platform: ' + ((/iPad|iPhone|iPod/.test(navigator.userAgent)) ? 'iOS' : 'Desktop'));
+startupLog('🕐 Time: ' + new Date().toISOString());
+startupLog('===============================================');
+
+// Force immediate test log for debugging
+if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+    // Multiple attempts to ensure logging works
+    setTimeout(() => startupLog('🔥 TEST 1: Atome app loaded successfully!'), 100);
+    setTimeout(() => startupLog('🔥 TEST 2: iOS logging system working!'), 500);
+    setTimeout(() => startupLog('🔥 TEST 3: Ready for .lrx import!'), 1000);
+    
+    // Also try direct console.log fallback
+    setTimeout(() => console.log('⚛️ ATOME-APP: 🔥 FALLBACK TEST: Direct console log'), 200);
+}
+
 // Import all modules
 import { CONSTANTS } from './src/constants.js';
 import { StorageManager } from './src/storage.js';
@@ -2428,16 +2466,25 @@ function createMainInterface() {
                 updateScrubSliderDisplay(currentTime);
             });
             
+            // Primary event - when audio metadata (including duration) is loaded
+            audioController.on('loaded', (duration) => {
+                startupLog(`📏 Audio loaded event - duration: ${duration}s`);
+                updateSliderDuration();
+            });
+            
             audioController.on('loadedmetadata', () => {
+                startupLog('📏 Loadedmetadata event triggered');
                 updateSliderDuration();
             });
             
             // Also listen for loadeddata and canplay events as fallbacks
             audioController.on('loadeddata', () => {
+                startupLog('📏 Loadeddata event triggered');
                 updateSliderDuration();
             });
             
             audioController.on('canplay', () => {
+                startupLog('📏 Canplay event triggered');
                 updateSliderDuration();
             });
         }
@@ -2636,21 +2683,42 @@ function updateScrubSliderDisplay(currentTime) {
 function updateSliderDuration() {
     const totalTimeLabel = document.getElementById('total_time_label');
     
+    startupLog('📏 updateSliderDuration() called');
+    
     if (totalTimeLabel && audioController && audioController.audioPlayer) {
         const duration = audioController.audioPlayer.duration || 0;
         
-        if (duration > 0) {
+        startupLog(`📏 Audio duration found: ${duration}s`);
+        startupLog(`📏 Audio player ready state: ${audioController.audioPlayer.readyState}`);
+        startupLog(`📏 Audio player src: ${audioController.audioPlayer.src ? audioController.audioPlayer.src.substring(0, 50) + '...' : 'empty'}`);
+        
+        if (duration > 0 && isFinite(duration)) {
             const durationMin = Math.floor(duration / 60);
             const durationSec = Math.floor(duration % 60);
-            totalTimeLabel.textContent = `${durationMin}:${durationSec.toString().padStart(2, '0')}`;
-            console.log(`📏 Updated audio duration display: ${durationMin}:${durationSec.toString().padStart(2, '0')}`);
+            const timeString = `${durationMin}:${durationSec.toString().padStart(2, '0')}`;
+            totalTimeLabel.textContent = timeString;
+            
+            startupLog(`📏 ✅ Updated total_time_label to: ${timeString}`);
+            console.log(`📏 Updated audio duration display: ${timeString}`);
         } else {
+            startupLog(`📏 ⚠️ Duration is ${duration} (invalid), will retry...`);
             // Try again after a short delay if duration isn't available yet
-            // setTimeout(() => {
-            //     if (audioController && audioController.audioPlayer && audioController.audioPlayer.duration > 0) {
-            //         updateSliderDuration();
-            //     }
-            // }, 250);
+            setTimeout(() => {
+                if (audioController && audioController.audioPlayer) {
+                    const retryDuration = audioController.audioPlayer.duration;
+                    startupLog(`📏 🔄 Retrying - new duration: ${retryDuration}s, readyState: ${audioController.audioPlayer.readyState}`);
+                    if (retryDuration > 0) {
+                        startupLog('📏 🔄 Retrying updateSliderDuration...');
+                        updateSliderDuration();
+                    }
+                }
+            }, 250);
+        }
+    } else {
+        startupLog('📏 ❌ Missing elements - totalTimeLabel: ' + !!totalTimeLabel + ', audioController: ' + !!audioController + ', audioPlayer: ' + !!(audioController && audioController.audioPlayer));
+        
+        if (audioController && audioController.audioPlayer) {
+            startupLog(`📏 Audio player details - src: ${audioController.audioPlayer.src ? 'present' : 'empty'}, readyState: ${audioController.audioPlayer.readyState}`);
         }
     }
 }

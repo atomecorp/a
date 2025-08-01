@@ -7,6 +7,26 @@ import { Modal } from './modal.js';
 import { CONSTANTS } from './constants.js';
 import { createSyncedLyricsFromData } from './library.js';
 
+// iOS-compatible logging function
+function dragLog(message) {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const prefixedMessage = `⚛️ ATOME-APP: [DRAG-DROP] ${message}`;
+    
+    if (isIOS) {
+        try {
+            if (window.webkit?.messageHandlers?.console) {
+                window.webkit.messageHandlers.console.postMessage(prefixedMessage);
+            } else {
+                console.log('[iOS]', prefixedMessage);
+            }
+        } catch (e) {
+            console.log('[iOS-fallback]', prefixedMessage);
+        }
+    } else {
+        console.log(prefixedMessage);
+    }
+}
+
 export class DragDropManager {
     // Permet de modifier le titre d'une chanson existante
     async editSongTitle(song, newTitle) {
@@ -283,7 +303,7 @@ export class DragDropManager {
                     const duration = songData.metadata?.duration || songData.duration || 0;
                     const songId = songData.songId || `imported_${Date.now()}_${index}`;
 
-                    console.log(`📦 Importing song: "${title}" by "${artist}"`);
+                    dragLog(`📦 Importing song: "${title}" by "${artist}"`);
 
                     // Créer l'instance SyncedLyrics avec le constructeur standard
                     const syncedLyrics = new SyncedLyrics(title, artist, album, duration, songId);
@@ -294,7 +314,9 @@ export class DragDropManager {
                     // Assigner le audioPath dans les métadonnées (pas directement sur l'objet)
                     if (songData.audioPath) {
                         syncedLyrics.metadata.audioPath = songData.audioPath;
-                        console.log(`📦 Audio path assigned: ${songData.audioPath}`);
+                        dragLog(`📦 Audio path assigned: ${songData.audioPath}`);
+                        dragLog(`📦 Audio path contains spaces: ${songData.audioPath.includes(' ')}`);
+                        dragLog(`📦 Audio path contains %20: ${songData.audioPath.includes('%20')}`);
                     }
                     
                     if (songData.syncData) {
@@ -313,11 +335,13 @@ export class DragDropManager {
                     const success = this.lyricsLibrary.saveSong(syncedLyrics);
                     if (success) {
                         importedCount++;
-                        console.log(`✅ Imported song: ${syncedLyrics.metadata.title}`);
+                        dragLog(`✅ Imported song: ${syncedLyrics.metadata.title}`);
                     } else {
                         errors.push(`Failed to save song: ${syncedLyrics.metadata.title}`);
+                        dragLog(`❌ Failed to save song: ${syncedLyrics.metadata.title}`);
                     }
                 } catch (error) {
+                    dragLog(`❌ Error importing song ${index + 1}: ${error.message}`);
                     console.error(`❌ Error importing song ${index + 1}:`, error);
                     errors.push(`Error importing song ${index + 1}: ${error.message}`);
                 }
@@ -340,16 +364,19 @@ export class DragDropManager {
     }
 
     async processFile(file) {
-        console.log(`📂 Processing file: ${file.name} (${file.type}) - ${(file.size / 1024).toFixed(1)} KB`);
+        dragLog(`📂 Processing file: ${file.name} (${file.type}) - ${(file.size / 1024).toFixed(1)} KB`);
         
         // Vérifier si c'est un fichier LRX (Lyrix library)
         if (this.isLRXFile(file)) {
             try {
-                console.log('📦 Processing LRX file...');
+                dragLog('📦 Processing LRX file...');
                 const content = await this.readFileContent(file);
+                dragLog('📦 LRX file content read successfully, starting import...');
                 await this.importLRXFile(content);
+                dragLog('✅ LRX file processing completed');
                 return;
             } catch (error) {
+                dragLog(`❌ Error reading LRX file: ${error.message}`);
                 console.error('❌ Erreur lecture fichier LRX:', error);
                 throw error;
             }
@@ -357,19 +384,20 @@ export class DragDropManager {
 
         // Vérifier si c'est un fichier texte (paroles)
         if (this.isTextFile(file)) {
-            console.log('📄 Processing text file...');
+            dragLog('📄 Processing text file...');
             await this.processTextFile(file);
             return;
         }
 
         // Vérifier si c'est un fichier audio
         if (this.isAudioFile(file)) {
-            console.log('🎵 Processing audio file...');
+            dragLog('🎵 Processing audio file...');
             await this.processAudioFile(file);
             return;
         }
 
         // Type de fichier non supporté
+        dragLog(`⚠️ Unsupported file type: ${file.name} (${file.type})`);
         console.warn('⚠️ Unsupported file type:', file.name, file.type);
         throw new Error(`Type de fichier non supporté: ${file.type}`);
     }

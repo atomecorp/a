@@ -10,7 +10,23 @@
   <script src="js/gsap.min.js"></script>
   <script type="module" src="squirrel/spark.js"></script>
   <script type="module">
+    // Test immédiat de logging iOS
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+      try {
+        if (window.webkit?.messageHandlers?.console) {
+          window.webkit.messageHandlers.console.postMessage('⚛️ ATOME-APP: 🔥 IMMEDIATE TEST: HTML loaded on iOS!');
+        } else {
+          console.log('⚛️ ATOME-APP: 🔥 IMMEDIATE TEST: HTML loaded, no webkit handler');
+        }
+      } catch (e) {
+        console.log('⚛️ ATOME-APP: 🔥 IMMEDIATE TEST: Error in webkit logging', e);
+      }
+    } else {
+      console.log('⚛️ ATOME-APP: 🔥 IMMEDIATE TEST: HTML loaded on Desktop');
+    }
+    
     window.addEventListener('squirrel:ready', () => {
+      console.log('⚛️ ATOME-APP: 🔥 SQUIRREL READY: About to import application');
       import('./application/index.js');
     });
   </script>
