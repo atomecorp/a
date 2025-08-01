@@ -133,6 +133,13 @@ function initializeLyrix() {
         uiManager = new UIManager();
         lyricsLibrary = new LyricsLibrary();
         
+        // Apply saved volume to audio controller
+        const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
+        if (audioController && audioController.audioPlayer) {
+            audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
+            console.log(`🔊 Applied saved volume: ${savedVolume}%`);
+        }
+        
         // iOS memory check after initialization
         if (isIOS && audioController.checkIOSMemory) {
             audioController.checkIOSMemory();
@@ -2609,6 +2616,142 @@ function showSettingsModal() {
     audioContainer.append(audioButton, audioLabel);
     audioSection.append(audioTitle, audioWarning, audioDisclaimer, audioContainer);
 
+    // Audio Sync section
+    const syncSection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#fff3e0',
+            borderRadius: '5px',
+            border: '1px solid #ff9800'
+        }
+    });
+
+    const syncTitle = $('h4', {
+        text: '🔄 Audio Sync with Host Timecode',
+        css: {
+            fontSize: '16px',
+            marginBottom: '5px',
+            color: '#e65100'
+        }
+    });
+
+    // Experimental warning for sync
+    const syncWarning = $('div', {
+        text: '⚠️ EXPERIMENTAL FEATURE - REQUIRES HOST APPLICATION SUPPORT',
+        css: {
+            fontSize: '11px',
+            color: '#d84315',
+            fontWeight: '600',
+            marginBottom: '10px',
+            padding: '4px 8px',
+            backgroundColor: '#fbe9e7',
+            borderRadius: '3px',
+            border: '1px solid #f44336',
+            textAlign: 'center'
+        }
+    });
+
+    const syncDisclaimer = $('div', {
+        text: 'This feature attempts to sync audio playback with host application timecode. May not work in all environments.',
+        css: {
+            fontSize: '10px',
+            color: '#666',
+            fontStyle: 'italic',
+            marginBottom: '10px',
+            textAlign: 'center'
+        }
+    });
+
+    const syncContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '10px'
+        }
+    });
+
+    // Load current sync state from localStorage
+    const isSyncEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
+
+    const syncButton = UIManager.createInterfaceButton(
+        isSyncEnabled ? '✅' : '❌', 
+        {
+            onClick: () => toggleAudioSync(syncButton, syncLabel)
+        }
+    );
+
+    const syncLabel = $('span', {
+        text: isSyncEnabled ? 'Host Sync Enabled' : 'Host Sync Disabled',
+        css: {
+            fontSize: '14px',
+            color: '#e65100',
+            fontWeight: '500'
+        }
+    });
+
+    syncContainer.append(syncButton, syncLabel);
+
+    // Test sync container
+    const testSyncContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginTop: '10px'
+        }
+    });
+
+    const testPlayButton = UIManager.createInterfaceButton('▶️ Test Play', {
+        onClick: () => {
+            console.log('🔄 Testing host sync - simulating timecode progression');
+            const timecodeDisplay = document.getElementById('timecode-display');
+            if (timecodeDisplay) {
+                // Simulate timecode progression
+                let time = 0;
+                const interval = setInterval(() => {
+                    time += 0.1;
+                    timecodeDisplay.textContent = `${time.toFixed(3)}s`;
+                    if (time >= 2) {
+                        clearInterval(interval);
+                    }
+                }, 100);
+            } else {
+                console.warn('⚠️ Host timecode display not found for test');
+            }
+        }
+    });
+
+    const testStopButton = UIManager.createInterfaceButton('⏹️ Test Stop', {
+        onClick: () => {
+            console.log('🔄 Testing host sync - simulating timecode stop');
+            const timecodeDisplay = document.getElementById('timecode-display');
+            if (timecodeDisplay) {
+                // Keep timecode static to simulate stop
+                const currentTime = timecodeDisplay.textContent;
+                setTimeout(() => {
+                    timecodeDisplay.textContent = currentTime; // Keep same time
+                }, 1000);
+            } else {
+                console.warn('⚠️ Host timecode display not found for test');
+            }
+        }
+    });
+
+    const testLabel = $('span', {
+        text: 'Test sync manually',
+        css: {
+            fontSize: '12px',
+            color: '#666',
+            fontStyle: 'italic'
+        }
+    });
+
+    testSyncContainer.append(testPlayButton, testStopButton, testLabel);
+
+    syncSection.append(syncTitle, syncWarning, syncDisclaimer, syncContainer, testSyncContainer);
+
     // MIDI Inspector section
     const midiSection = $('div', {
         css: {
@@ -2660,7 +2803,7 @@ function showSettingsModal() {
     midiSection.append(midiTitle, midiContainer);
 
     // Assemble the content
-    settingsContent.append(title, activateSection, deactivateSection, audioSection, midiSection);
+    settingsContent.append(title, activateSection, deactivateSection, audioSection, syncSection, midiSection);
 
     // Show modal
     Modal({
@@ -2696,7 +2839,8 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
         document.getElementById('audio-play-button'),
         document.getElementById('audio-stop-button'),
         document.getElementById('audio-controls-container'),
-        document.getElementById('audio-scrub-slider-container')
+        document.getElementById('audio-scrub-slider-container'),
+        document.getElementById('audio-volume-slider-container')
     ];
     
     // Also toggle the audio tools row
@@ -2742,6 +2886,361 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     console.log(`🎵 Audio Player Controls: ${newState ? 'ENABLED' : 'DISABLED'} - Audio controls ${newState ? 'shown' : 'hidden'}`);
 }
 
+// Toggle audio sync with host timecode
+function toggleAudioSync(buttonElement, labelElement) {
+    const isCurrentlyEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
+    const newState = !isCurrentlyEnabled;
+    
+    // Save new state
+    localStorage.setItem('lyrix_audio_sync_enabled', newState.toString());
+    
+    // Update button and label
+    buttonElement.textContent = newState ? '✅' : '❌';
+    labelElement.textContent = newState ? 'Host Sync Enabled' : 'Host Sync Disabled';
+    
+    if (newState) {
+        // Enable host sync - monitor timecode display
+        try {
+            // Start monitoring host timecode
+            startHostTimecodeMonitoring();
+            
+            // Also try host-specific interfaces as backup
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.audioSync) {
+                window.webkit.messageHandlers.audioSync.postMessage({
+                    action: 'enableSync',
+                    enabled: true
+                });
+                window.addEventListener('message', handleHostTransportMessage);
+                console.log('🔄 Host timeline sync enabled via webkit + timecode monitoring');
+            } else if (window.electronAPI && window.electronAPI.audioSync) {
+                window.electronAPI.audioSync.enable();
+                window.electronAPI.audioSync.onTransportChange(handleHostTransportChange);
+                console.log('🔄 Host timeline sync enabled via electron + timecode monitoring');
+            } else {
+                window.addEventListener('message', handleHostTransportMessage);
+                if (window.external && window.external.OnPlaybackChanged) {
+                    window.external.OnPlaybackChanged = handleHostPlaybackChange;
+                }
+                console.log('🔄 Audio sync enabled via timecode monitoring');
+            }
+        } catch (error) {
+            console.error('❌ Failed to enable host timeline sync:', error);
+        }
+    } else {
+        // Disable host sync
+        try {
+            // Stop monitoring timecode
+            stopHostTimecodeMonitoring();
+            hostPlaybackActive = false;
+            
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.audioSync) {
+                window.webkit.messageHandlers.audioSync.postMessage({
+                    action: 'enableSync',
+                    enabled: false
+                });
+                window.removeEventListener('message', handleHostTransportMessage);
+                console.log('🔄 Host timeline sync disabled via webkit');
+            } else if (window.electronAPI && window.electronAPI.audioSync) {
+                window.electronAPI.audioSync.disable();
+                console.log('🔄 Host timeline sync disabled via electron');
+            } else {
+                window.removeEventListener('message', handleHostTransportMessage);
+                if (window.external && window.external.OnPlaybackChanged) {
+                    window.external.OnPlaybackChanged = null;
+                }
+                console.log('🔄 Audio sync disabled');
+            }
+        } catch (error) {
+            console.error('❌ Failed to disable host timeline sync:', error);
+        }
+    }
+    
+    console.log(`🔄 Audio Host Sync: ${newState ? 'ENABLED' : 'DISABLED'} - Timeline sync ${newState ? 'active' : 'inactive'}`);
+}
+
+// Handle host transport messages (for webkit/generic hosts)
+function handleHostTransportMessage(event) {
+    if (!localStorage.getItem('lyrix_audio_sync_enabled') === 'true') return;
+    
+    console.log('🔄 Received host transport message:', event.data);
+    
+    try {
+        let transportData = event.data;
+        
+        // Parse if it's a string
+        if (typeof transportData === 'string') {
+            transportData = JSON.parse(transportData);
+        }
+        
+        // Handle different message formats
+        if (transportData.type === 'transport' || transportData.action === 'transport') {
+            const state = transportData.state || transportData.playing;
+            const position = transportData.position || transportData.time;
+            
+            if (state === 'playing' || state === true) {
+                console.log('🔄 Host started playback - starting audio sync');
+                if (audioController && audioController.play) {
+                    audioController.play();
+                }
+            } else if (state === 'stopped' || state === false) {
+                console.log('🔄 Host stopped playback - stopping audio sync');
+                if (audioController && audioController.stop) {
+                    audioController.stop();
+                }
+            }
+            
+            // Sync position if provided
+            if (position !== undefined && audioController && audioController.audioPlayer) {
+                audioController.audioPlayer.currentTime = position;
+                console.log(`🔄 Synced position to: ${position}s`);
+            }
+        }
+    } catch (error) {
+        console.warn('⚠️ Failed to parse host transport message:', error);
+    }
+}
+
+// Variables for timecode monitoring
+let lastHostTimecode = '0.000s';
+let hostTimecodeObserver = null;
+let hostPlaybackActive = false;
+let lastSyncTime = 0;
+
+// Monitor host timecode display for changes
+function startHostTimecodeMonitoring() {
+    const timecodeDisplay = document.getElementById('timecode-display');
+    
+    if (!timecodeDisplay) {
+        console.warn('⚠️ Host timecode display not found');
+        return;
+    }
+    
+    console.log('🔄 Starting host timecode monitoring');
+    console.log('🔄 Initial timecode:', timecodeDisplay.textContent || timecodeDisplay.innerText);
+    console.log('🔄 AudioController available:', !!audioController);
+    if (audioController) {
+        console.log('🔄 AudioController.play available:', !!audioController.play);
+        console.log('🔄 AudioController.stop available:', !!audioController.stop);
+        console.log('🔄 AudioController.audioPlayer available:', !!audioController.audioPlayer);
+    }
+    
+    // Reset state
+    hostPlaybackActive = false;
+    lastHostTimecode = timecodeDisplay.textContent || timecodeDisplay.innerText || '0.000s';
+    lastSyncTime = Date.now();
+    
+    // Use MutationObserver to detect timecode changes
+    if (hostTimecodeObserver) {
+        hostTimecodeObserver.disconnect();
+    }
+    
+    hostTimecodeObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList' || mutation.type === 'characterData') {
+                const currentTimecode = timecodeDisplay.textContent || timecodeDisplay.innerText;
+                handleHostTimecodeChange(currentTimecode);
+            }
+        });
+    });
+    
+    // Observe text content changes
+    hostTimecodeObserver.observe(timecodeDisplay, {
+        childList: true,
+        subtree: true,
+        characterData: true
+    });
+    
+    // Also poll every 50ms as backup for faster detection
+    setInterval(() => {
+        if (localStorage.getItem('lyrix_audio_sync_enabled') === 'true') {
+            const currentTimecode = timecodeDisplay.textContent || timecodeDisplay.innerText;
+            handleHostTimecodeChange(currentTimecode);
+        }
+    }, 50);
+}
+
+// Stop host timecode monitoring
+function stopHostTimecodeMonitoring() {
+    if (hostTimecodeObserver) {
+        hostTimecodeObserver.disconnect();
+        hostTimecodeObserver = null;
+    }
+    console.log('🔄 Stopped host timecode monitoring');
+}
+
+// Handle host timecode changes
+function handleHostTimecodeChange(currentTimecode) {
+    if (localStorage.getItem('lyrix_audio_sync_enabled') !== 'true') {
+        console.log('🔄 Audio sync disabled in settings');
+        return;
+    }
+    
+    if (currentTimecode === lastHostTimecode) {
+        console.log('🔄 Timecode unchanged:', currentTimecode);
+        return;
+    }
+    
+    console.log('🔄 AudioController status:', {
+        exists: !!audioController,
+        hasPlay: !!(audioController && audioController.play),
+        hasStop: !!(audioController && audioController.stop),
+        hasAudioPlayer: !!(audioController && audioController.audioPlayer),
+        audioPlayerHasPlay: !!(audioController && audioController.audioPlayer && audioController.audioPlayer.play),
+        audioPlayerHasPause: !!(audioController && audioController.audioPlayer && audioController.audioPlayer.pause)
+    });
+    
+    // Parse timecode (format: "X.XXXs")
+    const timeMatch = currentTimecode.match(/(\d+\.?\d*)s?/);
+    if (!timeMatch) {
+        console.log('❌ Could not parse timecode:', currentTimecode);
+        return;
+    }
+    
+    const currentTime = parseFloat(timeMatch[1]);
+    const lastTime = parseFloat(lastHostTimecode.match(/(\d+\.?\d*)s?/)?.[1] || '0');
+    
+    console.log(`🔄 Host timecode changed: ${lastHostTimecode} -> ${currentTimecode} (${lastTime} -> ${currentTime})`);
+    
+    // Calculate time difference
+    const timeDiff = currentTime - lastTime;
+    const now = Date.now();
+    const realTimeDiff = (now - lastSyncTime) / 1000; // Convert to seconds
+    
+    console.log(`🔄 Time analysis: timeDiff=${timeDiff}s, realTimeDiff=${realTimeDiff}s, hostPlaybackActive=${hostPlaybackActive}`);
+    
+    // If timecode is advancing (even slightly), host is playing
+    if (timeDiff > 0.001) { // Very sensitive threshold
+        console.log('🔄 Timecode progressing - host is playing');
+        
+        if (!hostPlaybackActive) {
+            console.log('🔄 HOST PLAYBACK DETECTED - Starting audio sync');
+            hostPlaybackActive = true;
+            
+            // Start audio playback
+            if (audioController && audioController.play) {
+                try {
+                    console.log('🎵 Calling audioController.play()');
+                    audioController.play();
+                    console.log('✅ Audio playback started successfully');
+                } catch (error) {
+                    console.error('❌ Failed to start audio playback:', error);
+                }
+            } else if (audioController && audioController.audioPlayer && audioController.audioPlayer.play) {
+                try {
+                    console.log('🎵 Calling audioController.audioPlayer.play()');
+                    audioController.audioPlayer.play();
+                    console.log('✅ Audio playback started successfully via audioPlayer');
+                } catch (error) {
+                    console.error('❌ Failed to start audio playback via audioPlayer:', error);
+                }
+            } else {
+                console.warn('⚠️ AudioController or play method not available');
+            }
+        } else {
+            console.log('🔄 Already playing - continuing sync');
+        }
+        
+        // Always sync audio position when timecode changes
+        if (audioController && audioController.audioPlayer) {
+            const audioTime = audioController.audioPlayer.currentTime;
+            const timeDifference = Math.abs(audioTime - currentTime);
+            
+            console.log(`🔄 Audio sync check: audioTime=${audioTime}s, hostTime=${currentTime}s, diff=${timeDifference}s`);
+            
+            // Sync if difference is more than 100ms (more sensitive)
+            if (timeDifference > 0.1) {
+                audioController.audioPlayer.currentTime = currentTime;
+                console.log(`✅ Synced audio position: ${audioTime}s -> ${currentTime}s`);
+            }
+        }
+    } 
+    // If timecode stopped changing for more than 300ms, host likely stopped
+    else if (timeDiff === 0 && realTimeDiff > 0.3) {
+        if (hostPlaybackActive) {
+            console.log('🔄 HOST PLAYBACK STOPPED - Stopping audio sync');
+            hostPlaybackActive = false;
+            
+            if (audioController && audioController.stop) {
+                try {
+                    audioController.stop();
+                    console.log('✅ Audio playback stopped successfully');
+                } catch (error) {
+                    console.error('❌ Failed to stop audio playback:', error);
+                }
+            }
+        }
+    }
+    // If timecode jumped backwards (rewind/reset), also sync
+    else if (timeDiff < -0.1) {
+        console.log('🔄 HOST TIMECODE REWIND DETECTED');
+        if (audioController && audioController.audioPlayer) {
+            audioController.audioPlayer.currentTime = currentTime;
+            console.log(`✅ Rewound audio position to: ${currentTime}s`);
+        }
+    }
+    
+    lastHostTimecode = currentTimecode;
+    lastSyncTime = now;
+}
+
+// Handle host transport changes (for Electron)
+function handleHostTransportChange(transportInfo) {
+    if (!localStorage.getItem('lyrix_audio_sync_enabled') === 'true') return;
+    
+    console.log('🔄 Host transport changed:', transportInfo);
+    
+    try {
+        if (transportInfo.playing) {
+            console.log('🔄 Host started playback via Electron - starting audio sync');
+            if (audioController && audioController.play) {
+                audioController.play();
+            }
+        } else {
+            console.log('🔄 Host stopped playback via Electron - stopping audio sync');
+            if (audioController && audioController.stop) {
+                audioController.stop();
+            }
+        }
+        
+        // Sync position
+        if (transportInfo.position !== undefined && audioController && audioController.audioPlayer) {
+            audioController.audioPlayer.currentTime = transportInfo.position;
+            console.log(`🔄 Synced position via Electron to: ${transportInfo.position}s`);
+        }
+    } catch (error) {
+        console.error('❌ Failed to handle Electron transport change:', error);
+    }
+}
+
+// Handle host playback changes (for external DAW interfaces)
+function handleHostPlaybackChange(isPlaying, position) {
+    if (!localStorage.getItem('lyrix_audio_sync_enabled') === 'true') return;
+    
+    console.log('🔄 Host playback changed via external interface:', { isPlaying, position });
+    
+    try {
+        if (isPlaying) {
+            console.log('🔄 Host started playback via external - starting audio sync');
+            if (audioController && audioController.play) {
+                audioController.play();
+            }
+        } else {
+            console.log('🔄 Host stopped playback via external - stopping audio sync');
+            if (audioController && audioController.stop) {
+                audioController.stop();
+            }
+        }
+        
+        // Sync position if provided
+        if (position !== undefined && audioController && audioController.audioPlayer) {
+            audioController.audioPlayer.currentTime = position;
+            console.log(`🔄 Synced position via external to: ${position}s`);
+        }
+    } catch (error) {
+        console.error('❌ Failed to handle external playback change:', error);
+    }
+}
+
 // Toggle MIDI inspector visibility
 function toggleMidiInspector(buttonElement, labelElement) {
     const isCurrentlyEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
@@ -2779,6 +3278,11 @@ function applyInitialSettings() {
         localStorage.setItem('lyrix_midi_inspector_enabled', 'false'); // Default to hidden
     }
     
+    // Set default volume if it doesn't exist
+    if (localStorage.getItem('lyrix_audio_volume') === null) {
+        localStorage.setItem('lyrix_audio_volume', '70'); // Default to 70%
+    }
+    
     // Wait for DOM elements to be created, then apply settings
     setTimeout(() => {
         // Apply audio player settings
@@ -2788,7 +3292,8 @@ function applyInitialSettings() {
             document.getElementById('audio-play-button'),
             document.getElementById('audio-stop-button'),
             document.getElementById('audio-controls-container'),
-            document.getElementById('audio-scrub-slider-container')
+            document.getElementById('audio-scrub-slider-container'),
+            document.getElementById('audio-volume-slider-container')
         ];
         
         // Also handle the audio tools row
@@ -2828,6 +3333,52 @@ function applyInitialSettings() {
         const midiElement = document.getElementById('midi-logger-container');
         if (midiElement) {
             midiElement.style.display = isMidiInspectorEnabled ? 'block' : 'none';
+        }
+        
+        // Apply saved volume setting
+        const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
+        setTimeout(() => {
+            // Apply volume to audio player
+            if (audioController && audioController.audioPlayer) {
+                audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
+                console.log(`🔊 Applied saved volume at startup: ${savedVolume}%`);
+            }
+            
+            // Update volume slider if it exists
+            const volumeValueLabel = document.getElementById('volume_value_label');
+            if (volumeValueLabel) {
+                volumeValueLabel.textContent = `${savedVolume}%`;
+            }
+        }, 200); // Extra delay for audio player initialization
+        
+        // Apply audio sync settings
+        const isAudioSyncEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
+        if (isAudioSyncEnabled) {
+            console.log('🔄 Re-enabling audio host sync on startup');
+            // Re-enable listeners without changing the UI state
+            try {
+                // Start timecode monitoring
+                startHostTimecodeMonitoring();
+                
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.audioSync) {
+                    window.webkit.messageHandlers.audioSync.postMessage({
+                        action: 'enableSync',
+                        enabled: true
+                    });
+                    window.addEventListener('message', handleHostTransportMessage);
+                } else if (window.electronAPI && window.electronAPI.audioSync) {
+                    window.electronAPI.audioSync.enable();
+                    window.electronAPI.audioSync.onTransportChange(handleHostTransportChange);
+                } else {
+                    window.addEventListener('message', handleHostTransportMessage);
+                    if (window.external && window.external.OnPlaybackChanged) {
+                        window.external.OnPlaybackChanged = handleHostPlaybackChange;
+                    }
+                }
+                console.log('🔄 Audio host sync listeners restored with timecode monitoring');
+            } catch (error) {
+                console.error('❌ Failed to restore audio host sync:', error);
+            }
         }
         
     }, 100); // Small delay to ensure DOM is ready
@@ -3175,6 +3726,15 @@ function loadAndDisplaySong(songKey) {
         // Load associated audio if available
         if (song.hasAudio() && audioController) {
             audioController.loadAudio(song.getAudioPath());
+            
+            // Apply saved volume to newly loaded audio
+            const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
+            setTimeout(() => {
+                if (audioController && audioController.audioPlayer) {
+                    audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
+                    console.log(`🔊 Applied volume to new audio: ${savedVolume}%`);
+                }
+            }, 100);
             
             // Reset slider to zero when loading new audio
             resetAudioSlider();
@@ -3558,6 +4118,122 @@ function createMainInterface() {
         
         timeLabels.append(currentTimeLabel, totalTimeLabel);
         scrubContainer.append(scrubSlider, timeLabels);
+
+        // Add volume control slider
+        const volumeContainer = $('div', {
+            id: 'audio-volume-slider-container',
+            css: {
+                marginBottom: '15px',
+                padding: '10px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '4px',
+                border: '1px solid #dee2e6',
+                display: initialDisplay
+            }
+        });
+
+        // Add data attribute for identification
+        volumeContainer.setAttribute('data-element', 'volume-slider');
+
+        const volumeLabel = $('div', {
+            text: '🔊 Volume',
+            css: {
+                fontSize: '14px',
+                fontWeight: '600',
+                marginBottom: '8px',
+                color: '#495057'
+            }
+        });
+
+        // Load saved volume from localStorage (default: 70%)
+        const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
+        
+        // Create Squirrel slider for volume control
+        const volumeSlider = Slider({
+            type: 'horizontal',
+            min: 0,
+            max: 100,
+            value: parseInt(savedVolume),
+            showLabel: false,
+            id: 'audio_volume_slider',
+            skin: {
+                container: {
+                    width: '100%',
+                    height: '20px',
+                    marginBottom: '5px'
+                },
+                track: {
+                    height: '6px',
+                    backgroundColor: '#ddd',
+                    borderRadius: '3px'
+                },
+                progression: {
+                    backgroundColor: '#28a745',
+                    borderRadius: '3px'
+                },
+                handle: {
+                    width: '16px',
+                    height: '16px',
+                    backgroundColor: '#28a745',
+                    border: '2px solid #fff',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                }
+            },
+            onInput: (value) => {
+                // Update audio volume immediately
+                if (audioController && audioController.audioPlayer) {
+                    const volume = value / 100;
+                    audioController.audioPlayer.volume = volume;
+                    
+                    // Save volume to localStorage
+                    localStorage.setItem('lyrix_audio_volume', value.toString());
+                    
+                    // Update volume label
+                    const volumeValueLabel = document.getElementById('volume_value_label');
+                    if (volumeValueLabel) {
+                        volumeValueLabel.textContent = `${Math.round(value)}%`;
+                    }
+                    
+                    console.log(`🔊 Volume set to: ${Math.round(value)}%`);
+                }
+            }
+        });
+
+        const volumeValueContainer = $('div', {
+            css: {
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '12px',
+                color: '#666',
+                fontFamily: 'monospace',
+                marginTop: '5px'
+            }
+        });
+
+        const volumeMinLabel = $('span', {
+            text: '0%'
+        });
+
+        const volumeValueLabel = $('span', {
+            id: 'volume_value_label',
+            text: `${savedVolume}%`,
+            css: {
+                fontWeight: '600',
+                color: '#28a745'
+            }
+        });
+
+        const volumeMaxLabel = $('span', {
+            text: '100%'
+        });
+
+        volumeValueContainer.append(volumeMinLabel, volumeValueLabel, volumeMaxLabel);
+        volumeContainer.append(volumeLabel, volumeSlider, volumeValueContainer);
+
+        // Apply saved volume to audio player when it's loaded
+        if (audioController && audioController.audioPlayer) {
+            audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
+        }
         
         // Add timecode display for AUv3 host compatibility
         const timecodeDisplay = UIManager.createEnhancedTimecodeDisplay({
