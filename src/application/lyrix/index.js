@@ -1778,6 +1778,18 @@ function showSongLibrary() {
 
     let filteredItems = [...songItems];
 
+    // Function to refresh all MIDI input values
+    function refreshMidiInputs() {
+        if (!window.midiUtilities) return;
+        
+        const midiInputs = listContainer.querySelectorAll('input[data-song-key]');
+        midiInputs.forEach(input => {
+            const songKey = input.getAttribute('data-song-key');
+            const midiNote = window.midiUtilities.getMidiAssignment(songKey);
+            input.value = midiNote || '';
+        });
+    }
+
     function updateSongList() {
         listContainer.innerHTML = '';
         
@@ -1798,7 +1810,7 @@ function showSongLibrary() {
                 }
             });
 
-            // MIDI note input box - reload value each time
+            // MIDI note input box - get fresh value each time the list is updated
             let currentMidiNote = null;
             if (window.midiUtilities) {
                 currentMidiNote = window.midiUtilities.getMidiAssignment(item.value);
@@ -1819,6 +1831,9 @@ function showSongLibrary() {
                     textAlign: 'center'
                 }
             });
+            
+            // Store reference to input for updating
+            midiInput.setAttribute('data-song-key', item.value);
 
             // Update MIDI assignment when input changes
             midiInput.addEventListener('change', (e) => {
@@ -1963,10 +1978,18 @@ function showSongLibrary() {
             item.text.toLowerCase().includes(searchTerm)
         );
         updateSongList();
+        // Refresh MIDI inputs after search
+        setTimeout(() => refreshMidiInputs(), 50);
     });
 
     content.append(searchInput, listContainer);
     updateSongList();
+    
+    // Refresh MIDI inputs after DOM is ready
+    setTimeout(() => {
+        refreshMidiInputs();
+        console.log('🎹 MIDI inputs refreshed in song library');
+    }, 100);
 
     // Footer
     const footer = UIManager.createModalFooter({});
