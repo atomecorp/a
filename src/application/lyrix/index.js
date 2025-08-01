@@ -1700,6 +1700,23 @@ function showSongLibrary() {
         }
     });
 
+    // Sort alphabetically button
+    const sortAlphabeticallyButton = $('button', {
+        text: '🔤 Sort A-Z',
+        css: {
+            backgroundColor: '#9c27b0',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            cursor: 'pointer'
+        },
+        onClick: () => {
+            sortSongsAlphabetically();
+        }
+    });
+
     // Bouton supprimer toutes les chansons
     const deleteAllButton = $('button', {
         text: '🗑️ Supprimer toutes les chansons',
@@ -1733,7 +1750,7 @@ function showSongLibrary() {
             });
         }
     });
-    actionButtons.append(exportLRXButton, exportTextButton, deleteAllButton);
+    actionButtons.append(exportLRXButton, exportTextButton, sortAlphabeticallyButton, deleteAllButton);
     headerTop.append(headerTitle, actionButtons);
 
     // Instructions
@@ -1778,6 +1795,63 @@ function showSongLibrary() {
 
     let filteredItems = [...songItems];
 
+    // Functions to manage custom song order persistence
+    function saveCustomSongOrder() {
+        const orderData = filteredItems.map((item, index) => ({
+            songKey: item.value,
+            order: index
+        }));
+        localStorage.setItem('lyrix_custom_song_order', JSON.stringify(orderData));
+        console.log('💾 Custom song order saved to localStorage');
+    }
+
+    function loadCustomSongOrder() {
+        try {
+            const savedOrder = localStorage.getItem('lyrix_custom_song_order');
+            if (!savedOrder) {
+                console.log('📋 No custom song order found, using default');
+                return;
+            }
+
+            const orderData = JSON.parse(savedOrder);
+            const orderMap = new Map();
+            orderData.forEach(item => {
+                orderMap.set(item.songKey, item.order);
+            });
+
+            // Separate songs with saved order from new songs
+            const songsWithOrder = [];
+            const newSongs = [];
+            
+            filteredItems.forEach(item => {
+                if (orderMap.has(item.value)) {
+                    songsWithOrder.push({
+                        ...item,
+                        savedOrder: orderMap.get(item.value)
+                    });
+                } else {
+                    newSongs.push(item);
+                }
+            });
+
+            // Sort songs with saved order
+            songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
+            
+            // Combine: ordered songs first, then new songs at the end
+            filteredItems = [
+                ...songsWithOrder.map(item => ({ ...item, savedOrder: undefined })),
+                ...newSongs
+            ];
+
+            console.log(`📋 Custom song order loaded: ${songsWithOrder.length} ordered songs, ${newSongs.length} new songs`);
+        } catch (error) {
+            console.error('❌ Error loading custom song order:', error);
+        }
+    }
+
+    // Load custom order on initialization
+    loadCustomSongOrder();
+
     // Function to refresh all MIDI input values
     function refreshMidiInputs() {
         if (!window.midiUtilities) return;
@@ -1790,11 +1864,41 @@ function showSongLibrary() {
         });
     }
 
+    // Function to sort songs alphabetically
+    function sortSongsAlphabetically() {
+        filteredItems.sort((a, b) => {
+            const titleA = (a.song.metadata?.title || a.song.title || 'Untitled').toLowerCase();
+            const titleB = (b.song.metadata?.title || b.song.title || 'Untitled').toLowerCase();
+            return titleA.localeCompare(titleB);
+        });
+        updateSongList();
+        setTimeout(() => refreshMidiInputs(), 50);
+        saveCustomSongOrder(); // Save the new order
+        console.log('🔤 Songs sorted alphabetically and order saved');
+    }
+
     function updateSongList() {
         listContainer.innerHTML = '';
         
         filteredItems.forEach((item, index) => {
             const itemDiv = UIManager.createListItem({});
+            
+            // Add drag and drop functionality
+            itemDiv.draggable = true;
+            itemDiv.dataset.songIndex = index;
+            itemDiv.style.cursor = 'grab';
+            
+            // Add drag handle visual indicator
+            const dragHandle = $('span', {
+                text: '⋮⋮',
+                css: {
+                    marginRight: '8px',
+                    color: '#999',
+                    fontSize: '14px',
+                    cursor: 'grab',
+                    userSelect: 'none'
+                }
+            });
             
             const textSpan = UIManager.createListItemText({
                 text: item.text
@@ -1960,13 +2064,55 @@ function showSongLibrary() {
                 if (e.target !== deleteButton && 
                     e.target !== midiLearnButton && 
                     e.target !== midiInput && 
+                    e.target !== dragHandle &&
                     !midiControls.contains(e.target)) {
                     document.body.removeChild(modalContainer);
                     loadAndDisplaySong(item.value);
                 }
             });
 
-            itemDiv.append(textSpan, controlsContainer);
+            // Drag and drop event handlers
+            itemDiv.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', index);
+                itemDiv.style.opacity = '0.5';
+                itemDiv.style.cursor = 'grabbing';
+            });
+
+            itemDiv.addEventListener('dragend', (e) => {
+                itemDiv.style.opacity = '1';
+                itemDiv.style.cursor = 'grab';
+            });
+
+            itemDiv.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                itemDiv.style.borderTop = '2px solid #007acc';
+            });
+
+            itemDiv.addEventListener('dragleave', (e) => {
+                itemDiv.style.borderTop = '';
+            });
+
+            itemDiv.addEventListener('drop', (e) => {
+                e.preventDefault();
+                itemDiv.style.borderTop = '';
+                const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                const targetIndex = index;
+                
+                if (draggedIndex !== targetIndex) {
+                    // Reorder the filteredItems array
+                    const draggedItem = filteredItems[draggedIndex];
+                    filteredItems.splice(draggedIndex, 1);
+                    filteredItems.splice(targetIndex, 0, draggedItem);
+                    
+                    // Update the display
+                    updateSongList();
+                    setTimeout(() => refreshMidiInputs(), 50);
+                    saveCustomSongOrder(); // Save the new order
+                    console.log(`🔄 Moved song from position ${draggedIndex} to ${targetIndex} and saved order`);
+                }
+            });
+
+            itemDiv.append(dragHandle, textSpan, controlsContainer);
             listContainer.appendChild(itemDiv);
         });
     }
@@ -2639,6 +2785,55 @@ function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
     }
 }
 
+// Function to get songs in custom order (respecting user's reordering)
+function getSongsInCustomOrder() {
+    const allSongs = lyricsLibrary.getAllSongs();
+    
+    try {
+        const savedOrder = localStorage.getItem('lyrix_custom_song_order');
+        if (!savedOrder) {
+            // No custom order, return songs in creation order
+            return allSongs;
+        }
+
+        const orderData = JSON.parse(savedOrder);
+        const orderMap = new Map();
+        orderData.forEach(item => {
+            orderMap.set(item.songKey, item.order);
+        });
+
+        // Separate songs with saved order from new songs
+        const songsWithOrder = [];
+        const newSongs = [];
+        
+        allSongs.forEach(song => {
+            if (orderMap.has(song.key)) {
+                songsWithOrder.push({
+                    ...song,
+                    savedOrder: orderMap.get(song.key)
+                });
+            } else {
+                newSongs.push(song);
+            }
+        });
+
+        // Sort songs with saved order
+        songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
+        
+        // Combine: ordered songs first, then new songs at the end
+        const orderedSongs = [
+            ...songsWithOrder.map(song => ({ ...song, savedOrder: undefined })),
+            ...newSongs
+        ];
+
+        console.log(`🎵 Retrieved ${orderedSongs.length} songs in custom order`);
+        return orderedSongs;
+    } catch (error) {
+        console.error('❌ Error getting songs in custom order:', error);
+        return allSongs; // Fallback to default order
+    }
+}
+
 // Song navigation functions
 function navigateToPreviousSong() {
     if (!lyricsLibrary) {
@@ -2646,7 +2841,7 @@ function navigateToPreviousSong() {
         return false;
     }
     
-    const songs = lyricsLibrary.getAllSongs();
+    const songs = getSongsInCustomOrder(); // Use custom order instead of getAllSongs()
     console.log(`🎵 Total songs in library: ${songs.length}`);
     if (songs.length === 0) {
         console.log('📚 No songs in library');
@@ -2654,7 +2849,7 @@ function navigateToPreviousSong() {
     }
     
     // Debug: Show all songs
-    console.log('📚 All songs in library:', songs.map(s => ({ key: s.key, title: s.title })));
+    console.log('📚 All songs in custom order:', songs.map(s => ({ key: s.key, title: s.title })));
     
     // Get current song key from display or global backup
     const currentSongKey = window.lyricsDisplay?.currentSongKey || window.currentSongKey || null;
@@ -2694,7 +2889,7 @@ function navigateToNextSong() {
         return false;
     }
     
-    const songs = lyricsLibrary.getAllSongs();
+    const songs = getSongsInCustomOrder(); // Use custom order instead of getAllSongs()
     console.log(`🎵 Total songs in library: ${songs.length}`);
     if (songs.length === 0) {
         console.log('📚 No songs in library');
@@ -2702,7 +2897,7 @@ function navigateToNextSong() {
     }
     
     // Debug: Show all songs
-    console.log('📚 All songs in library:', songs.map(s => ({ key: s.key, title: s.title })));
+    console.log('📚 All songs in custom order:', songs.map(s => ({ key: s.key, title: s.title })));
     
     // Get current song key from display or global backup
     const currentSongKey = window.lyricsDisplay?.currentSongKey || window.currentSongKey || null;
