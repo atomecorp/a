@@ -1380,6 +1380,82 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     selectAllContainer.appendChild(selectAllBtn);
     content.appendChild(selectAllContainer);
 
+    // Export format option
+    const formatContainer = $('div', {
+        css: {
+            marginBottom: '15px',
+            padding: '10px',
+            backgroundColor: UIManager.THEME.colors.background,
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '15px'
+        }
+    });
+
+    const formatLabel = $('span', {
+        text: 'Export format:',
+        css: {
+            fontWeight: 'bold',
+            color: '#333'
+        }
+    });
+
+    let exportSeparateFiles = false;
+
+    const singleFileBtn = $('button', {
+        text: '📄 Single File',
+        css: {
+            padding: '6px 12px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            backgroundColor: '#27ae60',
+            color: 'white',
+            fontWeight: 'bold'
+        }
+    });
+
+    const separateFilesBtn = $('button', {
+        text: '📁 Separate Files',
+        css: {
+            padding: '6px 12px',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            backgroundColor: '#eee',
+            color: '#333'
+        }
+    });
+
+    function updateFormatButtons() {
+        if (exportSeparateFiles) {
+            singleFileBtn.style.backgroundColor = '#eee';
+            singleFileBtn.style.color = '#333';
+            separateFilesBtn.style.backgroundColor = '#27ae60';
+            separateFilesBtn.style.color = 'white';
+        } else {
+            singleFileBtn.style.backgroundColor = '#27ae60';
+            singleFileBtn.style.color = 'white';
+            separateFilesBtn.style.backgroundColor = '#eee';
+            separateFilesBtn.style.color = '#333';
+        }
+    }
+
+    singleFileBtn.addEventListener('click', () => {
+        exportSeparateFiles = false;
+        updateFormatButtons();
+    });
+
+    separateFilesBtn.addEventListener('click', () => {
+        exportSeparateFiles = true;
+        updateFormatButtons();
+    });
+
+    formatContainer.append(formatLabel, singleFileBtn, separateFilesBtn);
+    content.appendChild(formatContainer);
+
     // Song list
     const listContainer = UIManager.createListContainer({});
     
@@ -1464,133 +1540,116 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
             document.body.removeChild(modalContainer);
 
-            // Generate export text
-            let exportText = `Lyrix Songs Export - ${new Date().toLocaleDateString()}\n`;
-            exportText += `Total Songs: ${selectedSongIds.length}\n`;
-            exportText += '='.repeat(50) + '\n\n';
-
-            selectedSongIds.forEach((songId, index) => {
-                const song = lyricsLibrary.getSongById(songId);
-                if (song) {
-                    exportText += `${index + 1}. ${song.metadata.title || 'Untitled'}\n`;
-                    exportText += `Artist: ${song.metadata.artist || 'Unknown'}\n`;
-                    if (song.metadata.album) {
-                        exportText += `Album: ${song.metadata.album}\n`;
-                    }
-                    exportText += '\nLyrics:\n';
-                    exportText += '-'.repeat(30) + '\n';
-                    
-                    if (song.lines && song.lines.length > 0) {
-                        song.lines.forEach(line => {
-                            if (line.time >= 0) {
-                                const minutes = Math.floor(line.time / 60000);
-                                const seconds = Math.floor((line.time % 60000) / 1000);
-                                const centiseconds = Math.floor((line.time % 1000) / 10);
-                                const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
-                                exportText += `${timeStr} ${line.text}\n`;
-                            } else {
-                                exportText += `${line.text}\n`;
-                            }
-                        });
-                    } else {
-                        exportText += '(No lyrics available)\n';
-                    }
-                    
-                    exportText += '\n' + '='.repeat(50) + '\n\n';
-                }
-            });
-
-            // Use download method that works on all browsers including Safari
-            const blob = new Blob([exportText], { type: 'text/plain' });
-            const saveLink = document.createElement('a');
-            saveLink.href = URL.createObjectURL(blob);
-            saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
-            saveLink.style.display = 'none';
-            
-            // Add to document, click, and remove
-            document.body.appendChild(saveLink);
-            saveLink.click();
-            document.body.removeChild(saveLink);
-            
-            // Clean up the object URL
-            setTimeout(() => {
-                URL.revokeObjectURL(saveLink.href);
-            }, 100);
-            
-            console.log(`✅ Successfully exported ${selectedSongIds.length} songs as text via download`);
+            if (exportSeparateFiles) {
+                // Export each song as a separate file
+                exportSongsAsSeparateFiles(selectedSongIds);
+            } else {
+                // Export all songs in a single file
+                exportSongsAsSingleFile(selectedSongIds);
+            }
         }
     });
 
     footer.append(cancelButton, exportButton);
-
-    // Assemble modal
     modal.append(header, content, footer);
     modalContainer.appendChild(modal);
-    
-    // Add to DOM
     document.body.appendChild(modalContainer);
-
-    // Close on overlay click
-    modalContainer.addEventListener('click', (e) => {
-        if (e.target === modalContainer) {
-            document.body.removeChild(modalContainer);
-        }
-    });
 }
 
-// Export selected songs as text with folder dialog
-
-// Fallback function for browsers without File System Access API
-function exportSelectedSongsAsTextFallback(selectedSongIds) {
-    let exportText = `Lyrix Songs Export - ${new Date().toLocaleDateString()}\n`;
-    exportText += `Total Songs: ${selectedSongIds.length}\n`;
-    exportText += '='.repeat(50) + '\n\n';
-
+// Function to export songs as separate files
+function exportSongsAsSeparateFiles(selectedSongIds) {
+    let downloadCount = 0;
+    
     selectedSongIds.forEach((songId, index) => {
         const song = lyricsLibrary.getSongById(songId);
         if (song) {
-            exportText += `${index + 1}. ${song.metadata.title || 'Untitled'}\n`;
-            exportText += `Artist: ${song.metadata.artist || 'Unknown'}\n`;
-            if (song.metadata.album) {
-                exportText += `Album: ${song.metadata.album}\n`;
-            }
-            exportText += '\nLyrics:\n';
-            exportText += '-'.repeat(30) + '\n';
+            let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
             
             if (song.lines && song.lines.length > 0) {
                 song.lines.forEach(line => {
-                    if (line.time >= 0) {
-                        const minutes = Math.floor(line.time / 60000);
-                        const seconds = Math.floor((line.time % 60000) / 1000);
-                        const centiseconds = Math.floor((line.time % 1000) / 10);
-                        const timeStr = `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
-                        exportText += `${timeStr} ${line.text}\n`;
-                    } else {
-                        exportText += `${line.text}\n`;
-                    }
+                    exportText += `${line.text}\n`;
                 });
             } else {
                 exportText += '(No lyrics available)\n';
             }
             
-            exportText += '\n' + '='.repeat(50) + '\n\n';
+            // Create safe filename
+            const safeTitle = (song.metadata.title || 'Untitled')
+                .replace(/[^a-z0-9]/gi, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_|_$/g, '');
+            
+            // Use download method with delay to avoid browser blocking
+            setTimeout(() => {
+                const blob = new Blob([exportText], { type: 'text/plain' });
+                const saveLink = document.createElement('a');
+                saveLink.href = URL.createObjectURL(blob);
+                saveLink.download = `${safeTitle}.txt`;
+                saveLink.style.display = 'none';
+                
+                document.body.appendChild(saveLink);
+                saveLink.click();
+                document.body.removeChild(saveLink);
+                
+                setTimeout(() => {
+                    URL.revokeObjectURL(saveLink.href);
+                }, 100);
+                
+                downloadCount++;
+                if (downloadCount === selectedSongIds.length) {
+                    console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
+                }
+            }, index * 500); // 500ms delay between downloads
+        }
+    });
+}
+
+// Function to export songs as a single file
+function exportSongsAsSingleFile(selectedSongIds) {
+    // Generate export text - simple format
+    let exportText = '';
+
+    selectedSongIds.forEach((songId, index) => {
+        const song = lyricsLibrary.getSongById(songId);
+        if (song) {
+            // Add song title
+            exportText += `${song.metadata.title || 'Untitled'}\n\n`;
+            
+            // Add lyrics only
+            if (song.lines && song.lines.length > 0) {
+                song.lines.forEach(line => {
+                    // Export only the text, without timecodes
+                    exportText += `${line.text}\n`;
+                });
+            } else {
+                exportText += '(No lyrics available)\n';
+            }
+            
+            // Add spacing between songs (only if not the last song)
+            if (index < selectedSongIds.length - 1) {
+                exportText += '\n\n';
+            }
         }
     });
 
-    // Create download
-    const dataBlob = new Blob([exportText], { type: 'text/plain' });
-    const url = URL.createObjectURL(dataBlob);
-    console.log('🔍 Fallback download URL:', url);
+    // Use download method that works on all browsers including Safari
+    const blob = new Blob([exportText], { type: 'text/plain' });
+    const saveLink = document.createElement('a');
+    saveLink.href = URL.createObjectURL(blob);
+    saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
+    saveLink.style.display = 'none';
     
-    const downloadLink = document.createElement('a');
-    downloadLink.href = url;
-    downloadLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-    URL.revokeObjectURL(url);
-
-    console.log(`✅ Successfully exported ${selectedSongIds.length} songs as text`);
+    // Add to document, click, and remove
+    document.body.appendChild(saveLink);
+    saveLink.click();
+    document.body.removeChild(saveLink);
+    
+    // Clean up the object URL
+    setTimeout(() => {
+        URL.revokeObjectURL(saveLink.href);
+    }, 100);
+    
+    console.log(`✅ Successfully exported ${selectedSongIds.length} songs as single text file`);
 }
 
 // Show song library
@@ -1700,6 +1759,62 @@ function showSongLibrary() {
         }
     });
 
+    // Auto Fill MIDI container
+    const autoFillContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            backgroundColor: '#f8f9fa',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            border: '1px solid #ddd'
+        }
+    });
+
+    const autoFillLabel = $('span', {
+        text: 'Auto Fill:',
+        css: {
+            fontSize: '11px',
+            color: '#666',
+            fontWeight: '500'
+        }
+    });
+
+    const autoFillInput = $('input', {
+        type: 'number',
+        min: '0',
+        max: '127',
+        placeholder: 'Root',
+        value: '60', // Default to middle C
+        css: {
+            width: '50px',
+            padding: '2px 4px',
+            border: '1px solid #ccc',
+            borderRadius: '3px',
+            fontSize: '11px',
+            textAlign: 'center'
+        }
+    });
+
+    const autoFillButton = $('button', {
+        text: '🎹 Fill',
+        css: {
+            backgroundColor: '#4caf50',
+            color: 'white',
+            border: 'none',
+            padding: '4px 8px',
+            borderRadius: '3px',
+            fontSize: '11px',
+            cursor: 'pointer'
+        },
+        onClick: () => {
+            autoFillMidiNotes();
+        }
+    });
+
+    autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
+
     // Sort alphabetically button
     const sortAlphabeticallyButton = $('button', {
         text: '🔤 Sort A-Z',
@@ -1750,7 +1865,7 @@ function showSongLibrary() {
             });
         }
     });
-    actionButtons.append(exportLRXButton, exportTextButton, sortAlphabeticallyButton, deleteAllButton);
+    actionButtons.append(exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     headerTop.append(headerTitle, actionButtons);
 
     // Instructions
@@ -1875,6 +1990,83 @@ function showSongLibrary() {
         setTimeout(() => refreshMidiInputs(), 50);
         saveCustomSongOrder(); // Save the new order
         console.log('🔤 Songs sorted alphabetically and order saved');
+    }
+
+    // Function to auto-fill MIDI notes starting from root note
+    function autoFillMidiNotes() {
+        if (!window.midiUtilities) {
+            console.error('❌ MIDI utilities not available');
+            Modal({
+                title: '❌ Error',
+                content: '<p>MIDI utilities not available</p>',
+                buttons: [{ text: 'OK' }],
+                size: 'small'
+            });
+            return;
+        }
+
+        const rootNoteStr = autoFillInput.value.trim();
+        if (!rootNoteStr) {
+            console.error('❌ Root note not specified');
+            Modal({
+                title: '❌ Error',
+                content: '<p>Please enter a root note (0-127)</p>',
+                buttons: [{ text: 'OK' }],
+                size: 'small'
+            });
+            return;
+        }
+
+        const rootNote = parseInt(rootNoteStr);
+        if (isNaN(rootNote) || rootNote < 0 || rootNote > 127) {
+            console.error('❌ Invalid root note');
+            Modal({
+                title: '❌ Error',
+                content: '<p>Root note must be between 0 and 127</p>',
+                buttons: [{ text: 'OK' }],
+                size: 'small'
+            });
+            return;
+        }
+
+        // Perform auto-fill directly
+        performAutoFill(rootNote);
+    }
+
+    // Function to perform the actual auto-fill
+    function performAutoFill(rootNote) {
+        let assignedCount = 0;
+        let skippedCount = 0;
+
+        filteredItems.forEach((item, index) => {
+            const midiNote = rootNote + index;
+            
+            // Check if MIDI note is in valid range
+            if (midiNote > 127) {
+                console.warn(`⚠️ Skipping ${item.song.title}: MIDI note ${midiNote} exceeds 127`);
+                skippedCount++;
+                return;
+            }
+
+            try {
+                // Remove any existing assignment for this song
+                window.midiUtilities.removeMidiAssignment(item.value);
+                
+                // Set new assignment
+                window.midiUtilities.setMidiAssignment(item.value, midiNote);
+                assignedCount++;
+                
+                console.log(`🎹 Auto-assigned: ${item.song.title} -> Note ${midiNote}`);
+            } catch (error) {
+                console.error(`❌ Error assigning MIDI note to ${item.song.title}:`, error);
+                skippedCount++;
+            }
+        });
+
+        // Refresh MIDI inputs in the UI
+        setTimeout(() => refreshMidiInputs(), 100);
+
+        console.log(`🎹 Auto-fill complete: ${assignedCount} assigned, ${skippedCount} skipped`);
     }
 
     function updateSongList() {
