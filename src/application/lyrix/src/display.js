@@ -66,6 +66,51 @@ export class LyricsDisplay {
                 zIndex: '100' // Au-dessus du contenu de scroll
             }
         });
+
+        // Create hamburger button (always visible, positioned at top-left)
+        this.hamburgerButton = $('button', {
+            id: 'hamburger-menu-button',
+            text: '☰',
+            css: {
+                position: 'absolute',
+                top: '3px',
+                left: '3px',
+                width: '25px',
+                height: '25px',
+                backgroundColor: '#2c3e50', // Dark background
+                border: '1px solid #34495e',
+                borderRadius: '6px',
+                color: '#ecf0f1', // Light text color
+                fontSize: '18px',
+                cursor: 'pointer',
+                zIndex: '101',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }
+        });
+
+        // Hamburger button hover effects
+        this.hamburgerButton.addEventListener('mouseenter', () => {
+            this.hamburgerButton.style.backgroundColor = '#34495e';
+            this.hamburgerButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+        });
+
+        this.hamburgerButton.addEventListener('mouseleave', () => {
+            this.hamburgerButton.style.backgroundColor = '#2c3e50';
+            this.hamburgerButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+        });
+
+        // Hamburger button click handler
+        this.hamburgerButton.addEventListener('click', () => {
+            this.toggleToolbarVisibility();
+        });
+
+        // Load toolbar visibility state from localStorage
+        const savedToolbarState = localStorage.getItem('lyrix_toolbar_visible');
+        this.toolbarVisible = savedToolbarState === 'true'; // Default to false (minimized)
         
         // Create lyrics content area - SEULE zone autorisée à scroller
         this.lyricsContent = $('div', {
@@ -258,13 +303,14 @@ export class LyricsDisplay {
         const mainToolRow = $('div', {
             id: 'main-toolbar-row',
             css: {
-                display: 'flex',
+                display: this.toolbarVisible ? 'flex' : 'none', // Hidden by default
                 gap: '8px',
                 alignItems: 'center',
                 flexWrap: 'wrap',
-                padding: '8px', // Padding interne pour la rangée principale
+                padding: '8px 8px 8px 52px', // Extra left padding to avoid hamburger menu overlap (52px = 36px button + 8px margin + 8px clearance)
                 backgroundColor: UIManager.THEME.colors.background,
-                borderBottom: `1px solid ${UIManager.THEME.colors.border}`
+                borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
+                transition: 'all 0.3s ease' // Smooth transition for show/hide
             }
         });
         
@@ -331,7 +377,7 @@ export class LyricsDisplay {
                 flexDirection: 'column',
                 gap: '4px',
                 width: '100%',
-                padding: '4px 8px', // Padding interne pour la rangée audio
+                padding: '3px 3px 3px 3px', // Extra left padding to align with main toolbar row
                 backgroundColor: UIManager.THEME.colors.surface
             }
         });
@@ -348,9 +394,10 @@ export class LyricsDisplay {
         });
         
         // Add both rows to the toolbar
-        this.toolbar.append(mainToolRow, audioToolRow);
+        this.toolbar.append(this.hamburgerButton, mainToolRow, audioToolRow);
         
-        // Store reference to audio tools row for dynamic visibility
+        // Store references to toolbar rows for dynamic visibility
+        this.mainToolRow = mainToolRow;
         this.audioToolRow = audioToolRow;
         
         // Update lyrics content positioning based on audio tools visibility
@@ -377,6 +424,9 @@ export class LyricsDisplay {
         
         // Initialize timecode button appearance based on loaded state
         this.updateTimecodeButtonAppearance();
+        
+        // Initialize toolbar visibility based on saved state
+        this.updateToolbarVisibility();
         
     }
     
@@ -629,11 +679,11 @@ export class LyricsDisplay {
     updateLyricsContentPosition() {
         if (!this.audioToolRow) return;
         
-        // Check if audio player is enabled
+        // Check if audio player is enabled and toolbar is visible
         const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
         
-        // Show/hide audio tools row
-        if (isAudioPlayerEnabled && this.audioTools.length > 0) {
+        // Show/hide audio tools row (only if toolbar is visible)
+        if (isAudioPlayerEnabled && this.audioTools.length > 0 && this.toolbarVisible) {
             this.audioToolRow.style.display = 'flex';
         } else {
             this.audioToolRow.style.display = 'none';
@@ -1572,6 +1622,59 @@ export class LyricsDisplay {
         if (this.currentLyrics) {
             this.renderLyrics();
         }
+    }
+    
+    // Toggle toolbar visibility (hamburger menu functionality)
+    toggleToolbarVisibility() {
+        this.toolbarVisible = !this.toolbarVisible;
+        
+        // Save state to localStorage
+        localStorage.setItem('lyrix_toolbar_visible', this.toolbarVisible.toString());
+        
+        // Update main toolbar row visibility
+        if (this.mainToolRow) {
+            this.mainToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
+        }
+        
+        // Update audio toolbar row visibility if audio is enabled
+        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+        if (this.audioToolRow && isAudioPlayerEnabled) {
+            this.audioToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
+        }
+        
+        // Update hamburger button icon
+        this.hamburgerButton.textContent = this.toolbarVisible ? '✕' : '☰';
+        
+        // Animate the toolbar transition
+        if (this.mainToolRow) {
+            this.mainToolRow.style.transition = 'all 0.3s ease';
+        }
+        if (this.audioToolRow) {
+            this.audioToolRow.style.transition = 'all 0.3s ease';
+        }
+        
+        console.log(`🍔 Toolbar ${this.toolbarVisible ? 'shown' : 'hidden'}`);
+    }
+    
+    // Update toolbar visibility without toggling (for initialization)
+    updateToolbarVisibility() {
+        // Update main toolbar row visibility
+        if (this.mainToolRow) {
+            this.mainToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
+        }
+        
+        // Update audio toolbar row visibility if audio is enabled
+        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+        if (this.audioToolRow && isAudioPlayerEnabled) {
+            this.audioToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
+        }
+        
+        // Update hamburger button icon
+        if (this.hamburgerButton) {
+            this.hamburgerButton.textContent = this.toolbarVisible ? '✕' : '☰';
+        }
+        
+        console.log(`🍔 Toolbar initialized as ${this.toolbarVisible ? 'shown' : 'hidden'}`);
     }
     
     // Toggle timecode display
