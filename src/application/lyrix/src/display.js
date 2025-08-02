@@ -2215,6 +2215,52 @@ export class LyricsDisplay {
         const currentText = this.currentLyrics.lines[lineIndex].text;
         console.log(`📝 Current text: "${currentText}"`);
         
+        // Auto-assign timecode if line has no timecode
+        const currentLine = this.currentLyrics.lines[lineIndex];
+        if (currentLine.time < 0) {
+            // Find the previous line with a timecode
+            let previousTimecode = -1;
+            for (let i = lineIndex - 1; i >= 0; i--) {
+                if (this.currentLyrics.lines[i].time >= 0) {
+                    previousTimecode = this.currentLyrics.lines[i].time;
+                    break;
+                }
+            }
+            
+            if (previousTimecode >= 0) {
+                // Assign timecode based on previous line + 1 second (1000ms)
+                const newTimecode = previousTimecode + 1000;
+                currentLine.time = newTimecode;
+                this.currentLyrics.updateLastModified();
+                
+                // Save to localStorage
+                const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                if (saveSuccess) {
+                    console.log(`⏰ Auto-assigned timecode ${this.formatTimeDisplay(newTimecode)} to line ${lineIndex + 1} (previous + 1s)`);
+                } else {
+                    console.error(`❌ Failed to save auto-assigned timecode for line ${lineIndex + 1}`);
+                }
+                
+                // Trigger timecode verification to ensure chronological order
+                if (typeof this.verifyAndCorrectAllTimecodes === 'function') {
+                    this.verifyAndCorrectAllTimecodes();
+                }
+                
+                // Refresh display to show the new timecode
+                this.renderLyrics();
+                
+                // Find the text span again after refresh and continue editing
+                const refreshedTextSpan = this.findTextSpanForLine(lineIndex);
+                if (refreshedTextSpan) {
+                    // Continue with editing the refreshed element
+                    this.editLineText(lineIndex, refreshedTextSpan);
+                    return;
+                }
+            } else {
+                console.log(`⏰ No previous timecode found for line ${lineIndex + 1}, proceeding without auto-assignment`);
+            }
+        }
+        
         // Create container for input and delete button
         const editContainer = document.createElement('div');
         editContainer.style.cssText = `
@@ -2908,5 +2954,46 @@ export class LyricsDisplay {
         }
 
         return correctionsMade;
+    }
+
+    // Helper function to find the text span element for a specific line after display refresh
+    findTextSpanForLine(lineIndex) {
+        try {
+            // Find the line element by its data attribute
+            const lineElement = document.querySelector(`[data-line-index="${lineIndex}"]`);
+            if (!lineElement) {
+                console.warn(`⚠️ Could not find line element for index ${lineIndex}`);
+                return null;
+            }
+
+            // Find the line content div (the flex container)
+            const lineContent = lineElement.querySelector('.lyrics-line > div');
+            if (!lineContent) {
+                console.warn(`⚠️ Could not find line content within line ${lineIndex}`);
+                return null;
+            }
+
+            // Find all spans in the line content
+            const spans = lineContent.querySelectorAll('span');
+            
+            // The text span is usually the last span (after timecode span if it exists)
+            // Or we can find it by checking which span doesn't have the timecode-span class
+            for (const span of spans) {
+                if (!span.classList.contains('timecode-span')) {
+                    return span;
+                }
+            }
+
+            // Fallback: return the last span if no non-timecode span found
+            if (spans.length > 0) {
+                return spans[spans.length - 1];
+            }
+
+            console.warn(`⚠️ Could not find text span within line ${lineIndex}`);
+            return null;
+        } catch (error) {
+            console.error(`❌ Error finding text span for line ${lineIndex}:`, error);
+            return null;
+        }
     }
 }
