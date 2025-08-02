@@ -51,8 +51,8 @@ import { LyricsDisplay } from './src/display.js';
 import { DragDropManager } from './src/dragDrop.js';
 window.dragDropManager = new DragDropManager();
 import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/modal.js';
-import { MidiUtilities } from './src/midi_utilities.js';
-import { exportSongsToLRX } from './SongUtils.js';
+import { MidiUtilities } from '././src/midi_utilities.js';
+import { exportSongsToLRX } from './src/SongUtils.js';
 
 // iOS Error Handling Setup
 // Handle iOS thumbnail and view service termination errors globally
@@ -3353,10 +3353,10 @@ function applyInitialSettings() {
             }
             
             // Update volume slider if it exists
-            const volumeValueLabel = document.getElementById('volume_value_label');
-            if (volumeValueLabel) {
-                volumeValueLabel.textContent = `${savedVolume}%`;
-            }
+            // const volumeValueLabel = document.getElementById('volume_value_label');
+            // if (volumeValueLabel) {
+            //     volumeValueLabel.textContent = `${savedVolume}%`;
+            // }
         }, 200); // Extra delay for audio player initialization
         
         // Apply audio sync settings
@@ -4140,11 +4140,13 @@ function createMainInterface() {
         const volumeContainer = $('div', {
             id: 'audio-volume-slider-container',
             css: {
-                marginBottom: '15px',
-                padding: '10px',
-                backgroundColor: '#f8f9fa',
+                // marginBottom: '15px',
+                width: '190px',
+                height: '13px',
+                // padding: '10px',
+                backgroundColor: 'transparent',
                 borderRadius: '4px',
-                border: '1px solid #dee2e6',
+                // border: '1px solid #dee2e6',
                 display: initialDisplay
             }
         });
@@ -4153,7 +4155,7 @@ function createMainInterface() {
         volumeContainer.setAttribute('data-element', 'volume-slider');
 
         const volumeLabel = $('div', {
-            text: '🔊 Volume',
+            // text: '🔊 Volume',
             css: {
                 fontSize: '14px',
                 fontWeight: '600',
@@ -4206,12 +4208,12 @@ function createMainInterface() {
                     localStorage.setItem('lyrix_audio_volume', value.toString());
                     
                     // Update volume label
-                    const volumeValueLabel = document.getElementById('volume_value_label');
-                    if (volumeValueLabel) {
-                        volumeValueLabel.textContent = `${Math.round(value)}%`;
-                    }
+                    // const volumeValueLabel = document.getElementById('volume_value_label');
+                    // if (volumeValueLabel) {
+                    //     volumeValueLabel.textContent = `${Math.round(value)}%`;
+                    // }
                     
-                    console.log(`🔊 Volume set to: ${Math.round(value)}%`);
+                    // console.log(`🔊 Volume set to: ${Math.round(value)}%`);
                 }
             }
         });
@@ -4231,20 +4233,20 @@ function createMainInterface() {
             text: '0%'
         });
 
-        const volumeValueLabel = $('span', {
-            id: 'volume_value_label',
-            text: `${savedVolume}%`,
-            css: {
-                fontWeight: '600',
-                color: '#28a745'
-            }
-        });
+        // const volumeValueLabel = $('span', {
+        //     id: 'volume_value_label',
+        //     text: `${savedVolume}%`,
+        //     css: {
+        //         fontWeight: '600',
+        //         color: '#28a745'
+        //     }
+        // });
 
         const volumeMaxLabel = $('span', {
             text: '100%'
         });
 
-        volumeValueContainer.append(volumeMinLabel, volumeValueLabel, volumeMaxLabel);
+        // volumeValueContainer.append(volumeMinLabel, volumeValueLabel, volumeMaxLabel);
         volumeContainer.append(volumeLabel, volumeSlider, volumeValueContainer);
 
         // Add volume container to audio tools for display
