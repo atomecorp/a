@@ -447,7 +447,7 @@ export class LyricsDisplay {
     setupEventListeners() {
         // Click on lyrics line in edit mode
         this.lyricsContent.addEventListener('click', (e) => {
-            if (this.editMode && e.target.classList.contains('lyrics-line') && !this.recordMode) {
+            if (this.editMode && e.target.classList.contains('lyrics-line')) {
                 // Find the text span within the clicked line
                 const lineIndex = parseInt(e.target.dataset.lineIndex);
                 const textSpan = e.target.querySelector('.text-span');
@@ -1210,9 +1210,7 @@ export class LyricsDisplay {
             const editTextButton = UIManager.createInterfaceButton('✏️', {
                 id: `edit_text_line_${index}`,
                 onClick: () => {
-                    if (!this.recordMode) {
-                        this.editLineText(index);
-                    }
+                    this.editLineText(index);
                 }
             });
             
@@ -1305,10 +1303,7 @@ export class LyricsDisplay {
             textTouchTimer = setTimeout(() => {
                 if (!textHasMoved) {
                     e.preventDefault();
-                    // Lock line editing during record mode
-                    if (!this.recordMode) {
-                        this.editLineText(index, textSpan);
-                    }
+                    this.editLineText(index, textSpan);
                 }
             }, 300);
         });
@@ -1333,10 +1328,7 @@ export class LyricsDisplay {
                 // Check for double tap
                 if (currentTime - lastTapTime < 400) {
                     e.preventDefault();
-                    // Lock line editing during record mode
-                    if (!this.recordMode) {
-                        this.editLineText(index, textSpan);
-                    }
+                    this.editLineText(index, textSpan);
                     lastTapTime = 0;
                     return;
                 }
@@ -1407,10 +1399,7 @@ export class LyricsDisplay {
             
             e.stopPropagation();
             // console.log(`🖱️ Double-click detected on line ${index + 1}, calling editLineText`);
-            // Lock line editing during record mode
-            if (!this.recordMode) {
-                this.editLineText(index, textSpan);
-            }
+            this.editLineText(index, textSpan);
         });
         
         return lineDiv;
@@ -1665,18 +1654,9 @@ export class LyricsDisplay {
         // Update the stored original color for hover behavior
         this.recordButton.dataset.originalBgColor = newColor;
         
-        // Add/remove visual indication that line editing is locked
-        if (this.lyricsContent) {
-            if (this.recordMode) {
-                this.lyricsContent.classList.add('record-mode-editing-locked');
-            } else {
-                this.lyricsContent.classList.remove('record-mode-editing-locked');
-            }
-        }
-        
         if (this.recordMode) {
             // console.log('🔴 Record mode: ON - Click lines to assign current audio time as timecode');
-            // console.log('🔴 Auto-scroll disabled, line seeking disabled, line editing locked');
+            // console.log('🔴 Auto-scroll disabled, line seeking disabled');
             
             // Store original lines for saving later
             this.originalLinesForRecord = this.currentLyrics ? 
@@ -2209,7 +2189,6 @@ export class LyricsDisplay {
         
         // Lock line editing during record mode
         if (this.recordMode) {
-            console.log('🔒 Line editing is locked during record mode');
             return;
         }
         
