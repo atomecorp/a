@@ -503,7 +503,7 @@ export class UIManager {
             sm: '8px',
             md: '15px',
             lg: '20px',
-            xl: '30px'
+            xl: '33px'
         },
         
         borderRadius: {

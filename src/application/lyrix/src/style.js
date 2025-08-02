@@ -13,10 +13,11 @@ const default_theme = {
     recordModeActiveColor: '#f44336',  // Rouge pour mode enregistrement actif
     
     button: {
-        backgroundColor: 'gray',
+        backgroundColor: 'transparent',
+        top: '0px',
         color: 'white',
-        border: '2px solid rgba(255,255,255,0.3)', // Bordure uniforme pour tous les boutons
-        borderRadius: '9px',
+        border: '0px solid rgba(255,255,255,0.3)', // Bordure uniforme pour tous les boutons
+        borderRadius: '3px',
         cursor: 'pointer',
         fontSize: '14px',
         transition: 'all 0.2s ease',
@@ -26,12 +27,12 @@ const default_theme = {
         alignItems: 'center',
         justifyContent: 'center',
         // Espacement uniforme
-        margin: '2px',
-        padding: '8px',
+        // margin: '2px',
+        // padding: '8px',
         // Tailles par défaut (appliquées à tous les boutons)
         width: '30px',
-        height: '36px',
-        minWidth: '50px'
+        height: '30px',
+        minWidth: '30px'
     },
     
     defaultColor: {

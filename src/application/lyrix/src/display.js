@@ -73,13 +73,13 @@ export class LyricsDisplay {
             text: '☰',
             css: {
                 position: 'absolute',
-                top: '6px',
-                left: '3px',
-                width: '25px',
-                height: '25px',
+                top: '0px',
+                left: '0px',
+                width: '30px',
+                height: '30px',
                 backgroundColor: '#2c3e50', // Dark background
-                border: '1px solid #34495e',
-                borderRadius: '6px',
+                border: '0px solid #34495e',
+                borderRadius: '3px',
                 color: '#ecf0f1', // Light text color
                 fontSize: '18px',
                 cursor: 'pointer',
@@ -117,11 +117,13 @@ export class LyricsDisplay {
             id: 'lyrics_content_area',
             css: {
                 flex: '1', // Prend tout l'espace restant après la toolbar
-                padding: UIManager.THEME.spacing.lg,
-                backgroundColor: '#232323ff',
+                padding: UIManager.THEME.spacing.xl,
+                backgroundColor: '#383838ff',
+                color: 'green',
                 overflow: 'auto', // SEULE zone qui peut scroller
                 height: '0', // Force le flex à calculer la hauteur disponible
                 fontSize: `${this.fontSize}px`,
+           
                 lineHeight: '1.6',
                 fontFamily: 'Arial, sans-serif'
             }
@@ -307,9 +309,9 @@ export class LyricsDisplay {
                 gap: '8px',
                 alignItems: 'center',
                 flexWrap: 'wrap',
-                padding: '8px 8px 8px 52px', // Extra left padding to avoid hamburger menu overlap (52px = 36px button + 8px margin + 8px clearance)
-                backgroundColor: UIManager.THEME.colors.background,
-                borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
+                // padding: '8px 8px 8px 52px', // Extra left padding to avoid hamburger menu overlap (52px = 36px button + 8px margin + 8px clearance)
+                backgroundColor: 'transparent',
+                // borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
                 transition: 'all 0.3s ease' // Smooth transition for show/hide
             }
         });
@@ -1788,8 +1790,7 @@ export class LyricsDisplay {
         }
         
         // Update hamburger button icon
-        this.hamburgerButton.textContent = this.toolbarVisible ? '✕' : '☰';
-        
+this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';        
         // Animate the toolbar transition
         if (this.mainToolRow) {
             this.mainToolRow.style.transition = 'all 0.3s ease';
