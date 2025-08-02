@@ -3831,9 +3831,9 @@ function createMainInterface() {
             css: {
                 marginBottom: '15px',
                 padding: '2px 0px', // Minimal padding, no left/right padding
-                backgroundColor: '#f8f9fa',
+                backgroundColor: '#3a3a3aff',
                 borderRadius: '4px',
-                border: '1px solid #dee2e6',
+                // border: '1px solid #dee2e6',
                 display: initialDisplay,
                 width: '98%', // Set container width to 98%
                 boxSizing: 'border-box'

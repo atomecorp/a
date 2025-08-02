@@ -118,7 +118,7 @@ export class LyricsDisplay {
             css: {
                 flex: '1', // Prend tout l'espace restant après la toolbar
                 padding: UIManager.THEME.spacing.lg,
-                backgroundColor: '#f9f9f9',
+                backgroundColor: '#232323ff',
                 overflow: 'auto', // SEULE zone qui peut scroller
                 height: '0', // Force le flex à calculer la hauteur disponible
                 fontSize: `${this.fontSize}px`,
@@ -379,7 +379,7 @@ export class LyricsDisplay {
                 gap: '4px',
                 width: '100%',
                 padding: '3px 3px 3px 3px', // Extra left padding to align with main toolbar row
-                backgroundColor: UIManager.THEME.colors.surface
+                // backgroundColor: UIManager.THEME.colors.surface
             }
         });
         
@@ -892,7 +892,7 @@ export class LyricsDisplay {
             css: {
                 marginBottom: '20px',
                 padding: '15px',
-                backgroundColor: '#e3f2fd',
+                backgroundColor: '#515151ff',
                 borderRadius: '8px',
                 borderLeft: '4px solid #2196F3'
             }
@@ -1144,6 +1144,14 @@ export class LyricsDisplay {
                     isDragging = false;
                     timeSpan.style.backgroundColor = '#f0f0f0';
                     timeSpan.style.color = '#666';
+                    
+                    // Save to localStorage when drag is complete
+                    const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                    if (saveSuccess) {
+                        console.log(`✅ Drag-adjusted timecode for line ${index + 1} saved to localStorage successfully`);
+                    } else {
+                        console.error(`❌ Failed to save drag-adjusted timecode for line ${index + 1} to localStorage`);
+                    }
                 }
             });
             
@@ -1229,6 +1237,15 @@ export class LyricsDisplay {
                 }
                 this.currentLyrics.lines[index].time = timecodeMs;
                 this.currentLyrics.updateLastModified();
+                
+                // Save to localStorage when recording timecode in record mode
+                const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                if (saveSuccess) {
+                    console.log(`✅ Record mode timecode for line ${index + 1} saved to localStorage successfully`);
+                } else {
+                    console.error(`❌ Failed to save record mode timecode for line ${index + 1} to localStorage`);
+                }
+                
                 if (typeof window.updateTimecodeDisplay === 'function') {
                     window.updateTimecodeDisplay(timecodeMs);
                 }
@@ -1313,11 +1330,33 @@ export class LyricsDisplay {
                 this.setActiveLineIndex(index);
                 
                 if (this.recordMode) {
-                    // RECORD MODE: Assign current audio time to this line
-                    if (this.audioController) {
-                        const currentTime = this.audioController.getCurrentTime() * 1000; // Convert to ms
+                    // RECORD MODE: Get current time from timecode display (works with both audio controller and AUv3 host)
+                    let currentTime = 0;
+                    const timecodeElement = document.getElementById('timecode-display');
+                    if (timecodeElement) {
+                        const text = timecodeElement.textContent.replace('s', '').replace('🔴', '').trim();
+                        const seconds = parseFloat(text);
+                        if (isFinite(seconds)) {
+                            currentTime = Math.round(seconds * 1000); // Convert to ms
+                        }
+                    }
+                    
+                    // Fallback to audio controller if timecode display is not available
+                    if (currentTime === 0 && this.audioController) {
+                        currentTime = this.audioController.getCurrentTime() * 1000; // Convert to ms
+                    }
+                    
+                    if (currentTime > 0) {
                         this.currentLyrics.lines[index].time = currentTime;
                         this.currentLyrics.updateLastModified();
+                        
+                        // Save to localStorage when recording timecode in record mode (touch)
+                        const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                        if (saveSuccess) {
+                            console.log(`✅ Touch record mode timecode for line ${index + 1} saved to localStorage successfully`);
+                        } else {
+                            console.error(`❌ Failed to save touch record mode timecode for line ${index + 1} to localStorage`);
+                        }
                         
                         // Re-render to show the new timecode (if timecodes are visible)
                         if (this.showTimecodes) {
@@ -2140,8 +2179,17 @@ export class LyricsDisplay {
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
             
-            // Update lyrics and save
+            // Update lyrics and save to localStorage
             this.currentLyrics.updateLastModified();
+            
+            // Save to localStorage using the same method as the save button
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log(`✅ Drag-adjusted timecode for line ${lineIndex + 1} saved to localStorage successfully`);
+            } else {
+                console.error(`❌ Failed to save drag-adjusted timecode for line ${lineIndex + 1} to localStorage`);
+            }
+            
             console.log(`🎯 Timecode adjusted via drag: ${this.formatTimeDisplay(this.currentLyrics.lines[lineIndex].time)}`);
         };
         
@@ -2156,6 +2204,15 @@ export class LyricsDisplay {
                 // Update the time
                 this.currentLyrics.lines[lineIndex].time = newTime;
                 this.currentLyrics.updateLastModified();
+                
+                // Save to localStorage using the same method as the save button
+                const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                if (saveSuccess) {
+                    console.log(`✅ Timecode for line ${lineIndex + 1} saved to localStorage successfully`);
+                } else {
+                    console.error(`❌ Failed to save timecode for line ${lineIndex + 1} to localStorage`);
+                }
+                
                 timeSpan.textContent = this.formatTimeDisplay(newTime);
                 console.log(`✏️ Updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(newTime)}`);
             } else {
@@ -2262,16 +2319,24 @@ export class LyricsDisplay {
         input.select();
         
         const saveEdit = () => {
-            const newText = input.value.trim();
+            const newText = input.value; // Don't trim here to allow spaces-only lines
             
-            if (newText && newText !== currentText) {
-                // Update the text
+            // Always save if the text is different from original (including empty strings)
+            if (newText !== currentText) {
+                // Update the text (allow empty lines)
                 this.currentLyrics.lines[lineIndex].text = newText;
                 this.currentLyrics.updateLastModified();
+                
+                // Save to localStorage using the same method as the save button
+                const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                if (saveSuccess) {
+                    console.log(`✅ Line ${lineIndex + 1} saved to localStorage successfully`);
+                } else {
+                    console.error(`❌ Failed to save line ${lineIndex + 1} to localStorage`);
+                }
+                
                 textSpan.textContent = newText;
                 console.log(`✏️ Updated text for line ${lineIndex + 1}: "${newText}"`);
-            } else if (newText === '') {
-                console.warn('⚠️ Empty text not allowed, keeping original value');
             }
             
             // Restore the span
@@ -2303,14 +2368,38 @@ export class LyricsDisplay {
     
     // Record current timecode
     recordCurrentTimecode() {
-        if (!this.audioController || !this.currentLyrics) return;
+        if (!this.currentLyrics) return;
         
-        const currentTime = this.audioController.getCurrentTime() * 1000; // Convert to ms
+        // Get current time from timecode display (works with both audio controller and AUv3 host)
+        let currentTime = 0;
+        const timecodeElement = document.getElementById('timecode-display');
+        if (timecodeElement) {
+            const text = timecodeElement.textContent.replace('s', '').replace('🔴', '').trim();
+            const seconds = parseFloat(text);
+            if (isFinite(seconds)) {
+                currentTime = Math.round(seconds * 1000); // Convert to ms
+            }
+        }
+        
+        // Fallback to audio controller if timecode display is not available
+        if (currentTime === 0 && this.audioController) {
+            currentTime = this.audioController.getCurrentTime() * 1000; // Convert to ms
+        }
+        
         const nextLineIndex = this.findNextUntimedLine();
         
         if (nextLineIndex >= 0) {
             this.currentLyrics.lines[nextLineIndex].time = currentTime;
             this.currentLyrics.updateLastModified();
+            
+            // Save to localStorage using the same method as the save button
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log(`✅ Recorded timecode for line ${nextLineIndex + 1} saved to localStorage successfully`);
+            } else {
+                console.error(`❌ Failed to save recorded timecode for line ${nextLineIndex + 1} to localStorage`);
+            }
+            
             this.renderLyrics();
             console.log(`⏺️ Recorded timecode ${this.formatTimeDisplay(currentTime)} for line ${nextLineIndex + 1}`);
         } else {
@@ -2325,11 +2414,35 @@ export class LyricsDisplay {
     
     // Set time for specific line
     setLineTime(lineIndex) {
-        if (!this.audioController || !this.currentLyrics) return;
+        if (!this.currentLyrics) return;
         
-        const currentTime = this.audioController.getCurrentTime() * 1000;
+        // Get current time from timecode display (works with both audio controller and AUv3 host)
+        let currentTime = 0;
+        const timecodeElement = document.getElementById('timecode-display');
+        if (timecodeElement) {
+            const text = timecodeElement.textContent.replace('s', '').replace('🔴', '').trim();
+            const seconds = parseFloat(text);
+            if (isFinite(seconds)) {
+                currentTime = Math.round(seconds * 1000); // Convert to ms
+            }
+        }
+        
+        // Fallback to audio controller if timecode display is not available
+        if (currentTime === 0 && this.audioController) {
+            currentTime = this.audioController.getCurrentTime() * 1000; // Convert to ms
+        }
+        
         this.currentLyrics.lines[lineIndex].time = currentTime;
         this.currentLyrics.updateLastModified();
+        
+        // Save to localStorage using the same method as the save button
+        const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+        if (saveSuccess) {
+            console.log(`✅ Set timecode for line ${lineIndex + 1} saved to localStorage successfully`);
+        } else {
+            console.error(`❌ Failed to save set timecode for line ${lineIndex + 1} to localStorage`);
+        }
+        
         this.renderLyrics();
         console.log(`⏰ Set time ${this.formatTimeDisplay(currentTime)} for line ${lineIndex + 1}`);
     }
@@ -2339,6 +2452,15 @@ export class LyricsDisplay {
         if (!this.currentLyrics) return;
         
         this.currentLyrics.clearLineTimecode(lineIndex);
+        
+        // Save to localStorage using the same method as the save button
+        const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+        if (saveSuccess) {
+            console.log(`✅ Cleared timecode for line ${lineIndex + 1} saved to localStorage successfully`);
+        } else {
+            console.error(`❌ Failed to save cleared timecode for line ${lineIndex + 1} to localStorage`);
+        }
+        
         this.renderLyrics();
     }
     
@@ -2348,6 +2470,15 @@ export class LyricsDisplay {
         
         if (confirm('Clear all timecodes? This cannot be undone.')) {
             this.currentLyrics.clearAllTimecodes();
+            
+            // Save to localStorage using the same method as the save button
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log('✅ Cleared all timecodes saved to localStorage successfully');
+            } else {
+                console.error('❌ Failed to save cleared timecodes to localStorage');
+            }
+            
             this.renderLyrics();
             console.log('🗑️ All timecodes cleared');
         }
@@ -2360,6 +2491,15 @@ export class LyricsDisplay {
         const text = prompt('Enter new line text:');
         if (text && text.trim()) {
             this.currentLyrics.addLine(-1, text.trim());
+            
+            // Save to localStorage using the same method as the save button
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log('✅ New line saved to localStorage successfully');
+            } else {
+                console.error('❌ Failed to save new line to localStorage');
+            }
+            
             this.renderLyrics();
             console.log('➕ New line added');
         }
