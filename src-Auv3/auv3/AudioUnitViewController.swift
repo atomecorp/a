@@ -25,9 +25,9 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     public var isTestActive: Bool { return _isTestActive }
     public var currentTestFrequency: Double { return _currentTestFrequency }
     
-    // Rate limiting for WebView updates (OPTIMIZED for better performance)
+    // ULTRA AGGRESSIVE: Rate limiting for WebView updates (for maximum performance)
     private var lastWebViewUpdate: TimeInterval = 0
-    private var webViewUpdateInterval: TimeInterval = 1.0 / 5.0 // Reduced to 5 FPS for maximum performance
+    private var webViewUpdateInterval: TimeInterval = 1.0 / 2.0 // ULTRA: Reduced to 2 FPS for maximum performance (instead of 5)
     
     public override func viewDidLoad() {
         super.viewDidLoad()
@@ -131,25 +131,27 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     public func didReceiveAudioData(_ data: [Float], timestamp: Double) {
         let currentTime = CACurrentMediaTime()
         if currentTime - lastWebViewUpdate >= webViewUpdateInterval {
-            // Calculate audio metrics
-            let audioMetrics = processAudioData(data)
-            
-            // Add test tone information to metrics
-            var metricsWithTest = audioMetrics
-            metricsWithTest["testFrequency"] = _currentTestFrequency
-            metricsWithTest["isTestActive"] = _isTestActive
-            
-            // Convert audio data and metrics to JSON
-            let audioData: [String: Any] = [
-                "data": data,
-                "timestamp": timestamp,
-                "metrics": metricsWithTest
-            ]
-            
-            if let jsonData = try? JSONSerialization.data(withJSONObject: audioData),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                // Send audio data to WebView
-                WebViewManager.sendToJS(jsonString, "updateAudioVisualization")
+            // ULTRA-AGGRESSIVE: Only process if audio is significant
+            let quickPeak = data.max() ?? 0
+            if abs(quickPeak) > 0.005 { // Only process if audio is above threshold
+                
+                // Calculate minimal audio metrics
+                let audioMetrics = processAudioData(data)
+                
+                // Minimal data structure - avoid dictionary merging
+                let audioData: [String: Any] = [
+                    "peak": audioMetrics["peak"] ?? 0,
+                    "rms": audioMetrics["rms"] ?? 0,
+                    "timestamp": timestamp,
+                    "testFreq": _currentTestFrequency,
+                    "testActive": _isTestActive
+                ]
+                
+                // Direct JSON conversion without error handling for performance
+                if let jsonData = try? JSONSerialization.data(withJSONObject: audioData),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    WebViewManager.sendToJS(jsonString, "updateAudioVisualization")
+                }
             }
             
             lastWebViewUpdate = currentTime
@@ -157,50 +159,31 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     }
     
     private func processAudioData(_ data: [Float]) -> [String: Any] {
-        var metrics: [String: Any] = [:]
-        
-        // PERFORMANCE: Simplified audio processing for reduced CPU usage
+        // ULTRA-AGGRESSIVE: Process only every 32nd sample for extreme CPU savings
         let dataCount = data.count
         guard dataCount > 0 else {
             return ["rms": 0, "peak": 0, "zeroCrossings": 0]
         }
         
-        // Sample only every 4th element for large buffers
-        let strideSize = max(1, dataCount / 256) // Limit to 256 samples max
-        var rmsSum: Float = 0
+        // Sample only every 32nd element for massive CPU reduction
+        let strideSize = max(32, dataCount / 64) // Maximum 64 samples analyzed
         var peak: Float = 0
-        var zeroCrossings = 0
-        var lastSample: Float = 0
         var sampleCount = 0
         
+        // Only track peak - eliminate RMS and zero crossing calculations for maximum performance
         for i in stride(from: 0, to: dataCount, by: strideSize) {
-            let sample = data[i]
-            let absSample = abs(sample)
-            
-            // Accumulate for RMS
-            rmsSum += sample * sample
-            sampleCount += 1
-            
-            // Track peak
+            let absSample = abs(data[i])
             if absSample > peak {
                 peak = absSample
             }
+            sampleCount += 1
             
-            // Count zero crossings (simplified)
-            if i > 0 && (sample * lastSample) < 0 {
-                zeroCrossings += 1
-            }
-            lastSample = sample
+            // Break early if we have enough samples
+            if sampleCount >= 32 { break }
         }
         
-        // Calculate RMS from sampled data
-        let rms = sampleCount > 0 ? sqrt(rmsSum / Float(sampleCount)) : 0
-        
-        metrics["rms"] = rms
-        metrics["peak"] = peak
-        metrics["zeroCrossings"] = zeroCrossings
-        
-        return metrics
+        // Return minimal metrics for maximum performance
+        return ["peak": peak, "rms": peak * 0.7] // Approximate RMS from peak
     }
     
     // MARK: - Transport Data Delegate

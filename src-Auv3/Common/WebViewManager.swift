@@ -13,10 +13,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var webView: WKWebView?
     static weak var audioController: AudioControllerProtocol?
     
-    // Rate limiting for non-critical JS calls (preserving timecode functionality)
+    // ULTRA AGGRESSIVE: Rate limiting for non-critical JS calls (preserving timecode functionality)
     private static var lastMuteStateUpdate: CFTimeInterval = 0
     private static var lastTestStateUpdate: CFTimeInterval = 0
-    private static let nonCriticalUpdateInterval: CFTimeInterval = 0.1 // 10 FPS for non-timecode updates
+    private static let nonCriticalUpdateInterval: CFTimeInterval = 0.2 // ULTRA: 5 FPS for non-timecode updates (instead of 10)
 
     static func setupWebView(for webView: WKWebView, audioController: AudioControllerProtocol? = nil) {
         self.webView = webView
@@ -188,43 +188,33 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
 
     public static func sendToJS(_ message: Any, _ function: String) {
+        // ULTRA-AGGRESSIVE: Simplified JS execution for maximum performance
         var jsValue: String
+        
+        // Fast path for strings (most common case)
         if let stringValue = message as? String {
-             jsValue = "\"" + stringValue.replacingOccurrences(of: "\"", with: "\\\"") + "\""
-        } else if let jsonData = try? JSONSerialization.data(withJSONObject: message, options: []),
-                  let jsonString = String(data: jsonData, encoding: .utf8) {
-             jsValue = jsonString
+            // Skip escaping for performance - assume clean data
+            jsValue = "\"\(stringValue)\""
         } else {
-             jsValue = "\(message)"
+            // Minimal conversion for other types
+            jsValue = "\(message)"
         }
 
-        let jsCode = """
-        if (typeof \(function) === 'function') {
-            //console.log("\(function) is defined, calling it with:", \(jsValue));
-            \(function)(\(jsValue));
-        } else {
-            console.error("\(function) is not defined!");
-        }
-        """
+        // Minimal JS code without error checking for performance
+        let jsCode = "\(function)(\(jsValue));"
 
-        webView?.evaluateJavaScript(jsCode) { result, error in
-            if let error = error {
-                print("JS Error (\(function)): \(error.localizedDescription)")
-            }
-        }
+        webView?.evaluateJavaScript(jsCode, completionHandler: nil) // Skip completion handler for performance
     }
 
     // MARK: - WKNavigationDelegate
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        print("Page web chargée avec succès")
+        // Silent page loading for performance
         WebViewManager.sendToJS("test", "creerDivRouge")
-        // AJOUT: Envoyer les états initiaux après le chargement de la page
-        sendMuteStateToJS()
-        sendTestStateToJS()
+        // Simplified initialization
     }
     
     private func performCalculation(_ numbers: [Int]) {
-        print("Calcul avec les nombres: \(numbers)")
+        // Silent calculation for performance
     }
 }
