@@ -1841,7 +1841,7 @@ function showSongLibrary() {
 
     // Bouton supprimer toutes les chansons
     const deleteAllButton = $('button', {
-        text: '🗑️ Supprimer toutes les chansons',
+        text: '🗑️',
         css: {
             backgroundColor: '#e74c3c',
             color: 'white',
@@ -2378,7 +2378,7 @@ function showSettingsModal() {
 
     // Title
     const title = $('h3', {
-        text: 'Settings - MIDI Fullscreen Control & UI Visibility',
+        text: 'Settings - MIDI Control, UI Visibility & Timecode Options',
         css: {
             margin: '0 0 20px 0',
             color: '#333',
@@ -2628,11 +2628,22 @@ function showSettingsModal() {
     });
 
     const syncTitle = $('h4', {
-        text: '🔄 Audio Sync with Host Timecode',
+        text: '⚠️ EXPERIMENTAL FEATURES',
         css: {
             fontSize: '16px',
             marginBottom: '5px',
             color: '#e65100'
+        }
+    });
+
+    // Subtitle for sync section
+    const syncSubtitle = $('div', {
+        text: '🔄 Audio Sync with Host Timecode',
+        css: {
+            fontSize: '14px',
+            marginBottom: '10px',
+            color: '#e65100',
+            fontWeight: '500'
         }
     });
 
@@ -2703,7 +2714,7 @@ function showSettingsModal() {
         }
     });
 
-    const testPlayButton = UIManager.createInterfaceButton('▶️ Test Play', {
+    const testPlayButton = UIManager.createInterfaceButton('▶️', {
         onClick: () => {
             console.log('🔄 Testing host sync - simulating timecode progression');
             const timecodeDisplay = document.getElementById('timecode-display');
@@ -2723,7 +2734,7 @@ function showSettingsModal() {
         }
     });
 
-    const testStopButton = UIManager.createInterfaceButton('⏹️ Test Stop', {
+    const testStopButton = UIManager.createInterfaceButton('⏹️', {
         onClick: () => {
             console.log('🔄 Testing host sync - simulating timecode stop');
             const timecodeDisplay = document.getElementById('timecode-display');
@@ -2750,7 +2761,7 @@ function showSettingsModal() {
 
     testSyncContainer.append(testPlayButton, testStopButton, testLabel);
 
-    syncSection.append(syncTitle, syncWarning, syncDisclaimer, syncContainer, testSyncContainer);
+    syncSection.append(syncTitle, syncSubtitle, syncWarning, syncDisclaimer, syncContainer, testSyncContainer);
 
     // MIDI Inspector section
     const midiSection = $('div', {
@@ -2802,8 +2813,166 @@ function showSettingsModal() {
     midiContainer.append(midiButton, midiLabel);
     midiSection.append(midiTitle, midiContainer);
 
-    // Assemble the content
-    settingsContent.append(title, activateSection, deactivateSection, audioSection, syncSection, midiSection);
+    // Timecode Display section
+    const timecodeDisplaySection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#e8f5e8',
+            borderRadius: '5px',
+            border: '1px solid #4caf50'
+        }
+    });
+
+    const timecodeDisplayTitle = $('div', {
+        text: '🕐 Timecode Display',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '10px',
+            color: '#2e7d32'
+        }
+    });
+
+    const timecodeDisplayContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '10px'
+        }
+    });
+
+    // Load current state from localStorage
+    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false'; // Default to true
+
+    const timecodeDisplayButton = UIManager.createInterfaceButton(
+        isTimecodeDisplayVisible ? '✅' : '❌', 
+        {
+            onClick: () => toggleTimecodeDisplayVisibility(timecodeDisplayButton, timecodeDisplayLabel)
+        }
+    );
+
+    const timecodeDisplayLabel = $('span', {
+        text: isTimecodeDisplayVisible ? 'Timecode Display Visible' : 'Timecode Display Hidden',
+        css: {
+            fontSize: '14px',
+            color: '#2e7d32',
+            fontWeight: '500'
+        }
+    });
+
+    timecodeDisplayContainer.append(timecodeDisplayButton, timecodeDisplayLabel);
+
+    // Timecode Options section
+    const timecodeOptionsSection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#e3f2fd',
+            borderRadius: '5px',
+            border: '1px solid #2196f3'
+        }
+    });
+
+    const timecodeOptionsTitle = $('div', {
+        text: '⏱️ Timecode Options',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '10px',
+            color: '#1976d2'
+        }
+    });
+
+    const timecodeOptionsContainer = $('div', {
+        css: {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+        }
+    });
+
+    // Show/Hide Timecodes toggle
+    const showTimecodesContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+        }
+    });
+
+    const showTimecodesButton = UIManager.createInterfaceButton(
+        lyricsDisplay?.showTimecodes ? '✅' : '❌',
+        {
+            onClick: () => {
+                if (lyricsDisplay) {
+                    lyricsDisplay.toggleTimecodes();
+                    showTimecodesButton.textContent = lyricsDisplay.showTimecodes ? '✅' : '❌';
+                    showTimecodesLabel.textContent = lyricsDisplay.showTimecodes ? 'Timecodes Visible' : 'Timecodes Hidden';
+                }
+            }
+        }
+    );
+
+    const showTimecodesLabel = $('span', {
+        text: lyricsDisplay?.showTimecodes ? 'Timecodes Visible' : 'Timecodes Hidden',
+        css: {
+            fontSize: '14px',
+            color: '#1976d2',
+            fontWeight: '500'
+        }
+    });
+
+    showTimecodesContainer.append(showTimecodesButton, showTimecodesLabel);
+
+    // Clear All Timecodes button
+    const clearTimecodesContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+        }
+    });
+
+    const clearAllTimecodesButton = UIManager.createInterfaceButton('🗑️', {
+        onClick: () => {
+            if (lyricsDisplay && lyricsDisplay.currentLyrics) {
+                const confirmed = confirm('Clear all timecodes? This action cannot be undone.');
+                if (confirmed) {
+                    lyricsDisplay.currentLyrics.clearAllTimecodes();
+                    
+                    // Save to localStorage
+                    const saveSuccess = StorageManager.saveSong(lyricsDisplay.currentLyrics.songId, lyricsDisplay.currentLyrics);
+                    if (saveSuccess) {
+                        console.log('✅ Cleared all timecodes saved to localStorage successfully');
+                    } else {
+                        console.error('❌ Failed to save cleared timecodes to localStorage');
+                    }
+                    
+                    lyricsDisplay.renderLyrics();
+                    console.log('🗑️ All timecodes cleared from settings');
+                }
+            } else {
+                alert('No lyrics loaded to clear timecodes from.');
+            }
+        }
+    });
+
+    const clearTimecodesLabel = $('span', {
+        text: 'Remove all timecodes from current song',
+        css: {
+            fontSize: '12px',
+            color: '#666',
+            fontStyle: 'italic'
+        }
+    });
+
+    clearTimecodesContainer.append(clearAllTimecodesButton, clearTimecodesLabel);
+
+    timecodeOptionsContainer.append(showTimecodesContainer, clearTimecodesContainer);
+    timecodeOptionsSection.append(timecodeOptionsTitle, timecodeOptionsContainer);
+
+    // Assemble the content - move experimental features to the bottom
+    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, midiSection, audioSection, syncSection);
 
     // Show modal
     Modal({
@@ -3270,6 +3439,29 @@ function toggleMidiInspector(buttonElement, labelElement) {
     console.log(`🎹 MIDI Inspector: ${newState ? 'ENABLED' : 'DISABLED'} - MIDI data logger ${newState ? 'shown' : 'hidden'}`);
 }
 
+// Toggle timecode display visibility
+function toggleTimecodeDisplayVisibility(buttonElement, labelElement) {
+    const isCurrentlyVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false'; // Default to true
+    const newState = !isCurrentlyVisible;
+    
+    // Save new state
+    localStorage.setItem('lyrix_timecode_display_visible', newState.toString());
+    
+    // Update button and label
+    buttonElement.textContent = newState ? '✅' : '❌';
+    labelElement.textContent = newState ? 'Timecode Display Visible' : 'Timecode Display Hidden';
+    
+    // Get timecode display element to toggle
+    const timecodeElement = document.getElementById('timecode-display');
+    
+    // Toggle visibility for timecode display
+    if (timecodeElement) {
+        timecodeElement.style.display = newState ? 'block' : 'none';
+    }
+    
+    console.log(`🕐 Timecode Display: ${newState ? 'VISIBLE' : 'HIDDEN'} - Timecode display ${newState ? 'shown' : 'hidden'}`);
+}
+
 // Apply initial settings on application startup
 function applyInitialSettings() {
     
@@ -3282,11 +3474,21 @@ function applyInitialSettings() {
         localStorage.setItem('lyrix_midi_inspector_enabled', 'false'); // Default to hidden
     }
     
+    if (localStorage.getItem('lyrix_timecode_display_visible') === null) {
+        localStorage.setItem('lyrix_timecode_display_visible', 'true'); // Default to visible
+    }
+    
     // Set default volume if it doesn't exist
     if (localStorage.getItem('lyrix_audio_volume') === null) {
         localStorage.setItem('lyrix_audio_volume', '70'); // Default to 70%
     }
     
+    // Apply timecode display visibility setting
+    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false';
+    const timecodeElement = document.getElementById('timecode-display');
+    if (timecodeElement) {
+        timecodeElement.style.display = isTimecodeDisplayVisible ? 'block' : 'none';
+    }
   
 }
 
@@ -4161,6 +4363,10 @@ function createMainInterface() {
         const timecodeDisplay = UIManager.createEnhancedTimecodeDisplay({
             text: '0.000s'
         });
+        
+        // Apply timecode display visibility setting immediately
+        const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false';
+        timecodeDisplay.style.display = isTimecodeDisplayVisible ? 'block' : 'none';
         
         // Store scrub and timecode tools for potential move to lyrics toolbar
         window.leftPanelScrubTools = {

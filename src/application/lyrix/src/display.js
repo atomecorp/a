@@ -165,11 +165,11 @@ export class LyricsDisplay {
             this.toggleFullscreen(); // Call the toggle function directly
         });
         
-        // Timecode button
-        this.timecodeButton = UIManager.createInterfaceButton('🕐', {
-            id: 'timecode_options',
-            onClick: () => this.showTimecodeOptionsPanel()
-        });
+        // Timecode button - moved to settings panel
+        // this.timecodeButton = UIManager.createInterfaceButton('🕐', {
+        //     id: 'timecode_options',
+        //     onClick: () => this.showTimecodeOptionsPanel()
+        // });
         
         // Song navigation buttons
         this.previousSongButton = UIManager.createInterfaceButton('⏮️', {
@@ -314,15 +314,14 @@ export class LyricsDisplay {
             }
         });
         
-        // Add all main toolbar elements (timecode display after timecode button)
+        // Add all main toolbar elements (timecode display without timecode options button)
         const mainToolElements = [
             ...this.nonAudioTools,
             this.editButton,
             this.recordButton,
             this.fullscreenButton,
             this.previousSongButton,
-            this.nextSongButton,
-            this.timecodeButton
+            this.nextSongButton
         ];
         
         // Add timecode display after timecode button if it exists
@@ -1841,120 +1840,14 @@ export class LyricsDisplay {
         }
     }
     
-    // Show timecode options panel
+    // Show timecode options panel (DEPRECATED - moved to settings panel)
+    /* 
     showTimecodeOptionsPanel() {
-        // Create panel content using Squirrel syntax
-        const panelContent = $('div', {
-            id: 'timecode-options-panel-content',
-            css: {
-                padding: '20px',
-                minWidth: '300px'
-            }
-        });
-
-        // Title
-        const title = $('h3', {
-            text: 'Timecode Options',
-            css: {
-                margin: '0 0 20px 0',
-                color: '#333',
-                textAlign: 'center'
-            }
-        });
-
-        // Show/Hide Timecodes button with label
-        const toggleContainer = $('div', {
-            id: 'timecode-toggle-container',
-            css: {
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                marginBottom: '15px',
-                padding: '10px',
-                backgroundColor: '#f8f9fa',
-                borderRadius: '6px'
-            }
-        });
-        
-        const toggleButton = UIManager.createInterfaceButton(this.showTimecodes ? '👁️' : '🚫', {
-            id: 'toggle_timecodes_display',
-            onClick: () => {
-                this.toggleTimecodes();
-                // Close the modal after toggling
-                document.querySelector('.modal-overlay')?.remove();
-            }
-        });
-        
-        const toggleLabel = $('span', {
-            text: this.showTimecodes ? 'Hide Timecodes' : 'Show Timecodes',
-            css: {
-                fontSize: '14px',
-                color: '#333',
-                fontWeight: '500'
-            }
-        });
-        
-        toggleContainer.append(toggleButton, toggleLabel);
-
-        // Clear All Timecodes button with label
-        const clearContainer = $('div', {
-            id: 'timecode-clear-container',
-            css: {
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                marginBottom: '15px',
-                padding: '10px',
-                backgroundColor: '#f8f9fa',
-                borderRadius: '6px'
-            }
-        });
-        
-        const clearAllButton = UIManager.createInterfaceButton('🗑️', {
-            id: 'clear_all_timecodes',
-            onClick: () => {
-                // Close current modal first
-                document.querySelector('.modal-overlay')?.remove();
-                // Then show confirmation
-                this.confirmClearAllTimecodes();
-            }
-        });
-        
-        const clearLabel = $('span', {
-            text: 'Clear All Timecodes',
-            css: {
-                fontSize: '14px',
-                color: '#333',
-                fontWeight: '500'
-            }
-        });
-        
-        clearContainer.append(clearAllButton, clearLabel);
-
-        // Assemble the content
-        panelContent.append(title, toggleContainer, clearContainer);
-
-        // Show modal using the Modal from modal.js
-        import('./modal.js').then(({ Modal }) => {
-            Modal({
-                title: 'Timecode Options',
-                content: panelContent,
-                buttons: [
-                    {
-                        text: 'Close',
-                        style: 'secondary',
-                        action: () => {
-                            console.log('🔧 Timecode options panel closed');
-                        }
-                    }
-                ]
-            });
-        }).catch(error => {
-            // Fallback if modal import fails
-            console.error('Failed to load modal:', error);
-            alert('Show/Hide: ' + (this.showTimecodes ? 'Hide' : 'Show') + ' Timecodes\nClear All: Clear all timecodes');
-        });
+        // This method has been moved to the settings panel
+        // Timecode options are now available in Settings > Timecode Options
+        console.log('⚠️ showTimecodeOptionsPanel is deprecated - use settings panel instead');
     }
+    */
     
     // Confirm clearing all timecodes
     confirmClearAllTimecodes() {
