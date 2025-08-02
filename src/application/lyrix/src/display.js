@@ -447,8 +447,13 @@ export class LyricsDisplay {
     setupEventListeners() {
         // Click on lyrics line in edit mode
         this.lyricsContent.addEventListener('click', (e) => {
-            if (this.editMode && e.target.classList.contains('lyrics-line')) {
-                this.editLine(parseInt(e.target.dataset.lineIndex));
+            if (this.editMode && e.target.classList.contains('lyrics-line') && !this.recordMode) {
+                // Find the text span within the clicked line
+                const lineIndex = parseInt(e.target.dataset.lineIndex);
+                const textSpan = e.target.querySelector('.text-span');
+                if (textSpan) {
+                    this.editLineText(lineIndex, textSpan);
+                }
             }
         });
         
@@ -1204,7 +1209,11 @@ export class LyricsDisplay {
             
             const editTextButton = UIManager.createInterfaceButton('✏️', {
                 id: `edit_text_line_${index}`,
-                onClick: () => this.editLineText(index)
+                onClick: () => {
+                    if (!this.recordMode) {
+                        this.editLineText(index);
+                    }
+                }
             });
             
             controls.append(setTimeButton, clearTimeButton, editTextButton);
@@ -1296,7 +1305,10 @@ export class LyricsDisplay {
             textTouchTimer = setTimeout(() => {
                 if (!textHasMoved) {
                     e.preventDefault();
-                    this.editLineText(index, textSpan);
+                    // Lock line editing during record mode
+                    if (!this.recordMode) {
+                        this.editLineText(index, textSpan);
+                    }
                 }
             }, 300);
         });
@@ -1321,7 +1333,10 @@ export class LyricsDisplay {
                 // Check for double tap
                 if (currentTime - lastTapTime < 400) {
                     e.preventDefault();
-                    this.editLineText(index, textSpan);
+                    // Lock line editing during record mode
+                    if (!this.recordMode) {
+                        this.editLineText(index, textSpan);
+                    }
                     lastTapTime = 0;
                     return;
                 }
@@ -1392,7 +1407,10 @@ export class LyricsDisplay {
             
             e.stopPropagation();
             // console.log(`🖱️ Double-click detected on line ${index + 1}, calling editLineText`);
-            this.editLineText(index, textSpan);
+            // Lock line editing during record mode
+            if (!this.recordMode) {
+                this.editLineText(index, textSpan);
+            }
         });
         
         return lineDiv;
@@ -1647,9 +1665,18 @@ export class LyricsDisplay {
         // Update the stored original color for hover behavior
         this.recordButton.dataset.originalBgColor = newColor;
         
+        // Add/remove visual indication that line editing is locked
+        if (this.lyricsContent) {
+            if (this.recordMode) {
+                this.lyricsContent.classList.add('record-mode-editing-locked');
+            } else {
+                this.lyricsContent.classList.remove('record-mode-editing-locked');
+            }
+        }
+        
         if (this.recordMode) {
             // console.log('🔴 Record mode: ON - Click lines to assign current audio time as timecode');
-            // console.log('🔴 Auto-scroll disabled, line seeking disabled');
+            // console.log('🔴 Auto-scroll disabled, line seeking disabled, line editing locked');
             
             // Store original lines for saving later
             this.originalLinesForRecord = this.currentLyrics ? 
@@ -2179,6 +2206,12 @@ export class LyricsDisplay {
     // Edit line text via double-click
     editLineText(lineIndex, textSpan) {
         console.log(`🖱️ editLineText called for line ${lineIndex + 1}`);
+        
+        // Lock line editing during record mode
+        if (this.recordMode) {
+            console.log('🔒 Line editing is locked during record mode');
+            return;
+        }
         
         if (!this.currentLyrics) {
             console.log('❌ No currentLyrics in editLineText');

@@ -81,18 +81,41 @@ export class SyncedLyrics {
     
     // Clear all timecodes (reset for new recording)
     clearAllTimecodes() {
+        console.log(`🗑️ Starting clearAllTimecodes() - found ${this.lines?.length || 0} lines`);
+        
+        if (!this.lines || this.lines.length === 0) {
+            console.warn('⚠️ No lines found to clear timecodes from');
+            return false;
+        }
+        
+        let clearedCount = 0;
+        let textCleanedCount = 0;
+        
         this.lines.forEach((line, index) => {
             // Use -1 as special value to ignore lines during scroll
+            const previousTime = line.time;
             line.time = -1;
+            
+            if (previousTime !== -1) {
+                clearedCount++;
+            }
             
             // IMPORTANT: Clean text of all parasitic timecodes
             if (line.text) {
+                const originalText = line.text;
                 // Remove all patterns [X.Xs] or [-X.Xs] from text
                 line.text = line.text.replace(/\[[-]?\d+(?:\.\d+)?s\]\s*/g, '').trim();
+                
+                if (originalText !== line.text) {
+                    textCleanedCount++;
+                    console.log(`🧹 Line ${index + 1}: "${originalText}" → "${line.text}"`);
+                }
             }
         });
+        
         this.updateLastModified();
-        console.log(`✨ All timecodes cleared - ${this.lines.length} lines marked as unsynchronized (-1) and texts cleaned`);
+        console.log(`✨ All timecodes cleared - ${clearedCount} timecodes cleared, ${textCleanedCount} texts cleaned, ${this.lines.length} lines total`);
+        return true;
     }
     
     // Reset timecodes with uniform spacing

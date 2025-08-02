@@ -2959,9 +2959,24 @@ function showSettingsModal() {
 
     const clearAllTimecodesButton = UIManager.createInterfaceButton('🗑️', {
         onClick: () => {
-            if (lyricsDisplay && lyricsDisplay.currentLyrics) {
-                const confirmed = confirm('Clear all timecodes? This action cannot be undone.');
-                if (confirmed) {
+            console.log('🗑️ Clear all timecodes button clicked');
+            console.log('🔍 Debug info:', {
+                lyricsDisplay: !!lyricsDisplay,
+                currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
+                songId: lyricsDisplay?.currentLyrics?.songId,
+                linesCount: lyricsDisplay?.currentLyrics?.lines?.length
+            });
+            
+            if (lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes) {
+                // Show confirmation modal instead of system confirm
+                ConfirmModal({
+                    title: '🗑️ Clear All Timecodes',
+                    message: `Are you sure you want to remove all timecodes from "${lyricsDisplay.currentLyrics.title || 'current song'}"?\n\nThis action cannot be undone.`,
+                    confirmText: 'Clear All',
+                    cancelText: 'Cancel',
+                    confirmStyle: 'danger',
+                    onConfirm: () => {
+                    console.log('🗑️ User confirmed, clearing timecodes...');
                     lyricsDisplay.currentLyrics.clearAllTimecodes();
                     
                     // Save to localStorage
@@ -2972,11 +2987,41 @@ function showSettingsModal() {
                         console.error('❌ Failed to save cleared timecodes to localStorage');
                     }
                     
-                    lyricsDisplay.renderLyrics();
-                    console.log('🗑️ All timecodes cleared from settings');
-                }
+                    // Force re-render of lyrics to show the changes
+                    if (lyricsDisplay.renderLyrics) {
+                        lyricsDisplay.renderLyrics();
+                        console.log('� Lyrics re-rendered after clearing timecodes');
+                    } else {
+                        console.error('❌ renderLyrics method not found');
+                    }
+                    
+                    console.log('�🗑️ All timecodes cleared from settings');
+                    },
+                    onCancel: () => {
+                        console.log('❌ User cancelled clearing timecodes');
+                    }
+                });
             } else {
-                alert('No lyrics loaded to clear timecodes from.');
+                console.error('❌ Debug info:', {
+                    lyricsDisplay: !!lyricsDisplay,
+                    currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
+                    clearAllTimecodes: !!(lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes)
+                });
+                // Use custom modal instead of system alert for Tauri compatibility
+                Modal({
+                    title: '⚠️ No Lyrics Available',
+                    content: $('div', {
+                        text: 'No lyrics loaded to clear timecodes from, or method not available.',
+                        css: { padding: '10px', textAlign: 'center' }
+                    }),
+                    buttons: [
+                        {
+                            text: 'OK',
+                            style: 'primary',
+                            action: () => {} // Just close modal
+                        }
+                    ]
+                });
             }
         }
     });

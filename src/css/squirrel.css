@@ -503,6 +503,32 @@ pre {
     }
 }
 
+/* Record mode - Line editing locked styles */
+.record-mode-editing-locked .lyrics-line {
+    position: relative;
+}
+
+.record-mode-editing-locked .lyrics-line:hover::after {
+    content: "🔒 Editing locked during record mode";
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 0, 0, 0.9);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+.record-mode-editing-locked .lyrics-line .text-span {
+    cursor: not-allowed !important;
+    opacity: 0.7;
+}
+
 /* Panneau de contrôle responsive */
 @media (max-width: 768px) {
     .control-panel {
