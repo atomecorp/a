@@ -330,7 +330,8 @@ export class LyricsDisplay {
         }
         
         // Add font size container
-        mainToolElements.push(this.fontSizeContainer);
+        // Font size controls can be used within edit mode but not shown in main toolbar anymore
+        // mainToolElements.push(this.fontSizeContainer); // Moved to settings panel
         
         // Add edit mode buttons (save and cancel)
         mainToolElements.push(this.saveChangesButton, this.cancelEditButton);

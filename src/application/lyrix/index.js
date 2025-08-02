@@ -2843,7 +2843,7 @@ function showSettingsModal() {
     });
 
     // Load current state from localStorage
-    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false'; // Default to true
+    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true'; // Default to false (hidden)
 
     const timecodeDisplayButton = UIManager.createInterfaceButton(
         isTimecodeDisplayVisible ? '✅' : '❌', 
@@ -2862,6 +2862,8 @@ function showSettingsModal() {
     });
 
     timecodeDisplayContainer.append(timecodeDisplayButton, timecodeDisplayLabel);
+
+    timecodeDisplaySection.append(timecodeDisplayTitle, timecodeDisplayContainer);
 
     // Timecode Options section
     const timecodeOptionsSection = $('div', {
@@ -2971,8 +2973,98 @@ function showSettingsModal() {
     timecodeOptionsContainer.append(showTimecodesContainer, clearTimecodesContainer);
     timecodeOptionsSection.append(timecodeOptionsTitle, timecodeOptionsContainer);
 
+    // Font Size Controls section
+    const fontSizeSection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#f0f8ff',
+            borderRadius: '5px',
+            border: '1px solid #87ceeb'
+        }
+    });
+
+    const fontSizeTitle = $('div', {
+        text: '📝 Font Size Controls',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '10px',
+            color: '#4682b4'
+        }
+    });
+
+    const fontSizeContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            justifyContent: 'center'
+        }
+    });
+
+    // Get current font size
+    const currentFontSize = lyricsDisplay ? lyricsDisplay.fontSize : 24;
+
+    const fontMinusButton = UIManager.createInterfaceButton('A-', {
+        onClick: () => {
+            if (lyricsDisplay) {
+                lyricsDisplay.adjustFontSize(-2);
+                fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
+            }
+        }
+    });
+
+    const fontSizeLabel = $('span', {
+        text: `${currentFontSize}px`,
+        css: {
+            padding: '5px 10px',
+            backgroundColor: '#f0f0f0',
+            borderRadius: '4px',
+            fontSize: '14px',
+            fontWeight: '500',
+            minWidth: '50px',
+            textAlign: 'center',
+            border: '1px solid #ccc'
+        }
+    });
+
+    const fontPlusButton = UIManager.createInterfaceButton('A+', {
+        onClick: () => {
+            if (lyricsDisplay) {
+                lyricsDisplay.adjustFontSize(2);
+                fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
+            }
+        }
+    });
+
+    // Add double-click handler for direct font size editing
+    fontSizeLabel.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        if (lyricsDisplay) {
+            lyricsDisplay.editFontSizeDirectly();
+            // Update label after editing
+            setTimeout(() => {
+                fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
+            }, 100);
+        }
+    });
+
+    const fontSizeHint = $('div', {
+        text: 'Click A- / A+ or double-click size to adjust',
+        css: {
+            fontSize: '11px',
+            color: '#666',
+            fontStyle: 'italic',
+            textAlign: 'center',
+            marginTop: '5px'
+        }
+    });
+
+    fontSizeContainer.append(fontMinusButton, fontSizeLabel, fontPlusButton);
+    fontSizeSection.append(fontSizeTitle, fontSizeContainer, fontSizeHint);
+
     // Assemble the content - move experimental features to the bottom
-    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, midiSection, audioSection, syncSection);
+    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
 
     // Show modal
     Modal({
@@ -3441,7 +3533,7 @@ function toggleMidiInspector(buttonElement, labelElement) {
 
 // Toggle timecode display visibility
 function toggleTimecodeDisplayVisibility(buttonElement, labelElement) {
-    const isCurrentlyVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false'; // Default to true
+    const isCurrentlyVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true'; // Default to false (hidden)
     const newState = !isCurrentlyVisible;
     
     // Save new state
@@ -3475,7 +3567,7 @@ function applyInitialSettings() {
     }
     
     if (localStorage.getItem('lyrix_timecode_display_visible') === null) {
-        localStorage.setItem('lyrix_timecode_display_visible', 'true'); // Default to visible
+        localStorage.setItem('lyrix_timecode_display_visible', 'false'); // Default to hidden
     }
     
     // Set default volume if it doesn't exist
@@ -3484,10 +3576,13 @@ function applyInitialSettings() {
     }
     
     // Apply timecode display visibility setting
-    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false';
+    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true';
     const timecodeElement = document.getElementById('timecode-display');
     if (timecodeElement) {
         timecodeElement.style.display = isTimecodeDisplayVisible ? 'block' : 'none';
+        console.log(`🕐 Applied timecode display visibility from applyInitialSettings: ${isTimecodeDisplayVisible ? 'visible' : 'hidden'}`);
+    } else {
+        console.log('🕐 Timecode display element not found in applyInitialSettings - will be applied later');
     }
   
 }
@@ -4365,8 +4460,9 @@ function createMainInterface() {
         });
         
         // Apply timecode display visibility setting immediately
-        const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') !== 'false';
+        const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true';
         timecodeDisplay.style.display = isTimecodeDisplayVisible ? 'block' : 'none';
+        console.log(`🕐 Timecode display initial visibility: ${isTimecodeDisplayVisible ? 'visible' : 'hidden'}`);
         
         // Store scrub and timecode tools for potential move to lyrics toolbar
         window.leftPanelScrubTools = {
