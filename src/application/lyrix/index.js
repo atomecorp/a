@@ -3202,11 +3202,11 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
         if (volumeContainer && !toolbarRow.contains(volumeContainer)) {
             toolbarRow.appendChild(volumeContainer);
         }
-        if (playButton && !toolbarRow.contains(playButton)) {
-            toolbarRow.appendChild(playButton);
-        }
         if (stopButton && !toolbarRow.contains(stopButton)) {
             toolbarRow.appendChild(stopButton);
+        }
+        if (playButton && !toolbarRow.contains(playButton)) {
+            toolbarRow.appendChild(playButton);
         }
     }
     
@@ -4178,7 +4178,7 @@ function createMainInterface() {
         // Add data attribute for identification
         audioControls.setAttribute('data-element', 'audio-controls');
         
-        audioControls.append(playButton, stopButton);
+        audioControls.append(stopButton, playButton);
         
         // Store audio controls for potential move to lyrics toolbar
         window.leftPanelAudioTools = {

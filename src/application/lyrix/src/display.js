@@ -596,18 +596,6 @@ export class LyricsDisplay {
                 audioContainer.style.marginBottom = '15px';
             }
             
-            if (playButton) {
-                // Fix positioning and display for play button
-                playButton.style.position = 'relative'; // Remove any absolute positioning
-                playButton.style.display = 'inline-block';
-                playButton.style.visibility = 'visible';
-                playButton.style.float = 'none'; // Remove any float
-                playButton.style.top = 'auto';
-                playButton.style.left = 'auto';
-                playButton.style.right = 'auto';
-                playButton.style.bottom = 'auto';
-                buttons.push(playButton);
-            }
             if (stopButton) {
                 // Fix positioning and display for stop button
                 stopButton.style.position = 'relative'; // Remove any absolute positioning
@@ -619,6 +607,18 @@ export class LyricsDisplay {
                 stopButton.style.right = 'auto';
                 stopButton.style.bottom = 'auto';
                 buttons.push(stopButton);
+            }
+            if (playButton) {
+                // Fix positioning and display for play button
+                playButton.style.position = 'relative'; // Remove any absolute positioning
+                playButton.style.display = 'inline-block';
+                playButton.style.visibility = 'visible';
+                playButton.style.float = 'none'; // Remove any float
+                playButton.style.top = 'auto';
+                playButton.style.left = 'auto';
+                playButton.style.right = 'auto';
+                playButton.style.bottom = 'auto';
+                buttons.push(playButton);
             }
             
             // Add volume slider after play/stop buttons
