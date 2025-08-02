@@ -1718,7 +1718,8 @@ function showSongLibrary() {
     });
 
     const headerTitle = $('h3', {
-        text: '📚 Song Library',
+        id: 'song-library-header',
+        // text: '📚 Song Library',
         css: { margin: '0', color: 'white' }
     });
 
@@ -1730,9 +1731,29 @@ function showSongLibrary() {
         }
     });
 
+    // Create new song button
+    const createNewSongButton = $('button', {
+        id: 'create_new_song_button',
+        text: '➕ New',
+        css: {
+            backgroundColor: '#2ecc71',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            cursor: 'pointer'
+        },
+        onClick: () => {
+            document.body.removeChild(modalContainer);
+            createNewSong();
+        }
+    });
+
     // Export all to LRX button
     const exportLRXButton = $('button', {
-        text: '💾 Save All (.lrx)',
+          id: 'export-lrx-format',
+        text: '💾 Save',
         css: {
             backgroundColor: '#27ae60',
             color: 'white',
@@ -1750,7 +1771,8 @@ function showSongLibrary() {
 
     // Export selected as text button
     const exportTextButton = $('button', {
-        text: '� Export Text',
+        id: 'export-songs-as-text',
+        text: 'save txt',
         css: {
             backgroundColor: '#3498db',
             color: 'white',
@@ -1780,7 +1802,7 @@ function showSongLibrary() {
     });
 
     const autoFillLabel = $('span', {
-        text: 'Auto Fill:',
+        //text: '',
         css: {
             fontSize: '11px',
             color: '#666',
@@ -1872,7 +1894,7 @@ function showSongLibrary() {
             });
         }
     });
-    actionButtons.append(exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
+    actionButtons.append(createNewSongButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     headerTop.append(headerTitle, actionButtons);
 
     // Instructions
@@ -4011,15 +4033,16 @@ function createMainInterface() {
         }
     });
     
-    const createSongButton = UIManager.createInterfaceButton('➕', {
-        id: 'create_new_song_button',
-        onClick: () => {
-            createNewSong();
-        },
-        css: {
-            marginBottom: '10px'
-        }
-    });
+    // Create song button moved to song library panel
+    // const createSongButton = UIManager.createInterfaceButton('➕', {
+    //     id: 'create_new_song_button',
+    //     onClick: () => {
+    //         createNewSong();
+    //     },
+    //     css: {
+    //         marginBottom: '10px'
+    //     }
+    // });
     
     const songListButton = UIManager.createInterfaceButton('☰', {
         id: 'song_list_button',
@@ -4031,7 +4054,7 @@ function createMainInterface() {
     window.leftPanelTools = {
         settingsButton,
         importButton, 
-        createSongButton,
+        // createSongButton, // Moved to song library panel
         songListButton
     };
     
@@ -4126,14 +4149,14 @@ function createMainInterface() {
         const scrubContainer = $('div', {
             id: 'audio-scrub-slider-container',
             css: {
-                marginBottom: '15px',
-                padding: '2px 0px', // Minimal padding, no left/right padding
-                backgroundColor: '#3a3a3aff',
-                borderRadius: '4px',
+                // marginBottom: '15px',
+                // padding: '2px 0px', // Minimal padding, no left/right padding
+                // backgroundColor: '#3a3a3aff',
+                // borderRadius: '4px',
                 // border: '1px solid #dee2e6',
                 display: initialDisplay,
-                width: '98%', // Set container width to 98%
-                boxSizing: 'border-box'
+                // width: '100%', // Set container width to 98%
+                // boxSizing: 'border-box'
             }
         });
         
