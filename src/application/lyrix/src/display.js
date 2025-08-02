@@ -904,7 +904,7 @@ export class LyricsDisplay {
                 padding: '15px',
                 backgroundColor: '#515151ff',
                 borderRadius: '8px',
-                borderLeft: '4px solid #2196F3'
+                // borderLeft: '4px solid #2196F3'
             }
         });
         
@@ -941,8 +941,15 @@ export class LyricsDisplay {
                 css: {
                     margin: '0 0 5px 0',
                     color: '#1976D2',
-                    fontSize: '1.3em'
+                    fontSize: '1.3em',
+                    cursor: 'pointer'
                 }
+            });
+            
+            // Add double-click to edit title in normal mode
+            title.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                this.editMetadataField(title, 'title', this.currentLyrics.metadata.title || '');
             });
         }
         
@@ -980,8 +987,15 @@ export class LyricsDisplay {
                     margin: '0 0 5px 0',
                     color: '#666',
                     fontSize: '1.1em',
-                    fontWeight: 'normal'
+                    fontWeight: 'normal',
+                    cursor: 'pointer'
                 }
+            });
+            
+            // Add double-click to edit artist in normal mode
+            artist.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                this.editMetadataField(artist, 'artist', this.currentLyrics.metadata.artist || '');
             });
         }
         
@@ -2491,6 +2505,101 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         });
     }
     
+    // Edit metadata field (title or artist) via double-click
+    editMetadataField(displayElement, fieldName, currentValue) {
+        console.log(`🖱️ editMetadataField called for ${fieldName}: "${currentValue}"`);
+        
+        if (!this.currentLyrics) {
+            console.log('❌ No currentLyrics in editMetadataField');
+            return;
+        }
+        
+        // Create input field for editing using DOM directly
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentValue;
+        input.style.cssText = `
+            font-size: ${displayElement.style.fontSize || '1.3em'};
+            font-family: inherit;
+            font-weight: ${displayElement.style.fontWeight || 'normal'};
+            color: ${displayElement.style.color || '#333'};
+            padding: 4px 8px;
+            border: 2px solid #007bff;
+            border-radius: 4px;
+            background-color: white;
+            width: 100%;
+            box-sizing: border-box;
+            margin: ${displayElement.style.margin || '0'};
+        `;
+        
+        console.log(`📝 Input created with value: "${input.value}"`);
+        
+        // Replace the display element with input temporarily
+        displayElement.style.display = 'none';
+        displayElement.parentNode.insertBefore(input, displayElement);
+        input.focus();
+        input.select();
+        
+        const saveEdit = () => {
+            const newValue = input.value.trim();
+            
+            // Always save if the value is different from original
+            if (newValue !== currentValue) {
+                // Update the metadata
+                this.currentLyrics.metadata[fieldName] = newValue;
+                this.currentLyrics.updateLastModified();
+                
+                // Save to localStorage using StorageManager
+                const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                if (saveSuccess) {
+                    console.log(`✅ ${fieldName} saved to localStorage successfully: "${newValue}"`);
+                } else {
+                    console.error(`❌ Failed to save ${fieldName} to localStorage`);
+                }
+                
+                // Update the display element text
+                if (fieldName === 'artist') {
+                    displayElement.textContent = `by ${newValue}`;
+                } else {
+                    displayElement.textContent = newValue;
+                }
+                
+                console.log(`✏️ Updated ${fieldName}: "${newValue}"`);
+            }
+            
+            // Restore the display element
+            if (input.parentNode) {
+                input.parentNode.removeChild(input);
+                displayElement.style.display = '';
+            }
+        };
+        
+        const cancelEdit = () => {
+            // Restore the display element without changes
+            if (input.parentNode) {
+                input.parentNode.removeChild(input);
+                displayElement.style.display = '';
+            }
+            console.log(`❌ ${fieldName} edit cancelled`);
+        };
+        
+        // Enter to save
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveEdit();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+        
+        // Save when losing focus
+        input.addEventListener('blur', () => {
+            saveEdit();
+        });
+    }
+
     // Record current timecode
     recordCurrentTimecode() {
         if (!this.currentLyrics) return;
