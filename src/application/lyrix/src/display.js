@@ -854,6 +854,9 @@ export class LyricsDisplay {
         // Ensure all lines have IDs (for backward compatibility)
         syncedLyrics.ensureLineIds();
         
+        // Verify and correct timecode order when loading lyrics
+        this.verifyAndCorrectAllTimecodes();
+        
         // Set current lyrics and render
         this.currentLyrics = syncedLyrics;
         this.renderLyrics();
@@ -1245,6 +1248,9 @@ export class LyricsDisplay {
                 this.currentLyrics.lines[index].time = timecodeMs;
                 this.currentLyrics.updateLastModified();
                 
+                // Verify and correct timecode order after recording
+                this.verifyAndCorrectTimecodeOrder(index);
+                
                 // Save to localStorage when recording timecode in record mode
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 if (saveSuccess) {
@@ -1356,6 +1362,9 @@ export class LyricsDisplay {
                     if (currentTime > 0) {
                         this.currentLyrics.lines[index].time = currentTime;
                         this.currentLyrics.updateLastModified();
+                        
+                        // Verify and correct timecode order after recording
+                        this.verifyAndCorrectTimecodeOrder(index);
                         
                         // Save to localStorage when recording timecode in record mode (touch)
                         const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
@@ -2083,6 +2092,9 @@ export class LyricsDisplay {
             // Update lyrics and save to localStorage
             this.currentLyrics.updateLastModified();
             
+            // Verify and correct timecode order after drag adjustment
+            this.verifyAndCorrectTimecodeOrder(lineIndex);
+            
             // Save to localStorage using the same method as the save button
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
             if (saveSuccess) {
@@ -2105,6 +2117,9 @@ export class LyricsDisplay {
                 // Update the time
                 this.currentLyrics.lines[lineIndex].time = newTime;
                 this.currentLyrics.updateLastModified();
+                
+                // Verify and correct timecode order after manual edit
+                this.verifyAndCorrectTimecodeOrder(lineIndex);
                 
                 // Save to localStorage using the same method as the save button
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
@@ -2455,6 +2470,9 @@ export class LyricsDisplay {
             this.currentLyrics.lines[nextLineIndex].time = currentTime;
             this.currentLyrics.updateLastModified();
             
+            // Verify and correct timecode order after recording
+            this.verifyAndCorrectTimecodeOrder(nextLineIndex);
+            
             // Save to localStorage using the same method as the save button
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
             if (saveSuccess) {
@@ -2497,6 +2515,9 @@ export class LyricsDisplay {
         
         this.currentLyrics.lines[lineIndex].time = currentTime;
         this.currentLyrics.updateLastModified();
+        
+        // Verify and correct timecode order after setting time
+        this.verifyAndCorrectTimecodeOrder(lineIndex);
         
         // Save to localStorage using the same method as the save button
         const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
@@ -2751,5 +2772,141 @@ export class LyricsDisplay {
             document.removeEventListener('keydown', this.keyboardHandler);
             this.keyboardHandler = null;
         }
+    }
+
+    // Verify and correct timecode order to ensure they are always incremental
+    verifyAndCorrectTimecodeOrder(modifiedLineIndex) {
+        if (!this.currentLyrics || !this.currentLyrics.lines) {
+            return;
+        }
+
+        const lines = this.currentLyrics.lines;
+        let correctionsMade = 0;
+        let correctionLog = [];
+
+        console.log(`🔍 Verifying timecode order after modifying line ${modifiedLineIndex + 1}...`);
+
+        // Start from the modified line and check forward
+        for (let i = modifiedLineIndex; i < lines.length - 1; i++) {
+            const currentLine = lines[i];
+            const nextLine = lines[i + 1];
+
+            // Skip lines without timecodes
+            if (currentLine.time < 0 || nextLine.time < 0) {
+                continue;
+            }
+
+            // If next line's timecode is not greater than current line's timecode
+            if (nextLine.time <= currentLine.time) {
+                // Calculate a minimum increment (100ms default)
+                const minimumIncrement = 100;
+                const newTimecode = currentLine.time + minimumIncrement;
+                
+                correctionLog.push({
+                    lineIndex: i + 1,
+                    oldTimecode: nextLine.time,
+                    newTimecode: newTimecode,
+                    reason: `Line ${i + 2} timecode (${this.formatTimeDisplay(nextLine.time)}) was not greater than line ${i + 1} timecode (${this.formatTimeDisplay(currentLine.time)})`
+                });
+
+                nextLine.time = newTimecode;
+                correctionsMade++;
+            }
+        }
+
+        // Log corrections if any were made
+        if (correctionsMade > 0) {
+            console.log(`⚡ Made ${correctionsMade} timecode corrections:`);
+            correctionLog.forEach(correction => {
+                console.log(`  📝 Line ${correction.lineIndex + 1}: ${this.formatTimeDisplay(correction.oldTimecode)} → ${this.formatTimeDisplay(correction.newTimecode)}`);
+                console.log(`     Reason: ${correction.reason}`);
+            });
+
+            // Update last modified and save to localStorage
+            this.currentLyrics.updateLastModified();
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log(`✅ Corrected timecodes saved to localStorage successfully`);
+            } else {
+                console.error(`❌ Failed to save corrected timecodes to localStorage`);
+            }
+
+            // Re-render lyrics to show the corrections
+            if (this.showTimecodes) {
+                this.renderLyrics();
+            }
+        } else {
+            console.log(`✅ Timecode order verification complete - no corrections needed`);
+        }
+
+        return correctionsMade;
+    }
+
+    // Verify and correct all timecodes in the song (used for imports or bulk operations)
+    verifyAndCorrectAllTimecodes() {
+        if (!this.currentLyrics || !this.currentLyrics.lines) {
+            return;
+        }
+
+        const lines = this.currentLyrics.lines;
+        let correctionsMade = 0;
+        let correctionLog = [];
+
+        console.log(`🔍 Verifying all timecode order for entire song...`);
+
+        // Check all lines with timecodes
+        for (let i = 0; i < lines.length - 1; i++) {
+            const currentLine = lines[i];
+            const nextLine = lines[i + 1];
+
+            // Skip lines without timecodes
+            if (currentLine.time < 0 || nextLine.time < 0) {
+                continue;
+            }
+
+            // If next line's timecode is not greater than current line's timecode
+            if (nextLine.time <= currentLine.time) {
+                // Calculate a minimum increment (100ms default)
+                const minimumIncrement = 100;
+                const newTimecode = currentLine.time + minimumIncrement;
+                
+                correctionLog.push({
+                    lineIndex: i + 1,
+                    oldTimecode: nextLine.time,
+                    newTimecode: newTimecode,
+                    reason: `Line ${i + 2} timecode (${this.formatTimeDisplay(nextLine.time)}) was not greater than line ${i + 1} timecode (${this.formatTimeDisplay(currentLine.time)})`
+                });
+
+                nextLine.time = newTimecode;
+                correctionsMade++;
+            }
+        }
+
+        // Log corrections if any were made
+        if (correctionsMade > 0) {
+            console.log(`⚡ Made ${correctionsMade} timecode corrections for entire song:`);
+            correctionLog.forEach(correction => {
+                console.log(`  📝 Line ${correction.lineIndex + 1}: ${this.formatTimeDisplay(correction.oldTimecode)} → ${this.formatTimeDisplay(correction.newTimecode)}`);
+                console.log(`     Reason: ${correction.reason}`);
+            });
+
+            // Update last modified and save to localStorage
+            this.currentLyrics.updateLastModified();
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log(`✅ All corrected timecodes saved to localStorage successfully`);
+            } else {
+                console.error(`❌ Failed to save all corrected timecodes to localStorage`);
+            }
+
+            // Re-render lyrics to show the corrections
+            if (this.showTimecodes) {
+                this.renderLyrics();
+            }
+        } else {
+            console.log(`✅ All timecode order verification complete - no corrections needed`);
+        }
+
+        return correctionsMade;
     }
 }
