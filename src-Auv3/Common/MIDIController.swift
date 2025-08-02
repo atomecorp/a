@@ -9,6 +9,7 @@
 import Foundation
 import CoreMIDI
 import os.log
+import QuartzCore
 
 public class MIDIController: NSObject {
     
@@ -20,6 +21,10 @@ public class MIDIController: NSObject {
     // Logger for Xcode console
     private let logger = Logger(subsystem: "com.atomecorp.atome", category: "MIDI")
     
+    // OPTIMIZATION: Rate limiting for MIDI logs to reduce CPU usage
+    private var lastLogTime: CFTimeInterval = 0
+    private let logInterval: CFTimeInterval = 0.5 // Max 2 logs per second
+    
     public override init() {
         super.init()
         setupMIDI()
@@ -27,6 +32,16 @@ public class MIDIController: NSObject {
     
     deinit {
         cleanup()
+    }
+    
+    // MARK: - MIDI Logging with Rate Limiting (OPTIMIZATION)
+    
+    private func logMIDIMessage(_ message: String) {
+        let currentTime = CACurrentMediaTime()
+        if currentTime - lastLogTime >= logInterval {
+            logger.info("\(message)")
+            lastLogTime = currentTime
+        }
     }
     
     // MARK: - Main MIDI Setup
@@ -91,11 +106,8 @@ public class MIDIController: NSObject {
                     Array(UnsafeBufferPointer(start: ptr.withMemoryRebound(to: UInt32.self, capacity: Int(wordCount)) { $0 }, count: Int(wordCount)))
                 }
                 
-                // Log raw MIDI data
-                logger.info("🎹 MIDI Data Received:")
-                logger.info("   Timestamp: \(timestamp)")
-                logger.info("   Word Count: \(wordCount)")
-                logger.info("   Raw Words: \(words.map { String(format: "0x%08X", $0) }.joined(separator: ", "))")
+                // Log raw MIDI data with rate limiting
+                logMIDIMessage("🎹 MIDI Data - Timestamp: \(timestamp), Words: \(wordCount)")
                 
                 // Parse MIDI messages from words
                 if wordCount >= 1 {
@@ -144,9 +156,9 @@ public class MIDIController: NSObject {
                 let note = data[1]
                 let velocity = data[2]
                 if velocity > 0 {
-                    logger.info("🎵 Note ON  - Channel: \(channel), Note: \(note), Velocity: \(velocity)")
+                    logMIDIMessage("🎵 Note ON  - Ch: \(channel), Note: \(note), Vel: \(velocity)")
                 } else {
-                    logger.info("🎵 Note OFF - Channel: \(channel), Note: \(note) (velocity 0)")
+                    logMIDIMessage("🎵 Note OFF - Ch: \(channel), Note: \(note) (vel 0)")
                 }
             }
             
@@ -154,20 +166,20 @@ public class MIDIController: NSObject {
             if data.count >= 3 {
                 let note = data[1]
                 let velocity = data[2]
-                logger.info("🎵 Note OFF - Channel: \(channel), Note: \(note), Velocity: \(velocity)")
+                logMIDIMessage("🎵 Note OFF - Ch: \(channel), Note: \(note), Vel: \(velocity)")
             }
             
         case 0xB0: // Control Change
             if data.count >= 3 {
                 let controller = data[1]
                 let value = data[2]
-                logger.info("🎛️ CC Change - Channel: \(channel), Controller: \(controller), Value: \(value)")
+                logMIDIMessage("🎛️ CC - Ch: \(channel), CC: \(controller), Val: \(value)")
             }
             
         case 0xC0: // Program Change
             if data.count >= 2 {
                 let program = data[1]
-                logger.info("🎪 Program Change - Channel: \(channel), Program: \(program)")
+                logMIDIMessage("🎪 PC - Ch: \(channel), Prog: \(program)")
             }
             
         case 0xE0: // Pitch Bend
@@ -175,7 +187,7 @@ public class MIDIController: NSObject {
                 let lsb = data[1]
                 let msb = data[2]
                 let pitchValue = Int(lsb) + (Int(msb) << 7)
-                logger.info("🎚️ Pitch Bend - Channel: \(channel), Value: \(pitchValue)")
+                logMIDIMessage("🎚️ PB - Ch: \(channel), Val: \(pitchValue)")
             }
             
         case 0xA0: // Aftertouch

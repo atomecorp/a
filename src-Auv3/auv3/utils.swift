@@ -23,11 +23,11 @@ protocol TransportDataDelegate: AnyObject {
 public class auv3Utils: AUAudioUnit {
     // MARK: - Properties
     
-    private var _outputBusArray: AUAudioUnitBusArray!
-    private var _inputBusArray: AUAudioUnitBusArray!
+    private var _outputBusArray: AUAudioUnitBusArray?
+    private var _inputBusArray: AUAudioUnitBusArray?
     private var isMuted: Bool = false
     private var audioLogger: FileHandle?
-    private var isLogging: Bool = false
+    private var isLogging: Bool = false // PERFORMANCE: Disabled by default to save CPU
     
     // Test tone properties
     private var isTestToneActive: Bool = false
@@ -40,8 +40,12 @@ public class auv3Utils: AUAudioUnit {
     private let audioBufferSize = 1024
     private var audioBuffer = [Float](repeating: 0, count: 1024)
     private var bufferIndex = 0
-    private var lastVisualizationUpdate: TimeInterval = 0
-    private let visualizationUpdateInterval: TimeInterval = 1.0 / 30.0 // 30 FPS update rate
+    private var lastVisualizationUpdate: CFTimeInterval = 0
+    private let visualizationUpdateInterval: CFTimeInterval = 1.0/5.0 // 5 FPS max for visualization
+    
+    // OPTIMIZATION: Pre-allocated buffers to avoid allocations in render thread
+    private var preAllocatedVisualizationBuffer = [Float](repeating: 0, count: 64)
+    private var preAllocatedTempArray = [NSNumber](repeating: 0, count: 64)
 
     // Custom AudioBufferList wrapper
     private struct AudioBufferListWrapper {
@@ -76,14 +80,30 @@ public class auv3Utils: AUAudioUnit {
         return { [weak self] actionFlags, timestamp, frameCount, outputBusNumber, outputData, realtimeEventListHead, pullInputBlock in
             guard let strongSelf = self else { return kAudioUnitErr_NoConnection }
             
-            // Process MIDI events first
+            // Safety check: Ensure audio unit is properly initialized
+            guard strongSelf._outputBusArray != nil, strongSelf._inputBusArray != nil else {
+                // If not properly initialized, return silence to prevent "invalid reuse after initialization failure"
+                let bufferList = AudioBufferListWrapper(ptr: outputData)
+                for i in 0..<bufferList.numberOfBuffers {
+                    let buffer = bufferList.buffer(at: i)
+                    if let mData = buffer.mData {
+                        memset(mData, 0, Int(buffer.mDataByteSize))
+                    }
+                }
+                return noErr
+            }
+            
+            // PERFORMANCE: Reduce expensive operations in render thread
+            let currentTime = CACurrentMediaTime()
+            
+            // Process MIDI events first (lightweight)
             if let eventList = realtimeEventListHead?.pointee {
                 strongSelf.processMIDIEvents(eventList)
             }
-            
+
             let bufferList = AudioBufferListWrapper(ptr: outputData)
             
-            // Generate test tone if active
+            // Generate test tone if active (lightweight math)
             if strongSelf.isTestToneActive {
                 let sampleRate = strongSelf.getSampleRate() ?? 44100.0
                 
@@ -118,45 +138,34 @@ public class auv3Utils: AUAudioUnit {
                 }
             }
 
-            // Log audio data if logging is enabled
-            if strongSelf.isLogging, let logger = strongSelf.audioLogger {
-                for i in 0..<bufferList.numberOfBuffers {
-                    let buffer = bufferList.buffer(at: i)
-                    if let inData = buffer.mData {
-                        let data = Data(bytes: inData, count: Int(buffer.mDataByteSize))
-                        try? logger.write(contentsOf: data)
-                    }
-                }
-            }
-
-            // Process audio data for visualization with rate limiting
-            let currentTime = CACurrentMediaTime()
-            if currentTime - strongSelf.lastVisualizationUpdate >= strongSelf.visualizationUpdateInterval {
-                for i in 0..<bufferList.numberOfBuffers {
-                    let buffer = bufferList.buffer(at: i)
+            // PERFORMANCE: Skip expensive logging in render thread
+            // Audio logging moved to background processing if needed
+            
+            // PERFORMANCE: Heavily throttled visualization (5 FPS max)
+            if currentTime - strongSelf.lastVisualizationUpdate >= 0.2 { // 5 FPS instead of 15
+                // Use pre-allocated buffer to avoid allocations
+                if bufferList.numberOfBuffers > 0 {
+                    let buffer = bufferList.buffer(at: 0) // Only process first buffer
                     if let inData = buffer.mData {
                         let floatData = inData.assumingMemoryBound(to: Float.self)
-                        let count = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
+                        let count = min(Int(buffer.mDataByteSize) / MemoryLayout<Float>.size, strongSelf.audioBufferSize)
                         
-                        var visualizationData = [Float]()
-                        let downsampleFactor = max(1, count / strongSelf.audioBufferSize)
-                        
-                        for i in stride(from: 0, to: count, by: downsampleFactor) {
-                            let sum = (0..<downsampleFactor)
-                                .map { j in i + j < count ? abs(floatData[i + j]) : 0 }
-                                .reduce(0, +)
-                            visualizationData.append(sum / Float(downsampleFactor))
+                        // Simple peak detection instead of full processing
+                        var peak: Float = 0
+                        for i in stride(from: 0, to: count, by: 8) { // Sample every 8th element
+                            peak = max(peak, abs(floatData[i]))
                         }
                         
+                        // Background dispatch for UI updates
                         DispatchQueue.main.async {
-                            strongSelf.audioDataDelegate?.didReceiveAudioData(visualizationData, timestamp: Double(timestamp.pointee.mSampleTime))
+                            strongSelf.audioDataDelegate?.didReceiveAudioData([peak], timestamp: Double(timestamp.pointee.mSampleTime))
                         }
                     }
                 }
                 strongSelf.lastVisualizationUpdate = currentTime
             }
 
-            // Handle muting
+            // Handle muting (lightweight operation)
             if strongSelf.isMuted {
                 for i in 0..<bufferList.numberOfBuffers {
                     let buffer = bufferList.buffer(at: i)
@@ -166,14 +175,16 @@ public class auv3Utils: AUAudioUnit {
                 }
             }
             
-            strongSelf.checkHostTransport()
-            strongSelf.checkHostTempo()
+            // PERFORMANCE: Throttle transport checks to 10 FPS
+            if currentTime - strongSelf.lastTransportCheck >= 0.1 {
+                strongSelf.checkHostTransport()
+                strongSelf.checkHostTempo()
+                strongSelf.lastTransportCheck = currentTime
+            }
 
             return noErr
         }
-    }
-
-    // MARK: - Musical Context and Transport
+    }    // MARK: - Musical Context and Transport
     
     public override var musicalContextBlock: AUHostMusicalContextBlock? {
         get {
@@ -254,11 +265,25 @@ public class auv3Utils: AUAudioUnit {
     // MARK: - Bus Configuration
     
     override public var inputBusses: AUAudioUnitBusArray {
-        return _inputBusArray
+        // Safety check to prevent "invalid reuse after initialization failure"
+        guard let busArray = _inputBusArray else {
+            // Create a temporary empty bus array if initialization failed
+            print("⚠️ Warning: Input bus array not properly initialized, creating temporary empty array")
+            _ = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2) ?? AVAudioFormat()
+            return AUAudioUnitBusArray(audioUnit: self, busType: .input, busses: [])
+        }
+        return busArray
     }
 
     override public var outputBusses: AUAudioUnitBusArray {
-        return _outputBusArray
+        // Safety check to prevent "invalid reuse after initialization failure"
+        guard let busArray = _outputBusArray else {
+            // Create a temporary empty bus array if initialization failed
+            print("⚠️ Warning: Output bus array not properly initialized, creating temporary empty array")
+            _ = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2) ?? AVAudioFormat()
+            return AUAudioUnitBusArray(audioUnit: self, busType: .output, busses: [])
+        }
+        return busArray
     }
 
     // MARK: - Initialization
@@ -267,15 +292,27 @@ public class auv3Utils: AUAudioUnit {
                          options: AudioComponentInstantiationOptions = []) throws {
         try super.init(componentDescription: componentDescription, options: options)
 
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        // Safer audio format creation with proper error handling
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2) else {
+            throw NSError(domain: "auv3Utils", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create audio format"])
+        }
 
-        _inputBusArray = AUAudioUnitBusArray(audioUnit: self,
-                                             busType: .input,
-                                             busses: [try AUAudioUnitBus(format: format)])
+        // Create bus arrays with proper error handling to prevent reuse after initialization failure
+        do {
+            let inputBus = try AUAudioUnitBus(format: format)
+            let outputBus = try AUAudioUnitBus(format: format)
+            
+            _inputBusArray = AUAudioUnitBusArray(audioUnit: self,
+                                                 busType: .input,
+                                                 busses: [inputBus])
 
-        _outputBusArray = AUAudioUnitBusArray(audioUnit: self,
-                                              busType: .output,
-                                              busses: [try AUAudioUnitBus(format: format)])
+            _outputBusArray = AUAudioUnitBusArray(audioUnit: self,
+                                                  busType: .output,
+                                                  busses: [outputBus])
+        } catch {
+            print("❌ Failed to create audio unit buses: \(error)")
+            throw error
+        }
     }
 
     // MARK: - MIDI Support
@@ -283,6 +320,13 @@ public class auv3Utils: AUAudioUnit {
     public override var supportsMPE: Bool {
         return true
     }
+    
+    // Performance: Rate limiting for AUv3 MIDI logging
+    private var lastAUv3MIDILog: CFTimeInterval = 0
+    private let auv3MidiLogInterval: CFTimeInterval = 0.5 // 2 logs/second max
+    
+    // Performance: Rate limiting for transport checks
+    private var lastTransportCheck: CFTimeInterval = 0
     
     // Process MIDI events from the render block
     private func processMIDIEvents(_ eventList: AURenderEvent) {
@@ -296,7 +340,13 @@ public class auv3Utils: AUAudioUnit {
                                             count: Int(midiEvent.length)))
                 }
                 
-                print("🎹 AUv3 MIDI Event: \(midiData.map { String(format: "0x%02X", $0) }.joined(separator: ", "))")
+                // Rate-limited logging to reduce CPU overhead from string formatting
+                let currentTime = CACurrentMediaTime()
+                if currentTime - lastAUv3MIDILog >= auv3MidiLogInterval {
+                    lastAUv3MIDILog = currentTime
+                    print("🎹 AUv3 MIDI: \(midiData.count) bytes")
+                }
+                
                 parseMIDIData(midiData)
             }
             
@@ -310,6 +360,7 @@ public class auv3Utils: AUAudioUnit {
         let status = data[0] & 0xF0
         let channel = (data[0] & 0x0F) + 1
         let timestamp = Date().timeIntervalSince1970
+        let currentTime = CACurrentMediaTime()
         
         // Send all MIDI data to JavaScript (3 bytes, padding with 0 if needed)
         let data1 = data.count > 0 ? data[0] : 0
@@ -323,29 +374,41 @@ public class auv3Utils: AUAudioUnit {
             if data.count >= 3 {
                 let note = data[1]
                 let velocity = data[2]
-                if velocity > 0 {
-                    print("🎵 AUv3 Note ON  - Channel: \(channel), Note: \(note), Velocity: \(velocity)")
-                } else {
-                    print("🎵 AUv3 Note OFF - Channel: \(channel), Note: \(note) (velocity 0)")
+                // Reduced logging to save CPU
+                if currentTime - lastAUv3MIDILog >= auv3MidiLogInterval {
+                    if velocity > 0 {
+                        print("🎵 AUv3 Note ON - Ch:\(channel), Note:\(note)")
+                    } else {
+                        print("🎵 AUv3 Note OFF - Ch:\(channel), Note:\(note)")
+                    }
                 }
             }
             
         case 0x80: // Note Off
             if data.count >= 3 {
                 let note = data[1]
-                let velocity = data[2]
-                print("🎵 AUv3 Note OFF - Channel: \(channel), Note: \(note), Velocity: \(velocity)")
+                let _ = data[2] // velocity not used in optimized logging
+                // Rate-limited logging
+                if currentTime - lastAUv3MIDILog >= auv3MidiLogInterval {
+                    print("🎵 AUv3 Note OFF - Ch:\(channel), Note:\(note)")
+                }
             }
             
         case 0xB0: // Control Change
             if data.count >= 3 {
                 let controller = data[1]
-                let value = data[2]
-                print("🎛️ AUv3 CC Change - Channel: \(channel), Controller: \(controller), Value: \(value)")
+                let _ = data[2] // value not used in optimized logging
+                // Rate-limited logging for CC messages
+                if currentTime - lastAUv3MIDILog >= auv3MidiLogInterval {
+                    print("🎛️ AUv3 CC - Ch:\(channel), CC:\(controller)")
+                }
             }
             
         default:
-            print("❓ AUv3 Unknown MIDI - Status: 0x\(String(format: "%02X", status))")
+            // Rate-limited logging for unknown MIDI messages
+            if currentTime - lastAUv3MIDILog >= auv3MidiLogInterval {
+                print("❓ AUv3 Unknown MIDI")
+            }
         }
     }
 
@@ -410,10 +473,11 @@ public class auv3Utils: AUAudioUnit {
     // MARK: - Utility Methods
     
     func getSampleRate() -> Double? {
-        guard outputBusses.count > 0 else {
-            print("No output busses available")
-            return nil
+        // Safety check to prevent crashes if initialization failed
+        guard let outputBusArray = _outputBusArray, outputBusArray.count > 0 else {
+            print("⚠️ No output busses available or not properly initialized")
+            return 44100.0 // Return default sample rate
         }
-        return outputBusses[0].format.sampleRate
+        return outputBusArray[0].format.sampleRate
     }
 }

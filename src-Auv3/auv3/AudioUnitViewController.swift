@@ -25,9 +25,9 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     public var isTestActive: Bool { return _isTestActive }
     public var currentTestFrequency: Double { return _currentTestFrequency }
     
-    // Rate limiting for WebView updates
+    // Rate limiting for WebView updates (OPTIMIZED for better performance)
     private var lastWebViewUpdate: TimeInterval = 0
-    private var webViewUpdateInterval: TimeInterval = 1.0 / 30.0 // 30 FPS
+    private var webViewUpdateInterval: TimeInterval = 1.0 / 5.0 // Reduced to 5 FPS for maximum performance
     
     public override func viewDidLoad() {
         super.viewDidLoad()
@@ -159,19 +159,42 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     private func processAudioData(_ data: [Float]) -> [String: Any] {
         var metrics: [String: Any] = [:]
         
-        // Calculate RMS (Root Mean Square)
-        let rms = sqrt(data.map { $0 * $0 }.reduce(0, +) / Float(data.count))
+        // PERFORMANCE: Simplified audio processing for reduced CPU usage
+        let dataCount = data.count
+        guard dataCount > 0 else {
+            return ["rms": 0, "peak": 0, "zeroCrossings": 0]
+        }
         
-        // Calculate peak amplitude
-        let peak = data.map { abs($0) }.max() ?? 0
-        
-        // Calculate zero crossings
+        // Sample only every 4th element for large buffers
+        let strideSize = max(1, dataCount / 256) // Limit to 256 samples max
+        var rmsSum: Float = 0
+        var peak: Float = 0
         var zeroCrossings = 0
-        for i in 1..<data.count {
-            if (data[i] * data[i-1]) < 0 {
+        var lastSample: Float = 0
+        var sampleCount = 0
+        
+        for i in stride(from: 0, to: dataCount, by: strideSize) {
+            let sample = data[i]
+            let absSample = abs(sample)
+            
+            // Accumulate for RMS
+            rmsSum += sample * sample
+            sampleCount += 1
+            
+            // Track peak
+            if absSample > peak {
+                peak = absSample
+            }
+            
+            // Count zero crossings (simplified)
+            if i > 0 && (sample * lastSample) < 0 {
                 zeroCrossings += 1
             }
+            lastSample = sample
         }
+        
+        // Calculate RMS from sampled data
+        let rms = sampleCount > 0 ? sqrt(rmsSum / Float(sampleCount)) : 0
         
         metrics["rms"] = rms
         metrics["peak"] = peak

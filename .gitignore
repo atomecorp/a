@@ -3,6 +3,7 @@ node_modules/
 
 # Build outputs
 src/svelte/build/
+src-Auv3/build/
 
 # Development files
 package-lock.json
@@ -44,3 +45,4 @@ src/assets/audios/Big Brother.m4a
 src/assets/audios/Alive.m4a
 src/assets/audios/After The War.m4a
 src/assets/audios/Change the world.m4a
+.DS_Store

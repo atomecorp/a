@@ -6,11 +6,17 @@
 ////
 
 import WebKit
+import QuartzCore
 
 public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     static let shared = WebViewManager()
     static var webView: WKWebView?
     static weak var audioController: AudioControllerProtocol?
+    
+    // Rate limiting for non-critical JS calls (preserving timecode functionality)
+    private static var lastMuteStateUpdate: CFTimeInterval = 0
+    private static var lastTestStateUpdate: CFTimeInterval = 0
+    private static let nonCriticalUpdateInterval: CFTimeInterval = 0.1 // 10 FPS for non-timecode updates
 
     static func setupWebView(for webView: WKWebView, audioController: AudioControllerProtocol? = nil) {
         self.webView = webView
@@ -129,6 +135,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
 
     private func sendMuteStateToJS() {
+        // Rate limiting for mute state updates (non-critical for timecode)
+        let currentTime = CACurrentMediaTime()
+        if currentTime - WebViewManager.lastMuteStateUpdate < WebViewManager.nonCriticalUpdateInterval {
+            return
+        }
+        WebViewManager.lastMuteStateUpdate = currentTime
+        
         if let isMuted = WebViewManager.audioController?.isMuted {
             let state = ["muted": isMuted]
             if let jsonData = try? JSONSerialization.data(withJSONObject: state),
@@ -139,6 +152,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     private func sendTestStateToJS() {
+        // Rate limiting for test state updates (non-critical for timecode)
+        let currentTime = CACurrentMediaTime()
+        if currentTime - WebViewManager.lastTestStateUpdate < WebViewManager.nonCriticalUpdateInterval {
+            return
+        }
+        WebViewManager.lastTestStateUpdate = currentTime
+        
         guard let audioController = WebViewManager.audioController else { return }
         
         let state: [String: Any] = [
