@@ -392,11 +392,6 @@ export class LyricsDisplay {
                 tool.style.marginRight = '0';
                 // Reset display property to ensure it follows parent container visibility
                 tool.style.display = 'block';
-            } else if (tool && tool.id === 'audio-volume-slider-container') {
-                // Volume slider styling
-                tool.style.width = '190px';
-                tool.style.display = 'block';
-                tool.style.marginBottom = '5px';
             } else if (tool && tool.id === 'audio-player-title') {
                 // Audio title styling
                 tool.style.display = 'block';
@@ -620,6 +615,47 @@ export class LyricsDisplay {
                 stopButton.style.bottom = 'auto';
                 buttons.push(stopButton);
             }
+            
+            // Add volume slider after play/stop buttons
+            const volumeContainer = document.getElementById('audio-volume-slider-container');
+            if (volumeContainer) {
+                // Create a container for volume slider + value display
+                const volumeWrapper = document.createElement('div');
+                volumeWrapper.id = 'volume-wrapper-toolbar';
+                volumeWrapper.style.cssText = `
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                    margin-left: 10px;
+                `;
+                
+                // Style the volume container for toolbar
+                volumeContainer.style.width = '120px';
+                volumeContainer.style.height = '25px';
+                volumeContainer.style.marginBottom = '0';
+                volumeContainer.style.display = 'flex';
+                volumeContainer.style.alignItems = 'center';
+                
+                // Create volume value display
+                const volumeValue = document.createElement('span');
+                volumeValue.id = 'volume-value-display';
+                volumeValue.style.cssText = `
+                    font-size: 11px;
+                    color: #666;
+                    min-width: 25px;
+                    text-align: right;
+                `;
+                
+                // Get current volume from localStorage and display it
+                const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
+                volumeValue.textContent = savedVolume + '%';
+                
+                // Move volume container to wrapper and add value display
+                volumeWrapper.appendChild(volumeContainer);
+                volumeWrapper.appendChild(volumeValue);
+                
+                buttons.push(volumeWrapper);
+            }
         } else {
         }
         
@@ -631,11 +667,10 @@ export class LyricsDisplay {
         const tools = [];
         
         // Get individual audio control elements by their IDs in the correct order
-        // Audio title and volume slider BEFORE the scrub slider
+        // Volume slider is now in main toolbar, so only get title and scrub slider
         const audioControlIds = [
             'audio-player-title',
-            'audio-volume-slider-container',
-            'audio-scrub-slider-container'  // This should be last (at the bottom)
+            'audio-scrub-slider-container'  // Volume slider moved to main toolbar
         ];
         
         audioControlIds.forEach(id => {

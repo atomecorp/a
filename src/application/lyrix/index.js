@@ -4105,11 +4105,11 @@ function createMainInterface() {
                     // Save volume to localStorage
                     localStorage.setItem('lyrix_audio_volume', value.toString());
                     
-                    // Update volume label
-                    // const volumeValueLabel = document.getElementById('volume_value_label');
-                    // if (volumeValueLabel) {
-                    //     volumeValueLabel.textContent = `${Math.round(value)}%`;
-                    // }
+                    // Update volume value display in toolbar
+                    const volumeValueDisplay = document.getElementById('volume-value-display');
+                    if (volumeValueDisplay) {
+                        volumeValueDisplay.textContent = `${Math.round(value)}%`;
+                    }
                     
                     // console.log(`🔊 Volume set to: ${Math.round(value)}%`);
                 }
