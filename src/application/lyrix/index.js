@@ -4149,26 +4149,14 @@ function createMainInterface() {
         const scrubContainer = $('div', {
             id: 'audio-scrub-slider-container',
             css: {
-                // marginBottom: '15px',
-                // padding: '2px 0px', // Minimal padding, no left/right padding
-                // backgroundColor: '#3a3a3aff',
-                // borderRadius: '4px',
-                // border: '1px solid #dee2e6',
                 display: initialDisplay,
-                // width: '100%', // Set container width to 98%
-                // boxSizing: 'border-box'
+                padding: '0 10px', // Add horizontal padding to prevent handle overflow
+                boxSizing: 'border-box'
             }
         });
         
         // Add data attribute for identification
         scrubContainer.setAttribute('data-element', 'scrub-slider');
-        
-        // Force left alignment and adjust padding to accommodate 100% width slider
-        scrubContainer.style.paddingLeft = '0px';
-        scrubContainer.style.paddingRight = '0px'; // Remove right padding too
-        scrubContainer.style.marginLeft = '0px';
-        scrubContainer.style.marginRight = '0px';
-        scrubContainer.style.boxSizing = 'border-box';
         
         // Create Squirrel slider for audio scrubbing
         const scrubSlider = Slider({
@@ -4180,9 +4168,11 @@ function createMainInterface() {
             id: 'audio_scrub_slider',
             skin: {
                 container: {
-                    width: '100%', // Full width of the 98% container
+                    width: 'calc(100% - 20px)', // Reduced width to account for handle size
                     height: '20px',
-                    marginBottom: '10px'
+                    marginBottom: '10px',
+                    marginLeft: '10px', // Center the slider
+                    marginRight: '10px'
                 },
                 track: {
                     height: '6px',
@@ -4194,8 +4184,8 @@ function createMainInterface() {
                     borderRadius: '3px'
                 },
                 handle: {
-                    width: '16px',
-                    height: '16px',
+                    width: '14px', // Slightly smaller handle
+                    height: '14px',
                     backgroundColor: '#007bff',
                     border: '2px solid #fff',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
