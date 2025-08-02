@@ -2221,6 +2221,15 @@ export class LyricsDisplay {
         const currentText = this.currentLyrics.lines[lineIndex].text;
         console.log(`📝 Current text: "${currentText}"`);
         
+        // Create container for input and delete button
+        const editContainer = document.createElement('div');
+        editContainer.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+        `;
+        
         // Create input field for editing using DOM directly to ensure value is set
         const input = document.createElement('input');
         input.type = 'text';
@@ -2233,15 +2242,44 @@ export class LyricsDisplay {
             border-radius: 4px;
             background-color: white;
             color: #333;
-            width: 100%;
+            flex: 1;
             box-sizing: border-box;
         `;
         
+        // Create delete button
+        const deleteButton = document.createElement('button');
+        deleteButton.innerHTML = '🗑️';
+        deleteButton.type = 'button'; // Explicitly set button type
+        deleteButton.style.cssText = `
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 8px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            transition: background-color 0.2s;
+            flex-shrink: 0;
+        `;
+        deleteButton.title = 'Delete this line';
+        
+        // Add hover effect for delete button
+        deleteButton.addEventListener('mouseenter', () => {
+            deleteButton.style.backgroundColor = '#c82333';
+        });
+        deleteButton.addEventListener('mouseleave', () => {
+            deleteButton.style.backgroundColor = '#dc3545';
+        });
+        
+        editContainer.appendChild(input);
+        editContainer.appendChild(deleteButton);
+        
         console.log(`📝 Input created with value: "${input.value}"`);
         
-        // Replace the text span with input temporarily
+        // Replace the text span with edit container temporarily
         textSpan.style.display = 'none';
-        textSpan.parentNode.insertBefore(input, textSpan);
+        textSpan.parentNode.insertBefore(editContainer, textSpan);
         input.focus();
         input.select();
         
@@ -2267,30 +2305,149 @@ export class LyricsDisplay {
             }
             
             // Restore the span
-            input.parentNode.removeChild(input);
-            textSpan.style.display = 'inline';
+            if (editContainer.parentNode) {
+                editContainer.parentNode.removeChild(editContainer);
+                textSpan.style.display = 'inline';
+            }
         };
         
         const cancelEdit = () => {
             // Restore the span without changes
-            input.parentNode.removeChild(input);
-            textSpan.style.display = 'inline';
+            if (editContainer.parentNode) {
+                editContainer.parentNode.removeChild(editContainer);
+                textSpan.style.display = 'inline';
+            }
             console.log('❌ Text edit cancelled');
         };
         
-        // Save on Enter, cancel on Escape
+        const insertNewLine = (atPosition) => {
+            const currentText = input.value;
+            let beforeText = '';
+            let afterText = '';
+            
+            if (atPosition < currentText.length) {
+                // Split the text at cursor position
+                beforeText = currentText.substring(0, atPosition);
+                afterText = currentText.substring(atPosition);
+            } else {
+                // Insert at end
+                beforeText = currentText;
+                afterText = '';
+            }
+            
+            // Update current line with text before cursor
+            this.currentLyrics.lines[lineIndex].text = beforeText;
+            
+            // Create new line with text after cursor
+            const newLine = {
+                time: -1, // New lines start without timecode
+                text: afterText,
+                type: 'vocal',
+                id: this.currentLyrics.generateLineId()
+            };
+            
+            // Insert the new line after current line
+            this.currentLyrics.lines.splice(lineIndex + 1, 0, newLine);
+            this.currentLyrics.updateLastModified();
+            
+            // Save to localStorage
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log(`✅ Line split/inserted at line ${lineIndex + 1} saved successfully`);
+            } else {
+                console.error(`❌ Failed to save split/inserted line`);
+            }
+            
+            // Refresh the display to show the new line
+            this.renderLyrics();
+            
+            console.log(`📝 Line split: "${beforeText}" | "${afterText}"`);
+        };
+        
+        const deleteLine = () => {
+            console.log('🗑️ deleteLine() called for line', lineIndex + 1);
+            console.log('🗑️ Total lines before deletion:', this.currentLyrics.lines.length);
+            
+            if (this.currentLyrics.lines.length <= 1) {
+                console.warn('⚠️ Cannot delete the last remaining line');
+                return;
+            }
+            
+            // Remove the line from lyrics
+            this.currentLyrics.lines.splice(lineIndex, 1);
+            this.currentLyrics.updateLastModified();
+            
+            console.log('🗑️ Total lines after deletion:', this.currentLyrics.lines.length);
+            
+            // Save to localStorage
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            if (saveSuccess) {
+                console.log(`✅ Line ${lineIndex + 1} deleted and saved successfully`);
+            } else {
+                console.error(`❌ Failed to save after deleting line ${lineIndex + 1}`);
+            }
+            
+            // Refresh the display
+            console.log('🗑️ Refreshing display after deletion');
+            this.renderLyrics();
+            
+            console.log(`🗑️ Deleted line ${lineIndex + 1}`);
+        };
+        
+        // Delete button click handler
+        deleteButton.addEventListener('click', (e) => {
+            console.log('🗑️ Delete button clicked for line', lineIndex + 1);
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Clean up edit interface first
+            if (editContainer.parentNode) {
+                editContainer.parentNode.removeChild(editContainer);
+                textSpan.style.display = 'inline';
+                console.log('🗑️ Edit interface cleaned up');
+            }
+            
+            // Then delete the line
+            console.log('🗑️ Calling deleteLine()');
+            deleteLine();
+        });
+        
+        // Save on Enter (with split behavior), cancel on Escape
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                saveEdit();
+                const cursorPosition = input.selectionStart;
+                
+                // Restore span first to clean up UI
+                if (editContainer.parentNode) {
+                    editContainer.parentNode.removeChild(editContainer);
+                    textSpan.style.display = 'inline';
+                }
+                
+                // Then handle the line split/insert
+                insertNewLine(cursorPosition);
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 cancelEdit();
             }
         });
         
-        // Save when losing focus
-        input.addEventListener('blur', saveEdit);
+        // Save when losing focus (but delay to allow delete button click)
+        let isDeleting = false;
+        deleteButton.addEventListener('mousedown', () => {
+            isDeleting = true;
+        });
+        
+        input.addEventListener('blur', (e) => {
+            // Small delay to allow delete button click to register first
+            setTimeout(() => {
+                // Only save if we're not in the middle of deleting
+                if (!isDeleting && editContainer.parentNode) {
+                    saveEdit();
+                }
+                isDeleting = false; // Reset flag
+            }, 150);
+        });
     }
     
     // Record current timecode
