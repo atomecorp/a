@@ -309,7 +309,7 @@ export class LyricsDisplay {
                 gap: '8px',
                 alignItems: 'center',
                 flexWrap: 'wrap',
-                // padding: '8px 8px 8px 52px', // Extra left padding to avoid hamburger menu overlap (52px = 36px button + 8px margin + 8px clearance)
+                padding: '0px 0px 0px 33px', // Extra left padding to avoid hamburger menu overlap (52px = 36px button + 8px margin + 8px clearance)
                 backgroundColor: 'transparent',
                 // borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
                 transition: 'all 0.3s ease' // Smooth transition for show/hide
