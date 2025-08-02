@@ -337,37 +337,38 @@ export class LyricsDisplay {
         mainToolElements.push(this.saveChangesButton, this.cancelEditButton);
         
         // Add audio buttons after font size container (play button, then stop button)
-        // if (this.audioButtons && this.audioButtons.length > 0) {
-        //     // console.log('🎵 Adding audio buttons to main toolbar:', this.audioButtons.length);
-        //     // console.log('🎵 Audio buttons details:', this.audioButtons.map(btn => ({
-        //     //     id: btn.id,
-        //     //     className: btn.className,
-        //     //     style: btn.style.cssText,
-        //     //     visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
-        //     //     parent: btn.parentElement?.id
-        //     // })));
-        //     mainToolElements.push(...this.audioButtons);
-        // } else {
-        //     console.log('🎵 No audio buttons to add to toolbar');
-        // }
+        if (this.audioButtons && this.audioButtons.length > 0) {
+            console.log('🎵 Adding audio buttons to main toolbar:', this.audioButtons.length);
+            console.log('🎵 Audio buttons details:', this.audioButtons.map(btn => ({
+                id: btn.id,
+                className: btn.className,
+                style: btn.style.cssText,
+                visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
+                parent: btn.parentElement?.id
+            })));
+            mainToolElements.push(...this.audioButtons);
+        } else {
+            console.log('🎵 No audio buttons to add to toolbar');
+        }
         
-        // console.log('🔧 Final mainToolElements:', mainToolElements.length, 'elements');
+        console.log('🔧 Final mainToolElements:', mainToolElements.length, 'elements');
         
         mainToolRow.append(...mainToolElements);
         
-        // // Debug: Check if audio buttons are actually in the toolbar after appending
-        // setTimeout(() => {
-        //     const buttonsInToolbar = mainToolRow.querySelectorAll('button');
-        //     buttonsInToolbar.forEach((btn, index) => {
-        //         console.log(`  Button ${index}:`, {
-        //             id: btn.id,
-        //             text: btn.textContent,
-        //             visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
-        //             display: window.getComputedStyle(btn).display,
-        //             visibility: window.getComputedStyle(btn).visibility
-        //         });
-        //     });
-        // }, 100);
+        // Debug: Check if audio buttons are actually in the toolbar after appending
+        setTimeout(() => {
+            const buttonsInToolbar = mainToolRow.querySelectorAll('button');
+            console.log('🔧 Buttons found in toolbar:');
+            buttonsInToolbar.forEach((btn, index) => {
+                console.log(`  Button ${index}:`, {
+                    id: btn.id,
+                    text: btn.textContent,
+                    visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
+                    display: window.getComputedStyle(btn).display,
+                    visibility: window.getComputedStyle(btn).visibility
+                });
+            });
+        }, 100);
         
         // Create audio tools row (will be hidden by default)
         const audioToolRow = $('div', {
@@ -391,6 +392,17 @@ export class LyricsDisplay {
                 tool.style.marginRight = '0';
                 // Reset display property to ensure it follows parent container visibility
                 tool.style.display = 'block';
+            } else if (tool && tool.id === 'audio-volume-slider-container') {
+                // Volume slider styling
+                tool.style.width = '190px';
+                tool.style.display = 'block';
+                tool.style.marginBottom = '5px';
+            } else if (tool && tool.id === 'audio-player-title') {
+                // Audio title styling
+                tool.style.display = 'block';
+                tool.style.marginBottom = '5px';
+                tool.style.fontSize = '12px';
+                tool.style.textAlign = 'center';
             }
             // Reset display for all audio tools to ensure they follow parent container
             if (tool && tool.style) {
@@ -574,18 +586,39 @@ export class LyricsDisplay {
         if (window.leftPanelAudioTools) {
             const { playButton, stopButton } = window.leftPanelAudioTools;
             
+            // Fix the audio controls container first
+            const audioContainer = document.getElementById('audio-controls-container');
+            if (audioContainer) {
+                audioContainer.style.display = 'flex';
+                audioContainer.style.flexDirection = 'row';
+                audioContainer.style.gap = '5px';
+                audioContainer.style.alignItems = 'center';
+                audioContainer.style.marginBottom = '15px';
+            }
             
             if (playButton) {
-                buttons.push(playButton);
-                // Ensure button is visible
+                // Fix positioning and display for play button
+                playButton.style.position = 'relative'; // Remove any absolute positioning
                 playButton.style.display = 'inline-block';
                 playButton.style.visibility = 'visible';
+                playButton.style.float = 'none'; // Remove any float
+                playButton.style.top = 'auto';
+                playButton.style.left = 'auto';
+                playButton.style.right = 'auto';
+                playButton.style.bottom = 'auto';
+                buttons.push(playButton);
             }
             if (stopButton) {
-                buttons.push(stopButton);
-                // Ensure button is visible
+                // Fix positioning and display for stop button
+                stopButton.style.position = 'relative'; // Remove any absolute positioning
                 stopButton.style.display = 'inline-block';
                 stopButton.style.visibility = 'visible';
+                stopButton.style.float = 'none'; // Remove any float
+                stopButton.style.top = 'auto';
+                stopButton.style.left = 'auto';
+                stopButton.style.right = 'auto';
+                stopButton.style.bottom = 'auto';
+                buttons.push(stopButton);
             }
         } else {
         }
@@ -597,12 +630,27 @@ export class LyricsDisplay {
     getAudioTools() {
         const tools = [];
         
-        // Get scrub container (should appear at bottom and take full width)
-        // Note: timecode display is now handled separately in main toolbar row
-        // Note: audio buttons are now handled separately in main toolbar row
+        // Get individual audio control elements by their IDs in the correct order
+        // Audio title and volume slider BEFORE the scrub slider
+        const audioControlIds = [
+            'audio-player-title',
+            'audio-volume-slider-container',
+            'audio-scrub-slider-container'  // This should be last (at the bottom)
+        ];
+        
+        audioControlIds.forEach(id => {
+            const element = document.getElementById(id);
+            if (element && !tools.includes(element)) {
+                tools.push(element);
+            }
+        });
+        
+        // Get scrub container from leftPanelScrubTools if it exists and not already added
         if (window.leftPanelScrubTools) {
             const { scrubContainer } = window.leftPanelScrubTools;
-            if (scrubContainer) tools.push(scrubContainer);
+            if (scrubContainer && !tools.includes(scrubContainer)) {
+                tools.push(scrubContainer);
+            }
         }
         
         return tools;
@@ -649,6 +697,11 @@ export class LyricsDisplay {
                 if (tool.id === 'audio-controls-container') {
                     tool.style.marginBottom = '0';
                     tool.style.display = 'flex'; // Ensure buttons are side by side
+                    tool.style.flexDirection = 'row'; // Force horizontal layout
+                    tool.style.gap = '5px'; // Add space between buttons
+                    tool.style.alignItems = 'center'; // Vertically center buttons
+                    // Force override any other display setting
+                    tool.style.setProperty('display', 'flex', 'important');
                 }
                 
                 if (tool.id === 'midi-logger-container') {
@@ -669,14 +722,7 @@ export class LyricsDisplay {
                     // Note: height et width viennent déjà de default_theme.button dans createEnhancedTimecodeDisplay
                 }
                 
-                // Ensure audio buttons (play/stop) remain visible and properly styled
-                if (tool.id === 'audio-play-button' || tool.id === 'audio-stop-button') {
-                    tool.style.display = 'inline-block';
-                    tool.style.visibility = 'visible';
-                    tool.style.opacity = '1';
-                    tool.style.margin = '2px';
-                  
-                }
+        
             }
         });
     }
