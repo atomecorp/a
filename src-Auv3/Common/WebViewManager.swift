@@ -175,16 +175,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - Transport Data Communication
     
     public static func sendTransportDataToJS(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
-        let transportData: [String: Any] = [
-            "isPlaying": isPlaying,
-            "playheadPosition": playheadPosition,
-            "sampleRate": sampleRate
-        ]
+        // Direct JavaScript call with proper formatting
+        let jsCode = "if (typeof updateTransportFromSwift === 'function') { updateTransportFromSwift({\"isPlaying\": \(isPlaying ? "true" : "false"), \"playheadPosition\": \(Int(playheadPosition)), \"sampleRate\": \(Int(sampleRate))}); }"
         
-        if let jsonData = try? JSONSerialization.data(withJSONObject: transportData),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            sendToJS(jsonString, "updateTransportFromSwift")
-        }
+        webView?.evaluateJavaScript(jsCode, completionHandler: nil)
     }
 
     public static func sendToJS(_ message: Any, _ function: String) {
@@ -196,12 +190,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             // Skip escaping for performance - assume clean data
             jsValue = "\"\(stringValue)\""
         } else {
-            // Minimal conversion for other types
-            jsValue = "\(message)"
+            // For JSON objects, pass as string and parse in JS
+            jsValue = "'\(message)'"
         }
 
         // Minimal JS code without error checking for performance
-        let jsCode = "\(function)(\(jsValue));"
+        let jsCode = "if (typeof \(function) === 'function') { \(function)(\(jsValue)); }"
 
         webView?.evaluateJavaScript(jsCode, completionHandler: nil) // Skip completion handler for performance
     }

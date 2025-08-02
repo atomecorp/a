@@ -232,7 +232,8 @@ public class auv3Utils: AUAudioUnit {
                         // print("Transport is playing: \(isPlaying), Position: \(currentSampleTime)")
                         
                         // Only update WebView if we have one - remove expensive checks
-                        WebViewManager.webView?.evaluateJavaScript("displayTransportInfo(\(isPlaying), \(currentSampleTime), \(sampleRate));", completionHandler: nil)
+                        let jsCode = "if (typeof displayTransportInfo === 'function') { displayTransportInfo(\(isPlaying ? "true" : "false"), \(Int(currentSampleTime)), \(Int(sampleRate))); }"
+                        WebViewManager.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
                         
                         // Direct delegate call without intermediate processing
                         self.transportDataDelegate?.didReceiveTransportData(isPlaying: isPlaying, playheadPosition: currentSampleTime, sampleRate: sampleRate)
