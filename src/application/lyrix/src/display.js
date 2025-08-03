@@ -1321,6 +1321,9 @@ export class LyricsDisplay {
                     timeSpan.style.backgroundColor = '#f0f0f0';
                     timeSpan.style.color = '#666';
                     
+                    // Verify and correct timecode order after drag adjustment
+                    this.verifyAndCorrectTimecodeOrder(index);
+                    
                     // Save to localStorage when drag is complete
                     const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                     if (saveSuccess) {
@@ -2434,12 +2437,13 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         // Convert milliseconds to mm:ss.sss format for display
         let currentTimeFormatted;
-        if (currentTime < 0) {
+        if (currentTime === undefined || currentTime === null || currentTime < 0) {
             currentTimeFormatted = '00:00.000';
         } else {
-            const minutes = Math.floor(currentTime / 60000);
-            const seconds = Math.floor((currentTime % 60000) / 1000);
-            const milliseconds = Math.floor(currentTime % 1000);
+            const totalSeconds = currentTime / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            const milliseconds = Math.floor((totalSeconds % 1) * 1000);
             currentTimeFormatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
         }
         
@@ -2602,10 +2606,11 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             // Update input and line time
             this.currentLyrics.lines[lineIndex].time = newTime;
             
-            // Format new time for display
-            const minutes = Math.floor(newTime / 60000);
-            const seconds = Math.floor((newTime % 60000) / 1000);
-            const milliseconds = Math.floor(newTime % 1000);
+            // Format new time for display using consistent formatting
+            const totalSeconds = newTime / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            const milliseconds = Math.floor((totalSeconds % 1) * 1000);
             const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
             
             input.value = formattedTime;
