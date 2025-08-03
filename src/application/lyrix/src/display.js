@@ -1107,9 +1107,12 @@ export class LyricsDisplay {
             
             // Add a small edit indicator for touch devices
             if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-                timeSpan.setAttribute('title', 'Tap to edit timecode');
-                // Add a subtle visual hint
+                timeSpan.setAttribute('title', 'Double-tap to edit or drag up/down to adjust timecode');
+                // Add a subtle visual hint for touch devices
                 timeSpan.style.borderBottom = '1px dotted #999';
+                timeSpan.style.position = 'relative';
+            } else {
+                timeSpan.setAttribute('title', 'Double-click to edit timecode');
             }
             
             // Add hover effects
@@ -1127,6 +1130,49 @@ export class LyricsDisplay {
             timeSpan.addEventListener('touchstart', (e) => {
                 // Prevent default to avoid double-firing with click events
                 e.preventDefault();
+                
+                // Store initial touch position for swipe detection
+                const touch = e.touches[0];
+                timeSpan._touchStartY = touch.clientY;
+                timeSpan._touchStartTime = Date.now();
+                timeSpan._initialTime = line.time;
+                timeSpan._isDragging = false;
+            });
+            
+            timeSpan.addEventListener('touchmove', (e) => {
+                // Block timecode editing in record mode
+                if (this.recordMode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+                
+                e.preventDefault();
+                
+                if (!timeSpan._touchStartY) return;
+                
+                const touch = e.touches[0];
+                const deltaY = timeSpan._touchStartY - touch.clientY; // Invert: up = positive
+                const deltaTime = Date.now() - timeSpan._touchStartTime;
+                
+                // If moved more than 10px, consider it a drag
+                if (Math.abs(deltaY) > 10) {
+                    timeSpan._isDragging = true;
+                    
+                    // Calculate time adjustment (more sensitive for touch)
+                    let sensitivity = 30; // milliseconds per pixel for touch
+                    const timeChange = deltaY * sensitivity;
+                    const newTime = Math.max(0, timeSpan._initialTime + timeChange);
+                    
+                    // Update the display
+                    timeSpan.textContent = this.formatTimeDisplay(newTime);
+                    timeSpan.style.backgroundColor = '#007bff';
+                    timeSpan.style.color = 'white';
+                    
+                    // Update the actual time in the lyrics object
+                    this.currentLyrics.lines[index].time = newTime;
+                    this.currentLyrics.updateLastModified();
+                }
             });
             
             timeSpan.addEventListener('touchend', (e) => {
@@ -1138,10 +1184,49 @@ export class LyricsDisplay {
                     return;
                 }
                 
-                // Simple tap to edit on mobile
                 e.preventDefault();
                 e.stopPropagation();
-                this.editTimecode(index, timeSpan);
+                
+                const deltaTime = Date.now() - (timeSpan._touchStartTime || 0);
+                const currentTime = Date.now();
+                
+                if (timeSpan._isDragging) {
+                    // Finish drag operation
+                    timeSpan.style.backgroundColor = '#f0f0f0';
+                    timeSpan.style.color = '#666';
+                    
+                    // Verify and correct timecode order after drag adjustment
+                    this.verifyAndCorrectTimecodeOrder(index);
+                    
+                    // Save to localStorage when drag is complete
+                    const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                    if (saveSuccess) {
+                        console.log(`✅ Touch-adjusted timecode for line ${index + 1} saved successfully`);
+                    } else {
+                        console.error(`❌ Failed to save touch-adjusted timecode for line ${index + 1}`);
+                    }
+                } else {
+                    // Handle double-tap detection for iOS
+                    if (!timeSpan._lastTapTime) {
+                        timeSpan._lastTapTime = currentTime;
+                    } else {
+                        const timeBetweenTaps = currentTime - timeSpan._lastTapTime;
+                        if (timeBetweenTaps < 300) { // 300ms for double-tap
+                            // Double-tap detected - open edit modal
+                            console.log('📱 Double-tap detected on iOS timecode');
+                            this.editTimecodeTouch(index, timeSpan);
+                            timeSpan._lastTapTime = 0; // Reset
+                        } else {
+                            timeSpan._lastTapTime = currentTime;
+                        }
+                    }
+                }
+                
+                // Clean up touch data
+                delete timeSpan._touchStartY;
+                delete timeSpan._touchStartTime;
+                delete timeSpan._initialTime;
+                delete timeSpan._isDragging;
             });
             
             // Double-click to edit timecode (desktop only)
@@ -1155,6 +1240,41 @@ export class LyricsDisplay {
                 
                 e.stopPropagation();
                 this.editTimecode(index, timeSpan);
+            });
+            
+            // Double-tap support for mobile devices
+            let tapCount = 0;
+            let tapTimer = null;
+            
+            timeSpan.addEventListener('click', (e) => {
+                // Block timecode editing in record mode
+                if (this.recordMode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('⚠️ Timecode editing is disabled in record mode');
+                    return;
+                }
+                
+                tapCount++;
+                
+                if (tapCount === 1) {
+                    tapTimer = setTimeout(() => {
+                        tapCount = 0; // Reset tap count after timeout
+                    }, 300); // 300ms timeout for double-tap detection
+                } else if (tapCount === 2) {
+                    // Double-tap detected
+                    clearTimeout(tapTimer);
+                    tapCount = 0;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Use mobile-optimized modal for touch devices
+                    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                        this.editTimecodeTouch(index, timeSpan);
+                    } else {
+                        this.editTimecode(index, timeSpan);
+                    }
+                }
             });
             
             // Mouse drag to adjust timecode
@@ -2297,6 +2417,315 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         // Save when losing focus
         input.addEventListener('blur', saveEdit);
+    }
+
+    // Touch-optimized timecode editing for iOS/mobile devices
+    editTimecodeTouch(lineIndex, timeSpan) {
+        if (!this.currentLyrics) return;
+        
+        // Block timecode editing in record mode
+        if (this.recordMode) {
+            console.log('⚠️ Timecode editing is blocked in record mode');
+            return;
+        }
+        
+        // Get current time value
+        const currentTime = this.currentLyrics.lines[lineIndex].time;
+        
+        // Convert milliseconds to mm:ss.sss format for display
+        let currentTimeFormatted;
+        if (currentTime < 0) {
+            currentTimeFormatted = '00:00.000';
+        } else {
+            const minutes = Math.floor(currentTime / 60000);
+            const seconds = Math.floor((currentTime % 60000) / 1000);
+            const milliseconds = Math.floor(currentTime % 1000);
+            currentTimeFormatted = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+        }
+        
+        // Create a mobile-optimized modal for timecode editing
+        const modalOverlay = $('div', {
+            css: {
+                position: 'fixed',
+                top: '0',
+                left: '0',
+                width: '100%',
+                height: '100%',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                zIndex: '10000',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px',
+                boxSizing: 'border-box'
+            }
+        });
+        
+        const modal = $('div', {
+            css: {
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '24px',
+                maxWidth: '350px',
+                width: '100%',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+                position: 'relative'
+            }
+        });
+        
+        // Title
+        const title = $('h3', {
+            text: `Edit Timecode - Line ${lineIndex + 1}`,
+            css: {
+                margin: '0 0 16px 0',
+                fontSize: '18px',
+                color: '#333',
+                textAlign: 'center'
+            }
+        });
+        
+        // Current line preview
+        const linePreview = $('div', {
+            text: `"${this.currentLyrics.lines[lineIndex].text}"`,
+            css: {
+                margin: '0 0 20px 0',
+                padding: '12px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '6px',
+                fontSize: '14px',
+                color: '#666',
+                fontStyle: 'italic',
+                textAlign: 'center',
+                border: '1px solid #e9ecef'
+            }
+        });
+        
+        // Input container
+        const inputContainer = $('div', {
+            css: {
+                marginBottom: '20px'
+            }
+        });
+        
+        const inputLabel = $('label', {
+            text: 'Timecode (mm:ss.sss or seconds):',
+            css: {
+                display: 'block',
+                marginBottom: '8px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                color: '#333'
+            }
+        });
+        
+        const input = $('input', {
+            type: 'text',
+            value: currentTimeFormatted,
+            css: {
+                width: '100%',
+                padding: '12px',
+                fontSize: '16px',
+                fontFamily: 'monospace',
+                border: '2px solid #007bff',
+                borderRadius: '6px',
+                textAlign: 'center',
+                boxSizing: 'border-box',
+                backgroundColor: 'white'
+            }
+        });
+        
+        // Focus and select all text for easy editing
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 100);
+        
+        // Swipe adjustment area
+        const swipeArea = $('div', {
+            css: {
+                marginBottom: '20px',
+                padding: '16px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '8px',
+                border: '2px dashed #007bff',
+                textAlign: 'center',
+                userSelect: 'none',
+                cursor: 'ns-resize'
+            }
+        });
+        
+        const swipeLabel = $('div', {
+            text: '👆 Swipe up/down to adjust',
+            css: {
+                fontSize: '14px',
+                color: '#007bff',
+                fontWeight: 'bold',
+                marginBottom: '4px'
+            }
+        });
+        
+        const swipeHint = $('div', {
+            text: 'Swipe up: increase time, Swipe down: decrease time',
+            css: {
+                fontSize: '12px',
+                color: '#666'
+            }
+        });
+        
+        swipeArea.append(swipeLabel, swipeHint);
+        
+        // Add swipe functionality
+        let startY = 0;
+        let startTime = currentTime;
+        let isDragging = false;
+        
+        swipeArea.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            startY = touch.clientY;
+            startTime = this.currentLyrics.lines[lineIndex].time;
+            isDragging = true;
+            swipeArea.style.backgroundColor = '#e3f2fd';
+            swipeArea.style.borderColor = '#1976d2';
+        });
+        
+        swipeArea.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            const touch = e.touches[0];
+            const deltaY = startY - touch.clientY; // Invert: up = positive
+            const sensitivity = 25; // milliseconds per pixel
+            const timeChange = deltaY * sensitivity;
+            const newTime = Math.max(0, startTime + timeChange);
+            
+            // Update input and line time
+            this.currentLyrics.lines[lineIndex].time = newTime;
+            
+            // Format new time for display
+            const minutes = Math.floor(newTime / 60000);
+            const seconds = Math.floor((newTime % 60000) / 1000);
+            const milliseconds = Math.floor(newTime % 1000);
+            const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+            
+            input.value = formattedTime;
+            
+            // Visual feedback
+            swipeLabel.textContent = `⏱️ ${formattedTime}`;
+        });
+        
+        swipeArea.addEventListener('touchend', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            isDragging = false;
+            swipeArea.style.backgroundColor = '#f8f9fa';
+            swipeArea.style.borderColor = '#007bff';
+            swipeLabel.textContent = '👆 Swipe up/down to adjust';
+        });
+        
+        // Buttons container
+        const buttonsContainer = $('div', {
+            css: {
+                display: 'flex',
+                gap: '12px',
+                justifyContent: 'center'
+            }
+        });
+        
+        // Cancel button
+        const cancelButton = $('button', {
+            text: 'Cancel',
+            css: {
+                padding: '12px 20px',
+                fontSize: '16px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                minWidth: '80px'
+            },
+            onClick: () => {
+                // Restore original time
+                this.currentLyrics.lines[lineIndex].time = currentTime;
+                document.body.removeChild(modalOverlay);
+            }
+        });
+        
+        // Save button
+        const saveButton = $('button', {
+            text: 'Save',
+            css: {
+                padding: '12px 20px',
+                fontSize: '16px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                minWidth: '80px'
+            },
+            onClick: () => {
+                const newTimeText = input.value.trim();
+                let newTime = this.parseTimeInput(newTimeText);
+                
+                if (newTime !== null) {
+                    // Update the time
+                    this.currentLyrics.lines[lineIndex].time = newTime;
+                    this.currentLyrics.updateLastModified();
+                    
+                    // Verify and correct timecode order
+                    this.verifyAndCorrectTimecodeOrder(lineIndex);
+                    
+                    // Save to localStorage
+                    const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                    if (saveSuccess) {
+                        console.log(`✅ Touch-edited timecode for line ${lineIndex + 1} saved successfully`);
+                    } else {
+                        console.error(`❌ Failed to save touch-edited timecode for line ${lineIndex + 1}`);
+                    }
+                    
+                    // Update the original timeSpan
+                    timeSpan.textContent = this.formatTimeDisplay(newTime);
+                    console.log(`✏️ Touch-updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(newTime)}`);
+                } else {
+                    console.warn('⚠️ Invalid time format, keeping original value');
+                    this.currentLyrics.lines[lineIndex].time = currentTime;
+                }
+                
+                document.body.removeChild(modalOverlay);
+            }
+        });
+        
+        // Handle Enter key
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveButton.click();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelButton.click();
+            }
+        });
+        
+        // Assemble modal
+        inputContainer.append(inputLabel, input);
+        buttonsContainer.append(cancelButton, saveButton);
+        modal.append(title, linePreview, inputContainer, swipeArea, buttonsContainer);
+        modalOverlay.appendChild(modal);
+        
+        // Add to document
+        document.body.appendChild(modalOverlay);
+        
+        // Close on overlay click
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) {
+                // Restore original time and close
+                this.currentLyrics.lines[lineIndex].time = currentTime;
+                document.body.removeChild(modalOverlay);
+            }
+        });
     }
     
     // Parse time input in various formats (mm:ss.sss, mm:ss, seconds)
