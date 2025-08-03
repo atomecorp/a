@@ -790,8 +790,25 @@ export class AudioController {
                 
             case 'volume':
                 if (value !== null) {
-                    this.audioPlayer.volume = Math.max(0, Math.min(1, value));
-                    console.log('🔊 Volume:', (value * 100) + '%');
+                    // Check if platform supports volume control
+                    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+                    const volumeControlDisabled = isIOS || (isSafari && navigator.vendor === 'Apple Computer, Inc.');
+                    
+                    if (volumeControlDisabled) {
+                        console.log('🔊 Volume control disabled on iOS/Safari - use device volume buttons');
+                        // Store the value but don't apply it
+                        localStorage.setItem('lyrix_audio_volume', (value * 100).toString());
+                        return false;
+                    }
+                    
+                    try {
+                        this.audioPlayer.volume = Math.max(0, Math.min(1, value));
+                        console.log('🔊 Volume:', (value * 100) + '%');
+                    } catch (error) {
+                        console.log('🔊 Volume control not supported:', error.message);
+                        return false;
+                    }
                 }
                 break;
                 

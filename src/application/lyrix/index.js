@@ -3,21 +3,32 @@
 
 // iOS-compatible logging function (duplicate from audio.js for startup logging)
 function startupLog(message) {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const prefixedMessage = `⚛️ ATOME-APP: ${message}`;
-    
-    if (isIOS) {
-        try {
-            if (window.webkit?.messageHandlers?.console) {
-                window.webkit.messageHandlers.console.postMessage(prefixedMessage);
-            } else {
-                console.log('[iOS]', prefixedMessage);
-            }
-        } catch (e) {
-            console.log('[iOS-fallback]', prefixedMessage);
+    console.log(prefixedMessage);
+}
+
+// Utility function to check if volume control is supported on the current platform
+function isVolumeControlSupported() {
+    return true; // Always allow volume control on all platforms
+}
+
+// Utility function to safely apply volume with platform detection
+function safeApplyVolume(audioPlayer, volumePercent, context = '') {
+    try {
+        const volumeValue = volumePercent / 100;
+        
+        // Check that we can actually set the volume property
+        if (audioPlayer && typeof audioPlayer.volume !== 'undefined') {
+            audioPlayer.volume = volumeValue;
+            console.log(`🔊 Volume applied${context ? ' (' + context + ')' : ''}: ${volumePercent}%`);
+            return true;
+        } else {
+            console.log(`🔊 Audio player does not support volume control${context ? ' (' + context + ')' : ''}`);
+            return false;
         }
-    } else {
-        console.log(prefixedMessage);
+    } catch (error) {
+        console.log(`🔊 Volume application failed${context ? ' (' + context + ')' : ''}:`, error.message);
+        return false;
     }
 }
 
@@ -122,12 +133,6 @@ function updateAudioTitle() {
 // Initialize the application
 function initializeLyrix() {
     try {
-        // iOS-specific initialization
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        if (isIOS) {
-            setupiOSOptimizations();
-        }
-        
         // Initialize managers
         audioController = new AudioController();
         uiManager = new UIManager();
@@ -136,13 +141,7 @@ function initializeLyrix() {
         // Apply saved volume to audio controller
         const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
         if (audioController && audioController.audioPlayer) {
-            audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
-            console.log(`🔊 Applied saved volume: ${savedVolume}%`);
-        }
-        
-        // iOS memory check after initialization
-        if (isIOS && audioController.checkIOSMemory) {
-            audioController.checkIOSMemory();
+            safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'startup');
         }
         
         // Create main UI
@@ -158,14 +157,6 @@ function initializeLyrix() {
                 const timeMs = currentTime * 1000;
                 lyricsDisplay.updateTime(timeMs);
             });
-            
-            // iOS-specific error handling
-            if (isIOS) {
-                audioController.on('error', (error) => {
-                    console.error('🍎 iOS audio error:', error);
-                    handleIOSAudioError(error);
-                });
-            }
         }
         
         // Initialize MIDI utilities
@@ -3308,8 +3299,8 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
         document.getElementById('audio-controls-container'),
         document.getElementById('audio-scrub-slider-container'),
         document.getElementById('audio-volume-slider-container'),
-        document.getElementById('volume-value-display'),  // Add volume value display
-        document.getElementById('volume-wrapper-toolbar') // Add volume wrapper
+        document.getElementById('volume-value-display'),
+        document.getElementById('volume-wrapper-toolbar')
     ];
     
     // Also toggle the audio tools row
@@ -3805,24 +3796,6 @@ function showFileImportDialog() {
     fileInput.accept = '*/*';
     fileInput.multiple = true;
     fileInput.style.display = 'none';
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    if (isIOS) {
-        // iOS-specific file input optimizations
-        fileInput.removeAttribute('capture');
-        fileInput.removeAttribute('webkitdirectory');
-        
-        // iOS AUv3 compatibility: use simpler file selection
-        fileInput.style.display = 'none';
-        fileInput.style.position = 'absolute';
-        fileInput.style.left = '-9999px';
-        
-        // Force document interaction for iOS file picker
-        document.body.style.userSelect = 'none';
-        document.body.style.webkitUserSelect = 'none';
-        
-        // Accept all file types to prevent graying out
-        fileInput.setAttribute('accept', '*/*');
-    }
     document.body.appendChild(fileInput);
 
     // Enhanced iOS error handler
@@ -3878,9 +3851,7 @@ function showFileImportDialog() {
                     showCustomAlert('Invalid File Type', 'Please select text files (.lrx, .txt, .lrc, .json) or audio files (.mp3, .wav, .m4a, .flac, .ogg)');
                 }
             } else {
-                if (isIOS) {
-                    showCustomAlert('iOS File Picker', 'No files returned by the picker. Try using drag-and-drop or check iOS permissions.');
-                }
+                showCustomAlert('File Picker', 'No files returned by the picker. Please try again.');
             }
         } catch (error) {
             console.error('❌ File import error:', error);
@@ -3894,7 +3865,7 @@ function showFileImportDialog() {
                 } catch (cleanupError) {
                     console.warn('⚠️ File input cleanup error:', cleanupError);
                 }
-            }, isIOS ? 1000 : 100);
+            }, 100);
         }
     });
 
@@ -3903,11 +3874,7 @@ function showFileImportDialog() {
         fileInput.click();
         
         // Show helpful tip about file selection, especially for .lrx files
-        if (isIOS) {
-            console.log('💡 iOS Tip: If .lrx files appear grayed out, try changing the file type filter in the picker or use drag-and-drop instead.');
-        } else {
-            console.log('💡 Tip: If .lrx files appear grayed out, try changing the file type filter to "All Files" in the file picker.');
-        }
+        console.log('💡 Tip: If .lrx files appear grayed out, try changing the file type filter to "All Files" in the file picker.');
     } catch (error) {
         console.error('❌ File picker error:', error);
         document.body.removeChild(fileInput);
@@ -4142,8 +4109,7 @@ function loadAndDisplaySong(songKey) {
             const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
             setTimeout(() => {
                 if (audioController && audioController.audioPlayer) {
-                    audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
-                    console.log(`🔊 Applied volume to new audio: ${savedVolume}%`);
+                    safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'new audio');
                 }
             }, 100);
             
@@ -4589,25 +4555,29 @@ function createMainInterface() {
                     height: '16px',
                     backgroundColor: '#28a745',
                     border: '2px solid #fff',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    cursor: 'pointer'
                 }
             },
             onInput: (value) => {
-                // Update audio volume immediately
+                // Update audio volume immediately on all platforms
                 if (audioController && audioController.audioPlayer) {
-                    const volume = value / 100;
-                    audioController.audioPlayer.volume = volume;
-                    
-                    // Save volume to localStorage
-                    localStorage.setItem('lyrix_audio_volume', value.toString());
-                    
-                    // Update volume value display in toolbar
-                    const volumeValueDisplay = document.getElementById('volume-value-display');
-                    if (volumeValueDisplay) {
-                        volumeValueDisplay.textContent = `${Math.round(value)}%`;
+                    if (safeApplyVolume(audioController.audioPlayer, value, 'slider')) {
+                        // Save volume to localStorage only if successfully applied
+                        localStorage.setItem('lyrix_audio_volume', value.toString());
+                        
+                        // Update volume value display in toolbar
+                        const volumeValueDisplay = document.getElementById('volume-value-display');
+                        if (volumeValueDisplay) {
+                            volumeValueDisplay.textContent = `${Math.round(value)}%`;
+                        }
+                        
+                        // Update current volume label
+                        const volumeCurrentLabel = document.getElementById('volume_current_label');
+                        if (volumeCurrentLabel) {
+                            volumeCurrentLabel.textContent = `${Math.round(value)}%`;
+                        }
                     }
-                    
-                    console.log(`🔊 Volume set to: ${Math.round(value)}% (audioPlayer.volume = ${volume})`);
                 } else {
                     // Store volume for when audio player becomes available
                     localStorage.setItem('lyrix_audio_volume', value.toString());
@@ -4618,11 +4588,18 @@ function createMainInterface() {
                         volumeValueDisplay.textContent = `${Math.round(value)}%`;
                     }
                     
+                    // Update current volume label
+                    const volumeCurrentLabel = document.getElementById('volume_current_label');
+                    if (volumeCurrentLabel) {
+                        volumeCurrentLabel.textContent = `${Math.round(value)}%`;
+                    }
+                    
                     console.log(`🔊 Volume stored for later: ${Math.round(value)}% (audioPlayer not ready)`);
                 }
             }
         });
 
+        // Volume value container
         const volumeValueContainer = $('div', {
             css: {
                 display: 'flex',
@@ -4635,23 +4612,22 @@ function createMainInterface() {
         });
 
         const volumeMinLabel = $('span', {
-            text: '0%'
+            text: 'volume'
         });
 
-        // const volumeValueLabel = $('span', {
-        //     id: 'volume_value_label',
-        //     text: `${savedVolume}%`,
-        //     css: {
-        //         fontWeight: '600',
-        //         color: '#28a745'
-        //     }
-        // });
-
-        const volumeMaxLabel = $('span', {
-            text: '100%'
+        // Add current volume display
+        const volumeCurrentLabel = $('span', {
+            id: 'volume_current_label',
+            text: `${savedVolume}%`,
+            css: {
+                fontWeight: '600',
+                color: '#28a745'
+            }
         });
 
-        // volumeValueContainer.append(volumeMinLabel, volumeValueLabel, volumeMaxLabel);
+      
+
+        volumeValueContainer.append(volumeMinLabel, volumeCurrentLabel);
         volumeContainer.append(volumeLabel, volumeSlider, volumeValueContainer);
 
         // Add volume container to audio tools for display
@@ -4661,16 +4637,14 @@ function createMainInterface() {
 
         // Apply saved volume to audio player when it's loaded
         if (audioController && audioController.audioPlayer) {
-            audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
-            console.log(`🔊 Initial volume applied: ${savedVolume}%`);
+            safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'initial volume');
         }
         
         // Add function to apply saved volume when audio becomes available
         window.applySavedVolume = function() {
             const savedVol = localStorage.getItem('lyrix_audio_volume') || '70';
             if (audioController && audioController.audioPlayer) {
-                audioController.audioPlayer.volume = parseInt(savedVol) / 100;
-                console.log(`🔊 Saved volume applied: ${savedVol}%`);
+                safeApplyVolume(audioController.audioPlayer, parseInt(savedVol), 'delayed application');
             }
         };
         
@@ -5088,77 +5062,5 @@ export {
     CONSTANTS
 };
 
-// iOS-specific optimization functions
-function setupiOSOptimizations() {
-    console.log('🍎 Setting up iOS optimizations...');
-    
-    // Prevent zoom on input focus
-    const viewport = document.querySelector('meta[name="viewport"]');
-    if (viewport) {
-        viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
-    }
-    
-    // Prevent iOS bounce scrolling
-    document.body.style.overscrollBehavior = 'none';
-    
-    // Add iOS-specific CSS for better performance
-    const style = document.createElement('style');
-    style.textContent = `
-        * {
-            -webkit-tap-highlight-color: transparent;
-            -webkit-touch-callout: none;
-        }
-        
-        audio {
-            -webkit-playsinline: true;
-            playsinline: true;
-        }
-        
-        .ios-optimized {
-            -webkit-transform: translateZ(0);
-            transform: translateZ(0);
-            -webkit-backface-visibility: hidden;
-            backface-visibility: hidden;
-        }
-    `;
-    document.head.appendChild(style);
-    
-    // Setup memory monitoring
-    if (performance.memory) {
-        setInterval(() => {
-            const memoryInfo = performance.memory;
-            const usedMB = Math.round(memoryInfo.usedJSHeapSize / 1024 / 1024);
-            const limitMB = Math.round(memoryInfo.jsHeapSizeLimit / 1024 / 1024);
-            
-            if (usedMB > limitMB * 0.9) {
-                console.warn('🍎 High memory usage detected:', usedMB, 'MB');
-                if (audioController && audioController.forceMemoryCleanup) {
-                    audioController.forceMemoryCleanup();
-                }
-            }
-        }, 30000); // Check every 30 seconds
-    }
-    
-    console.log('🍎 iOS optimizations completed');
-}
-
-// Handle iOS-specific audio errors
-function handleIOSAudioError(error) {
-    console.error('🍎 iOS audio error handler:', error);
-    
-    // Common iOS audio error recovery
-    if (error && error.message) {
-        if (error.message.includes('decode') || error.message.includes('format')) {
-            showCustomAlert('Audio Format Error', 'This audio format may not be supported on iOS. Try using MP3 or M4A format.');
-        } else if (error.message.includes('network') || error.message.includes('loading')) {
-            showCustomAlert('Audio Loading Error', 'Failed to load audio file. Please check your connection and try again.');
-        } else if (error.message.includes('memory')) {
-            if (audioController && audioController.forceMemoryCleanup) {
-                audioController.forceMemoryCleanup();
-            }
-            showCustomAlert('Memory Error', 'Low memory detected. Please close other apps and try again.');
-        }
-    }
-}
 // console.log('🎵 Lyrix module initialized');
 // Lyrix module loaded

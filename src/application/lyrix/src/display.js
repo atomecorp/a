@@ -685,22 +685,22 @@ export class LyricsDisplay {
                 volumeContainer.style.alignItems = 'center';
                 
                 // Create volume value display
-                const volumeValue = document.createElement('span');
-                volumeValue.id = 'volume-value-display';
-                volumeValue.style.cssText = `
-                    font-size: 11px;
-                    color: #666;
-                    min-width: 25px;
-                    text-align: right;
-                `;
+                // const volumeValue = document.createElement('span');
+                // volumeValue.id = 'volume-value-display';
+                // volumeValue.style.cssText = `
+                //     font-size: 11px;
+                //     color: #666;
+                //     min-width: 25px;
+                //     text-align: right;
+                // `;
                 
                 // Get current volume from localStorage and display it
                 const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-                volumeValue.textContent = savedVolume + '%';
+                // volumeValue.textContent = savedVolume + '%';
                 
                 // Move volume container to wrapper and add value display
                 volumeWrapper.appendChild(volumeContainer);
-                volumeWrapper.appendChild(volumeValue);
+                // volumeWrapper.appendChild(volumeValue);
                 
                 buttons.push(volumeWrapper);
             }
@@ -1693,8 +1693,9 @@ export class LyricsDisplay {
             
             if (element) {
                 // console.log('🎯 Applying highlight to new line:', index);
-                element.style.backgroundColor = '#fff3cd';
-                element.style.border = '2px solid #ffc107';
+                element.style.backgroundColor = 'red';
+                element.style.color = 'black';
+                // element.style.border = '2px solid #ffc107';
                 element.style.transform = 'scale(1.05)';
                 element.style.fontWeight = 'bold';
                 element.style.transition = 'all 0.3s ease';
