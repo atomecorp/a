@@ -17,6 +17,13 @@ export class LyricsDisplay {
         const savedTimecodeState = localStorage.getItem('lyrix_show_timecodes');
         this.showTimecodes = savedTimecodeState === 'true';
         
+        // Load metadata display states from localStorage
+        const savedTitleState = localStorage.getItem('lyrix_show_title');
+        this.showTitle = savedTitleState !== 'false'; // Default to true if not set
+        
+        const savedArtistState = localStorage.getItem('lyrix_show_artist');
+        this.showArtist = savedArtistState !== 'false'; // Default to true if not set
+        
         this.currentLineIndex = -1;
         this.fontSize = StorageManager.loadFontSize();
         this.lastScrollTime = 0;
@@ -935,6 +942,7 @@ export class LyricsDisplay {
             });
         } else {
             title = $('h2', {
+                id: 'lyrics-title-display',
                 text: this.currentLyrics.metadata.title,
                 css: {
                     margin: '0 0 5px 0',
@@ -980,6 +988,7 @@ export class LyricsDisplay {
             });
         } else {
             artist = $('h3', {
+                id: 'lyrics-artist-display',
                 text: `by ${this.currentLyrics.metadata.artist}`,
                 css: {
                     margin: '0 0 5px 0',
@@ -1012,6 +1021,9 @@ export class LyricsDisplay {
         }
         
         this.lyricsContent.append(metadata);
+        
+        // Apply metadata visibility setting
+        this.updateMetadataVisibility();
         
         // Add lyrics lines
         const linesContainer = $('div', {
@@ -1890,6 +1902,83 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 this.timecodeButton.style.backgroundColor = default_theme.button.backgroundColor;
             }
         }
+    }
+    
+    // Toggle title visibility
+    toggleTitle() {
+        this.showTitle = !this.showTitle;
+        
+        // Save state to localStorage
+        localStorage.setItem('lyrix_show_title', this.showTitle.toString());
+
+        // Update title visibility
+        this.updateTitleVisibility();
+        
+        console.log(`📄 Title display: ${this.showTitle ? 'ON' : 'OFF'}`);
+    }
+    
+    // Toggle artist visibility
+    toggleArtist() {
+        this.showArtist = !this.showArtist;
+        
+        // Save state to localStorage
+        localStorage.setItem('lyrix_show_artist', this.showArtist.toString());
+
+        // Update artist visibility
+        this.updateArtistVisibility();
+        
+        console.log(`� Artist display: ${this.showArtist ? 'ON' : 'OFF'}`);
+    }
+    
+    // Update title visibility
+    updateTitleVisibility() {
+        const titleElement = document.getElementById('edit_title_input') || document.getElementById('lyrics-title-display');
+        if (titleElement) {
+            titleElement.style.display = this.showTitle ? 'block' : 'none';
+        }
+    }
+    
+    // Update artist visibility
+    updateArtistVisibility() {
+        const artistElement = document.getElementById('edit_artist_input') || document.getElementById('lyrics-artist-display');
+        if (artistElement) {
+            artistElement.style.display = this.showArtist ? 'block' : 'none';
+        }
+    }
+    
+    // Update metadata container visibility (legacy method for compatibility)
+    updateMetadataVisibility() {
+        this.updateTitleVisibility();
+        this.updateArtistVisibility();
+    }
+    
+    // Toggle metadata (title/artist) visibility (legacy method for compatibility)
+    toggleMetadata() {
+        // If both are currently visible, hide both
+        if (this.showTitle && this.showArtist) {
+            this.showTitle = false;
+            this.showArtist = false;
+        }
+        // If both are hidden, show both
+        else if (!this.showTitle && !this.showArtist) {
+            this.showTitle = true;
+            this.showArtist = true;
+        }
+        // If mixed state, show both
+        else {
+            this.showTitle = true;
+            this.showArtist = true;
+        }
+        
+        // Save states to localStorage
+        localStorage.setItem('lyrix_show_title', this.showTitle.toString());
+        localStorage.setItem('lyrix_show_artist', this.showArtist.toString());
+
+        // Update visibility
+        this.updateTitleVisibility();
+        this.updateArtistVisibility();
+        
+        console.log(`📄 Metadata display: Title ${this.showTitle ? 'ON' : 'OFF'}, Artist ${this.showArtist ? 'ON' : 'OFF'}`);
     }
     
     // Show timecode options panel (DEPRECATED - moved to settings panel)

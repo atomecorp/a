@@ -3081,6 +3081,104 @@ function showSettingsModal() {
     timecodeOptionsContainer.append(showTimecodesContainer, clearTimecodesContainer);
     timecodeOptionsSection.append(timecodeOptionsTitle, timecodeOptionsContainer);
 
+    // Metadata Display Options section
+    const metadataOptionsSection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#f8f4ff',
+            borderRadius: '5px',
+            border: '1px solid #e0d4f7'
+        }
+    });
+
+    const metadataOptionsTitle = $('div', {
+        text: 'Metadata Display Options',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '15px',
+            color: '#6a1b9a',
+            fontSize: '16px'
+        }
+    });
+
+    const metadataOptionsContainer = $('div', {
+        css: {
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px'
+        }
+    });
+
+    // Show/Hide Title toggle
+    const showTitleContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+        }
+    });
+
+    const showTitleButton = UIManager.createInterfaceButton(
+        lyricsDisplay?.showTitle ? '✅' : '❌',
+        {
+            onClick: () => {
+                if (lyricsDisplay) {
+                    lyricsDisplay.toggleTitle();
+                    showTitleButton.textContent = lyricsDisplay.showTitle ? '✅' : '❌';
+                    showTitleLabel.textContent = lyricsDisplay.showTitle ? 'Title Visible' : 'Title Hidden';
+                }
+            }
+        }
+    );
+
+    const showTitleLabel = $('span', {
+        text: lyricsDisplay?.showTitle ? 'Title Visible' : 'Title Hidden',
+        css: {
+            fontSize: '14px',
+            color: '#6a1b9a',
+            fontWeight: '500'
+        }
+    });
+
+    showTitleContainer.append(showTitleLabel, showTitleButton);
+
+    // Show/Hide Artist toggle
+    const showArtistContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+        }
+    });
+
+    const showArtistButton = UIManager.createInterfaceButton(
+        lyricsDisplay?.showArtist ? '✅' : '❌',
+        {
+            onClick: () => {
+                if (lyricsDisplay) {
+                    lyricsDisplay.toggleArtist();
+                    showArtistButton.textContent = lyricsDisplay.showArtist ? '✅' : '❌';
+                    showArtistLabel.textContent = lyricsDisplay.showArtist ? 'Artist Visible' : 'Artist Hidden';
+                }
+            }
+        }
+    );
+
+    const showArtistLabel = $('span', {
+        text: lyricsDisplay?.showArtist ? 'Artist Visible' : 'Artist Hidden',
+        css: {
+            fontSize: '14px',
+            color: '#6a1b9a',
+            fontWeight: '500'
+        }
+    });
+
+    showArtistContainer.append(showArtistLabel, showArtistButton);
+
+    metadataOptionsContainer.append(showTitleContainer, showArtistContainer);
+    metadataOptionsSection.append(metadataOptionsTitle, metadataOptionsContainer);
+
     // Font Size Controls section
     const fontSizeSection = $('div', {
         css: {
@@ -3172,7 +3270,7 @@ function showSettingsModal() {
     fontSizeSection.append(fontSizeTitle, fontSizeContainer, fontSizeHint);
 
     // Assemble the content - move experimental features to the bottom
-    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
+    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, metadataOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
 
     // Show modal
     Modal({
