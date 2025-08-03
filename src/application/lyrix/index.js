@@ -1893,12 +1893,8 @@ function showSongLibrary() {
                     { text: 'Supprimer', onClick: () => {
                         lyricsLibrary.deleteAllSongs();
                         document.body.removeChild(modalContainer);
-                        Modal({
-                            title: 'Suppression terminée',
-                            content: '<p>Toutes les chansons ont été supprimées.</p>',
-                            buttons: [{ text: 'OK' }],
-                            size: 'small'
-                        });
+                        // No need for additional confirmation modal - user can see the empty library
+                        showSongLibrary(); // Reopen the library to show it's now empty
                     }, css: { backgroundColor: '#e74c3c', color: 'white' } }
                 ],
                 size: 'small'
