@@ -4409,9 +4409,9 @@ function createMainInterface() {
                     seekToPendingTime();
                     
                     // Add a longer delay before allowing automatic updates again
-                    // setTimeout(() => {
-                    //     isUserScrubbing = false;
-                    // }, 300);
+                    setTimeout(() => {
+                        isUserScrubbing = false;
+                    }, 300);
                 });
                 
                 // Also add to the container for broader detection
@@ -4439,9 +4439,9 @@ function createMainInterface() {
                     seekToPendingTime();
                     
                     // Add a longer delay before allowing automatic updates again
-                    // setTimeout(() => {
-                    //     isUserScrubbing = false;
-                    // }, 300);
+                    setTimeout(() => {
+                        isUserScrubbing = false;
+                    }, 300);
                 });
             } else {
                 // Fallback: try to find standard input element
@@ -4452,9 +4452,9 @@ function createMainInterface() {
                     });
                     
                     sliderInput.addEventListener('mouseup', () => {
-                        // setTimeout(() => {
-                        //     isUserScrubbing = false;
-                        // }, 100);
+                        setTimeout(() => {
+                            isUserScrubbing = false;
+                        }, 100);
                     });
                 }
             }
@@ -4466,9 +4466,9 @@ function createMainInterface() {
                 // Seek to the pending time immediately
                 seekToPendingTime();
                 
-                // setTimeout(() => {
-                //     isUserScrubbing = false;
-                // }, 300);
+                setTimeout(() => {
+                    isUserScrubbing = false;
+                }, 300);
             }
         });
         
