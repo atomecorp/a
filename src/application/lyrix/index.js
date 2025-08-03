@@ -3168,7 +3168,9 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
         document.getElementById('audio-stop-button'),
         document.getElementById('audio-controls-container'),
         document.getElementById('audio-scrub-slider-container'),
-        document.getElementById('audio-volume-slider-container')
+        document.getElementById('audio-volume-slider-container'),
+        document.getElementById('volume-value-display'),  // Add volume value display
+        document.getElementById('volume-wrapper-toolbar') // Add volume wrapper
     ];
     
     // Also toggle the audio tools row
@@ -4466,7 +4468,18 @@ function createMainInterface() {
                         volumeValueDisplay.textContent = `${Math.round(value)}%`;
                     }
                     
-                    // console.log(`🔊 Volume set to: ${Math.round(value)}%`);
+                    console.log(`🔊 Volume set to: ${Math.round(value)}% (audioPlayer.volume = ${volume})`);
+                } else {
+                    // Store volume for when audio player becomes available
+                    localStorage.setItem('lyrix_audio_volume', value.toString());
+                    
+                    // Update volume value display in toolbar
+                    const volumeValueDisplay = document.getElementById('volume-value-display');
+                    if (volumeValueDisplay) {
+                        volumeValueDisplay.textContent = `${Math.round(value)}%`;
+                    }
+                    
+                    console.log(`🔊 Volume stored for later: ${Math.round(value)}% (audioPlayer not ready)`);
                 }
             }
         });
@@ -4510,7 +4523,17 @@ function createMainInterface() {
         // Apply saved volume to audio player when it's loaded
         if (audioController && audioController.audioPlayer) {
             audioController.audioPlayer.volume = parseInt(savedVolume) / 100;
+            console.log(`🔊 Initial volume applied: ${savedVolume}%`);
         }
+        
+        // Add function to apply saved volume when audio becomes available
+        window.applySavedVolume = function() {
+            const savedVol = localStorage.getItem('lyrix_audio_volume') || '70';
+            if (audioController && audioController.audioPlayer) {
+                audioController.audioPlayer.volume = parseInt(savedVol) / 100;
+                console.log(`🔊 Saved volume applied: ${savedVol}%`);
+            }
+        };
         
         // Add timecode display for AUv3 host compatibility
         const timecodeDisplay = UIManager.createEnhancedTimecodeDisplay({
@@ -4547,22 +4570,30 @@ function createMainInterface() {
             audioController.on('loaded', (duration) => {
                 startupLog(`📏 Audio loaded event - duration: ${duration}s`);
                 updateSliderDuration();
+                // Apply saved volume when audio is loaded
+                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('loadedmetadata', () => {
                 startupLog('📏 Loadedmetadata event triggered');
                 updateSliderDuration();
+                // Apply saved volume when metadata is loaded
+                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             // Also listen for loadeddata and canplay events as fallbacks
             audioController.on('loadeddata', () => {
                 startupLog('📏 Loadeddata event triggered');
                 updateSliderDuration();
+                // Apply saved volume when data is loaded
+                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('canplay', () => {
                 startupLog('📏 Canplay event triggered');
                 updateSliderDuration();
+                // Apply saved volume when audio can play
+                if (window.applySavedVolume) window.applySavedVolume();
             });
         }
     }
