@@ -1788,6 +1788,25 @@ function showSongLibrary() {
         }
     });
 
+    // Import file button - moved from toolbar to song library panel
+    const importFileButton = $('button', {
+        id: 'import_file_button_library',
+        text: '📁 Import',
+        css: {
+            backgroundColor: '#f39c12',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            cursor: 'pointer'
+        },
+        onClick: () => {
+            document.body.removeChild(modalContainer);
+            showFileImportDialog();
+        }
+    });
+
     // Auto Fill MIDI container
     const autoFillContainer = $('div', {
         css: {
@@ -1894,7 +1913,7 @@ function showSongLibrary() {
             });
         }
     });
-    actionButtons.append(createNewSongButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
+    actionButtons.append(createNewSongButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     headerTop.append(headerTitle, actionButtons);
 
     // Instructions
@@ -4100,7 +4119,7 @@ function createMainInterface() {
     // Store tool elements for potential move to lyrics toolbar
     window.leftPanelTools = {
         settingsButton,
-        importButton, 
+        // importButton moved to song library panel
         // createSongButton, // Moved to song library panel
         songListButton
     };

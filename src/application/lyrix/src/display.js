@@ -539,12 +539,10 @@ export class LyricsDisplay {
     getNonAudioTools() {
         const tools = [];
         
-        // Get the 4 main buttons from stored references
+        // Get the main buttons from stored references (import button moved to song library panel)
         if (window.leftPanelTools) {
-            const { settingsButton, importButton, createSongButton, songListButton } = window.leftPanelTools;
+            const { settingsButton, songListButton } = window.leftPanelTools;
             if (settingsButton) tools.push(settingsButton);
-            if (importButton) tools.push(importButton);
-            if (createSongButton) tools.push(createSongButton);
             if (songListButton) tools.push(songListButton);
         }
         
