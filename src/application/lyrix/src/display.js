@@ -1120,6 +1120,14 @@ export class LyricsDisplay {
             });
             
             timeSpan.addEventListener('touchend', (e) => {
+                // Block timecode editing in record mode
+                if (this.recordMode) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('⚠️ Timecode editing is disabled in record mode');
+                    return;
+                }
+                
                 // Simple tap to edit on mobile
                 e.preventDefault();
                 e.stopPropagation();
@@ -1128,6 +1136,13 @@ export class LyricsDisplay {
             
             // Double-click to edit timecode (desktop only)
             timeSpan.addEventListener('dblclick', (e) => {
+                // Block timecode editing in record mode
+                if (this.recordMode) {
+                    e.stopPropagation();
+                    console.log('⚠️ Timecode editing is disabled in record mode');
+                    return;
+                }
+                
                 e.stopPropagation();
                 this.editTimecode(index, timeSpan);
             });
@@ -1138,6 +1153,13 @@ export class LyricsDisplay {
             let startTime = line.time;
             
             timeSpan.addEventListener('mousedown', (e) => {
+                // Block timecode dragging in record mode
+                if (this.recordMode) {
+                    e.preventDefault();
+                    console.log('⚠️ Timecode dragging is disabled in record mode');
+                    return;
+                }
+                
                 if (e.detail === 1) { // Single click, not double click
                     isDragging = true;
                     startX = e.clientX;
@@ -2005,6 +2027,12 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
     // Edit timecode via double-click
     editTimecode(lineIndex, timeSpan) {
         if (!this.currentLyrics) return;
+        
+        // Block timecode editing in record mode
+        if (this.recordMode) {
+            console.log('⚠️ Timecode editing is blocked in record mode');
+            return;
+        }
         
         // Get the currently displayed timecode text from the span (similar to editLineText approach)
         const currentDisplayedTime = timeSpan.textContent || timeSpan.innerText || '';
