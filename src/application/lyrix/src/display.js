@@ -13,6 +13,42 @@ export class LyricsDisplay {
         this.recordMode = false;
         this.fullscreenMode = false;
         
+        // Style state management for fullscreen mode
+        this.originalStyles = {
+            normal: {
+                backgroundColor: '#383838ff',
+                color: 'green'
+            },
+            fullscreen: {
+                backgroundColor: '#000',
+                color: '#fff'
+            },
+            sidebar: {
+                backgroundColor: '#2c3e50',
+                color: '#ecf0f1'
+            },
+            hamburgerButton: {
+                normal: '#2c3e50',
+                hover: '#34495e'
+            },
+            editPanel: {
+                backgroundColor: '#f0f0f0'
+            },
+            buttons: {
+                save: '#4CAF50',
+                cancel: '#f44336',
+                transparent: 'transparent'
+            },
+            timecodeEdit: {
+                backgroundColor: '#515151ff'
+            },
+            formElements: {
+                color: '#1976D2',
+                backgroundColor: '#f5faff',
+                textColor: '#666'
+            }
+        };
+        
         // Load timecode display state from localStorage
         const savedTimecodeState = localStorage.getItem('lyrix_show_timecodes');
         this.showTimecodes = savedTimecodeState === 'true';
@@ -84,10 +120,10 @@ export class LyricsDisplay {
                 left: '0px',
                 width: '30px',
                 height: '30px',
-                backgroundColor: '#2c3e50', // Dark background
+                backgroundColor: this.originalStyles.sidebar.backgroundColor, // Dark background
                 border: '0px solid #34495e',
                 borderRadius: '3px',
-                color: '#ecf0f1', // Light text color
+                color: this.originalStyles.sidebar.color, // Light text color
                 fontSize: '18px',
                 cursor: 'pointer',
                 zIndex: '101',
@@ -101,12 +137,12 @@ export class LyricsDisplay {
 
         // Hamburger button hover effects
         this.hamburgerButton.addEventListener('mouseenter', () => {
-            this.hamburgerButton.style.backgroundColor = '#34495e';
+            this.hamburgerButton.style.backgroundColor = this.originalStyles.hamburgerButton.hover;
             this.hamburgerButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
         });
 
         this.hamburgerButton.addEventListener('mouseleave', () => {
-            this.hamburgerButton.style.backgroundColor = '#2c3e50';
+            this.hamburgerButton.style.backgroundColor = this.originalStyles.hamburgerButton.normal;
             this.hamburgerButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
         });
 
@@ -125,8 +161,8 @@ export class LyricsDisplay {
             css: {
                 flex: '1', // Prend tout l'espace restant après la toolbar
                 padding: UIManager.THEME.spacing.xl,
-                backgroundColor: '#383838ff',
-                color: 'green',
+                backgroundColor: this.originalStyles.normal.backgroundColor,
+                color: this.originalStyles.normal.color,
                 overflow: 'auto', // SEULE zone qui peut scroller
                 height: '0', // Force le flex à calculer la hauteur disponible
                 fontSize: `${this.fontSize}px`,
@@ -230,7 +266,7 @@ export class LyricsDisplay {
             text: `${this.fontSize}px`,
             css: {
                 padding: '5px 10px',
-                backgroundColor: '#f0f0f0',
+                backgroundColor: this.originalStyles.editPanel.backgroundColor,
                 borderRadius: '4px',
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -280,7 +316,7 @@ export class LyricsDisplay {
                 this.toggleEditMode(); // Exit edit mode after saving
             },
             css: {
-                backgroundColor: '#4CAF50',
+                backgroundColor: this.originalStyles.buttons.save,
                 display: 'none' // Initially hidden
             }
         });
@@ -292,7 +328,7 @@ export class LyricsDisplay {
                 this.toggleEditMode(); // Exit edit mode without saving
             },
             css: {
-                backgroundColor: '#f44336',
+                backgroundColor: this.originalStyles.buttons.cancel,
                 display: 'none' // Initially hidden
             }
         });
@@ -317,7 +353,7 @@ export class LyricsDisplay {
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 padding: '0px 0px 0px 33px', // Extra left padding to avoid hamburger menu overlap (52px = 36px button + 8px margin + 8px clearance)
-                backgroundColor: 'transparent',
+                backgroundColor: this.originalStyles.buttons.transparent,
                 // borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
                 transition: 'all 0.3s ease' // Smooth transition for show/hide
             }
@@ -907,7 +943,7 @@ export class LyricsDisplay {
             css: {
                 marginBottom: '20px',
                 padding: '15px',
-                backgroundColor: '#515151ff',
+                backgroundColor: this.originalStyles.timecodeEdit.backgroundColor,
                 borderRadius: '8px',
                 // borderLeft: '4px solid #2196F3'
             }
@@ -921,13 +957,13 @@ export class LyricsDisplay {
                 value: this.currentLyrics.metadata.title || '',
                 css: {
                     margin: '0 0 5px 0',
-                    color: '#1976D2',
+                    color: this.originalStyles.formElements.color,
                     fontSize: '1.3em',
                     fontWeight: 'bold',
                     padding: '4px 8px',
                     borderRadius: '4px',
-                    border: '2px solid #1976D2',
-                    backgroundColor: '#f5faff',
+                    border: `2px solid ${this.originalStyles.formElements.color}`,
+                    backgroundColor: this.originalStyles.formElements.backgroundColor,
                     width: '100%'
                 }
             });
@@ -946,7 +982,7 @@ export class LyricsDisplay {
                 text: this.currentLyrics.metadata.title,
                 css: {
                     margin: '0 0 5px 0',
-                    color: '#1976D2',
+                    color: this.originalStyles.formElements.color,
                     fontSize: '1.3em',
                     cursor: 'pointer'
                 }
@@ -967,13 +1003,13 @@ export class LyricsDisplay {
                 value: this.currentLyrics.metadata.artist || '',
                 css: {
                     margin: '0 0 5px 0',
-                    color: '#666',
+                    color: this.originalStyles.formElements.textColor,
                     fontSize: '1.1em',
                     fontWeight: 'normal',
                     padding: '4px 8px',
                     borderRadius: '4px',
-                    border: '2px solid #666',
-                    backgroundColor: '#f5faff',
+                    border: `2px solid ${this.originalStyles.formElements.textColor}`,
+                    backgroundColor: this.originalStyles.formElements.backgroundColor,
                     width: '100%'
                 }
             });
@@ -992,7 +1028,7 @@ export class LyricsDisplay {
                 text: `by ${this.currentLyrics.metadata.artist}`,
                 css: {
                     margin: '0 0 5px 0',
-                    color: '#666',
+                    color: this.originalStyles.formElements.textColor,
                     fontSize: '1.1em',
                     fontWeight: 'normal',
                     cursor: 'pointer'
@@ -1083,8 +1119,8 @@ export class LyricsDisplay {
                 text: this.formatTimeDisplay(line.time),
                 css: {
                     fontSize: '0.8em',
-                    color: '#666',
-                    backgroundColor: '#f0f0f0',
+                    color: this.originalStyles.formElements.textColor,
+                    backgroundColor: this.originalStyles.editPanel.backgroundColor,
                     padding: '2px 6px',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
@@ -1852,6 +1888,74 @@ export class LyricsDisplay {
         }
     }
     
+    // Update style configuration (for future customization)
+    updateStyleConfig(mode, styleUpdates) {
+        if (mode === 'normal' || mode === 'fullscreen') {
+            this.originalStyles[mode] = {
+                ...this.originalStyles[mode],
+                ...styleUpdates
+            };
+            
+            // If updating current mode, apply the changes immediately
+            if ((mode === 'fullscreen' && this.fullscreenMode) || 
+                (mode === 'normal' && !this.fullscreenMode)) {
+                this.applyModeStyles(this.fullscreenMode);
+            }
+            
+            console.log(`🎨 Updated ${mode} styles:`, this.originalStyles[mode]);
+        }
+    }
+    
+    // Get current style configuration
+    getStyleConfig(mode = null) {
+        if (mode) {
+            return { ...this.originalStyles[mode] };
+        }
+        return {
+            normal: { ...this.originalStyles.normal },
+            fullscreen: { ...this.originalStyles.fullscreen }
+        };
+    }
+    
+    // Apply styles based on the current mode (normal or fullscreen)
+    applyModeStyles(isFullscreen) {
+        const styles = isFullscreen ? this.originalStyles.fullscreen : this.originalStyles.normal;
+        
+        if (isFullscreen) {
+            // Apply fullscreen styles
+            this.lyricsContent.style.position = 'fixed';
+            this.lyricsContent.style.top = '0';
+            this.lyricsContent.style.left = '0';
+            this.lyricsContent.style.width = '100vw';
+            this.lyricsContent.style.height = '100vh';
+            this.lyricsContent.style.zIndex = '9999';
+            this.lyricsContent.style.backgroundColor = styles.backgroundColor;
+            this.lyricsContent.style.color = styles.color;
+            this.lyricsContent.style.padding = '40px';
+            this.lyricsContent.style.overflow = 'auto';
+            this.lyricsContent.style.fontSize = `${this.fontSize}px`;
+            this.lyricsContent.style.textAlign = 'center';
+            this.lyricsContent.style.cursor = 'pointer';
+            this.lyricsContent.style.flex = 'none';  // Remove flex behavior
+        } else {
+            // Apply normal styles
+            this.lyricsContent.style.position = 'relative';
+            this.lyricsContent.style.top = 'auto';
+            this.lyricsContent.style.left = 'auto';
+            this.lyricsContent.style.width = 'auto';
+            this.lyricsContent.style.height = 'auto';
+            this.lyricsContent.style.zIndex = 'auto';
+            this.lyricsContent.style.backgroundColor = styles.backgroundColor;
+            this.lyricsContent.style.color = styles.color;
+            this.lyricsContent.style.padding = UIManager.THEME.spacing.xl;
+            this.lyricsContent.style.fontSize = `${this.fontSize}px`;
+            this.lyricsContent.style.textAlign = 'left';
+            this.lyricsContent.style.cursor = 'default';
+            this.lyricsContent.style.flex = '1';
+            this.lyricsContent.style.overflow = 'auto';
+        }
+    }
+    
     // Toggle fullscreen
     toggleFullscreen(enterFullscreen = null) {
         // If parameter is provided, use it to explicitly set fullscreen state
@@ -1874,21 +1978,8 @@ export class LyricsDisplay {
             // Hide the toolbar but NOT the display container
             if (this.toolbar) this.toolbar.style.display = 'none';
             
-            // Make ONLY lyrics content fullscreen
-            this.lyricsContent.style.position = 'fixed';
-            this.lyricsContent.style.top = '0';
-            this.lyricsContent.style.left = '0';
-            this.lyricsContent.style.width = '100vw';
-            this.lyricsContent.style.height = '100vh';
-            this.lyricsContent.style.zIndex = '9999';
-            this.lyricsContent.style.backgroundColor = '#000';
-            this.lyricsContent.style.color = '#fff';
-            this.lyricsContent.style.padding = '40px';
-            this.lyricsContent.style.overflow = 'auto';
-            this.lyricsContent.style.fontSize = `${this.fontSize}px`;
-            this.lyricsContent.style.textAlign = 'center';
-            this.lyricsContent.style.cursor = 'pointer';
-            this.lyricsContent.style.flex = 'none';  // Remove flex behavior
+            // Apply fullscreen styles
+            this.applyModeStyles(true);
             
             // Add click handler to exit fullscreen
             this.fullscreenClickHandler = () => {
@@ -1912,22 +2003,8 @@ export class LyricsDisplay {
             if (statusBar) statusBar.style.display = 'block';
             if (this.toolbar) this.toolbar.style.display = 'flex';
             
-            // Restore lyrics content to normal (inside the container structure)
-            this.lyricsContent.style.position = 'relative';
-            this.lyricsContent.style.top = 'auto';
-            this.lyricsContent.style.left = 'auto';
-            this.lyricsContent.style.width = 'auto';
-            this.lyricsContent.style.height = 'auto';
-            this.lyricsContent.style.zIndex = 'auto';
-            this.lyricsContent.style.backgroundColor = 'transparent';
-            this.lyricsContent.style.color = '#000';
-            this.lyricsContent.style.padding = '20px';
-            this.lyricsContent.style.fontSize = `${this.fontSize}px`;
-            this.lyricsContent.style.textAlign = 'left';
-            this.lyricsContent.style.cursor = 'default';
-            this.lyricsContent.style.flex = '1';
-            this.lyricsContent.style.overflow = 'auto';
-            
+            // Apply normal styles
+            this.applyModeStyles(false);
         }
         
         console.log(`🖼️ Fullscreen mode: ${this.fullscreenMode ? 'ON' : 'OFF'}`);
