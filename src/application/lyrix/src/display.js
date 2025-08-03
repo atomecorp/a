@@ -1242,40 +1242,38 @@ export class LyricsDisplay {
                 this.editTimecode(index, timeSpan);
             });
             
-            // Double-tap support for mobile devices
-            let tapCount = 0;
-            let tapTimer = null;
-            
-            timeSpan.addEventListener('click', (e) => {
-                // Block timecode editing in record mode
-                if (this.recordMode) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('⚠️ Timecode editing is disabled in record mode');
-                    return;
-                }
+            // Double-tap support for mobile devices only
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                let tapCount = 0;
+                let tapTimer = null;
                 
-                tapCount++;
-                
-                if (tapCount === 1) {
-                    tapTimer = setTimeout(() => {
-                        tapCount = 0; // Reset tap count after timeout
-                    }, 300); // 300ms timeout for double-tap detection
-                } else if (tapCount === 2) {
-                    // Double-tap detected
-                    clearTimeout(tapTimer);
-                    tapCount = 0;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Use mobile-optimized modal for touch devices
-                    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-                        this.editTimecodeTouch(index, timeSpan);
-                    } else {
-                        this.editTimecode(index, timeSpan);
+                timeSpan.addEventListener('click', (e) => {
+                    // Block timecode editing in record mode
+                    if (this.recordMode) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('⚠️ Timecode editing is disabled in record mode');
+                        return;
                     }
-                }
-            });
+                    
+                    tapCount++;
+                    
+                    if (tapCount === 1) {
+                        tapTimer = setTimeout(() => {
+                            tapCount = 0; // Reset tap count after timeout
+                        }, 300); // 300ms timeout for double-tap detection
+                    } else if (tapCount === 2) {
+                        // Double-tap detected
+                        clearTimeout(tapTimer);
+                        tapCount = 0;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        // Use mobile-optimized modal for touch devices
+                        this.editTimecodeTouch(index, timeSpan);
+                    }
+                });
+            }
             
             // Mouse drag to adjust timecode
             let isDragging = false;
@@ -2374,6 +2372,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 // Verify and correct timecode order after manual edit
                 this.verifyAndCorrectTimecodeOrder(lineIndex);
                 
+                // Get the potentially corrected time
+                const finalTime = this.currentLyrics.lines[lineIndex].time;
+                
                 // Save to localStorage using the same method as the save button
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 if (saveSuccess) {
@@ -2382,8 +2383,8 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                     console.error(`❌ Failed to save timecode for line ${lineIndex + 1} to localStorage`);
                 }
                 
-                timeSpan.textContent = this.formatTimeDisplay(newTime);
-                console.log(`✏️ Updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(newTime)}`);
+                timeSpan.textContent = this.formatTimeDisplay(finalTime);
+                console.log(`✏️ Updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(finalTime)}`);
             } else {
                 console.warn('⚠️ Invalid time format, keeping original value');
             }
@@ -2522,21 +2523,26 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             }
         });
         
-        const input = $('input', {
-            type: 'text',
-            value: currentTimeFormatted,
-            css: {
-                width: '100%',
-                padding: '12px',
-                fontSize: '16px',
-                fontFamily: 'monospace',
-                border: '2px solid #007bff',
-                borderRadius: '6px',
-                textAlign: 'center',
-                boxSizing: 'border-box',
-                backgroundColor: 'white'
-            }
-        });
+        // Create input using direct DOM creation to ensure value is set correctly
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentTimeFormatted;
+        input.style.cssText = `
+            width: 100%;
+            padding: 12px;
+            fontSize: 16px;
+            fontFamily: monospace;
+            border: 2px solid #007bff;
+            borderRadius: 6px;
+            textAlign: center;
+            boxSizing: border-box;
+            backgroundColor: white;
+        `;
+        
+        // Ensure the value is set correctly
+        setTimeout(() => {
+            input.value = currentTimeFormatted;
+        }, 50);
         
         // Focus and select all text for easy editing
         setTimeout(() => {
@@ -2627,6 +2633,41 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             swipeArea.style.backgroundColor = '#f8f9fa';
             swipeArea.style.borderColor = '#007bff';
             swipeLabel.textContent = '👆 Swipe up/down to adjust';
+            
+            // Get the current time before validation
+            const timeBeforeValidation = this.currentLyrics.lines[lineIndex].time;
+            
+            // Verify and correct timecode order after swipe gesture completes
+            const correctionsMade = this.verifyAndCorrectTimecodeOrder(lineIndex);
+            
+            // Get the potentially corrected time after validation
+            const correctedTime = this.currentLyrics.lines[lineIndex].time;
+            
+            // Update the input field with the final value (corrected or original)
+            const totalSeconds = correctedTime / 1000;
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = Math.floor(totalSeconds % 60);
+            const milliseconds = Math.floor((totalSeconds % 1) * 1000);
+            const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+            
+            input.value = formattedTime;
+            
+            // Show visual feedback if corrections were made
+            if (correctionsMade > 0) {
+                swipeLabel.textContent = `✅ ${formattedTime} (corrected)`;
+                swipeLabel.style.color = '#28a745'; // Green for corrections
+                
+                // Show brief notification about corrections
+                setTimeout(() => {
+                    swipeLabel.textContent = `⏱️ ${formattedTime}`;
+                    swipeLabel.style.color = '#007bff'; // Back to blue
+                }, 2000);
+            } else {
+                swipeLabel.textContent = `⏱️ ${formattedTime}`;
+            }
+            
+            // Update startTime to the final corrected value for subsequent swipes
+            startTime = correctedTime;
         });
         
         // Buttons container
@@ -2680,20 +2721,31 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                     this.currentLyrics.lines[lineIndex].time = newTime;
                     this.currentLyrics.updateLastModified();
                     
-                    // Verify and correct timecode order
-                    this.verifyAndCorrectTimecodeOrder(lineIndex);
+                    // Verify and correct timecode order - this is the final validation
+                    const correctionsMade = this.verifyAndCorrectTimecodeOrder(lineIndex);
+                    
+                    // Get the final time after all validations
+                    const finalTime = this.currentLyrics.lines[lineIndex].time;
                     
                     // Save to localStorage
                     const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                     if (saveSuccess) {
                         console.log(`✅ Touch-edited timecode for line ${lineIndex + 1} saved successfully`);
+                        if (correctionsMade > 0) {
+                            console.log(`🔧 ${correctionsMade} additional corrections were applied to maintain timecode order`);
+                        }
                     } else {
                         console.error(`❌ Failed to save touch-edited timecode for line ${lineIndex + 1}`);
                     }
                     
-                    // Update the original timeSpan
-                    timeSpan.textContent = this.formatTimeDisplay(newTime);
-                    console.log(`✏️ Touch-updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(newTime)}`);
+                    // Update the original timeSpan with the final time (after all corrections)
+                    timeSpan.textContent = this.formatTimeDisplay(finalTime);
+                    console.log(`✏️ Touch-updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(finalTime)}`);
+                    
+                    // If corrections were made, show a brief notification
+                    if (correctionsMade > 0) {
+                        console.log(`📢 iOS Timecode correction: Line ${lineIndex + 1} and ${correctionsMade} subsequent line(s) were adjusted to maintain order`);
+                    }
                 } else {
                     console.warn('⚠️ Invalid time format, keeping original value');
                     this.currentLyrics.lines[lineIndex].time = currentTime;
@@ -3482,48 +3534,58 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
     // Verify and correct timecode order to ensure they are always incremental
     verifyAndCorrectTimecodeOrder(modifiedLineIndex) {
         if (!this.currentLyrics || !this.currentLyrics.lines) {
-            return;
+            return 0;
         }
 
         const lines = this.currentLyrics.lines;
         let correctionsMade = 0;
         let correctionLog = [];
+        const minimumIncrement = 100; // milliseconds
 
         console.log(`🔍 Verifying timecode order after modifying line ${modifiedLineIndex + 1}...`);
 
-        // Start from the modified line and check forward
-        for (let i = modifiedLineIndex; i < lines.length - 1; i++) {
-            const currentLine = lines[i];
-            const nextLine = lines[i + 1];
+        // Start from the modified line and check forward - with cascading corrections
+        let hasMoreCorrections = true;
+        let iterations = 0;
+        const maxIterations = lines.length; // Prevent infinite loops
+        
+        while (hasMoreCorrections && iterations < maxIterations) {
+            hasMoreCorrections = false;
+            iterations++;
+            
+            for (let i = modifiedLineIndex; i < lines.length - 1; i++) {
+                const currentLine = lines[i];
+                const nextLine = lines[i + 1];
 
-            // Skip lines without timecodes
-            if (currentLine.time < 0 || nextLine.time < 0) {
-                continue;
-            }
+                // Skip lines without timecodes
+                if (currentLine.time < 0 || nextLine.time < 0) {
+                    continue;
+                }
 
-            // If next line's timecode is not greater than current line's timecode
-            if (nextLine.time <= currentLine.time) {
-                // Calculate a minimum increment (100ms default)
-                const minimumIncrement = 100;
-                const newTimecode = currentLine.time + minimumIncrement;
-                
-                correctionLog.push({
-                    lineIndex: i + 1,
-                    oldTimecode: nextLine.time,
-                    newTimecode: newTimecode,
-                    reason: `Line ${i + 2} timecode (${this.formatTimeDisplay(nextLine.time)}) was not greater than line ${i + 1} timecode (${this.formatTimeDisplay(currentLine.time)})`
-                });
+                // If next line's timecode is not greater than current line's timecode
+                if (nextLine.time <= currentLine.time) {
+                    const newTimecode = currentLine.time + minimumIncrement;
+                    
+                    correctionLog.push({
+                        lineIndex: i + 1,
+                        oldTimecode: nextLine.time,
+                        newTimecode: newTimecode,
+                        iteration: iterations,
+                        reason: `Line ${i + 2} timecode (${this.formatTimeDisplay(nextLine.time)}) was not greater than line ${i + 1} timecode (${this.formatTimeDisplay(currentLine.time)})`
+                    });
 
-                nextLine.time = newTimecode;
-                correctionsMade++;
+                    nextLine.time = newTimecode;
+                    correctionsMade++;
+                    hasMoreCorrections = true; // Continue checking for cascading effects
+                }
             }
         }
 
         // Log corrections if any were made
         if (correctionsMade > 0) {
-            console.log(`⚡ Made ${correctionsMade} timecode corrections:`);
+            console.log(`⚡ Made ${correctionsMade} timecode corrections in ${iterations} iteration(s):`);
             correctionLog.forEach(correction => {
-                console.log(`  📝 Line ${correction.lineIndex + 1}: ${this.formatTimeDisplay(correction.oldTimecode)} → ${this.formatTimeDisplay(correction.newTimecode)}`);
+                console.log(`  📝 Iter ${correction.iteration} - Line ${correction.lineIndex + 1}: ${this.formatTimeDisplay(correction.oldTimecode)} → ${this.formatTimeDisplay(correction.newTimecode)}`);
                 console.log(`     Reason: ${correction.reason}`);
             });
 
@@ -3540,6 +3602,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             if (this.showTimecodes) {
                 this.renderLyrics();
             }
+            
+            // Update any visible timecode displays in the DOM
+            this.updateVisibleTimecodeDisplays();
         } else {
             console.log(`✅ Timecode order verification complete - no corrections needed`);
         }
@@ -3653,6 +3718,40 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         } catch (error) {
             console.error(`❌ Error finding text span for line ${lineIndex}:`, error);
             return null;
+        }
+    }
+
+    // Update any visible timecode displays in the DOM after corrections
+    updateVisibleTimecodeDisplays() {
+        if (!this.currentLyrics || !this.currentLyrics.lines) {
+            return;
+        }
+
+        try {
+            // Find all visible timecode spans in the lyrics display
+            const lyricsContainer = document.getElementById('lyrics-container');
+            if (!lyricsContainer) {
+                console.warn('⚠️ Lyrics container not found for timecode display update');
+                return;
+            }
+
+            // Update all timecode spans
+            const timecodeSpans = lyricsContainer.querySelectorAll('[data-line-index]');
+            timecodeSpans.forEach(span => {
+                const lineIndex = parseInt(span.getAttribute('data-line-index'));
+                if (!isNaN(lineIndex) && this.currentLyrics.lines[lineIndex]) {
+                    const line = this.currentLyrics.lines[lineIndex];
+                    if (line.time >= 0) {
+                        // Check if this is a timecode span (has timecode-like content)
+                        if (span.textContent && span.textContent.match(/^\s*\[.*\]\s*$/)) {
+                            span.textContent = this.formatTimeDisplay(line.time);
+                            console.log(`🔄 Updated visible timecode display for line ${lineIndex + 1}: ${this.formatTimeDisplay(line.time)}`);
+                        }
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('❌ Error updating visible timecode displays:', error);
         }
     }
 }
