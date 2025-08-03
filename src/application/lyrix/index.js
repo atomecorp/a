@@ -1680,16 +1680,8 @@ function showSongLibrary() {
 
     const songs = lyricsLibrary.getAllSongs();
     
-    if (songs.length === 0) {
-        Modal({
-            title: '📚 Library Empty',
-            content: '<p>No songs in library. Create a new song first.</p>',
-            buttons: [{ text: 'OK' }],
-            size: 'small'
-        });
-        return;
-    }
-
+    // Always show the song library, even if empty, so users can create or import songs
+    
     // Create custom modal with export/import buttons
     const modalContainer = UIManager.createEnhancedModalOverlay();
     const modal = UIManager.createEnhancedModalContainer({
@@ -2119,6 +2111,40 @@ function showSongLibrary() {
 
     function updateSongList() {
         listContainer.innerHTML = '';
+        
+        // Check if there are no songs to display
+        if (filteredItems.length === 0) {
+            const emptyMessage = $('div', {
+                css: {
+                    textAlign: 'center',
+                    padding: '40px 20px',
+                    color: '#666',
+                    fontSize: '16px'
+                }
+            });
+            
+            const emptyIcon = $('div', {
+                text: '🎵',
+                css: {
+                    fontSize: '48px',
+                    marginBottom: '15px'
+                }
+            });
+            
+            const emptyText = $('div', {
+                text: songs.length === 0 ? 
+                    'No songs in your library yet.\nUse the buttons above to create a new song or import existing ones.' : 
+                    'No songs match your search.',
+                css: {
+                    lineHeight: '1.6',
+                    whiteSpace: 'pre-line'
+                }
+            });
+            
+            emptyMessage.append(emptyIcon, emptyText);
+            listContainer.appendChild(emptyMessage);
+            return;
+        }
         
         filteredItems.forEach((item, index) => {
             const itemDiv = UIManager.createListItem({});
