@@ -46,3 +46,7 @@ src/assets/audios/Alive.m4a
 src/assets/audios/After The War.m4a
 src/assets/audios/Change the world.m4a
 .DS_Store
+src-tauri/Cargo.lock
+src-tauri/Cargo.lock
+src-tauri/gen/schemas/acl-manifests.json
+src-tauri/gen/schemas/desktop-schema.json

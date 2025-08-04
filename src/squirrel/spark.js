@@ -14,6 +14,7 @@ import Table from './components/table_builder.js';
 import Matrix from './components/matrix_builder.js';
 import List from './components/List_builder.js';
 import Menu from './components/menu_builder.js';
+import Console from './components/console_builder.js';
 import Unit, { 
   selectUnits, 
   getSelectedUnits, 
@@ -48,6 +49,7 @@ window.Table = Table;
 window.Matrix = Matrix;
 window.List = List;
 window.Menu = Menu;
+window.Console = Console;
 window.Unit = Unit;
 window.Draggable = Draggable;
 window.makeDraggable = makeDraggable;
@@ -66,6 +68,7 @@ window.Squirrel.Table = Table;
 window.Squirrel.Matrix = Matrix;
 window.Squirrel.List = List;
 window.Squirrel.Menu = Menu;
+window.Squirrel.Console = Console;
 window.Squirrel.Unit = Unit;
 window.Squirrel.Draggable = Draggable;
 window.Squirrel.makeDraggable = makeDraggable;
