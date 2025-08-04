@@ -14,7 +14,7 @@
 
 // import('./examples/lists.js');
 
-// import('./examples/ws.js');
+// import('./examples/wavesurfer.js');
 
 // import('./examples/design_slider.js');
 
@@ -32,8 +32,10 @@
 // import('./lyrix/lyrixProto.js');
 // import('./lyrix/index.js');
 
-import('./examples/console.js');
-// import('./lyrix/index.js');
+// import('./examples/console.js');
+import('./examples/libraries_test.js');
+// import('./examples/audio.js');
+
 // import('./test/slice.js');
 
 // const mySpan = $('span', {

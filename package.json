@@ -63,7 +63,10 @@
     "check:syntax": "node check-syntax.mjs",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "update:libs": "cd scripts_utils && ./get_latest_libs.sh",
+    "update:libs:basic": "cd scripts_utils && ./update_libraries.sh",
+    "update:libs:stable": "cd scripts_utils && ./update_libraries_stable.sh"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
