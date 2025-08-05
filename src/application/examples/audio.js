@@ -444,12 +444,134 @@ function createAudioDemo() {
     }
   });
   
+  // Test 6: Sampler avec fichier audio
+  let sampler = null;
+  let samplerLoaded = false;
+  
+  const toneSamplerBtn = Button({
+    text: '🎸 Sampler',
+    parent: toneButtonsContainer,
+    onClick: async () => {
+      console.log('🎹 Test Tone.js - Sampler...');
+      status.textContent = '🎹 Tone.js: Chargement sampler...';
+      
+      try {
+        await Tone.start();
+        
+        if (!sampler) {
+          // Créer le sampler avec le fichier riff.m4a
+          console.log('🎸 Création du sampler avec riff.m4a...');
+          
+          sampler = new Tone.Sampler({
+            urls: {
+              "C4": "assets/audios/riff.m4a"
+            },
+            onload: () => {
+              console.log('✅ Sampler chargé !');
+              samplerLoaded = true;
+              status.textContent = '🎸 Sampler chargé ! Cliquez encore pour jouer.';
+              toneSamplerBtn.updateText('🎸 Jouer Riff');
+            },
+            onerror: (error) => {
+              console.error('❌ Erreur chargement sampler:', error);
+              status.textContent = '❌ Erreur chargement: ' + error;
+            }
+          }).toDestination();
+          
+          status.textContent = '🎸 Chargement du sampler en cours...';
+          
+        } else if (samplerLoaded) {
+          // Jouer le sample
+          console.log('🎸 Lecture du sample...');
+          status.textContent = '🎸 Lecture du riff...';
+          
+          // Jouer le sample à différentes hauteurs
+          const notes = ["C4", "D4", "E4", "F4"];
+          let time = Tone.now();
+          
+          notes.forEach((note, i) => {
+            sampler.triggerAttackRelease(note, "4n", time + i * 0.5);
+          });
+          
+          status.textContent = '🎸 Riff joué à différentes hauteurs !';
+          
+        } else {
+          status.textContent = '⏳ Sampler en cours de chargement...';
+        }
+        
+      } catch (error) {
+        console.error('❌ Erreur Sampler Tone.js:', error);
+        status.textContent = '❌ Erreur Sampler: ' + error.message;
+      }
+    },
+    css: {
+      padding: '10px 15px',
+      backgroundColor: '#d35400',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
+  // Test 7: Sampler avancé avec patterns
+  const toneSamplerPatternBtn = Button({
+    text: '🎼 Pattern Riff',
+    parent: toneButtonsContainer,
+    onClick: async () => {
+      console.log('🎹 Test Tone.js - Pattern Sampler...');
+      status.textContent = '🎹 Tone.js: Pattern de riff...';
+      
+      try {
+        await Tone.start();
+        
+        if (!sampler || !samplerLoaded) {
+          status.textContent = '⚠️ Chargez d\'abord le sampler !';
+          return;
+        }
+        
+        // Créer un pattern rythmique avec le riff
+        const pattern = new Tone.Pattern((time, note) => {
+          sampler.triggerAttackRelease(note, "8n", time);
+          console.log('🎸 Note jouée:', note, 'à', time);
+        }, ["C4", "C4", "E4", "C4", "G4", "C4"], "up");
+        
+        pattern.start(0);
+        Tone.Transport.bpm.value = 120;
+        Tone.Transport.start();
+        
+        status.textContent = '🎼 Pattern de riff démarré !';
+        
+        // Arrêter après 8 secondes
+        setTimeout(() => {
+          Tone.Transport.stop();
+          pattern.dispose();
+          status.textContent = '🎼 Pattern de riff terminé';
+        }, 8000);
+        
+      } catch (error) {
+        console.error('❌ Erreur Pattern Sampler:', error);
+        status.textContent = '❌ Erreur Pattern: ' + error.message;
+      }
+    },
+    css: {
+      padding: '10px 15px',
+      backgroundColor: '#8e44ad',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
   console.log('✅ Test buttons créés:');
   console.log('- testBtn1 (onClick création):', testBtn1);
   console.log('- testBtn2 (onClick après):', testBtn2);
   console.log('- testBtn3 (onClick création):', testBtn3);
   console.log('- audioTestBtn (audio test):', audioTestBtn);
-  console.log('- Tone.js tests:', { toneSimpleBtn, toneSynthBtn, toneEffectsBtn, toneSequenceBtn, toneDrumBtn });
+  console.log('- Tone.js tests:', { toneSimpleBtn, toneSynthBtn, toneEffectsBtn, toneSequenceBtn, toneDrumBtn, toneSamplerBtn, toneSamplerPatternBtn });
   
   // === TEST DE VÉRIFICATION DE LA CORRECTION ===
   console.log('🔧 TEST: Vérification des propriétés dynamiques...');
