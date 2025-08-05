@@ -36,8 +36,8 @@
 // import('./lyrix/index.js');
 
 // import('./examples/console.js');
-import('./examples/leaflet.js');
-// import('./examples/audio.js');
+// import('./examples/leaflet.js');
+import('./examples/audio.js');
 
 // import('./test/slice.js');
 

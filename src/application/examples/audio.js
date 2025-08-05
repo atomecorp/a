@@ -138,11 +138,11 @@ function createAudioDemo() {
   
   // TEST 4: Test audio avec onClick à la création
   const audioTestBtn = Button({
-    text: '🎵 Test Audio Squirrel',
+    text: '🎵 Test Audio Web API',
     parent: controlsContainer,
     onClick: async () => {
       console.log('🎵 Test audio avec Squirrel Button...');
-      status.textContent = '🎵 Test audio Squirrel en cours...';
+      status.textContent = '🎵 Test audio Web API en cours...';
       
       try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -190,11 +190,266 @@ function createAudioDemo() {
     }
   });
   
+  // TEST 5: Tests avancés Tone.js
+  const toneTestsContainer = document.createElement('div');
+  toneTestsContainer.style.cssText = `
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #2c3e50;
+    border-radius: 10px;
+    width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+  `;
+  view.appendChild(toneTestsContainer);
+  
+  const toneTitle = document.createElement('h2');
+  toneTitle.textContent = '🎹 Tests Tone.js Avancés';
+  toneTitle.style.cssText = `
+    color: #f39c12;
+    text-align: center;
+    margin-bottom: 20px;
+  `;
+  toneTestsContainer.appendChild(toneTitle);
+  
+  const toneButtonsContainer = document.createElement('div');
+  toneButtonsContainer.style.cssText = `
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  `;
+  toneTestsContainer.appendChild(toneButtonsContainer);
+  
+  // Test 1: Son simple Tone.js
+  const toneSimpleBtn = Button({
+    text: '🔈 Note Simple',
+    parent: toneButtonsContainer,
+    onClick: async () => {
+      console.log('🎹 Test Tone.js - Note simple...');
+      status.textContent = '🎹 Tone.js: Note simple en cours...';
+      
+      try {
+        // Vérifier si Tone est disponible
+        if (typeof Tone === 'undefined') {
+          throw new Error('Tone.js non disponible');
+        }
+        
+        await Tone.start();
+        console.log('✅ Tone.js démarré');
+        
+        // Créer un oscillateur simple
+        const synth = new Tone.Oscillator(440, "sine").toDestination();
+        synth.start();
+        synth.stop("+1");
+        
+        status.textContent = '🎹 Note 440Hz jouée avec Tone.js !';
+        
+      } catch (error) {
+        console.error('❌ Erreur Tone.js:', error);
+        status.textContent = '❌ Erreur Tone.js: ' + error.message;
+      }
+    },
+    css: {
+      padding: '10px 15px',
+      backgroundColor: '#e67e22',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
+  // Test 2: Synthétiseur Tone.js
+  const toneSynthBtn = Button({
+    text: '🎹 Synthé',
+    parent: toneButtonsContainer,
+    onClick: async () => {
+      console.log('🎹 Test Tone.js - Synthétiseur...');
+      status.textContent = '🎹 Tone.js: Synthétiseur en cours...';
+      
+      try {
+        await Tone.start();
+        
+        // Créer un synthétiseur
+        const synth = new Tone.Synth().toDestination();
+        
+        // Jouer une mélodie
+        const notes = ["C4", "E4", "G4", "B4"];
+        let time = Tone.now();
+        
+        notes.forEach((note, i) => {
+          synth.triggerAttackRelease(note, "8n", time + i * 0.3);
+        });
+        
+        status.textContent = '🎹 Mélodie jouée avec Tone.js !';
+        
+      } catch (error) {
+        console.error('❌ Erreur Synthé Tone.js:', error);
+        status.textContent = '❌ Erreur Synthé: ' + error.message;
+      }
+    },
+    css: {
+      padding: '10px 15px',
+      backgroundColor: '#8e44ad',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
+  // Test 3: Effets Tone.js
+  const toneEffectsBtn = Button({
+    text: '✨ Effets',
+    parent: toneButtonsContainer,
+    onClick: async () => {
+      console.log('🎹 Test Tone.js - Effets...');
+      status.textContent = '🎹 Tone.js: Effets en cours...';
+      
+      try {
+        await Tone.start();
+        
+        // Créer une chaîne d'effets
+        const reverb = new Tone.Reverb(4).toDestination();
+        const distortion = new Tone.Distortion(0.8).connect(reverb);
+        const synth = new Tone.Synth().connect(distortion);
+        
+        // Jouer avec effets
+        synth.triggerAttackRelease("A4", "2n");
+        
+        status.textContent = '🎹 Note avec effets (reverb + distortion) !';
+        
+      } catch (error) {
+        console.error('❌ Erreur Effets Tone.js:', error);
+        status.textContent = '❌ Erreur Effets: ' + error.message;
+      }
+    },
+    css: {
+      padding: '10px 15px',
+      backgroundColor: '#16a085',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
+  // Test 4: Séquenceur Tone.js
+  let sequenceActive = false;
+  let sequence = null;
+  
+  const toneSequenceBtn = Button({
+    text: '🔄 Séquenceur',
+    parent: toneButtonsContainer,
+    onClick: async () => {
+      console.log('🎹 Test Tone.js - Séquenceur...');
+      
+      try {
+        await Tone.start();
+        
+        if (!sequenceActive) {
+          // Démarrer le séquenceur
+          const synth = new Tone.Synth().toDestination();
+          
+          sequence = new Tone.Sequence((time, note) => {
+            synth.triggerAttackRelease(note, "16n", time);
+          }, ["C4", "E4", "G4", "C5"], "8n").start(0);
+          
+          Tone.Transport.start();
+          sequenceActive = true;
+          toneSequenceBtn.text = '⏹️ Stop Séq';
+          status.textContent = '🎹 Séquenceur démarré !';
+          
+        } else {
+          // Arrêter le séquenceur
+          Tone.Transport.stop();
+          if (sequence) {
+            sequence.dispose();
+          }
+          sequenceActive = false;
+          toneSequenceBtn.text = '🔄 Séquenceur';
+          status.textContent = '🎹 Séquenceur arrêté';
+        }
+        
+      } catch (error) {
+        console.error('❌ Erreur Séquenceur Tone.js:', error);
+        status.textContent = '❌ Erreur Séquenceur: ' + error.message;
+      }
+    },
+    css: {
+      padding: '10px 15px',
+      backgroundColor: '#c0392b',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
+  // Test 5: Drum Machine
+  const toneDrumBtn = Button({
+    text: '🥁 Drums',
+    parent: toneButtonsContainer,
+    onClick: async () => {
+      console.log('🎹 Test Tone.js - Drum Machine...');
+      status.textContent = '🎹 Tone.js: Drum Machine...';
+      
+      try {
+        await Tone.start();
+        
+        // Créer des sons de batterie
+        const kick = new Tone.MembraneSynth().toDestination();
+        const snare = new Tone.NoiseSynth().toDestination();
+        const hihat = new Tone.MetalSynth().toDestination();
+        
+        // Pattern de batterie simple
+        const now = Tone.now();
+        
+        // Kick (grosse caisse)
+        kick.triggerAttackRelease("C2", "8n", now);
+        kick.triggerAttackRelease("C2", "8n", now + 0.5);
+        kick.triggerAttackRelease("C2", "8n", now + 1);
+        
+        // Snare (caisse claire)
+        snare.triggerAttackRelease("16n", now + 0.25);
+        snare.triggerAttackRelease("16n", now + 0.75);
+        
+        // Hi-hat
+        hihat.triggerAttackRelease("32n", now + 0.125);
+        hihat.triggerAttackRelease("32n", now + 0.375);
+        hihat.triggerAttackRelease("32n", now + 0.625);
+        hihat.triggerAttackRelease("32n", now + 0.875);
+        
+        status.textContent = '🥁 Pattern de batterie joué !';
+        
+      } catch (error) {
+        console.error('❌ Erreur Drums Tone.js:', error);
+        status.textContent = '❌ Erreur Drums: ' + error.message;
+      }
+    },
+    css: {
+      padding: '10px 15px',
+      backgroundColor: '#2c3e50',
+      color: 'white',
+      border: 'none',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      fontSize: '14px'
+    }
+  });
+  
   console.log('✅ Test buttons créés:');
   console.log('- testBtn1 (onClick création):', testBtn1);
   console.log('- testBtn2 (onClick après):', testBtn2);
   console.log('- testBtn3 (onClick création):', testBtn3);
   console.log('- audioTestBtn (audio test):', audioTestBtn);
+  console.log('- Tone.js tests:', { toneSimpleBtn, toneSynthBtn, toneEffectsBtn, toneSequenceBtn, toneDrumBtn });
   
   // === TEST DE VÉRIFICATION DE LA CORRECTION ===
   console.log('🔧 TEST: Vérification des propriétés dynamiques...');
