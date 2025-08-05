@@ -653,10 +653,10 @@ const createButton = (config = {}) => {
       button.$({ css: finalStyles });
       
       // Exécuter l'action appropriée
-      if (currentToggleState && onAction) {
-        onAction(currentToggleState, button);
-      } else if (!currentToggleState && offAction) {
-        offAction(currentToggleState, button);
+      if (currentToggleState && button._handlers.onAction) {
+        button._handlers.onAction(currentToggleState, button);
+      } else if (!currentToggleState && button._handlers.offAction) {
+        button._handlers.offAction(currentToggleState, button);
       }
       
       // Callback de changement d'état
@@ -702,8 +702,8 @@ const createButton = (config = {}) => {
       
     } else {
       // Mode bouton classique
-      if (onClick) {
-        onClick(event, button);
+      if (button._handlers.onClick) {
+        button._handlers.onClick(event, button);
       }
     }
   };
@@ -743,6 +743,14 @@ const createButton = (config = {}) => {
 
   // Stocker la config pour référence
   button._config = processedConfig;
+
+  // === CORRECTION: INITIALISER LES HANDLERS DANS L'OBJET BOUTON ===
+  // Stocker les handlers dans l'objet bouton pour permettre leur modification
+  button._handlers = {
+    onClick: onClick,
+    onAction: onAction,
+    offAction: offAction
+  };
 
   // Appliquer les effets du template si disponible
   if (templateName && buttonTemplates[templateName]) {
@@ -986,6 +994,47 @@ const createButton = (config = {}) => {
     button.getCurrentStateIndex = () => currentStateIndex;
     button.getStates = () => states;
   }
+
+  // === CORRECTION: EXPOSER LES HANDLERS COMME PROPRIÉTÉS MODIFIABLES ===
+
+  // Exposer onClick comme propriété getter/setter
+  Object.defineProperty(button, 'onClick', {
+    get() {
+      return this._handlers.onClick;
+    },
+    set(newHandler) {
+      this._handlers.onClick = newHandler;
+      console.log('✅ onClick handler mis à jour');
+    },
+    enumerable: true,
+    configurable: true
+  });
+
+  // Exposer onAction comme propriété getter/setter
+  Object.defineProperty(button, 'onAction', {
+    get() {
+      return this._handlers.onAction;
+    },
+    set(newHandler) {
+      this._handlers.onAction = newHandler;
+      console.log('✅ onAction handler mis à jour');
+    },
+    enumerable: true,
+    configurable: true
+  });
+
+  // Exposer offAction comme propriété getter/setter
+  Object.defineProperty(button, 'offAction', {
+    get() {
+      return this._handlers.offAction;
+    },
+    set(newHandler) {
+      this._handlers.offAction = newHandler;
+      console.log('✅ offAction handler mis à jour');
+    },
+    enumerable: true,
+    configurable: true
+  });
 
   return button;
 };

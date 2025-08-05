@@ -28,13 +28,16 @@
 // import('./vie/vie.js');
 // import('./examples/svg.js');
 // import('./examples/anim_svg.js');
+
+// Démo Leaflet
+// import('./examples/leaflet.js');
 // import('./lyrix/lyrix.js');
 // import('./lyrix/lyrixProto.js');
 // import('./lyrix/index.js');
 
 // import('./examples/console.js');
-import('./examples/libraries_test.js');
-// import('./examples/audio.js');
+// import('./examples/leaflet.js');
+import('./examples/audio.js');
 
 // import('./test/slice.js');
 
