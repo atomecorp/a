@@ -1,3 +1,30 @@
+
+        // Console redefinition
+        window.console.log = (function(oldLog) {
+            return function(message) {
+                oldLog(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("LOG: " + message);
+                } catch(e) {
+                    oldLog();
+                }
+            }
+        })(window.console.log);
+
+        window.console.error = (function(oldErr) {
+            return function(message) {
+                oldErr(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("ERROR: " + message);
+                } catch(e) {
+                    oldErr();
+                }
+            }
+        })(window.console.error);
+
+
+
+
 // Test de diagnostic Squirrel - Passer onAction à la création
 console.log('🎵 Test diagnostic Squirrel');
 
