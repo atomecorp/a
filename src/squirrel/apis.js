@@ -71,10 +71,16 @@ window.grab = (function () {
 })();
 
 // Add extensions to native JavaScript objects (similar to Ruby)
-Object.prototype.define_method = function (name, fn) {
-    this[name] = fn;
-    return this;
-};
+// Use non-enumerable properties to avoid contaminating for...in loops
+Object.defineProperty(Object.prototype, 'define_method', {
+    value: function (name, fn) {
+        this[name] = fn;
+        return this;
+    },
+    enumerable: false,    // Crucial: ne pas apparaître dans for...in
+    writable: false,
+    configurable: false
+});
 
 // Add methods to Array to mimic Ruby behavior
 Array.prototype.each = function (callback) {
@@ -82,10 +88,16 @@ Array.prototype.each = function (callback) {
     return this;
 };
 
-// Extend the Object class to allow inspection
-Object.prototype.inspect = function () {
-    return AJS.inspect(this);
-};
+// Extend the Object class to allow inspection  
+// Use non-enumerable property to avoid contaminating for...in loops
+Object.defineProperty(Object.prototype, 'inspect', {
+    value: function () {
+        return AJS.inspect(this);
+    },
+    enumerable: false,    // Crucial: ne pas apparaître dans for...in
+    writable: false,
+    configurable: false
+});
 
 // Add a wait function for delays (promisified version is more modern)
 const wait = (delay, callback) => {
