@@ -33,13 +33,13 @@
 // import('./examples/leaflet.js');
 
 
-import('./lyrix/index.js');
+// import('./lyrix/index.js');
 
 // import('./examples/console.js');
 // import('./examples/leaflet.js');
 // import('./examples/audio.js');
 // import('./examples/auv3_tests.js');
-// import('./examples/audio_swift.js');
+import('./examples/audio_swift.js');
 // import('./test/slice.js');
 
 // const mySpan = $('span', {
