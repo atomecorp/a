@@ -452,7 +452,7 @@ class SimpleAudioGenerator {
     }
 
     // Play a note by sending audio to Swift
-    playNote(noteName, frequency, duration = 5.0) {
+    async playNote(noteName, frequency, duration = 5.0) {
         console.log(`Playing note: ${noteName} ${frequency}Hz for ${duration}s`);
         
         this.activeNotes.add(noteName);
@@ -462,8 +462,8 @@ class SimpleAudioGenerator {
         const isAUv3Mode = window.forceAUv3Mode || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge);
         
         if (!isAUv3Mode) {
-            // Mode local - jouer le son localement
-            this.playLocalAudio(frequency, duration);
+            // Mode local - jouer le son localement avec activation AudioContext
+            await this.playLocalAudio(frequency, duration);
         }
 
         // Always generate and send audio buffer to Swift (even if no bridge detected)
@@ -480,8 +480,19 @@ class SimpleAudioGenerator {
     }
 
     // Play audio locally for testing (when no Swift bridge)
-    playLocalAudio(frequency, duration = 2.0) {
+    async playLocalAudio(frequency, duration = 2.0) {
         if (!this.audioContext) return;
+
+        // CORRECTION: Activer l'AudioContext si suspendu
+        if (this.audioContext.state === 'suspended') {
+            try {
+                await this.audioContext.resume();
+                console.log('🔊 AudioContext resumed for local playback');
+            } catch (error) {
+                console.error('Failed to resume AudioContext:', error);
+                return;
+            }
+        }
 
         // Create oscillator for local playback
         const oscillator = this.audioContext.createOscillator();
@@ -515,7 +526,7 @@ class SimpleAudioGenerator {
     }
 
     // Play a chord by sending multiple frequencies
-    playChord(frequencies, duration = 5.0) {
+    async playChord(frequencies, duration = 5.0) {
         console.log(`Playing chord: ${frequencies.join(', ')}Hz`);
         
         this.chordActive = true;
@@ -524,8 +535,10 @@ class SimpleAudioGenerator {
         const isAUv3Mode = window.forceAUv3Mode || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge);
         
         if (!isAUv3Mode) {
-            // Mode local - jouer l'accord localement
-            frequencies.forEach(freq => this.playLocalAudio(freq, duration));
+            // Mode local - jouer l'accord localement avec activation AudioContext
+            for (const freq of frequencies) {
+                await this.playLocalAudio(freq, duration);
+            }
         }
 
         this.sendToSwift({

@@ -89,7 +89,24 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             WebViewManager.audioController?.toggleMute()
             sendMuteStateToJS()
             
-        
+        case "audioNote":
+            if let data = data as? [String: Any],
+               let command = data["command"] as? String {
+                handleAudioCommand(command: command, data: data)
+            }
+            
+        case "audioBuffer":
+            if let data = data as? [String: Any] {
+                handleAudioBuffer(data: data)
+            }
+            
+        case "audioChord":
+            if let data = data as? [String: Any] {
+                handleAudioChord(data: data)
+            }
+            
+        case "getSampleRate":
+            sendSampleRateToJS()
             
         case "performCalculation":
             if let numbers = data as? [Int] {
@@ -99,6 +116,58 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         default:
             print("Message non géré - Type: \(type), Data: \(data)")
         }
+    }
+    
+    // MARK: - Audio Command Handlers
+    
+    private func handleAudioCommand(command: String, data: [String: Any]) {
+        switch command {
+        case "playNote":
+            if let frequency = data["frequency"] as? Double,
+               let note = data["note"] as? String {
+                print("🎵 JS->Swift: playNote \(note) at \(frequency)Hz (routed to AUv3)")
+            }
+            
+        case "stopNote":
+            if let note = data["note"] as? String {
+                print("🎵 JS->Swift: stopNote \(note) (routed to AUv3)")
+            }
+            
+        case "stopAll":
+            print("🎵 JS->Swift: stopAll (routed to AUv3)")
+            
+        default:
+            print("🎵 JS->Swift: Unknown audio command: \(command)")
+        }
+    }
+    
+    private func handleAudioBuffer(data: [String: Any]) {
+        if let frequency = data["frequency"] as? Double {
+            print("🎵 JS->Swift: audioBuffer at \(frequency)Hz (routed to AUv3)")
+        }
+    }
+    
+    private func handleAudioChord(data: [String: Any]) {
+        if let command = data["command"] as? String {
+            switch command {
+            case "playChord":
+                if let frequencies = data["frequencies"] as? [Double] {
+                    print("🎼 JS->Swift: playChord \(frequencies) (routed to AUv3)")
+                }
+                
+            case "stopChord":
+                print("🎼 JS->Swift: stopChord (routed to AUv3)")
+                
+            default:
+                break
+            }
+        }
+    }
+    
+    private func sendSampleRateToJS() {
+        // Send sample rate back to JavaScript
+        let jsCode = "if (typeof window.updateSampleRate === 'function') { window.updateSampleRate(44100); }"
+        Self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
     }
     
     // MARK: - MIDI Communication
