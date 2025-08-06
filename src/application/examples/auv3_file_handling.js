@@ -334,8 +334,10 @@ function creerInterfaceFichiers() {
     // Ajouter à la page
     document.body.appendChild(container);
     
-    // Charger la liste initiale
-    listerFichiers('Projects', filesList);
+    // Charger la liste initiale (créer le dossier s'il n'existe pas)
+    listerFichiers('Projects', filesList).catch(() => {
+        console.log('📁 Dossier Projects pas encore créé - sera créé à la première sauvegarde');
+    });
 }
 
 /**
@@ -385,7 +387,12 @@ async function listerFichiers(folder, container) {
                     }
                     resolve(result.data.files);
                 } else {
-                    container.innerHTML = '<p style="color: red;">Erreur: ' + result.error + '</p>';
+                    // Si le dossier n'existe pas encore
+                    if (result.error && result.error.includes("n'existe pas")) {
+                        container.innerHTML = '<p style="color: #666; font-style: italic;">📁 Dossier pas encore créé - sauvegardez un projet pour le créer</p>';
+                    } else {
+                        container.innerHTML = '<p style="color: red;">Erreur: ' + result.error + '</p>';
+                    }
                     reject(new Error(result.error));
                 }
             });
