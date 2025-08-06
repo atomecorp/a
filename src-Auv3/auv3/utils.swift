@@ -50,6 +50,13 @@ public class auv3Utils: AUAudioUnit {
     // ULTRA OPTIMIZATION: Skip frame counter for even more aggressive throttling
     private var frameSkipCounter: Int = 0
     private let frameSkipAmount: Int = 16 // Skip 15 out of 16 frames for visualization
+    
+    // NOUVEAU: JavaScript Audio Injection
+    private var jsAudioBuffer: [Float] = []
+    private var jsAudioPlaybackIndex: Int = 0
+    private var jsAudioSampleRate: Double = 48000
+    private var jsAudioActive: Bool = false
+    private let jsAudioLock = NSLock() // Thread safety for JS audio injection
 
     // Custom AudioBufferList wrapper
     private struct AudioBufferListWrapper {
@@ -176,6 +183,9 @@ public class auv3Utils: AUAudioUnit {
                     strongSelf.lastVisualizationUpdate = currentTime
                 }
             }
+
+            // NOUVEAU: Mix JavaScript audio into the output
+            strongSelf.mixJavaScriptAudio(bufferList: bufferList, frameCount: frameCount)
 
             // Handle muting (lightweight operation)
             if strongSelf.isMuted {
@@ -357,6 +367,66 @@ public class auv3Utils: AUAudioUnit {
         // All MIDI processing moved to background thread to save CPU in audio thread
     }
 
+    // MARK: - JavaScript Audio Injection
+    
+    /// Inject JavaScript-generated audio into the AUv3 pipeline
+    public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
+        jsAudioLock.lock()
+        defer { jsAudioLock.unlock() }
+        
+        print("🎵 AUv3: Injecting JS audio - \(audioData.count) samples at \(sampleRate)Hz")
+        
+        // Store the JavaScript audio data
+        jsAudioBuffer = audioData
+        jsAudioPlaybackIndex = 0
+        jsAudioSampleRate = sampleRate
+        jsAudioActive = true
+        
+        print("🔊 AUv3: JS audio injection ready - \(audioData.count) samples")
+    }
+    
+    /// Stop JavaScript audio playback
+    public func stopJavaScriptAudio() {
+        jsAudioLock.lock()
+        defer { jsAudioLock.unlock() }
+        
+        jsAudioActive = false
+        jsAudioBuffer.removeAll()
+        jsAudioPlaybackIndex = 0
+        
+        print("⏹️ AUv3: JS audio stopped")
+    }
+    
+    /// Mix JavaScript audio into the output buffer (called from render thread)
+    private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount) {
+        guard jsAudioActive, !jsAudioBuffer.isEmpty, jsAudioLock.try() else { return }
+        defer { jsAudioLock.unlock() }
+        
+        for i in 0..<bufferList.numberOfBuffers {
+            let buffer = bufferList.buffer(at: i)
+            guard let outputData = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+            
+            let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
+            
+            // Mix JavaScript audio with current audio (additive mixing)
+            for frame in 0..<framesToProcess {
+                if jsAudioPlaybackIndex + frame < jsAudioBuffer.count {
+                    outputData[frame] += jsAudioBuffer[jsAudioPlaybackIndex + frame] * 0.5 // 50% mix level
+                }
+            }
+            
+            jsAudioPlaybackIndex += framesToProcess
+            
+            // Stop when we've played all the JavaScript audio
+            if jsAudioPlaybackIndex >= jsAudioBuffer.count {
+                jsAudioActive = false
+                jsAudioBuffer.removeAll()
+                jsAudioPlaybackIndex = 0
+                print("🎵 AUv3: JS audio playback completed")
+                break
+            }
+        }
+    }
 
     // MARK: - Audio Control Properties
     

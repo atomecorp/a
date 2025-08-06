@@ -25,5 +25,8 @@ public protocol AudioControllerProtocol: AnyObject {
     func playChord(frequencies: [Double], amplitude: Float)
     func stopChord()
     func stopAllAudio()
+    
+    // JavaScript audio injection
+    func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double)
 }
 

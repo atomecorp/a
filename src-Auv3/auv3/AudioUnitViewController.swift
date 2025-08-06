@@ -53,10 +53,11 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         audioUnit = try auv3Utils(componentDescription: componentDescription, options: [])
         
         if let au = audioUnit as? auv3Utils {
-            au.mute = true
-            _isMuted = true
+            au.mute = false  // CORRECTION: Démarrer NON muté pour entendre l'audio
+            _isMuted = false
             au.audioDataDelegate = self
             au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
+            print("🔊 AUv3 Audio Unit démarré NON MUTÉ")
         }
 
         return audioUnit!
@@ -199,6 +200,20 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         midiController?.sendControlChange(controller: 123, value: 0) // All Notes Off
         midiController?.sendControlChange(controller: 120, value: 0) // All Sound Off
         print("🎹 MIDI PANIC (All Notes + Sound OFF) -> Host")
+    }
+    
+    // MARK: - JavaScript Audio Injection
+    
+    public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
+        print("🎵 AUv3: Received JS audio - \(audioData.count) samples at \(sampleRate)Hz for \(duration)s")
+        
+        // Route JavaScript audio to our AUv3 for direct playback
+        if let au = audioUnit as? auv3Utils {
+            au.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)
+            print("🔊 AUv3: JavaScript audio injected into audio pipeline")
+        } else {
+            print("❌ AUv3: Failed to inject JS audio - no audio unit available")
+        }
     }
     
     // Helper function to convert frequency to MIDI note number

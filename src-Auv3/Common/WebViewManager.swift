@@ -153,9 +153,23 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     private func handleAudioBuffer(data: [String: Any]) {
-        if let frequency = data["frequency"] as? Double {
-            print("🎵 JS->Swift: audioBuffer at \(frequency)Hz (routed to AUv3)")
+        guard let frequency = data["frequency"] as? Double,
+              let sampleRate = data["sampleRate"] as? Double,
+              let duration = data["duration"] as? Double,
+              let audioDataArray = data["audioData"] as? [Double] else {
+            print("❌ Invalid audioBuffer data from JavaScript")
+            return
         }
+        
+        print("🎵 JS->Swift: audioBuffer at \(frequency)Hz (routing to AUv3 audio pipeline)")
+        
+        // Convert [Double] to [Float] for audio processing
+        let audioData = audioDataArray.map { Float($0) }
+        
+        // Route JavaScript audio directly to AUv3 audio pipeline
+        WebViewManager.audioController?.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)
+        
+        print("🔊 JS->Swift: Audio injected - \(audioData.count) samples at \(sampleRate)Hz")
     }
     
     private func handleAudioChord(data: [String: Any]) {
