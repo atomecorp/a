@@ -357,22 +357,7 @@ public class auv3Utils: AUAudioUnit {
         // All MIDI processing moved to background thread to save CPU in audio thread
     }
 
-    // MARK: - Test Tone Control
-    
-    public func startTestTone(frequency: Double = 440.0) {
-        isTestToneActive = true
-        testToneFrequency = frequency
-        testTonePhase = 0.0
-    }
-    
-    public func stopTestTone() {
-        isTestToneActive = false
-    }
-    
-    public func updateTestToneFrequency(_ frequency: Double) {
-        testToneFrequency = frequency
-    }
-    
+
     // MARK: - Audio Control Properties
     
     public var mute: Bool {

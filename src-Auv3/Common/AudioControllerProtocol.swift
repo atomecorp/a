@@ -19,28 +19,5 @@ public protocol AudioControllerProtocol: AnyObject {
     func toggleMute()
     func setMute(_ muted: Bool)
     
-    // Audio test methods
-    func startTestTone(frequency: Double)
-    func stopTestTone()
-    func setTestFrequency(_ frequency: Double)
-    func handleTestToneState(isPlaying: Bool, frequency: Double)
 }
 
-// Default implementations
-public extension AudioControllerProtocol {
-    // Default values for test properties
-    var isTestActive: Bool { return false }
-    var currentTestFrequency: Double { return 440.0 }
-    
-    // Default implementations for test methods that can be overridden
-    func startTestTone(frequency: Double) {}
-    func stopTestTone() {}
-    func setTestFrequency(_ frequency: Double) {}
-    func handleTestToneState(isPlaying: Bool, frequency: Double) {
-        if isPlaying {
-            startTestTone(frequency: frequency)
-        } else {
-            stopTestTone()
-        }
-    }
-}

@@ -79,53 +79,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             print("Audio is now \(muted ? "muted" : "unmuted")")
         }
     }
-    
-    // MARK: - Test Tone Methods
-    
-    public func startTestTone(frequency: Double) {
-        if let au = audioUnit as? auv3Utils {
-            _isTestActive = true
-            _currentTestFrequency = frequency
-            au.startTestTone(frequency: frequency)
-            print("Test tone started at \(frequency) Hz")
-            
-            // AJOUT: Assurer que le son n'est pas coupé quand le test démarre
-            if _isMuted {
-                setMute(false)
-            }
-        }
-    }
-    
-    public func stopTestTone() {
-        if let au = audioUnit as? auv3Utils {
-            _isTestActive = false
-            au.stopTestTone()
-            print("Test tone stopped")
-        }
-    }
-    
-    public func setTestFrequency(_ frequency: Double) {
-        _currentTestFrequency = frequency
-        if _isTestActive {
-            if let au = audioUnit as? auv3Utils {
-                au.updateTestToneFrequency(frequency)
-            }
-        }
-    }
-    
-    public func handleTestToneState(isPlaying: Bool, frequency: Double) {
-        // MODIFICATION: Amélioration de la gestion des états
-        if isPlaying != _isTestActive {
-            if isPlaying {
-                startTestTone(frequency: frequency)
-            } else {
-                stopTestTone()
-            }
-        } else if isPlaying && frequency != _currentTestFrequency {
-            setTestFrequency(frequency)
-        }
-    }
-    
+  
+ 
     // MARK: - Audio Data Delegate
     
     public func didReceiveAudioData(_ data: [Float], timestamp: Double) {

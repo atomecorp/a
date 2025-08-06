@@ -89,19 +89,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             WebViewManager.audioController?.toggleMute()
             sendMuteStateToJS()
             
-        case "audioTest":
-            if let testData = data as? [String: Any],
-               let isPlaying = testData["isPlaying"] as? Bool,
-               let frequency = testData["frequency"] as? Double {
-                WebViewManager.audioController?.handleTestToneState(isPlaying: isPlaying, frequency: frequency)
-                sendTestStateToJS() // AJOUT: Envoi de l'état mis à jour
-            }
-            
-        case "updateTestFrequency":
-            if let frequency = data as? Double {
-                WebViewManager.audioController?.setTestFrequency(frequency)
-                sendTestStateToJS() // AJOUT: Envoi de l'état mis à jour
-            }
+        
             
         case "performCalculation":
             if let numbers = data as? [Int] {
