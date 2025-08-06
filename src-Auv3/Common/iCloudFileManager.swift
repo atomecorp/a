@@ -32,11 +32,28 @@ public class iCloudFileManager: ObservableObject {
     
     // MARK: - Directory URLs
     private func getLocalDocumentsDirectory() -> URL {
-        // Pour Files app, utiliser le dossier Documents public
-        let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        let documentsURL = paths[0]
-        print("📁 Documents directory: \(documentsURL.path)")
-        return documentsURL
+        // Déterminer si on est dans l'extension AUv3 ou l'app principale
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+        let isAUv3Extension = bundleIdentifier.contains(".appex")
+        
+        if isAUv3Extension {
+            // Pour l'extension AUv3 : utiliser App Groups pour partager avec l'app
+            if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") {
+                let documentsURL = groupURL.appendingPathComponent("Documents")
+                print("📁 [AUv3] App Groups Documents directory: \(documentsURL.path)")
+                return documentsURL
+            } else {
+                print("⚠️ [AUv3] App Groups non disponible, fallback vers Documents privé")
+                let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+                return paths[0]
+            }
+        } else {
+            // Pour l'app principale : utiliser Documents standard (visible dans Files)
+            let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+            let documentsURL = paths[0]
+            print("📁 [App] Standard Documents directory: \(documentsURL.path)")
+            return documentsURL
+        }
     }
     
     private func getiCloudDocumentsDirectory() -> URL? {
@@ -96,10 +113,18 @@ public class iCloudFileManager: ObservableObject {
         print("=== INITIALIZING LOCAL FILE STRUCTURE ===")
         
         let documentsURL = getLocalDocumentsDirectory()
-        // Ne pas créer de sous-dossier AtomeFiles, utiliser directement Documents
-        let atomeFilesURL = documentsURL
         
-        createDirectoryStructure(at: atomeFilesURL, isLocal: true)
+        // Créer le dossier Documents s'il n'existe pas (pour App Groups)
+        do {
+            try FileManager.default.createDirectory(at: documentsURL, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            print("⚠️ Error creating Documents directory: \(error)")
+        }
+        
+        // Utiliser directement Documents - PAS de sous-dossier AtomeFiles
+        let baseURL = documentsURL
+        
+        createDirectoryStructure(at: baseURL, isLocal: true)
     }
     
     private func initializeiCloudFileStructure() {
@@ -111,9 +136,10 @@ public class iCloudFileManager: ObservableObject {
             return
         }
         
-        let atomeFilesURL = iCloudURL.appendingPathComponent("AtomeFiles", isDirectory: true)
+        // Utiliser directement iCloud Documents - PAS de sous-dossier AtomeFiles
+        let baseURL = iCloudURL
         
-        createDirectoryStructure(at: atomeFilesURL, isLocal: false)
+        createDirectoryStructure(at: baseURL, isLocal: false)
     }
     
     private func createDirectoryStructure(at baseURL: URL, isLocal: Bool) {
@@ -122,15 +148,8 @@ public class iCloudFileManager: ObservableObject {
         do {
             let fileManager = FileManager.default
             
-            // Create main directory
-            if !fileManager.fileExists(atPath: baseURL.path) {
-                try fileManager.createDirectory(
-                    at: baseURL,
-                    withIntermediateDirectories: true,
-                    attributes: [FileAttributeKey.posixPermissions: 0o755]
-                )
-                print("📁 AtomeFiles directory created")
-            }
+            // Le dossier Documents existe déjà - ne pas créer AtomeFiles
+            // Juste créer les sous-dossiers directement dans Documents
             
             // For iCloud, start downloading if needed
             if !isLocal {
@@ -144,7 +163,7 @@ public class iCloudFileManager: ObservableObject {
             // Make directory visible in Files app
             makeDirectoryVisibleInFiles(baseURL)
             
-            // Create subdirectories
+            // Create subdirectories directement dans Documents
             let subdirectories = ["Projects", "Exports", "Recordings", "Templates"]
             for subdirectory in subdirectories {
                 let subdirectoryURL = baseURL.appendingPathComponent(subdirectory, isDirectory: true)
@@ -155,6 +174,7 @@ public class iCloudFileManager: ObservableObject {
                         attributes: [FileAttributeKey.posixPermissions: 0o755]
                     )
                     makeDirectoryVisibleInFiles(subdirectoryURL)
+                    print("📁 Created subdirectory: \(subdirectory)")
                     
                     if !isLocal {
                         try fileManager.startDownloadingUbiquitousItem(at: subdirectoryURL)
@@ -162,7 +182,7 @@ public class iCloudFileManager: ObservableObject {
                 }
             }
             
-            // Create welcome file
+            // Create welcome file directement dans Documents
             createWelcomeFile(at: baseURL, isLocal: isLocal)
             
             isInitialized = true
@@ -181,13 +201,12 @@ public class iCloudFileManager: ObservableObject {
         let welcomeContent = """
         Bienvenue dans Atome!
         
-        Ce dossier est accessible via l'app Fichiers de votre appareil.
-        Vous le trouverez sous "\(isLocal ? "Sur mon iPad/iPhone" : "iCloud Drive")" > "Atome".
+        Ce dossier contient vos fichiers Atome.
         
         Vos fichiers sont stockés \(storageType).
         
         Structure des dossiers:
-        - Projects: Stockez vos fichiers de projets
+        - Projects: Stockez vos fichiers de projets (.atome)
         - Exports: Trouvez vos fichiers exportés
         - Recordings: Accédez à vos enregistrements audio
         - Templates: Modèles et présets
@@ -235,7 +254,8 @@ public class iCloudFileManager: ObservableObject {
         let useICloud = UserDefaults.standard.bool(forKey: "AtomeUseICloud")
         
         if useICloud && iCloudAvailable {
-            return getiCloudDocumentsDirectory()?.appendingPathComponent("AtomeFiles")
+            // Pas de sous-dossier AtomeFiles pour iCloud
+            return getiCloudDocumentsDirectory()
         } else {
             // Pour Files app, utiliser directement Documents sans sous-dossier
             return getLocalDocumentsDirectory()
@@ -306,15 +326,15 @@ public class iCloudFileManager: ObservableObject {
             return
         }
         
-        let localURL = getLocalDocumentsDirectory().appendingPathComponent("AtomeFiles")
-        guard let iCloudURL = getiCloudDocumentsDirectory()?.appendingPathComponent("AtomeFiles") else {
+        let localURL = getLocalDocumentsDirectory()
+        guard let iCloudURL = getiCloudDocumentsDirectory() else {
             completion(false)
             return
         }
         
         do {
             if FileManager.default.fileExists(atPath: localURL.path) {
-                // Copy files to iCloud
+                // Copy files to iCloud (sans sous-dossier AtomeFiles)
                 try FileManager.default.copyItem(at: localURL, to: iCloudURL)
                 
                 // Start iCloud sync
@@ -335,19 +355,19 @@ public class iCloudFileManager: ObservableObject {
     }
     
     public func migrateToLocal(completion: @escaping (Bool) -> Void) {
-        guard let iCloudURL = getiCloudDocumentsDirectory()?.appendingPathComponent("AtomeFiles") else {
+        guard let iCloudURL = getiCloudDocumentsDirectory() else {
             completion(false)
             return
         }
         
-        let localURL = getLocalDocumentsDirectory().appendingPathComponent("AtomeFiles")
+        let localURL = getLocalDocumentsDirectory()
         
         do {
             if FileManager.default.fileExists(atPath: iCloudURL.path) {
                 // Download all iCloud files first
                 try FileManager.default.startDownloadingUbiquitousItem(at: iCloudURL)
                 
-                // Copy to local
+                // Copy to local (sans sous-dossier AtomeFiles)
                 if FileManager.default.fileExists(atPath: localURL.path) {
                     try FileManager.default.removeItem(at: localURL)
                 }

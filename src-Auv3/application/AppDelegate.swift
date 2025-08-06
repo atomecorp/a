@@ -9,11 +9,11 @@ import SwiftUI
 
 @main
 struct atomeApp: App {
-    @StateObject private var fileManager = MainAppFileManager.shared
+    @StateObject private var fileManager = iCloudFileManager.shared
     
     init() {
-        // Initialiser les fichiers au démarrage (mode local uniquement pour l'instant)
-        MainAppFileManager.shared.initializeFileStructure()
+        // Initialiser les fichiers au démarrage avec iCloudFileManager
+        iCloudFileManager.shared.initializeFileStructure()
     }
     
     var body: some Scene {
