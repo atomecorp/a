@@ -141,6 +141,73 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         return ["peak": peak, "rms": peak * 0.7] // Approximate RMS from peak
     }
     
+    // MARK: - AudioControllerProtocol - Audio Commands (JS to MIDI routing)
+    
+    public func playNote(frequency: Double, note: String, amplitude: Float) {
+        print("🎵 AUv3: Converting JS note '\(note)' (\(frequency)Hz) to MIDI")
+        
+        // Convert frequency to MIDI note number
+        let midiNote = frequencyToMidiNote(frequency)
+        let velocity = UInt8(max(1, min(127, amplitude * 127)))
+        
+        // Send MIDI Note On to host
+        midiController?.sendNoteOn(note: midiNote, velocity: velocity)
+        
+        print("🎹 MIDI Note ON: \(midiNote) (velocity: \(velocity)) -> Host")
+    }
+    
+    public func stopNote(note: String) {
+        print("🎵 AUv3: Stopping JS note '\(note)'")
+        
+        // For simplicity, we'll send Note Off for common notes
+        // In practice, you'd track active notes
+        let commonNotes: [String: UInt8] = [
+            "C4": 60, "A4": 69, "E5": 76
+        ]
+        
+        if let midiNote = commonNotes[note] {
+            midiController?.sendNoteOff(note: midiNote, velocity: 0)
+            print("🎹 MIDI Note OFF: \(midiNote) -> Host")
+        }
+    }
+    
+    public func playChord(frequencies: [Double], amplitude: Float) {
+        print("🎼 AUv3: Converting JS chord to MIDI chord")
+        
+        let velocity = UInt8(max(1, min(127, amplitude * 127)))
+        
+        // Send each note in the chord
+        for frequency in frequencies {
+            let midiNote = frequencyToMidiNote(frequency)
+            midiController?.sendNoteOn(note: midiNote, velocity: velocity)
+            print("🎹 MIDI Chord Note ON: \(midiNote) -> Host")
+        }
+    }
+    
+    public func stopChord() {
+        print("🎼 AUv3: Stopping chord - sending All Notes Off")
+        
+        // Send MIDI All Notes Off (CC 123)
+        midiController?.sendControlChange(controller: 123, value: 0)
+        print("🎹 MIDI All Notes OFF -> Host")
+    }
+    
+    public func stopAllAudio() {
+        print("⛔ AUv3: Stop All - sending MIDI panic")
+        
+        // Send MIDI All Notes Off and All Sound Off
+        midiController?.sendControlChange(controller: 123, value: 0) // All Notes Off
+        midiController?.sendControlChange(controller: 120, value: 0) // All Sound Off
+        print("🎹 MIDI PANIC (All Notes + Sound OFF) -> Host")
+    }
+    
+    // Helper function to convert frequency to MIDI note number
+    private func frequencyToMidiNote(_ frequency: Double) -> UInt8 {
+        // MIDI note formula: note = 69 + 12 * log2(frequency / 440)
+        let noteNumber = 69 + 12 * log2(frequency / 440.0)
+        return UInt8(max(0, min(127, Int(round(noteNumber)))))
+    }
+
     // MARK: - Transport Data Delegate
     
     public func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {

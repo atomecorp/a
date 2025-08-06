@@ -90,9 +90,18 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             sendMuteStateToJS()
             
         case "audioNote":
-            if let data = data as? [String: Any],
-               let command = data["command"] as? String {
-                handleAudioCommand(command: command, data: data)
+            if let data = data as? [String: Any] {
+                handleAudioCommand(command: data["command"] as? String ?? "", data: data)
+            }
+            
+        case "noteCommand":
+            if let data = data as? [String: Any] {
+                handleAudioCommand(command: data["command"] as? String ?? "", data: data)
+            }
+            
+        case "chordCommand":
+            if let data = data as? [String: Any] {
+                handleAudioChord(data: data)
             }
             
         case "audioBuffer":
@@ -103,9 +112,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         case "audioChord":
             if let data = data as? [String: Any] {
                 handleAudioChord(data: data)
-            }
-            
-        case "getSampleRate":
+            }        case "getSampleRate":
             sendSampleRateToJS()
             
         case "performCalculation":
@@ -124,17 +131,21 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         switch command {
         case "playNote":
             if let frequency = data["frequency"] as? Double,
-               let note = data["note"] as? String {
-                print("🎵 JS->Swift: playNote \(note) at \(frequency)Hz (routed to AUv3)")
+               let note = data["note"] as? String,
+               let amplitude = data["amplitude"] as? Double {
+                print("🎵 JS->Swift: playNote \(note) at \(frequency)Hz")
+                WebViewManager.audioController?.playNote(frequency: frequency, note: note, amplitude: Float(amplitude))
             }
             
         case "stopNote":
             if let note = data["note"] as? String {
-                print("🎵 JS->Swift: stopNote \(note) (routed to AUv3)")
+                print("🎵 JS->Swift: stopNote \(note)")
+                WebViewManager.audioController?.stopNote(note: note)
             }
             
         case "stopAll":
-            print("🎵 JS->Swift: stopAll (routed to AUv3)")
+            print("🎵 JS->Swift: stopAll")
+            WebViewManager.audioController?.stopAllAudio()
             
         default:
             print("🎵 JS->Swift: Unknown audio command: \(command)")
@@ -151,12 +162,15 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         if let command = data["command"] as? String {
             switch command {
             case "playChord":
-                if let frequencies = data["frequencies"] as? [Double] {
-                    print("🎼 JS->Swift: playChord \(frequencies) (routed to AUv3)")
+                if let frequencies = data["frequencies"] as? [Double],
+                   let amplitude = data["amplitude"] as? Double {
+                    print("🎼 JS->Swift: playChord \(frequencies)")
+                    WebViewManager.audioController?.playChord(frequencies: frequencies, amplitude: Float(amplitude))
                 }
                 
             case "stopChord":
-                print("🎼 JS->Swift: stopChord (routed to AUv3)")
+                print("🎼 JS->Swift: stopChord")
+                WebViewManager.audioController?.stopChord()
                 
             default:
                 break

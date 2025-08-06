@@ -95,6 +95,8 @@ public class MIDIController: NSObject {
         // Parse MIDI event list
         var packet = eventList.pointee.packet
         
+        logger.info("📥 MIDI INPUT RECEIVED from AUM - Packets: \(eventList.pointee.numPackets)")
+        
         for _ in 0..<eventList.pointee.numPackets {
             
             // Extract MIDI data from packet
@@ -383,7 +385,102 @@ public class MIDIController: NSObject {
         logger.info("   Sources: \(MIDIGetNumberOfSources())")
         logger.info("   Destinations: \(MIDIGetNumberOfDestinations())")
         
+        // List all destinations with names
+        let destCount = MIDIGetNumberOfDestinations()
+        for i in 0..<destCount {
+            let dest = MIDIGetDestination(i)
+            if let destName = getMIDIObjectName(dest) {
+                logger.info("   📤 Destination \(i): '\(destName)' (ID: \(dest))")
+            } else {
+                logger.info("   📤 Destination \(i): ID \(dest)")
+            }
+        }
+        
         // Force a connection refresh
         connectToAllMIDISources()
+    }
+    
+    // MARK: - MIDI Output Methods (JS->MIDI routing)
+    
+    /// Send MIDI Note On message to host
+    public func sendNoteOn(note: UInt8, velocity: UInt8, channel: UInt8 = 0) {
+        let noteOnStatus: UInt8 = 0x90 | (channel & 0x0F)
+        let midiData: [UInt8] = [noteOnStatus, note & 0x7F, velocity & 0x7F]
+        sendMIDIMessage(data: midiData)
+        logger.info("🎹 MIDI OUT: Note ON \(note) vel:\(velocity) ch:\(channel)")
+    }
+    
+    /// Send MIDI Note Off message to host
+    public func sendNoteOff(note: UInt8, velocity: UInt8, channel: UInt8 = 0) {
+        let noteOffStatus: UInt8 = 0x80 | (channel & 0x0F)
+        let midiData: [UInt8] = [noteOffStatus, note & 0x7F, velocity & 0x7F]
+        sendMIDIMessage(data: midiData)
+        logger.info("🎹 MIDI OUT: Note OFF \(note) vel:\(velocity) ch:\(channel)")
+    }
+    
+    /// Send MIDI Control Change message to host
+    public func sendControlChange(controller: UInt8, value: UInt8, channel: UInt8 = 0) {
+        let ccStatus: UInt8 = 0xB0 | (channel & 0x0F)
+        let midiData: [UInt8] = [ccStatus, controller & 0x7F, value & 0x7F]
+        sendMIDIMessage(data: midiData)
+        logger.info("🎹 MIDI OUT: CC \(controller) val:\(value) ch:\(channel)")
+    }
+    
+    /// Send raw MIDI message to first available destination
+    private func sendMIDIMessage(data: [UInt8]) {
+        guard data.count > 0 && data.count <= 3 else {
+            logger.error("❌ Invalid MIDI data length: \(data.count)")
+            return
+        }
+        
+        // Find first available destination
+        let destCount = MIDIGetNumberOfDestinations()
+        logger.info("🔍 MIDI Destinations available: \(destCount)")
+        
+        guard destCount > 0 else {
+            logger.warning("⚠️ No MIDI destinations available - Cannot send MIDI")
+            return
+        }
+        
+        let destination = MIDIGetDestination(0)
+        guard destination != 0 else {
+            logger.error("❌ Failed to get MIDI destination")
+            return
+        }
+        
+        // Get destination name for debugging
+        if let destName = getMIDIObjectName(destination) {
+            logger.info("📤 Sending MIDI to destination: '\(destName)'")
+        } else {
+            logger.info("📤 Sending MIDI to destination ID: \(destination)")
+        }
+        
+        // Create MIDI packet
+        var packetListBuffer = Data(count: 1024)
+        let packetListPtr = packetListBuffer.withUnsafeMutableBytes { ptr in
+            return ptr.bindMemory(to: MIDIPacketList.self).baseAddress!
+        }
+        
+        var packet = MIDIPacketListInit(packetListPtr)
+        let timestamp = mach_absolute_time()
+        
+        packet = MIDIPacketListAdd(packetListPtr, 1024, packet, timestamp, data.count, data)
+        
+        if packet == nil {
+            logger.error("❌ Failed to create MIDI packet")
+            return
+        }
+        
+        // Log the MIDI data being sent
+        let dataString = data.map { String(format: "0x%02X", $0) }.joined(separator: " ")
+        logger.info("📤 MIDI Data: [\(dataString)] -> Destination: \(destination)")
+        
+        // Send MIDI packet
+        let result = MIDISend(inputPort, destination, packetListPtr)
+        if result != noErr {
+            logger.error("❌ Failed to send MIDI: \(result)")
+        } else {
+            logger.info("✅ MIDI sent successfully to host")
+        }
     }
 }

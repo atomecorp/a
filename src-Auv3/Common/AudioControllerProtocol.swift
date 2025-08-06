@@ -19,5 +19,11 @@ public protocol AudioControllerProtocol: AnyObject {
     func toggleMute()
     func setMute(_ muted: Bool)
     
+    // New audio generation methods
+    func playNote(frequency: Double, note: String, amplitude: Float)
+    func stopNote(note: String)
+    func playChord(frequencies: [Double], amplitude: Float)
+    func stopChord()
+    func stopAllAudio()
 }
 
