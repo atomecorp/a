@@ -305,7 +305,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         };
         """
         
-        let script = WKUserScript(source: jsAPI, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+        let script = WKUserScript(source: jsAPI, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         webView.configuration.userContentController.addUserScript(script)
     }
     

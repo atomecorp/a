@@ -39,7 +39,11 @@
 // import('./examples/leaflet.js');
 // import('./examples/audio.js');
 // import('./examples/auv3_tests.js');
-import('./examples/audio_swift.js');
+// import('./examples/audio_swift.js');
+import('./examples/auv3_file_handling.js');
+
+
+
 // import('./test/slice.js');
 
 // const mySpan = $('span', {

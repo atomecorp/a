@@ -616,9 +616,10 @@ The system is designed for scalability and maintainability, with clear separatio
 
 - ✅ Local file storage in Documents/AtomeFiles
 - ✅ Files app integration ("On My iPhone/iPad" > "Atome")
-- ✅ Basic JavaScript API (simplified)
+- ✅ **JavaScript API activated** - Full file system access from web components
 - ✅ Directory structure creation
 - ✅ Error handling and user feedback
+- ✅ **Example implementation** - `auv3_file_handling.js` with Squirrel components
 
 ### Features Ready for iCloud Activation
 
@@ -764,3 +765,34 @@ if (window.AtomeFileSystem) {
     console.log("File system API not available - check WebViewManager setup");
 }
 ```
+
+### Usage Example
+
+The project includes a complete example in `src/application/examples/auv3_file_handling.js`:
+
+```javascript
+// Open file management interface
+window.FileHandlingExample.creerInterfaceFichiers();
+
+// Test the API
+await window.FileHandlingExample.testerApiFichiers();
+
+// Save a project programmatically
+const projectData = {
+    version: '1.0',
+    atoms: [/* your atoms */],
+    settings: {/* your settings */}
+};
+await window.FileHandlingExample.sauvegarderProjet(projectData, 'MyProject');
+
+// Load a project
+const project = await window.FileHandlingExample.chargerProjet('MyProject');
+```
+
+**Features of the example:**
+- 🎨 **Squirrel UI Components** - Native-looking interface with proper styling
+- 💾 **Save/Load Operations** - Complete project management
+- 📋 **File Listing** - Browse and select existing files  
+- 🔄 **Auto-save** - Periodic backup functionality
+- 📊 **Progress Feedback** - Visual indicators for long operations
+- 🧪 **API Testing** - Automated testing suite

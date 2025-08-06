@@ -12,6 +12,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static let shared = WebViewManager()
     static var webView: WKWebView?
     static weak var audioController: AudioControllerProtocol?
+    static var fileSystemBridge: FileSystemBridge?
     
     // ULTRA AGGRESSIVE: Rate limiting for non-critical JS calls (preserving timecode functionality)
     private static var lastMuteStateUpdate: CFTimeInterval = 0
@@ -48,8 +49,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         contentController.add(WebViewManager.shared, name: "console")
         contentController.add(WebViewManager.shared, name: "swiftBridge")
         
-        // TODO: Réactiver l'API du système de fichiers quand iCloud sera configuré
-        // addFileSystemAPI(to: webView)
+        // Activation de l'API du système de fichiers (local storage)
+        addFileSystemAPI(to: webView)
 
         webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         webView.configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
@@ -298,5 +299,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     
     private func performCalculation(_ numbers: [Int]) {
         // Silent calculation for performance
+    }
+    
+    // MARK: - File System API
+    
+    private static func addFileSystemAPI(to webView: WKWebView) {
+        fileSystemBridge = FileSystemBridge()
+        fileSystemBridge?.addFileSystemAPI(to: webView)
+        print("🔧 FileSystemBridge créé et API ajoutée au WebView")
     }
 }
