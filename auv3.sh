@@ -2,7 +2,54 @@
 
 # =============================================================================
 # Script AUv3 - Compile, Déploie et Lance AUm
-# =============================================================================
+# ==============================    # Méthode 3: Fallback - Installation automatique ou instructions manuelles
+    warning "Aucun outil de logs en temps réel trouvé"
+    echo ""
+    
+    if command -v brew &> /dev/null; then
+        log "🔧 Installation automatique de libimobiledevice..."
+        
+        # Installation silencieuse
+        if brew install libimobiledevice &>/dev/null; then
+            success "libimobiledevice installé!"
+            log "🔄 Redémarrage des logs..."
+            
+            # Relancer les logs avec libimobiledevice
+            if [ "$ALL_LOGS" = true ]; then
+                log "🔍 Mode: TOUS les logs iPad"
+                echo ""
+                echo -e "${BLUE}==================== TOUS LES LOGS IPAD ====================${NC}"
+                
+                idevicesyslog -u "$device_id"
+            else
+                log "🔍 Filtrage AUv3 'atome' uniquement"
+                echo ""
+                echo -e "${BLUE}==================== LOGS AUv3 ATOME ====================${NC}"
+                echo -e "${YELLOW}💡 Utilisez maintenant les boutons audio dans l'AUv3 pour voir les logs${NC}"
+                echo ""
+                
+                idevicesyslog -u "$device_id" | \
+                grep -i --line-buffered -E "(atome|WebViewManager|AudioController|🎵|📡|✅|❌|🔊)" | \
+                grep -v -i -E "(wifid|bluetoothd|spotlightknowledged|springboard|backboard|kernel|assertiond|passd|locationd|mediaserverd|BLE Scanner|WiFiPolicy|CoreUtils)"
+            fi
+            return
+        else
+            warning "Échec installation automatique de libimobiledevice"
+        fi
+    fi
+    
+    log "📖 Pour voir les logs en temps réel, vous avez 3 options:"
+    echo ""
+    log "1️⃣  Installer manuellement libimobiledevice:"
+    log "   $0 --install-logs"
+    echo ""
+    log "2️⃣  Utiliser Xcode:"
+    log "   Xcode → Window → Devices and Simulators → Sélectionner iPad → View Device Logs"
+    echo ""
+    log "3️⃣  Utiliser Console.app:"
+    log "   Applications → Utilities → Console → Sélectionner iPad"
+    echo ""
+    log "💡 L'app est déployée et fonctionnelle, seuls les logs manquent"================================
 # Usage:
 #   ./auv3_fixed.sh                    # Par défaut: compile + déploie + lance AUm
 #   ./auv3_fixed.sh --build-only       # Juste compiler (rapide)
@@ -42,6 +89,9 @@ NC='\033[0m'
 # Variables
 BUILD_ONLY=false
 TARGET_APP="$DEFAULT_TARGET_APP"
+NO_LOGS=false
+ALL_LOGS=false
+INSTALL_LOGS=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -54,13 +104,28 @@ while [[ $# -gt 0 ]]; do
             TARGET_APP="$2"
             shift 2
             ;;
+        --no-logs)
+            NO_LOGS=true
+            shift
+            ;;
+        --all-logs)
+            ALL_LOGS=true
+            shift
+            ;;
+        --install-logs)
+            INSTALL_LOGS=true
+            shift
+            ;;
         -h|--help)
             echo "🎵 Script AUv3 - Compile, Déploie et Lance"
             echo ""
             echo "Usage:"
-            echo "  $0                         # Compile + déploie + lance AUm"
+            echo "  $0                         # Compile + déploie + lance AUm + logs"
             echo "  $0 --build-only            # Juste compiler (rapide)"
             echo "  $0 --app NanoStudio        # Lance app spécifique"
+            echo "  $0 --no-logs               # Sans affichage des logs iPad"
+            echo "  $0 --all-logs              # Tous les logs iPad (non filtrés)"
+            echo "  $0 --install-logs          # Installe les outils de logs (libimobiledevice)"
             echo ""
             echo "Apps supportées:"
             for app in $SUPPORTED_APPS; do
@@ -95,6 +160,95 @@ warning() {
     echo -e "${YELLOW}⚠️${NC} $1"
 }
 
+# Fonction pour démarrer les logs iPad
+start_device_logs() {
+    local device_id="$1"
+    local device_name="$2"
+    
+    log "📱 Démarrage des logs iPad: $device_name"
+    log "💡 Appuyez sur Ctrl+C pour arrêter les logs"
+    
+    # Méthode 1: Essayer la bonne syntaxe devicectl
+    if xcrun devicectl list devices &>/dev/null; then
+        log "🔍 Essai avec devicectl..."
+        
+        # Tester d'abord si la commande log stream existe
+        if xcrun devicectl device log stream --help &>/dev/null; then
+            if [ "$ALL_LOGS" = true ]; then
+                log "🔍 Mode: TOUS les logs iPad"
+                echo ""
+                echo -e "${BLUE}==================== TOUS LES LOGS IPAD ====================${NC}"
+                
+                # Syntaxe correcte pour devicectl
+                xcrun devicectl device log stream --device "$device_id"
+            else
+                log "🔍 Filtrage AUv3 'atome' uniquement"
+                echo ""
+                echo -e "${BLUE}==================== LOGS AUv3 ATOME ====================${NC}"
+                echo -e "${YELLOW}💡 Utilisez maintenant les boutons audio dans l'AUv3 pour voir les logs${NC}"
+                echo ""
+                
+                xcrun devicectl device log stream --device "$device_id" | \
+                grep -i --line-buffered -E "(atome|WebViewManager|AudioController|🎵|📡|✅|❌|🔊)" | \
+                grep -v -i -E "(wifid|bluetoothd|spotlightknowledged|springboard|backboard|kernel|assertiond|passd|locationd|mediaserverd|BLE Scanner|WiFiPolicy|CoreUtils)"
+            fi
+            return
+        else
+            log "⚠️  devicectl log stream non disponible sur cette version"
+        fi
+    fi
+    
+    # Méthode 2: libimobiledevice (si installé)
+    if command -v idevicesyslog &> /dev/null; then
+        log "🔍 Utilisation de idevicesyslog..."
+        
+        if [ "$ALL_LOGS" = true ]; then
+            log "🔍 Mode: TOUS les logs iPad"
+            echo ""
+            echo -e "${BLUE}==================== TOUS LES LOGS IPAD ====================${NC}"
+            
+            idevicesyslog -u "$device_id"
+        else
+            log "🔍 Filtrage AUv3 'atome' uniquement"
+            echo ""
+            echo -e "${BLUE}==================== LOGS AUv3 ATOME ====================${NC}"
+            echo -e "${YELLOW}💡 Utilisez maintenant les boutons audio dans l'AUv3 pour voir les logs${NC}"
+            echo ""
+            
+            idevicesyslog -u "$device_id" | \
+            grep --line-buffered "atome" | \
+            grep -v -i -E "(bluetoothd|spotlightknowledged|BLE Scanner|HomePod)"
+        fi
+        return
+    fi
+    
+    # Méthode 3: Fallback - Instructions manuelles
+    warning "Aucun outil de logs trouvé"
+    echo ""
+    log "� Pour voir les logs en temps réel, vous avez 3 options:"
+    echo ""
+    log "1️⃣  Installer libimobiledevice:"
+    log "   $0 --install-logs"
+    echo ""
+    log "2️⃣  Utiliser Xcode:"
+    log "   Xcode → Window → Devices and Simulators → Sélectionner iPad → View Device Logs"
+    echo ""
+    log "3️⃣  Utiliser Console.app:"
+    log "   Applications → Utilities → Console → Sélectionner iPad"
+    echo ""
+    log "💡 L'app est déployée et fonctionnelle, seuls les logs manquent"
+}
+
+# Fonction pour gérer l'arrêt propre
+cleanup() {
+    echo ""
+    log "🛑 Arrêt des logs..."
+    exit 0
+}
+
+# Trap pour gérer Ctrl+C
+trap cleanup SIGINT SIGTERM
+
 # Vérifications
 if ! command -v xcodebuild &> /dev/null; then
     error "Xcode command line tools requis"
@@ -105,6 +259,26 @@ if [ ! -d "$PROJECT_PATH" ]; then
 fi
 
 cd "$(dirname "$0")"
+
+# MODE INSTALL LOGS
+if [ "$INSTALL_LOGS" = true ]; then
+    log "🔧 Installation des outils de logs iPad..."
+    
+    if command -v brew &> /dev/null; then
+        log "📦 Installation de libimobiledevice via Homebrew..."
+        brew install libimobiledevice
+        
+        if [ $? -eq 0 ]; then
+            success "Outils de logs installés!"
+            log "💡 Vous pouvez maintenant utiliser: $0"
+        else
+            error "Échec installation libimobiledevice"
+        fi
+    else
+        error "Homebrew requis. Installez-le d'abord: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+    fi
+    exit 0
+fi
 
 # MODE BUILD ONLY
 if [ "$BUILD_ONLY" = true ]; then
@@ -207,4 +381,27 @@ echo "   2. L'interface web s'affiche automatiquement"
 echo "   3. Utilisez le switch Local/AUv3 Mode"
 echo ""
 log "🎛️  Interface: audio_swift.js avec boutons C4, A4, E5, Chord"
-log "✨ Ready to make music!"
+
+# Démarrer les logs iPad si demandé
+if [ "$NO_LOGS" != true ]; then
+    echo ""
+    log "🎯 ÉTAPE IMPORTANTE:"
+    log "1. Ouvrez $TARGET_APP sur l'iPad"
+    log "2. Ajoutez l'AUv3 'atome' (bouton +)"
+    log "3. Chargez l'interface web de l'AUv3"
+    echo ""
+    log "📱 Pour voir les logs en temps réel, utilisez Xcode :"
+    echo ""
+    log "🔧 MÉTHODE XCODE (recommandée) :"
+    log "   • Ouvrez Xcode"
+    log "   • Window → Devices and Simulators"
+    log "   • Sélectionnez votre iPad"
+    log "   • Cliquez sur 'Open Console'"
+    log "   • Dans la barre de recherche, tapez : atome"
+    echo ""
+    log "💡 Cette méthode Xcode filtre automatiquement et fonctionne parfaitement !"
+    echo ""
+    log "✨ Ready to make music! Votre AUv3 est déployé et prêt."
+else
+    log "✨ Ready to make music!"
+fi

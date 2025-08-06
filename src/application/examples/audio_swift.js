@@ -453,30 +453,54 @@ class SimpleAudioGenerator {
 
     // Play a note by sending audio to Swift
     async playNote(noteName, frequency, duration = 5.0) {
-        console.log(`Playing note: ${noteName} ${frequency}Hz for ${duration}s`);
+        console.log(`🎵 Playing note: ${noteName} ${frequency}Hz for ${duration}s`);
         
         this.activeNotes.add(noteName);
         this.currentFrequency = frequency;
 
-        // Check mode: force AUv3 if switch is ON, otherwise check for real bridge
-        const isAUv3Mode = window.forceAUv3Mode || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge);
-        
-        if (!isAUv3Mode) {
-            // Mode local - jouer le son localement avec activation AudioContext
+        // Check mode: priorité au switch utilisateur
+        if (window.forceAUv3Mode === true) {
+            // Mode AUv3 forcé par le switch
+            console.log("🎯 Mode AUv3 forcé - envoi vers Swift");
+            
+            // Generate and send audio buffer to Swift
+            this.generateAudioBuffer(frequency, duration);
+
+            // Send note command to Swift
+            this.sendToSwift({
+                command: "playNote",
+                note: noteName,
+                frequency: frequency,
+                duration: duration,
+                amplitude: 0.5
+            }, "audioNote");
+            
+        } else if (window.forceAUv3Mode === false) {
+            // Mode local forcé par le switch
+            console.log("🔊 Mode LOCAL forcé - son dans le navigateur");
+            
+            // Play audio locally only
             await this.playLocalAudio(frequency, duration);
+            
+        } else {
+            // Mode auto (détection automatique du bridge)
+            const hasSwiftBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
+            
+            if (hasSwiftBridge) {
+                console.log("🎯 Mode AUTO - Bridge détecté, envoi vers Swift");
+                this.generateAudioBuffer(frequency, duration);
+                this.sendToSwift({
+                    command: "playNote",
+                    note: noteName,
+                    frequency: frequency,
+                    duration: duration,
+                    amplitude: 0.5
+                }, "audioNote");
+            } else {
+                console.log("🔊 Mode AUTO - Pas de bridge, son local");
+                await this.playLocalAudio(frequency, duration);
+            }
         }
-
-        // Always generate and send audio buffer to Swift (even if no bridge detected)
-        this.generateAudioBuffer(frequency, duration);
-
-        // Send note command to Swift (comme dans to_study.html)
-        this.sendToSwift({
-            command: "playNote",
-            note: noteName,
-            frequency: frequency,
-            duration: duration,
-            amplitude: 0.5
-        }, "audioNote");
     }
 
     // Play audio locally for testing (when no Swift bridge)
@@ -527,26 +551,50 @@ class SimpleAudioGenerator {
 
     // Play a chord by sending multiple frequencies
     async playChord(frequencies, duration = 5.0) {
-        console.log(`Playing chord: ${frequencies.join(', ')}Hz`);
+        console.log(`🎼 Playing chord: ${frequencies.join(', ')}Hz`);
         
         this.chordActive = true;
 
-        // Check mode: force AUv3 if switch is ON, otherwise check for real bridge
-        const isAUv3Mode = window.forceAUv3Mode || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge);
-        
-        if (!isAUv3Mode) {
-            // Mode local - jouer l'accord localement avec activation AudioContext
+        // Check mode: priorité au switch utilisateur
+        if (window.forceAUv3Mode === true) {
+            // Mode AUv3 forcé par le switch
+            console.log("🎯 Mode AUv3 forcé - envoi accord vers Swift");
+            
+            this.sendToSwift({
+                command: "playChord",
+                frequencies: frequencies,
+                duration: duration,
+                amplitude: 0.3
+            }, "audioChord");
+            
+        } else if (window.forceAUv3Mode === false) {
+            // Mode local forcé par le switch
+            console.log("🔊 Mode LOCAL forcé - accord dans le navigateur");
+            
+            // Play chord locally
             for (const freq of frequencies) {
                 await this.playLocalAudio(freq, duration);
             }
+            
+        } else {
+            // Mode auto (détection automatique du bridge)
+            const hasSwiftBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
+            
+            if (hasSwiftBridge) {
+                console.log("🎯 Mode AUTO - Bridge détecté, envoi accord vers Swift");
+                this.sendToSwift({
+                    command: "playChord",
+                    frequencies: frequencies,
+                    duration: duration,
+                    amplitude: 0.3
+                }, "audioChord");
+            } else {
+                console.log("🔊 Mode AUTO - Pas de bridge, accord local");
+                for (const freq of frequencies) {
+                    await this.playLocalAudio(freq, duration);
+                }
+            }
         }
-
-        this.sendToSwift({
-            command: "playChord",
-            frequencies: frequencies,
-            duration: duration,
-            amplitude: 0.3
-        }, "audioChord");
     }
 
     stopChord() {
@@ -599,13 +647,16 @@ setTimeout(() => {
     if (bridgeEl) {
         const hasWebkit = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
         if (hasWebkit) {
-            bridgeEl.textContent = `Bridge: Connected`;
+            bridgeEl.textContent = `Bridge: Détecté (AUv3 disponible)`;
             bridgeEl.style.color = '#4CAF50';
         } else {
-            bridgeEl.textContent = `Bridge: TEST MODE (local browser)`;
+            bridgeEl.textContent = `Bridge: Non détecté (Mode navigateur)`;
             bridgeEl.style.color = '#ffaa00';
         }
     }
+    
+    // Set initial mode based on switch
+    switchMode(window.forceAUv3Mode);
 }, 500);
 
 // Make audioGen globally available for testing
