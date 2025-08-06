@@ -371,6 +371,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;
@@ -407,6 +408,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;

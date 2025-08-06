@@ -12,7 +12,7 @@ struct atomeApp: App {
     @StateObject private var fileManager = MainAppFileManager.shared
     
     init() {
-        // Initialiser les fichiers au démarrage
+        // Initialiser les fichiers au démarrage (mode local uniquement pour l'instant)
         MainAppFileManager.shared.initializeFileStructure()
     }
     

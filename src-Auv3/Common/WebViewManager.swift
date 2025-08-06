@@ -47,6 +47,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         contentController.addUserScript(userScript)
         contentController.add(WebViewManager.shared, name: "console")
         contentController.add(WebViewManager.shared, name: "swiftBridge")
+        
+        // TODO: Réactiver l'API du système de fichiers quand iCloud sera configuré
+        // addFileSystemAPI(to: webView)
 
         webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         webView.configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")

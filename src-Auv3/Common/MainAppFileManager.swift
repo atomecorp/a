@@ -112,4 +112,58 @@ public class MainAppFileManager: ObservableObject {
             print("Description: \(nsError.localizedDescription)")
         }
     }
+    
+    // MARK: - File Operations
+    
+    public func getCurrentStorageURL() -> URL? {
+        let documentsURL = getDocumentsDirectory()
+        return documentsURL.appendingPathComponent("AtomeFiles", isDirectory: true)
+    }
+    
+    public var iCloudAvailable: Bool {
+        // Pour le MainAppFileManager, iCloud n'est pas disponible
+        return false
+    }
+    
+    public func saveFile(data: Data, to relativePath: String, completion: @escaping (Bool, Error?) -> Void) {
+        guard let storageURL = getCurrentStorageURL() else {
+            completion(false, NSError(domain: "MainAppFileManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Storage URL not available"]))
+            return
+        }
+        
+        let fileURL = storageURL.appendingPathComponent(relativePath)
+        
+        // Créer le dossier parent si nécessaire
+        do {
+            let parentDirectory = fileURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parentDirectory, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            completion(false, error)
+            return
+        }
+        
+        // Sauvegarder le fichier
+        do {
+            try data.write(to: fileURL)
+            completion(true, nil)
+        } catch {
+            completion(false, error)
+        }
+    }
+    
+    public func loadFile(from relativePath: String, completion: @escaping (Data?, Error?) -> Void) {
+        guard let storageURL = getCurrentStorageURL() else {
+            completion(nil, NSError(domain: "MainAppFileManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Storage URL not available"]))
+            return
+        }
+        
+        let fileURL = storageURL.appendingPathComponent(relativePath)
+        
+        do {
+            let data = try Data(contentsOf: fileURL)
+            completion(data, nil)
+        } catch {
+            completion(nil, error)
+        }
+    }
 }
