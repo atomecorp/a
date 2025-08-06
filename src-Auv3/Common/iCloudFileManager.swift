@@ -32,8 +32,11 @@ public class iCloudFileManager: ObservableObject {
     
     // MARK: - Directory URLs
     private func getLocalDocumentsDirectory() -> URL {
+        // Pour Files app, utiliser le dossier Documents public
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-        return paths[0]
+        let documentsURL = paths[0]
+        print("📁 Documents directory: \(documentsURL.path)")
+        return documentsURL
     }
     
     private func getiCloudDocumentsDirectory() -> URL? {
@@ -93,7 +96,8 @@ public class iCloudFileManager: ObservableObject {
         print("=== INITIALIZING LOCAL FILE STRUCTURE ===")
         
         let documentsURL = getLocalDocumentsDirectory()
-        let atomeFilesURL = documentsURL.appendingPathComponent("AtomeFiles", isDirectory: true)
+        // Ne pas créer de sous-dossier AtomeFiles, utiliser directement Documents
+        let atomeFilesURL = documentsURL
         
         createDirectoryStructure(at: atomeFilesURL, isLocal: true)
     }
@@ -233,7 +237,8 @@ public class iCloudFileManager: ObservableObject {
         if useICloud && iCloudAvailable {
             return getiCloudDocumentsDirectory()?.appendingPathComponent("AtomeFiles")
         } else {
-            return getLocalDocumentsDirectory().appendingPathComponent("AtomeFiles")
+            // Pour Files app, utiliser directement Documents sans sous-dossier
+            return getLocalDocumentsDirectory()
         }
     }
     
@@ -244,22 +249,27 @@ public class iCloudFileManager: ObservableObject {
         }
         
         let fileURL = baseURL.appendingPathComponent(relativePath)
+        print("💾 iCloudFileManager sauvegarde vers: \(fileURL.path)")
         
         do {
             // Create intermediate directories if needed
             let directoryURL = fileURL.deletingLastPathComponent()
+            print("📁 Création du dossier: \(directoryURL.path)")
             try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: nil)
             
             // Write the file
             try data.write(to: fileURL)
+            print("✅ Fichier sauvegardé dans: \(fileURL.path)")
             
             // For iCloud files, start uploading
             if syncEnabled {
                 try FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
+                print("☁️ iCloud sync démarré pour: \(fileURL.lastPathComponent)")
             }
             
             completion(true, nil)
         } catch {
+            print("❌ Erreur sauvegarde iCloud: \(error)")
             completion(false, error)
         }
     }

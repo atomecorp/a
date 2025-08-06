@@ -50,7 +50,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         }
         
         let fileData = Data(data.utf8)
-        MainAppFileManager.shared.saveFile(data: fileData, to: path) { success, error in
+        iCloudFileManager.shared.saveFile(data: fileData, to: path) { success, error in
             DispatchQueue.main.async {
                 if success {
                     self.sendSuccessResponse(to: webView, data: ["message": "File saved successfully"])
@@ -67,7 +67,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             return
         }
         
-        MainAppFileManager.shared.loadFile(from: path) { data, error in
+        iCloudFileManager.shared.loadFile(from: path) { data, error in
             DispatchQueue.main.async {
                 if let data = data, let content = String(data: data, encoding: .utf8) {
                     self.sendSuccessResponse(to: webView, data: ["content": content])
@@ -84,7 +84,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             return
         }
         
-        guard let storageURL = MainAppFileManager.shared.getCurrentStorageURL() else {
+        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
             sendErrorResponse(to: webView, error: "Storage not available")
             return
         }
@@ -119,7 +119,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             return
         }
         
-        guard let storageURL = MainAppFileManager.shared.getCurrentStorageURL() else {
+        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
             sendErrorResponse(to: webView, error: "Storage not available")
             return
         }
@@ -137,9 +137,9 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     private func handleGetStorageInfo(webView: WKWebView?) {
         let storageInfo: [String: Any] = [
             "isICloudEnabled": UserDefaults.standard.bool(forKey: "AtomeUseICloud"),
-            "isICloudAvailable": MainAppFileManager.shared.iCloudAvailable,
+            "isICloudAvailable": iCloudFileManager.shared.iCloudAvailable,
             "storageType": UserDefaults.standard.bool(forKey: "AtomeUseICloud") ? "icloud" : "local",
-            "isInitialized": MainAppFileManager.shared.isInitialized
+            "isInitialized": iCloudFileManager.shared.isInitialized
         ]
         
         sendSuccessResponse(to: webView, data: storageInfo)

@@ -51,6 +51,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         
         // Activation de l'API du système de fichiers (local storage)
         addFileSystemAPI(to: webView)
+        
+        // Initialiser la structure de fichiers avec iCloudFileManager
+        iCloudFileManager.shared.initializeFileStructure()
 
         webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         webView.configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")

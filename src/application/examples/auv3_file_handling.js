@@ -23,6 +23,7 @@ async function sauvegarderProjet(projectData, projectName) {
         
         console.log(`💾 Sauvegarde du projet: ${projectName}`);
         
+        // Le bridge ajoute automatiquement "Projects/" et ".atome"
         const result = await window.saveProject(projectData, projectName);
         console.log('✅ Projet sauvegardé avec succès');
         

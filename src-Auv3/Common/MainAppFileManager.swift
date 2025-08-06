@@ -48,6 +48,7 @@ public class MainAppFileManager: ObservableObject {
         let documentsURL = getDocumentsDirectory()
         let atomeFilesURL = documentsURL.appendingPathComponent("AtomeFiles", isDirectory: true)
         
+        print("📂 Documents directory: \(documentsURL.path)")
         print("📂 AtomeFiles path: \(atomeFilesURL.path)")
         
         do {
@@ -132,12 +133,15 @@ public class MainAppFileManager: ObservableObject {
         }
         
         let fileURL = storageURL.appendingPathComponent(relativePath)
+        print("💾 Sauvegarde vers: \(fileURL.path)")
         
         // Créer le dossier parent si nécessaire
         do {
             let parentDirectory = fileURL.deletingLastPathComponent()
+            print("📁 Création du dossier: \(parentDirectory.path)")
             try FileManager.default.createDirectory(at: parentDirectory, withIntermediateDirectories: true, attributes: nil)
         } catch {
+            print("❌ Erreur création dossier: \(error)")
             completion(false, error)
             return
         }
@@ -145,8 +149,10 @@ public class MainAppFileManager: ObservableObject {
         // Sauvegarder le fichier
         do {
             try data.write(to: fileURL)
+            print("✅ Fichier sauvegardé: \(fileURL.path)")
             completion(true, nil)
         } catch {
+            print("❌ Erreur sauvegarde: \(error)")
             completion(false, error)
         }
     }
