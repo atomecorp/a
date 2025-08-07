@@ -7,6 +7,7 @@
 
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 
 public class iCloudFileManager: ObservableObject {
     public static let shared = iCloudFileManager()
@@ -17,6 +18,7 @@ public class iCloudFileManager: ObservableObject {
     
     // Pour stocker le delegate du Document Picker
     private var documentPickerDelegate: DocumentPickerDelegate?
+    private var documentPickerLoadDelegate: DocumentPickerLoadDelegate?
     
     private init() {
         checkiCloudAvailability()
@@ -411,47 +413,100 @@ public class iCloudFileManager: ObservableObject {
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
         print("🔥 SWIFT: bundleIdentifier = \(bundleIdentifier)")
         
-        if bundleIdentifier.contains(".appex") {
-            print("🔥 SWIFT: Extension AUv3 détectée - utilisation Document Picker")
-            // Extension AUv3 : utiliser Document Picker pour accès utilisateur
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-            print("🔥 SWIFT: tempURL = \(tempURL)")
+        // FORCER l'utilisation du Document Picker iOS dans tous les cas
+        print("🔥 SWIFT: FORCER Document Picker iOS - toujours présenter à l'utilisateur")
+        
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        print("🔥 SWIFT: tempURL = \(tempURL)")
+        
+        do {
+            try data.write(to: tempURL)
+            print("🔥 SWIFT: Fichier temporaire écrit avec succès")
             
-            do {
-                try data.write(to: tempURL)
-                print("🔥 SWIFT: Fichier temporaire écrit avec succès")
-                
-                // Stocker le delegate pour éviter qu'il soit libéré
-                self.documentPickerDelegate = DocumentPickerDelegate { [weak self] success, error in
-                    print("🔥 SWIFT: DocumentPickerDelegate callback - success: \(success), error: \(String(describing: error))")
-                    self?.documentPickerDelegate = nil // Libérer après utilisation
-                    completion(success, error)
-                }
-                
-                print("🔥 SWIFT: DocumentPickerDelegate créé")
-                
-                let documentPicker = UIDocumentPickerViewController(forExporting: [tempURL])
-                documentPicker.delegate = self.documentPickerDelegate
-                documentPicker.modalPresentationStyle = .formSheet
-                
-                print("🔥 SWIFT: DocumentPickerViewController créé")
-                print("🔥 SWIFT: Tentative de présentation du Document Picker...")
-                
-                DispatchQueue.main.async {
-                    print("🔥 SWIFT: Sur main thread - présentation du Document Picker")
-                    viewController.present(documentPicker, animated: true) {
-                        print("🔥 SWIFT: Document Picker présenté avec succès")
-                    }
-                }
-                
-            } catch {
-                print("❌ SWIFT: Erreur écriture fichier temporaire: \(error)")
-                completion(false, error)
+            // Stocker le delegate pour éviter qu'il soit libéré
+            self.documentPickerDelegate = DocumentPickerDelegate { [weak self] success, error in
+                print("🔥 SWIFT: DocumentPickerDelegate callback - success: \(success), error: \(String(describing: error))")
+                self?.documentPickerDelegate = nil // Libérer après utilisation
+                completion(success, error)
             }
+            
+            print("🔥 SWIFT: DocumentPickerDelegate créé")
+            
+            let documentPicker = UIDocumentPickerViewController(forExporting: [tempURL])
+            documentPicker.delegate = self.documentPickerDelegate
+            documentPicker.modalPresentationStyle = .formSheet
+            
+            print("🔥 SWIFT: DocumentPickerViewController créé")
+            print("🔥 SWIFT: Tentative de présentation du Document Picker...")
+            
+            DispatchQueue.main.async {
+                print("🔥 SWIFT: Sur main thread - présentation du Document Picker")
+                viewController.present(documentPicker, animated: true) {
+                    print("🔥 SWIFT: Document Picker présenté avec succès !")
+                    print("📄 SWIFT: Le Document Picker iOS devrait maintenant être visible")
+                }
+            }
+            
+        } catch {
+            print("❌ SWIFT: Erreur écriture fichier temporaire: \(error)")
+            completion(false, error)
+        }
+    }
+    
+    // MARK: - Document Picker pour charger des fichiers AUv3
+    public func loadFileWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, Data?, String?, Error?) -> Void) {
+        print("🔥 SWIFT: loadFileWithDocumentPicker appelé")
+        print("🔥 SWIFT: fileTypes = \(fileTypes)")
+        print("🔥 SWIFT: viewController = \(type(of: viewController))")
+        
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+        print("🔥 SWIFT: bundleIdentifier = \(bundleIdentifier)")
+        
+        if bundleIdentifier.contains(".appex") {
+            print("🔥 SWIFT: Extension AUv3 détectée - utilisation Document Picker pour import")
+            
+            // Stocker le delegate pour éviter qu'il soit libéré
+            self.documentPickerLoadDelegate = DocumentPickerLoadDelegate { [weak self] success, data, fileName, error in
+                print("🔥 SWIFT: DocumentPickerLoadDelegate callback - success: \(success), fileName: \(fileName ?? "nil"), error: \(String(describing: error))")
+                self?.documentPickerLoadDelegate = nil // Libérer après utilisation
+                completion(success, data, fileName, error)
+            }
+            
+            print("🔥 SWIFT: DocumentPickerLoadDelegate créé")
+            
+            // Créer les types de documents supportés
+            var utTypes: [UTType] = []
+            for fileType in fileTypes {
+                switch fileType.lowercased() {
+                case "atome":
+                    utTypes.append(UTType.data) // Type générique pour .atome
+                case "json":
+                    utTypes.append(UTType.json)
+                case "txt":
+                    utTypes.append(UTType.text)
+                default:
+                    utTypes.append(UTType.data)
+                }
+            }
+            
+            let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
+            documentPicker.delegate = self.documentPickerLoadDelegate
+            documentPicker.modalPresentationStyle = .formSheet
+            documentPicker.allowsMultipleSelection = false
+            
+            print("🔥 SWIFT: DocumentPickerViewController pour import créé")
+            print("🔥 SWIFT: Tentative de présentation du Document Picker pour import...")
+            
+            DispatchQueue.main.async {
+                print("🔥 SWIFT: Sur main thread - présentation du Document Picker pour import")
+                viewController.present(documentPicker, animated: true) {
+                    print("🔥 SWIFT: Document Picker pour import présenté avec succès")
+                }
+            }
+            
         } else {
-            print("🔥 SWIFT: App principale détectée - utilisation méthode normale")
-            // App principale : utiliser la méthode normale
-            saveFile(data: data, to: fileName, completion: completion)
+            print("🔥 SWIFT: App principale détectée - méthode alternative non implémentée")
+            completion(false, nil, nil, NSError(domain: "iCloudFileManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Load with Document Picker only available in AUv3 extension"]))
         }
     }
     
@@ -567,5 +622,47 @@ class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate {
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
         print("🔥 SWIFT: documentPicker was cancelled")
         completion(false, NSError(domain: "DocumentPicker", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
+    }
+}
+
+// MARK: - Document Picker Load Delegate pour AUv3
+class DocumentPickerLoadDelegate: NSObject, UIDocumentPickerDelegate {
+    private let completion: (Bool, Data?, String?, Error?) -> Void
+    
+    init(completion: @escaping (Bool, Data?, String?, Error?) -> Void) {
+        self.completion = completion
+        print("🔥 SWIFT: DocumentPickerLoadDelegate init")
+    }
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        print("🔥 SWIFT: documentPicker didPickDocumentsAt: \(urls)")
+        
+        guard let selectedURL = urls.first else {
+            completion(false, nil, nil, NSError(domain: "DocumentPickerLoad", code: -1, userInfo: [NSLocalizedDescriptionKey: "No file selected"]))
+            return
+        }
+        
+        // Commencer l'accès sécurisé au fichier
+        let didStartAccessing = selectedURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                selectedURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        
+        do {
+            let data = try Data(contentsOf: selectedURL)
+            let fileName = selectedURL.lastPathComponent
+            print("🔥 SWIFT: Fichier lu avec succès - \(fileName), \(data.count) bytes")
+            completion(true, data, fileName, nil)
+        } catch {
+            print("🔥 SWIFT: Erreur lecture fichier: \(error)")
+            completion(false, nil, nil, error)
+        }
+    }
+    
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        print("🔥 SWIFT: documentPickerLoad was cancelled")
+        completion(false, nil, nil, NSError(domain: "DocumentPickerLoad", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
     }
 }

@@ -39,6 +39,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleShowStorageSettings()
         case "saveFileWithDocumentPicker":
             handleSaveFileWithDocumentPicker(body: body, webView: message.webView)
+        case "loadFileWithDocumentPicker":
+            handleLoadFileWithDocumentPicker(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -383,5 +385,69 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             }
         }
         print("🔥 SWIFT: Appel à saveFileWithDocumentPicker terminé")
+    }
+    
+    private func handleLoadFileWithDocumentPicker(body: [String: Any], webView: WKWebView?) {
+        print("🔥 SWIFT: handleLoadFileWithDocumentPicker appelé")
+        print("🔥 SWIFT: body = \(body)")
+        
+        guard let webView = webView else {
+            print("❌ SWIFT: WebView invalide pour Document Picker Load")
+            sendErrorResponse(to: webView, error: "Invalid webView for Document Picker Load")
+            return
+        }
+        
+        let fileTypes = body["fileTypes"] as? [String] ?? ["atome", "json"]
+        print("🔥 SWIFT: Types de fichiers acceptés: \(fileTypes)")
+        
+        // Trouver le view controller pour présenter le Document Picker
+        guard let viewController = findViewController(from: webView) else {
+            print("❌ SWIFT: Cannot find view controller for Document Picker Load")
+            sendErrorResponse(to: webView, error: "Cannot find view controller for Document Picker Load")
+            return
+        }
+        
+        print("📂 SWIFT: View controller trouvé: \(type(of: viewController))")
+        print("📂 Chargement avec Document Picker pour les types: \(fileTypes)")
+        
+        iCloudFileManager.shared.loadFileWithDocumentPicker(
+            fileTypes: fileTypes,
+            from: viewController
+        ) { [weak self] success, data, fileName, error in
+            print("🔥 SWIFT: Callback Document Picker Load reçu - success: \(success), fileName: \(fileName ?? "nil"), error: \(String(describing: error))")
+            DispatchQueue.main.async {
+                if success, let data = data, let content = String(data: data, encoding: .utf8) {
+                    print("✅ SWIFT: Notifying JavaScript of load success")
+                    // Échapper les caractères spéciaux pour JavaScript
+                    let escapedContent = content.replacingOccurrences(of: "\\", with: "\\\\")
+                                              .replacingOccurrences(of: "'", with: "\\'")
+                                              .replacingOccurrences(of: "\n", with: "\\n")
+                                              .replacingOccurrences(of: "\r", with: "\\r")
+                    
+                    // Notifier JavaScript du succès avec les données
+                    let js = "if (window.documentPickerLoadResult) window.documentPickerLoadResult(true, '\(escapedContent)', null);"
+                    webView.evaluateJavaScript(js) { (result, error) in
+                        if let error = error {
+                            print("❌ SWIFT: Erreur JavaScript load success: \(error)")
+                        } else {
+                            print("✅ SWIFT: JavaScript load success notifié")
+                        }
+                    }
+                } else {
+                    let errorMessage = error?.localizedDescription ?? "Unknown error or no file selected"
+                    print("❌ SWIFT: Notifying JavaScript of load error: \(errorMessage)")
+                    // Notifier JavaScript de l'erreur
+                    let js = "if (window.documentPickerLoadResult) window.documentPickerLoadResult(false, null, '\(errorMessage)');"
+                    webView.evaluateJavaScript(js) { (result, error) in
+                        if let error = error {
+                            print("❌ SWIFT: Erreur JavaScript load error: \(error)")
+                        } else {
+                            print("✅ SWIFT: JavaScript load error notifié")
+                        }
+                    }
+                }
+            }
+        }
+        print("🔥 SWIFT: Appel à loadFileWithDocumentPicker terminé")
     }
 }
