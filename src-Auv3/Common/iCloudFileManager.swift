@@ -462,6 +462,49 @@ public class iCloudFileManager: ObservableObject {
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
         print("🔥 SWIFT: bundleIdentifier = \(bundleIdentifier)")
         
+        // ÉTAPE CRITIQUE : Demander l'autorisation d'accès aux fichiers
+        print("🔐 SWIFT: Demande d'autorisation d'accès aux fichiers...")
+        self.requestFileAccessPermission(from: viewController) { [weak self] granted in
+            guard granted else {
+                print("❌ SWIFT: Autorisation d'accès aux fichiers refusée")
+                completion(false, nil, nil, NSError(domain: "FileAccess", code: -1, userInfo: [NSLocalizedDescriptionKey: "L'autorisation d'accès aux fichiers est requise"]))
+                return
+            }
+            
+            print("✅ SWIFT: Autorisation d'accès aux fichiers accordée")
+            self?.proceedWithDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
+        }
+    }
+    
+    // MARK: - Demande d'autorisation d'accès aux fichiers
+    private func requestFileAccessPermission(from viewController: UIViewController, completion: @escaping (Bool) -> Void) {
+        print("🔐 SWIFT: Présentation de la demande d'autorisation...")
+        
+        let alert = UIAlertController(
+            title: "Accès aux fichiers",
+            message: "Atome a besoin d'accéder à vos fichiers pour charger vos projets. Vous allez être redirigé vers le sélecteur de fichiers iOS.\n\n⚠️ Important : Vous devez d'abord naviguer vers le dossier 'Atome' dans 'Sur mon iPhone/iPad' et toucher 'Sélectionner' pour autoriser l'accès, puis choisir votre fichier.",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "Continuer", style: .default) { _ in
+            print("✅ SWIFT: Utilisateur a accepté - ouverture Document Picker")
+            completion(true)
+        })
+        
+        alert.addAction(UIAlertAction(title: "Annuler", style: .cancel) { _ in
+            print("❌ SWIFT: Utilisateur a annulé la demande d'autorisation")
+            completion(false)
+        })
+        
+        DispatchQueue.main.async {
+            viewController.present(alert, animated: true)
+        }
+    }
+    
+    // MARK: - Procéder avec le Document Picker après autorisation
+    private func proceedWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, Data?, String?, Error?) -> Void) {
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+        
         if bundleIdentifier.contains(".appex") {
             print("🔥 SWIFT: Extension AUv3 détectée - utilisation Document Picker pour import")
             
@@ -474,12 +517,22 @@ public class iCloudFileManager: ObservableObject {
             
             print("🔥 SWIFT: DocumentPickerLoadDelegate créé")
             
-            // Créer les types de documents supportés
+            // Créer les types de documents supportés avec UTType personnalisé pour .atome
             var utTypes: [UTType] = []
             for fileType in fileTypes {
                 switch fileType.lowercased() {
                 case "atome":
-                    utTypes.append(UTType.data) // Type générique pour .atome
+                    // Utiliser le UTType personnalisé déclaré dans Info.plist
+                    if let atomeType = UTType("one.atome.app.atome-project") {
+                        utTypes.append(atomeType)
+                        print("🔥 SWIFT: UTType personnalisé 'atome' ajouté")
+                    } else if let genericAtome = UTType(filenameExtension: "atome") {
+                        utTypes.append(genericAtome)
+                        print("🔥 SWIFT: UTType générique 'atome' ajouté")
+                    } else {
+                        utTypes.append(UTType.data)
+                        print("🔥 SWIFT: UTType fallback 'data' ajouté pour atome")
+                    }
                 case "json":
                     utTypes.append(UTType.json)
                 case "txt":
@@ -489,10 +542,18 @@ public class iCloudFileManager: ObservableObject {
                 }
             }
             
+            // Ajouter des types supplémentaires pour être sûr que l'utilisateur voit tous les fichiers
+            utTypes.append(UTType.data)
+            utTypes.append(UTType.item)
+            utTypes.append(UTType.content)
+            
+            print("🔥 SWIFT: Types UTType créés: \(utTypes)")
+            
             let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
             documentPicker.delegate = self.documentPickerLoadDelegate
             documentPicker.modalPresentationStyle = .formSheet
             documentPicker.allowsMultipleSelection = false
+            documentPicker.shouldShowFileExtensions = true
             
             print("🔥 SWIFT: DocumentPickerViewController pour import créé")
             print("🔥 SWIFT: Tentative de présentation du Document Picker pour import...")
@@ -501,6 +562,7 @@ public class iCloudFileManager: ObservableObject {
                 print("🔥 SWIFT: Sur main thread - présentation du Document Picker pour import")
                 viewController.present(documentPicker, animated: true) {
                     print("🔥 SWIFT: Document Picker pour import présenté avec succès")
+                    print("📱 SWIFT: L'utilisateur doit maintenant naviguer vers le dossier Atome et sélectionner un fichier")
                 }
             }
             

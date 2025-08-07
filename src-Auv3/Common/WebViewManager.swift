@@ -87,7 +87,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     print("🔥 SWIFT: action trouvée: \(action)")
                     
                     // Router vers FileSystemBridge pour les actions de fichiers
-                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker"]
+                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker"]
                     
                     if fileSystemActions.contains(action) {
                         print("🔥 SWIFT: Routage vers FileSystemBridge pour action: \(action)")
