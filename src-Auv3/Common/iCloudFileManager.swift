@@ -15,6 +15,9 @@ public class iCloudFileManager: ObservableObject {
     @Published public var iCloudAvailable = false
     @Published public var syncEnabled = false
     
+    // Pour stocker le delegate du Document Picker
+    private var documentPickerDelegate: DocumentPickerDelegate?
+    
     private init() {
         checkiCloudAvailability()
     }
@@ -37,13 +40,13 @@ public class iCloudFileManager: ObservableObject {
         let isAUv3Extension = bundleIdentifier.contains(".appex")
         
         if isAUv3Extension {
-            // Pour l'extension AUv3 : utiliser App Groups pour partager avec l'app
+            // Pour l'extension AUv3 : utiliser App Groups MAIS synchroniser vers Documents visible
             if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") {
                 let documentsURL = groupURL.appendingPathComponent("Documents")
                 print("📁 [AUv3] App Groups Documents directory: \(documentsURL.path)")
                 return documentsURL
             } else {
-                print("⚠️ [AUv3] App Groups non disponible, fallback vers Documents privé")
+                print("⚠️ [AUv3] App Groups non disponible, fallback vers Documents standard")
                 let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
                 return paths[0]
             }
@@ -106,6 +109,12 @@ public class iCloudFileManager: ObservableObject {
             initializeiCloudFileStructure()
         } else {
             initializeLocalFileStructure()
+        }
+        
+        // Si c'est l'app principale, synchroniser les fichiers depuis App Groups
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+        if !bundleIdentifier.contains(".appex") {
+            syncFromAppGroupsToVisibleDocuments()
         }
     }
     
@@ -287,6 +296,12 @@ public class iCloudFileManager: ObservableObject {
                 print("☁️ iCloud sync démarré pour: \(fileURL.lastPathComponent)")
             }
             
+            // Si c'est une extension AUv3, aussi copier vers Documents visible
+            let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+            if bundleIdentifier.contains(".appex") {
+                copyFileToVisibleDocuments(from: fileURL, relativePath: relativePath)
+            }
+            
             completion(true, nil)
         } catch {
             print("❌ Erreur sauvegarde iCloud: \(error)")
@@ -385,5 +400,172 @@ public class iCloudFileManager: ObservableObject {
             print("❌ Migration to local failed: \(error)")
             completion(false)
         }
+    }
+    
+    // MARK: - Document Picker pour AUv3
+    public func saveFileWithDocumentPicker(data: Data, fileName: String, from viewController: UIViewController, completion: @escaping (Bool, Error?) -> Void) {
+        print("🔥 SWIFT: saveFileWithDocumentPicker appelé")
+        print("🔥 SWIFT: fileName = \(fileName), data.count = \(data.count)")
+        print("🔥 SWIFT: viewController = \(type(of: viewController))")
+        
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
+        print("🔥 SWIFT: bundleIdentifier = \(bundleIdentifier)")
+        
+        if bundleIdentifier.contains(".appex") {
+            print("🔥 SWIFT: Extension AUv3 détectée - utilisation Document Picker")
+            // Extension AUv3 : utiliser Document Picker pour accès utilisateur
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+            print("🔥 SWIFT: tempURL = \(tempURL)")
+            
+            do {
+                try data.write(to: tempURL)
+                print("🔥 SWIFT: Fichier temporaire écrit avec succès")
+                
+                // Stocker le delegate pour éviter qu'il soit libéré
+                self.documentPickerDelegate = DocumentPickerDelegate { [weak self] success, error in
+                    print("🔥 SWIFT: DocumentPickerDelegate callback - success: \(success), error: \(String(describing: error))")
+                    self?.documentPickerDelegate = nil // Libérer après utilisation
+                    completion(success, error)
+                }
+                
+                print("🔥 SWIFT: DocumentPickerDelegate créé")
+                
+                let documentPicker = UIDocumentPickerViewController(forExporting: [tempURL])
+                documentPicker.delegate = self.documentPickerDelegate
+                documentPicker.modalPresentationStyle = .formSheet
+                
+                print("🔥 SWIFT: DocumentPickerViewController créé")
+                print("🔥 SWIFT: Tentative de présentation du Document Picker...")
+                
+                DispatchQueue.main.async {
+                    print("🔥 SWIFT: Sur main thread - présentation du Document Picker")
+                    viewController.present(documentPicker, animated: true) {
+                        print("🔥 SWIFT: Document Picker présenté avec succès")
+                    }
+                }
+                
+            } catch {
+                print("❌ SWIFT: Erreur écriture fichier temporaire: \(error)")
+                completion(false, error)
+            }
+        } else {
+            print("🔥 SWIFT: App principale détectée - utilisation méthode normale")
+            // App principale : utiliser la méthode normale
+            saveFile(data: data, to: fileName, completion: completion)
+        }
+    }
+    
+    // MARK: - App Groups Synchronization
+    private func syncFromAppGroupsToVisibleDocuments() {
+        print("🔄 Synchronisation depuis App Groups vers Documents visible...")
+        
+        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
+            print("❌ App Groups non disponible pour synchronisation")
+            return
+        }
+        
+        let appGroupDocuments = groupURL.appendingPathComponent("Documents")
+        let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        
+        // Vérifier si App Groups contient des fichiers
+        guard FileManager.default.fileExists(atPath: appGroupDocuments.path) else {
+            print("📂 Aucun fichier App Groups à synchroniser")
+            return
+        }
+        
+        do {
+            let fileManager = FileManager.default
+            let folders = ["Projects", "Exports", "Recordings", "Templates"]
+            
+            for folder in folders {
+                let sourceFolder = appGroupDocuments.appendingPathComponent(folder)
+                let destFolder = visibleDocuments.appendingPathComponent(folder)
+                
+                if fileManager.fileExists(atPath: sourceFolder.path) {
+                    // Créer le dossier de destination s'il n'existe pas
+                    if !fileManager.fileExists(atPath: destFolder.path) {
+                        try fileManager.createDirectory(at: destFolder, withIntermediateDirectories: true, attributes: nil)
+                    }
+                    
+                    // Copier tous les fichiers du dossier source vers destination
+                    let sourceContents = try fileManager.contentsOfDirectory(at: sourceFolder, includingPropertiesForKeys: nil)
+                    
+                    for sourceFile in sourceContents {
+                        let destFile = destFolder.appendingPathComponent(sourceFile.lastPathComponent)
+                        
+                        // Ne copier que si le fichier n'existe pas déjà ou est plus récent
+                        var shouldCopy = false
+                        
+                        if !fileManager.fileExists(atPath: destFile.path) {
+                            shouldCopy = true
+                        } else {
+                            // Comparer les dates de modification
+                            let sourceDate = try sourceFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                            let destDate = try destFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                            
+                            if let sDate = sourceDate, let dDate = destDate, sDate > dDate {
+                                try fileManager.removeItem(at: destFile)
+                                shouldCopy = true
+                            }
+                        }
+                        
+                        if shouldCopy {
+                            try fileManager.copyItem(at: sourceFile, to: destFile)
+                            print("📄 Copié: \(sourceFile.lastPathComponent) vers Documents visible")
+                        }
+                    }
+                }
+            }
+            
+            print("✅ Synchronisation App Groups → Documents terminée")
+            
+        } catch {
+            print("❌ Erreur lors de la synchronisation: \(error)")
+        }
+    }
+    
+    private func copyFileToVisibleDocuments(from sourceURL: URL, relativePath: String) {
+        print("📋 Copie vers Documents visible: \(relativePath)")
+        
+        let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let destURL = visibleDocuments.appendingPathComponent(relativePath)
+        
+        do {
+            // Créer le dossier de destination s'il n'existe pas
+            let destDirectory = destURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: destDirectory, withIntermediateDirectories: true, attributes: nil)
+            
+            // Supprimer le fichier existant s'il y en a un
+            if FileManager.default.fileExists(atPath: destURL.path) {
+                try FileManager.default.removeItem(at: destURL)
+            }
+            
+            // Copier le fichier
+            try FileManager.default.copyItem(at: sourceURL, to: destURL)
+            print("✅ Fichier copié vers Documents visible: \(destURL.path)")
+            
+        } catch {
+            print("❌ Erreur copie vers Documents visible: \(error)")
+        }
+    }
+}
+
+// MARK: - Document Picker Delegate pour AUv3
+class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate {
+    private let completion: (Bool, Error?) -> Void
+    
+    init(completion: @escaping (Bool, Error?) -> Void) {
+        self.completion = completion
+        print("🔥 SWIFT: DocumentPickerDelegate init")
+    }
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        print("🔥 SWIFT: documentPicker didPickDocumentsAt: \(urls)")
+        completion(true, nil)
+    }
+    
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        print("🔥 SWIFT: documentPicker was cancelled")
+        completion(false, NSError(domain: "DocumentPicker", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
     }
 }

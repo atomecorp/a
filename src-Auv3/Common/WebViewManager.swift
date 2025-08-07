@@ -74,10 +74,44 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             }
             
         case "swiftBridge":
-            if let body = message.body as? [String: Any],
-               let type = body["type"] as? String,
-               let data = body["data"] {
-                handleSwiftBridgeMessage(type: type, data: data)
+            // 🔥 SWIFT: Début du handler swiftBridge
+            print("🔥 SWIFT: swiftBridge message reçu")
+            print("🔥 SWIFT: message.body type: \(type(of: message.body))")
+            print("🔥 SWIFT: message.body content: \(message.body)")
+            
+            if let body = message.body as? [String: Any] {
+                print("🔥 SWIFT: body parsé avec succès: \(body)")
+                
+                // Vérifier si c'est un message de système de fichiers
+                if let action = body["action"] as? String {
+                    print("🔥 SWIFT: action trouvée: \(action)")
+                    
+                    // Router vers FileSystemBridge pour les actions de fichiers
+                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker"]
+                    
+                    if fileSystemActions.contains(action) {
+                        print("🔥 SWIFT: Routage vers FileSystemBridge pour action: \(action)")
+                        if let bridge = WebViewManager.fileSystemBridge {
+                            print("🔥 SWIFT: FileSystemBridge disponible, envoi du message")
+                            bridge.userContentController(userContentController, didReceive: message)
+                        } else {
+                            print("🔥 SWIFT: ❌ FileSystemBridge est nil!")
+                        }
+                        return
+                    }
+                }
+                
+                // Messages audio (ancien format avec "type")
+                if let type = body["type"] as? String,
+                   let data = body["data"] {
+                    print("🔥 SWIFT: message audio avec type: \(type)")
+                    handleSwiftBridgeMessage(type: type, data: data)
+                } else {
+                    print("🔥 SWIFT: ❌ Format de message non reconnu")
+                    print("🔥 SWIFT: Clés disponibles: \(body.keys)")
+                }
+            } else {
+                print("🔥 SWIFT: ❌ Impossible de parser message.body en [String: Any]")
             }
             
         default:
@@ -307,7 +341,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - File System API
     
     private static func addFileSystemAPI(to webView: WKWebView) {
+        print("🔥 SWIFT: addFileSystemAPI appelée")
         fileSystemBridge = FileSystemBridge()
+        print("🔥 SWIFT: FileSystemBridge créé: \(fileSystemBridge != nil)")
         fileSystemBridge?.addFileSystemAPI(to: webView)
         print("🔧 FileSystemBridge créé et API ajoutée au WebView")
     }

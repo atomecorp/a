@@ -37,6 +37,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleGetStorageInfo(webView: message.webView)
         case "showStorageSettings":
             handleShowStorageSettings()
+        case "saveFileWithDocumentPicker":
+            handleSaveFileWithDocumentPicker(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -320,5 +322,66 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             responder = responder?.next
         }
         return nil
+    }
+    
+    private func handleSaveFileWithDocumentPicker(body: [String: Any], webView: WKWebView?) {
+        print("🔥 SWIFT: handleSaveFileWithDocumentPicker appelé")
+        print("🔥 SWIFT: body = \(body)")
+        
+        guard let fileName = body["fileName"] as? String,
+              let dataString = body["data"] as? String,
+              let data = dataString.data(using: .utf8),
+              let webView = webView else {
+            print("❌ SWIFT: Paramètres invalides pour Document Picker")
+            sendErrorResponse(to: webView, error: "Invalid parameters for Document Picker")
+            return
+        }
+        
+        print("🔥 SWIFT: Paramètres OK - fileName: \(fileName), data.count: \(data.count)")
+        
+        // Trouver le view controller pour présenter le Document Picker
+        guard let viewController = findViewController(from: webView) else {
+            print("❌ SWIFT: Cannot find view controller for Document Picker")
+            sendErrorResponse(to: webView, error: "Cannot find view controller for Document Picker")
+            return
+        }
+        
+        print("� SWIFT: View controller trouvé: \(type(of: viewController))")
+        print("�📄 Sauvegarde avec Document Picker: \(fileName)")
+        
+        iCloudFileManager.shared.saveFileWithDocumentPicker(
+            data: data,
+            fileName: fileName,
+            from: viewController
+        ) { [weak self] success, error in
+            print("🔥 SWIFT: Callback Document Picker reçu - success: \(success), error: \(String(describing: error))")
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ SWIFT: Notifying JavaScript of success")
+                    // Notifier JavaScript du succès
+                    let js = "if (window.documentPickerResult) window.documentPickerResult(true, null);"
+                    webView.evaluateJavaScript(js) { (result, error) in
+                        if let error = error {
+                            print("❌ SWIFT: Erreur JavaScript success: \(error)")
+                        } else {
+                            print("✅ SWIFT: JavaScript success notifié")
+                        }
+                    }
+                } else {
+                    let errorMessage = error?.localizedDescription ?? "Unknown error"
+                    print("❌ SWIFT: Notifying JavaScript of error: \(errorMessage)")
+                    // Notifier JavaScript de l'erreur
+                    let js = "if (window.documentPickerResult) window.documentPickerResult(false, '\(errorMessage)');"
+                    webView.evaluateJavaScript(js) { (result, error) in
+                        if let error = error {
+                            print("❌ SWIFT: Erreur JavaScript error: \(error)")
+                        } else {
+                            print("✅ SWIFT: JavaScript error notifié")
+                        }
+                    }
+                }
+            }
+        }
+        print("🔥 SWIFT: Appel à saveFileWithDocumentPicker terminé")
     }
 }
