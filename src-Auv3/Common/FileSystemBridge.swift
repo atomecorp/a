@@ -356,6 +356,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             fileName: fileName,
             from: viewController
         ) { [weak self] success, error in
+            guard self != nil else { return }
             print("🔥 SWIFT: Callback Document Picker reçu - success: \(success), error: \(String(describing: error))")
             DispatchQueue.main.async {
                 if success {
@@ -414,6 +415,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             fileTypes: fileTypes,
             from: viewController
         ) { [weak self] success, data, fileName, error in
+            guard self != nil else { return }
             print("🔥 SWIFT: Callback Document Picker Load reçu - success: \(success), fileName: \(fileName ?? "nil"), error: \(String(describing: error))")
             DispatchQueue.main.async {
                 if success, let data = data, let content = String(data: data, encoding: .utf8) {

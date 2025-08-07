@@ -461,15 +461,11 @@ public class MIDIController: NSObject {
             return ptr.bindMemory(to: MIDIPacketList.self).baseAddress!
         }
         
-        var packet = MIDIPacketListInit(packetListPtr)
+        let packet = MIDIPacketListInit(packetListPtr)
         let timestamp = mach_absolute_time()
         
-        packet = MIDIPacketListAdd(packetListPtr, 1024, packet, timestamp, data.count, data)
-        
-        if packet == nil {
-            logger.error("❌ Failed to create MIDI packet")
-            return
-        }
+        // Add the MIDI packet to the packet list
+        _ = MIDIPacketListAdd(packetListPtr, 1024, packet, timestamp, data.count, data)
         
         // Log the MIDI data being sent
         let dataString = data.map { String(format: "0x%02X", $0) }.joined(separator: " ")
