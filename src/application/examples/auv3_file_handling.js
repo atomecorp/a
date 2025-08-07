@@ -1092,14 +1092,14 @@ function creerBoutons() {
         }
     });
     
-    // 2. Bouton Document Picker direct
-    const documentPickerButton = creerBouton({
-        text: '📄 Document Picker AUv3',
+    // 2. Bouton Document Picker pour sauvegarder
+    const saveDocumentPickerButton = creerBouton({
+        text: '💾 Sauvegarder AUv3',
         id: 'auv3-button-save',
         css: {
             position: 'fixed',
             top: '20px',
-            left: '280px',
+            left: '250px',
             padding: '15px 20px',
             backgroundColor: '#FF6B35',
             color: 'white',
@@ -1112,24 +1112,17 @@ function creerBoutons() {
             boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
         },
         click: async () => {
-            console.log('🔥 DÉBUT: Clic sur Document Picker AUv3');
+            console.log('🔥 DÉBUT: Clic sur Sauvegarder AUv3');
             
             try {
                 // 1. Vérifier les APIs disponibles
-                console.log('🔍 Vérification des APIs:');
-                console.log('- window.AtomeFileSystem:', typeof window.AtomeFileSystem);
-                console.log('- window.webkit:', typeof window.webkit);
-                console.log('- window.webkit.messageHandlers:', typeof window.webkit?.messageHandlers);
-                console.log('- window.webkit.messageHandlers.swiftBridge:', typeof window.webkit?.messageHandlers?.swiftBridge);
-                
-                // 2. Vérifier le bridge
                 if (typeof window.webkit === 'undefined' || 
                     typeof window.webkit.messageHandlers === 'undefined' || 
                     typeof window.webkit.messageHandlers.swiftBridge === 'undefined') {
                     throw new Error('Bridge Swift non disponible. Vérifiez WebViewManager.swift');
                 }
                 
-                // 3. Créer les données de test
+                // 2. Créer les données de test
                 const testData = {
                     version: '1.0',
                     created: new Date().toISOString(),
@@ -1140,9 +1133,9 @@ function creerBoutons() {
                     ]
                 };
                 
-                console.log('� Données à sauvegarder:', testData);
+                console.log('📊 Données à sauvegarder:', testData);
                 
-                // 4. Notification de début
+                // 3. Notification de début
                 const startNotification = document.createElement('div');
                 startNotification.style.cssText = `
                     position: fixed;
@@ -1155,187 +1148,26 @@ function creerBoutons() {
                     z-index: 1001;
                     font-family: Arial, sans-serif;
                 `;
-                startNotification.textContent = '�🚀 Lancement Document Picker...';
+                startNotification.textContent = '🚀 Lancement Document Picker sauvegarde...';
                 document.body.appendChild(startNotification);
                 
-                // 5. Préparer le message pour Swift
-                const message = {
-                    action: 'saveFileWithDocumentPicker',
-                    data: JSON.stringify(testData),
-                    fileName: 'TestDocumentPicker.atome'
-                };
+                // 4. Utiliser la fonction sauvegarderProjetAUv3
+                await sauvegarderProjetAUv3(testData, 'TestSauvegardeAUv3');
                 
-                console.log('📤 Message envoyé au bridge Swift:', message);
-                
-                // 6. Envoyer le message au bridge Swift
-                window.webkit.messageHandlers.swiftBridge.postMessage(message);
-                console.log('✅ Message envoyé avec succès !');
-                
-                // 7. Attendre une réponse (timeout après 10 secondes)
-                const result = await new Promise((resolve, reject) => {
-                    // Timeout si pas de réponse
-                    const timeout = setTimeout(() => {
-                        reject(new Error('Timeout: Pas de réponse du Document Picker après 10 secondes'));
-                    }, 10000);
-                    
-                    // Handler pour la réponse
-                    window.documentPickerResult = (success, error) => {
-                        clearTimeout(timeout);
-                        console.log('📥 Réponse reçue du Document Picker:', { success, error });
-                        
-                        if (success) {
-                            resolve(true);
-                        } else {
-                            reject(new Error(error || 'Document Picker cancelled'));
-                        }
-                    };
-                    
-                    console.log('⏳ En attente de la réponse du Document Picker...');
-                });
-                
-                // 8. Succès
-                console.log('✅ Document Picker terminé avec succès !');
-                
-                // Supprimer notification de début
+                // 5. Supprimer notification de début
                 if (startNotification.parentNode) {
                     startNotification.remove();
                 }
                 
-                // Notification de succès
-                const successNotification = document.createElement('div');
-                successNotification.style.cssText = `
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    padding: 10px 20px;
-                    background-color: #4CAF50;
-                    color: white;
-                    border-radius: 5px;
-                    z-index: 1001;
-                    font-family: Arial, sans-serif;
-                `;
-                successNotification.textContent = '✅ Fichier sauvegardé via Document Picker !';
-                document.body.appendChild(successNotification);
-                
-                setTimeout(() => {
-                    if (successNotification.parentNode) {
-                        successNotification.remove();
-                    }
-                }, 3000);
-                
             } catch (error) {
-                console.error('❌ ERREUR Document Picker:', error);
-                console.error('Stack trace:', error.stack);
+                console.error('❌ ERREUR Document Picker Sauvegarde:', error);
                 
-                // LOGS DE DEBUGGING POUR LE PANNEAU D'ERREUR
-                console.log('🔧 DÉBUT: Création du panneau d\'erreur...');
-                console.log('🔧 document.body disponible:', !!document.body);
-                console.log('🔧 document.createElement fonctionne:', typeof document.createElement);
+                // Supprimer notification de début si elle existe
+                const startNotif = document.querySelector('div[style*="FF6B35"]');
+                if (startNotif) startNotif.remove();
                 
-                try {
-                    // Créer notification d'erreur détaillée
-                    console.log('🔧 Création de l\'élément errorDiv...');
-                    const errorDiv = document.createElement('div');
-                    console.log('🔧 errorDiv créé:', !!errorDiv);
-                    
-                    console.log('🔧 Application des styles CSS...');
-                    errorDiv.style.cssText = `
-                        position: fixed;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        padding: 20px;
-                        background-color: rgba(255, 0, 0, 0.9);
-                        color: white;
-                        border-radius: 10px;
-                        z-index: 10000;
-                        max-width: 80%;
-                        text-align: left;
-                        font-family: monospace;
-                        font-size: 12px;
-                        white-space: pre-wrap;
-                    `;
-                    console.log('🔧 Styles CSS appliqués');
-                    
-                    console.log('🔧 Création du message d\'erreur...');
-                    let errorMessage = `❌ ERREUR Document Picker:\n\n`;
-                    errorMessage += `Message: ${error.message}\n\n`;
-                    errorMessage += `APIs disponibles:\n`;
-                    errorMessage += `- window.AtomeFileSystem: ${typeof window.AtomeFileSystem}\n`;
-                    errorMessage += `- window.webkit: ${typeof window.webkit}\n`;
-                    errorMessage += `- messageHandlers: ${typeof window.webkit?.messageHandlers}\n`;
-                    errorMessage += `- swiftBridge: ${typeof window.webkit?.messageHandlers?.swiftBridge}\n\n`;
-                    errorMessage += `Vérifiez:\n`;
-                    errorMessage += `1. FileSystemBridge.swift est lié au projet\n`;
-                    errorMessage += `2. WebViewManager.swift appelle addFileSystemAPI()\n`;
-                    errorMessage += `3. App lancée en mode iOS (pas web browser)\n\n`;
-                    errorMessage += `Stack trace:\n${error.stack || 'Non disponible'}`;
-                    
-                    console.log('🔧 Attribution du textContent...');
-                    errorDiv.textContent = errorMessage;
-                    console.log('🔧 textContent attribué');
-                    
-                    // Bouton fermer
-                    console.log('🔧 Création du bouton fermer...');
-                    const closeBtn = document.createElement('button');
-                    closeBtn.textContent = '✕ Fermer';
-                    closeBtn.style.cssText = `
-                        position: absolute;
-                        top: 10px;
-                        right: 10px;
-                        background: rgba(255,255,255,0.2);
-                        border: 1px solid white;
-                        color: white;
-                        padding: 5px 10px;
-                        border-radius: 3px;
-                        cursor: pointer;
-                    `;
-                    closeBtn.addEventListener('click', () => {
-                        console.log('🔧 Bouton fermer cliqué');
-                        errorDiv.remove();
-                    });
-                    console.log('🔧 Bouton fermer créé');
-                    
-                    console.log('🔧 Ajout du bouton à errorDiv...');
-                    errorDiv.appendChild(closeBtn);
-                    console.log('🔧 Bouton ajouté à errorDiv');
-                    
-                    console.log('🔧 Ajout d\'errorDiv au document.body...');
-                    console.log('🔧 document.body avant ajout:', document.body);
-                    document.body.appendChild(errorDiv);
-                    console.log('🔧 errorDiv ajouté au DOM');
-                    
-                    // Vérifier que l'élément est bien dans le DOM
-                    console.log('🔧 errorDiv dans le DOM:', document.body.contains(errorDiv));
-                    console.log('🔧 errorDiv visible (offsetWidth > 0):', errorDiv.offsetWidth > 0);
-                    console.log('🔧 errorDiv styles calculés:', window.getComputedStyle(errorDiv).display);
-                    console.log('🔧 errorDiv position:', window.getComputedStyle(errorDiv).position);
-                    console.log('🔧 errorDiv z-index:', window.getComputedStyle(errorDiv).zIndex);
-                    
-                    // Forcer un reflow
-                    console.log('🔧 Forçage d\'un reflow...');
-                    errorDiv.offsetHeight; // Trigger reflow
-                    
-                    // Auto-suppression après 15 secondes
-                    setTimeout(() => {
-                        console.log('🔧 Timeout auto-suppression...');
-                        if (errorDiv.parentNode) {
-                            console.log('🔧 Suppression auto du panneau d\'erreur');
-                            errorDiv.remove();
-                        } else {
-                            console.log('🔧 errorDiv déjà supprimé');
-                        }
-                    }, 15000);
-                    
-                    console.log('✅ PANNEAU D\'ERREUR CRÉÉ ET AJOUTÉ AU DOM !');
-                    
-                } catch (panelError) {
-                    console.error('❌ ERREUR lors de la création du panneau:', panelError);
-                    console.error('❌ Stack trace panneau:', panelError.stack);
-                    
-                    // Fallback: simple alert
-                    alert(`❌ ERREUR Document Picker:\n${error.message}\n\nErreur panneau: ${panelError.message}`);
-                }
+                // Simple alert pour l'erreur
+                alert(`❌ ERREUR Document Picker Sauvegarde:\n${error.message}`);
             }
         }
     });
@@ -1530,218 +1362,13 @@ function creerBoutons() {
         }
     });
     
-    // 5. Bouton Test Simple
-    const testButton = creerBouton({
-        text: '🧪 Test Simple',
-        css: {
-            position: 'fixed',
-            top: '80px',
-            left: '200px',
-            padding: '10px 15px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            zIndex: '1000',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        },
-        click: () => {
-            console.log('🧪 Test des APIs...');
-            window.debugFileSystemAPI();
-            
-            // Notification visuelle
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 10px 20px;
-                background-color: #4CAF50;
-                color: white;
-                border-radius: 5px;
-                z-index: 1001;
-                font-family: Arial, sans-serif;
-            `;
-            notification.textContent = '🧪 Test lancé - Vérifiez la console !';
-            
-            document.body.appendChild(notification);
-            
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 3000);
-        }
-    });
-    
-    // 6. Bouton Test Panneau DOM
-    const testPanelButton = creerBouton({
-        text: '🎭 Test Panneau',
-        id: 'auv3-button-test-panel',
-        css: {
-            position: 'fixed',
-            top: '80px',
-            left: '340px',
-            padding: '10px 15px',
-            backgroundColor: '#E91E63',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            zIndex: '1000',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        },
-        click: () => {
-            console.log('🎭 Test création panneau DOM...');
-            
-            try {
-                // Test simple de création d'un panneau
-                const testPanel = document.createElement('div');
-                testPanel.style.cssText = `
-                    position: fixed;
-                    top: 30%;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    width: 300px;
-                    padding: 20px;
-                    background-color: rgba(0, 150, 255, 0.95);
-                    color: white;
-                    border-radius: 10px;
-                    z-index: 10000;
-                    text-align: center;
-                    font-family: Arial, sans-serif;
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-                `;
-                
-                testPanel.innerHTML = `
-                    <h3>🎭 Test Panneau DOM</h3>
-                    <p>Ce panneau teste si les overlays fonctionnent correctement dans l'AUv3.</p>
-                    <p><strong>DOM Status:</strong></p>
-                    <p>document.body: ${!!document.body ? '✅' : '❌'}</p>
-                    <p>createElement: ${!!document.createElement ? '✅' : '❌'}</p>
-                    <p>appendChild: ${!!document.body?.appendChild ? '✅' : '❌'}</p>
-                    <button onclick="this.parentElement.remove()" style="
-                        margin-top: 10px;
-                        padding: 8px 16px;
-                        background-color: rgba(255,255,255,0.2);
-                        border: 1px solid white;
-                        border-radius: 4px;
-                        color: white;
-                        cursor: pointer;
-                    ">🗑️ Fermer Test</button>
-                `;
-                
-                console.log('🎭 Ajout du panneau de test au DOM...');
-                document.body.appendChild(testPanel);
-                console.log('🎭 Panneau de test ajouté !');
-                
-                // Vérifications
-                console.log('🎭 Panneau dans DOM:', document.body.contains(testPanel));
-                console.log('🎭 Panneau visible:', testPanel.offsetWidth > 0);
-                console.log('🎭 Styles calculés:', {
-                    display: window.getComputedStyle(testPanel).display,
-                    position: window.getComputedStyle(testPanel).position,
-                    zIndex: window.getComputedStyle(testPanel).zIndex,
-                    visibility: window.getComputedStyle(testPanel).visibility
-                });
-                
-                // Auto-suppression après 10 secondes
-                setTimeout(() => {
-                    if (testPanel.parentNode) {
-                        console.log('🎭 Auto-suppression du panneau de test');
-                        testPanel.remove();
-                    }
-                }, 10000);
-                
-            } catch (error) {
-                console.error('❌ Erreur test panneau:', error);
-                alert('❌ Erreur test panneau: ' + error.message);
-            }
-        }
-    });
-    
-    // 7. Bouton de nettoyage d'urgence DOM
-    const cleanupButton = creerBouton({
-        text: '🧹 Nettoyer DOM',
-        id: 'auv3-button-cleanup',
-        css: {
-            position: 'fixed',
-            top: '80px',
-            left: '480px',
-            padding: '10px 15px',
-            backgroundColor: '#FF5722',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            zIndex: '1000',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        },
-        click: () => {
-            logSafe('🧹 Démarrage nettoyage DOM manuel...');
-            
-            try {
-                const success = nettoyerDOM();
-                
-                const notification = document.createElement('div');
-                notification.style.cssText = `
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    padding: 10px 20px;
-                    background-color: ${success ? '#4CAF50' : '#FF5722'};
-                    color: white;
-                    border-radius: 5px;
-                    z-index: 1001;
-                    font-family: Arial, sans-serif;
-                `;
-                notification.textContent = success ? 
-                    '🧹 Nettoyage DOM terminé avec succès !' : 
-                    '⚠️ Nettoyage DOM partiellement réussi';
-                
-                document.body.appendChild(notification);
-                
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.remove();
-                    }
-                }, 4000);
-                
-                // Recréer les boutons si nécessaire
-                if (success) {
-                    setTimeout(() => {
-                        const existingButtons = document.querySelectorAll('[id^="auv3-button-"]');
-                        if (existingButtons.length < 7) {
-                            logSafe('🔄 Recréation des boutons après nettoyage...');
-                            creerBoutons();
-                        }
-                    }, 1000);
-                }
-                
-            } catch (error) {
-                logSafe('❌ Erreur nettoyage manuel:', error);
-                alert('❌ Erreur nettoyage: ' + error.message);
-            }
-        }
-    });
-    
     
     // Ajouter tous les boutons au DOM de façon sécurisée
     const boutons = [
         quickAccessButton,
-        documentPickerButton, 
+        saveDocumentPickerButton,
         loadDocumentPickerButton,
-        debugLocationButton,
-        testButton,
-        testPanelButton,
-        cleanupButton
+        debugLocationButton
     ];
     
     let boutonsAjoutes = 0;
@@ -1750,7 +1377,7 @@ function creerBoutons() {
             if (bouton && document.body && document.body.appendChild) {
                 document.body.appendChild(bouton);
                 boutonsAjoutes++;
-                logSafe(`✅ Bouton ${index + 1}/7 ajouté`);
+                logSafe(`✅ Bouton ${index + 1}/4 ajouté`);
             } else {
                 logSafe(`❌ Impossible d'ajouter bouton ${index + 1}`);
             }
@@ -1759,15 +1386,12 @@ function creerBoutons() {
         }
     });
     
-    logSafe(`✅ ${boutonsAjoutes}/7 boutons créés avec succès !`);
+    logSafe(`✅ ${boutonsAjoutes}/4 boutons créés avec succès !`);
     if (boutonsAjoutes > 0) {
         logSafe('📁 Bouton bleu: Gestionnaire de Fichiers');
-        logSafe('📄 Bouton orange: Document Picker direct (sauvegarde)');
-        logSafe('📂 Bouton violet: Document Picker direct (chargement)');
+        logSafe('� Bouton orange: Sauvegarder AUv3');
+        logSafe('📂 Bouton violet: Charger Fichier AUv3');
         logSafe('🔍 Bouton violet foncé: Debug localisation');
-        logSafe('🧪 Bouton vert: Test simple');
-        logSafe('🎭 Bouton rose: Test panneau DOM');
-        logSafe('🧹 Bouton rouge: Nettoyage DOM d\'urgence');
     }
     
     } catch (globalError) {
