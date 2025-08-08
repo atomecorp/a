@@ -344,7 +344,17 @@ window.console.log = (function(oldLog) {
                 const cb = pendingFileSaves[msg.requestId];
                 if (cb){
                     delete pendingFileSaves[msg.requestId];
-                    msg.success ? cb.resolve(true) : cb.reject(new Error(msg.error||'Save failed'));
+                    if (msg.success) cb.resolve({ success:true, fileName: msg.fileName, path: msg.path||null });
+                    else cb.reject(new Error(msg.error||'Save failed'));
+                }
+                break;
+            }
+            case 'saveProjectInternalResult': { // nouveau type attendu pour auv3_file_saver
+                const cb = pendingFileSaves[msg.requestId];
+                if (cb){
+                    delete pendingFileSaves[msg.requestId];
+                    if (msg.success) cb.resolve({ success:true, fileName: msg.fileName, path: msg.path||null });
+                    else cb.reject(new Error(msg.error||'Save failed'));
                 }
                 break;
             }
@@ -463,10 +473,10 @@ window.console.log = (function(oldLog) {
     let fileName = (inp && inp.value.trim()) || 'PanelProj.atome';
     if(!fileName.includes('.')) fileName += '.atome';
     const p={name:fileName.replace(/\.[^.]+$/,''),stamp:Date.now(),v:1}; 
-    await AUv3API.auv3_file_saver(fileName, p); 
-    log('AUv3 Save ok => '+fileName); 
+    const res = await AUv3API.auv3_file_saver(fileName, p); 
+    if(res && res.path) log('AUv3 Save ok => '+fileName+'\nPath: '+res.path); else log('AUv3 Save ok => '+fileName+' (path inconnu)');
   });
-  addBtn('List Projects', async()=>{ const files = await AUv3API.auv3_file_list('Projects'); return files; });
+  addBtn('List Projects', async()=>{ const files = await AUv3API.auv3_file_list('Projects'); log('DEBUG list raw => '+JSON.stringify(files)); return files; });
   addBtn('Load Proj', async()=>{ const name=prompt('Project name (without .atome)','PanelProj'); if(!name) return; const d= await AUv3API.auv3_file_loader('Projects', name); log('Project keys: '+Object.keys(d)); });
   addBtn('Tempo', async()=>{ const bpm = await AUv3API.auv3_tempo(); log('Tempo='+bpm); return bpm; });
 

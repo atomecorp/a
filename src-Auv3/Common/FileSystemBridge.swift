@@ -41,6 +41,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleSaveFileWithDocumentPicker(body: body, webView: message.webView)
         case "loadFileWithDocumentPicker":
             handleLoadFileWithDocumentPicker(body: body, webView: message.webView)
+        case "saveProjectInternal":
+            handleSaveProjectInternal(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -83,37 +85,37 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     }
     
     private func handleListFiles(body: [String: Any], webView: WKWebView?) {
-        guard let folder = body["folder"] as? String else {
-            sendErrorResponse(to: webView, error: "Invalid folder parameter")
-            return
-        }
-        
-        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
-            sendErrorResponse(to: webView, error: "Storage not available")
-            return
-        }
-        
-        let folderURL = storageURL.appendingPathComponent(folder)
-        
+        // Accept both 'folder' (legacy) and 'path' (AUv3API)
+        let folder = (body["folder"] as? String) ?? (body["path"] as? String) ?? ""
+        let requestId = body["requestId"] as? Int
+        print("📂 SWIFT:listFiles folder/path=\(folder) requestId=\(String(describing: requestId))")
+        if folder.isEmpty { sendErrorResponse(to: webView, error: "Invalid folder/path parameter"); return }
+        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else { sendErrorResponse(to: webView, error: "Storage not available"); return }
+        let folderURL = storageURL.appendingPathComponent(folder, isDirectory: true)
+        print("📂 SWIFT:listFiles storageURL=\(storageURL.path) folderURL=\(folderURL.path)")
         do {
             let fileURLs = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey], options: .skipsHiddenFiles)
-            
             let files = fileURLs.compactMap { url -> [String: Any]? in
-                guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]),
-                      let isFile = resourceValues.isRegularFile, isFile else {
-                    return nil
-                }
-                
+                guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]), let isFile = resourceValues.isRegularFile, isFile else { return nil }
+                print("📄 SWIFT:listFiles found file=\(url.lastPathComponent)")
                 return [
                     "name": url.lastPathComponent,
                     "size": resourceValues.fileSize ?? 0,
                     "modified": resourceValues.contentModificationDate?.timeIntervalSince1970 ?? 0
                 ]
             }
-            
-            sendSuccessResponse(to: webView, data: ["files": files])
+            if let requestId = requestId { // unified AUv3API pathway
+                sendBridgeResult(to: webView, payload: ["action":"listFilesResult","requestId":requestId,"success":true,"files":files])
+            } else {
+                sendSuccessResponse(to: webView, data: ["files": files])
+            }
         } catch {
-            sendErrorResponse(to: webView, error: "Failed to list files: \(error.localizedDescription)")
+            print("❌ SWIFT:listFiles error=\(error.localizedDescription)")
+            if let requestId = requestId {
+                sendBridgeResult(to: webView, payload: ["action":"listFilesResult","requestId":requestId,"success":false,"error":error.localizedDescription])
+            } else {
+                sendErrorResponse(to: webView, error: "Failed to list files: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -451,5 +453,34 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             }
         }
         print("🔥 SWIFT: Appel à loadFileWithDocumentPicker terminé")
+    }
+    
+    private func handleSaveProjectInternal(body: [String: Any], webView: WKWebView?) {
+        guard let fileName = body["fileName"] as? String, let dataString = body["data"] as? String, let requestId = body["requestId"] as? Int else { return }
+        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
+            print("❌ SWIFT:saveProjectInternal no storage URL")
+            sendBridgeResult(to: webView, payload: ["action":"saveProjectInternalResult","requestId":requestId,"success":false,"error":"No storage URL"]) ; return }
+        let projectsURL = storageURL.appendingPathComponent("Projects", isDirectory: true)
+        try? FileManager.default.createDirectory(at: projectsURL, withIntermediateDirectories: true)
+        let fileURL = projectsURL.appendingPathComponent(fileName)
+        print("💾 SWIFT:saveProjectInternal writing file=\(fileURL.path)")
+        let data = Data(dataString.utf8)
+        do {
+            try data.write(to: fileURL, options: .atomic)
+            let relPath = "Projects/" + fileName
+            print("✅ SWIFT:saveProjectInternal success relPath=\(relPath)")
+            sendBridgeResult(to: webView, payload: ["action":"saveProjectInternalResult","requestId":requestId,"success":true,"fileName":fileName,"path":relPath])
+        } catch {
+            print("❌ SWIFT:saveProjectInternal error=\(error.localizedDescription)")
+            sendBridgeResult(to: webView, payload: ["action":"saveProjectInternalResult","requestId":requestId,"success":false,"error":error.localizedDescription])
+        }
+    }
+
+    private func sendBridgeResult(to webView: WKWebView?, payload: [String: Any]) {
+        guard let webView = webView else { return }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let js = "window.AUv3API && AUv3API._receiveFromSwift(\(json));"
+        webView.evaluateJavaScript(js)
     }
 }
