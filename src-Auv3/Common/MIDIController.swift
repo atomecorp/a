@@ -479,4 +479,8 @@ public class MIDIController: NSObject {
             logger.info("✅ MIDI sent successfully to host")
         }
     }
+    
+    public func sendRaw(bytes: [UInt8]) {
+        sendMIDIMessage(data: bytes)
+    }
 }

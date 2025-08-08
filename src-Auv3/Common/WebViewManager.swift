@@ -13,6 +13,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var webView: WKWebView?
     static weak var audioController: AudioControllerProtocol?
     static var fileSystemBridge: FileSystemBridge?
+    // NEW: MIDI controller reference injected from AudioUnitViewController
+    static weak var midiController: MIDIController?
+    
+    // Timers for streaming (host time & transport)
+    private static var hostTimeTimer: Timer?
+    private static var hostStateTimer: Timer?
     
     // ULTRA AGGRESSIVE: Rate limiting for non-critical JS calls (preserving timecode functionality)
     private static var lastMuteStateUpdate: CFTimeInterval = 0
@@ -87,7 +93,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     print("🔥 SWIFT: action trouvée: \(action)")
                     
                     // Router vers FileSystemBridge pour les actions de fichiers
-                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker"]
+                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"]
                     
                     if fileSystemActions.contains(action) {
                         print("🔥 SWIFT: Routage vers FileSystemBridge pour action: \(action)")
@@ -97,6 +103,47 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         } else {
                             print("🔥 SWIFT: ❌ FileSystemBridge est nil!")
                         }
+                        return
+                    }
+                    
+                    // NEW: High-level AUv3API actions
+                    if action == "sendMidi" {
+                        if let bytes = body["bytes"] as? [Int] {
+                            let u8 = bytes.compactMap { UInt8(exactly: $0 & 0xFF) }
+                            WebViewManager.midiController?.sendRaw(bytes: u8)
+                        }
+                        return
+                    }
+                    
+                    if action == "requestHostTempo" {
+                        let bpm: Double = 120.0 // TODO: Implement real host tempo retrieval if needed
+                        let requestId = body["requestId"] as? Int ?? -1
+                        WebViewManager.sendBridgeJSON(["action":"hostTempo", "bpm": bpm, "requestId": requestId])
+                        return
+                    }
+                    
+                    if action == "startHostTimeStream" {
+                        WebViewManager.startHostTimeStream(format: body["format"] as? String)
+                        return
+                    }
+                    if action == "stopHostTimeStream" {
+                        WebViewManager.stopHostTimeStream()
+                        return
+                    }
+                    if action == "startHostStateStream" {
+                        WebViewManager.startHostStateStream()
+                        return
+                    }
+                    if action == "stopHostStateStream" {
+                        WebViewManager.stopHostStateStream()
+                        return
+                    }
+                    if action == "startMidiStream" {
+                        // Incoming MIDI already forwarded via midiUtilities.* in existing code.
+                        // Could add alternate forwarding path if needed.
+                        return
+                    }
+                    if action == "stopMidiStream" {
                         return
                     }
                 }
@@ -346,5 +393,54 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         print("🔥 SWIFT: FileSystemBridge créé: \(fileSystemBridge != nil)")
         fileSystemBridge?.addFileSystemAPI(to: webView)
         print("🔧 FileSystemBridge créé et API ajoutée au WebView")
+    }
+    
+    // MARK: - Bridge JSON helper
+    private static func sendBridgeJSON(_ dict: [String: Any]) {
+        guard let webView = webView else { return }
+        if let data = try? JSONSerialization.data(withJSONObject: dict),
+           let json = String(data: data, encoding: .utf8) {
+            let js = "if (window.AUv3API) { AUv3API._receiveFromSwift(\"\(json.replacingOccurrences(of: "\\\"", with: "\\\\\""))\"); }"
+            webView.evaluateJavaScript(js, completionHandler: nil)
+        }
+    }
+    
+    // MARK: - Streams
+    private static func startHostTimeStream(format: String?) {
+        stopHostTimeStream()
+        var position: Double = 0
+        hostTimeTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            position += 0.5
+            let payload: [String: Any] = [
+                "action": "hostTimeUpdate",
+                "positionSeconds": position,
+                "positionSamples": Int(position * 44100),
+                "tempo": 120.0,
+                "ppq": position * 2.0,
+                "playing": true
+            ]
+            sendBridgeJSON(payload)
+        }
+    }
+    private static func stopHostTimeStream() {
+        hostTimeTimer?.invalidate(); hostTimeTimer = nil
+    }
+    private static func startHostStateStream() {
+        stopHostStateStream()
+        var playing = true
+        var position: Double = 0
+        hostStateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            position += 1.0
+            playing.toggle()
+            let payload: [String: Any] = [
+                "action": "hostTransport",
+                "playing": playing,
+                "positionSeconds": position
+            ]
+            sendBridgeJSON(payload)
+        }
+    }
+    private static func stopHostStateStream() {
+        hostStateTimer?.invalidate(); hostStateTimer = nil
     }
 }
