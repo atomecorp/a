@@ -296,6 +296,11 @@ public class auv3Utils: AUAudioUnit {
         return true
     }
     
+    // MIDI Output capabilities pour host discovery
+    override public var midiOutputNames: [String] {
+        return ["Atome MIDI Out"]
+    }
+    
     // Performance: Ultra-aggressive rate limiting for AUv3 MIDI logging
     private var lastAUv3MIDILog: CFTimeInterval = 0
     private let auv3MidiLogInterval: CFTimeInterval = 2.0 // 0.5 logs/second max (ultra conservative)

@@ -34,6 +34,14 @@
                     </array>
                     <key>type</key>
                     <string>aumf</string>
+                    <key>supportsMIDI</key>
+                    <true/>
+                    <key>supportsMIDIInput</key>
+                    <true/>
+                    <key>supportsMIDIOutput</key>
+                    <true/>
+                    <key>hasMIDIOutput</key>
+                    <true/>
                     <key>version</key>
                     <integer>67072</integer>
                 </dict>
