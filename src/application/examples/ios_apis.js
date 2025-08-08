@@ -1,4 +1,4 @@
-        window.console.log = (function(oldLog) {
+window.console.log = (function(oldLog) {
             return function(message) {
                 oldLog(message);
                 try {
@@ -363,3 +363,72 @@
 // Usage Examples (see separate examples/examples/ios_apis.js if retained)
 // ------------------------------------------------------------
 // See separate examples file for live usage patterns.
+
+// === Interactive Test Panel (auto-injected) ===
+(function(){
+  if (!window.AUv3API) { console.warn('AUv3API not ready for test panel'); return; }
+  if (document.getElementById('auv3api-test-panel')) return; // avoid duplicates
+
+  const css = `#auv3api-test-panel{position:fixed;z-index:99999;top:8px;right:8px;width:320px;font:12px/1.3 sans-serif;background:#111;color:#eee;border:1px solid #444;border-radius:6px;box-shadow:0 2px 8px #0009;display:flex;flex-direction:column;max-height:90vh;}
+#auv3api-test-panel header{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;background:#222;border-bottom:1px solid #333;font-weight:600;font-size:13px;}
+#auv3api-test-panel button{cursor:pointer;background:#2d2f34;color:#eee;border:1px solid #444;border-radius:4px;padding:4px 6px;margin:2px;font-size:11px;min-width:64px;}
+#auv3api-test-panel button:hover{background:#3a3d44}
+#auv3api-test-panel button:active{background:#555}
+#auv3api-test-panel .grid{display:flex;flex-wrap:wrap;padding:4px;align-content:flex-start;}
+#auv3api-test-panel .log{flex:1;overflow:auto;background:#0a0a0a;border-top:1px solid #222;padding:4px;font-family:monospace;white-space:pre-wrap;}
+#auv3api-test-panel .row{display:flex;gap:4px;width:100%;flex-wrap:wrap;margin-bottom:2px;}
+#auv3api-test-panel .tag{background:#444;border-radius:3px;padding:2px 4px;margin-right:4px;font-size:10px;}
+#auv3api-test-panel footer{padding:2px 6px;background:#191919;border-top:1px solid #222;display:flex;justify-content:space-between;align-items:center;}
+#auv3api-test-panel .on{background:#145214 !important}
+#auv3api-test-panel .warn{color:#f6c35b}
+#auv3api-test-panel .error{color:#ff6d6d}
+`;
+  const style = document.createElement('style'); style.textContent = css; document.head.appendChild(style);
+
+  const panel = document.createElement('div'); panel.id='auv3api-test-panel';
+  panel.innerHTML = `<header><span>AUv3API Test</span><div><button id="auv3api-close" title="Close">✕</button></div></header>
+    <div class="grid" id="auv3api-btns"></div>
+    <div class="log" id="auv3api-log"></div>
+    <footer><span id="auv3api-status">Idle</span><button id="auv3api-clear">Clear</button></footer>`;
+  document.body.appendChild(panel);
+
+  const logEl = panel.querySelector('#auv3api-log');
+  const statusEl = panel.querySelector('#auv3api-status');
+  function log(msg, cls){ const line=document.createElement('div'); if(cls) line.className=cls; line.textContent = (new Date().toLocaleTimeString())+" "+msg; logEl.appendChild(line); logEl.scrollTop = logEl.scrollHeight; }
+  function setStatus(s){ statusEl.textContent=s; }
+
+  panel.querySelector('#auv3api-close').onclick = ()=> panel.remove();
+  panel.querySelector('#auv3api-clear').onclick = ()=> { logEl.textContent=''; };
+
+  const btns = panel.querySelector('#auv3api-btns');
+  function addBtn(label, handler, opts={}){ const b=document.createElement('button'); b.textContent=label; if(opts.title) b.title=opts.title; b.onclick=async ()=>{ try { setStatus(label+'...'); const r = await handler(b); if(r!==undefined) log(label+': '+JSON.stringify(r)); setStatus('Idle'); } catch(e){ log(label+' ERROR: '+e.message,'error'); setStatus('Error'); } }; btns.appendChild(b); return b; }
+
+  // Buttons definitions
+  addBtn('iOS Save', async()=>{ const data={time:Date.now(),demo:true}; await AUv3API.ios_file_saver('demo_file.json', data); log('iOS Save ok'); });
+  addBtn('iOS Load', async()=>{ const r= await AUv3API.ios_file_loader(['public.data']); log('Loaded '+r.fileName+' len='+(r.data||'').length); return r.fileName; });
+  addBtn('AUv3 Save', async()=>{ const p={name:'PanelProj',stamp:Date.now(),v:1}; await AUv3API.auv3_file_saver('PanelProj.atome', p); log('AUv3 Save ok'); });
+  addBtn('List Projects', async()=>{ const files = await AUv3API.auv3_file_list('Projects'); return files; });
+  addBtn('Load Proj', async()=>{ const name=prompt('Project name (without .atome)','PanelProj'); if(!name) return; const d= await AUv3API.auv3_file_loader('Projects', name); log('Project keys: '+Object.keys(d)); });
+  addBtn('Tempo', async()=>{ const bpm = await AUv3API.auv3_tempo(); log('Tempo='+bpm); return bpm; });
+
+  // Streaming buttons (toggle)
+  const timeBtn = addBtn('Time ▶︎', async(btn)=>{
+    if(!btn.classList.contains('on')){ AUv3API.auv3_current_time(true,'time',(info)=>{ log('Time '+info.positionSeconds.toFixed(1)+'s'); }); btn.classList.add('on'); btn.textContent='Time ■'; }
+    else { AUv3API.auv3_current_time(false); btn.classList.remove('on'); btn.textContent='Time ▶︎'; }
+  });
+  const hostBtn = addBtn('Transport ▶︎', async(btn)=>{
+    if(!btn.classList.contains('on')){ AUv3API.auv3_host_state(true,(s)=>{ log('Transport '+(s.playing?'▶':'⏸')+' '+Number(s.positionSeconds).toFixed(1)); }); btn.classList.add('on'); btn.textContent='Transport ■'; }
+    else { AUv3API.auv3_host_state(false); btn.classList.remove('on'); btn.textContent='Transport ▶︎'; }
+  });
+  const midiInBtn = addBtn('MIDI In ▶︎', async(btn)=>{
+    if(!btn.classList.contains('on')){ AUv3API.auv3_midi_receive(true,(m)=>{ if(m.type==='parsed') log('MIDI '+m.status.toString(16)+' '+m.data1+','+m.data2); else log('MIDI RAW '+(m.bytes||[])); }); btn.classList.add('on'); btn.textContent='MIDI In ■'; }
+    else { AUv3API.auv3_midi_receive(false); btn.classList.remove('on'); btn.textContent='MIDI In ▶︎'; }
+  });
+  addBtn('MIDI Test', async()=>{ AUv3API.auv3_midi_send([0x90,60,100]); setTimeout(()=> AUv3API.auv3_midi_send([0x80,60,0]),300); log('Sent test note C4'); });
+
+  // Auto shrink log if too large
+  setInterval(()=>{ if(logEl.childNodes.length>400){ while(logEl.childNodes.length>300) logEl.removeChild(logEl.firstChild); log('log truncated'); } }, 5000);
+
+  log('Test panel ready');
+})();
+// === End Test Panel ===

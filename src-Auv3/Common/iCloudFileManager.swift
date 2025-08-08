@@ -432,11 +432,19 @@ public class iCloudFileManager: ObservableObject {
             
             print("🔥 SWIFT: DocumentPickerDelegate créé")
             
-            let documentPicker = UIDocumentPickerViewController(forExporting: [tempURL])
+            // Replace creation to enable rename/edit inside picker
+            let documentPicker: UIDocumentPickerViewController
+            if #available(iOS 16.0, *) {
+                documentPicker = UIDocumentPickerViewController(forExporting: [tempURL], asCopy: true)
+            } else {
+                documentPicker = UIDocumentPickerViewController(forExporting: [tempURL])
+            }
+            // NOTE: allowsEditing not available on this iOS version; forExporting already lets user rename before saving.
+            documentPicker.shouldShowFileExtensions = true
+            
             documentPicker.delegate = self.documentPickerDelegate
             documentPicker.modalPresentationStyle = .formSheet
             
-            print("🔥 SWIFT: DocumentPickerViewController créé")
             print("🔥 SWIFT: Tentative de présentation du Document Picker...")
             
             DispatchQueue.main.async {
