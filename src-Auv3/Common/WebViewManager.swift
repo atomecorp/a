@@ -30,7 +30,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // Timers for streaming (host time & transport)
     private static var hostTimeTimer: Timer?
     private static var hostStateTimer: Timer?
-    
+    private static var hostTimeStreamActiveFlag: Bool = false
+    public static func isHostTimeStreamActive() -> Bool { return hostTimeStreamActiveFlag }
+
     // ULTRA AGGRESSIVE: Rate limiting for non-critical JS calls (preserving timecode functionality)
     private static var lastMuteStateUpdate: CFTimeInterval = 0
     private static var lastTestStateUpdate: CFTimeInterval = 0
@@ -434,6 +436,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - Streams
     private static func startHostTimeStream(format: String?) {
         stopHostTimeStream()
+        hostTimeStreamActiveFlag = true
         hostTimeTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
             let isPlaying = lastIsPlaying
             let playhead = lastPlayheadSeconds
@@ -451,6 +454,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     private static func stopHostTimeStream() {
         hostTimeTimer?.invalidate(); hostTimeTimer = nil
+        hostTimeStreamActiveFlag = false
     }
     private static var hostStateStreamActiveFlag: Bool = false
     public static func isHostTransportStreamActive() -> Bool { return hostStateStreamActiveFlag }

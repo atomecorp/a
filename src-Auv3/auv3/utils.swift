@@ -199,8 +199,7 @@ public class auv3Utils: AUAudioUnit {
             
             // PERFORMANCE: Ultra-throttle transport checks to 5 FPS (instead of 10 FPS)
             if currentTime - strongSelf.lastTransportCheck >= 0.2 {
-                // Only check transport if we have delegates to avoid unnecessary work
-                if strongSelf.transportDataDelegate != nil {
+                if strongSelf.shouldPollTransport() { // nouvelle condition unifiée
                     strongSelf.checkHostTransport()
                 }
                 strongSelf.lastTransportCheck = currentTime
@@ -220,35 +219,19 @@ public class auv3Utils: AUAudioUnit {
     }
     
     private func checkHostTransport() {
-        if let transportStateBlock = self.transportStateBlock {
-            var transportStateChanged = AUHostTransportStateFlags(rawValue: 0)
-            var currentSampleTime: Double = 0
-
-            let success = transportStateBlock(&transportStateChanged,
-                                          &currentSampleTime,
-                                          nil,
-                                          nil)
-            if success {
-                // ULTRA OPTIMIZATION: Only process transport if state actually changed
-                if transportStateChanged.rawValue != 0 {
-                    let isPlaying = transportStateChanged.rawValue & 2 != 0
-                    
-                    // ULTRA OPTIMIZATION: Only get sample rate once and cache it
-                    let sampleRate = self.getSampleRate() ?? 44100.0
-                    
-                    // ULTRA OPTIMIZATION: Batch the UI update and skip unnecessary work
-                    DispatchQueue.main.async {
-                        // Skip console logging in production for performance
-                        // print("Transport is playing: \(isPlaying), Position: \(currentSampleTime)")
-                        
-                        // Only update WebView if we have one - remove expensive checks
-                        let jsCode = "if (typeof displayTransportInfo === 'function') { displayTransportInfo(\(isPlaying ? "true" : "false"), \(Int(currentSampleTime)), \(Int(sampleRate))); }"
-                        WebViewManager.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
-                        
-                        // Direct delegate call without intermediate processing
-                        self.transportDataDelegate?.didReceiveTransportData(isPlaying: isPlaying, playheadPosition: currentSampleTime, sampleRate: sampleRate)
-                    }
-                }
+        guard let tsBlock = self.transportStateBlock else { return }
+        var flags = AUHostTransportStateFlags(rawValue: 0)
+        var currentSampleTime: Double = 0
+        if tsBlock(&flags, &currentSampleTime, nil, nil) {
+            let isPlaying = (flags.rawValue & AUHostTransportStateFlags.moving.rawValue) != 0
+            let sr = getSampleRate() ?? 44100.0
+            // Met à jour le cache central utilisé par les streams hostTimeUpdate / hostTransport
+            WebViewManager.updateTransportCache(isPlaying: isPlaying, playheadSeconds: currentSampleTime / sr)
+            // Fallback direct pour Lyrix si les streams JS (ios_apis.js) ne sont pas présents
+            DispatchQueue.main.async { [weak self] in
+                let js = "(function(){if(typeof displayTransportInfo==='function'){try{displayTransportInfo(\(isPlaying ? "true":"false"),\(currentSampleTime),\(sr));}catch(e){}}else if(typeof updateTimecode==='function'){try{updateTimecode(\(currentSampleTime / sr * 1000.0));}catch(e){}}})();"
+                WebViewManager.webView?.evaluateJavaScript(js, completionHandler: nil)
+                self?.transportDataDelegate?.didReceiveTransportData(isPlaying: isPlaying, playheadPosition: currentSampleTime, sampleRate: sr)
             }
         }
     }
@@ -478,5 +461,12 @@ public class auv3Utils: AUAudioUnit {
             return 44100.0 // Return default sample rate
         }
         return outputBusArray[0].format.sampleRate
+    }
+    
+    private func shouldPollTransport() -> Bool {
+        if self.transportDataDelegate != nil { return true }
+        if WebViewManager.isHostTimeStreamActive() { return true }
+        if WebViewManager.isHostTransportStreamActive() { return true }
+        return false
     }
 }
