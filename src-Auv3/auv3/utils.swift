@@ -228,6 +228,15 @@ public class auv3Utils: AUAudioUnit {
         if tsBlock(&flags, &currentSampleTime, nil, nil) {
             let isPlaying = (flags.rawValue & AUHostTransportStateFlags.moving.rawValue) != 0
             let sr = getSampleRate() ?? 44100.0
+            
+            // Also check and update tempo while we're checking transport
+            if let musicalBlock = self.musicalContextBlock {
+                var currentTempo: Double = 0
+                if musicalBlock(&currentTempo, nil, nil, nil, nil, nil), currentTempo > 0 {
+                    WebViewManager.updateCachedTempo(currentTempo)
+                }
+            }
+            
             // Met à jour le cache central utilisé par les streams hostTimeUpdate / hostTransport
             WebViewManager.updateTransportCache(isPlaying: isPlaying, playheadSeconds: currentSampleTime / sr)
             // Fallback direct pour Lyrix si les streams JS (ios_apis.js) ne sont pas présents

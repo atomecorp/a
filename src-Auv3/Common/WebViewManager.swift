@@ -150,16 +150,30 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                                 var currentTempo: Double = 0
                                 if block(&currentTempo, nil, nil, nil, nil, nil), currentTempo > 0 {
                                     bpm = currentTempo; source = "hostBlock"
+                                    // Update cached tempo when we get a good value
+                                    WebViewManager.updateCachedTempo(currentTempo)
                                 } else {
-                                    bpm = WebViewManager.cachedTempo; source = "cached"
+                                    // Try again with all parameters to see if we get a different result
+                                    var timeSignatureNum: Double = 0
+                                    var timeSignatureDen: Int = 0
+                                    var currentBeatPosition: Double = 0
+                                    var sampleOffsetToNextBeat: Int = 0
+                                    var currentMeasureDownbeatPosition: Double = 0
+                                    if block(&currentTempo, &timeSignatureNum, &timeSignatureDen, &currentBeatPosition, &sampleOffsetToNextBeat, &currentMeasureDownbeatPosition), currentTempo > 0 {
+                                        bpm = currentTempo; source = "hostBlockFull"
+                                        WebViewManager.updateCachedTempo(currentTempo)
+                                    } else {
+                                        bpm = WebViewManager.cachedTempo; source = "cached(\(WebViewManager.cachedTempo))"
+                                    }
                                 }
                             } else {
-                                bpm = WebViewManager.cachedTempo; source = "cachedNoBlock"
+                                bpm = WebViewManager.cachedTempo; source = "cachedNoBlock(\(WebViewManager.cachedTempo))"
                             }
                         } else {
-                            bpm = WebViewManager.cachedTempo; source = "noAU"
+                            bpm = WebViewManager.cachedTempo; source = "noAU(\(WebViewManager.cachedTempo))"
                         }
                         let requestId = body["requestId"] as? Int ?? -1
+                        print("[WebViewManager] requestHostTempo: bmp=\(bpm), source=\(source), requestId=\(requestId)")
                         WebViewManager.sendBridgeJSON(["action":"hostTempo", "bpm": bpm, "requestId": requestId, "source": source])
                         return
                     }
