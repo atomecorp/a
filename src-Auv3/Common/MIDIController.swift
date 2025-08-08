@@ -10,13 +10,16 @@ import Foundation
 import CoreMIDI
 import os.log
 import QuartzCore
+import AVFoundation // POUR AUAudioUnit / AUScheduleMIDIEventBlock
 
 public class MIDIController: NSObject {
-    
     // MIDI Client, Input Port and Destination
     private var midiClient: MIDIClientRef = 0
     private var inputPort: MIDIPortRef = 0
     private var destinationEndpoint: MIDIEndpointRef = 0
+    // NEW: output port + virtual source to expose MIDI OUT
+    private var outputPort: MIDIPortRef = 0
+    private var virtualSource: MIDIEndpointRef = 0
     
     // Logger for Xcode console
     private let logger = Logger(subsystem: "com.atomecorp.atome", category: "MIDI")
@@ -24,6 +27,9 @@ public class MIDIController: NSObject {
     // OPTIMIZATION: Rate limiting for MIDI logs to reduce CPU usage
     private var lastLogTime: CFTimeInterval = 0
     private let logInterval: CFTimeInterval = 0.5 // Max 2 logs per second
+    
+    weak var auAudioUnit: AUAudioUnit? // rendu interne (plus private) pour assignation depuis AudioUnitViewController
+    private var midiEventSender: AUScheduleMIDIEventBlock? // host MIDI sender
     
     public override init() {
         super.init()
@@ -75,6 +81,14 @@ public class MIDIController: NSObject {
         }
         
         logger.info("✅ MIDI Input Port created successfully")
+        // NEW: Create output port
+        let outName = "AtomeMIDIOutput" as CFString
+        let outStatus = MIDIOutputPortCreate(midiClient, outName, &outputPort)
+        if outStatus == noErr { logger.info("✅ MIDI Output Port created") } else { logger.error("❌ Failed to create MIDI output port: \(outStatus)") }
+        // NEW: Create virtual source so host sees a MIDI OUT endpoint
+        let vsName = "Atome MIDI Out" as CFString
+        let vsStatus = MIDISourceCreate(midiClient, vsName, &virtualSource)
+        if vsStatus == noErr { logger.info("✅ Virtual MIDI Source created (exposed to host)") } else { logger.error("❌ Failed to create virtual MIDI source: \(vsStatus)") }
         
         // NOTE: AUv3 cannot create MIDI destinations due to sandbox restrictions
         // Apps like AUM must route MIDI manually to the AUv3
@@ -311,21 +325,11 @@ public class MIDIController: NSObject {
     // MARK: - Cleanup
     
     private func cleanup() {
-        if inputPort != 0 {
-            MIDIPortDispose(inputPort)
-            inputPort = 0
-        }
-        
-        if destinationEndpoint != 0 {
-            MIDIEndpointDispose(destinationEndpoint)
-            destinationEndpoint = 0
-        }
-        
-        if midiClient != 0 {
-            MIDIClientDispose(midiClient)
-            midiClient = 0
-        }
-        
+        if inputPort != 0 { MIDIPortDispose(inputPort); inputPort = 0 }
+        if outputPort != 0 { MIDIPortDispose(outputPort); outputPort = 0 } // NEW
+        if virtualSource != 0 { MIDIEndpointDispose(virtualSource); virtualSource = 0 } // NEW
+        if destinationEndpoint != 0 { MIDIEndpointDispose(destinationEndpoint); destinationEndpoint = 0 }
+        if midiClient != 0 { MIDIClientDispose(midiClient); midiClient = 0 }
         logger.info("🧹 MIDI Controller cleaned up")
     }
     
@@ -428,59 +432,46 @@ public class MIDIController: NSObject {
     
     /// Send raw MIDI message to first available destination
     private func sendMIDIMessage(data: [UInt8]) {
-        guard data.count > 0 && data.count <= 3 else {
-            logger.error("❌ Invalid MIDI data length: \(data.count)")
-            return
+        guard data.count > 0 && data.count <= 3 else { logger.error("❌ Invalid MIDI data length: \(data.count)"); return }
+        var hostSent = false
+        if let sender = midiEventSender {
+            sender(AUEventSampleTimeImmediate, 0, data.count, data) // AUScheduleMIDIEventBlock returns Void
+            hostSent = true
+            let dbg = data.map{String(format:"0x%02X", $0)}.joined(separator:" ")
+            logger.info("🚀 Host MIDI (scheduleMIDIEventBlock) sent: [\(dbg)]")
         }
-        
-        // Find first available destination
+        if !hostSent { logger.warning("⚠️ Host schedule block unavailable, using CoreMIDI fallback") }
         let destCount = MIDIGetNumberOfDestinations()
-        logger.info("🔍 MIDI Destinations available: \(destCount)")
-        
-        guard destCount > 0 else {
-            logger.warning("⚠️ No MIDI destinations available - Cannot send MIDI")
-            return
-        }
-        
-        let destination = MIDIGetDestination(0)
-        guard destination != 0 else {
-            logger.error("❌ Failed to get MIDI destination")
-            return
-        }
-        
-        // Get destination name for debugging
-        if let destName = getMIDIObjectName(destination) {
-            logger.info("📤 Sending MIDI to destination: '\(destName)'")
-        } else {
-            logger.info("📤 Sending MIDI to destination ID: \(destination)")
-        }
-        
-        // Create MIDI packet
-        var packetListBuffer = Data(count: 1024)
-        let packetListPtr = packetListBuffer.withUnsafeMutableBytes { ptr in
-            return ptr.bindMemory(to: MIDIPacketList.self).baseAddress!
-        }
-        
-        let packet = MIDIPacketListInit(packetListPtr)
-        let timestamp = mach_absolute_time()
-        
-        // Add the MIDI packet to the packet list
-        _ = MIDIPacketListAdd(packetListPtr, 1024, packet, timestamp, data.count, data)
-        
-        // Log the MIDI data being sent
+        var destination: MIDIEndpointRef = 0
+        if destCount > 0 { destination = MIDIGetDestination(0) }
+        var packetListBuffer = Data(count: 256)
+        let packetListPtr = packetListBuffer.withUnsafeMutableBytes { $0.bindMemory(to: MIDIPacketList.self).baseAddress! }
+        let firstPacket = MIDIPacketListInit(packetListPtr)
+        let ts = mach_absolute_time()
+        _ = MIDIPacketListAdd(packetListPtr, 256, firstPacket, ts, data.count, data)
         let dataString = data.map { String(format: "0x%02X", $0) }.joined(separator: " ")
-        logger.info("📤 MIDI Data: [\(dataString)] -> Destination: \(destination)")
-        
-        // Send MIDI packet
-        let result = MIDISend(inputPort, destination, packetListPtr)
-        if result != noErr {
-            logger.error("❌ Failed to send MIDI: \(result)")
-        } else {
-            logger.info("✅ MIDI sent successfully to host")
+        if destination != 0 && outputPort != 0 {
+            let sendStatus = MIDISend(outputPort, destination, packetListPtr)
+            if sendStatus == noErr { logger.info("✅ CoreMIDI sent: [\(dataString)]") } else { logger.error("❌ CoreMIDI send failed: \(sendStatus)") }
+        }
+        if virtualSource != 0 {
+            let vsStatus = MIDIReceived(virtualSource, packetListPtr)
+            if vsStatus == noErr { logger.info("📡 Virtual source broadcast: [\(dataString)]") } else { logger.error("❌ MIDIReceived failed: \(vsStatus)") }
         }
     }
     
     public func sendRaw(bytes: [UInt8]) {
         sendMIDIMessage(data: bytes)
+    }
+    
+    public convenience init(audioUnit: AUAudioUnit?) {
+        self.init()
+        self.auAudioUnit = audioUnit
+        self.midiEventSender = audioUnit?.scheduleMIDIEventBlock
+    }
+    public func setAudioUnit(_ au: AUAudioUnit?) { self.auAudioUnit = au; self.refreshMIDIScheduleBlock() }
+    
+    public func refreshMIDIScheduleBlock() {
+        midiEventSender = auAudioUnit?.scheduleMIDIEventBlock
     }
 }

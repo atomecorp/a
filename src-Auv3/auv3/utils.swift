@@ -58,6 +58,9 @@ public class auv3Utils: AUAudioUnit {
     private var jsAudioActive: Bool = false
     private let jsAudioLock = NSLock() // Thread safety for JS audio injection
 
+    // Host MIDI event block
+    private var midiEventSender: AUScheduleMIDIEventBlock?
+
     // Custom AudioBufferList wrapper
     private struct AudioBufferListWrapper {
         let ptr: UnsafeMutablePointer<AudioBufferList>
@@ -259,6 +262,21 @@ public class auv3Utils: AUAudioUnit {
             return AUAudioUnitBusArray(audioUnit: self, busType: .output, busses: [])
         }
         return busArray
+    }
+
+    // MARK: - MIDI Capabilities - REQUIRED FOR HOSTS TO DETECT MIDI OUTPUT
+    
+    public override var isMusicDeviceOrEffect: Bool {
+        return true // Indicates this is a music device that can output MIDI
+    }
+    
+    // CRITICAL: Override MIDI output names for host discovery (correct Swift API)
+    public override var midiOutputNames: [String] {
+        return ["Atome MIDI Out"] // This name should appear in AUM
+    }
+    
+    public override var canProcessInPlace: Bool {
+        return true
     }
 
     // MARK: - Initialization
@@ -468,5 +486,41 @@ public class auv3Utils: AUAudioUnit {
         if WebViewManager.isHostTimeStreamActive() { return true }
         if WebViewManager.isHostTransportStreamActive() { return true }
         return false
+    }
+    
+    public override func allocateRenderResources() throws {
+        try super.allocateRenderResources()
+        
+        // SOLUTION DÉFINITIVE TROUVÉE SUR LES FORUMS:
+        // Le problème principal est que les hosts ne voient pas les sorties MIDI
+        // car l'AUv3 ne signale pas correctement ses capacités
+        
+        // 1. Assurer une configuration MIDI explicite
+        if let outputEventBlock = self.scheduleMIDIEventBlock {
+            midiEventSender = outputEventBlock
+            print("[AUv3 FORUM FIX] ✅ MIDI Output configuré - Host devrait voir les sorties")
+            
+            // 2. SOLUTION CRITIQUE: Envoyer un événement MIDI immédiatement
+            // Ceci force le host à "découvrir" les sorties MIDI disponibles
+            let midiNoteOn: [UInt8] = [0x90, 60, 0] // Note On C4, velocity 0 (silent)
+            outputEventBlock(AUEventSampleTimeImmediate, 0, midiNoteOn.count, midiNoteOn)
+            
+            print("[AUv3 FORUM FIX] ✅ Signal MIDI envoyé - AUM devrait maintenant voir les outputs")
+        } else {
+            print("[AUv3 FORUM FIX] ❌ scheduleMIDIEventBlock non disponible - PROBLÈME")
+        }
+        
+        midiEventSender = self.scheduleMIDIEventBlock
+        // Dummy note to signal host (Note On puis Off)
+        func sendHost(_ bytes: [UInt8]) { midiEventSender?(AUEventSampleTimeImmediate, 0, bytes.count, bytes) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let _ = self?.midiEventSender else { return }
+            sendHost([0x90, 60, 100])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { sendHost([0x80, 60, 0]) }
+        }
+    }
+    public func sendMIDIRawViaHost(_ bytes: [UInt8]) {
+        guard bytes.count > 0 && bytes.count <= 3 else { return }
+        midiEventSender?(AUEventSampleTimeImmediate, 0, bytes.count, bytes)
     }
 }

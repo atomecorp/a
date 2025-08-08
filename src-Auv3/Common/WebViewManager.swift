@@ -122,9 +122,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     
                     // NEW: High-level AUv3API actions
                     if action == "sendMidi" {
-                        if let bytes = body["bytes"] as? [Int] {
-                            let u8 = bytes.compactMap { UInt8(exactly: $0 & 0xFF) }
+                        if let data = body["data"] as? [Int] {
+                            let u8 = data.compactMap { UInt8(exactly: $0 & 0xFF) }
+                            print("🎼 Sending MIDI from JS: \(u8)")
                             WebViewManager.midiController?.sendRaw(bytes: u8)
+                            // Also try via host if available - use protocol approach
+                            if let hostAU = WebViewManager.hostAudioUnit {
+                                // Use runtime check and selector to avoid compile-time dependency
+                                if hostAU.responds(to: Selector(("sendMIDIRawViaHost:"))) {
+                                    hostAU.perform(Selector(("sendMIDIRawViaHost:")), with: u8)
+                                }
+                            }
                         }
                         return
                     }

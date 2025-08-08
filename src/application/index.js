@@ -33,7 +33,7 @@
 // import('./examples/leaflet.js');
 
 
-import('./lyrix/index.js');
+// import('./lyrix/index.js');
 
 // import('./examples/console.js');
 // import('./examples/leaflet.js');
@@ -42,6 +42,7 @@ import('./lyrix/index.js');
 // import('./examples/audio_swift.js');
 // import('./examples/auv3_file_handling.js');
 // import('./examples/ios_apis.js');
+import('./examples/midi_test.js');
 // import('./examples/console_to_swift.js');
 
 

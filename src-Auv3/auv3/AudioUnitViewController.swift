@@ -31,16 +31,11 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     
     public override func viewDidLoad() {
         super.viewDidLoad()
-        
-        // Initialize MIDI Controller
-        midiController = MIDIController()
+        // Initialize MIDI Controller (without AU yet)
+        midiController = MIDIController(audioUnit: nil)
         midiController?.startMIDIMonitoring()
         print("🎹 MIDI Controller initialized and monitoring started")
-        
-        // Run MIDI system diagnostic after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.midiController?.checkMIDISystemStatus()
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.midiController?.checkMIDISystemStatus() }
       
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: view.bounds, configuration: config)
@@ -51,15 +46,15 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
 
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
         audioUnit = try auv3Utils(componentDescription: componentDescription, options: [])
-        
+        // Refresh MIDI schedule block now AU is available
+        if let au = audioUnit { midiController?.setAudioUnit(au) }
         if let au = audioUnit as? auv3Utils {
-            au.mute = false  // CORRECTION: Démarrer NON muté pour entendre l'audio
+            au.mute = false
             _isMuted = false
             au.audioDataDelegate = self
-            au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
+            au.transportDataDelegate = self
             print("🔊 AUv3 Audio Unit démarré NON MUTÉ")
         }
-
         return audioUnit!
     }
 
@@ -145,61 +140,25 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     // MARK: - AudioControllerProtocol - Audio Commands (JS to MIDI routing)
     
     public func playNote(frequency: Double, note: String, amplitude: Float) {
-        print("🎵 AUv3: Converting JS note '\(note)' (\(frequency)Hz) to MIDI")
-        
-        // Convert frequency to MIDI note number
         let midiNote = frequencyToMidiNote(frequency)
         let velocity = UInt8(max(1, min(127, amplitude * 127)))
-        
-        // Send MIDI Note On to host
-        midiController?.sendNoteOn(note: midiNote, velocity: velocity)
-        
-        print("🎹 MIDI Note ON: \(midiNote) (velocity: \(velocity)) -> Host")
+        (audioUnit as? auv3Utils)?.sendMIDIRawViaHost([0x90, midiNote, velocity])
+        print("🎹 Host MIDI Note ON via schedule block: \(midiNote)")
     }
-    
     public func stopNote(note: String) {
-        print("🎵 AUv3: Stopping JS note '\(note)'")
-        
-        // For simplicity, we'll send Note Off for common notes
-        // In practice, you'd track active notes
-        let commonNotes: [String: UInt8] = [
-            "C4": 60, "A4": 69, "E5": 76
-        ]
-        
-        if let midiNote = commonNotes[note] {
-            midiController?.sendNoteOff(note: midiNote, velocity: 0)
-            print("🎹 MIDI Note OFF: \(midiNote) -> Host")
-        }
+        let commonNotes: [String: UInt8] = ["C4": 60, "A4": 69, "E5": 76]
+        if let midiNote = commonNotes[note] { (audioUnit as? auv3Utils)?.sendMIDIRawViaHost([0x80, midiNote, 0]) }
     }
-    
     public func playChord(frequencies: [Double], amplitude: Float) {
-        print("🎼 AUv3: Converting JS chord to MIDI chord")
-        
-        let velocity = UInt8(max(1, min(127, amplitude * 127)))
-        
-        // Send each note in the chord
-        for frequency in frequencies {
-            let midiNote = frequencyToMidiNote(frequency)
-            midiController?.sendNoteOn(note: midiNote, velocity: velocity)
-            print("🎹 MIDI Chord Note ON: \(midiNote) -> Host")
-        }
+        let v = UInt8(max(1, min(127, amplitude * 127)))
+        for f in frequencies { let n = frequencyToMidiNote(f); (audioUnit as? auv3Utils)?.sendMIDIRawViaHost([0x90, n, v]) }
     }
-    
     public func stopChord() {
-        print("🎼 AUv3: Stopping chord - sending All Notes Off")
-        
-        // Send MIDI All Notes Off (CC 123)
-        midiController?.sendControlChange(controller: 123, value: 0)
-        print("🎹 MIDI All Notes OFF -> Host")
+        (audioUnit as? auv3Utils)?.sendMIDIRawViaHost([0xB0, 123, 0]) // All Notes Off
     }
-    
     public func stopAllAudio() {
-        print("⛔ AUv3: Stop All - sending MIDI panic")
-        
-        // Send MIDI All Notes Off and All Sound Off
-        midiController?.sendControlChange(controller: 123, value: 0) // All Notes Off
-        midiController?.sendControlChange(controller: 120, value: 0) // All Sound Off
-        print("🎹 MIDI PANIC (All Notes + Sound OFF) -> Host")
+        (audioUnit as? auv3Utils)?.sendMIDIRawViaHost([0xB0, 120, 0]) // All Sound Off
+        (audioUnit as? auv3Utils)?.sendMIDIRawViaHost([0xB0, 123, 0])
     }
     
     // MARK: - JavaScript Audio Injection

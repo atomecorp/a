@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSExtension</key>
+  <dict>
+    <key>NSExtensionPointIdentifier</key>
+    <string>com.apple.AudioUnit-Extension</string>
+    <key>NSExtensionPrincipalClass</key>
+    <string>$(PRODUCT_MODULE_NAME).AudioUnitViewController</string>
+    <key>NSExtensionAttributes</key>
+    <dict>
+      <key>AudioComponents</key>
+      <array>
+        <dict>
+          <key>description</key>
+          <string>atome AU Instrument with MIDI Out</string>
+          <key>manufacturer</key>
+          <string>ATOM</string>
+          <key>name</key>
+          <string>atome: atome</string>
+          <key>subtype</key>
+          <string>atom</string>
+          <key>type</key>
+          <string>aumu</string>
+          <key>version</key>
+          <integer>67072</integer>
+          <key>supportsMIDIOutput</key>
+          <true/>
+          <key>hasMIDIOutput</key>
+          <true/>
+          <key>tags</key>
+          <array>
+            <string>Instrument</string>
+            <string>MIDI</string>
+          </array>
+        </dict>
+      </array>
+    </dict>
+  </dict>
+</dict>
+</plist>

@@ -18,7 +18,7 @@
                     <key>description</key>
                     <string>atomeauv3</string>
                     <key>factoryFunction</key>
-                    <string>$(PRODUCT_MODULE_NAME).AudioUnitViewController</string>
+                    <string>createAudioUnit</string>
                     <key>manufacturer</key>
                     <string>ATOM</string>
                     <key>name</key>
@@ -29,13 +29,21 @@
                     <string>atom</string>
                     <key>tags</key>
                     <array>
-                        <string>Effects</string>
+                        <string>Instrument</string>
                         <string>MIDI</string>
                     </array>
                     <key>type</key>
-                    <string>aumf</string>
+                    <string>aumi</string>
+                    <key>supportsMIDIOutput</key>
+                    <true/>
+                    <key>hasMIDIOutput</key>
+                    <true/>
                     <key>version</key>
                     <integer>67072</integer>
+                    <key>supportsMIDI</key>
+                    <true/>
+                    <key>supportsMIDIInput</key>
+                    <true/>
                 </dict>
             </array>
         </dict>
