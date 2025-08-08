@@ -121,21 +121,66 @@ window.console.log = (function(oldLog) {
     };
 
     // 2. ios_file_loader()
-    // Opens UIDocumentPickerViewController(forOpeningContentTypes:) (Swift: iCloudFileManager.loadFileWithDocumentPicker)
-    // Can restrict or allow all types (Swift decides mapping). Pass fileTypes array or leave empty for all.
-    API.ios_file_loader = function ios_file_loader(fileTypes = ['public.data']){
+    // Nouvelle version: n'utilise PLUS le Document Picker natif (pas de fenêtre système AUv3)
+    // Reprend la logique du bouton 'import_file_button_library' (showFileImportDialog) pour un input caché.
+    // Retourne une Promise avec { fileName, data, encoding, rawFile } (premier fichier) ou rejette.
+    API.ios_file_loader = function ios_file_loader(acceptExtensions = ['.atome','.json','.txt','.lrc','.md','.wav','.mp3','.m4a','.flac','.ogg']){
         return new Promise((resolve, reject) => {
-            if (!bridgeAvailable()) return reject(new Error('swiftBridge not available'));
-            const id = nextId();
-            pendingFileLoads[id] = {resolve, reject};
+            try {
+                const lowerExts = acceptExtensions.map(e=>e.toLowerCase());
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.multiple = false; // simple loader (peut évoluer)
+                input.accept = '*/*'; // permissif, filtrage JS manuel comme showFileImportDialog
+                input.style.display = 'none';
+                document.body.appendChild(input);
 
-            postToSwift({
-                action: 'loadFileWithDocumentPicker', // existing Swift method in iCloudFileManager
-                requestId: id,
-                fileTypes
-                // Customization of dialog text/buttons is limited via UIDocumentPicker.
-                // Could add extra fields for Swift to display an alert BEFORE the picker if desired.
-            });
+                const cleanup = () => { try { input.parentNode && document.body.removeChild(input); } catch(_){} };
+
+                input.addEventListener('change', () => {
+                    try {
+                        if (!input.files || !input.files.length){ cleanup(); return reject(new Error('Aucun fichier sélectionné')); }
+                        const file = input.files[0];
+                        const name = file.name;
+                        const lowerName = name.toLowerCase();
+
+                        // Filtrage inspiré showFileImportDialog (ultra permissif)
+                        const isAccepted = lowerExts.some(ext => lowerName.endsWith(ext)) ||
+                                           file.type.startsWith('text/') ||
+                                           file.type === 'application/json' ||
+                                           file.type.startsWith('audio/') ||
+                                           file.type === '';
+                        if (!isAccepted) {
+                            cleanup();
+                            return reject(new Error('Type de fichier non accepté: '+name));
+                        }
+
+                        const reader = new FileReader();
+                        reader.onerror = (err)=>{ cleanup(); reject(new Error('Erreur lecture')); };
+
+                        // Choix encodage: texte vs binaire → base64
+                        const treatAsText = /\.(atome|json|txt|lrc|md)$/i.test(name) || file.type.startsWith('text') || file.type==='application/json' || file.type==='';
+
+                        reader.onload = () => {
+                            try {
+                                if (treatAsText) {
+                                    resolve({ fileName: name, data: reader.result, encoding: 'utf8', rawFile: file });
+                                } else {
+                                    // reader.result = ArrayBuffer
+                                    const buf = new Uint8Array(reader.result);
+                                    let bin=''; for (let i=0;i<buf.length;i++) bin += String.fromCharCode(buf[i]);
+                                    const b64 = btoa(bin);
+                                    resolve({ fileName: name, data: b64, encoding: 'base64', rawFile: file });
+                                }
+                            } finally { cleanup(); }
+                        };
+
+                        if (treatAsText) reader.readAsText(file); else reader.readAsArrayBuffer(file);
+                    } catch(e){ cleanup(); reject(e); }
+                });
+
+                input.click();
+            } catch(e){ reject(e); }
         });
     };
 
