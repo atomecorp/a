@@ -512,13 +512,42 @@ window.console.log = (function(oldLog) {
     else { AUv3API.auv3_host_state(false); btn.classList.remove('on'); btn.textContent='Transport ▶︎'; }
   });
   const midiInBtn = addBtn('MIDI In ▶︎', async(btn)=>{
-    if(!btn.classList.contains('on')){ AUv3API.auv3_midi_receive(true,(m)=>{ if(m.type==='parsed') log('MIDI '+m.status.toString(16)+' '+m.data1+','+m.data2); else log('MIDI RAW '+(m.bytes||[])); }); btn.classList.add('on'); btn.textContent='MIDI In ■'; }
+    if(!btn.classList.contains('on')){ AUv3API.auv3_midi_receive(true,(m)=>{ if(m.type==='parsed') { log('MIDI '+m.status.toString(16)+' '+m.data1+','+m.data2); appendMidiLog(m.status,m.data1,m.data2); } else log('MIDI RAW '+(m.bytes||[])); }); btn.classList.add('on'); btn.textContent='MIDI In ■'; showMidiLogger(true); }
     else { AUv3API.auv3_midi_receive(false); btn.classList.remove('on'); btn.textContent='MIDI In ▶︎'; }
   });
   addBtn('MIDI Test', async()=>{ AUv3API.auv3_midi_send([0x90,60,100]); setTimeout(()=> AUv3API.auv3_midi_send([0x80,60,0]),300); log('Sent test note C4'); });
 
-  // Auto shrink log if too large
-  setInterval(()=>{ if(logEl.childNodes.length>400){ while(logEl.childNodes.length>300) logEl.removeChild(logEl.firstChild); log('log truncated'); } }, 5000);
+  // --- Minimal MIDI Logger (Lyrix-style light) ---
+  function ensureMidiLogger(){
+    if(document.getElementById('midi-logger-container')) return;
+    const box = document.createElement('div');
+    box.id = 'midi-logger-container';
+    Object.assign(box.style, {
+      background:'#1a1a1a',color:'#0f0',fontFamily:'monospace',fontSize:'11px',padding:'6px',border:'1px solid #333',borderRadius:'4px',maxHeight:'120px',overflow:'auto',margin:'4px'
+    });
+    const title = document.createElement('div'); title.textContent='MIDI Data Logger'; Object.assign(title.style,{color:'#fff',fontWeight:'bold',fontSize:'12px',marginBottom:'4px'});
+    const content = document.createElement('div'); content.id='midi-log-content';
+    box.appendChild(title); box.appendChild(content);
+    panel.insertBefore(box, logEl); // place above main log
+  }
+  function appendMidiLog(s,d1,d2){
+    const cont = document.getElementById('midi-log-content'); if(!cont) return;
+    const line = document.createElement('div'); line.textContent = '0x'+s.toString(16)+' '+d1+','+d2; cont.appendChild(line);
+    if(cont.childNodes.length>120) cont.removeChild(cont.firstChild);
+    cont.parentNode.scrollTop = cont.parentNode.scrollHeight;
+  }
+  function showMidiLogger(v){ ensureMidiLogger(); const box=document.getElementById('midi-logger-container'); if(box) box.style.display = v?'block':'none'; }
+
+  // Shim so Swift direct injection (sendMIDIToJS) works even without Lyrix loaded
+  if(!window.midiUtilities){
+    window.midiUtilities = {
+      receiveMidiData: function(d1,d2,d3, ts){
+        // route through AUv3API to reuse callbacks
+        try { AUv3API._receiveFromSwift({action:'midiEvent', status:d1, data1:d2, data2:d3, timestamp: ts|| (performance.now()/1000)}); } catch(e){}
+        appendMidiLog(d1,d2,d3);
+      }
+    };
+  }
 
   log('Test panel ready');
 })();
