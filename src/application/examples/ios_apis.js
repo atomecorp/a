@@ -448,10 +448,24 @@ window.console.log = (function(oldLog) {
   const btns = panel.querySelector('#auv3api-btns');
   function addBtn(label, handler, opts={}){ const b=document.createElement('button'); b.textContent=label; if(opts.title) b.title=opts.title; b.onclick=async ()=>{ try { setStatus(label+'...'); const r = await handler(b); if(r!==undefined) log(label+': '+JSON.stringify(r)); setStatus('Idle'); } catch(e){ log(label+' ERROR: '+e.message,'error'); setStatus('Error'); } }; btns.appendChild(b); return b; }
 
+  // Ajout champ nom fichier pour AUv3 Save
+  const fileNameWrap = document.createElement('div');
+  fileNameWrap.style.cssText='width:100%;display:flex;gap:4px;align-items:center;margin:2px 0 4px;';
+  fileNameWrap.innerHTML = '<label style="font-size:11px;flex:0 0 auto;color:#bbb">AUv3 Nom:</label>'+
+    '<input id="auv3api-auv3-filename" type="text" value="PanelProj.atome" style="flex:1 1 auto;background:#171717;border:1px solid #333;color:#eee;padding:3px 4px;border-radius:4px;font-size:11px;" placeholder="NomFichier.ext" />';
+  btns.parentNode.insertBefore(fileNameWrap, btns.nextSibling);
+
   // Buttons definitions
   addBtn('iOS Save', async()=>{ const data={time:Date.now(),demo:true}; await AUv3API.ios_file_saver('demo_file.json', data); log('iOS Save ok'); });
   addBtn('iOS Load', async()=>{ const r= await AUv3API.ios_file_loader(['public.data']); log('Loaded '+r.fileName+' len='+(r.data||'').length); return r.fileName; });
-  addBtn('AUv3 Save', async()=>{ const p={name:'PanelProj',stamp:Date.now(),v:1}; await AUv3API.auv3_file_saver('PanelProj.atome', p); log('AUv3 Save ok'); });
+  addBtn('AUv3 Save', async()=>{ 
+    const inp = document.getElementById('auv3api-auv3-filename');
+    let fileName = (inp && inp.value.trim()) || 'PanelProj.atome';
+    if(!fileName.includes('.')) fileName += '.atome';
+    const p={name:fileName.replace(/\.[^.]+$/,''),stamp:Date.now(),v:1}; 
+    await AUv3API.auv3_file_saver(fileName, p); 
+    log('AUv3 Save ok => '+fileName); 
+  });
   addBtn('List Projects', async()=>{ const files = await AUv3API.auv3_file_list('Projects'); return files; });
   addBtn('Load Proj', async()=>{ const name=prompt('Project name (without .atome)','PanelProj'); if(!name) return; const d= await AUv3API.auv3_file_loader('Projects', name); log('Project keys: '+Object.keys(d)); });
   addBtn('Tempo', async()=>{ const bpm = await AUv3API.auv3_tempo(); log('Tempo='+bpm); return bpm; });
