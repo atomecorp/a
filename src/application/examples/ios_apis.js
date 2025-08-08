@@ -506,7 +506,6 @@ window.console.log = (function(oldLog) {
     if(!btn.classList.contains('on')){ AUv3API.auv3_current_time(true,'time',(info)=>{ AUv3API.updateTimecode(info.positionSeconds*1000); log('Time '+info.positionSeconds.toFixed(1)+'s'); }); btn.classList.add('on'); btn.textContent='Time ■'; }
     else { AUv3API.auv3_current_time(false); btn.classList.remove('on'); btn.textContent='Time ▶︎'; }
   });
-  addBtn('Upd Timecode', async()=>{ AUv3API.updateTimecode(Date.now()%60000); });
   const hostBtn = addBtn('Transport ▶︎', async(btn)=>{
     if(!btn.classList.contains('on')){ AUv3API.auv3_host_state(true,(s)=>{ log('Transport '+(s.playing?'▶':'⏸')+' '+Number(s.positionSeconds).toFixed(1)); }); btn.classList.add('on'); btn.textContent='Transport ■'; }
     else { AUv3API.auv3_host_state(false); btn.classList.remove('on'); btn.textContent='Transport ▶︎'; }

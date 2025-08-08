@@ -7,6 +7,7 @@
 
 import WebKit
 import QuartzCore
+import AudioToolbox
 
 public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     static let shared = WebViewManager()
@@ -15,6 +16,16 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var fileSystemBridge: FileSystemBridge?
     // NEW: MIDI controller reference injected from AudioUnitViewController
     static weak var midiController: MIDIController?
+    static weak var hostAudioUnit: AUAudioUnit?
+    static func setHostAudioUnit(_ au: AUAudioUnit?) { self.hostAudioUnit = au }
+    private static var cachedTempo: Double = 120.0
+    static func updateCachedTempo(_ t: Double) { if t > 0 { cachedTempo = t } }
+    private static var lastPlayheadSeconds: Double = 0
+    private static var lastIsPlaying: Bool = false
+    static func updateTransportCache(isPlaying: Bool, playheadSeconds: Double) { lastIsPlaying = isPlaying; lastPlayheadSeconds = playheadSeconds }
+    // NEW: remember last sent transport state to avoid duplicate/unreal logs
+    private static var lastSentTransportPlaying: Bool? = nil
+    private static var lastSentTransportPosition: Double = -1
     
     // Timers for streaming (host time & transport)
     private static var hostTimeTimer: Timer?
@@ -28,6 +39,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static func setupWebView(for webView: WKWebView, audioController: AudioControllerProtocol? = nil) {
         self.webView = webView
         self.audioController = audioController
+        // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
         webView.navigationDelegate = WebViewManager.shared
 
         let scriptSource = """
@@ -116,9 +128,24 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     }
                     
                     if action == "requestHostTempo" {
-                        let bpm: Double = 120.0 // TODO: Implement real host tempo retrieval if needed
+                        var bpm: Double = 120.0
+                        var source = "fallback"
+                        if let au = WebViewManager.hostAudioUnit { // use type qualifier for static
+                            if let block = au.musicalContextBlock {
+                                var currentTempo: Double = 0
+                                if block(&currentTempo, nil, nil, nil, nil, nil), currentTempo > 0 {
+                                    bpm = currentTempo; source = "hostBlock"
+                                } else {
+                                    bpm = WebViewManager.cachedTempo; source = "cached"
+                                }
+                            } else {
+                                bpm = WebViewManager.cachedTempo; source = "cachedNoBlock"
+                            }
+                        } else {
+                            bpm = WebViewManager.cachedTempo; source = "noAU"
+                        }
                         let requestId = body["requestId"] as? Int ?? -1
-                        WebViewManager.sendBridgeJSON(["action":"hostTempo", "bpm": bpm, "requestId": requestId])
+                        WebViewManager.sendBridgeJSON(["action":"hostTempo", "bpm": bpm, "requestId": requestId, "source": source])
                         return
                     }
                     
@@ -348,9 +375,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - Transport Data Communication
     
     public static func sendTransportDataToJS(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
-        // Direct JavaScript call with proper formatting
+        updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadPosition)
         let jsCode = "if (typeof updateTransportFromSwift === 'function') { updateTransportFromSwift({\"isPlaying\": \(isPlaying ? "true" : "false"), \"playheadPosition\": \(Int(playheadPosition)), \"sampleRate\": \(Int(sampleRate))}); }"
-        
         webView?.evaluateJavaScript(jsCode, completionHandler: nil)
     }
 
@@ -408,16 +434,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - Streams
     private static func startHostTimeStream(format: String?) {
         stopHostTimeStream()
-        var position: Double = 0
-        hostTimeTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            position += 0.5
+        hostTimeTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
+            let isPlaying = lastIsPlaying
+            let playhead = lastPlayheadSeconds
+            let tempo = cachedTempo
             let payload: [String: Any] = [
                 "action": "hostTimeUpdate",
-                "positionSeconds": position,
-                "positionSamples": Int(position * 44100),
-                "tempo": 120.0,
-                "ppq": position * 2.0,
-                "playing": true
+                "positionSeconds": playhead,
+                "positionSamples": Int(playhead * 44100.0),
+                "tempo": tempo,
+                "ppq": playhead * (tempo / 60.0),
+                "playing": isPlaying
             ]
             sendBridgeJSON(payload)
         }
@@ -425,22 +452,42 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static func stopHostTimeStream() {
         hostTimeTimer?.invalidate(); hostTimeTimer = nil
     }
+    private static var hostStateStreamActiveFlag: Bool = false
+    public static func isHostTransportStreamActive() -> Bool { return hostStateStreamActiveFlag }
     private static func startHostStateStream() {
         stopHostStateStream()
-        var playing = true
-        var position: Double = 0
-        hostStateTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            position += 1.0
-            playing.toggle()
-            let payload: [String: Any] = [
-                "action": "hostTransport",
-                "playing": playing,
-                "positionSeconds": position
-            ]
-            sendBridgeJSON(payload)
+        hostStateStreamActiveFlag = true
+        // Immediately emit current cached state once (real host state)
+        let initialPayload: [String: Any] = [
+            "action": "hostTransport",
+            "playing": lastIsPlaying,
+            "positionSeconds": lastPlayheadSeconds
+        ]
+        sendBridgeJSON(initialPayload)
+        lastSentTransportPlaying = lastIsPlaying
+        lastSentTransportPosition = lastPlayheadSeconds
+        // Poll cached values (updated by auv3 utils) and emit only on changes
+        hostStateTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
+            let playing = lastIsPlaying
+            let pos = lastPlayheadSeconds
+            var shouldSend = false
+            if lastSentTransportPlaying == nil || playing != lastSentTransportPlaying { shouldSend = true }
+            // Optionally also send if position jumps significantly while stopped (e.g. user scrub) (> 0.05s)
+            if !playing && abs(pos - lastSentTransportPosition) > 0.05 { shouldSend = true }
+            if shouldSend {
+                let payload: [String: Any] = [
+                    "action": "hostTransport",
+                    "playing": playing,
+                    "positionSeconds": pos
+                ]
+                sendBridgeJSON(payload)
+                lastSentTransportPlaying = playing
+                lastSentTransportPosition = pos
+            }
         }
     }
     private static func stopHostStateStream() {
         hostStateTimer?.invalidate(); hostStateTimer = nil
+        hostStateStreamActiveFlag = false
     }
 }
