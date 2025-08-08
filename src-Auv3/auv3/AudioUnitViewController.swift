@@ -36,6 +36,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         midiController = MIDIController()
         midiController?.startMIDIMonitoring()
         print("🎹 MIDI Controller initialized and monitoring started")
+    // Expose MIDI controller to WebViewManager for JS -> Swift raw sends
+    WebViewManager.midiController = midiController
         
         // Run MIDI system diagnostic after a short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -58,12 +60,21 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             au.audioDataDelegate = self
             au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
             print("🔊 AUv3 Audio Unit démarré NON MUTÉ")
+            
+            // Force allocation of render resources to capture scheduleMIDIEventBlock
+            do {
+                try au.allocateRenderResources()
+                print("🎹 Forced allocateRenderResources succeeded")
+            } catch {
+                print("🎹 Warning: allocateRenderResources failed: \(error)")
+            }
         }
 
-        return audioUnit!
-    }
+        // Make AU instance accessible to WebViewManager so 'sendMidi' can reach sendMIDIRawViaHost
+        WebViewManager.setHostAudioUnit(audioUnit)
 
-    // MARK: - Audio Control Methods
+        return audioUnit!
+    }    // MARK: - Audio Control Methods
     
     public func toggleMute() {
         if let au = audioUnit as? auv3Utils {

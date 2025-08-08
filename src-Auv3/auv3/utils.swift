@@ -111,6 +111,9 @@ public class auv3Utils: AUAudioUnit {
             if let eventList = realtimeEventListHead?.pointee {
                 strongSelf.processMIDIEvents(eventList)
             }
+            
+            // Envoyer les événements MIDI en queue (depuis render thread)
+            strongSelf.processMIDIOutputQueue()
 
             let bufferList = AudioBufferListWrapper(ptr: outputData)
             
@@ -299,6 +302,64 @@ public class auv3Utils: AUAudioUnit {
     // MIDI Output capabilities pour host discovery
     override public var midiOutputNames: [String] {
         return ["Atome MIDI Out"]
+    }
+    
+    // MARK: - MIDI Output Event Block (Standard AUv3 MIDI generation)
+    public override var midiOutputEventBlock: AUMIDIOutputEventBlock? {
+        get { return super.midiOutputEventBlock }
+        set { 
+            super.midiOutputEventBlock = newValue
+            print("🎹 AU: midiOutputEventBlock set by host: \(newValue != nil)")
+        }
+    }
+    
+    // MARK: - MIDI Out (midiOutputEventBlock - Standard method)
+    /// Envoi MIDI via midiOutputEventBlock (méthode standard pour plugins AUv3 qui génèrent du MIDI)
+    // MARK: - MIDI Out (Queue for render thread)
+    // Queue thread-safe pour stocker les événements MIDI à envoyer
+    private var midiOutputQueue: [(timestamp: AUEventSampleTime, cable: UInt8, bytes: [UInt8])] = []
+    private let midiQueueLock = NSLock()
+    
+    /// Envoi MIDI via queue pour render thread (méthode correcte pour plugins AUv3)
+    @objc public func sendMIDIRawViaHost(_ bytes: [UInt8]) {
+        guard bytes.count > 0 && bytes.count <= 3 else { 
+            print("❌ sendMIDIRawViaHost: invalid bytes count: \(bytes.count)")
+            return 
+        }
+        
+        print("🎹 AU: Queuing MIDI for render thread: \(bytes.map { String(format: "0x%02X", $0) }.joined(separator: " "))")
+        
+        // Stocker dans la queue pour envoi depuis render thread
+        midiQueueLock.lock()
+        midiOutputQueue.append((timestamp: AUEventSampleTimeImmediate, cable: 0, bytes: bytes))
+        midiQueueLock.unlock()
+        
+        print("✅ AU: MIDI queued (queue size: \(midiOutputQueue.count))")
+    }
+    
+    /// Traite la queue MIDI depuis le render thread
+    private func processMIDIOutputQueue() {
+        guard !midiOutputQueue.isEmpty else { return }
+        
+        midiQueueLock.lock()
+        let eventsToSend = midiOutputQueue
+        midiOutputQueue.removeAll()
+        midiQueueLock.unlock()
+        
+        // Envoyer via midiOutputEventBlock depuis render thread
+        if let outputBlock = self.midiOutputEventBlock {
+            for event in eventsToSend {
+                let result = event.bytes.withUnsafeBufferPointer { bufferPointer in
+                    return outputBlock(event.timestamp, event.cable, event.bytes.count, bufferPointer.baseAddress!)
+                }
+                
+                if result == noErr {
+                    print("🎹 RENDER: MIDI sent via midiOutputEventBlock: \(event.bytes.map { String(format: "0x%02X", $0) }.joined(separator: " "))")
+                } else {
+                    print("❌ RENDER: midiOutputEventBlock failed (OSStatus: \(result))")
+                }
+            }
+        }
     }
     
     // Performance: Ultra-aggressive rate limiting for AUv3 MIDI logging
