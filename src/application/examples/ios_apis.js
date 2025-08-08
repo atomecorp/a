@@ -466,7 +466,14 @@ window.console.log = (function(oldLog) {
   btns.parentNode.insertBefore(fileNameWrap, btns.nextSibling);
 
   // Buttons definitions
-  addBtn('iOS Save', async()=>{ const data={time:Date.now(),demo:true}; await AUv3API.ios_file_saver('demo_file.json', data); log('iOS Save ok'); });
+  addBtn('iOS Save', async()=>{ 
+    const inp = document.getElementById('auv3api-auv3-filename');
+    let fileName = (inp && inp.value.trim()) || 'demo_file.json';
+    if(!/\.[a-z0-9]+$/i.test(fileName)) fileName += '.json';
+    const data={time:Date.now(),demo:true, ios:true}; 
+    await AUv3API.ios_file_saver(fileName, data); 
+    log('iOS Save ok => '+fileName); 
+  });
   addBtn('iOS Load', async()=>{ const r= await AUv3API.ios_file_loader(['public.data']); log('Loaded '+r.fileName+' len='+(r.data||'').length); return r.fileName; });
   addBtn('AUv3 Save', async()=>{ 
     const inp = document.getElementById('auv3api-auv3-filename');
