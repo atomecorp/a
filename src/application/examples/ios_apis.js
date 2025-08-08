@@ -329,6 +329,18 @@ window.console.log = (function(oldLog) {
         postToSwift({ action: 'sendMidi', bytes }); // EXPECTED Swift action
     };
 
+    // === Timecode helpers (Lyrix-style integration) ===
+    API.updateTimecode = function(timecodeMs){
+        if (!isFinite(timecodeMs) || timecodeMs < 0) timecodeMs = 0;
+        const seconds = (timecodeMs/1000).toFixed(3);
+        const el = document.getElementById('timecode-display');
+        if (el) el.textContent = seconds+'s';
+        // If Lyrix lyricsDisplay present update it
+        if (window.lyricsDisplay && typeof window.lyricsDisplay.updateTime === 'function') {
+            try { window.lyricsDisplay.updateTime(timecodeMs); } catch(_){}
+        }
+    };
+
     // ------------------------------------------------------------
     // Incoming messages entry point (Swift -> JS)
     // Swift should call: window.AUv3API._receiveFromSwift(jsonPayload)
@@ -387,8 +399,10 @@ window.console.log = (function(oldLog) {
                 break;
             }
             case 'hostTimeUpdate': {
-                // Broadcast to registered callbacks
-                timeCallbacks.forEach(fn => { try { fn(msg); } catch(_){} });
+                if (typeof msg.positionSeconds === 'number') {
+                    API.updateTimecode(msg.positionSeconds * 1000);
+                }
+                try { timeCallbacks.forEach(fn => { try { fn(msg); } catch(_){} }); } catch(err){ console.error('[AUv3API] hostTimeUpdate dispatch error', err); }
                 break;
             }
             case 'hostTransport': {
@@ -489,9 +503,10 @@ window.console.log = (function(oldLog) {
 
   // Streaming buttons (toggle)
   const timeBtn = addBtn('Time ▶︎', async(btn)=>{
-    if(!btn.classList.contains('on')){ AUv3API.auv3_current_time(true,'time',(info)=>{ log('Time '+info.positionSeconds.toFixed(1)+'s'); }); btn.classList.add('on'); btn.textContent='Time ■'; }
+    if(!btn.classList.contains('on')){ AUv3API.auv3_current_time(true,'time',(info)=>{ AUv3API.updateTimecode(info.positionSeconds*1000); log('Time '+info.positionSeconds.toFixed(1)+'s'); }); btn.classList.add('on'); btn.textContent='Time ■'; }
     else { AUv3API.auv3_current_time(false); btn.classList.remove('on'); btn.textContent='Time ▶︎'; }
   });
+  addBtn('Upd Timecode', async()=>{ AUv3API.updateTimecode(Date.now()%60000); });
   const hostBtn = addBtn('Transport ▶︎', async(btn)=>{
     if(!btn.classList.contains('on')){ AUv3API.auv3_host_state(true,(s)=>{ log('Transport '+(s.playing?'▶':'⏸')+' '+Number(s.positionSeconds).toFixed(1)); }); btn.classList.add('on'); btn.textContent='Transport ■'; }
     else { AUv3API.auv3_host_state(false); btn.classList.remove('on'); btn.textContent='Transport ▶︎'; }

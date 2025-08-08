@@ -398,11 +398,11 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - Bridge JSON helper
     private static func sendBridgeJSON(_ dict: [String: Any]) {
         guard let webView = webView else { return }
-        if let data = try? JSONSerialization.data(withJSONObject: dict),
-           let json = String(data: data, encoding: .utf8) {
-            let js = "if (window.AUv3API) { AUv3API._receiveFromSwift(\"\(json.replacingOccurrences(of: "\\\"", with: "\\\\\""))\"); }"
-            webView.evaluateJavaScript(js, completionHandler: nil)
-        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              let json = String(data: data, encoding: .utf8) else { return }
+        // Inject raw JSON object (already valid JS), matching FileSystemBridge usage
+        let js = "window.AUv3API && AUv3API._receiveFromSwift(\(json));"
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
     
     // MARK: - Streams
