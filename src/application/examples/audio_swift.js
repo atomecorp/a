@@ -415,13 +415,33 @@ class SimpleAudioGenerator {
             }
         };
 
-        // Request host sample rate from Swift
-        this.sendToSwift({ requestSampleRate: true }, "getSampleRate");
+        // Request host sample rate from Swift (utiliser la même méthode que ios_apis.js)
+        this.requestHostSampleRate();
     }
 
     sendToSwift(message, type = "audioData") {
         if (window.sendToSwift) {
             window.sendToSwift(message, type);
+        }
+    }
+
+    // Nouvelle méthode pour récupérer le sample rate (même logique que ios_apis.js)
+    requestHostSampleRate() {
+        if (typeof window.webkit !== 'undefined' && 
+            typeof window.webkit.messageHandlers !== 'undefined' && 
+            typeof window.webkit.messageHandlers.swiftBridge !== 'undefined') {
+            try {
+                // Utiliser le même format que ios_apis.js qui fonctionne
+                window.webkit.messageHandlers.swiftBridge.postMessage({
+                    type: 'getSampleRate',
+                    data: { requestSampleRate: 1 }
+                });
+                console.log("🔊 Requête sample rate envoyée vers Swift");
+            } catch (error) {
+                console.error("❌ Erreur envoi requête sample rate:", error);
+            }
+        } else {
+            console.warn("⚠️ Bridge Swift non disponible pour requête sample rate");
         }
     }
 
@@ -618,13 +638,21 @@ class SimpleAudioGenerator {
 
     // Update sample rate from Swift host
     updateSampleRate(sampleRate) {
-        if (this.audioContext && sampleRate !== this.audioContext.sampleRate) {
-            console.log(`Updating sample rate from ${this.audioContext.sampleRate} to ${sampleRate}`);
-            this.sendToSwift({
-                message: `Sample rate updated to ${sampleRate}`,
-                webAudioSampleRate: this.audioContext.sampleRate,
-                hostSampleRate: sampleRate
-            }, "sampleRateUpdate");
+        console.log(`🔊 [SimpleAudioGenerator] updateSampleRate appelé avec: ${sampleRate}`);
+        
+        if (this.audioContext) {
+            const webSampleRate = this.audioContext.sampleRate;
+            console.log(`🔊 Web Audio Context sample rate: ${webSampleRate}`);
+            console.log(`🔊 Host sample rate: ${sampleRate}`);
+            
+            if (sampleRate !== webSampleRate) {
+                console.log(`⚠️ Sample rate discrepancy: Web=${webSampleRate}, Host=${sampleRate}`);
+                console.log(`💡 Utilisation du Web Audio sample rate ${webSampleRate} pour la génération JS`);
+            } else {
+                console.log(`✅ Sample rates matched: ${sampleRate}`);
+            }
+        } else {
+            console.warn(`⚠️ Pas d'AudioContext disponible pour comparaison`);
         }
     }
 }
@@ -669,8 +697,31 @@ console.log("Audio Swift Bridge example ready with Squirrel Buttons!");
 
 // Global functions for Swift to call back
 window.updateSampleRate = function(sampleRate) {
+    console.log("🔊 [audio_swift.js] updateSampleRate appelé avec:", sampleRate);
+    
     if (window.audioSwiftBridge) {
         window.audioSwiftBridge.updateSampleRate(sampleRate);
+        
+        // Envoyer une confirmation à Swift (même logique que ios_apis.js)
+        if (typeof window.webkit !== 'undefined' && 
+            typeof window.webkit.messageHandlers !== 'undefined' && 
+            typeof window.webkit.messageHandlers.swiftBridge !== 'undefined') {
+            try {
+                window.webkit.messageHandlers.swiftBridge.postMessage({
+                    type: 'sampleRateUpdate',
+                    data: {
+                        hostSampleRate: sampleRate,
+                        webAudioSampleRate: window.audioSwiftBridge.audioContext ? window.audioSwiftBridge.audioContext.sampleRate : null,
+                        message: 'Sample rate updated to ' + sampleRate
+                    }
+                });
+                console.log("✅ [audio_swift.js] Confirmation sample rate envoyée à Swift");
+            } catch (error) {
+                console.error("❌ [audio_swift.js] Erreur envoi confirmation sample rate:", error);
+            }
+        }
+    } else {
+        console.warn("⚠️ [audio_swift.js] window.audioSwiftBridge non disponible");
     }
 };
 
