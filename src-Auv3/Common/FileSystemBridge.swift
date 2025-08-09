@@ -188,7 +188,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                     data: \(jsonString)
                 });
             """
-            webView.evaluateJavaScript(js)
+            DispatchQueue.main.async { webView.evaluateJavaScript(js) }
         } catch {
             sendErrorResponse(to: webView, error: "Failed to serialize response")
         }
@@ -204,7 +204,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                 error: "\(escapedError)"
             });
         """
-        webView.evaluateJavaScript(js)
+    DispatchQueue.main.async { webView.evaluateJavaScript(js) }
     }
     
     func addFileSystemAPI(to webView: WKWebView) {
@@ -365,25 +365,25 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                     print("✅ SWIFT: Notifying JavaScript of success")
                     // Notifier JavaScript du succès
                     let js = "if (window.documentPickerResult) window.documentPickerResult(true, null);"
-                    webView.evaluateJavaScript(js) { (result, error) in
+                    DispatchQueue.main.async { webView.evaluateJavaScript(js) { (result, error) in
                         if let error = error {
                             print("❌ SWIFT: Erreur JavaScript success: \(error)")
                         } else {
                             print("✅ SWIFT: JavaScript success notifié")
                         }
-                    }
+                    } }
                 } else {
                     let errorMessage = error?.localizedDescription ?? "Unknown error"
                     print("❌ SWIFT: Notifying JavaScript of error: \(errorMessage)")
                     // Notifier JavaScript de l'erreur
                     let js = "if (window.documentPickerResult) window.documentPickerResult(false, '\(errorMessage)');"
-                    webView.evaluateJavaScript(js) { (result, error) in
+                    DispatchQueue.main.async { webView.evaluateJavaScript(js) { (result, error) in
                         if let error = error {
                             print("❌ SWIFT: Erreur JavaScript error: \(error)")
                         } else {
                             print("✅ SWIFT: JavaScript error notifié")
                         }
-                    }
+                    } }
                 }
             }
         }
@@ -430,25 +430,25 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                     
                     // Notifier JavaScript du succès avec les données
                     let js = "if (window.documentPickerLoadResult) window.documentPickerLoadResult(true, '\(escapedContent)', null);"
-                    webView.evaluateJavaScript(js) { (result, error) in
+                    DispatchQueue.main.async { webView.evaluateJavaScript(js) { (result, error) in
                         if let error = error {
                             print("❌ SWIFT: Erreur JavaScript load success: \(error)")
                         } else {
                             print("✅ SWIFT: JavaScript load success notifié")
                         }
-                    }
+                    } }
                 } else {
                     let errorMessage = error?.localizedDescription ?? "Unknown error or no file selected"
                     print("❌ SWIFT: Notifying JavaScript of load error: \(errorMessage)")
                     // Notifier JavaScript de l'erreur
                     let js = "if (window.documentPickerLoadResult) window.documentPickerLoadResult(false, null, '\(errorMessage)');"
-                    webView.evaluateJavaScript(js) { (result, error) in
+                    DispatchQueue.main.async { webView.evaluateJavaScript(js) { (result, error) in
                         if let error = error {
                             print("❌ SWIFT: Erreur JavaScript load error: \(error)")
                         } else {
                             print("✅ SWIFT: JavaScript load error notifié")
                         }
-                    }
+                    } }
                 }
             }
         }
@@ -481,6 +481,6 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
               let json = String(data: data, encoding: .utf8) else { return }
         let js = "window.AUv3API && AUv3API._receiveFromSwift(\(json));"
-        webView.evaluateJavaScript(js)
+    DispatchQueue.main.async { webView.evaluateJavaScript(js) }
     }
 }
