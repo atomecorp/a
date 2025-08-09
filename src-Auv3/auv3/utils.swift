@@ -10,6 +10,9 @@ import Foundation
 import CoreAudio
 import WebKit
 
+
+// File d'attente circulaire pour messages JS (évite blocage thread principal)
+
 // Protocol for real-time audio data delegation
 protocol AudioDataDelegate: AnyObject {
     func didReceiveAudioData(_ data: [Float], timestamp: Double)
@@ -362,7 +365,7 @@ public class auv3Utils: AUAudioUnit {
         jsAudioLock.lock()
         defer { jsAudioLock.unlock() }
 
-        print("🎵 AUv3: Injecting JS audio - \(audioData.count) samples at \(sampleRate)Hz")
+    // print("🎵 AUv3: Injecting JS audio - \(audioData.count) samples at \(sampleRate)Hz")
 
         // 1. Detect host sample rate
         let hostSampleRate = getSampleRate() ?? 44100.0
@@ -383,7 +386,7 @@ public class auv3Utils: AUAudioUnit {
                     processedBuffer[i] = audioData.last ?? 0
                 }
             }
-                print("🔄 AUv3: Resampled JS audio from \(sampleRate)Hz to \(hostSampleRate)Hz (\(newLength) samples)")
+            // print("🔄 AUv3: Resampled JS audio from \(sampleRate)Hz to \(hostSampleRate)Hz (\(newLength) samples)")
         }
 
         // 3. Fade-in/out (128 samples or 5% of buffer)
@@ -407,7 +410,7 @@ public class auv3Utils: AUAudioUnit {
         jsAudioSampleRate = hostSampleRate
         jsAudioActive = true
 
-        print("🔊 AUv3: JS audio injection ready - \(processedBuffer.count) samples")
+    // print("🔊 AUv3: JS audio injection ready - \(processedBuffer.count) samples")
     }
     
     /// Stop JavaScript audio playback
@@ -445,7 +448,10 @@ public class auv3Utils: AUAudioUnit {
             jsAudioActive = false
             jsAudioBuffer.removeAll()
             jsAudioPlaybackIndex = 0
-            print("🎵 AUv3: JS audio playback completed")
+            // print("🎵 AUv3: JS audio playback completed")
+// File d'attente circulaire pour messages JS (évite blocage thread principal)
+
+// File d'attente circulaire pour messages JS (évite blocage thread principal)
         }
     }
 

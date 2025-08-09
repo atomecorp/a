@@ -397,23 +397,40 @@ class SimpleAudioGenerator {
 
     setupSwiftBridge() {
         // Define Swift communication function (utilise swiftBridge comme to_study.html)
-        window.sendToSwift = (message, type = "log") => {
-            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge) {
-                try {
+            // Throttle: max 20 messages/sec
+            let lastSendTime = 0;
+            let sendQueue = [];
+            let sending = false;
+            function processSendQueue() {
+                if (sendQueue.length === 0) return;
+                const now = Date.now();
+                if (now - lastSendTime < 50) return; // 20Hz
+                const {message, type} = sendQueue.shift();
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge) {
                     const payload = {
-                        type: type,
+                        type,
                         data: message
                     };
-                    window.webkit.messageHandlers.swiftBridge.postMessage(payload);
-                    console.log(`📡 Swift Bridge: [${type}]`, message);
-                } catch (error) {
-                    console.error("Error sending to Swift:", error);
+                    try {
+                        window.webkit.messageHandlers.swiftBridge.postMessage(payload);
+                    } catch (e) {
+                        console.warn("Swift bridge postMessage failed", e);
+                    }
                 }
-            } else {
-                // Mode test local SEULEMENT si pas d'host AUv3
-                console.log(`🔗 Swift Bridge (TEST MODE): [${type}]`, message);
+                lastSendTime = now;
             }
-        };
+            setInterval(processSendQueue, 10);
+            window.sendToSwift = (message, type = "log") => {
+                // Si message est un tableau audio, tronquer à 128 samples max
+                if (Array.isArray(message) && message.length > 128) {
+                    message = message.slice(0, 128);
+                }
+                // Avoid sending huge objects (e.g. > 100kB)
+                if (typeof message === 'string' && message.length > 100000) {
+                    return;
+                }
+                sendQueue.push({message, type});
+            };
 
         // Request host sample rate from Swift (utiliser la même méthode que ios_apis.js)
         this.requestHostSampleRate();

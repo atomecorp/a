@@ -89,38 +89,19 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         switch message.name {
         case "console":
-            if let messageBody = message.body as? String {
-                print("WebView Log: \(messageBody)")
-            }
-            
+            // logs désactivés
+            break
         case "swiftBridge":
-            // 🔥 SWIFT: Début du handler swiftBridge
-            print("🔥 SWIFT: swiftBridge message reçu")
-            print("🔥 SWIFT: message.body type: \(type(of: message.body))")
-            print("🔥 SWIFT: message.body content: \(message.body)")
-            
             if let body = message.body as? [String: Any] {
-                print("🔥 SWIFT: body parsé avec succès: \(body)")
-                
                 // Vérifier si c'est un message de système de fichiers
                 if let action = body["action"] as? String {
-                    print("🔥 SWIFT: action trouvée: \(action)")
-                    
-                    // Router vers FileSystemBridge pour les actions de fichiers
-                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"]
-                    
+                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"];
                     if fileSystemActions.contains(action) {
-                        print("🔥 SWIFT: Routage vers FileSystemBridge pour action: \(action)")
                         if let bridge = WebViewManager.fileSystemBridge {
-                            print("🔥 SWIFT: FileSystemBridge disponible, envoi du message")
                             bridge.userContentController(userContentController, didReceive: message)
-                        } else {
-                            print("🔥 SWIFT: ❌ FileSystemBridge est nil!")
                         }
                         return
                     }
-                    
-                    // NEW: High-level AUv3API actions
                     if action == "sendMidi" {
                         if let bytes = body["bytes"] as? [Int] {
                             let u8 = bytes.compactMap { UInt8(exactly: $0 & 0xFF) }
@@ -128,11 +109,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         }
                         return
                     }
-                    
                     if action == "requestHostTempo" {
                         var bpm: Double = 120.0
                         var source = "fallback"
-                        if let au = WebViewManager.hostAudioUnit { // use type qualifier for static
+                        if let au = WebViewManager.hostAudioUnit {
                             if let block = au.musicalContextBlock {
                                 var currentTempo: Double = 0
                                 if block(&currentTempo, nil, nil, nil, nil, nil), currentTempo > 0 {
@@ -150,7 +130,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         WebViewManager.sendBridgeJSON(["action":"hostTempo", "bpm": bpm, "requestId": requestId, "source": source])
                         return
                     }
-                    
                     if action == "startHostTimeStream" {
                         WebViewManager.startHostTimeStream(format: body["format"] as? String)
                         return
@@ -168,28 +147,18 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         return
                     }
                     if action == "startMidiStream" {
-                        // Incoming MIDI already forwarded via midiUtilities.* in existing code.
-                        // Could add alternate forwarding path if needed.
                         return
                     }
                     if action == "stopMidiStream" {
                         return
                     }
                 }
-                
                 // Messages audio (ancien format avec "type")
                 if let type = body["type"] as? String,
                    let data = body["data"] {
-                    print("🔥 SWIFT: message audio avec type: \(type)")
                     handleSwiftBridgeMessage(type: type, data: data)
-                } else {
-                    print("🔥 SWIFT: ❌ Format de message non reconnu")
-                    print("🔥 SWIFT: Clés disponibles: \(body.keys)")
                 }
-            } else {
-                print("🔥 SWIFT: ❌ Impossible de parser message.body en [String: Any]")
             }
-            
         default:
             break
         }
@@ -274,19 +243,14 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
               let sampleRate = data["sampleRate"] as? Double,
               let duration = data["duration"] as? Double,
               let audioDataArray = data["audioData"] as? [Double] else {
-            print("❌ Invalid audioBuffer data from JavaScript")
             return
         }
-        
-        print("🎵 JS->Swift: audioBuffer at \(frequency)Hz (routing to AUv3 audio pipeline)")
-        
-        // Convert [Double] to [Float] for audio processing
+        // Convert [Double] to [Float] pour audio processing
         let audioData = audioDataArray.map { Float($0) }
-        
-        // Route JavaScript audio directly to AUv3 audio pipeline
-        WebViewManager.audioController?.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)
-        
-        print("🔊 JS->Swift: Audio injected - \(audioData.count) samples at \(sampleRate)Hz")
+        // Injection asynchrone pour ne jamais bloquer le thread principal
+        DispatchQueue.global(qos: .userInitiated).async {
+            WebViewManager.audioController?.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)
+        }
     }
     
     private func handleAudioChord(data: [String: Any]) {
