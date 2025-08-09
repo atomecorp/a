@@ -7,6 +7,7 @@
 
 import CoreAudioKit
 import WebKit
+import AVFoundation
 
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, AudioDataDelegate, TransportDataDelegate {
     var audioUnit: AUAudioUnit?
@@ -247,11 +248,39 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     
     // MARK: - Utility Methods
     
-    func getHostSampleRate() -> Double? {
-        guard let au = audioUnit, au.outputBusses.count > 0 else {
+    public func getHostSampleRate() -> Double? {
+        guard let au = audioUnit else {
+            print("⚠️ [AudioUnitViewController] getHostSampleRate: audioUnit not available")
             return nil
         }
-        return au.outputBusses[0].format.sampleRate
+        
+        // Method 1: Check iOS system sample rate first
+        #if os(iOS)
+        let systemRate = AVAudioSession.sharedInstance().sampleRate
+        if systemRate > 0 && systemRate != 44100.0 {
+            print("🔊 [AudioUnitViewController] Using iOS system sample rate: \(systemRate)")
+            return systemRate
+        }
+        #endif
+        
+        // Method 2: Check direct bus access
+        var busRate: Double = 44100.0
+        if au.outputBusses.count > 0 {
+            busRate = au.outputBusses[0].format.sampleRate
+        }
+        
+        #if os(iOS)
+        print("🔊 [AudioUnitViewController] getHostSampleRate - system: \(systemRate), bus: \(busRate)")
+        #else
+        print("🔊 [AudioUnitViewController] getHostSampleRate - bus: \(busRate)")
+        #endif
+        
+        // Return system rate if available and different from default, otherwise bus rate
+        #if os(iOS)
+        return (systemRate > 0 && systemRate != 44100.0) ? systemRate : busRate
+        #else
+        return busRate
+        #endif
     }
     
     // MARK: - Cleanup

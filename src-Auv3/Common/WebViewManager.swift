@@ -337,9 +337,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     private func sendSampleRateToJS() {
-        // Send sample rate back to JavaScript
-        let jsCode = "if (typeof window.updateSampleRate === 'function') { window.updateSampleRate(44100); }"
-        Self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+        // Get actual sample rate from audio controller
+        if let hostSampleRate = WebViewManager.audioController?.getHostSampleRate() {
+            let jsCode = "if (typeof window.updateSampleRate === 'function') { window.updateSampleRate(\(hostSampleRate)); }"
+            Self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+            print("🔊 [WebViewManager] Sent actual host sample rate: \(hostSampleRate)")
+        } else {
+            // Fallback if audio controller not available
+            let jsCode = "if (typeof window.updateSampleRate === 'function') { window.updateSampleRate(44100); }"
+            Self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+            print("⚠️ [WebViewManager] Audio controller unavailable, sent fallback: 44100")
+        }
     }
     
     // MARK: - MIDI Communication

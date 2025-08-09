@@ -70,6 +70,7 @@ window.console.log = (function(oldLog) {
     const timeCallbacks    = [];      // listeners for timeline updates (stream)
     const hostStateCallbacks = [];    // listeners for host transport state
     const midiCallbacks    = [];      // listeners for midi events
+    const sampleRateRequests = [];    // pending resolvers for host sample rate (resolved via window.updateSampleRate)
 
     // Flags to avoid redundant start/stop messages to Swift.
     let timeStreamActive = false;
@@ -263,6 +264,89 @@ window.console.log = (function(oldLog) {
         });
     };
 
+    // 6bis. auv3_sample_rate() (pattern audio_swift.js)
+    // Swift ne renvoie pas un message via swiftBridge; il exécute window.updateSampleRate(hostRate)
+    // Nous interceptons cette fonction pour résoudre les Promises en attente.
+    (function setupSampleRateHook(){
+        const original = window.updateSampleRate;
+        // Internal store
+        API._sampleRateInfo = { host:null, web:null, discrepancy:false, lastUpdate:null };
+        let _lastSentHost = null;
+        window.updateSampleRate = function(sampleRate){
+            try {
+                // Try multiple sources for web audio sample rate
+                let webRate = null;
+                if (window.audioSwiftBridge && window.audioSwiftBridge.audioContext) {
+                    webRate = window.audioSwiftBridge.audioContext.sampleRate;
+                } else if (window.AudioContext || window.webkitAudioContext) {
+                    // Create temporary context to get default sample rate
+                    try {
+                        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        webRate = tempCtx.sampleRate;
+                        tempCtx.close();
+                    } catch(_){}
+                }
+                
+                API._sampleRateInfo.host = sampleRate;
+                if (webRate) API._sampleRateInfo.web = webRate;
+                API._sampleRateInfo.lastUpdate = Date.now();
+                if (webRate && sampleRate && Math.abs(webRate - sampleRate) >= 200) {
+                    API._sampleRateInfo.discrepancy = true;
+                    console.warn('[AUv3API] Sample rate discrepancy host='+sampleRate+' web='+webRate+' (using web rate for JS audio)');
+                } else if (webRate && sampleRate) {
+                    API._sampleRateInfo.discrepancy = false;
+                }
+                // Résolution de toutes les requêtes en attente
+                if (sampleRateRequests.length){
+                    const arr = sampleRateRequests.splice(0);
+                    arr.forEach(entry=>{ try { clearTimeout(entry.t); entry.resolve(sampleRate); } catch(_){} });
+                }
+                // Echo vers Swift (pattern audio_swift.js) pour log sampleRateUpdate
+                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge) {
+                    if (_lastSentHost !== sampleRate) { // éviter spam
+                        _lastSentHost = sampleRate;
+                        try {
+                            window.webkit.messageHandlers.swiftBridge.postMessage({
+                                type: 'sampleRateUpdate',
+                                data: {
+                                    hostSampleRate: sampleRate,
+                                    webAudioSampleRate: webRate,
+                                    message: 'Sample rate updated to '+sampleRate
+                                }
+                            });
+                        } catch(e){ console.warn('[AUv3API] Failed to echo sampleRateUpdate', e); }
+                    }
+                }
+            } finally {
+                if (typeof original === 'function') {
+                    try { original(sampleRate); } catch(_){}
+                }
+            }
+        };
+    })();
+
+    // Diagnostic helper
+    API.auv3_sample_rate_info = function(){ return Object.assign({}, API._sampleRateInfo); };
+
+    API.auv3_sample_rate = function auv3_sample_rate(){
+        return new Promise((resolve, reject) => {
+            if (!bridgeAvailable()) return reject(new Error('swiftBridge not available'));
+            const entry = { resolve, reject, t: setTimeout(()=>{
+                const i = sampleRateRequests.indexOf(entry);
+                if (i!==-1) sampleRateRequests.splice(i,1);
+                reject(new Error('sample rate timeout'));
+            }, 2000) };
+            sampleRateRequests.push(entry);
+            try {
+                window.webkit.messageHandlers.swiftBridge.postMessage({ type:'getSampleRate', data:{ requestSampleRate:1 } });
+            } catch(e){
+                clearTimeout(entry.t);
+                const i = sampleRateRequests.indexOf(entry); if (i!==-1) sampleRateRequests.splice(i,1);
+                reject(e);
+            }
+        });
+    };
+
     // 7. auv3_current_time(start, format?)
     // start=true  => ask Swift to begin streaming timeline updates
     // start=false => ask Swift to stop streaming
@@ -280,6 +364,35 @@ window.console.log = (function(oldLog) {
             timeStreamActive = false;
             postToSwift({ action: 'stopHostTimeStream' }); // EXPECTED Swift action
         }
+    };
+
+    // 7bis. auv3_current_time_once(format?)
+    // Lightweight single fetch of host time: starts stream, resolves first message, then stops immediately.
+    // Avoids leaving a continuous stream running (CPU friendly).
+    API.auv3_current_time_once = function auv3_current_time_once(format='time'){
+        return new Promise((resolve, reject) => {
+            if (!bridgeAvailable()) return reject(new Error('swiftBridge not available'));
+            let settled = false;
+            const cb = (info) => {
+                if (settled) return;
+                settled = true;
+                // Remove callback
+                const idx = timeCallbacks.indexOf(cb); if (idx!==-1) timeCallbacks.splice(idx,1);
+                // Stop stream ASAP
+                API.auv3_current_time(false);
+                resolve(info);
+            };
+            API.auv3_current_time(true, format, cb);
+            // Safety timeout
+            setTimeout(()=>{
+                if (!settled){
+                    settled = true;
+                    const idx = timeCallbacks.indexOf(cb); if (idx!==-1) timeCallbacks.splice(idx,1);
+                    API.auv3_current_time(false);
+                    reject(new Error('host time timeout'));
+                }
+            }, 1000);
+        });
     };
 
     // 8. auv3_host_state(start)
@@ -351,6 +464,8 @@ window.console.log = (function(oldLog) {
         } catch(e){ console.warn('Invalid JSON from Swift', msg); return; }
         if (!msg || typeof msg !== 'object') return;
 
+    // (plus de gestion sampleRateUpdate ici; résolution via window.updateSampleRate)
+
         switch(msg.action){
             case 'saveFileWithDocumentPickerResult': {
                 const cb = pendingFileSaves[msg.requestId];
@@ -399,10 +514,15 @@ window.console.log = (function(oldLog) {
                 break;
             }
             case 'hostTimeUpdate': {
-                if (typeof msg.positionSeconds === 'number') {
-                    API.updateTimecode(msg.positionSeconds * 1000);
+                // Throttle updates to reduce CPU (process every 4th message)
+                if (!API.__timeUpdateCounter) API.__timeUpdateCounter = 0;
+                API.__timeUpdateCounter++;
+                if (API.__timeUpdateCounter % 4 === 0) {
+                    if (typeof msg.positionSeconds === 'number') {
+                        API.updateTimecode(msg.positionSeconds * 1000);
+                    }
+                    try { timeCallbacks.forEach(fn => { try { fn(msg); } catch(_){} }); } catch(err){ console.error('[AUv3API] hostTimeUpdate dispatch error', err); }
                 }
-                try { timeCallbacks.forEach(fn => { try { fn(msg); } catch(_){} }); } catch(err){ console.error('[AUv3API] hostTimeUpdate dispatch error', err); }
                 break;
             }
             case 'hostTransport': {
@@ -500,12 +620,24 @@ window.console.log = (function(oldLog) {
   addBtn('List Projects', async()=>{ const files = await AUv3API.auv3_file_list('Projects'); log('DEBUG list raw => '+JSON.stringify(files)); return files; });
   addBtn('Load Proj', async()=>{ const name=prompt('Project name (without .atome)','PanelProj'); if(!name) return; const d= await AUv3API.auv3_file_loader('Projects', name); log('Project keys: '+Object.keys(d)); });
   addBtn('Tempo', async()=>{ const bpm = await AUv3API.auv3_tempo(); log('Tempo='+bpm); return bpm; });
+    
+  // SampleRate button with dynamic text update
+  const sampleRateBtn = addBtn('SampleRate', async(btn)=>{ 
+    const sr = await AUv3API.auv3_sample_rate(); 
+    const info = AUv3API.auv3_sample_rate_info();
+    btn.textContent = `SR: H${info.host || sr} W${info.web || '?'}`;
+    if (info.discrepancy) btn.style.backgroundColor = '#ff6b35';
+    log('SampleRate='+sr); 
+    return sr; 
+  });
+  addBtn('SR Info', async()=>{ const info = AUv3API.auv3_sample_rate_info(); log('SR Info '+JSON.stringify(info)); return info; });
 
   // Streaming buttons (toggle)
   const timeBtn = addBtn('Time ▶︎', async(btn)=>{
     if(!btn.classList.contains('on')){ AUv3API.auv3_current_time(true,'time',(info)=>{ AUv3API.updateTimecode(info.positionSeconds*1000); log('Time '+info.positionSeconds.toFixed(1)+'s'); }); btn.classList.add('on'); btn.textContent='Time ■'; }
     else { AUv3API.auv3_current_time(false); btn.classList.remove('on'); btn.textContent='Time ▶︎'; }
   });
+    addBtn('TimeOnce', async()=>{ const info = await AUv3API.auv3_current_time_once('time'); log('TimeOnce '+info.positionSeconds.toFixed(3)+'s'); return {seconds:info.positionSeconds}; });
   const hostBtn = addBtn('Transport ▶︎', async(btn)=>{
     if(!btn.classList.contains('on')){ AUv3API.auv3_host_state(true,(s)=>{ log('Transport '+(s.playing?'▶':'⏸')+' '+Number(s.positionSeconds).toFixed(1)); }); btn.classList.add('on'); btn.textContent='Transport ■'; }
     else { AUv3API.auv3_host_state(false); btn.classList.remove('on'); btn.textContent='Transport ▶︎'; }

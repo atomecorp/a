@@ -529,13 +529,41 @@ public class auv3Utils: AUAudioUnit {
     
     // MARK: - Utility Methods
     
+    // MARK: - Format Detection (Proper AUv3 Pattern)
+    
+    /// Get the actual runtime sample rate from host context
+    func getRuntimeSampleRate() -> Double {
+        // Method 1: Check iOS system audio session sample rate
+        #if os(iOS)
+        let systemRate = AVAudioSession.sharedInstance().sampleRate
+        if systemRate > 0 && systemRate != 44100.0 {
+            print("🔊 [getRuntimeSampleRate] Using iOS system sample rate: \(systemRate)")
+            return systemRate
+        }
+        #endif
+        
+        // Method 2: Check if host has updated output format after allocateRenderResources
+        if let outputBusArray = _outputBusArray, outputBusArray.count > 0 {
+            return outputBusArray[0].format.sampleRate
+        }
+        
+        // Fallback to 44100
+        print("⚠️ [getRuntimeSampleRate] All methods failed, using fallback 44100")
+        return 44100.0
+    }
+    
     func getSampleRate() -> Double? {
         // Safety check to prevent crashes if initialization failed
         guard let outputBusArray = _outputBusArray, outputBusArray.count > 0 else {
-            // Silent error handling for performance
+            print("⚠️ [getSampleRate] Output bus array not available, returning default 44100")
             return 44100.0 // Return default sample rate
         }
-        return outputBusArray[0].format.sampleRate
+        let actualRate = outputBusArray[0].format.sampleRate
+        // Only print occasionally to avoid log spam
+        if Int.random(in: 1...1000) == 1 {
+            print("🔊 [getSampleRate] Output bus sample rate: \(actualRate)")
+        }
+        return actualRate
     }
     
     private func shouldPollTransport() -> Bool {

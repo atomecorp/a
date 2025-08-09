@@ -41,7 +41,26 @@ extension auv3Utils {
     /// Override allocateRenderResources to force MIDI setup
     public override func allocateRenderResources() throws {
         print("🎹 AUv3: allocateRenderResources called!")
+        
+        // CRITICAL: Log sample rates BEFORE calling super to see what host provides
+        if outputBusses.count > 0 {
+            let preRate = outputBusses[0].format.sampleRate
+            print("🔊 [PRE-allocate] Output bus sample rate: \(preRate)")
+        }
+        
         try super.allocateRenderResources()
+        
+        // Log actual host sample rate after allocation
+        if outputBusses.count > 0 {
+            let actualHostRate = outputBusses[0].format.sampleRate
+            print("🔊 [POST-allocate] ACTUAL Host sample rate after allocation: \(actualHostRate)")
+            
+            // Also check input bus in case host sets different rates
+            if inputBusses.count > 0 {
+                let inputRate = inputBusses[0].format.sampleRate
+                print("🔊 [POST-allocate] Input bus sample rate: \(inputRate)")
+            }
+        }
         
         print("🎹 AUv3: allocateRenderResources - scheduleMIDIEventBlock before: \(self.scheduleMIDIEventBlock != nil)")
         
