@@ -166,14 +166,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     
     private func handleSwiftBridgeMessage(type: String, data: Any) {
         switch type {
-        case "audioBuffer_b64":
-            // Optimisation : décodage base64 → Float32Array
-            if let b64 = data as? String,
-               let decoded = Data(base64Encoded: b64) {
-                let sampleCount = decoded.count / 4
+        case "audioBuffer_bin":
+            // Optimisation : réception ArrayBuffer natif (binaire)
+            if let data = data as? Data {
+                let sampleCount = data.count / 4
                 var floatArray = [Float](repeating: 0, count: sampleCount)
-                _ = floatArray.withUnsafeMutableBytes { decoded.copyBytes(to: $0) }
-                // Utilise un sampleRate par défaut (à ajuster si besoin)
+                _ = floatArray.withUnsafeMutableBytes { data.copyBytes(to: $0) }
                 let sampleRate: Double = 44100
                 let duration: Double = Double(sampleCount) / sampleRate
                 DispatchQueue.global(qos: .userInitiated).async {
