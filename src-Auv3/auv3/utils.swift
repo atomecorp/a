@@ -361,16 +361,53 @@ public class auv3Utils: AUAudioUnit {
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
         jsAudioLock.lock()
         defer { jsAudioLock.unlock() }
-        
+
         print("🎵 AUv3: Injecting JS audio - \(audioData.count) samples at \(sampleRate)Hz")
-        
-        // Store the JavaScript audio data
-        jsAudioBuffer = audioData
+
+        // 1. Detect host sample rate
+        let hostSampleRate = getSampleRate() ?? 44100.0
+        var processedBuffer: [Float] = audioData
+
+        // 2. Resample if needed (linear interpolation)
+        if abs(sampleRate - hostSampleRate) > 1.0 {
+            let ratio = hostSampleRate / sampleRate
+            let newLength = Int(Double(audioData.count) * ratio)
+            processedBuffer = [Float](repeating: 0, count: newLength)
+            for i in 0..<newLength {
+                let srcIndex = Double(i) / ratio
+                let idx = Int(srcIndex)
+                let frac = Float(srcIndex - Double(idx))
+                if idx + 1 < audioData.count {
+                    processedBuffer[i] = audioData[idx] * (1 - frac) + audioData[idx + 1] * frac
+                } else {
+                    processedBuffer[i] = audioData.last ?? 0
+                }
+            }
+                print("🔄 AUv3: Resampled JS audio from \(sampleRate)Hz to \(hostSampleRate)Hz (\(newLength) samples)")
+        }
+
+        // 3. Fade-in/out (128 samples or 5% of buffer)
+        let fadeLen = max(128, Int(Double(processedBuffer.count) * 0.05))
+        if processedBuffer.count > fadeLen * 2 {
+            // Fade-in
+            for i in 0..<fadeLen {
+                let gain = Float(i) / Float(fadeLen)
+                processedBuffer[i] *= gain
+            }
+            // Fade-out
+            for i in 0..<fadeLen {
+                let gain = Float(fadeLen - i) / Float(fadeLen)
+                processedBuffer[processedBuffer.count - 1 - i] *= gain
+            }
+        }
+
+        // 4. Store the processed buffer
+        jsAudioBuffer = processedBuffer
         jsAudioPlaybackIndex = 0
-        jsAudioSampleRate = sampleRate
+        jsAudioSampleRate = hostSampleRate
         jsAudioActive = true
-        
-        print("🔊 AUv3: JS audio injection ready - \(audioData.count) samples")
+
+        print("🔊 AUv3: JS audio injection ready - \(processedBuffer.count) samples")
     }
     
     /// Stop JavaScript audio playback
@@ -389,30 +426,26 @@ public class auv3Utils: AUAudioUnit {
     private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount) {
         guard jsAudioActive, !jsAudioBuffer.isEmpty, jsAudioLock.try() else { return }
         defer { jsAudioLock.unlock() }
-        
+
+        let gain: Float = 0.4 // Conservative mix gain
+        let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
         for i in 0..<bufferList.numberOfBuffers {
             let buffer = bufferList.buffer(at: i)
             guard let outputData = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-            
-            let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
-            
-            // Mix JavaScript audio with current audio (additive mixing)
+            // Mix the same JS segment into all channels
             for frame in 0..<framesToProcess {
                 if jsAudioPlaybackIndex + frame < jsAudioBuffer.count {
-                    outputData[frame] += jsAudioBuffer[jsAudioPlaybackIndex + frame] * 0.5 // 50% mix level
+                    outputData[frame] += jsAudioBuffer[jsAudioPlaybackIndex + frame] * gain
                 }
             }
-            
-            jsAudioPlaybackIndex += framesToProcess
-            
-            // Stop when we've played all the JavaScript audio
-            if jsAudioPlaybackIndex >= jsAudioBuffer.count {
-                jsAudioActive = false
-                jsAudioBuffer.removeAll()
-                jsAudioPlaybackIndex = 0
-                print("🎵 AUv3: JS audio playback completed")
-                break
-            }
+        }
+        jsAudioPlaybackIndex += framesToProcess
+        // Stop when we've played all the JavaScript audio
+        if jsAudioPlaybackIndex >= jsAudioBuffer.count {
+            jsAudioActive = false
+            jsAudioBuffer.removeAll()
+            jsAudioPlaybackIndex = 0
+            print("🎵 AUv3: JS audio playback completed")
         }
     }
 
