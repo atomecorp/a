@@ -28,8 +28,5 @@ public protocol AudioControllerProtocol: AnyObject {
     
     // JavaScript audio injection
     func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double)
-    
-    // Host sample rate access
-    func getHostSampleRate() -> Double?
 }
 

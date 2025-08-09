@@ -57,10 +57,6 @@ public class auv3Utils: AUAudioUnit {
     private var jsAudioSampleRate: Double = 48000
     private var jsAudioActive: Bool = false
     private let jsAudioLock = NSLock() // Thread safety for JS audio injection
-    
-    // Throttled MIDI-to-JS forwarding (avoid WebKit from render thread)
-    private var lastMIDISendToJS: CFTimeInterval = 0
-    private let midiToJSInterval: CFTimeInterval = 0.02 // max 50 Hz to UI
 
     // Custom AudioBufferList wrapper
     private struct AudioBufferListWrapper {
@@ -115,9 +111,6 @@ public class auv3Utils: AUAudioUnit {
             if let eventList = realtimeEventListHead?.pointee {
                 strongSelf.processMIDIEvents(eventList)
             }
-            
-            // Envoyer les événements MIDI en queue (depuis render thread)
-            strongSelf.processMIDIOutputQueue()
 
             let bufferList = AudioBufferListWrapper(ptr: outputData)
             
@@ -232,15 +225,6 @@ public class auv3Utils: AUAudioUnit {
         if tsBlock(&flags, &currentSampleTime, nil, nil) {
             let isPlaying = (flags.rawValue & AUHostTransportStateFlags.moving.rawValue) != 0
             let sr = getSampleRate() ?? 44100.0
-            
-            // Also check and update tempo while we're checking transport
-            if let musicalBlock = self.musicalContextBlock {
-                var currentTempo: Double = 0
-                if musicalBlock(&currentTempo, nil, nil, nil, nil, nil), currentTempo > 0 {
-                    WebViewManager.updateCachedTempo(currentTempo)
-                }
-            }
-            
             // Met à jour le cache central utilisé par les streams hostTimeUpdate / hostTransport
             WebViewManager.updateTransportCache(isPlaying: isPlaying, playheadSeconds: currentSampleTime / sr)
             // Fallback direct pour Lyrix si les streams JS (ios_apis.js) ne sont pas présents
@@ -317,64 +301,6 @@ public class auv3Utils: AUAudioUnit {
         return ["Atome MIDI Out"]
     }
     
-    // MARK: - MIDI Output Event Block (Standard AUv3 MIDI generation)
-    public override var midiOutputEventBlock: AUMIDIOutputEventBlock? {
-        get { return super.midiOutputEventBlock }
-        set { 
-            super.midiOutputEventBlock = newValue
-            print("🎹 AU: midiOutputEventBlock set by host: \(newValue != nil)")
-        }
-    }
-    
-    // MARK: - MIDI Out (midiOutputEventBlock - Standard method)
-    /// Envoi MIDI via midiOutputEventBlock (méthode standard pour plugins AUv3 qui génèrent du MIDI)
-    // MARK: - MIDI Out (Queue for render thread)
-    // Queue thread-safe pour stocker les événements MIDI à envoyer
-    private var midiOutputQueue: [(timestamp: AUEventSampleTime, cable: UInt8, bytes: [UInt8])] = []
-    private let midiQueueLock = NSLock()
-    
-    /// Envoi MIDI via queue pour render thread (méthode correcte pour plugins AUv3)
-    @objc public func sendMIDIRawViaHost(_ bytes: [UInt8]) {
-        guard bytes.count > 0 && bytes.count <= 3 else { 
-            print("❌ sendMIDIRawViaHost: invalid bytes count: \(bytes.count)")
-            return 
-        }
-        
-        print("🎹 AU: Queuing MIDI for render thread: \(bytes.map { String(format: "0x%02X", $0) }.joined(separator: " "))")
-        
-        // Stocker dans la queue pour envoi depuis render thread
-        midiQueueLock.lock()
-        midiOutputQueue.append((timestamp: AUEventSampleTimeImmediate, cable: 0, bytes: bytes))
-        midiQueueLock.unlock()
-        
-        print("✅ AU: MIDI queued (queue size: \(midiOutputQueue.count))")
-    }
-    
-    /// Traite la queue MIDI depuis le render thread
-    private func processMIDIOutputQueue() {
-        guard !midiOutputQueue.isEmpty else { return }
-        
-        midiQueueLock.lock()
-        let eventsToSend = midiOutputQueue
-        midiOutputQueue.removeAll()
-        midiQueueLock.unlock()
-        
-        // Envoyer via midiOutputEventBlock depuis render thread
-        if let outputBlock = self.midiOutputEventBlock {
-            for event in eventsToSend {
-                let result = event.bytes.withUnsafeBufferPointer { bufferPointer in
-                    return outputBlock(event.timestamp, event.cable, event.bytes.count, bufferPointer.baseAddress!)
-                }
-                
-                if result == noErr {
-                    print("🎹 RENDER: MIDI sent via midiOutputEventBlock: \(event.bytes.map { String(format: "0x%02X", $0) }.joined(separator: " "))")
-                } else {
-                    print("❌ RENDER: midiOutputEventBlock failed (OSStatus: \(result))")
-                }
-            }
-        }
-    }
-    
     // Performance: Ultra-aggressive rate limiting for AUv3 MIDI logging
     private var lastAUv3MIDILog: CFTimeInterval = 0
     private let auv3MidiLogInterval: CFTimeInterval = 2.0 // 0.5 logs/second max (ultra conservative)
@@ -422,14 +348,8 @@ public class auv3Utils: AUAudioUnit {
         // ULTRA OPTIMIZATION: Skip expensive timestamp calculation
         let timestamp = CACurrentMediaTime() // Use more efficient time source
         
-        // Never call WebKit from render thread. Throttle and dispatch to main.
-        let now = CACurrentMediaTime()
-        if now - lastMIDISendToJS >= midiToJSInterval {
-            lastMIDISendToJS = now
-            DispatchQueue.main.async {
-                WebViewManager.sendMIDIToJS(data1: data1, data2: data2, data3: data3, timestamp: timestamp)
-            }
-        }
+        // ULTRA OPTIMIZATION: Batch WebView call without intermediate processing
+        WebViewManager.sendMIDIToJS(data1: data1, data2: data2, data3: data3, timestamp: timestamp)
         
         // ULTRA OPTIMIZATION: Remove expensive status parsing and logging in render thread
         // All MIDI processing moved to background thread to save CPU in audio thread
@@ -441,62 +361,16 @@ public class auv3Utils: AUAudioUnit {
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
         jsAudioLock.lock()
         defer { jsAudioLock.unlock() }
-
+        
         print("🎵 AUv3: Injecting JS audio - \(audioData.count) samples at \(sampleRate)Hz")
-
-        // Determine host sample rate
-        let hostRate = getRuntimeSampleRate()
-
-        var processed: [Float] = audioData
-        var targetRate = sampleRate
-
-        // Offline resample to host rate if needed (linear interpolation, robust and bounds-checked)
-        if sampleRate > 0.0, abs(sampleRate - hostRate) > 0.5 {
-            let inCount = audioData.count
-            if inCount >= 2 {
-                // Output length proportional to rate change
-                let outCount = max(1, Int(ceil(Double(inCount) * hostRate / sampleRate)))
-                processed.reserveCapacity(outCount)
-                processed.removeAll(keepingCapacity: true)
-
-                // Map output index n -> source index = n * (inputRate / outputRate)
-                let step = sampleRate / hostRate
-                let lastIdx = inCount - 1
-                for n in 0..<outCount {
-                    let src = Double(n) * step
-                    var i0 = Int(floor(src))
-                    if i0 >= lastIdx { i0 = lastIdx - 1 } // keep i1 valid
-                    if i0 < 0 { i0 = 0 }
-                    let i1 = min(i0 + 1, lastIdx)
-                    let frac = Float(src - Double(i0))
-                    let s0 = audioData[i0]
-                    let s1 = audioData[i1]
-                    processed.append(s0 + (s1 - s0) * frac)
-                }
-            } else if inCount == 1 {
-                // Degenerate case: repeat single sample to target length
-                let outCount = max(1, Int(ceil(hostRate / max(sampleRate, 1.0))))
-                processed = Array(repeating: audioData[0], count: outCount)
-            }
-            targetRate = hostRate
-            print("🔁 AUv3: Resampled JS audio to host rate in=\(sampleRate) out=\(hostRate)Hz (inCount=\(audioData.count) → outCount=\(processed.count))")
-        }
-
-        // Apply tiny fade-in/out to reduce clicks
-        let fadeSamples = min(128, processed.count / 20)
-        if fadeSamples > 0 {
-            let inv = 1.0 / Float(fadeSamples)
-            for i in 0..<fadeSamples { processed[i] *= Float(i) * inv }
-            for i in 0..<fadeSamples { processed[processed.count - 1 - i] *= Float(i) * inv }
-        }
-
-        // Store processed buffer
-        jsAudioBuffer = processed
+        
+        // Store the JavaScript audio data
+        jsAudioBuffer = audioData
         jsAudioPlaybackIndex = 0
-        jsAudioSampleRate = targetRate
+        jsAudioSampleRate = sampleRate
         jsAudioActive = true
-
-        print("🔊 AUv3: JS audio injection ready - \(processed.count) samples @ \(targetRate)Hz")
+        
+        print("🔊 AUv3: JS audio injection ready - \(audioData.count) samples")
     }
     
     /// Stop JavaScript audio playback
@@ -515,30 +389,30 @@ public class auv3Utils: AUAudioUnit {
     private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount) {
         guard jsAudioActive, !jsAudioBuffer.isEmpty, jsAudioLock.try() else { return }
         defer { jsAudioLock.unlock() }
-
-        let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
-        if framesToProcess <= 0 { return }
-
-        // Mix the same JS segment into all channels (do not consume per channel)
+        
         for i in 0..<bufferList.numberOfBuffers {
             let buffer = bufferList.buffer(at: i)
             guard let outputData = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-
-            // Additive mix with conservative gain to avoid clipping
+            
+            let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
+            
+            // Mix JavaScript audio with current audio (additive mixing)
             for frame in 0..<framesToProcess {
-                outputData[frame] += jsAudioBuffer[jsAudioPlaybackIndex + frame] * 0.4
+                if jsAudioPlaybackIndex + frame < jsAudioBuffer.count {
+                    outputData[frame] += jsAudioBuffer[jsAudioPlaybackIndex + frame] * 0.5 // 50% mix level
+                }
             }
-        }
-
-        // Consume JS frames ONCE per render call
-        jsAudioPlaybackIndex += framesToProcess
-
-        // Stop when we've played all the JavaScript audio
-        if jsAudioPlaybackIndex >= jsAudioBuffer.count {
-            jsAudioActive = false
-            jsAudioBuffer.removeAll()
-            jsAudioPlaybackIndex = 0
-            print("🎵 AUv3: JS audio playback completed")
+            
+            jsAudioPlaybackIndex += framesToProcess
+            
+            // Stop when we've played all the JavaScript audio
+            if jsAudioPlaybackIndex >= jsAudioBuffer.count {
+                jsAudioActive = false
+                jsAudioBuffer.removeAll()
+                jsAudioPlaybackIndex = 0
+                print("🎵 AUv3: JS audio playback completed")
+                break
+            }
         }
     }
 
@@ -585,41 +459,13 @@ public class auv3Utils: AUAudioUnit {
     
     // MARK: - Utility Methods
     
-    // MARK: - Format Detection (Proper AUv3 Pattern)
-    
-    /// Get the actual runtime sample rate from host context
-    func getRuntimeSampleRate() -> Double {
-        // Method 1: Check iOS system audio session sample rate
-        #if os(iOS)
-        let systemRate = AVAudioSession.sharedInstance().sampleRate
-        if systemRate > 0 && systemRate != 44100.0 {
-            print("🔊 [getRuntimeSampleRate] Using iOS system sample rate: \(systemRate)")
-            return systemRate
-        }
-        #endif
-        
-        // Method 2: Check if host has updated output format after allocateRenderResources
-        if let outputBusArray = _outputBusArray, outputBusArray.count > 0 {
-            return outputBusArray[0].format.sampleRate
-        }
-        
-        // Fallback to 44100
-        print("⚠️ [getRuntimeSampleRate] All methods failed, using fallback 44100")
-        return 44100.0
-    }
-    
     func getSampleRate() -> Double? {
         // Safety check to prevent crashes if initialization failed
         guard let outputBusArray = _outputBusArray, outputBusArray.count > 0 else {
-            print("⚠️ [getSampleRate] Output bus array not available, returning default 44100")
+            // Silent error handling for performance
             return 44100.0 // Return default sample rate
         }
-        let actualRate = outputBusArray[0].format.sampleRate
-        // Only print occasionally to avoid log spam
-        if Int.random(in: 1...1000) == 1 {
-            print("🔊 [getSampleRate] Output bus sample rate: \(actualRate)")
-        }
-        return actualRate
+        return outputBusArray[0].format.sampleRate
     }
     
     private func shouldPollTransport() -> Bool {
