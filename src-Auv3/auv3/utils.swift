@@ -389,20 +389,6 @@ public class auv3Utils: AUAudioUnit {
             // print("🔄 AUv3: Resampled JS audio from \(sampleRate)Hz to \(hostSampleRate)Hz (\(newLength) samples)")
         }
 
-        // 3. Fade-in/out (128 samples or 5% of buffer)
-        let fadeLen = max(128, Int(Double(processedBuffer.count) * 0.05))
-        if processedBuffer.count > fadeLen * 2 {
-            // Fade-in
-            for i in 0..<fadeLen {
-                let gain = Float(i) / Float(fadeLen)
-                processedBuffer[i] *= gain
-            }
-            // Fade-out
-            for i in 0..<fadeLen {
-                let gain = Float(fadeLen - i) / Float(fadeLen)
-                processedBuffer[processedBuffer.count - 1 - i] *= gain
-            }
-        }
 
         // 4. Store the processed buffer
         jsAudioBuffer = processedBuffer
