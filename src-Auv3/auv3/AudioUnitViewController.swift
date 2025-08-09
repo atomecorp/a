@@ -7,7 +7,6 @@
 
 import CoreAudioKit
 import WebKit
-import AVFoundation
 
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, AudioDataDelegate, TransportDataDelegate {
     var audioUnit: AUAudioUnit?
@@ -37,8 +36,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         midiController = MIDIController()
         midiController?.startMIDIMonitoring()
         print("🎹 MIDI Controller initialized and monitoring started")
-    // Expose MIDI controller to WebViewManager for JS -> Swift raw sends
-    WebViewManager.midiController = midiController
         
         // Run MIDI system diagnostic after a short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -61,18 +58,7 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             au.audioDataDelegate = self
             au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
             print("🔊 AUv3 Audio Unit démarré NON MUTÉ")
-            
-            // Force allocation of render resources to capture scheduleMIDIEventBlock
-            do {
-                try au.allocateRenderResources()
-                print("🎹 Forced allocateRenderResources succeeded")
-            } catch {
-                print("🎹 Warning: allocateRenderResources failed: \(error)")
-            }
         }
-
-        // Make AU instance accessible to WebViewManager so 'sendMidi' can reach sendMIDIRawViaHost
-        WebViewManager.setHostAudioUnit(audioUnit)
 
         return audioUnit!
     }    // MARK: - Audio Control Methods
@@ -248,39 +234,11 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     
     // MARK: - Utility Methods
     
-    public func getHostSampleRate() -> Double? {
-        guard let au = audioUnit else {
-            print("⚠️ [AudioUnitViewController] getHostSampleRate: audioUnit not available")
+    func getHostSampleRate() -> Double? {
+        guard let au = audioUnit, au.outputBusses.count > 0 else {
             return nil
         }
-        
-        // Method 1: Check iOS system sample rate first
-        #if os(iOS)
-        let systemRate = AVAudioSession.sharedInstance().sampleRate
-        if systemRate > 0 && systemRate != 44100.0 {
-            print("🔊 [AudioUnitViewController] Using iOS system sample rate: \(systemRate)")
-            return systemRate
-        }
-        #endif
-        
-        // Method 2: Check direct bus access
-        var busRate: Double = 44100.0
-        if au.outputBusses.count > 0 {
-            busRate = au.outputBusses[0].format.sampleRate
-        }
-        
-        #if os(iOS)
-        print("🔊 [AudioUnitViewController] getHostSampleRate - system: \(systemRate), bus: \(busRate)")
-        #else
-        print("🔊 [AudioUnitViewController] getHostSampleRate - bus: \(busRate)")
-        #endif
-        
-        // Return system rate if available and different from default, otherwise bus rate
-        #if os(iOS)
-        return (systemRate > 0 && systemRate != 44100.0) ? systemRate : busRate
-        #else
-        return busRate
-        #endif
+        return au.outputBusses[0].format.sampleRate
     }
     
     // MARK: - Cleanup
