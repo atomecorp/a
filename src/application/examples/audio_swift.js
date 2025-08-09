@@ -421,7 +421,19 @@ class SimpleAudioGenerator {
             }
             setInterval(processSendQueue, 10);
             window.sendToSwift = (message, type = "log") => {
-                // Si message est un tableau audio, tronquer à 128 samples max
+                // Si message est un buffer audio Float32Array, encode en base64 pour Swift
+                if (message instanceof Float32Array) {
+                    // Limite à 128 samples pour la latence
+                    const limited = message.length > 128 ? message.subarray(0, 128) : message;
+                    // Conversion binaire → base64
+                    const bytes = new Uint8Array(limited.buffer, limited.byteOffset, limited.byteLength);
+                    let binary = '';
+                    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                    const b64 = btoa(binary);
+                    sendQueue.push({message: b64, type: type + '_b64'});
+                    return;
+                }
+                // Si message est un tableau audio natif, tronquer à 128 samples max
                 if (Array.isArray(message) && message.length > 128) {
                     message = message.slice(0, 128);
                 }
