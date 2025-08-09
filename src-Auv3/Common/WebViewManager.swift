@@ -126,9 +126,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                             let u8 = bytes.compactMap { UInt8(exactly: $0 & 0xFF) }
                             print("🎹 WebView: sendMidi action with bytes: \(u8.map { String(format: "0x%02X", $0) }.joined(separator: " "))")
                             
-                            if let au = WebViewManager.hostAudioUnit, au.responds(to: Selector("sendMIDIRawViaHost:")) {
+                            if let au = WebViewManager.hostAudioUnit, au.responds(to: Selector(("sendMIDIRawViaHost:"))) {
                                 // Perform dynamic call - this should be the PRIMARY path
-                                (au as NSObject).perform(Selector("sendMIDIRawViaHost:"), with: u8)
+                                (au as NSObject).perform(Selector(("sendMIDIRawViaHost:")), with: u8)
                                 print("🎹 MIDI routed to AU's sendMIDIRawViaHost (priority path)")
                             } else {
                                 if let mc = WebViewManager.midiController {
