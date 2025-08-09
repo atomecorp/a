@@ -43,9 +43,9 @@
 
 // import('./examples/console_to_swift.js');
 
-//import('./lyrix/index.js');
+// import('./lyrix/index.js');
 // import('./examples/ios_apis.js');
-
+import('./examples/auv3_audio.js');
 
 
 
