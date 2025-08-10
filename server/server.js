@@ -97,6 +97,94 @@ async function startServer() {
       };
     });
 
+    // YouTube Search proxy (requires YOUTUBE_API_KEY)
+    server.get('/api/youtube/search', async (request, reply) => {
+      try {
+        const q = (request.query.q || '').toString();
+        const pageToken = (request.query.pageToken || '').toString();
+        if (!q) {
+          reply.code(400);
+          return { success: false, error: 'Missing query parameter q' };
+        }
+
+        const apiKey = process.env.YOUTUBE_API_KEY;
+        if (!apiKey) {
+          // Minimal mocked fallback so UI can still render
+          return {
+            success: true,
+            info: 'No YOUTUBE_API_KEY configured. Returning mocked results.',
+            items: [
+              {
+                id: { videoId: 'dQw4w9WgXcQ' },
+                snippet: {
+                  title: `Résultats simulés pour "${q}" (exemple 1)`,
+                  channelTitle: 'Mock Channel',
+                  publishedAt: new Date().toISOString(),
+                  thumbnails: {
+                    default: { url: 'https://img.youtube.com/vi/dQw4w9WgXcQ/default.jpg' },
+                    medium: { url: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg' },
+                    high: { url: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg' }
+                  }
+                }
+              },
+              {
+                id: { videoId: '9bZkp7q19f0' },
+                snippet: {
+                  title: `Résultats simulés pour "${q}" (exemple 2)`,
+                  channelTitle: 'Mock Channel',
+                  publishedAt: new Date().toISOString(),
+                  thumbnails: {
+                    default: { url: 'https://img.youtube.com/vi/9bZkp7q19f0/default.jpg' },
+                    medium: { url: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg' },
+                    high: { url: 'https://img.youtube.com/vi/9bZkp7q19f0/hqdefault.jpg' }
+                  }
+                }
+              },
+              {
+                id: { videoId: 'kUMe1FH4CHE' },
+                snippet: {
+                  title: `Résultats simulés pour "${q}" (exemple 3)`,
+                  channelTitle: 'Mock Channel',
+                  publishedAt: new Date().toISOString(),
+                  thumbnails: {
+                    default: { url: 'https://img.youtube.com/vi/kUMe1FH4CHE/default.jpg' },
+                    medium: { url: 'https://img.youtube.com/vi/kUMe1FH4CHE/mqdefault.jpg' },
+                    high: { url: 'https://img.youtube.com/vi/kUMe1FH4CHE/hqdefault.jpg' }
+                  }
+                }
+              }
+            ],
+            pageInfo: { totalResults: 3, resultsPerPage: 3 }
+          };
+        }
+
+        const params = new URLSearchParams({
+          key: apiKey,
+          part: 'snippet',
+          type: 'video',
+          maxResults: '12',
+          q,
+          videoEmbeddable: 'true'
+        });
+        if (pageToken) params.set('pageToken', pageToken);
+
+        const url = `https://www.googleapis.com/youtube/v3/search?${params.toString()}`;
+        const res = await fetch(url);
+        const text = await res.text();
+        if (!res.ok) {
+          let parsed;
+          try { parsed = JSON.parse(text); } catch { parsed = { error: text }; }
+          reply.code(res.status);
+          return { success: false, status: res.status, ...parsed };
+        }
+        const data = JSON.parse(text);
+        return data; // Keep original YouTube shape
+      } catch (error) {
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
     // ===========================
     // 3. DATABASE API ROUTES
     // ===========================
