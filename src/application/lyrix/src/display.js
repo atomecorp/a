@@ -695,7 +695,11 @@ export class LyricsDisplay {
                 // Move volume container to wrapper and add value display
                 volumeWrapper.appendChild(volumeContainer);
                 // volumeWrapper.appendChild(volumeValue);
-                
+                // Respect volume visibility preference
+                const audioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+                const volumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+                volumeWrapper.style.display = (audioEnabled && volumeVisible) ? 'flex' : 'none';
+
                 buttons.push(volumeWrapper);
             }
         } else {

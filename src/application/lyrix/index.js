@@ -2554,7 +2554,28 @@ function showSettingsModal() {
     });
 
     audioContainer.append(audioButton, audioLabel);
-    audioSection.append(audioTitle, audioWarning, audioDisclaimer, audioContainer);
+    
+    // Volume visibility toggle inside Audio section
+    const isVolumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const volumeToggleRow = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginTop: '8px'
+        }
+    });
+    const volumeButton = UIManager.createInterfaceButton(
+        isVolumeVisible ? '✅' : '❌',
+        { onClick: () => toggleVolumeControlsVisibility(volumeButton, volumeLabel) }
+    );
+    const volumeLabel = $('span', {
+        text: isVolumeVisible ? 'Volume Visible' : 'Volume Hidden',
+        css: { fontSize: '14px', color: '#1976D2', fontWeight: '500' }
+    });
+    volumeToggleRow.append(volumeButton, volumeLabel);
+
+    audioSection.append(audioTitle, audioWarning, audioDisclaimer, audioContainer, volumeToggleRow);
 
     // Audio Sync section
     const syncSection = $('div', {
@@ -3178,6 +3199,8 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     buttonElement.textContent = newState ? '✅' : '❌';
     labelElement.textContent = newState ? 'Audio Controls Visible' : 'Audio Controls Hidden';
     
+    const isVolumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+
     // Get audio elements to toggle using their IDs
     const audioElementsToToggle = [
         document.getElementById('audio-play-button'),
@@ -3199,6 +3222,9 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
             element.style.display = newState ? 'flex' : 'none';
         } else if (element.id === 'audio-play-button' || element.id === 'audio-stop-button') {
             element.style.display = newState ? 'inline-block' : 'none';
+        } else if (element.id === 'audio-volume-slider-container' || element.id === 'volume-wrapper-toolbar' || element.id === 'volume-value-display') {
+            // Volume elements respect both audio newState and the volume visibility flag
+            element.style.display = (newState && isVolumeVisible) ? (element.id === 'volume-wrapper-toolbar' ? 'flex' : 'block') : 'none';
         } else {
             element.style.display = newState ? 'block' : 'none';
         }
@@ -3234,6 +3260,26 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     }
     
     console.log(`🎵 Audio Player Controls: ${newState ? 'ENABLED' : 'DISABLED'} - Audio controls ${newState ? 'shown' : 'hidden'}`);
+}
+
+// Toggle only the Volume controls visibility, independent from global audio controls
+function toggleVolumeControlsVisibility(buttonElement, labelElement) {
+    const isCurrentlyVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const newState = !isCurrentlyVisible;
+    localStorage.setItem('lyrix_volume_controls_visible', newState.toString());
+
+    buttonElement.textContent = newState ? '✅' : '❌';
+    labelElement.textContent = newState ? 'Volume Visible' : 'Volume Hidden';
+
+    const audioEnabled = (localStorage.getItem('lyrix_audio_player_enabled') === 'true');
+    const shouldShow = audioEnabled && newState;
+
+    const volumeContainer = document.getElementById('audio-volume-slider-container');
+    const volumeWrapper = document.getElementById('volume-wrapper-toolbar');
+    const volumeValueDisplay = document.getElementById('volume-value-display');
+    if (volumeContainer) volumeContainer.style.display = shouldShow ? 'block' : 'none';
+    if (volumeWrapper) volumeWrapper.style.display = shouldShow ? 'flex' : 'none';
+    if (volumeValueDisplay) volumeValueDisplay.style.display = shouldShow ? 'block' : 'none';
 }
 
 // Toggle audio sync with host timecode
@@ -3654,6 +3700,9 @@ function applyInitialSettings() {
     if (localStorage.getItem('lyrix_timecode_display_visible') === null) {
         localStorage.setItem('lyrix_timecode_display_visible', 'false'); // Default to hidden
     }
+    if (localStorage.getItem('lyrix_volume_controls_visible') === null) {
+        localStorage.setItem('lyrix_volume_controls_visible', 'true'); // Default to visible
+    }
     
     // Set default volume if it doesn't exist
     if (localStorage.getItem('lyrix_audio_volume') === null) {
@@ -3669,6 +3718,17 @@ function applyInitialSettings() {
     } else {
         console.log('🕐 Timecode display element not found in applyInitialSettings - will be applied later');
     }
+    
+    // Apply volume controls visibility if elements exist already
+    const isAudioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+    const isVolumeVisibleInit = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const volumeContainerInit = document.getElementById('audio-volume-slider-container');
+    const volumeWrapperInit = document.getElementById('volume-wrapper-toolbar');
+    const volumeValueDisplayInit = document.getElementById('volume-value-display');
+    const showVolumeNow = isAudioEnabled && isVolumeVisibleInit;
+    if (volumeContainerInit) volumeContainerInit.style.display = showVolumeNow ? 'block' : 'none';
+    if (volumeWrapperInit) volumeWrapperInit.style.display = showVolumeNow ? 'flex' : 'none';
+    if (volumeValueDisplayInit) volumeValueDisplayInit.style.display = showVolumeNow ? 'block' : 'none';
   
 }
 
@@ -4370,11 +4430,17 @@ function createMainInterface() {
         });
         
         const currentTimeLabel = $('span', {
+            css: {
+                display: 'none',
+            },
             id: 'current_time_label',
             text: '0:00'
         });
         
         const totalTimeLabel = $('span', {
+             css: {
+                display: 'none',
+            },
             id: 'total_time_label',
             text: '0:00'
         });
@@ -4519,6 +4585,13 @@ function createMainInterface() {
         // Add volume container to audio tools for display
         if (window.leftPanelAudioTools) {
             window.leftPanelAudioTools.volumeContainer = volumeContainer;
+        }
+
+        // Respect volume visibility preference immediately
+        const volVisiblePref = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+        const audioEnabledNow = (localStorage.getItem('lyrix_audio_player_enabled') === 'true');
+        if (!(audioEnabledNow && volVisiblePref)) {
+            volumeContainer.style.display = 'none';
         }
 
         // Apply saved volume to audio player when it's loaded
