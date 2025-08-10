@@ -1008,6 +1008,8 @@ export class DragDropManager {
                 const cleanFileName = decodeURIComponent(fileName);
                 audioTitleElement.textContent = cleanFileName;
                 console.log(`🎵 Audio player title updated: ${cleanFileName}`);
+            } else {
+                console.warn('⚠️ Audio player title element not found');
             }
         } catch (error) {
             console.error('❌ Error updating audio player title:', error);
