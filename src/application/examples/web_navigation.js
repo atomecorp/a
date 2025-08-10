@@ -103,6 +103,23 @@ const searchInput = $('input', {
   }
 });
 
+// Bouton de fermeture de l'iframe (initialement caché)
+const closeWebViewButton = $('button', {
+  parent: googleHeader,
+  css: {
+    padding: '8px 16px',
+    backgroundColor: '#ea4335',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    display: 'none'
+  },
+  text: '✕ Fermer',
+  onclick: closeWebView
+});
+
 // Fonction pour le bouton de recherche
 function performSearchAction() {
     const query = searchInput.value;
@@ -348,7 +365,8 @@ function closeWebView() {
     webViewFrame.style.height = '0px';
     webViewFrame.src = 'about:blank';
     
-    // Afficher les résultats de recherche
+    // Réafficher le header Google et les résultats de recherche
+    googleHeader.style.display = 'flex';
     resultsContainer.style.display = 'block';
     
     // Masquer le bouton de fermeture
@@ -441,12 +459,13 @@ function navigateToWikipedia() {
 
 // Créer une interface GitHub simulée
 function createGitHubInterface() {
-    // Masquer les résultats de recherche
+    // Masquer le header Google et les résultats de recherche
+    googleHeader.style.display = 'none';
     resultsContainer.style.display = 'none';
     
     // Vider et afficher l'iframe comme conteneur
     webViewFrame.style.display = 'block';
-    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.style.height = '100%';
     webViewFrame.srcdoc = `
         <html>
         <head>
@@ -477,6 +496,11 @@ function createGitHubInterface() {
                 <div class="repo-name">📁 web-navigation-demo</div>
                 <div class="repo-desc">Démonstration de navigation web avec iframe simulée</div>
             </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <button onclick="parent.closeWebView()" style="padding: 12px 24px; background: #ea4335; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                    ← Retour à Google
+                </button>
+            </div>
         </body>
         </html>
     `;
@@ -487,9 +511,12 @@ function createGitHubInterface() {
 
 // Créer une interface YouTube simulée
 function createYouTubeInterface() {
+    // Masquer le header Google et les résultats de recherche
+    googleHeader.style.display = 'none';
     resultsContainer.style.display = 'none';
+    
     webViewFrame.style.display = 'block';
-    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.style.height = '100%';
     webViewFrame.srcdoc = `
         <html>
         <head>
@@ -501,6 +528,38 @@ function createYouTubeInterface() {
                 .search-container { flex: 1; display: flex; max-width: 600px; }
                 .search-input { flex: 1; padding: 8px 15px; background: #121212; border: 1px solid #3d3d3d; color: #ffffff; border-radius: 2px 0 0 2px; }
                 .search-btn { padding: 8px 15px; background: #3d3d3d; border: 1px solid #3d3d3d; color: #ffffff; cursor: pointer; border-radius: 0 2px 2px 0; }
+                
+                /* Styles pour la connexion */
+                .user-area { display: flex; align-items: center; gap: 10px; }
+                .login-btn { background: #065fd4; color: white; border: none; padding: 8px 16px; border-radius: 2px; cursor: pointer; font-size: 14px; }
+                .login-btn:hover { background: #1976d2; }
+                .user-profile { display: flex; align-items: center; gap: 8px; }
+                .profile-pic { width: 32px; height: 32px; border-radius: 50%; }
+                .username { font-size: 14px; color: #ffffff; }
+                .logout-btn { background: transparent; color: #aaa; border: 1px solid #3d3d3d; padding: 4px 8px; border-radius: 2px; cursor: pointer; font-size: 12px; }
+                .logout-btn:hover { background: #3d3d3d; }
+                
+                /* Styles pour la modale */
+                .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; z-index: 1000; }
+                .modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 0; border-radius: 8px; width: 400px; max-width: 90vw; overflow: hidden; }
+                .modal-header { background: #1976d2; color: white; padding: 20px; text-align: center; }
+                .modal-header h2 { margin: 0; font-size: 20px; }
+                .modal-body { padding: 30px; }
+                .google-btn { width: 100%; background: #4285f4; color: white; border: none; padding: 12px; border-radius: 4px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 20px; }
+                .google-btn:hover { background: #3367d6; }
+                .divider { text-align: center; margin: 20px 0; color: #666; }
+                .form-group { margin-bottom: 15px; }
+                .form-group label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
+                .form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+                .form-group input:focus { outline: none; border-color: #1976d2; }
+                .modal-actions { display: flex; gap: 10px; }
+                .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+                .btn-primary { background: #1976d2; color: white; }
+                .btn-primary:hover { background: #1565c0; }
+                .btn-secondary { background: #f5f5f5; color: #333; }
+                .btn-secondary:hover { background: #e0e0e0; }
+                .close-modal { position: absolute; top: 10px; right: 15px; background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+                
                 .content { padding: 20px; }
                 .video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
                 .video { background: #212121; border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s; }
@@ -523,10 +582,49 @@ function createYouTubeInterface() {
                     <input class="search-input" id="youtube-search" placeholder="Rechercher des vidéos..." type="text">
                     <button class="search-btn" onclick="searchYouTube()">🔍</button>
                 </div>
+                <div class="user-area">
+                    <button class="login-btn" id="login-btn" onclick="showLoginModal()">Se connecter</button>
+                    <div class="user-profile" id="user-profile" style="display: none;">
+                        <img class="profile-pic" id="profile-pic" src="" alt="Profile">
+                        <span class="username" id="username"></span>
+                        <button class="logout-btn" onclick="logout()">Déconnexion</button>
+                    </div>
+                </div>
             </div>
             <div class="content">
                 <div class="video-grid" id="video-container">
                     <!-- Les vidéos seront ajoutées ici -->
+                </div>
+            </div>
+            
+            <!-- Modale de connexion -->
+            <div class="modal-overlay" id="login-modal">
+                <div class="modal">
+                    <button class="close-modal" onclick="closeLoginModal()">&times;</button>
+                    <div class="modal-header">
+                        <h2>Connexion à YouTube</h2>
+                    </div>
+                    <div class="modal-body">
+                        <button class="google-btn" onclick="loginWithGoogle()">
+                            <span>🔍</span>
+                            Se connecter avec Google
+                        </button>
+                        <div class="divider">── ou ──</div>
+                        <form onsubmit="loginWithEmail(event)">
+                            <div class="form-group">
+                                <label for="email">Email</label>
+                                <input type="email" id="email" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="password">Mot de passe</label>
+                                <input type="password" id="password" required>
+                            </div>
+                            <div class="modal-actions">
+                                <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Annuler</button>
+                                <button type="submit" class="btn btn-primary">Se connecter</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
 
@@ -656,6 +754,18 @@ function createYouTubeInterface() {
                             'webdev': {
                                 style: 'background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);',
                                 html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">🌐</div><div style="color: white; font-weight: bold; font-size: 18px;">Web Dev</div></div><div class="play-button">▶️</div>'
+                            },
+                            'personal': {
+                                style: 'background: linear-gradient(135deg, #fd79a8 0%, #e84393 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">🎯</div><div style="color: white; font-weight: bold; font-size: 16px;">Recommandé</div></div><div class="play-button">▶️</div>'
+                            },
+                            'subscriptions': {
+                                style: 'background: linear-gradient(135deg, #00b894 0%, #00a085 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">📱</div><div style="color: white; font-weight: bold; font-size: 16px;">Abonnements</div></div><div class="play-button">▶️</div>'
+                            },
+                            'history': {
+                                style: 'background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">📜</div><div style="color: white; font-weight: bold; font-size: 16px;">Historique</div></div><div class="play-button">▶️</div>'
                             }
                         };
                         
@@ -778,6 +888,227 @@ function createYouTubeInterface() {
 
                 // Afficher toutes les vidéos au démarrage
                 displayVideos(currentVideos);
+
+                // ========== SYSTÈME DE CONNEXION YOUTUBE ==========
+                
+                // Variables globales pour l'authentification
+                let isLoggedIn = false;
+                let currentUser = null;
+
+                // Fonction pour afficher la modale de connexion
+                function showLoginModal() {
+                    document.getElementById('login-modal').style.display = 'block';
+                }
+
+                // Fonction pour fermer la modale de connexion
+                function closeLoginModal() {
+                    document.getElementById('login-modal').style.display = 'none';
+                }
+
+                // Connexion avec Google (simulation de l'API YouTube)
+                async function loginWithGoogle() {
+                    console.log('🔐 Tentative de connexion avec Google...');
+                    
+                    // Afficher un indicateur de chargement
+                    const loginBtn = document.querySelector('.google-btn');
+                    const originalText = loginBtn.innerHTML;
+                    loginBtn.innerHTML = '<span>⏳</span> Connexion en cours...';
+                    loginBtn.disabled = true;
+                    
+                    // Simulation d'une connexion OAuth2 avec Google
+                    try {
+                        // Simuler une réponse de connexion réussie après 1 seconde
+                        setTimeout(() => {
+                            // Données simulées de l'utilisateur connecté
+                            const userData = {
+                                id: 'user123',
+                                name: 'Jean-Eric Godard',
+                                email: 'jean.eric@example.com',
+                                picture: 'https://www.gravatar.com/avatar/205e460b479e2e5b48aec07710c08d50?s=32&d=identicon',
+                                channelId: 'UC_fake_channel_id'
+                            };
+                            
+                            handleSuccessfulLogin(userData);
+                            
+                            // Restaurer le bouton
+                            loginBtn.innerHTML = originalText;
+                            loginBtn.disabled = false;
+                        }, 1000);
+                        
+                    } catch (error) {
+                        console.error('❌ Erreur de connexion:', error);
+                        alert('Erreur lors de la connexion avec Google');
+                        
+                        // Restaurer le bouton en cas d'erreur
+                        loginBtn.innerHTML = originalText;
+                        loginBtn.disabled = false;
+                    }
+                }
+
+                // Connexion avec email/mot de passe
+                function loginWithEmail(event) {
+                    event.preventDefault();
+                    
+                    const email = document.getElementById('email').value;
+                    const password = document.getElementById('password').value;
+                    
+                    console.log('🔐 Tentative de connexion avec email:', email);
+                    
+                    // Simulation de validation
+                    if (email && password.length >= 6) {
+                        const userData = {
+                            id: 'email_user',
+                            name: email.split('@')[0],
+                            email: email,
+                            picture: 'https://www.gravatar.com/avatar/fake?s=32&d=identicon',
+                            channelId: 'UC_email_channel_id'
+                        };
+                        
+                        handleSuccessfulLogin(userData);
+                    } else {
+                        alert('Veuillez vérifier vos identifiants');
+                    }
+                }
+
+                // Gérer une connexion réussie
+                function handleSuccessfulLogin(userData) {
+                    isLoggedIn = true;
+                    currentUser = userData;
+                    
+                    // Masquer le bouton de connexion
+                    document.getElementById('login-btn').style.display = 'none';
+                    
+                    // Afficher le profil utilisateur
+                    document.getElementById('user-profile').style.display = 'flex';
+                    document.getElementById('profile-pic').src = userData.picture;
+                    document.getElementById('username').textContent = userData.name;
+                    
+                    // Fermer la modale
+                    closeLoginModal();
+                    
+                    // Charger les données personnalisées de l'utilisateur
+                    loadUserPersonalizedContent();
+                    
+                    console.log('✅ Connexion réussie pour:', userData.name);
+                    
+                    // Notification de bienvenue
+                    showNotification(\`Bienvenue \${userData.name} ! 🎉\`);
+                }
+
+                // Déconnexion
+                function logout() {
+                    console.log('👋 Déconnexion en cours...');
+                    
+                    isLoggedIn = false;
+                    currentUser = null;
+                    
+                    // Afficher le bouton de connexion
+                    document.getElementById('login-btn').style.display = 'block';
+                    
+                    // Masquer le profil utilisateur
+                    document.getElementById('user-profile').style.display = 'none';
+                    
+                    // Restaurer le contenu par défaut (vidéos non-personnalisées)
+                    currentVideos = [...videoDatabase];
+                    displayVideos(currentVideos);
+                    
+                    console.log('✅ Déconnexion effectuée');
+                    showNotification('Vous êtes déconnecté');
+                }
+
+                // Charger le contenu personnalisé pour l'utilisateur connecté
+                function loadUserPersonalizedContent() {
+                    console.log('📺 Chargement du contenu personnalisé...');
+                    
+                    // Créer des vidéos personnalisées simulées
+                    const personalizedVideos = [
+                        {
+                            id: 'my-video-1',
+                            title: '🎯 Mes vidéos recommandées - Programmation',
+                            channel: 'Ma Chaîne',
+                            views: '156K vues',
+                            time: 'il y a 1 jour',
+                            duration: '25:30',
+                            tags: ['personnel', 'recommandé'],
+                            videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+                            thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+                            category: 'personal'
+                        },
+                        {
+                            id: 'my-video-2',
+                            title: '📱 Mes abonnements - Dernières vidéos',
+                            channel: 'Abonnements',
+                            views: '89K vues',
+                            time: 'il y a 3 heures',
+                            duration: '18:45',
+                            tags: ['abonnements'],
+                            videoUrl: 'https://www.youtube.com/embed/9bZkp7q19f0',
+                            thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/hqdefault.jpg',
+                            category: 'subscriptions'
+                        },
+                        {
+                            id: 'my-history',
+                            title: '📜 Mon historique de visionnage',
+                            channel: 'YouTube',
+                            views: 'Historique personnel',
+                            time: 'Mis à jour',
+                            duration: '∞',
+                            tags: ['historique'],
+                            videoUrl: 'simulation',
+                            thumbnail: 'custom',
+                            category: 'history'
+                        },
+                        // Ajouter les vidéos existantes aussi
+                        ...videoDatabase
+                    ];
+                    
+                    // Afficher les vidéos personnalisées
+                    displayVideos(personalizedVideos);
+                    
+                    // Mettre à jour currentVideos pour la recherche
+                    currentVideos = personalizedVideos;
+                    
+                    console.log('✅ Contenu personnalisé chargé:', personalizedVideos.length, 'vidéos');
+                }
+
+                // Fonction pour afficher des notifications
+                function showNotification(message) {
+                    // Créer une notification temporaire
+                    const notification = document.createElement('div');
+                    notification.style.cssText = \`
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: #2196F3;
+                        color: white;
+                        padding: 15px 20px;
+                        border-radius: 4px;
+                        z-index: 1001;
+                        font-size: 14px;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                        transition: all 0.3s ease;
+                    \`;
+                    notification.textContent = message;
+                    
+                    document.body.appendChild(notification);
+                    
+                    // Supprimer la notification après 3 secondes
+                    setTimeout(() => {
+                        notification.style.opacity = '0';
+                        setTimeout(() => {
+                            if (notification.parentNode) {
+                                notification.parentNode.removeChild(notification);
+                            }
+                        }, 300);
+                    }, 3000);
+                }
+
+                // Fermer la modale en cliquant sur l'overlay
+                document.getElementById('login-modal').addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeLoginModal();
+                    }
+                });
             </script>
         </body>
         </html>
@@ -786,9 +1117,12 @@ function createYouTubeInterface() {
 
 // Créer une interface Google simulée (comme l'existante mais plus simple)
 function createGoogleInterface() {
+    // Masquer le header Google et les résultats de recherche
+    googleHeader.style.display = 'none';
     resultsContainer.style.display = 'none';
+    
     webViewFrame.style.display = 'block';
-    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.style.height = '100%';
     webViewFrame.srcdoc = `
         <html>
         <head>
@@ -816,17 +1150,24 @@ function createGoogleInterface() {
                 <div class="result-title">Framework Development</div>
                 <div class="result-desc">Créer des frameworks avec les meilleures pratiques...</div>
             </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <button onclick="parent.closeWebView()" style="padding: 12px 24px; background: #ea4335; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                    ← Retour à la recherche
+                </button>
+            </div>
         </body>
         </html>
     `;
-    closeWebViewButton.style.display = 'block';
 }
 
 // Créer une interface Wikipedia simulée
 function createWikipediaInterface() {
+    // Masquer le header Google et les résultats de recherche
+    googleHeader.style.display = 'none';
     resultsContainer.style.display = 'none';
+    
     webViewFrame.style.display = 'block';
-    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.style.height = '100%';
     webViewFrame.srcdoc = `
         <html>
         <head>
@@ -869,10 +1210,14 @@ function createWikipediaInterface() {
                 <h2>Syntaxe</h2>
                 <p>La syntaxe de JavaScript est largement inspirée de celle du langage C...</p>
             </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <button onclick="parent.closeWebView()" style="padding: 12px 24px; background: #ea4335; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px;">
+                    ← Retour à Google
+                </button>
+            </div>
         </body>
         </html>
     `;
-    closeWebViewButton.style.display = 'block';
 }
 
 // // Bouton de test simple comme dans buttons.js - modèle reference_button
