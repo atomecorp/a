@@ -332,30 +332,12 @@ function exportAllSongsToLRX() {
     // Utilise la fonction utilitaire pour garantir l'inclusion des paroles
     const exportData = exportSongsToLRX(songSummaries, lyricsLibrary);
 
-    // Create download - iOS compatible version
+    // Create download - Always use dialog for better iOS/Mac compatibility
     const dataStr = JSON.stringify(exportData, null, 2);
     const filename = `lyrix_library_${new Date().toISOString().split('T')[0]}.lrx`;
     
-    // Check if we're on iOS/mobile
-    const isIOSorMobile = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || 
-                         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    
-    if (isIOSorMobile) {
-        // iOS/Mobile: Show modal with copy/share options
-        showMobileExportModal(dataStr, filename, 'LRX');
-    } else {
-        // Desktop: Traditional download
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        
-        const downloadLink = document.createElement('a');
-        downloadLink.href = url;
-        downloadLink.download = filename;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-        URL.revokeObjectURL(url);
-    }
+    // Always show the mobile-friendly export modal for consistent experience across all platforms
+    showMobileExportModal(dataStr, filename, 'LRX');
 }
 
 // Mobile-friendly export modal for iOS compatibility
@@ -456,9 +438,9 @@ function showMobileExportModal(dataString, filename, fileType) {
         }
     });
 
-    // Share button (iOS native sharing)
+    // Share button (iOS native sharing + enhanced Mac support)
     const shareButton = $('button', {
-        text: '📤 Share File',
+        text: '📤 Save File',
         css: {
             width: '100%',
             padding: '15px',
@@ -475,8 +457,37 @@ function showMobileExportModal(dataString, filename, fileType) {
 
     shareButton.addEventListener('click', async () => {
         try {
-            if (navigator.share) {
-                // Create a blob for sharing
+            // Try modern File System Access API first (works on newer browsers including Safari)
+            if (window.showSaveFilePicker) {
+                try {
+                    const fileHandle = await window.showSaveFilePicker({
+                        suggestedName: filename,
+                        types: [{
+                            description: fileType === 'LRX' ? 'Lyrix files' : 'Text files',
+                            accept: {
+                                [fileType === 'LRX' ? 'application/json' : 'text/plain']: [fileType === 'LRX' ? '.lrx' : '.txt']
+                            }
+                        }]
+                    });
+                    
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(dataString);
+                    await writable.close();
+                    
+                    shareButton.textContent = '✅ File Saved!';
+                    shareButton.style.backgroundColor = '#27ae60';
+                    setTimeout(() => {
+                        shareButton.textContent = '📤 Save File';
+                        shareButton.style.backgroundColor = '#9b59b6';
+                    }, 2000);
+                    return;
+                } catch (saveError) {
+                    console.log('File System Access API failed, trying other methods:', saveError);
+                }
+            }
+
+            // Try Web Share API for iOS native sharing
+            if (navigator.share && navigator.canShare) {
                 const blob = new Blob([dataString], { 
                     type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
                 });
@@ -484,45 +495,71 @@ function showMobileExportModal(dataString, filename, fileType) {
                     type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
                 });
                 
-                await navigator.share({
-                    title: `Lyrix ${fileType} Export`,
-                    text: `Exported ${fileType} file from Lyrix`,
-                    files: [file]
-                });
-            } else {
-                // Fallback: create download link that might work better on some mobile browsers
-                const blob = new Blob([dataString], { 
-                    type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
-                });
-                const url = URL.createObjectURL(blob);
-                
-                // Try to open in new tab/window for manual save
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        title: `Lyrix ${fileType} Export`,
+                        text: `Exported ${fileType} file from Lyrix`,
+                        files: [file]
+                    });
+                    
+                    shareButton.textContent = '✅ Shared!';
+                    shareButton.style.backgroundColor = '#27ae60';
+                    setTimeout(() => {
+                        shareButton.textContent = '📤 Save File';
+                        shareButton.style.backgroundColor = '#9b59b6';
+                    }, 2000);
+                    return;
+                }
+            }
+
+            // Fallback: Enhanced download method for better iOS/Mac compatibility
+            const blob = new Blob([dataString], { 
+                type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
+            });
+            const url = URL.createObjectURL(blob);
+            
+            // Create a download link that works better on iOS/Safari
+            const downloadLink = document.createElement('a');
+            downloadLink.href = url;
+            downloadLink.download = filename;
+            downloadLink.target = '_blank';
+            downloadLink.rel = 'noopener noreferrer';
+            
+            // Add to document temporarily to ensure it works on iOS
+            downloadLink.style.display = 'none';
+            document.body.appendChild(downloadLink);
+            
+            // Use both click and iOS-specific event handling
+            if (/iPad|iPhone|iPod/i.test(navigator.userAgent)) {
+                // For iOS, try to open in new tab first
                 const newWindow = window.open(url, '_blank');
                 if (!newWindow) {
-                    // If popup blocked, create download link
-                    const downloadLink = document.createElement('a');
-                    downloadLink.href = url;
-                    downloadLink.download = filename;
                     downloadLink.click();
                 }
-                
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-                
-                shareButton.textContent = '✅ Opened in new tab';
-                shareButton.style.backgroundColor = '#27ae60';
-                setTimeout(() => {
-                    shareButton.textContent = '📤 Share File';
-                    shareButton.style.backgroundColor = '#9b59b6';
-                }, 2000);
+            } else {
+                downloadLink.click();
             }
-        } catch (err) {
-            console.error('Failed to share:', err);
-            shareButton.textContent = '❌ Share failed';
-            shareButton.style.backgroundColor = '#e74c3c';
+            
+            document.body.removeChild(downloadLink);
+            
+            // Clean up the URL after a delay
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            
+            shareButton.textContent = '✅ Download Started';
+            shareButton.style.backgroundColor = '#27ae60';
             setTimeout(() => {
-                shareButton.textContent = '📤 Share File';
+                shareButton.textContent = '📤 Save File';
                 shareButton.style.backgroundColor = '#9b59b6';
             }, 2000);
+                
+        } catch (err) {
+            console.error('Failed to save/share file:', err);
+            shareButton.textContent = '❌ Save failed';
+            shareButton.style.backgroundColor = '#e74c3c';
+            setTimeout(() => {
+                shareButton.textContent = '📤 Save File';
+                shareButton.style.backgroundColor = '#9b59b6';
+            }, 3000);
         }
     });
 
@@ -550,7 +587,7 @@ function showMobileExportModal(dataString, filename, fileType) {
 
     // Instructions
     const instructionsText = $('div', {
-        text: 'Instructions:\n• Copy to Clipboard: Copy the file content to paste in another app\n• Share File: Use iOS sharing to save to Files app or send to other apps\n• View Content: Preview the file content before saving',
+        text: 'Instructions pour sauvegarder votre fichier .lrx :\n\n• 📤 Save File: Sauvegarde directe ou partage via iOS/Mac\n• 📋 Copy to Clipboard: Copie le contenu pour le coller dans une autre app\n• 👁️ View Content: Aperçu du contenu avant sauvegarde\n\nSur iOS: Utilisez "Save File" puis choisissez "Enregistrer dans Fichiers"\nSur Mac: "Save File" ouvrira la boîte de dialogue de sauvegarde',
         css: {
             fontSize: '14px',
             color: '#666',
@@ -2217,33 +2254,162 @@ function sortSongsAlphabetically() {
     }
 }
 
-// Show settings modal with MIDI fullscreen assignments
+// Settings panel state
+let settingsPanel = null;
+let isSettingsPanelOpen = false;
+
+// Show settings as panel
 function showSettingsModal() {
-    console.log('🔧 Opening settings modal...');
+    console.log('🔧 Opening settings panel...');
     
-    // Create settings content
-    const settingsContent = $('div', {
+    // Toggle panel visibility
+    if (isSettingsPanelOpen) {
+        hideSettingsPanel();
+        return;
+    }
+    
+    // Create or show settings panel
+    createSettingsPanel();
+}
+
+function hideSettingsPanel() {
+    if (settingsPanel) {
+        settingsPanel.style.display = 'none';
+        isSettingsPanelOpen = false;
+        
+        // Update lyrics display position
+        const lyricsDisplay = document.getElementById('lyrics-display');
+        if (lyricsDisplay) {
+            lyricsDisplay.style.marginTop = '0px';
+        }
+    }
+}
+
+function createSettingsPanel() {
+    // Find the main display container
+    const displayContainer = document.getElementById('display-container');
+    if (!displayContainer) {
+        console.error('❌ Display container not found');
+        return;
+    }
+    
+    // Remove existing panel if any
+    if (settingsPanel) {
+        settingsPanel.remove();
+        settingsPanel = null;
+    }
+    
+    // Create the settings panel
+    settingsPanel = $('div', {
+        id: 'settings-panel',
         css: {
-            padding: '20px',
-            maxWidth: '400px'
+            position: 'relative',
+            width: '100%',
+            backgroundColor: UIManager.THEME.colors.surface,
+            borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            zIndex: '90',
+            maxHeight: '70vh',
+            overflow: 'auto',
+            display: 'none' // Initially hidden
         }
     });
 
-    // Title
-    const title = $('h3', {
-        text: 'Settings - MIDI Control, UI Visibility & Timecode Options',
+    // Header with title and close button
+    const header = $('div', {
         css: {
-            margin: '0 0 20px 0',
-            color: '#333',
-            textAlign: 'center'
+            padding: '12px',
+            backgroundColor: UIManager.THEME.colors.primary,
+            borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
+            color: 'white',
+            position: 'sticky',
+            top: '0',
+            zIndex: '95'
         }
     });
+
+    const headerTop = $('div', {
+        css: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+        }
+    });
+
+    const headerTitle = $('h3', {
+        text: '⚙️ Settings - MIDI Control, UI Visibility & Timecode Options',
+        css: { margin: '0', color: 'white', fontSize: '16px' }
+    });
+
+    // Close button
+    const closeButton = $('button', {
+        text: '✖',
+        css: {
+            backgroundColor: 'transparent',
+            color: 'white',
+            border: 'none',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '14px',
+            cursor: 'pointer',
+            fontWeight: 'bold'
+        },
+        onClick: () => {
+            hideSettingsPanel();
+        }
+    });
+
+    headerTop.append(headerTitle, closeButton);
+    header.appendChild(headerTop);
+
+    // Content area
+    const content = $('div', {
+        className: 'settings-content',
+        css: {
+            padding: '12px',
+            maxWidth: '600px',
+            margin: '0 auto'
+        }
+    });
+
+    // Create settings content
+    createSettingsContent(content);
+
+    // Assemble panel
+    settingsPanel.append(header, content);
+
+    // Insert panel after toolbar but before lyrics
+    const toolbar = document.getElementById('lyrics-toolbar');
+    if (toolbar && toolbar.parentNode) {
+        toolbar.parentNode.insertBefore(settingsPanel, toolbar.nextSibling);
+    } else {
+        displayContainer.appendChild(settingsPanel);
+    }
+
+    // Show panel with animation
+    settingsPanel.style.display = 'block';
+    isSettingsPanelOpen = true;
+
+    // Adjust lyrics display position
+    requestAnimationFrame(() => {
+        const panelHeight = settingsPanel.offsetHeight;
+        const lyricsDisplay = document.getElementById('lyrics-display');
+        if (lyricsDisplay) {
+            lyricsDisplay.style.marginTop = `${panelHeight}px`;
+            lyricsDisplay.style.transition = 'margin-top 0.3s ease';
+        }
+    });
+}
+
+function createSettingsContent(container) {
+    // Clear existing content
+    container.innerHTML = '';
 
     // Fullscreen activation section
     const activateSection = $('div', {
         css: {
-            marginBottom: '20px',
-            padding: '15px',
+            marginBottom: '15px',
+            padding: '12px',
             backgroundColor: '#f8f9fa',
             borderRadius: '5px',
             border: '1px solid #e9ecef'
@@ -2254,8 +2420,9 @@ function showSettingsModal() {
         text: 'Activate Fullscreen',
         css: {
             fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#495057'
+            marginBottom: '8px',
+            color: '#495057',
+            fontSize: '14px'
         }
     });
 
@@ -2263,7 +2430,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
@@ -2272,12 +2439,12 @@ function showSettingsModal() {
         placeholder: 'MIDI Note',
         css: {
             flex: '1',
-            height: '30px',
-            fontSize: '14px',
+            height: '28px',
+            fontSize: '12px',
             textAlign: 'center',
             border: '1px solid #ccc',
-            borderRadius: '4px',
-            padding: '5px'
+            borderRadius: '3px',
+            padding: '4px'
         }
     });
 
@@ -2287,19 +2454,19 @@ function showSettingsModal() {
         activateInput.value = savedActivateNote;
     }
 
-    const activateLearnButton = Button({
+    const activateLearnButton = $('button', {
         text: '🎹 Learn',
-        onClick: () => {
-            startMidiLearnForSetting(activateInput, 'fullscreen_activate', activateLearnButton);
-        },
         css: {
-            padding: '5px 10px',
+            padding: '4px 8px',
             backgroundColor: '#007bff',
             color: 'white',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '3px',
             cursor: 'pointer',
-            fontSize: '12px'
+            fontSize: '11px'
+        },
+        onClick: () => {
+            startMidiLearnForSetting(activateInput, 'fullscreen_activate', activateLearnButton);
         }
     });
 
@@ -2309,8 +2476,8 @@ function showSettingsModal() {
     // Fullscreen deactivation section
     const deactivateSection = $('div', {
         css: {
-            marginBottom: '20px',
-            padding: '15px',
+            marginBottom: '15px',
+            padding: '12px',
             backgroundColor: '#f8f9fa',
             borderRadius: '5px',
             border: '1px solid #e9ecef'
@@ -2321,8 +2488,9 @@ function showSettingsModal() {
         text: 'Deactivate Fullscreen',
         css: {
             fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#495057'
+            marginBottom: '8px',
+            color: '#495057',
+            fontSize: '14px'
         }
     });
 
@@ -2330,7 +2498,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
@@ -2339,12 +2507,12 @@ function showSettingsModal() {
         placeholder: 'MIDI Note',
         css: {
             flex: '1',
-            height: '30px',
-            fontSize: '14px',
+            height: '28px',
+            fontSize: '12px',
             textAlign: 'center',
             border: '1px solid #ccc',
-            borderRadius: '4px',
-            padding: '5px'
+            borderRadius: '3px',
+            padding: '4px'
         }
     });
 
@@ -2354,19 +2522,19 @@ function showSettingsModal() {
         deactivateInput.value = savedDeactivateNote;
     }
 
-    const deactivateLearnButton = Button({
+    const deactivateLearnButton = $('button', {
         text: '🎹 Learn',
-        onClick: () => {
-            startMidiLearnForSetting(deactivateInput, 'fullscreen_deactivate', deactivateLearnButton);
-        },
         css: {
-            padding: '5px 10px',
+            padding: '4px 8px',
             backgroundColor: '#007bff',
             color: 'white',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '3px',
             cursor: 'pointer',
-            fontSize: '12px'
+            fontSize: '11px'
+        },
+        onClick: () => {
+            startMidiLearnForSetting(deactivateInput, 'fullscreen_deactivate', deactivateLearnButton);
         }
     });
 
@@ -2392,285 +2560,11 @@ function showSettingsModal() {
         }
     });
 
-    // Audio Player Controls section
-    const audioSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#e3f2fd',
-            borderRadius: '5px',
-            border: '1px solid #2196F3'
-        }
-    });
-
-    const audioTitle = $('div', {
-        text: '🎵 Audio Player Controls',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '5px',
-            color: '#1976D2'
-        }
-    });
-
-    // Experimental warning
-    const audioWarning = $('div', {
-        text: '⚠️ EXPERIMENTAL FEATURE - NOT RECOMMENDED FOR USE',
-        css: {
-            fontSize: '11px',
-            color: '#ff5722',
-            fontWeight: '600',
-            marginBottom: '10px',
-            padding: '4px 8px',
-            backgroundColor: '#fff3e0',
-            borderRadius: '3px',
-            border: '1px solid #ff9800',
-            textAlign: 'center'
-        }
-    });
-
-    const audioDisclaimer = $('div', {
-        text: 'This feature is unstable and may cause interface issues. Use at your own risk.',
-        css: {
-            fontSize: '10px',
-            color: '#666',
-            fontStyle: 'italic',
-            marginBottom: '10px',
-            textAlign: 'center'
-        }
-    });
-
-    const audioContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    // Load current state from localStorage
-    const isAudioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true'; // Default to false
-
-    const audioButton = UIManager.createInterfaceButton(
-        isAudioEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleAudioPlayerControls(audioButton, audioLabel)
-        }
-    );
-
-    const audioLabel = $('span', {
-        text: isAudioEnabled ? 'Audio Controls Visible' : 'Audio Controls Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#1976D2',
-            fontWeight: '500'
-        }
-    });
-
-    audioContainer.append(audioButton, audioLabel);
-    audioSection.append(audioTitle, audioWarning, audioDisclaimer, audioContainer);
-
-    // Audio Sync section
-    const syncSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#fff3e0',
-            borderRadius: '5px',
-            border: '1px solid #ff9800'
-        }
-    });
-
-    const syncTitle = $('h4', {
-        text: '⚠️ EXPERIMENTAL FEATURES',
-        css: {
-            fontSize: '16px',
-            marginBottom: '5px',
-            color: '#e65100'
-        }
-    });
-
-    // Subtitle for sync section
-    const syncSubtitle = $('div', {
-        text: '🔄 Audio Sync with Host Timecode',
-        css: {
-            fontSize: '14px',
-            marginBottom: '10px',
-            color: '#e65100',
-            fontWeight: '500'
-        }
-    });
-
-    // Experimental warning for sync
-    const syncWarning = $('div', {
-        text: '⚠️ EXPERIMENTAL FEATURE - REQUIRES HOST APPLICATION SUPPORT',
-        css: {
-            fontSize: '11px',
-            color: '#d84315',
-            fontWeight: '600',
-            marginBottom: '10px',
-            padding: '4px 8px',
-            backgroundColor: '#fbe9e7',
-            borderRadius: '3px',
-            border: '1px solid #f44336',
-            textAlign: 'center'
-        }
-    });
-
-    const syncDisclaimer = $('div', {
-        text: 'This feature attempts to sync audio playback with host application timecode. May not work in all environments.',
-        css: {
-            fontSize: '10px',
-            color: '#666',
-            fontStyle: 'italic',
-            marginBottom: '10px',
-            textAlign: 'center'
-        }
-    });
-
-    const syncContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            marginBottom: '10px'
-        }
-    });
-
-    // Load current sync state from localStorage
-    const isSyncEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
-
-    const syncButton = UIManager.createInterfaceButton(
-        isSyncEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleAudioSync(syncButton, syncLabel)
-        }
-    );
-
-    const syncLabel = $('span', {
-        text: isSyncEnabled ? 'Host Sync Enabled' : 'Host Sync Disabled',
-        css: {
-            fontSize: '14px',
-            color: '#e65100',
-            fontWeight: '500'
-        }
-    });
-
-    syncContainer.append(syncButton, syncLabel);
-
-    // Test sync container
-    const testSyncContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            marginTop: '10px'
-        }
-    });
-
-    const testPlayButton = UIManager.createInterfaceButton('▶️', {
-        onClick: () => {
-            console.log('🔄 Testing host sync - simulating timecode progression');
-            const timecodeDisplay = document.getElementById('timecode-display');
-            if (timecodeDisplay) {
-                // Simulate timecode progression
-                let time = 0;
-                const interval = setInterval(() => {
-                    time += 0.1;
-                    timecodeDisplay.textContent = `${time.toFixed(3)}s`;
-                    if (time >= 2) {
-                        clearInterval(interval);
-                    }
-                }, 100);
-            } else {
-                console.warn('⚠️ Host timecode display not found for test');
-            }
-        }
-    });
-
-    const testStopButton = UIManager.createInterfaceButton('⏹️', {
-        onClick: () => {
-            console.log('🔄 Testing host sync - simulating timecode stop');
-            const timecodeDisplay = document.getElementById('timecode-display');
-            if (timecodeDisplay) {
-                // Keep timecode static to simulate stop
-                const currentTime = timecodeDisplay.textContent;
-                setTimeout(() => {
-                    timecodeDisplay.textContent = currentTime; // Keep same time
-                }, 1000);
-            } else {
-                console.warn('⚠️ Host timecode display not found for test');
-            }
-        }
-    });
-
-    const testLabel = $('span', {
-        text: 'Test sync manually',
-        css: {
-            fontSize: '12px',
-            color: '#666',
-            fontStyle: 'italic'
-        }
-    });
-
-    testSyncContainer.append(testPlayButton, testStopButton, testLabel);
-
-    syncSection.append(syncTitle, syncSubtitle, syncWarning, syncDisclaimer, syncContainer, testSyncContainer);
-
-    // MIDI Inspector section
-    const midiSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#f3e5f5',
-            borderRadius: '5px',
-            border: '1px solid #9c27b0'
-        }
-    });
-
-    const midiTitle = $('div', {
-        text: '🎹 MIDI Inspector',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#7b1fa2'
-        }
-    });
-
-    const midiContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    // Load current state from localStorage
-    const isMidiEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true'; // Default to false
-
-    const midiButton = UIManager.createInterfaceButton(
-        isMidiEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleMidiInspector(midiButton, midiLabel)
-        }
-    );
-
-    const midiLabel = $('span', {
-        text: isMidiEnabled ? 'MIDI Inspector Visible' : 'MIDI Inspector Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#7b1fa2',
-            fontWeight: '500'
-        }
-    });
-
-    midiContainer.append(midiButton, midiLabel);
-    midiSection.append(midiTitle, midiContainer);
-
     // Timecode Display section
     const timecodeDisplaySection = $('div', {
         css: {
-            marginBottom: '20px',
-            padding: '15px',
+            marginBottom: '15px',
+            padding: '12px',
             backgroundColor: '#e8f5e8',
             borderRadius: '5px',
             border: '1px solid #4caf50'
@@ -2681,8 +2575,9 @@ function showSettingsModal() {
         text: '🕐 Timecode Display',
         css: {
             fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#2e7d32'
+            marginBottom: '8px',
+            color: '#2e7d32',
+            fontSize: '14px'
         }
     });
 
@@ -2690,13 +2585,12 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
-            marginBottom: '10px'
+            gap: '8px'
         }
     });
 
     // Load current state from localStorage
-    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true'; // Default to false (hidden)
+    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true';
 
     const timecodeDisplayButton = UIManager.createInterfaceButton(
         isTimecodeDisplayVisible ? '✅' : '❌', 
@@ -2708,21 +2602,20 @@ function showSettingsModal() {
     const timecodeDisplayLabel = $('span', {
         text: isTimecodeDisplayVisible ? 'Timecode Display Visible' : 'Timecode Display Hidden',
         css: {
-            fontSize: '14px',
+            fontSize: '12px',
             color: '#2e7d32',
             fontWeight: '500'
         }
     });
 
     timecodeDisplayContainer.append(timecodeDisplayButton, timecodeDisplayLabel);
-
     timecodeDisplaySection.append(timecodeDisplayTitle, timecodeDisplayContainer);
 
     // Timecode Options section
     const timecodeOptionsSection = $('div', {
         css: {
-            marginBottom: '20px',
-            padding: '15px',
+            marginBottom: '15px',
+            padding: '12px',
             backgroundColor: '#e3f2fd',
             borderRadius: '5px',
             border: '1px solid #2196f3'
@@ -2733,8 +2626,9 @@ function showSettingsModal() {
         text: '⏱️ Timecode Options',
         css: {
             fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#1976d2'
+            marginBottom: '8px',
+            color: '#1976d2',
+            fontSize: '14px'
         }
     });
 
@@ -2742,7 +2636,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             flexDirection: 'column',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
@@ -2751,7 +2645,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
@@ -2771,7 +2665,7 @@ function showSettingsModal() {
     const showTimecodesLabel = $('span', {
         text: lyricsDisplay?.showTimecodes ? 'Timecodes Visible' : 'Timecodes Hidden',
         css: {
-            fontSize: '14px',
+            fontSize: '12px',
             color: '#1976d2',
             fontWeight: '500'
         }
@@ -2784,75 +2678,29 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
     const clearAllTimecodesButton = UIManager.createInterfaceButton('🗑️', {
         onClick: () => {
-            console.log('🗑️ Clear all timecodes button clicked');
-            console.log('🔍 Debug info:', {
-                lyricsDisplay: !!lyricsDisplay,
-                currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
-                songId: lyricsDisplay?.currentLyrics?.songId,
-                linesCount: lyricsDisplay?.currentLyrics?.lines?.length
-            });
-            
             if (lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes) {
-                // Show confirmation modal instead of system confirm
-                ConfirmModal({
-                    title: '🗑️ Clear All Timecodes',
-                    message: `Are you sure you want to remove all timecodes from "${lyricsDisplay.currentLyrics.title || 'current song'}"?\n\nThis action cannot be undone.`,
-                    confirmText: 'Clear All',
-                    cancelText: 'Cancel',
-                    confirmStyle: 'danger',
-                    onConfirm: () => {
-                    console.log('🗑️ User confirmed, clearing timecodes...');
+                if (confirm(`Are you sure you want to remove all timecodes from "${lyricsDisplay.currentLyrics.title || 'current song'}"?\n\nThis action cannot be undone.`)) {
                     lyricsDisplay.currentLyrics.clearAllTimecodes();
                     
                     // Save to localStorage
                     const saveSuccess = StorageManager.saveSong(lyricsDisplay.currentLyrics.songId, lyricsDisplay.currentLyrics);
                     if (saveSuccess) {
-                        console.log('✅ Cleared all timecodes saved to localStorage successfully');
-                    } else {
-                        console.error('❌ Failed to save cleared timecodes to localStorage');
+                        console.log('✅ Cleared all timecodes saved successfully');
                     }
                     
-                    // Force re-render of lyrics to show the changes
+                    // Force re-render
                     if (lyricsDisplay.renderLyrics) {
                         lyricsDisplay.renderLyrics();
-                        console.log('� Lyrics re-rendered after clearing timecodes');
-                    } else {
-                        console.error('❌ renderLyrics method not found');
                     }
-                    
-                    console.log('�🗑️ All timecodes cleared from settings');
-                    },
-                    onCancel: () => {
-                        console.log('❌ User cancelled clearing timecodes');
-                    }
-                });
+                }
             } else {
-                console.error('❌ Debug info:', {
-                    lyricsDisplay: !!lyricsDisplay,
-                    currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
-                    clearAllTimecodes: !!(lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes)
-                });
-                // Use custom modal instead of system alert for Tauri compatibility
-                Modal({
-                    title: '⚠️ No Lyrics Available',
-                    content: $('div', {
-                        text: 'No lyrics loaded to clear timecodes from, or method not available.',
-                        css: { padding: '10px', textAlign: 'center' }
-                    }),
-                    buttons: [
-                        {
-                            text: 'OK',
-                            style: 'primary',
-                            action: () => {} // Just close modal
-                        }
-                    ]
-                });
+                alert('No lyrics loaded to clear timecodes from');
             }
         }
     });
@@ -2860,7 +2708,7 @@ function showSettingsModal() {
     const clearTimecodesLabel = $('span', {
         text: 'Remove all timecodes from current song',
         css: {
-            fontSize: '12px',
+            fontSize: '11px',
             color: '#666',
             fontStyle: 'italic'
         }
@@ -2874,8 +2722,8 @@ function showSettingsModal() {
     // Metadata Display Options section
     const metadataOptionsSection = $('div', {
         css: {
-            marginBottom: '20px',
-            padding: '15px',
+            marginBottom: '15px',
+            padding: '12px',
             backgroundColor: '#f8f4ff',
             borderRadius: '5px',
             border: '1px solid #e0d4f7'
@@ -2886,9 +2734,9 @@ function showSettingsModal() {
         text: 'Metadata Display Options',
         css: {
             fontWeight: 'bold',
-            marginBottom: '15px',
+            marginBottom: '8px',
             color: '#6a1b9a',
-            fontSize: '16px'
+            fontSize: '14px'
         }
     });
 
@@ -2896,7 +2744,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             flexDirection: 'column',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
@@ -2905,7 +2753,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
@@ -2925,7 +2773,7 @@ function showSettingsModal() {
     const showTitleLabel = $('span', {
         text: lyricsDisplay?.showTitle ? 'Title Visible' : 'Title Hidden',
         css: {
-            fontSize: '14px',
+            fontSize: '12px',
             color: '#6a1b9a',
             fontWeight: '500'
         }
@@ -2938,7 +2786,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '8px'
         }
     });
 
@@ -2958,7 +2806,7 @@ function showSettingsModal() {
     const showArtistLabel = $('span', {
         text: lyricsDisplay?.showArtist ? 'Artist Visible' : 'Artist Hidden',
         css: {
-            fontSize: '14px',
+            fontSize: '12px',
             color: '#6a1b9a',
             fontWeight: '500'
         }
@@ -2972,8 +2820,8 @@ function showSettingsModal() {
     // Font Size Controls section
     const fontSizeSection = $('div', {
         css: {
-            marginBottom: '20px',
-            padding: '15px',
+            marginBottom: '15px',
+            padding: '12px',
             backgroundColor: '#f0f8ff',
             borderRadius: '5px',
             border: '1px solid #87ceeb'
@@ -2984,8 +2832,9 @@ function showSettingsModal() {
         text: '📝 Font Size Controls',
         css: {
             fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#4682b4'
+            marginBottom: '8px',
+            color: '#4682b4',
+            fontSize: '14px'
         }
     });
 
@@ -2993,7 +2842,7 @@ function showSettingsModal() {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
+            gap: '8px',
             justifyContent: 'center'
         }
     });
@@ -3013,12 +2862,12 @@ function showSettingsModal() {
     const fontSizeLabel = $('span', {
         text: `${currentFontSize}px`,
         css: {
-            padding: '5px 10px',
+            padding: '4px 8px',
             backgroundColor: '#f0f0f0',
-            borderRadius: '4px',
-            fontSize: '14px',
+            borderRadius: '3px',
+            fontSize: '12px',
             fontWeight: '500',
-            minWidth: '50px',
+            minWidth: '40px',
             textAlign: 'center',
             border: '1px solid #ccc'
         }
@@ -3038,7 +2887,6 @@ function showSettingsModal() {
         e.preventDefault();
         if (lyricsDisplay) {
             lyricsDisplay.editFontSizeDirectly();
-            // Update label after editing
             setTimeout(() => {
                 fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
             }, 100);
@@ -3048,34 +2896,212 @@ function showSettingsModal() {
     const fontSizeHint = $('div', {
         text: 'Click A- / A+ or double-click size to adjust',
         css: {
-            fontSize: '11px',
+            fontSize: '10px',
             color: '#666',
             fontStyle: 'italic',
             textAlign: 'center',
-            marginTop: '5px'
+            marginTop: '4px'
         }
     });
 
     fontSizeContainer.append(fontMinusButton, fontSizeLabel, fontPlusButton);
     fontSizeSection.append(fontSizeTitle, fontSizeContainer, fontSizeHint);
 
-    // Assemble the content - move experimental features to the bottom
-    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, metadataOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
-
-    // Show modal
-    Modal({
-        title: '⚙️ Settings',
-        content: settingsContent,
-        buttons: [
-            {
-                text: 'Close',
-                style: 'primary',
-                action: () => {
-                    console.log('🔧 Settings modal closed');
-                }
-            }
-        ]
+    // MIDI Inspector section
+    const midiSection = $('div', {
+        css: {
+            marginBottom: '15px',
+            padding: '12px',
+            backgroundColor: '#f3e5f5',
+            borderRadius: '5px',
+            border: '1px solid #9c27b0'
+        }
     });
+
+    const midiTitle = $('div', {
+        text: '🎹 MIDI Inspector',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '8px',
+            color: '#7b1fa2',
+            fontSize: '14px'
+        }
+    });
+
+    const midiContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+        }
+    });
+
+    // Load current state from localStorage
+    const isMidiEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
+
+    const midiButton = UIManager.createInterfaceButton(
+        isMidiEnabled ? '✅' : '❌', 
+        {
+            onClick: () => toggleMidiInspector(midiButton, midiLabel)
+        }
+    );
+
+    const midiLabel = $('span', {
+        text: isMidiEnabled ? 'MIDI Inspector Visible' : 'MIDI Inspector Hidden',
+        css: {
+            fontSize: '12px',
+            color: '#7b1fa2',
+            fontWeight: '500'
+        }
+    });
+
+    midiContainer.append(midiButton, midiLabel);
+    midiSection.append(midiTitle, midiContainer);
+
+    // Audio Player Controls section - EXPERIMENTAL
+    const audioSection = $('div', {
+        css: {
+            marginBottom: '15px',
+            padding: '12px',
+            backgroundColor: '#e3f2fd',
+            borderRadius: '5px',
+            border: '1px solid #2196F3'
+        }
+    });
+
+    const audioTitle = $('div', {
+        text: '🎵 Audio Player Controls',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '4px',
+            color: '#1976D2',
+            fontSize: '14px'
+        }
+    });
+
+    const audioWarning = $('div', {
+        text: '⚠️ EXPERIMENTAL FEATURE - NOT RECOMMENDED FOR USE',
+        css: {
+            fontSize: '10px',
+            color: '#ff5722',
+            fontWeight: '600',
+            marginBottom: '8px',
+            padding: '3px 6px',
+            backgroundColor: '#fff3e0',
+            borderRadius: '3px',
+            border: '1px solid #ff9800',
+            textAlign: 'center'
+        }
+    });
+
+    const audioContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+        }
+    });
+
+    // Load current state from localStorage
+    const isAudioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+
+    const audioButton = UIManager.createInterfaceButton(
+        isAudioEnabled ? '✅' : '❌', 
+        {
+            onClick: () => toggleAudioPlayerControls(audioButton, audioLabel)
+        }
+    );
+
+    const audioLabel = $('span', {
+        text: isAudioEnabled ? 'Audio Controls Visible' : 'Audio Controls Hidden',
+        css: {
+            fontSize: '12px',
+            color: '#1976D2',
+            fontWeight: '500'
+        }
+    });
+
+    audioContainer.append(audioButton, audioLabel);
+    audioSection.append(audioTitle, audioWarning, audioContainer);
+
+    // Audio Sync section - EXPERIMENTAL  
+    const syncSection = $('div', {
+        css: {
+            marginBottom: '15px',
+            padding: '12px',
+            backgroundColor: '#fff3e0',
+            borderRadius: '5px',
+            border: '1px solid #ff9800'
+        }
+    });
+
+    const syncTitle = $('div', {
+        text: '🔄 Audio Sync with Host',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '4px',
+            color: '#e65100',
+            fontSize: '14px'
+        }
+    });
+
+    const syncWarning = $('div', {
+        text: '⚠️ EXPERIMENTAL - REQUIRES HOST SUPPORT',
+        css: {
+            fontSize: '10px',
+            color: '#d84315',
+            fontWeight: '600',
+            marginBottom: '8px',
+            padding: '3px 6px',
+            backgroundColor: '#fbe9e7',
+            borderRadius: '3px',
+            border: '1px solid #f44336',
+            textAlign: 'center'
+        }
+    });
+
+    const syncContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+        }
+    });
+
+    // Load current sync state from localStorage
+    const isSyncEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
+
+    const syncButton = UIManager.createInterfaceButton(
+        isSyncEnabled ? '✅' : '❌', 
+        {
+            onClick: () => toggleAudioSync(syncButton, syncLabel)
+        }
+    );
+
+    const syncLabel = $('span', {
+        text: isSyncEnabled ? 'Host Sync Enabled' : 'Host Sync Disabled',
+        css: {
+            fontSize: '12px',
+            color: '#e65100',
+            fontWeight: '500'
+        }
+    });
+
+    syncContainer.append(syncButton, syncLabel);
+    syncSection.append(syncTitle, syncWarning, syncContainer);
+
+    // Assemble all sections
+    container.append(
+        activateSection, 
+        deactivateSection, 
+        timecodeDisplaySection, 
+        timecodeOptionsSection, 
+        metadataOptionsSection, 
+        fontSizeSection, 
+        midiSection, 
+        audioSection, 
+        syncSection
+    );
 }
 
 // Toggle audio player controls visibility
