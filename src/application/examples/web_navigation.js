@@ -414,11 +414,447 @@ function testButtonClick() {
     output.$({ text: '🔥 Test bouton réussi !' });
 }
 
+// Fonctions pour créer des interfaces simulées des sites
+function navigateToGitHub() {
+    console.log('🌐 BOUTON GITHUB CLIQUÉ');
+    createGitHubInterface();
+    output.$({ text: '🌐 Interface GitHub simulée chargée' });
+}
+
+function navigateToYouTube() {
+    console.log('🌐 BOUTON YOUTUBE CLIQUÉ');
+    createYouTubeInterface();
+    output.$({ text: '🌐 Interface YouTube simulée chargée' });
+}
+
+function navigateToGoogle() {
+    console.log('🌐 BOUTON GOOGLE CLIQUÉ');
+    createGoogleInterface();
+    output.$({ text: '🌐 Interface Google simulée chargée' });
+}
+
+function navigateToWikipedia() {
+    console.log('🌐 BOUTON WIKIPEDIA CLIQUÉ');
+    createWikipediaInterface();
+    output.$({ text: '🌐 Interface Wikipedia simulée chargée' });
+}
+
+// Créer une interface GitHub simulée
+function createGitHubInterface() {
+    // Masquer les résultats de recherche
+    resultsContainer.style.display = 'none';
+    
+    // Vider et afficher l'iframe comme conteneur
+    webViewFrame.style.display = 'block';
+    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.srcdoc = `
+        <html>
+        <head>
+            <title>GitHub Simulé</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #0d1117; color: #f0f6fc; }
+                .header { background: #21262d; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+                .logo { font-size: 24px; font-weight: bold; color: #ffffff; }
+                .repo { background: #21262d; padding: 15px; margin: 10px 0; border-radius: 6px; border-left: 3px solid #58a6ff; }
+                .repo-name { font-size: 18px; color: #58a6ff; margin-bottom: 5px; }
+                .repo-desc { color: #8b949e; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="logo">🐙 GitHub Simulé</div>
+                <p>Interface de démonstration GitHub</p>
+            </div>
+            <div class="repo">
+                <div class="repo-name">📁 mon-projet-awesome</div>
+                <div class="repo-desc">Un projet génial avec du JavaScript et plus encore...</div>
+            </div>
+            <div class="repo">
+                <div class="repo-name">📁 squirrel-framework</div>
+                <div class="repo-desc">Framework Squirrel pour applications interactives</div>
+            </div>
+            <div class="repo">
+                <div class="repo-name">📁 web-navigation-demo</div>
+                <div class="repo-desc">Démonstration de navigation web avec iframe simulée</div>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    // Afficher le bouton de fermeture
+    closeWebViewButton.style.display = 'block';
+}
+
+// Créer une interface YouTube simulée
+function createYouTubeInterface() {
+    resultsContainer.style.display = 'none';
+    webViewFrame.style.display = 'block';
+    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.srcdoc = `
+        <html>
+        <head>
+            <title>YouTube Simulé</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0f0f0f; color: #ffffff; }
+                .header { background: #212121; padding: 15px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #3d3d3d; }
+                .logo { font-size: 24px; font-weight: bold; color: #ff0000; }
+                .search-container { flex: 1; display: flex; max-width: 600px; }
+                .search-input { flex: 1; padding: 8px 15px; background: #121212; border: 1px solid #3d3d3d; color: #ffffff; border-radius: 2px 0 0 2px; }
+                .search-btn { padding: 8px 15px; background: #3d3d3d; border: 1px solid #3d3d3d; color: #ffffff; cursor: pointer; border-radius: 0 2px 2px 0; }
+                .content { padding: 20px; }
+                .video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+                .video { background: #212121; border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s; }
+                .video:hover { transform: scale(1.02); }
+                .video-thumbnail { width: 100%; height: 180px; background: linear-gradient(45deg, #ff0000, #ff6b6b); display: flex; align-items: center; justify-content: center; position: relative; }
+                .play-button { font-size: 48px; color: white; opacity: 0.9; }
+                .video-info { padding: 12px; }
+                .video-title { font-size: 16px; color: #ffffff; margin-bottom: 8px; line-height: 1.3; }
+                .video-meta { color: #aaaaaa; font-size: 14px; margin-bottom: 4px; }
+                .channel-name { color: #aaaaaa; font-size: 14px; }
+                .video-duration { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 2px; font-size: 12px; }
+                .no-results { text-align: center; color: #aaaaaa; margin-top: 50px; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="logo">📺 YouTube</div>
+                <div class="search-container">
+                    <input class="search-input" id="youtube-search" placeholder="Rechercher des vidéos..." type="text">
+                    <button class="search-btn" onclick="searchYouTube()">🔍</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="video-grid" id="video-container">
+                    <!-- Les vidéos seront ajoutées ici -->
+                </div>
+            </div>
+
+            <script>
+                // Base de données de vidéos simulées
+                const videoDatabase = [
+                    {
+                        id: 'js-tutorial',
+                        title: 'JavaScript Complet - Tutoriel pour Débutants',
+                        channel: 'CodeAcademy',
+                        views: '1.2M vues',
+                        time: 'il y a 2 jours',
+                        duration: '45:32',
+                        tags: ['javascript', 'programmation', 'tutorial', 'débutant'],
+                        videoUrl: 'https://www.youtube.com/embed/UB1O30fR-EE'
+                    },
+                    {
+                        id: 'squirrel-guide',
+                        title: 'Framework Squirrel - Guide Complet 2024',
+                        channel: 'DevMaster',
+                        views: '856K vues',
+                        time: 'il y a 1 semaine',
+                        duration: '32:15',
+                        tags: ['squirrel', 'framework', 'web', 'développement'],
+                        videoUrl: 'https://www.youtube.com/embed/3rhhlxlbKiw'
+                    },
+                    {
+                        id: 'web-dev',
+                        title: 'Développement Web Moderne - Les Meilleures Pratiques',
+                        channel: 'WebPro',
+                        views: '2.1M vues',
+                        time: 'il y a 3 jours',
+                        duration: '28:47',
+                        tags: ['web', 'développement', 'html', 'css', 'javascript'],
+                        videoUrl: 'https://www.youtube.com/embed/Mus_vwhTCq0'
+                    },
+                    {
+                        id: 'api-rest',
+                        title: 'API REST - Comprendre et Créer des APIs Performantes',
+                        channel: 'BackendGuru',
+                        views: '743K vues',
+                        time: 'il y a 5 jours',
+                        duration: '52:18',
+                        tags: ['api', 'rest', 'backend', 'http'],
+                        videoUrl: 'simulation'
+                    },
+                    {
+                        id: 'react-hooks',
+                        title: 'React Hooks Expliqués Simplement',
+                        channel: 'ReactMaster',
+                        views: '1.8M vues',
+                        time: 'il y a 1 mois',
+                        duration: '38:29',
+                        tags: ['react', 'hooks', 'javascript', 'frontend'],
+                        videoUrl: 'simulation'
+                    },
+                    {
+                        id: 'nodejs-express',
+                        title: 'Node.js et Express - Créer un Serveur Web',
+                        channel: 'NodeJsPro',
+                        views: '967K vues',
+                        time: 'il y a 2 semaines',
+                        duration: '41:33',
+                        tags: ['nodejs', 'express', 'server', 'backend'],
+                        videoUrl: 'simulation'
+                    }
+                ];
+
+                let currentVideos = [...videoDatabase];
+
+                // Fonction pour créer une vidéo HTML
+                function createVideoElement(video) {
+                    return \`
+                        <div class="video" onclick="playVideo('\${video.id}', '\${video.videoUrl}')">
+                            <div class="video-thumbnail">
+                                <div class="play-button">▶️</div>
+                                <div class="video-duration">\${video.duration}</div>
+                            </div>
+                            <div class="video-info">
+                                <div class="video-title">\${video.title}</div>
+                                <div class="video-meta">\${video.views} • \${video.time}</div>
+                                <div class="channel-name">\${video.channel}</div>
+                            </div>
+                        </div>
+                    \`;
+                }
+
+                // Fonction pour afficher les vidéos
+                function displayVideos(videos) {
+                    const container = document.getElementById('video-container');
+                    if (videos.length === 0) {
+                        container.innerHTML = '<div class="no-results">Aucune vidéo trouvée pour cette recherche</div>';
+                    } else {
+                        container.innerHTML = videos.map(createVideoElement).join('');
+                    }
+                }
+
+                // Fonction de recherche
+                function searchYouTube() {
+                    const searchTerm = document.getElementById('youtube-search').value.toLowerCase().trim();
+                    
+                    if (searchTerm === '') {
+                        currentVideos = [...videoDatabase];
+                    } else {
+                        currentVideos = videoDatabase.filter(video => {
+                            return video.title.toLowerCase().includes(searchTerm) ||
+                                   video.channel.toLowerCase().includes(searchTerm) ||
+                                   video.tags.some(tag => tag.toLowerCase().includes(searchTerm));
+                        });
+                    }
+                    
+                    displayVideos(currentVideos);
+                    console.log('🔍 Recherche YouTube:', searchTerm, 'Résultats:', currentVideos.length);
+                }
+
+                // Fonction pour jouer une vidéo
+                function playVideo(videoId, videoUrl) {
+                    console.log('🎥 Lecture vidéo:', videoId);
+                    
+                    const video = videoDatabase.find(v => v.id === videoId);
+                    const container = document.getElementById('video-container');
+                    
+                    if (videoUrl === 'simulation') {
+                        // Créer un lecteur vidéo simulé
+                        container.innerHTML = \`
+                            <div style="background: #000; padding: 20px; border-radius: 8px; text-align: center;">
+                                <div style="width: 100%; height: 400px; background: linear-gradient(45deg, #ff0000, #ff6b6b); display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; position: relative;">
+                                    <div style="font-size: 64px; margin-bottom: 20px;">🎥</div>
+                                    <div style="font-size: 24px; margin-bottom: 10px; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">\${video.title}</div>
+                                    <div style="font-size: 16px; color: white; opacity: 0.9; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">Lecteur vidéo simulé - \${video.duration}</div>
+                                    <div style="margin-top: 20px;">
+                                        <button onclick="simulatePlay()" style="padding: 12px 24px; background: #ff0000; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin: 0 10px;">
+                                            ▶️ Play
+                                        </button>
+                                        <button onclick="simulatePause()" style="padding: 12px 24px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin: 0 10px;">
+                                            ⏸️ Pause
+                                        </button>
+                                    </div>
+                                    <div id="playback-status" style="margin-top: 15px; color: white; font-size: 14px;"></div>
+                                </div>
+                                <div style="margin-top: 15px;">
+                                    <button onclick="goBackToVideos()" style="padding: 10px 20px; background: #ff0000; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        ← Retour aux vidéos
+                                    </button>
+                                </div>
+                            </div>
+                        \`;
+                    } else {
+                        // Essayer d'utiliser une vraie vidéo YouTube
+                        container.innerHTML = \`
+                            <div style="background: #000; padding: 20px; border-radius: 8px; text-align: center;">
+                                <iframe width="100%" height="400" src="\${videoUrl}?autoplay=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+                                <div style="margin-top: 15px; color: white;">
+                                    <h3>\${video.title}</h3>
+                                    <p>Par \${video.channel} • \${video.views} • \${video.time}</p>
+                                </div>
+                                <div style="margin-top: 15px;">
+                                    <button onclick="goBackToVideos()" style="padding: 10px 20px; background: #ff0000; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                        ← Retour aux vidéos
+                                    </button>
+                                </div>
+                            </div>
+                        \`;
+                    }
+                }
+
+                // Fonctions pour simuler la lecture
+                function simulatePlay() {
+                    const status = document.getElementById('playback-status');
+                    status.innerHTML = '▶️ Lecture en cours...';
+                    console.log('📺 Simulation: Lecture démarrée');
+                }
+
+                function simulatePause() {
+                    const status = document.getElementById('playback-status');
+                    status.innerHTML = '⏸️ Vidéo en pause';
+                    console.log('📺 Simulation: Lecture en pause');
+                }
+
+                // Fonction pour revenir à la liste des vidéos
+                function goBackToVideos() {
+                    displayVideos(currentVideos);
+                }
+
+                // Recherche sur Entrée
+                document.getElementById('youtube-search').addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        searchYouTube();
+                    }
+                });
+
+                // Afficher toutes les vidéos au démarrage
+                displayVideos(currentVideos);
+            </script>
+        </body>
+        </html>
+    `;
+    closeWebViewButton.style.display = 'block';
+}
+
+// Créer une interface Google simulée (comme l'existante mais plus simple)
+function createGoogleInterface() {
+    resultsContainer.style.display = 'none';
+    webViewFrame.style.display = 'block';
+    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.srcdoc = `
+        <html>
+        <head>
+            <title>Google Simulé</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #ffffff; }
+                .header { text-align: center; margin-bottom: 40px; }
+                .logo { font-size: 48px; color: #4285f4; margin-bottom: 20px; }
+                .search-box { width: 80%; padding: 12px; border: 1px solid #ddd; border-radius: 24px; font-size: 16px; }
+                .result { margin: 20px 0; padding: 10px; border-left: 3px solid #4285f4; }
+                .result-title { font-size: 18px; color: #1a73e8; margin-bottom: 5px; }
+                .result-desc { color: #545454; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="logo">Google</div>
+                <input class="search-box" placeholder="Rechercher...">
+            </div>
+            <div class="result">
+                <div class="result-title">JavaScript Documentation</div>
+                <div class="result-desc">Guide complet pour apprendre JavaScript moderne...</div>
+            </div>
+            <div class="result">
+                <div class="result-title">Framework Development</div>
+                <div class="result-desc">Créer des frameworks avec les meilleures pratiques...</div>
+            </div>
+        </body>
+        </html>
+    `;
+    closeWebViewButton.style.display = 'block';
+}
+
+// Créer une interface Wikipedia simulée
+function createWikipediaInterface() {
+    resultsContainer.style.display = 'none';
+    webViewFrame.style.display = 'block';
+    webViewFrame.style.height = 'calc(100% - 60px)';
+    webViewFrame.srcdoc = `
+        <html>
+        <head>
+            <title>Wikipedia Simulé</title>
+            <style>
+                body { font-family: Georgia, serif; margin: 0; padding: 20px; background: #ffffff; line-height: 1.6; }
+                .header { border-bottom: 3px solid #a2a9b1; padding-bottom: 10px; margin-bottom: 20px; }
+                .logo { font-size: 24px; font-weight: bold; }
+                .article-title { font-size: 28px; margin: 20px 0; border-bottom: 1px solid #a2a9b1; }
+                .article-content { color: #222; }
+                .infobox { float: right; width: 250px; background: #f8f9fa; border: 1px solid #a2a9b1; margin: 0 0 20px 20px; padding: 15px; }
+                .toc { background: #f8f9fa; border: 1px solid #a2a9b1; padding: 15px; margin: 20px 0; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="logo">📚 Wikipédia Simulé</div>
+            </div>
+            <div class="infobox">
+                <h3>Informations</h3>
+                <p><strong>Type:</strong> Encyclopédie</p>
+                <p><strong>Langue:</strong> Français</p>
+                <p><strong>Articles:</strong> 2.5M+</p>
+            </div>
+            <h1 class="article-title">JavaScript</h1>
+            <div class="toc">
+                <h3>Sommaire</h3>
+                <ol>
+                    <li>Histoire</li>
+                    <li>Syntaxe</li>
+                    <li>Frameworks</li>
+                    <li>Applications</li>
+                </ol>
+            </div>
+            <div class="article-content">
+                <h2>Introduction</h2>
+                <p>JavaScript est un langage de programmation de scripts principalement employé dans les pages web interactives...</p>
+                <h2>Histoire</h2>
+                <p>JavaScript a été créé en 1995 par Brendan Eich pour la société Netscape Communications...</p>
+                <h2>Syntaxe</h2>
+                <p>La syntaxe de JavaScript est largement inspirée de celle du langage C...</p>
+            </div>
+        </body>
+        </html>
+    `;
+    closeWebViewButton.style.display = 'block';
+}
+
 // Bouton de test simple comme dans buttons.js - modèle reference_button
 const testButton = Button({
     id: 'test_button',
     onText: 'TEST BOUTON',
     offText: 'TEST BOUTON',
     onAction: testButtonClick,
+    parent: '#view'
+});
+
+// Boutons de navigation - modèle reference_button
+const githubButton = Button({
+    id: 'github_button',
+    onText: 'GitHub',
+    offText: 'GitHub',
+    onAction: navigateToGitHub,
+    parent: '#view'
+});
+
+const youtubeButton = Button({
+    id: 'youtube_button',
+    onText: 'YouTube',
+    offText: 'YouTube',
+    onAction: navigateToYouTube,
+    parent: '#view'
+});
+
+const googleButton = Button({
+    id: 'google_button',
+    onText: 'Google',
+    offText: 'Google',
+    onAction: navigateToGoogle,
+    parent: '#view'
+});
+
+const wikipediaButton = Button({
+    id: 'wikipedia_button',
+    onText: 'Wikipedia',
+    offText: 'Wikipedia',
+    onAction: navigateToWikipedia,
     parent: '#view'
 });
