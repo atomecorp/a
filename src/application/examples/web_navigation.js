@@ -505,8 +505,9 @@ function createYouTubeInterface() {
                 .video-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
                 .video { background: #212121; border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s; }
                 .video:hover { transform: scale(1.02); }
-                .video-thumbnail { width: 100%; height: 180px; background: linear-gradient(45deg, #ff0000, #ff6b6b); display: flex; align-items: center; justify-content: center; position: relative; }
-                .play-button { font-size: 48px; color: white; opacity: 0.9; }
+                .video-thumbnail { width: 100%; height: 180px; background: linear-gradient(45deg, #ff0000, #ff6b6b); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+                .play-button { font-size: 48px; color: white; opacity: 0.9; transition: all 0.3s ease; }
+                .play-button:hover { opacity: 1; transform: scale(1.1); }
                 .video-info { padding: 12px; }
                 .video-title { font-size: 16px; color: #ffffff; margin-bottom: 8px; line-height: 1.3; }
                 .video-meta { color: #aaaaaa; font-size: 14px; margin-bottom: 4px; }
@@ -540,7 +541,9 @@ function createYouTubeInterface() {
                         time: 'il y a 2 jours',
                         duration: '45:32',
                         tags: ['javascript', 'programmation', 'tutorial', 'débutant'],
-                        videoUrl: 'https://www.youtube.com/embed/UB1O30fR-EE'
+                        videoUrl: 'https://www.youtube.com/embed/UB1O30fR-EE',
+                        thumbnail: 'https://img.youtube.com/vi/UB1O30fR-EE/maxresdefault.jpg',
+                        category: 'javascript'
                     },
                     {
                         id: 'squirrel-guide',
@@ -550,7 +553,9 @@ function createYouTubeInterface() {
                         time: 'il y a 1 semaine',
                         duration: '32:15',
                         tags: ['squirrel', 'framework', 'web', 'développement'],
-                        videoUrl: 'https://www.youtube.com/embed/3rhhlxlbKiw'
+                        videoUrl: 'https://www.youtube.com/embed/3rhhlxlbKiw',
+                        thumbnail: 'https://img.youtube.com/vi/3rhhlxlbKiw/maxresdefault.jpg',
+                        category: 'framework'
                     },
                     {
                         id: 'web-dev',
@@ -560,7 +565,9 @@ function createYouTubeInterface() {
                         time: 'il y a 3 jours',
                         duration: '28:47',
                         tags: ['web', 'développement', 'html', 'css', 'javascript'],
-                        videoUrl: 'https://www.youtube.com/embed/Mus_vwhTCq0'
+                        videoUrl: 'https://www.youtube.com/embed/Mus_vwhTCq0',
+                        thumbnail: 'https://img.youtube.com/vi/Mus_vwhTCq0/maxresdefault.jpg',
+                        category: 'webdev'
                     },
                     {
                         id: 'api-rest',
@@ -570,7 +577,9 @@ function createYouTubeInterface() {
                         time: 'il y a 5 jours',
                         duration: '52:18',
                         tags: ['api', 'rest', 'backend', 'http'],
-                        videoUrl: 'simulation'
+                        videoUrl: 'simulation',
+                        thumbnail: 'custom',
+                        category: 'api'
                     },
                     {
                         id: 'react-hooks',
@@ -580,7 +589,9 @@ function createYouTubeInterface() {
                         time: 'il y a 1 mois',
                         duration: '38:29',
                         tags: ['react', 'hooks', 'javascript', 'frontend'],
-                        videoUrl: 'simulation'
+                        videoUrl: 'simulation',
+                        thumbnail: 'custom',
+                        category: 'react'
                     },
                     {
                         id: 'nodejs-express',
@@ -590,7 +601,9 @@ function createYouTubeInterface() {
                         time: 'il y a 2 semaines',
                         duration: '41:33',
                         tags: ['nodejs', 'express', 'server', 'backend'],
-                        videoUrl: 'simulation'
+                        videoUrl: 'simulation',
+                        thumbnail: 'custom',
+                        category: 'nodejs'
                     }
                 ];
 
@@ -598,10 +611,12 @@ function createYouTubeInterface() {
 
                 // Fonction pour créer une vidéo HTML
                 function createVideoElement(video) {
+                    const thumbnailContent = getThumbnailContent(video);
+                    
                     return \`
                         <div class="video" onclick="playVideo('\${video.id}', '\${video.videoUrl}')">
-                            <div class="video-thumbnail">
-                                <div class="play-button">▶️</div>
+                            <div class="video-thumbnail" style="\${thumbnailContent.style}">
+                                \${thumbnailContent.html}
                                 <div class="video-duration">\${video.duration}</div>
                             </div>
                             <div class="video-info">
@@ -611,6 +626,38 @@ function createYouTubeInterface() {
                             </div>
                         </div>
                     \`;
+                }
+
+                // Fonction pour générer le contenu des thumbnails
+                function getThumbnailContent(video) {
+                    if (video.thumbnail === 'custom') {
+                        // Créer des thumbnails personnalisées selon la catégorie
+                        const customThumbnails = {
+                            'api': {
+                                style: 'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">🔗</div><div style="color: white; font-weight: bold; font-size: 18px;">API REST</div></div><div class="play-button">▶️</div>'
+                            },
+                            'react': {
+                                style: 'background: linear-gradient(135deg, #61dafb 0%, #21232a 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">⚛️</div><div style="color: white; font-weight: bold; font-size: 18px;">React Hooks</div></div><div class="play-button">▶️</div>'
+                            },
+                            'nodejs': {
+                                style: 'background: linear-gradient(135deg, #68a063 0%, #3c5a3c 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">🟢</div><div style="color: white; font-weight: bold; font-size: 18px;">Node.js</div></div><div class="play-button">▶️</div>'
+                            }
+                        };
+                        
+                        return customThumbnails[video.category] || {
+                            style: 'background: linear-gradient(45deg, #ff0000, #ff6b6b);',
+                            html: '<div class="play-button">▶️</div>'
+                        };
+                    } else {
+                        // Utiliser la vraie thumbnail YouTube
+                        return {
+                            style: \`background-image: url('\${video.thumbnail}'); background-size: cover; background-position: center;\`,
+                            html: '<div class="play-button" style="background: rgba(0,0,0,0.7); border-radius: 50%; width: 68px; height: 68px; display: flex; align-items: center; justify-content: center;">▶️</div>'
+                        };
+                    }
                 }
 
                 // Fonction pour afficher les vidéos
@@ -817,14 +864,14 @@ function createWikipediaInterface() {
     closeWebViewButton.style.display = 'block';
 }
 
-// Bouton de test simple comme dans buttons.js - modèle reference_button
-const testButton = Button({
-    id: 'test_button',
-    onText: 'TEST BOUTON',
-    offText: 'TEST BOUTON',
-    onAction: testButtonClick,
-    parent: '#view'
-});
+// // Bouton de test simple comme dans buttons.js - modèle reference_button
+// const testButton = Button({
+//     id: 'test_button',
+//     onText: 'TEST BOUTON',
+//     offText: 'TEST BOUTON',
+//     onAction: testButtonClick,
+//     parent: '#view'
+// });
 
 // Boutons de navigation - modèle reference_button
 const githubButton = Button({
