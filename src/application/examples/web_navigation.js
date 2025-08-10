@@ -1,20 +1,38 @@
-// Exemple de démo compatible Squirrel
+// mon test: 
+function fct_to_trig(state) {
+    console.log('trig: ' + state);
+}
 
-// 1. Titre principal
-$('h1', {
-  parent: '#view',
-  id: 'demo-title',
-  css: {
-    backgroundColor: '#222',
-    color: '#fff',
-    padding: '16px',
-    margin: '16px 0',
-    borderRadius: '8px',
-    textAlign: 'center'
-  },
-  text: 'Démo Squirrel 🎉'
+function fct_to_trig2(state) {
+    console.log('trigger 2 : ' + state);
+}
+
+// === EXEMPLE 1: Votre bouton existant ===
+const toggle = Button({
+    onText: 'ON',
+    offText: 'OFF',
+    onAction: fct_to_trig,
+    offAction: fct_to_trig2,
+    parent: '#view', // parent direct
+    onStyle: { backgroundColor: '#28a745', color: 'white' },
+    offStyle: { backgroundColor: '#dc3545', color: 'white' },
+    css: {
+        width: '50px',
+        height: '24px',
+        left: '120px',
+        top: '120px',
+        borderRadius: '6px',
+        backgroundColor: 'orange',
+        position: 'relative',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        border: '3px solid rgba(255,255,255,0.3)',
+        boxShadow: '0 2px 4px rgba(255,255,1,1)',
+    }
 });
 
+// end mon test 
 // 2. Zone d'affichage dynamique
 const output = $('div', {
   parent: '#view',
@@ -30,308 +48,31 @@ const output = $('div', {
   text: 'Cliquez sur un bouton pour voir une action.'
 });
 
-// 3. Bouton Squirrel avec composant Button
-const messageButton = Button({
-  text: 'Afficher un message',
-  parent: '#view',
-  css: {
-    margin: '8px',
-    padding: '10px 20px',
-    backgroundColor: '#007bff',
-    color: '#fff',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    position: 'relative'
-  },
-  onAction: () => {
-    console.log('Message button clicked');
-    output.$({ text: 'Bravo, vous avez cliqué le bouton ! 🚀' });
-  }
-});
+// TEST SIMPLE - fonction comme dans buttons.js
+function testButtonClick() {
+    console.log('🔥 BOUTON TEST CLIQUÉ - ça marche !');
+    output.$({ text: '🔥 Test bouton réussi !' });
+}
 
-// 4. Slider Squirrel
-const demoSlider = Slider({
-  min: 0,
-  max: 100,
-  value: 50,
-  step: 1,
-  parent: '#view',
-  css: {
-    margin: '8px',
-    width: '200px'
-  },
-  onInput: (value) => {
-    console.log('Slider value:', value);
-    output.$({ text: `Valeur du slider : ${value}` });
-  }
-});
-
-// 5. Exemple d'animation Squirrel
-const animBox = $('div', {
-  parent: '#view',
-  id: 'anim-box',
-  css: {
-    width: '80px',
-    height: '80px',
-    backgroundColor: '#4caf50',
-    margin: '16px auto',
-    borderRadius: '8px',
-    transition: 'all 0.5s'
-  }
-});
-
-const animButton = Button({
-  text: 'Animer la boîte',
-  parent: '#view',
-  css: {
-    margin: '8px',
-    padding: '10px 20px',
-    backgroundColor: '#ff9800',
-    color: '#fff',
-    borderRadius: '5px',
-    cursor: 'pointer',
-    position: 'relative'
-  },
-  onAction: () => {
-    console.log('Animation button clicked');
-    animBox.$({
-      css: {
-        width: '160px',
-        height: '160px',
-        backgroundColor: '#e91e63'
-      }
-    });
-    setTimeout(() => {
-      animBox.$({
-        css: {
-          width: '80px',
-          height: '80px',
-          backgroundColor: '#4caf50'
-        }
-      });
-    }, 700);
-  }
-});
-
-// 6. Input text Squirrel
-$('input', {
-  parent: '#view',
-  attrs: {
-    type: 'text',
-    placeholder: 'Tapez quelque chose...'
-  },
-  css: {
-    margin: '8px',
-    padding: '8px',
-    borderRadius: '4px',
-    border: '1px solid #ccc',
-    width: '200px'
-  },
-  oninput: (e) => {
-    console.log('Input value:', e.target.value);
-    output.$({ text: `Vous tapez : "${e.target.value}"` });
-  }
-});
-
-// 7. Liste de couleurs
-const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f7d794', '#c44569'];
-$('div', {
-  parent: '#view',
-  css: {
-    margin: '16px 0',
-    textAlign: 'center'
-  },
-  text: 'Choisissez une couleur :'
-});
-
-colors.forEach((color, index) => {
-  Button({
-    text: `Couleur ${index + 1}`,
+// Bouton de test simple comme dans buttons.js
+const testButton = Button({
+    text: 'TEST BOUTON',
+    onAction: testButtonClick,
     parent: '#view',
     css: {
-      margin: '4px',
-      padding: '8px 16px',
-      backgroundColor: color,
-      color: '#fff',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      position: 'relative'
-    },
-    onAction: () => {
-      console.log('Color button clicked:', color);
-      document.body.style.backgroundColor = color;
-      output.$({ text: `Couleur de fond changée en ${color}` });
+        margin: '16px',
+        padding: '12px 24px',
+        backgroundColor: '#ff6b6b',
+        color: '#fff',
+        borderRadius: '6px',
+        cursor: 'pointer',
+        position: 'relative',
+        border: 'none'
     }
-  });
 });
 
-// Export pour ES6 modules
-export default {};
 
-//media examples
 
-// 8. Section média
-$('h2', {
-  parent: '#view',
-  css: {
-    color: '#333',
-    margin: '32px 0 16px 0',
-    textAlign: 'center',
-    borderBottom: '2px solid #007bff',
-    paddingBottom: '8px'
-  },
-  text: 'Exemples Média 🎵📷🎬'
-});
-
-// 9. Balise audio Squirrel avec syntaxe correcte
-const audioElement = $('audio', {
-  parent: '#view',
-  id: 'demo-audio',
-  attrs: {
-    src: './assets/audios/riff.m4a',
-    controls: true
-  },
-  css: {
-    width: '100%',
-    maxWidth: '400px',
-    margin: '16px auto',
-    display: 'block',
-    borderRadius: '8px'
-  },
-  onplay: () => {
-    console.log('Audio play event triggered');
-    output.$({ text: '🎵 Audio en cours de lecture...' });
-  },
-  onpause: () => {
-    console.log('Audio pause event triggered');
-    output.$({ text: '⏸️ Audio en pause' });
-  },
-  onended: () => {
-    console.log('Audio ended event triggered');
-    output.$({ text: '✅ Lecture audio terminée' });
-  },
-  onerror: (e) => {
-    console.log('Audio error:', e);
-    output.$({ text: '❌ Erreur de chargement audio' });
-  }
-});
-
-// 10. Galerie d'images Squirrel
-$('div', {
-  parent: '#view',
-  css: {
-    textAlign: 'center',
-    margin: '16px 0'
-  },
-  text: 'Galerie d\'images :'
-});
-
-const imageElement1 = $('img', {
-  parent: '#view',
-  id: 'img1',
-  attrs: {
-    src: './assets/images/green_planet.png',
-    alt: 'Planète verte'
-  },
-  css: {
-    width: '150px',
-    height: '150px',
-    objectFit: 'cover',
-    borderRadius: '50%',
-    margin: '8px',
-    display: 'inline-block',
-    border: '4px solid #4caf50',
-    cursor: 'pointer',
-    transition: 'transform 0.3s ease'
-  },
-  onclick: () => {
-    console.log('Image 1 clicked');
-    output.$({ text: '🌍 Image cliquée : Planète verte!' });
-  },
-  onmouseover: function() {
-    this.style.transform = 'scale(1.1)';
-  },
-  onmouseout: function() {
-    this.style.transform = 'scale(1)';
-  }
-});
-
-const imageElement2 = $('img', {
-  parent: '#view',
-  id: 'img2',
-  attrs: {
-    src: './assets/images/puydesancy.jpg',
-    alt: 'Puy de Sancy'
-  },
-  css: {
-    width: '150px',
-    height: '150px',
-    objectFit: 'cover',
-    borderRadius: '8px',
-    margin: '8px',
-    display: 'inline-block',
-    border: '4px solid #ff9800',
-    cursor: 'pointer',
-    transition: 'transform 0.3s ease'
-  },
-  onclick: () => {
-    console.log('Image 2 clicked');
-    output.$({ text: '🏔️ Image cliquée : Puy de Sancy!' });
-  },
-  onmouseover: function() {
-    this.style.transform = 'scale(1.1) rotate(5deg)';
-  },
-  onmouseout: function() {
-    this.style.transform = 'scale(1) rotate(0deg)';
-  }
-});
-
-// 11. Balise vidéo Squirrel
-const videoElement = $('video', {
-  parent: '#view',
-  id: 'demo-video',
-  attrs: {
-    src: './assets/videos/avengers.mp4',
-    controls: true,
-    width: 400,
-    height: 225
-  },
-  css: {
-    margin: '16px auto',
-    display: 'block',
-    borderRadius: '8px',
-    boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
-  },
-  onplay: () => {
-    console.log('Video play event triggered');
-    output.$({ text: '🎬 Vidéo en cours de lecture...' });
-  },
-  onpause: () => {
-    console.log('Video pause event triggered');
-    output.$({ text: '⏸️ Vidéo en pause' });
-  },
-  onended: () => {
-    console.log('Video ended event triggered');
-    output.$({ text: '🎭 Lecture vidéo terminée' });
-  },
-  onerror: (e) => {
-    console.log('Video error:', e);
-    output.$({ text: '❌ Erreur lors du chargement de la vidéo' });
-  }
-});
-
-// 13. Section Google intégré
-$('h2', {
-  parent: '#view',
-  css: {
-    color: '#333',
-    margin: '32px 0 16px 0',
-    textAlign: 'center',
-    borderBottom: '2px solid #007bff',
-    paddingBottom: '8px'
-  },
-  text: 'Google intégré 🔍'
-});
 
 // Interface de recherche Google-like
 const googleContainer = $('div', {
@@ -683,4 +424,241 @@ function loadInWebView(url, title) {
     output.$({ text: `❌ Erreur: ${e.message}` });
   }
 }
-// 
+
+// Fonction pour fermer l'iframe et revenir à la recherche
+function closeWebView() {
+  console.log('🔙 Fermeture de l\'iframe');
+  
+  try {
+    // Masquer l'iframe
+    webViewFrame.style.display = 'none';
+    webViewFrame.style.height = '0px';
+    webViewFrame.src = 'about:blank';
+    
+    // Afficher les résultats de recherche
+    resultsContainer.style.display = 'block';
+    
+    // Masquer le bouton de fermeture
+    closeWebViewButton.style.display = 'none';
+    
+    // Feedback
+    console.log('✅ Retour à la recherche');
+    output.$({ text: '🔙 Retour à la recherche Google' });
+    
+  } catch(e) {
+    console.log('❌ Erreur lors de la fermeture:', e);
+    output.$({ text: `❌ Erreur: ${e.message}` });
+  }
+}
+
+// Boutons de test rapide
+const quickSearchContainer = $('div', {
+  parent: '#view',
+  css: {
+    textAlign: 'center',
+    margin: '16px 0'
+  }
+});
+
+$('div', {
+  parent: quickSearchContainer,
+  css: {
+    marginBottom: '10px',
+    fontSize: '16px',
+    color: '#666'
+  },
+  text: 'Recherches rapides :'
+});
+
+const quickSearches = ['JavaScript', 'Squirrel framework', 'Web development', 'API REST'];
+
+// Fonctions pour les boutons de recherche rapide
+function handleQuickSearch(term) {
+    console.log('🔍 BOUTON RECHERCHE RAPIDE CLIQUÉ - Debug info:');
+    console.log('- Terme:', term);
+    searchInput.value = term;
+    performSearch(term);
+    output.$({ text: `🔍 Recherche rapide: "${term}"` });
+}
+
+quickSearches.forEach(term => {
+  const quickSearchButton = Button({
+    text: term,
+    onAction: () => handleQuickSearch(term),
+    parent: quickSearchContainer,
+    css: {
+      margin: '4px',
+      padding: '8px 16px',
+      backgroundColor: '#f8f9fa',
+      color: '#1a73e8',
+      border: '1px solid #dadce0',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      position: 'relative',
+      fontSize: '14px'
+    }
+  });
+});
+
+// Sites populaires en accès direct
+$('div', {
+  parent: quickSearchContainer,
+  css: {
+    marginBottom: '10px',
+    marginTop: '20px',
+    fontSize: '16px',
+    color: '#666'
+  },
+  text: 'Navigation directe :'
+});
+
+const quickSites = [
+  { name: 'Google', url: 'https://www.google.com' },
+  { name: 'YouTube', url: 'https://www.youtube.com' },
+  { name: 'Wikipedia', url: 'https://fr.wikipedia.org' },
+  { name: 'GitHub', url: 'https://github.com' }
+];
+
+// Fonctions pour les boutons de sites
+function handleSiteNavigation(site) {
+    console.log('🌐 BOUTON SITE CLIQUÉ - Debug info:');
+    console.log('- Site:', site.name);
+    console.log('- URL:', site.url);
+    loadInWebView(site.url, site.name);
+    output.$({ text: `🌐 Navigation: ${site.name}` });
+}
+
+quickSites.forEach(site => {
+  const quickSiteButton = Button({
+    text: site.name,
+    onAction: () => handleSiteNavigation(site),
+    parent: quickSearchContainer,
+    css: {
+      margin: '4px',
+      padding: '8px 16px',
+      backgroundColor: '#e8f0fe',
+      color: '#1967d2',
+      border: '1px solid #1967d2',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      position: 'relative',
+      fontSize: '14px'
+    }
+  });
+});
+
+// Boutons de navigation
+const buttonContainer = $('div', {
+  parent: '#view',
+  css: {
+    textAlign: 'center',
+    margin: '16px 0'
+  }
+});
+
+// Fonctions pour les boutons de navigation
+function openGoogleNewTab() {
+    console.log('🔍 BOUTON "OUVRIR GOOGLE" CLIQUÉ');
+    try {
+        window.open('https://www.google.com', '_blank');
+        console.log('✅ Google ouvert avec succès');
+        output.$({ text: '🔍 Google ouvert dans un nouvel onglet' });
+    } catch(e) {
+        console.log('❌ Erreur:', e);
+        output.$({ text: '❌ Erreur: ' + e.message });
+    }
+}
+
+function navigateToGoogle() {
+    console.log('🌐 BOUTON "ALLER À GOOGLE" CLIQUÉ');
+    if (confirm('Voulez-vous vraiment quitter cette page pour aller sur Google ?')) {
+        try {
+            window.location.href = 'https://www.google.com';
+            console.log('✅ Navigation en cours...');
+        } catch(e) {
+            console.log('❌ Erreur de navigation:', e);
+            output.$({ text: '❌ Erreur de navigation: ' + e.message });
+        }
+    } else {
+        console.log('ℹ️ Navigation annulée par l\'utilisateur');
+        output.$({ text: 'ℹ️ Navigation annulée' });
+    }
+}
+
+function openGooglePopup() {
+    console.log('📱 BOUTON "GOOGLE EN POPUP" CLIQUÉ');
+    try {
+        const popup = window.open(
+            'https://www.google.com', 
+            'GooglePopup',
+            'width=800,height=600,resizable=yes,scrollbars=yes,status=yes'
+        );
+        
+        if (popup) {
+            console.log('✅ Popup Google ouverte avec succès');
+            output.$({ text: '📱 Google ouvert en popup' });
+        } else {
+            console.log('⚠️ Popup bloquée');
+            output.$({ text: '⚠️ Popup bloquée par le navigateur' });
+        }
+    } catch(e) {
+        console.log('❌ Erreur popup:', e);
+        output.$({ text: '❌ Erreur popup: ' + e.message });
+    }
+}
+
+// Bouton pour ouvrir Google
+const openGoogleButton = Button({
+  text: '� Ouvrir Google',
+  onAction: openGoogleNewTab,
+  parent: buttonContainer,
+  css: {
+    margin: '8px',
+    padding: '12px 24px',
+    backgroundColor: '#4285f4',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    position: 'relative',
+    fontSize: '16px',
+    fontWeight: 'bold'
+  }
+});
+
+// Bouton pour ouvrir dans la même fenêtre
+const navigateToGoogleButton = Button({
+  text: '🌐 Aller à Google (même onglet)',
+  onAction: navigateToGoogle,
+  parent: buttonContainer,
+  css: {
+    margin: '8px',
+    padding: '12px 24px',
+    backgroundColor: '#ea4335',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    position: 'relative',
+    fontSize: '16px'
+  }
+});
+
+// Bouton pour ouvrir dans une popup
+const popupGoogleButton = Button({
+  text: '📱 Google en popup',
+  onAction: openGooglePopup,
+  parent: buttonContainer,
+  css: {
+    margin: '8px',
+    padding: '12px 24px',
+    backgroundColor: '#34a853',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    position: 'relative',
+    fontSize: '16px'
+  }
+});
+

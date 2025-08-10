@@ -43,7 +43,9 @@
 // import('./examples/ios_apis.js');
 
 // import('./examples/web_recorder.js');
- import('./examples/demos.js');
+import('./examples/web_navigation.js');
+
+//  import('./examples/demos.js');
 
 
 
