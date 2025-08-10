@@ -24,8 +24,8 @@ const topBar = $('div', {
 
 const backBtn = Button({
 	id: 'back_to_google_btn',
-	onText: '← Retour Google',
-	offText: '← Retour Google',
+	onText: 'Home',
+	offText: 'Google',
 	onAction: () => {
 		const url = 'https://www.google.com/?igu=1&hl=fr';
 		if (statusBarRef) { statusBarRef.$({ text: 'Chargement…' }); }
@@ -93,6 +93,10 @@ const typeSelect = $('select', {
 	const [v,l] = p.split(':');
 	$('option', { parent: typeSelect, attrs: { value: v }, text: l });
 });
+// Par défaut, afficher l’onglet Vidéos pour rendre la liste interne visible dès la première recherche
+try { typeSelect.value = 'videos'; } catch (_) {}
+// Si l'utilisateur change de type sans relancer la recherche, masquer les résultats internes
+typeSelect.onchange = () => { if (typeSelect.value !== 'videos') clearInternalResults(); };
 
 const dateSelect = $('select', {
 	parent: header,
@@ -111,7 +115,15 @@ const searchBtn = Button({
 	parent: header
 });
 
+
 // Lien "Ouvrir dans un nouvel onglet" supprimé selon demande
+
+// ===== Résultats internes (Vidéos) contrôlés par l'app — au-dessus de l'iframe =====
+const internalResults = $('div', {
+	parent: container,
+	id: 'internal-results',
+	css: { display: 'none', padding: '10px', borderBottom: '1px solid #eee', backgroundColor: '#fff' }
+});
 
 // Iframe
 searchFrameRef = $('iframe', {
@@ -127,6 +139,81 @@ statusBarRef = $('div', {
 	css: { padding: '8px 12px', fontSize: '12px', color: '#666', backgroundColor: '#fafafa', borderTop: '1px solid #eee' },
 	text: 'Entrez une recherche et appuyez sur Entrée.'
 });
+
+// (résultats internes déplacés au-dessus de l'iframe)
+
+function getApiBase() {
+	try {
+		const origin = (window && window.location && window.location.origin) ? window.location.origin : '';
+		if (!origin || origin === 'null' || origin.startsWith('file:')) return 'http://localhost:3001';
+		return origin;
+	} catch (_) { return 'http://localhost:3001'; }
+}
+
+function clearInternalResults() {
+	internalResults.style.display = 'none';
+	internalResults.innerHTML = '';
+}
+
+function renderVideoResults(items) {
+	internalResults.innerHTML = '';
+	const count = (items && items.length) ? items.length : 0;
+	if (!items || !items.length) {
+		$('div', { parent: internalResults, css: { color: '#666', fontSize: '14px' }, text: 'Aucun résultat vidéo (interne)' });
+		statusBarRef && statusBarRef.$({ text: 'Aucun résultat vidéo (interne).' });
+	} else {
+		$('div', { parent: internalResults, css: { fontWeight: '600', marginBottom: '8px' }, text: 'Résultats vidéos (internes) · ' + count });
+		items.forEach((it) => {
+			const vid = (it.id && (it.id.videoId || it.id)) || '';
+			const sn = it.snippet || {};
+			const title = sn.title || 'Sans titre';
+			const channel = sn.channelTitle || '';
+			const thumb = (sn.thumbnails && (sn.thumbnails.medium && sn.thumbnails.medium.url))
+				|| (sn.thumbnails && (sn.thumbnails.high && sn.thumbnails.high.url))
+				|| (vid ? ('https://img.youtube.com/vi/' + vid + '/hqdefault.jpg') : '');
+
+			const row = $('div', {
+				parent: internalResults,
+				css: {
+					display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', border: '1px solid #eee', borderRadius: '6px',
+					cursor: 'pointer', marginBottom: '8px', backgroundColor: '#fafafa'
+				},
+				onclick: () => {
+					if (vid) {
+						const embed = 'https://www.youtube.com/embed/' + vid + '?autoplay=1&rel=0&modestbranding=1';
+						statusBarRef.$({ text: 'Lecture (embed)…' });
+						searchFrameRef.src = embed;
+					}
+				}
+			});
+			$('img', { parent: row, attrs: { src: thumb, alt: title }, css: { width: '120px', height: '68px', objectFit: 'cover', borderRadius: '4px', backgroundColor: '#ddd' } });
+			const meta = $('div', { parent: row, css: { display: 'flex', flexDirection: 'column' } });
+			$('div', { parent: meta, css: { fontSize: '14px', fontWeight: '600' }, text: title });
+			$('div', { parent: meta, css: { fontSize: '12px', color: '#666' }, text: channel });
+		});
+		statusBarRef && statusBarRef.$({ text: 'Résultats vidéos: ' + count });
+	}
+	internalResults.style.display = 'block';
+	try { internalResults.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
+}
+
+async function fetchVideoResults(query) {
+	try {
+		// État de chargement interne
+		internalResults.innerHTML = '';
+		$('div', { parent: internalResults, css: { color: '#333', fontSize: '14px' }, text: 'Recherche vidéos…' });
+		internalResults.style.display = 'block';
+		const base = getApiBase();
+		const res = await fetch(base + '/api/youtube/search?q=' + encodeURIComponent(query));
+		const data = await res.json();
+		const items = Array.isArray(data.items) ? data.items : [];
+		renderVideoResults(items);
+	} catch (e) {
+		internalResults.innerHTML = '';
+		$('div', { parent: internalResults, css: { color: '#a00', fontSize: '14px' }, text: 'Erreur chargement résultats internes' });
+		internalResults.style.display = 'block';
+	}
+}
 
 function buildGoogleUrl(q, type, date) {
 	const params = new URLSearchParams();
@@ -148,11 +235,29 @@ function buildGoogleUrl(q, type, date) {
 function performSearch() {
 	const q = (input.value || '').trim();
 	if (!q) { statusBarRef.$({ text: 'Tapez une requête.' }); return; }
+
+	// Si l'utilisateur colle un lien YouTube, ouvrir directement en embed
+	const maybeEmbed = parseEmbedFromFreeText(q);
+	if (maybeEmbed) {
+		statusBarRef.$({ text: 'Lecture YouTube (embed)…' });
+		searchFrameRef.src = maybeEmbed;
+		return;
+	}
 	const type = typeSelect.value;
 	const date = dateSelect.value;
-	const url = buildGoogleUrl(q, type, date);
-	statusBarRef.$({ text: 'Chargement…' });
-	searchFrameRef.src = url;
+	// Affichage interne pour vidéos (liste cliquable) + iframe pour lecture
+	if (type === 'videos') {
+		statusBarRef.$({ text: 'Recherche vidéos (interne)…' });
+		fetchVideoResults(q);
+		// Charger aussi Google vidéos dans l’iframe en parallèle (référence)
+		const url = buildGoogleUrl(q, type, date);
+		searchFrameRef.src = url;
+	} else {
+		clearInternalResults();
+		const url = buildGoogleUrl(q, type, date);
+		statusBarRef.$({ text: 'Chargement…' });
+		searchFrameRef.src = url;
+	}
 }
 
 searchFrameRef.addEventListener('load', () => {
@@ -168,8 +273,8 @@ function parseEmbedFromUrl(href) {
 		const u = new URL(href);
 
 		// Cas Google redirect /url?q=...
-		if (/^www\.google\.[^/]+$/.test(u.hostname) && u.pathname === '/url') {
-			const target = u.searchParams.get('q') || '';
+			if (/^www\.google\.[^/]+$/.test(u.hostname) && u.pathname === '/url') {
+				const target = u.searchParams.get('q') || u.searchParams.get('url') || '';
 			if (target) return parseEmbedFromUrl(target);
 		}
 
@@ -223,4 +328,41 @@ function ensureIframeWatcher() {
 
 // Activer le watcher dès l'initialisation
 ensureIframeWatcher();
+
+// Détection de lien YouTube collé dans la barre de recherche
+function parseEmbedFromFreeText(text) {
+	try {
+		const t = (text || '').trim();
+		if (!t) return null;
+		let href = t;
+		// Autoriser entrées sans protocole
+		if (/^www\./.test(href)) href = 'https://' + href;
+		if (/^(youtube\.com|m\.youtube\.com|youtu\.be|www\.youtube\.com)/.test(href)) href = 'https://' + href;
+		// Si ce n'est pas une URL, essayer d'extraire une URL dedans
+		if (!/^https?:\/\//i.test(href)) {
+			const m = t.match(/https?:\/\/[^\s]+/i);
+			if (m) href = m[0];
+		}
+		return parseEmbedFromUrl(href);
+	} catch (_) { return null; }
+}
+
+async function openEmbedFromClipboard() {
+	try {
+		if (!navigator.clipboard) {
+			statusBarRef && statusBarRef.$({ text: 'Clipboard non disponible' });
+			return;
+		}
+		const clip = (await navigator.clipboard.readText()) || '';
+		const embed = parseEmbedFromFreeText(clip);
+		if (embed) {
+			statusBarRef && statusBarRef.$({ text: 'Lecture YouTube (embed)…' });
+			searchFrameRef.src = embed;
+		} else {
+			statusBarRef && statusBarRef.$({ text: 'Aucun lien YouTube détecté dans le presse-papiers' });
+		}
+	} catch (e) {
+		statusBarRef && statusBarRef.$({ text: 'Erreur lecture presse-papiers' });
+	}
+}
 
