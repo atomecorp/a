@@ -1814,20 +1814,20 @@ function showSongLibrary() {
     // Content with search and song list
     const content = UIManager.createModalContent({});
     
-    // Search input
-    const searchInput = $('input', {
-        type: 'text',
-        placeholder: 'Search songs...',
-        css: {
-            width: '100%',
-            padding: '10px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            marginBottom: '15px',
-            fontSize: '14px',
-            boxSizing: 'border-box'
-        }
-    });
+    // // Search input
+    // const searchInput = $('input', {
+    //     type: 'text',
+    //     placeholder: 'Search songs...',
+    //     css: {
+    //         width: '100%',
+    //         padding: '10px',
+    //         border: '1px solid #ddd',
+    //         borderRadius: '4px',
+    //         marginBottom: '15px',
+    //         fontSize: '14px',
+    //         boxSizing: 'border-box'
+    //     }
+    // });
 
     // Song list container
     const listContainer = UIManager.createListContainer({});
@@ -2274,18 +2274,18 @@ function showSongLibrary() {
         });
     }
 
-    // Search functionality
-    searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        filteredItems = songItems.filter(item => 
-            item.text.toLowerCase().includes(searchTerm)
-        );
-        updateSongList();
-        // Refresh MIDI inputs after search
-        setTimeout(() => refreshMidiInputs(), 50);
-    });
+    // // Search functionality
+    // searchInput.addEventListener('input', (e) => {
+    //     const searchTerm = e.target.value.toLowerCase();
+    //     filteredItems = songItems.filter(item => 
+    //         item.text.toLowerCase().includes(searchTerm)
+    //     );
+    //     updateSongList();
+    //     // Refresh MIDI inputs after search
+    //     setTimeout(() => refreshMidiInputs(), 50);
+    // });
 
-    content.append(searchInput, listContainer);
+    content.append( listContainer);
     updateSongList();
     
     // Refresh MIDI inputs after DOM is ready
@@ -2315,7 +2315,6 @@ function showSongLibrary() {
 
 // Show settings modal with MIDI fullscreen assignments
 function showSettingsModal() {
-    console.log('🔧 Opening settings modal...');
     
     // Create settings content
     const settingsContent = $('div', {
@@ -2326,14 +2325,14 @@ function showSettingsModal() {
     });
 
     // Title
-    const title = $('h3', {
-        text: 'Settings - MIDI Control, UI Visibility & Timecode Options',
-        css: {
-            margin: '0 0 20px 0',
-            color: '#333',
-            textAlign: 'center'
-        }
-    });
+    // const title = $('h3', {
+    //     text: 'Settings - MIDI Control, UI Visibility & Timecode Options',
+    //     css: {
+    //         margin: '0 0 20px 0',
+    //         color: '#333',
+    //         textAlign: 'center'
+    //     }
+    // });
 
     // Fullscreen activation section
     const activateSection = $('div', {
@@ -3156,21 +3155,21 @@ function showSettingsModal() {
     fontSizeSection.append(fontSizeTitle, fontSizeContainer, fontSizeHint);
 
     // Assemble the content - move experimental features to the bottom
-    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, metadataOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
+    settingsContent.append( activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, metadataOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
 
     // Show modal
     Modal({
-        title: '⚙️ Settings',
+        // title: '⚙️ Settings',
         content: settingsContent,
-        buttons: [
-            {
-                text: 'Close',
-                style: 'primary',
-                action: () => {
-                    console.log('🔧 Settings modal closed');
-                }
-            }
-        ]
+        // buttons: [
+        //     {
+        //         text: 'Close',
+        //         style: 'primary',
+        //         action: () => {
+        //             console.log('🔧 Settings modal closed');
+        //         }
+        //     }
+        // ]
     });
 }
 
