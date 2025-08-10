@@ -2556,7 +2556,7 @@ function showSettingsModal() {
     audioContainer.append(audioButton, audioLabel);
     
     // Volume visibility toggle inside Audio section
-    const isVolumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const isVolumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'false') === 'true';
     const volumeToggleRow = $('div', {
         css: {
             display: 'flex',
@@ -3199,7 +3199,7 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     buttonElement.textContent = newState ? '✅' : '❌';
     labelElement.textContent = newState ? 'Audio Controls Visible' : 'Audio Controls Hidden';
     
-    const isVolumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const isVolumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'false') === 'true';
 
     // Get audio elements to toggle using their IDs
     const audioElementsToToggle = [
@@ -3264,7 +3264,7 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
 
 // Toggle only the Volume controls visibility, independent from global audio controls
 function toggleVolumeControlsVisibility(buttonElement, labelElement) {
-    const isCurrentlyVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const isCurrentlyVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'false') === 'true';
     const newState = !isCurrentlyVisible;
     localStorage.setItem('lyrix_volume_controls_visible', newState.toString());
 
@@ -3701,7 +3701,7 @@ function applyInitialSettings() {
         localStorage.setItem('lyrix_timecode_display_visible', 'false'); // Default to hidden
     }
     if (localStorage.getItem('lyrix_volume_controls_visible') === null) {
-        localStorage.setItem('lyrix_volume_controls_visible', 'true'); // Default to visible
+        localStorage.setItem('lyrix_volume_controls_visible', 'false'); // Default to hidden
     }
     
     // Set default volume if it doesn't exist
@@ -3721,7 +3721,7 @@ function applyInitialSettings() {
     
     // Apply volume controls visibility if elements exist already
     const isAudioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-    const isVolumeVisibleInit = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const isVolumeVisibleInit = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'false') === 'true';
     const volumeContainerInit = document.getElementById('audio-volume-slider-container');
     const volumeWrapperInit = document.getElementById('volume-wrapper-toolbar');
     const volumeValueDisplayInit = document.getElementById('volume-value-display');
@@ -4588,7 +4588,7 @@ function createMainInterface() {
         }
 
         // Respect volume visibility preference immediately
-        const volVisiblePref = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+    const volVisiblePref = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'false') === 'true';
         const audioEnabledNow = (localStorage.getItem('lyrix_audio_player_enabled') === 'true');
         if (!(audioEnabledNow && volVisiblePref)) {
             volumeContainer.style.display = 'none';

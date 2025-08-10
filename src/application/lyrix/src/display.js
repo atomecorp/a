@@ -115,6 +115,7 @@ export class LyricsDisplay {
             id: 'hamburger-menu-button',
             text: '☰',
             css: {
+                display: 'none',
                 position: 'absolute',
                 top: '0px',
                 left: '0px',
@@ -127,7 +128,7 @@ export class LyricsDisplay {
                 fontSize: '18px',
                 cursor: 'pointer',
                 zIndex: '101',
-                display: 'flex',
+                // display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 transition: 'all 0.2s ease',
@@ -151,9 +152,14 @@ export class LyricsDisplay {
             this.toggleToolbarVisibility();
         });
 
-        // Load toolbar visibility state from localStorage
+        // Load toolbar visibility state from localStorage (default: visible on first run)
         const savedToolbarState = localStorage.getItem('lyrix_toolbar_visible');
-        this.toolbarVisible = savedToolbarState === 'true'; // Default to false (minimized)
+        if (savedToolbarState === null) {
+            this.toolbarVisible = true; // show toolbar by default on first startup
+            try { localStorage.setItem('lyrix_toolbar_visible', 'true'); } catch (_) {}
+        } else {
+            this.toolbarVisible = savedToolbarState === 'true';
+        }
         
         // Create lyrics content area - SEULE zone autorisée à scroller
         this.lyricsContent = $('div', {
@@ -697,7 +703,7 @@ export class LyricsDisplay {
                 // volumeWrapper.appendChild(volumeValue);
                 // Respect volume visibility preference
                 const audioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-                const volumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'true') === 'true';
+                const volumeVisible = (localStorage.getItem('lyrix_volume_controls_visible') ?? 'false') === 'true';
                 volumeWrapper.style.display = (audioEnabled && volumeVisible) ? 'flex' : 'none';
 
                 buttons.push(volumeWrapper);
