@@ -1,5 +1,6 @@
 // Évaluation: Google dans une iframe peut être limité par X-Frame-Options/CSP.
 // Approche: iframe "best-effort" (igu=1) + bouton de retour sans recharger toute la page.
+const API_KEY = "YAIzaSyC2i2rMjgWc_5mW9yW2twgPw2K2UaP8TSs"; // 
 
 // Références partagées
 let searchFrameRef = null;
@@ -95,8 +96,8 @@ const typeSelect = $('select', {
 });
 // Par défaut, afficher l’onglet Vidéos pour rendre la liste interne visible dès la première recherche
 try { typeSelect.value = 'videos'; } catch (_) {}
-// Si l'utilisateur change de type sans relancer la recherche, masquer les résultats internes
-typeSelect.onchange = () => { if (typeSelect.value !== 'videos') clearInternalResults(); };
+// Changement de type: pas d'action (liste interne supprimée)
+typeSelect.onchange = () => {};
 
 const dateSelect = $('select', {
 	parent: header,
@@ -118,12 +119,7 @@ const searchBtn = Button({
 
 // Lien "Ouvrir dans un nouvel onglet" supprimé selon demande
 
-// ===== Résultats internes (Vidéos) contrôlés par l'app — au-dessus de l'iframe =====
-const internalResults = $('div', {
-	parent: container,
-	id: 'internal-results',
-	css: { display: 'none', padding: '10px', borderBottom: '1px solid #eee', backgroundColor: '#fff' }
-});
+// (liste interne supprimée)
 
 // Iframe
 searchFrameRef = $('iframe', {
@@ -142,78 +138,7 @@ statusBarRef = $('div', {
 
 // (résultats internes déplacés au-dessus de l'iframe)
 
-function getApiBase() {
-	try {
-		const origin = (window && window.location && window.location.origin) ? window.location.origin : '';
-		if (!origin || origin === 'null' || origin.startsWith('file:')) return 'http://localhost:3001';
-		return origin;
-	} catch (_) { return 'http://localhost:3001'; }
-}
-
-function clearInternalResults() {
-	internalResults.style.display = 'none';
-	internalResults.innerHTML = '';
-}
-
-function renderVideoResults(items) {
-	internalResults.innerHTML = '';
-	const count = (items && items.length) ? items.length : 0;
-	if (!items || !items.length) {
-		$('div', { parent: internalResults, css: { color: '#666', fontSize: '14px' }, text: 'Aucun résultat vidéo (interne)' });
-		statusBarRef && statusBarRef.$({ text: 'Aucun résultat vidéo (interne).' });
-	} else {
-		$('div', { parent: internalResults, css: { fontWeight: '600', marginBottom: '8px' }, text: 'Résultats vidéos (internes) · ' + count });
-		items.forEach((it) => {
-			const vid = (it.id && (it.id.videoId || it.id)) || '';
-			const sn = it.snippet || {};
-			const title = sn.title || 'Sans titre';
-			const channel = sn.channelTitle || '';
-			const thumb = (sn.thumbnails && (sn.thumbnails.medium && sn.thumbnails.medium.url))
-				|| (sn.thumbnails && (sn.thumbnails.high && sn.thumbnails.high.url))
-				|| (vid ? ('https://img.youtube.com/vi/' + vid + '/hqdefault.jpg') : '');
-
-			const row = $('div', {
-				parent: internalResults,
-				css: {
-					display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', border: '1px solid #eee', borderRadius: '6px',
-					cursor: 'pointer', marginBottom: '8px', backgroundColor: '#fafafa'
-				},
-				onclick: () => {
-					if (vid) {
-						const embed = 'https://www.youtube.com/embed/' + vid + '?autoplay=1&rel=0&modestbranding=1';
-						statusBarRef.$({ text: 'Lecture (embed)…' });
-						searchFrameRef.src = embed;
-					}
-				}
-			});
-			$('img', { parent: row, attrs: { src: thumb, alt: title }, css: { width: '120px', height: '68px', objectFit: 'cover', borderRadius: '4px', backgroundColor: '#ddd' } });
-			const meta = $('div', { parent: row, css: { display: 'flex', flexDirection: 'column' } });
-			$('div', { parent: meta, css: { fontSize: '14px', fontWeight: '600' }, text: title });
-			$('div', { parent: meta, css: { fontSize: '12px', color: '#666' }, text: channel });
-		});
-		statusBarRef && statusBarRef.$({ text: 'Résultats vidéos: ' + count });
-	}
-	internalResults.style.display = 'block';
-	try { internalResults.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_) {}
-}
-
-async function fetchVideoResults(query) {
-	try {
-		// État de chargement interne
-		internalResults.innerHTML = '';
-		$('div', { parent: internalResults, css: { color: '#333', fontSize: '14px' }, text: 'Recherche vidéos…' });
-		internalResults.style.display = 'block';
-		const base = getApiBase();
-		const res = await fetch(base + '/api/youtube/search?q=' + encodeURIComponent(query));
-		const data = await res.json();
-		const items = Array.isArray(data.items) ? data.items : [];
-		renderVideoResults(items);
-	} catch (e) {
-		internalResults.innerHTML = '';
-		$('div', { parent: internalResults, css: { color: '#a00', fontSize: '14px' }, text: 'Erreur chargement résultats internes' });
-		internalResults.style.display = 'block';
-	}
-}
+// (toutes les fonctions de liste interne supprimées)
 
 function buildGoogleUrl(q, type, date) {
 	const params = new URLSearchParams();
@@ -245,19 +170,23 @@ function performSearch() {
 	}
 	const type = typeSelect.value;
 	const date = dateSelect.value;
-	// Affichage interne pour vidéos (liste cliquable) + iframe pour lecture
-	if (type === 'videos') {
-		statusBarRef.$({ text: 'Recherche vidéos (interne)…' });
-		fetchVideoResults(q);
-		// Charger aussi Google vidéos dans l’iframe en parallèle (référence)
-		const url = buildGoogleUrl(q, type, date);
-		searchFrameRef.src = url;
-	} else {
-		clearInternalResults();
-		const url = buildGoogleUrl(q, type, date);
-		statusBarRef.$({ text: 'Chargement…' });
-		searchFrameRef.src = url;
-	}
+	statusBarRef.$({ text: 'Chargement…' });
+	const url = buildGoogleUrl(q, type, date);
+	searchFrameRef.src = url;
+	// Debug: tenter d'imprimer le contenu HTML de l'iframe après un court délai
+	setTimeout(() => {
+		try {
+			const doc = searchFrameRef && (searchFrameRef.contentDocument || (searchFrameRef.contentWindow && searchFrameRef.contentWindow.document));
+			if (doc && doc.documentElement) {
+				console.log('=== Contenu HTML de search-frame ===');
+				console.log(doc.documentElement.outerHTML);
+			} else {
+				console.log('=== search-frame non accessible (cross-origin ou non chargé) ===');
+			}
+		} catch (e) {
+			console.log('=== Erreur accès search-frame ===', e && e.message ? e.message : e);
+		}
+	}, 1500);
 }
 
 searchFrameRef.addEventListener('load', () => {
@@ -366,3 +295,53 @@ async function openEmbedFromClipboard() {
 	}
 }
 
+
+
+
+
+function fct_to_trig(state) {
+    // console.log('trig: ' + state);
+	// Récupération correcte: grab attend un id sans '#'
+	const el = grab('search-frame');
+	if (!el) {
+		console.log('trig: élément non trouvé');
+		return;
+	}
+	// Lire le texte et le HTML via propriétés DOM standard
+	const text = el.textContent;
+	const inner = el.innerHTML;
+	const outer = el.outerHTML;
+	// Pour un bouton toggle, on peut aussi lire l'état si disponible
+	const stateInfo = typeof el.getState === 'function' ? (' | state=' + el.getState()) : '';
+	// console.log('trig: text="' + text + '" | innerHTML length=' + inner.length + ' | outerHTML length=' + outer.length + stateInfo);
+console.log(text);
+}
+
+function fct_to_trig2(state) {
+    console.clear();
+}
+
+// === EXEMPLE 1: Votre bouton existant ===
+const toggle = Button({
+    onText: 'ON',
+    offText: 'OFF',
+    onAction: fct_to_trig,
+    offAction: fct_to_trig2,
+    parent: '#view', // parent direct
+    onStyle: { backgroundColor: '#28a745', color: 'white' },
+    offStyle: { backgroundColor: '#dc3545', color: 'white' },
+    css: {
+        width: '50px',
+        height: '24px',
+        left: '120px',
+        top: '120px',
+        borderRadius: '6px',
+        backgroundColor: 'orange',
+        position: 'relative',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        border: '3px solid rgba(255,255,255,0.3)',
+        boxShadow: '0 2px 4px rgba(255,255,1,1)',
+    }
+});
