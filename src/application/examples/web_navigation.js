@@ -770,7 +770,6 @@ function createYouTubeInterface() {
         </body>
         </html>
     `;
-    closeWebViewButton.style.display = 'block';
 }
 
 // Créer une interface Google simulée (comme l'existante mais plus simple)
