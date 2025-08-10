@@ -1,38 +1,5 @@
-// mon test: 
-function fct_to_trig(state) {
-    console.log('trig: ' + state);
-}
 
-function fct_to_trig2(state) {
-    console.log('trigger 2 : ' + state);
-}
 
-// === EXEMPLE 1: Votre bouton existant ===
-const toggle = Button({
-    onText: 'ON',
-    offText: 'OFF',
-    onAction: fct_to_trig,
-    offAction: fct_to_trig2,
-    parent: '#view', // parent direct
-    onStyle: { backgroundColor: '#28a745', color: 'white' },
-    offStyle: { backgroundColor: '#dc3545', color: 'white' },
-    css: {
-        width: '50px',
-        height: '24px',
-        left: '120px',
-        top: '120px',
-        borderRadius: '6px',
-        backgroundColor: 'orange',
-        position: 'relative',
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-        border: '3px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 2px 4px rgba(255,255,1,1)',
-    }
-});
-
-// end mon test 
 // 2. Zone d'affichage dynamique
 const output = $('div', {
   parent: '#view',
@@ -48,28 +15,6 @@ const output = $('div', {
   text: 'Cliquez sur un bouton pour voir une action.'
 });
 
-// TEST SIMPLE - fonction comme dans buttons.js
-function testButtonClick() {
-    console.log('🔥 BOUTON TEST CLIQUÉ - ça marche !');
-    output.$({ text: '🔥 Test bouton réussi !' });
-}
-
-// Bouton de test simple comme dans buttons.js
-const testButton = Button({
-    text: 'TEST BOUTON',
-    onAction: testButtonClick,
-    parent: '#view',
-    css: {
-        margin: '16px',
-        padding: '12px 24px',
-        backgroundColor: '#ff6b6b',
-        color: '#fff',
-        borderRadius: '6px',
-        cursor: 'pointer',
-        position: 'relative',
-        border: 'none'
-    }
-});
 
 
 
@@ -158,47 +103,15 @@ const searchInput = $('input', {
   }
 });
 
-// Bouton de recherche
-const searchButton = Button({
-  text: '🔍',
-  parent: googleHeader,
-  css: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    backgroundColor: '#4285f4',
-    color: '#fff',
-    border: 'none',
-    cursor: 'pointer',
-    position: 'relative'
-  },
-  onAction: () => {
+// Fonction pour le bouton de recherche
+function performSearchAction() {
     const query = searchInput.value;
     if (query.trim()) {
-      performSearch(query);
+        performSearch(query);
     }
-  }
-});
+}
 
-// Bouton pour fermer l'iframe et revenir à la recherche
-const closeWebViewButton = Button({
-  text: '✕',
-  parent: googleHeader,
-  css: {
-    width: '40px',
-    height: '40px',
-    borderRadius: '50%',
-    backgroundColor: '#ea4335',
-    color: '#fff',
-    border: 'none',
-    cursor: 'pointer',
-    position: 'relative',
-    display: 'none'
-  },
-  onAction: () => {
-    closeWebView();
-  }
-});
+
 
 // Zone de résultats
 const resultsContainer = $('div', {
@@ -460,15 +373,7 @@ const quickSearchContainer = $('div', {
   }
 });
 
-$('div', {
-  parent: quickSearchContainer,
-  css: {
-    marginBottom: '10px',
-    fontSize: '16px',
-    color: '#666'
-  },
-  text: 'Recherches rapides :'
-});
+
 
 const quickSearches = ['JavaScript', 'Squirrel framework', 'Web development', 'API REST'];
 
@@ -481,184 +386,39 @@ function handleQuickSearch(term) {
     output.$({ text: `🔍 Recherche rapide: "${term}"` });
 }
 
-quickSearches.forEach(term => {
-  const quickSearchButton = Button({
-    text: term,
-    onAction: () => handleQuickSearch(term),
-    parent: quickSearchContainer,
-    css: {
-      margin: '4px',
-      padding: '8px 16px',
-      backgroundColor: '#f8f9fa',
-      color: '#1a73e8',
-      border: '1px solid #dadce0',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      position: 'relative',
-      fontSize: '14px'
-    }
-  });
-});
-
-// Sites populaires en accès direct
-$('div', {
-  parent: quickSearchContainer,
-  css: {
-    marginBottom: '10px',
-    marginTop: '20px',
-    fontSize: '16px',
-    color: '#666'
-  },
-  text: 'Navigation directe :'
-});
-
-const quickSites = [
-  { name: 'Google', url: 'https://www.google.com' },
-  { name: 'YouTube', url: 'https://www.youtube.com' },
-  { name: 'Wikipedia', url: 'https://fr.wikipedia.org' },
-  { name: 'GitHub', url: 'https://github.com' }
-];
-
-// Fonctions pour les boutons de sites
-function handleSiteNavigation(site) {
-    console.log('🌐 BOUTON SITE CLIQUÉ - Debug info:');
-    console.log('- Site:', site.name);
-    console.log('- URL:', site.url);
-    loadInWebView(site.url, site.name);
-    output.$({ text: `🌐 Navigation: ${site.name}` });
+// Fonctions spécifiques pour chaque recherche rapide
+function searchJavaScript() {
+    handleQuickSearch('JavaScript');
 }
 
-quickSites.forEach(site => {
-  const quickSiteButton = Button({
-    text: site.name,
-    onAction: () => handleSiteNavigation(site),
-    parent: quickSearchContainer,
-    css: {
-      margin: '4px',
-      padding: '8px 16px',
-      backgroundColor: '#e8f0fe',
-      color: '#1967d2',
-      border: '1px solid #1967d2',
-      borderRadius: '4px',
-      cursor: 'pointer',
-      position: 'relative',
-      fontSize: '14px'
-    }
-  });
-});
-
-// Boutons de navigation
-const buttonContainer = $('div', {
-  parent: '#view',
-  css: {
-    textAlign: 'center',
-    margin: '16px 0'
-  }
-});
-
-// Fonctions pour les boutons de navigation
-function openGoogleNewTab() {
-    console.log('🔍 BOUTON "OUVRIR GOOGLE" CLIQUÉ');
-    try {
-        window.open('https://www.google.com', '_blank');
-        console.log('✅ Google ouvert avec succès');
-        output.$({ text: '🔍 Google ouvert dans un nouvel onglet' });
-    } catch(e) {
-        console.log('❌ Erreur:', e);
-        output.$({ text: '❌ Erreur: ' + e.message });
-    }
+function searchSquirrel() {
+    handleQuickSearch('Squirrel framework');
 }
 
-function navigateToGoogle() {
-    console.log('🌐 BOUTON "ALLER À GOOGLE" CLIQUÉ');
-    if (confirm('Voulez-vous vraiment quitter cette page pour aller sur Google ?')) {
-        try {
-            window.location.href = 'https://www.google.com';
-            console.log('✅ Navigation en cours...');
-        } catch(e) {
-            console.log('❌ Erreur de navigation:', e);
-            output.$({ text: '❌ Erreur de navigation: ' + e.message });
-        }
-    } else {
-        console.log('ℹ️ Navigation annulée par l\'utilisateur');
-        output.$({ text: 'ℹ️ Navigation annulée' });
-    }
+function searchWebDev() {
+    handleQuickSearch('Web development');
 }
 
-function openGooglePopup() {
-    console.log('📱 BOUTON "GOOGLE EN POPUP" CLIQUÉ');
-    try {
-        const popup = window.open(
-            'https://www.google.com', 
-            'GooglePopup',
-            'width=800,height=600,resizable=yes,scrollbars=yes,status=yes'
-        );
-        
-        if (popup) {
-            console.log('✅ Popup Google ouverte avec succès');
-            output.$({ text: '📱 Google ouvert en popup' });
-        } else {
-            console.log('⚠️ Popup bloquée');
-            output.$({ text: '⚠️ Popup bloquée par le navigateur' });
-        }
-    } catch(e) {
-        console.log('❌ Erreur popup:', e);
-        output.$({ text: '❌ Erreur popup: ' + e.message });
-    }
+function searchAPIREST() {
+    handleQuickSearch('API REST');
 }
 
-// Bouton pour ouvrir Google
-const openGoogleButton = Button({
-  text: '� Ouvrir Google',
-  onAction: openGoogleNewTab,
-  parent: buttonContainer,
-  css: {
-    margin: '8px',
-    padding: '12px 24px',
-    backgroundColor: '#4285f4',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    position: 'relative',
-    fontSize: '16px',
-    fontWeight: 'bold'
-  }
-});
 
-// Bouton pour ouvrir dans la même fenêtre
-const navigateToGoogleButton = Button({
-  text: '🌐 Aller à Google (même onglet)',
-  onAction: navigateToGoogle,
-  parent: buttonContainer,
-  css: {
-    margin: '8px',
-    padding: '12px 24px',
-    backgroundColor: '#ea4335',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    position: 'relative',
-    fontSize: '16px'
-  }
-});
 
-// Bouton pour ouvrir dans une popup
-const popupGoogleButton = Button({
-  text: '📱 Google en popup',
-  onAction: openGooglePopup,
-  parent: buttonContainer,
-  css: {
-    margin: '8px',
-    padding: '12px 24px',
-    backgroundColor: '#34a853',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    position: 'relative',
-    fontSize: '16px'
-  }
-});
+///buttons 
 
+
+// TEST SIMPLE - fonction comme dans buttons.js
+function testButtonClick() {
+    console.log('🔥 BOUTON TEST CLIQUÉ - ça marche !');
+    output.$({ text: '🔥 Test bouton réussi !' });
+}
+
+// Bouton de test simple comme dans buttons.js - modèle reference_button
+const testButton = Button({
+    id: 'test_button',
+    onText: 'TEST BOUTON',
+    offText: 'TEST BOUTON',
+    onAction: testButtonClick,
+    parent: '#view'
+});
