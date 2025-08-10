@@ -1831,6 +1831,8 @@ function showSongLibrary() {
 
     // Song list container
     const listContainer = UIManager.createListContainer({});
+    // Add an id to the div containing all song list elements
+    try { listContainer.id = 'song-list'; } catch (_) {}
     
     // Prepare items for display
     const songItems = songs.map(song => ({
@@ -2294,23 +2296,13 @@ function showSongLibrary() {
         console.log('🎹 MIDI inputs refreshed in song library');
     }, 100);
 
-    // Footer
-    // Footer with close button
-    const footer = UIManager.createModalFooter({});
-    const cancelButton = UIManager.createCancelButton({
-        text: 'Close',
-        onClick: () => closeSongLibraryPanel()
-    });
-    footer.appendChild(cancelButton);
-
-    // Assemble inline panel
-    modal.append(header, content, footer);
+    // Assemble inline panel (no footer/close button)
+    modal.append(header, content);
 
     // Insert above lyrics_content_area so it pushes it down
     displayContainer.insertBefore(modal, lyricsContentArea);
 
     // Focus search input shortly after insert
-    setTimeout(() => searchInput.focus(), 100);
 }
 
 // Show settings modal with MIDI fullscreen assignments
@@ -3157,19 +3149,20 @@ function showSettingsModal() {
     // Assemble the content - move experimental features to the bottom
     settingsContent.append( activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, metadataOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
 
-    // Show modal
-    Modal({
-        // title: '⚙️ Settings',
-        content: settingsContent,
-        // buttons: [
-        //     {
-        //         text: 'Close',
-        //         style: 'primary',
-        //         action: () => {
-        //             console.log('🔧 Settings modal closed');
-        //         }
-        //     }
-        // ]
+    // Show as a simple modal without header/footer/close button
+    const settingsOverlay = UIManager.createEnhancedModalOverlay();
+    const settingsModal = UIManager.createEnhancedModalContainer({
+        css: { maxWidth: '480px', width: '95%' }
+    });
+    settingsModal.append(settingsContent);
+    settingsOverlay.appendChild(settingsModal);
+    document.body.appendChild(settingsOverlay);
+
+    // Close when clicking on overlay background
+    settingsOverlay.addEventListener('click', (e) => {
+        if (e.target === settingsOverlay) {
+            try { document.body.removeChild(settingsOverlay); } catch (_) {}
+        }
     });
 }
 
@@ -3187,7 +3180,6 @@ function toggleAudioPlayerControls(buttonElement, labelElement) {
     
     // Get audio elements to toggle using their IDs
     const audioElementsToToggle = [
-        document.getElementById('audio-player-title'),
         document.getElementById('audio-play-button'),
         document.getElementById('audio-stop-button'),
         document.getElementById('audio-controls-container'),
@@ -4109,19 +4101,6 @@ function createMainInterface() {
     
     // Add audio controls section
     if (audioController) {
-        // Audio title shown near controls (moved to toolbar by display.js)
-        const titleInitialDisplay = (localStorage.getItem('lyrix_audio_player_enabled') === 'true') ? 'block' : 'none';
-        const audioTitle = $('div', {
-            id: 'audio-player-title',
-            text: 'No audio loaded',
-            css: {
-                display: titleInitialDisplay,
-                marginBottom: '5px',
-                fontSize: '12px',
-                textAlign: 'center'
-            }
-        });
-
         // Check audio player controls setting state
         // Par défaut, les contrôles audio sont masqués sauf si activés dans les paramètres
         const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
@@ -4201,11 +4180,8 @@ function createMainInterface() {
             stopButton     // Store direct reference to stop button
         };
         
-        // Note: These tools will be moved to lyrics toolbar by display.js
-    // Attach the title to DOM so display.js can pick it up by ID
-    // Using mainLayout as a temporary parent before it gets moved to the toolbar
-    mainLayout.append(audioTitle);
-    // leftPanel.append(audioTitle, audioControls);
+    // Note: These tools will be moved to lyrics toolbar by display.js
+    // leftPanel.append(audioControls);
         
         // Add audio scrub slider
         const scrubContainer = $('div', {

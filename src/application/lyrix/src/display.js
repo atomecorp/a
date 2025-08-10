@@ -437,12 +437,6 @@ export class LyricsDisplay {
                 tool.style.marginRight = '0';
                 // Reset display property to ensure it follows parent container visibility
                 tool.style.display = 'block';
-            } else if (tool && tool.id === 'audio-player-title') {
-                // Audio title styling
-                tool.style.display = 'block';
-                tool.style.marginBottom = '5px';
-                tool.style.fontSize = '12px';
-                tool.style.textAlign = 'center';
             }
             // Reset display for all audio tools to ensure they follow parent container
             if (tool && tool.style) {
@@ -717,7 +711,6 @@ export class LyricsDisplay {
         // Get individual audio control elements by their IDs in the correct order
         // Volume slider is now in main toolbar, so only get title and scrub slider
         const audioControlIds = [
-            'audio-player-title',
             'audio-scrub-slider-container'  // Volume slider moved to main toolbar
         ];
         
@@ -772,10 +765,7 @@ export class LyricsDisplay {
                     tool.style.padding = '2px 5px';
                 }
                 
-                if (tool.id === 'audio-player-title') {
-                    tool.style.fontSize = '12px';
-                    tool.style.margin = '0 5px';
-                }
+                
                 
                 if (tool.id === 'audio-controls-container') {
                     tool.style.marginBottom = '0';
