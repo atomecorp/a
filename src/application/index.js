@@ -39,8 +39,11 @@
 //  import('./examples/audio_swift.js');
 // import('./examples/console_to_swift.js');
 
-import('./lyrix/index.js');
+//import('./lyrix/index.js');
 // import('./examples/ios_apis.js');
+
+// import('./examples/web_recorder.js');
+ import('./examples/demos.js');
 
 
 

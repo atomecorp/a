@@ -1,328 +1,322 @@
-// Import de la classe Slider paramétrée
+// Exemple de démo compatible Squirrel
 
-// Create a new A instance with custom properties
-const html_container = new A({
-    attach: 'body',
-    id: 'main_html_container',
-    markup: 'span',
-    role: 'container',
-    x: 150,
-    y: 50,
-    width: 400,
-    height: 300,
-    color: 'orange',
-    display: 'block',
-    backgroundColor: 'orange',
-    smooth: 10,
-    shadow: [
-        {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-        {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-    ],
-    overflow: 'hidden',
-    fasten: [] // will contain the IDs of children
+// 1. Titre principal
+$('h1', {
+  parent: '#view',
+  id: 'demo-title',
+  css: {
+    backgroundColor: '#222',
+    color: '#fff',
+    padding: '16px',
+    margin: '16px 0',
+    borderRadius: '8px',
+    textAlign: 'center'
+  },
+  text: 'Démo Squirrel 🎉'
 });
 
-puts(html_container)
-puts(html_container.width)
-puts(html_container.html_object)
-
-setTimeout(() => {
-    html_container.display('none')
-
-    console.log("Delayed for 2 second.");
-    html_container.width(800)
-    // html_container.left('800px');
-    html_container.html_object.style.left = '600px';
-    puts ('----------')
-    puts(html_container.particles );
-    puts ('----------')
-
-    const element = document.getElementById("main_html_container");
-
-    // Change the left position (in pixels)
-    let element2 = grab('main_html_container');
-    console.log(html_container === element2)
-    element2.height(12);
-    element2.style.top = '290px'
-    puts(">>> " + element2.style.top)
-    html_container.style.left = "50px";
-}, 2000);
-wait(2000, () => {
-    console.log("This message is displayed after a 2-second delay.");
+// 2. Zone d'affichage dynamique
+const output = $('div', {
+  parent: '#view',
+  id: 'demo-output',
+  css: {
+    backgroundColor: '#f9f9f9',
+    border: '1px solid #ccc',
+    borderRadius: '8px',
+    padding: '16px',
+    margin: '16px 0',
+    minHeight: '40px'
+  },
+  text: 'Cliquez sur un bouton pour voir une action.'
 });
 
-const element = grab('main_html_container');
-
-if (element) {
-    console.log('Element found:', element);
-    element.width(50); // Change the width of the element
-    element.style.backgroundColor = 'blue'; // Change the background color
-} else {
-    console.error('Element not found');
-}
-
-puts ('Element ID:is ...');
-
-// // Short alias for document
-const d = document;
-
-// Create and append an H1 and a div dynamically
-const div = Object.assign(d.body, {
-    append: Object.assign(d.createElement('h1'), {
-        textContent: 'Page generated in pure JS',
-        style: { textAlign: 'center' }
-    })
-}).appendChild(d.createElement('div'));
-
-// Style the created div
-Object.assign(div.style, {
-    width: '200px', height: '200px', backgroundColor: 'red', color: 'white',
-    display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer',
-    margin: '50px auto', padding: '20px', textAlign: 'center', borderRadius: '10px',
-    transition: 'background-color 0.3s'
+// 3. Bouton Squirrel avec composant Button
+const messageButton = Button({
+  text: 'Afficher un message',
+  parent: '#view',
+  css: {
+    margin: '8px',
+    padding: '10px 20px',
+    backgroundColor: '#007bff',
+    color: '#fff',
+    borderRadius: '5px',
+    cursor: 'pointer',
+    position: 'relative'
+  },
+  onAction: () => {
+    console.log('Message button clicked');
+    output.$({ text: 'Bravo, vous avez cliqué le bouton ! 🚀' });
+  }
 });
 
-div.textContent = 'Click me to change color';
-div.onclick = () => div.style.backgroundColor = div.style.backgroundColor === 'red' ? 'green' : 'red';
-
-// Create another container
-const container2 = new A({
-    attach: 'body',
-    id: 'main_container2',
-    markup: 'div',
-    type: 'container',
-    x: 50,
-    y: 50,
-    width: 400,
-    height: 300,
-    backgroundColor: '#f5f5f5',
-    smooth: 10,
-    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-    overflow: 'hidden',
-    fasten: [] // Will contain the IDs of children
+// 4. Slider Squirrel
+const demoSlider = Slider({
+  min: 0,
+  max: 100,
+  value: 50,
+  step: 1,
+  parent: '#view',
+  css: {
+    margin: '8px',
+    width: '200px'
+  },
+  onInput: (value) => {
+    console.log('Slider value:', value);
+    output.$({ text: `Valeur du slider : ${value}` });
+  }
 });
 
-// 2. Create a header inside the container
-const header = new A({
-    attach: '#main_container', // Attach to the main container
-    id: 'header',
-    markup: 'div',
-    type: 'shape',
-    x: 0,
-    y: 0,
-    width: '100%',
-    height: 60,
-    backgroundColor: '#4285f4',
-    center: false,
-    position: 'absolute',
-    color: 'white',
-    textAlign: 'center',
-    lineHeight: '60px',
-    fontWeight: 'bold',
-    fontSize: 20,
-    text: 'A Demo with Children'
+// 5. Exemple d'animation Squirrel
+const animBox = $('div', {
+  parent: '#view',
+  id: 'anim-box',
+  css: {
+    width: '80px',
+    height: '80px',
+    backgroundColor: '#4caf50',
+    margin: '16px auto',
+    borderRadius: '8px',
+    transition: 'all 0.5s'
+  }
 });
 
-
-// 3. Create main content with children using the children property
-const content = new A({
-    attach: '#main_container',
-    id: 'content',
-    markup: 'div',
-    type: 'content',
-    x: 0,
-    y: 60,
-    width: '100%',
-    height: 240,
-    padding: 15,
-    position: 'relative',
-    children: [
-        // Child 1: Red box
-        {
-            id: 'red_box',
-            markup: 'div',
-            type: 'shape',
-            x: 20,
-            y: 20,
-            width: 100,
-            height: 100,
-            backgroundColor: 'red',
-            smooth: 15,
-            events: {
-                click: (e) => {
-                    console.log('Red box clicked!');
-                }
-            }
-        },
-        // Child 2: Blue box
-        {
-            id: 'blue_box',
-            markup: 'div',
-            type: 'shape',
-            x: 150,
-            y: 20,
-            width: 100,
-            height: 100,
-            backgroundColor: 'blue',
-            smooth: 15,
-            color: 'white',
-            textAlign: 'center',
-            lineHeight: '100px',
-            text: 'Blue'
-        },
-        // Child 3: Green circle
-        {
-            id: 'green_circle',
-            markup: 'div',
-            type: 'shape',
-            x: 280,
-            y: 20,
-            width: 100,
-            height: 100,
-            backgroundColor: 'green',
-            smooth: '50%', // Perfect circle
-            color: 'white',
-            textAlign: 'center',
-            lineHeight: '100px',
-            text: 'Circle'
+const animButton = Button({
+  text: 'Animer la boîte',
+  parent: '#view',
+  css: {
+    margin: '8px',
+    padding: '10px 20px',
+    backgroundColor: '#ff9800',
+    color: '#fff',
+    borderRadius: '5px',
+    cursor: 'pointer',
+    position: 'relative'
+  },
+  onAction: () => {
+    console.log('Animation button clicked');
+    animBox.$({
+      css: {
+        width: '160px',
+        height: '160px',
+        backgroundColor: '#e91e63'
+      }
+    });
+    setTimeout(() => {
+      animBox.$({
+        css: {
+          width: '80px',
+          height: '80px',
+          backgroundColor: '#4caf50'
         }
-    ],
-    fasten: [] // Will be auto-filled with child IDs
+      });
+    }, 700);
+  }
 });
 
-const container = new A({
-    attach: 'body',
-    id: 'main_html_container',
-    markup: 'span',
-    role: 'container',
-    x: 550,
-    y: 50,
-    width: 400,
-    height: 300,
-    color: 'orange',
-    backgroundColor: 'orange',
-    display: 'block',
-    smooth: 10,
-    shadow: [
-        {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-        {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-    ],
-    overflow: 'hidden',
-    fasten: [] // will contain the IDs of children
+// 6. Input text Squirrel
+$('input', {
+  parent: '#view',
+  attrs: {
+    type: 'text',
+    placeholder: 'Tapez quelque chose...'
+  },
+  css: {
+    margin: '8px',
+    padding: '8px',
+    borderRadius: '4px',
+    border: '1px solid #ccc',
+    width: '200px'
+  },
+  oninput: (e) => {
+    console.log('Input value:', e.target.value);
+    output.$({ text: `Vous tapez : "${e.target.value}"` });
+  }
 });
 
-setTimeout(() => {
-    // Show the main container after 2 seconds
-    container.display('block');
-container.style.width = '800px';
- container.style.left = '800px';
-}, 3000);
-
-
-
-
-
-
-
-// Simple example of using fasten property
-const simpleExample = new A({
-    attach: 'body',
-    id: 'parent_box',
-    markup: 'div',
-    type: 'container',
-    x: 500,
-    y: 50,
-    width: 200,
-    height: 200,
-    backgroundColor: '#333',
-    smooth: 10,
-    // Directly define IDs of children to attach
-    fasten: ['child_box1', 'child_box2']
+// 7. Liste de couleurs
+const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f7d794', '#c44569'];
+$('div', {
+  parent: '#view',
+  css: {
+    margin: '16px 0',
+    textAlign: 'center'
+  },
+  text: 'Choisissez une couleur :'
 });
 
-// Create corresponding children
-const child1 = new A({
-    attach: '#parent_box',
-    id: 'child_box1',
-    markup: 'div',
-    type: 'shape',
-    x: 20,
-    y: 20,
-    width: 80,
-    height: 80,
-    backgroundColor: 'yellow',
-    smooth: 10
+colors.forEach((color, index) => {
+  Button({
+    text: `Couleur ${index + 1}`,
+    parent: '#view',
+    css: {
+      margin: '4px',
+      padding: '8px 16px',
+      backgroundColor: color,
+      color: '#fff',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      position: 'relative'
+    },
+    onAction: () => {
+      console.log('Color button clicked:', color);
+      document.body.style.backgroundColor = color;
+      output.$({ text: `Couleur de fond changée en ${color}` });
+    }
+  });
 });
 
-// Safe DOM access if needed
-const resultElement = document.getElementById("resultat")
-if (resultElement) {
-    resultElement.textContent = `Result is: ${resultat}`
-}
-
-/// pure js syntax
-setTimeout(() => {
-    console.log("Processing completed after delay")
-}, 3000)
-
-function addition(a, b) {
-    return a + b;
-}
-
-// Example usage
-const resultat_o = addition(3, 6);
-console.log("second result is :", resultat_o); // Logs: Result: 8
-
-// // Export for ES6 modules
+// Export pour ES6 modules
 export default {};
 
+//media examples
 
-
-
-const html_container2 = new A({
-    attach: 'body',
-    id: 'main_html_container',
-    markup: 'span',
-    role: 'container',
-    x: 150,
-    y: 50,
-    width: 400,
-    height: 300,
-    color: 'orange',
-    display: 'block',
-    smooth: 10,
-    shadow: [
-        {blur: 3, x: 4, y: 8, color: {red: 0, green: 0, blue: 0, alpha: 0.6}, invert: true},
-        {blur: 12, x: 0, y: 0, color: {red: 0, green: 0.5, blue: 0, alpha: 0.6}, invert: false}
-    ],
-    overflow: 'hidden',
-    fasten: [] // will contain the IDs of children
+// 8. Section média
+$('h2', {
+  parent: '#view',
+  css: {
+    color: '#333',
+    margin: '32px 0 16px 0',
+    textAlign: 'center',
+    borderBottom: '2px solid #007bff',
+    paddingBottom: '8px'
+  },
+  text: 'Exemples Média 🎵📷🎬'
 });
 
-// 
-// 
-// 
-// Create a new A instance with custom properties
-new A({
-  attach: 'body',
-  id: 'view',
-  markup: 'div',
-  role: 'container',
-  text: 'Hello World',
-  fontSize: 20,
-  fontWeight: 'bold',
-  textAlign: 'center',
-  backgroundColor: 'red',
-  x: 0,
-  y: 0,
-  width: 100,
-  height: 100,
-  unit: {
-    width: '%',
-    height: '%',
+// 9. Balise audio Squirrel avec syntaxe correcte
+const audioElement = $('audio', {
+  parent: '#view',
+  id: 'demo-audio',
+  attrs: {
+    src: './assets/audios/riff.m4a',
+    controls: true
   },
-  color: { red: 0.15, green: 0.15, blue: 0.15, alpha: 1 },
-  display: 'block',
-  overflow: 'hidden',
+  css: {
+    width: '100%',
+    maxWidth: '400px',
+    margin: '16px auto',
+    display: 'block',
+    borderRadius: '8px'
+  },
+  onplay: () => {
+    console.log('Audio play event triggered');
+    output.$({ text: '🎵 Audio en cours de lecture...' });
+  },
+  onpause: () => {
+    console.log('Audio pause event triggered');
+    output.$({ text: '⏸️ Audio en pause' });
+  },
+  onended: () => {
+    console.log('Audio ended event triggered');
+    output.$({ text: '✅ Lecture audio terminée' });
+  },
+  onerror: (e) => {
+    console.log('Audio error:', e);
+    output.$({ text: '❌ Erreur de chargement audio' });
+  }
+});
+
+// 10. Galerie d'images Squirrel
+$('div', {
+  parent: '#view',
+  css: {
+    textAlign: 'center',
+    margin: '16px 0'
+  },
+  text: 'Galerie d\'images :'
+});
+
+const imageElement1 = $('img', {
+  parent: '#view',
+  id: 'img1',
+  attrs: {
+    src: './assets/images/green_planet.png',
+    alt: 'Planète verte'
+  },
+  css: {
+    width: '150px',
+    height: '150px',
+    objectFit: 'cover',
+    borderRadius: '50%',
+    margin: '8px',
+    display: 'inline-block',
+    border: '4px solid #4caf50',
+    cursor: 'pointer',
+    transition: 'transform 0.3s ease'
+  },
+  onclick: () => {
+    console.log('Image 1 clicked');
+    output.$({ text: '🌍 Image cliquée : Planète verte!' });
+  },
+  onmouseover: function() {
+    this.style.transform = 'scale(1.1)';
+  },
+  onmouseout: function() {
+    this.style.transform = 'scale(1)';
+  }
+});
+
+const imageElement2 = $('img', {
+  parent: '#view',
+  id: 'img2',
+  attrs: {
+    src: './assets/images/puydesancy.jpg',
+    alt: 'Puy de Sancy'
+  },
+  css: {
+    width: '150px',
+    height: '150px',
+    objectFit: 'cover',
+    borderRadius: '8px',
+    margin: '8px',
+    display: 'inline-block',
+    border: '4px solid #ff9800',
+    cursor: 'pointer',
+    transition: 'transform 0.3s ease'
+  },
+  onclick: () => {
+    console.log('Image 2 clicked');
+    output.$({ text: '🏔️ Image cliquée : Puy de Sancy!' });
+  },
+  onmouseover: function() {
+    this.style.transform = 'scale(1.1) rotate(5deg)';
+  },
+  onmouseout: function() {
+    this.style.transform = 'scale(1) rotate(0deg)';
+  }
+});
+
+// 11. Balise vidéo Squirrel
+const videoElement = $('video', {
+  parent: '#view',
+  id: 'demo-video',
+  attrs: {
+    src: './assets/videos/avengers.mp4',
+    controls: true,
+    width: 400,
+    height: 225
+  },
+  css: {
+    margin: '16px auto',
+    display: 'block',
+    borderRadius: '8px',
+    boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+  },
+  onplay: () => {
+    console.log('Video play event triggered');
+    output.$({ text: '🎬 Vidéo en cours de lecture...' });
+  },
+  onpause: () => {
+    console.log('Video pause event triggered');
+    output.$({ text: '⏸️ Vidéo en pause' });
+  },
+  onended: () => {
+    console.log('Video ended event triggered');
+    output.$({ text: '🎭 Lecture vidéo terminée' });
+  },
+  onerror: (e) => {
+    console.log('Video error:', e);
+    output.$({ text: '❌ Erreur lors du chargement de la vidéo' });
+  }
 });
 

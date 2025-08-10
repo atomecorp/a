@@ -51,3 +51,4 @@ src-tauri/Cargo.lock
 src-tauri/gen/schemas/acl-manifests.json
 src-tauri/gen/schemas/desktop-schema.json
 src/assets/audios/Ices From Hells.m4a
+src/assets/videos/avengers.mp4
