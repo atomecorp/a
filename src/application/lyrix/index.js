@@ -1363,28 +1363,6 @@ function showInlineExportPanel(dataString, filename, fileType) {
         }
     });
 
-    // Header
-    const header = $('div', {
-        css: {
-            position: 'sticky',
-            top: '0',
-            zIndex: '5',
-            padding: UIManager.THEME.spacing.lg,
-            backgroundColor: UIManager.THEME.colors.primary,
-            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
-            color: 'white'
-        }
-    });
-    const headerTitle = $('h3', {
-        text: `📱 Export ${fileType} File`,
-        css: { margin: '0', color: 'white' }
-    });
-    const instructions = $('div', {
-        text: 'Choose how to save your file:',
-        css: { fontSize: '14px', opacity: '0.9', marginTop: '10px' }
-    });
-    header.append(headerTitle, instructions);
-
     // Content
     const content = $('div', { css: { padding: UIManager.THEME.spacing.lg } });
 
@@ -1397,6 +1375,8 @@ function showInlineExportPanel(dataString, filename, fileType) {
         }
     });
     copyButton.addEventListener('click', async () => {
+        // Close the panel immediately on action
+        try { closeExportPanel(); } catch (_) {}
         try {
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 await navigator.clipboard.writeText(dataString);
@@ -1412,14 +1392,116 @@ function showInlineExportPanel(dataString, filename, fileType) {
                 document.execCommand('copy');
                 document.body.removeChild(textArea);
             }
-            copyButton.textContent = '✅ Copied!';
-            copyButton.style.backgroundColor = '#27ae60';
-            setTimeout(() => { copyButton.textContent = '📋 Copy to Clipboard'; copyButton.style.backgroundColor = '#3498db'; }, 2000);
         } catch (err) {
             console.error('Failed to copy to clipboard:', err);
-            copyButton.textContent = '❌ Copy failed';
-            copyButton.style.backgroundColor = '#e74c3c';
-            setTimeout(() => { copyButton.textContent = '📋 Copy to Clipboard'; copyButton.style.backgroundColor = '#3498db'; }, 2000);
+        }
+    });
+
+    // Desktop-friendly save button for macOS and others
+    const downloadButton = $('button', {
+        text: '💾 Save to Disk',
+        css: {
+            width: '100%', padding: '15px', marginBottom: '10px',
+            backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '8px',
+            fontSize: '16px', cursor: 'pointer', fontWeight: 'bold'
+        }
+    });
+    downloadButton.addEventListener('click', async () => {
+        // Close the panel immediately on action
+        try { closeExportPanel(); } catch (_) {}
+        const mime = fileType === 'LRX' ? 'application/json' : 'text/plain';
+        const blob = new Blob([dataString], { type: mime });
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        const reset = (text = '💾 Save to Disk') => setTimeout(() => {}, 0);
+
+        // 1) Prefer native system file picker when available (shows a real Save dialog)
+        if (window.showSaveFilePicker) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: fileType === 'LRX' ? 'Lyrix Library (*.lrx)' : 'Text (*.txt)',
+                        accept: { [mime]: [fileType === 'LRX' ? '.lrx' : '.txt'] }
+                    }]
+                });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                return;
+            } catch (e) {
+                // If user cancels or API fails, fall through to the other strategies
+                console.warn('showSaveFilePicker not available or canceled, falling back:', e);
+            }
+        }
+
+        // 2) Non-Safari: anchor download usually triggers the browser download UI
+        try {
+            if (!isSafari) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                return;
+            }
+        } catch (e) {
+            console.warn('Anchor download failed, trying Safari fallback:', e);
+        }
+
+        // 3) Safari: open a helper page with a download link and instructions (more reliable Save dialog)
+        try {
+            const newWindow = window.open('', '_blank');
+            if (newWindow) {
+                const safeDataUri = `data:${mime};charset=utf-8,${encodeURIComponent(dataString)}`;
+                newWindow.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8" />
+                        <title>Download ${filename}</title>
+                        <style>
+                            body { font-family: -apple-system, system-ui, Arial, sans-serif; padding: 24px; background: #f6f7f9; }
+                            .card { max-width: 700px; margin: 0 auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08); padding: 24px; }
+                            .btn { display: inline-block; padding: 12px 18px; background: #007aff; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 700; }
+                            .btn:hover { background: #0063cc; }
+                            pre { background: #f1f3f5; padding: 12px; border-radius: 6px; max-height: 240px; overflow: auto; font-size: 12px; }
+                            .hint { color: #555; font-size: 14px; line-height: 1.5; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="card">
+                            <h2>📁 Save ${fileType} File</h2>
+                            <p class="hint">Click the button below. If no dialog appears, right‑click the link and choose “Download Linked File As…”</p>
+                            <p><a class="btn" href="${safeDataUri}" download="${filename}">💾 Download ${filename}</a></p>
+                            <details>
+                                <summary>Preview first 1KB</summary>
+                                <pre>${dataString.substring(0, 1000).replace(/[&<>]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[s]))}${dataString.length > 1000 ? '\n...\n[truncated]' : ''}</pre>
+                            </details>
+                        </div>
+                    </body>
+                    </html>
+                `);
+                newWindow.document.close();
+                return;
+            }
+        } catch (e) {
+            console.warn('Safari helper window failed, using data URI fallback:', e);
+        }
+
+        // 4) Last resort: fire a data URI download or show content viewer
+        try {
+            const a = document.createElement('a');
+            a.href = `data:${mime};charset=utf-8,${encodeURIComponent(dataString)}`;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } catch (err2) {
+            console.error('All download methods failed, showing viewer:', err2);
+            // As a last resort we skip viewer since panel is already closed
         }
     });
 
@@ -1432,6 +1514,8 @@ function showInlineExportPanel(dataString, filename, fileType) {
         }
     });
     shareButton.addEventListener('click', async () => {
+        // Close the panel immediately on action
+        try { closeExportPanel(); } catch (_) {}
         try {
             if (navigator.share) {
                 const blob = new Blob([dataString], { type: fileType === 'LRX' ? 'application/json' : 'text/plain' });
@@ -1449,28 +1533,9 @@ function showInlineExportPanel(dataString, filename, fileType) {
                 }
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
             }
-            shareButton.textContent = '✅ Ready';
-            shareButton.style.backgroundColor = '#27ae60';
-            setTimeout(() => { shareButton.textContent = '📤 Share File'; shareButton.style.backgroundColor = '#9b59b6'; }, 2000);
         } catch (err) {
             console.error('Failed to share:', err);
-            shareButton.textContent = '❌ Share failed';
-            shareButton.style.backgroundColor = '#e74c3c';
-            setTimeout(() => { shareButton.textContent = '📤 Share File'; shareButton.style.backgroundColor = '#9b59b6'; }, 2000);
         }
-    });
-
-    const viewButton = $('button', {
-        text: '👁️ View Content',
-        css: {
-            width: '100%', padding: '15px', marginBottom: '20px',
-            backgroundColor: '#f39c12', color: 'white', border: 'none', borderRadius: '8px',
-            fontSize: '16px', cursor: 'pointer', fontWeight: 'bold'
-        }
-    });
-    viewButton.addEventListener('click', () => {
-        // Reuse existing overlay viewer for now
-        showContentViewModal(dataString, filename, fileType);
     });
 
     const info = $('div', {
@@ -1478,25 +1543,10 @@ function showInlineExportPanel(dataString, filename, fileType) {
         css: { fontSize: '12px', color: '#666', marginBottom: '10px' }
     });
 
-    content.append(info, copyButton, shareButton, viewButton);
+    content.append(info, copyButton, downloadButton, shareButton);
 
-    const footer = $('div', {
-        css: {
-            padding: UIManager.THEME.spacing.lg,
-            backgroundColor: UIManager.THEME.colors.background,
-            borderTop: `1px solid ${UIManager.THEME.colors.border}`,
-            borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
-            textAlign: 'center'
-        }
-    });
-    const closeButton = $('button', {
-        text: 'Close',
-        css: { padding: '10px 20px', backgroundColor: '#95a5a6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }
-    });
-    closeButton.addEventListener('click', () => closeExportPanel());
-    footer.appendChild(closeButton);
-
-    panel.append(header, content, footer);
+    // Panel contains content only (no header/footer)
+    panel.append(content);
     displayContainer.insertBefore(panel, lyricsContentArea);
 }
 
@@ -1749,17 +1799,17 @@ function showSongLibrary() {
     actionButtons.append(createNewSongButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     headerTop.append(headerTitle, actionButtons);
 
-    // Instructions
-    const instructions = $('div', {
-        text: 'Select a song to load, or use the action buttons above',
-        css: {
-            fontSize: '14px',
-            opacity: '0.9',
-            fontStyle: 'italic'
-        }
-    });
+    // // Instructions
+    // const instructions = $('div', {
+    //     text: 'Select a song to load, or use the action buttons above',
+    //     css: {
+    //         fontSize: '14px',
+    //         opacity: '0.9',
+    //         fontStyle: 'italic'
+    //     }
+    // });
 
-    header.append(headerTop, instructions);
+    header.append(headerTop);
 
     // Content with search and song list
     const content = UIManager.createModalContent({});
