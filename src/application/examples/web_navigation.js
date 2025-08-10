@@ -541,8 +541,8 @@ function createYouTubeInterface() {
                         time: 'il y a 2 jours',
                         duration: '45:32',
                         tags: ['javascript', 'programmation', 'tutorial', 'débutant'],
-                        videoUrl: 'https://www.youtube.com/embed/UB1O30fR-EE',
-                        thumbnail: 'https://img.youtube.com/vi/UB1O30fR-EE/maxresdefault.jpg',
+                        videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+                        thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
                         category: 'javascript'
                     },
                     {
@@ -553,8 +553,8 @@ function createYouTubeInterface() {
                         time: 'il y a 1 semaine',
                         duration: '32:15',
                         tags: ['squirrel', 'framework', 'web', 'développement'],
-                        videoUrl: 'https://www.youtube.com/embed/3rhhlxlbKiw',
-                        thumbnail: 'https://img.youtube.com/vi/3rhhlxlbKiw/maxresdefault.jpg',
+                        videoUrl: 'https://www.youtube.com/embed/9bZkp7q19f0',
+                        thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/hqdefault.jpg',
                         category: 'framework'
                     },
                     {
@@ -565,8 +565,8 @@ function createYouTubeInterface() {
                         time: 'il y a 3 jours',
                         duration: '28:47',
                         tags: ['web', 'développement', 'html', 'css', 'javascript'],
-                        videoUrl: 'https://www.youtube.com/embed/Mus_vwhTCq0',
-                        thumbnail: 'https://img.youtube.com/vi/Mus_vwhTCq0/maxresdefault.jpg',
+                        videoUrl: 'https://www.youtube.com/embed/kUMe1FH4CHE',
+                        thumbnail: 'https://img.youtube.com/vi/kUMe1FH4CHE/hqdefault.jpg',
                         category: 'webdev'
                     },
                     {
@@ -615,7 +615,7 @@ function createYouTubeInterface() {
                     
                     return \`
                         <div class="video" onclick="playVideo('\${video.id}', '\${video.videoUrl}')">
-                            <div class="video-thumbnail" style="\${thumbnailContent.style}">
+                            <div class="video-thumbnail" id="thumbnail-\${video.id}" style="\${thumbnailContent.style}">
                                 \${thumbnailContent.html}
                                 <div class="video-duration">\${video.duration}</div>
                             </div>
@@ -644,6 +644,18 @@ function createYouTubeInterface() {
                             'nodejs': {
                                 style: 'background: linear-gradient(135deg, #68a063 0%, #3c5a3c 100%);',
                                 html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">🟢</div><div style="color: white; font-weight: bold; font-size: 18px;">Node.js</div></div><div class="play-button">▶️</div>'
+                            },
+                            'javascript': {
+                                style: 'background: linear-gradient(135deg, #f7df1e 0%, #323330 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">💛</div><div style="color: white; font-weight: bold; font-size: 18px;">JavaScript</div></div><div class="play-button">▶️</div>'
+                            },
+                            'framework': {
+                                style: 'background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">🛠️</div><div style="color: white; font-weight: bold; font-size: 18px;">Framework</div></div><div class="play-button">▶️</div>'
+                            },
+                            'webdev': {
+                                style: 'background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);',
+                                html: '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;"><div style="font-size: 48px; margin-bottom: 10px;">🌐</div><div style="color: white; font-weight: bold; font-size: 18px;">Web Dev</div></div><div class="play-button">▶️</div>'
                             }
                         };
                         
@@ -652,7 +664,7 @@ function createYouTubeInterface() {
                             html: '<div class="play-button">▶️</div>'
                         };
                     } else {
-                        // Utiliser la vraie thumbnail YouTube
+                        // Utiliser la vraie thumbnail YouTube avec fallback simple
                         return {
                             style: \`background-image: url('\${video.thumbnail}'); background-size: cover; background-position: center;\`,
                             html: '<div class="play-button" style="background: rgba(0,0,0,0.7); border-radius: 50%; width: 68px; height: 68px; display: flex; align-items: center; justify-content: center;">▶️</div>'
