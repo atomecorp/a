@@ -65,7 +65,7 @@ export class SongManager {
     //         console.log('❌ Title and artist required');
     //         return null;
     //     }
-    //     // Crée la chanson avec metadata uniquement
+    //     // Create the song with metadata only
     //     const newSong = library.createSong(title, artist, album);
     //     newSong.addLine(0, 'First lyric line...', 'vocal');
     //     library.saveSong(newSong);

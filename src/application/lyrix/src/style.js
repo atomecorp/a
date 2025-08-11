@@ -2,14 +2,14 @@
 // Base theme system for consistent styling across all components
 
 const default_theme = {
-    // Couleurs du thème (optionnelles - si non définies, utilise button.backgroundColor)
+    // Theme colors (optional - if not defined, uses button.backgroundColor)
     // primaryColor: '#27ae60',     // Vert pour boutons primaires
     // secondaryColor: '#3498db',   // Bleu pour boutons secondaires
     // dangerColor: '#e74c3c',      // Rouge pour boutons danger
     // warningColor: '#f39c12',     // Orange pour boutons warning
     
-    // Couleurs pour les modes spéciaux
-    editModeActiveColor: '#4CAF50',    // Vert pour mode édition actif
+    // Colors for special modes
+    editModeActiveColor: '#4CAF50',    // Green for active edit mode
     recordModeActiveColor: '#f44336',  // Rouge pour mode enregistrement actif
     
     button: {
@@ -29,7 +29,7 @@ const default_theme = {
         // Espacement uniforme
         // margin: '2px',
         // padding: '8px',
-        // Tailles par défaut (appliquées à tous les boutons)
+        // Default sizes (applied to all buttons)
         width: '30px',
         height: '30px',
         minWidth: '30px'

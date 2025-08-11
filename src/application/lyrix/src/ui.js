@@ -61,9 +61,9 @@ export class UIManager {
             text: icon,
             ...config,
             css: {
-                // Utilise le style de bouton unifié (y compris width/height)
+                // Use unified button style (including width/height)
                 ...default_theme.button,
-                fontSize: '16px', // Icônes un peu plus grandes
+                fontSize: '16px', // Icons slightly larger
                 ...config.css
             },
             onmouseover: (e) => {
@@ -457,9 +457,9 @@ export class UIManager {
         return $('div', {
             id: 'timecode',
             css: {
-                // Utilise le style de bouton unifié (y compris width/height)
+                // Use unified button style (including width/height)
                 ...default_theme.button,
-                // Spécificités du timecode
+                // Timecode specifics
                 fontFamily: 'monospace'
             },
             text: '0.000s'
@@ -1159,9 +1159,9 @@ export class UIManager {
             id: 'timecode-display',
             ...config,
             css: {
-                // Utilise le style de bouton unifié SAUF la largeur
+                // Use unified button style EXCEPT width
                 ...default_theme.button,
-                // Spécificités du timecode
+                // Timecode specifics
                 fontFamily: 'monospace',
                 textAlign: 'center',
                 // Largeur adaptative pour le timecode

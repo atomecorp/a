@@ -3,9 +3,9 @@ import { CONSTANTS } from './constants.js';
 import { SyncedLyrics } from './syncedLyrics.js';
 import { StorageManager } from './storage.js';
 
-// Centralise la création d'une instance SyncedLyrics à partir d'un objet songData
+// Centralizes creation of a SyncedLyrics instance from a songData object
 export function createSyncedLyricsFromData(songData) {
-    // Crée une instance SyncedLyrics vide
+    // Create an empty SyncedLyrics instance
     const lyrics = new SyncedLyrics();
     // Stocke toutes les infos dans metadata UNIQUEMENT
     lyrics.metadata = {
@@ -19,7 +19,7 @@ export function createSyncedLyricsFromData(songData) {
     lyrics.lines = songData.lines || [];
     lyrics.audioPath = songData.audioPath;
     lyrics.syncData = songData.syncData;
-    // Supprime les champs dupliqués au niveau racine si présents (y compris à l'export)
+    // Remove duplicate fields at root level if present (including on export)
     Object.keys(lyrics).forEach(key => {
         if (["title","artist","album","duration"].includes(key)) {
             delete lyrics[key];
@@ -273,7 +273,7 @@ export class LyricsLibrary {
         
         importData.songs.forEach((songData, index) => {
             try {
-                // Utilise la fonction centralisée
+                // Use the centralized function
                 const lyrics = createSyncedLyricsFromData(songData);
                 // Check if song already exists
                 const existingKey = `${CONSTANTS.STORAGE.LIBRARY_PREFIX}${lyrics.songId}`;

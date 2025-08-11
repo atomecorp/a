@@ -342,7 +342,7 @@ function createNewSong() {
         ],
         onSubmit: (values) => {
             try {
-                // Crée la chanson avec metadata uniquement
+                // Create the song with metadata only
                 const metadata = {
                     title: values.title || '',
                     artist: values.artist || 'Unknown Artist',
@@ -867,7 +867,7 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
     const isWebKit = /webkit/i.test(navigator.userAgent) && !/chrome/i.test(navigator.userAgent);
     
     if (isSafari || isWebKit) {
-        // Safari-specific method - utilise la fenêtre passée depuis le handler
+        // Safari-specific method - uses the window passed from the handler
         try {
             const newWindow = safariWin || window.open('', '_blank');
             if (newWindow) {
@@ -1051,8 +1051,8 @@ function importFromLRX(file) {
             // Import each song
             importData.songs.forEach((songData, index) => {
                 try {
-                    // Crée une instance SyncedLyrics pour chaque chanson importée
-                    // Utilise uniquement les champs racine du format exporté
+                    // Create a SyncedLyrics instance for each imported song
+                    // Use only root fields from the exported format
                     const syncedLyrics = new SyncedLyrics(
                        songData.title || `Imported ${index + 1}`,
                         songData.artist || 'Unknown',
@@ -1081,14 +1081,14 @@ function importFromLRX(file) {
                     });
                     syncedLyrics.audioPath = songData.audioPath;
                     syncedLyrics.syncData = songData.syncData;
-                    // Merge any extra metadata, mais NE PAS écraser title/artist/album
+                    // Merge any extra metadata, but DO NOT overwrite title/artist/album
                     syncedLyrics.metadata = Object.assign({}, syncedLyrics.metadata, songData.metadata || {}, {
                         audioPath: songData.audioPath,
                         title: syncedLyrics.title,
                         artist: syncedLyrics.artist,
                         album: syncedLyrics.album
                     });
-                    // Les champs racine sont déjà corrects
+                    // Root fields are already correct
                     // Log avant sauvegarde pour debug
                     console.log('[IMPORT DEBUG] Before save:', {
                         title: syncedLyrics.title,
@@ -1936,7 +1936,7 @@ function createMainInterface() {
     // Add audio controls section
     if (audioController) {
         // Check audio player controls setting state
-        // Par défaut, les contrôles audio sont masqués sauf si activés dans les paramètres
+        // By default, audio controls are hidden unless enabled in settings
         const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
         const initialDisplay = isAudioPlayerEnabled ? 'block' : 'none';
         
@@ -2703,7 +2703,7 @@ function displayTransportInfo(isPlaying, playheadPosition, sampleRate) {
     if (timecodeElement) {
         const seconds = (positionMs / 1000).toFixed(3);
         timecodeElement.textContent = `${seconds}s`; // Only show time, no icons
-        // Ne plus modifier la couleur de fond pour garder le style du thème
+        // No longer modify background color to keep theme style
     }
 }
 
