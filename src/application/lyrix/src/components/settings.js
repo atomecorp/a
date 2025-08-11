@@ -10,7 +10,6 @@ export function toggleAudioPlayerControls() {
     
     if (audioPlayer) {
         audioPlayer.style.display = showControls ? 'block' : 'none';
-        console.log('🎵 Audio player visibility:', showControls ? 'shown' : 'hidden');
     }
 }
 
@@ -20,7 +19,6 @@ export function toggleAudioSync() {
     
     if (window.audioController) {
         window.audioController.syncEnabled = enableSync;
-        console.log('🔄 Audio sync:', enableSync ? 'enabled' : 'disabled');
     }
 }
 
@@ -34,14 +32,12 @@ export function toggleMidiInspector() {
         } else {
             window.midiUtilities.inspector.hide();
         }
-        console.log('🎹 MIDI inspector:', showInspector ? 'shown' : 'hidden');
     }
 }
 
 // Start MIDI learn for settings function
 export function startMidiLearnForSetting(settingName, inputElement, buttonElement) {
     if (!window.midiUtilities) {
-        console.error('❌ MIDI utilities not available');
         return;
     }
 
@@ -51,16 +47,13 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
         buttonElement.style.backgroundColor = '#f0f8ff';
         buttonElement.style.color = '#007acc';
         buttonElement.textContent = '🎹';
-        console.log('🎹 MIDI learn stopped');
     } else {
         // Start learning
         buttonElement.style.backgroundColor = '#ff6b6b';
         buttonElement.style.color = 'white';
         buttonElement.textContent = '⏹️';
-        console.log(`🎹 MIDI learn started for setting: ${settingName}`);
         
         window.midiUtilities.startMidiLearn((midiNote) => {
-            console.log(`🎹 MIDI learn callback triggered with note: ${midiNote} for setting: ${settingName}`);
             // Remove any existing assignment for this setting
             window.midiUtilities.removeMidiSpecialAssignment(settingName);
             // Set new special assignment for settings
@@ -71,14 +64,12 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
             buttonElement.style.backgroundColor = '#f0f8ff';
             buttonElement.style.color = '#007acc';
             buttonElement.textContent = '🎹';
-            console.log(`🎹 MIDI learn completed: Note ${midiNote} -> Setting ${settingName}`);
         });
     }
 }
 
 // Show settings modal
 export function showSettingsModal() {
-    console.log('⚙️ Opening settings...');
     
     const modalContainer = window.UIManager.createEnhancedModalOverlay();
     const modal = window.UIManager.createEnhancedModalContainer({
@@ -210,10 +201,7 @@ export function showSettingsModal() {
         let currentMidiNote = null;
         if (window.midiUtilities && window.midiUtilities.getMidiSpecialAssignment) {
             currentMidiNote = window.midiUtilities.getMidiSpecialAssignment(settingKey);
-            console.log(`🎹 Loading MIDI special assignment for ${settingKey}: ${currentMidiNote}`);
-            console.log(`🔍 All special assignments:`, window.midiUtilities.getAllSpecialAssignments());
         } else {
-            console.warn('⚠️ MIDI utilities not available or getMidiSpecialAssignment method missing');
         }
 
         const midiInput = window.$('input', {
@@ -241,8 +229,6 @@ export function showSettingsModal() {
         // Store setting key as data attribute for later reference
         midiInput.setAttribute('data-setting-key', settingKey);
 
-        console.log(`🔍 Input created for ${settingKey} with value: "${currentMidiNote || ''}" (raw: ${currentMidiNote})`);
-        console.log(`🔍 Input element value:`, midiInput.value);
 
         const midiLearnButton = window.$('button', {
             text: '🎹',
@@ -276,11 +262,9 @@ export function showSettingsModal() {
                 window.midiUtilities.removeMidiSpecialAssignment(settingKey);
                 // Set new special assignment
                 window.midiUtilities.setMidiSpecialAssignment(settingKey, midiNote);
-                console.log(`🎹 Manual MIDI special assignment: Note ${midiNote} -> Setting ${settingKey}`);
             } else if (window.midiUtilities && e.target.value === '') {
                 // Remove assignment if input is cleared
                 window.midiUtilities.removeMidiSpecialAssignment(settingKey);
-                console.log(`🎹 MIDI special assignment removed for setting: ${settingKey}`);
             }
         });
 
@@ -307,7 +291,6 @@ export function showSettingsModal() {
             if (window.midiUtilities) {
                 window.midiUtilities.removeMidiSpecialAssignment(settingKey);
                 midiInput.value = '';
-                console.log(`🎹 MIDI special assignment cleared for setting: ${settingKey}`);
             }
         });
 
@@ -369,7 +352,6 @@ export function showSettingsModal() {
         toggle.addEventListener('change', (e) => {
             localStorage.setItem(storageKey, e.target.checked);
             if (onToggle) onToggle();
-            console.log(`⚙️ Setting ${storageKey}: ${e.target.checked}`);
         });
 
         row.append(leftColumn, toggle);
@@ -466,7 +448,6 @@ export function showSettingsModal() {
         if (window.audioController && window.audioController.updateTimecodeDisplay) {
             window.audioController.updateTimecodeDisplay();
         }
-        console.log(`⚙️ Timecode display: ${e.target.checked}`);
     });
 
     timecodeContainer.append(timecodeLeftColumn, timecodeToggle);
@@ -658,7 +639,6 @@ export function showSettingsModal() {
         if (lyricsContainer) {
             lyricsContainer.style.fontSize = `${size}px`;
         }
-        console.log(`📝 Font size changed to: ${size}px`);
     });
 
     fontControls.append(fontSizeSlider, fontSizeValue);
@@ -708,7 +688,6 @@ export function showSettingsModal() {
                 onConfirm: () => {
                     if (window.midiUtilities) {
                         window.midiUtilities.clearAllAssignments();
-                        console.log('🎹 All MIDI assignments cleared');
                         // Refresh the modal to update the display
                         document.body.removeChild(modalContainer);
                         showSettingsModal();
@@ -792,7 +771,6 @@ export class SettingsManager {
             const slider = document.getElementById('font-size-slider');
             if (slider) slider.value = size;
             
-            console.log('✅ Font size changed to', size + 'px');
             return true;
         }
         return false;
@@ -812,7 +790,6 @@ export class SettingsManager {
     // Reset settings to defaults
     static resetToDefaults() {
         this.setFontSize(CONSTANTS.UI.DEFAULT_FONT_SIZE);
-        console.log('🔄 Settings reset to defaults');
     }
 }
 
