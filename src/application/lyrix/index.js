@@ -5060,5 +5060,4 @@ export {
     CONSTANTS
 };
 
-// console.log('🎵 Lyrix module initialized');
-// Lyrix module loaded
+
