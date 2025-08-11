@@ -81,10 +81,8 @@ export class SyncedLyrics {
     
     // Clear all timecodes (reset for new recording)
     clearAllTimecodes() {
-        console.log(`🗑️ Starting clearAllTimecodes() - found ${this.lines?.length || 0} lines`);
         
         if (!this.lines || this.lines.length === 0) {
-            console.warn('⚠️ No lines found to clear timecodes from');
             return false;
         }
         
@@ -108,13 +106,11 @@ export class SyncedLyrics {
                 
                 if (originalText !== line.text) {
                     textCleanedCount++;
-                    console.log(`🧹 Line ${index + 1}: "${originalText}" → "${line.text}"`);
                 }
             }
         });
         
         this.updateLastModified();
-        console.log(`✨ All timecodes cleared - ${clearedCount} timecodes cleared, ${textCleanedCount} texts cleaned, ${this.lines.length} lines total`);
         return true;
     }
     
@@ -124,7 +120,6 @@ export class SyncedLyrics {
             line.time = index * intervalMs;
         });
         this.updateLastModified();
-        console.log(`🔄 Timecodes reset with ${intervalMs}ms interval`);
     }
     
     // Emergency cleaning function for corrupted texts
@@ -144,7 +139,6 @@ export class SyncedLyrics {
         
         if (cleanedCount > 0) {
             this.updateLastModified();
-            console.log(`🧹 Emergency cleaning performed - ${cleanedCount} lines repaired`);
         }
         
         return cleanedCount;
@@ -156,7 +150,6 @@ export class SyncedLyrics {
             // Use -1 to mark as unsynchronized
             this.lines[lineIndex].time = -1;
             this.updateLastModified();
-            console.log(`❌ Timecode cleared for line ${lineIndex + 1}`);
         }
     }
     
@@ -190,7 +183,6 @@ export class SyncedLyrics {
         
         // Log migration if old format was detected
         if (audioPath !== cleanFileName) {
-            console.log('🔧 Migrated audioPath from old format:', audioPath, '→', cleanFileName);
         }
         
         this.updateLastModified();
@@ -249,7 +241,6 @@ export class SyncedLyrics {
             localStorage.setItem(storageKey, JSON.stringify(this));
             return storageKey;
         } catch (error) {
-            console.error('❌ Save error:', error);
             return null;
         }
     }
@@ -276,7 +267,6 @@ export class SyncedLyrics {
             lyrics.album = parsed.metadata.album;
             return lyrics;
         } catch (error) {
-            console.error('❌ Load error:', error);
             return null;
         }
     }
