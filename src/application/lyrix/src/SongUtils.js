@@ -1,4 +1,4 @@
-// Utility to generate LRX export with lyrics and timecodes
+// Utility to generate LRX exp with lyrics and timecodes
 export function exportSongsToLRX(songSummaries, lyricsLibrary) {
   return {
     version: "1.0",

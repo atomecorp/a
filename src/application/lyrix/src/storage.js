@@ -6,8 +6,7 @@ export class StorageManager {
     // Font size management
     static saveFontSize(size) {
         try {
-            localStorage.setItem(CONSTANTS.STORAGE.FONT_SIZE, size.toString());
-            // console.log('💾 Font size saved:', size + 'px');
+            localStorage.setItem('lyrix_font_size', size.toString());
         } catch (error) {
             console.warn('⚠️ Error saving font size:', error);
         }
@@ -31,14 +30,7 @@ export class StorageManager {
     // Last song management
     static saveLastSong(songData) {
         try {
-            const data = {
-                id: songData.id || songData.songId,
-                title: songData.title,
-                artist: songData.artist,
-                timestamp: Date.now()
-            };
-            localStorage.setItem(CONSTANTS.STORAGE.LAST_SONG, JSON.stringify(data));
-            // console.log('💾 Last song saved:', data.title);
+            localStorage.setItem('lyrix_last_song', JSON.stringify(data));
         } catch (error) {
             console.warn('⚠️ Error saving last song:', error);
         }
@@ -60,8 +52,7 @@ export class StorageManager {
     // Library settings
     static saveLibrarySettings(settings) {
         try {
-            localStorage.setItem(CONSTANTS.STORAGE.SETTINGS_KEY, JSON.stringify(settings));
-            // console.log('💾 Library settings saved');
+            localStorage.setItem('lyrix_library_settings', JSON.stringify(settings));
         } catch (error) {
             console.error('❌ Error saving library settings:', error);
         }
@@ -72,7 +63,6 @@ export class StorageManager {
             const settings = localStorage.getItem(CONSTANTS.STORAGE.SETTINGS_KEY);
             if (settings) {
                 const parsed = JSON.parse(settings);
-                // console.log('📋 Library settings loaded:', parsed);
                 return parsed;
             }
         } catch (error) {
@@ -110,7 +100,6 @@ export class StorageManager {
         const storageKey = CONSTANTS.STORAGE.LIBRARY_PREFIX + songId;
         try {
             localStorage.setItem(storageKey, JSON.stringify(songData));
-            // console.log('✅ Song saved:', songData.metadata.title, 'with ID:', songId);
             return storageKey;
         } catch (error) {
             console.error('❌ Error saving song:', error);

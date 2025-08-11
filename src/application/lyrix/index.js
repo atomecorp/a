@@ -43,17 +43,6 @@ startupLog('📱 Platform: ' + ((/iPad|iPhone|iPod/.test(navigator.userAgent)) ?
 startupLog('🕐 Time: ' + new Date().toISOString());
 startupLog('===============================================');
 
-// Force immediate test log for debugging
-if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    // Multiple attempts to ensure logging works
-    setTimeout(() => startupLog('🔥 TEST 1: Atome app loaded successfully!'), 100);
-    setTimeout(() => startupLog('🔥 TEST 2: iOS logging system working!'), 500);
-    setTimeout(() => startupLog('🔥 TEST 3: Ready for .lrx import!'), 1000);
-    
-    // Also try direct console.log fallback
-    setTimeout(() => console.log('⚛️ ATOME-APP: 🔥 FALLBACK TEST: Direct console log'), 200);
-}
-
 // Import all modules
 import { CONSTANTS } from './src/constants.js';
 import { StorageManager } from './src/storage.js';
@@ -72,7 +61,6 @@ import { exportSongsToLRX } from './src/SongUtils.js';
 // iOS Error Handling Setup
 // Handle iOS thumbnail and view service termination errors globally
 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-   // console.log('🍎 iOS detected - Setting up global error handling for thumbnail/view service issues');
     
     // Function to check if error is related to iOS thumbnail/view service issues
     const isIOSSystemError = (error) => {
@@ -825,13 +813,11 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
     }
 
     const songs = lyricsLibrary.getAllSongs();
-   // console.log('🔍 Found songs:', songs.length);
     if (songs.length === 0) {
         console.warn('❌ No songs available to export');
         return;
     }
 
-   // ('🔍 Creating export data...');
     // Create export data structure
     const exportData = {
         version: '1.0',
@@ -971,29 +957,23 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         
         // Add to document, click, and remove
         document.body.appendChild(saveLink);
-      //  console.log('🔍 Link added to document, triggering click...');
         
         try {
             saveLink.click();
-            console.log('🔍 Click triggered');
         } catch (e) {
-            console.log('🔍 Click failed, trying dispatchEvent:', e);
             const clickEvent = new MouseEvent('click', {
                 view: window,
                 bubbles: true,
                 cancelable: false
             });
             saveLink.dispatchEvent(clickEvent);
-            console.log('🔍 DispatchEvent triggered');
         }
         
         document.body.removeChild(saveLink);
-        console.log('🔍 Link removed from document');
         
         // Clean up the object URL
         setTimeout(() => {
             URL.revokeObjectURL(url);
-            console.log('🔍 Object URL revoked');
         }, 100);
     }
     
@@ -1159,53 +1139,6 @@ function exportSelectedSongsAsText() {
         song: song,
         selected: false
     }));
-
-    // // Create custom modal with checkboxes
-    // const modalContainer = UIManager.createEnhancedModalOverlay();
-    // const modal = UIManager.createEnhancedModalContainer({
-    //     css: { maxWidth: '600px', width: '90%' }
-    // });
-
-    // // Header
-    // const header = UIManager.createModalHeader({});
-    // const headerTitle = $('h3', {
-    //     id: 'export-songs-header1',
-    //     text: '📄 Select Songs to Export as Text',
-    //     css: { margin: '0', color: 'white' }
-    // });
-    // header.appendChild(headerTitle);
-
-    // // Content
-    // const content = UIManager.createModalContent({});
-    
-    // const selectAllContainer = $('div', {
-    //     css: {
-    //         marginBottom: '15px',
-    //         padding: '10px',
-    //         backgroundColor: UIManager.THEME.colors.background,
-    //         borderRadius: '4px'
-    //     }
-    // });
-
-    // const selectAllCheckbox = $('input', {
-    //     type: 'checkbox',
-    //     id: 'select-all-songs'
-    // });
-
-    // const selectAllLabel = $('label', {
-    //     text: ' Select/Deselect All',
-    //     css: { marginLeft: '8px', cursor: 'pointer' }
-    // });
-
-    // selectAllLabel.addEventListener('click', () => {
-    //     const checkboxes = modal.querySelectorAll('input[type="checkbox"]:not(#select-all-songs)');
-    //     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    //     checkboxes.forEach(cb => cb.checked = !allChecked);
-    //     selectAllCheckbox.checked = !allChecked;
-    // });
-
-    // selectAllContainer.append(selectAllCheckbox, selectAllLabel);
-    // content.appendChild(selectAllContainer);
 
     // Song list
     const listContainer = UIManager.createListContainer({});

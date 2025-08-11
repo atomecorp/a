@@ -17,7 +17,6 @@ export class MidiUtilities {
 
     // Initialize the MIDI display container
     setupMidiDisplay() {
-       // console.log('🎵 Initializing MIDI display...');
         
         // Check MIDI inspector mode state
         const isMidiInspectorEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
@@ -45,8 +44,6 @@ export class MidiUtilities {
         
         // Add data attribute for identification
         this.midiContainer.setAttribute('data-element', 'midi-logger');
-
-        //console.log('✅ MIDI container created:', this.midiContainer);
 
         // Add title
         const midiTitle = $('div', {
@@ -144,13 +141,6 @@ export class MidiUtilities {
         // Insert the MIDI display below the timecode
         // this.insertMidiDisplay();
     }
-
-    // Insert MIDI display (now will be moved to lyrics toolbar)
-    // insertMidiDisplay() {
-    //     // MIDI container will be moved to lyrics toolbar by display.js
-    //     // No need to insert into left panel since it's been removed
-    //     console.log('🎵 MIDI container ready for toolbar integration');
-    // }
 
     // Parse and format MIDI message
     formatMidiMessage(data1, data2, data3, timestamp = null) {
