@@ -223,7 +223,6 @@ export class LyricsDisplay {
                 if (window.navigateToPreviousSong) {
                     window.navigateToPreviousSong();
                 } else {
-                    console.error('❌ navigateToPreviousSong function not available');
                 }
             },
             title: 'Previous Song'
@@ -235,7 +234,6 @@ export class LyricsDisplay {
                 if (window.navigateToNextSong) {
                     window.navigateToNextSong();
                 } else {
-                    console.error('❌ navigateToNextSong function not available');
                 }
             },
             title: 'Next Song'
@@ -898,11 +896,9 @@ export class LyricsDisplay {
                 // Use the audio path directly since AudioManager.normalize() is called in loadAudio()
                 const success = this.audioController.loadAudio(audioPath);
                 if (!success) {
-                    console.error('❌ Failed to initiate audio loading for:', audioPath);
                 }
             } else if (hasCurrentAudio) {
             } else {
-                console.error('❌ AudioController not available or loadAudio method missing');
             }
         }
     }
@@ -2705,7 +2701,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                         if (correctionsMade > 0) {
                         }
                     } else {
-                        console.error(`❌ Failed to save touch-edited timecode for line ${lineIndex + 1}`);
                     }
                     
                     // Update the original timeSpan with the final time (after all corrections)
@@ -3573,7 +3568,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
 
             return null;
         } catch (error) {
-            console.error(`❌ Error finding text span for line ${lineIndex}:`, error);
             return null;
         }
     }
@@ -3606,7 +3600,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 }
             });
         } catch (error) {
-            console.error('❌ Error updating visible timecode displays:', error);
         }
     }
 }
