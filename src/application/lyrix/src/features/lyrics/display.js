@@ -383,36 +383,17 @@ export class LyricsDisplay {
         
         // Add audio buttons after font size container (play button, then stop button)
         if (this.audioButtons && this.audioButtons.length > 0) {
-            console.log('🎵 Adding audio buttons to main toolbar:', this.audioButtons.length);
-            console.log('🎵 Audio buttons details:', this.audioButtons.map(btn => ({
-                id: btn.id,
-                className: btn.className,
-                style: btn.style.cssText,
-                visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
-                parent: btn.parentElement?.id
-            })));
+    
             mainToolElements.push(...this.audioButtons);
         } else {
-            console.log('🎵 No audio buttons to add to toolbar');
         }
-        
-        console.log('🔧 Final mainToolElements:', mainToolElements.length, 'elements');
         
         mainToolRow.append(...mainToolElements);
         
         // Debug: Check if audio buttons are actually in the toolbar after appending
         setTimeout(() => {
             const buttonsInToolbar = mainToolRow.querySelectorAll('button');
-            console.log('🔧 Buttons found in toolbar:');
-            buttonsInToolbar.forEach((btn, index) => {
-                console.log(`  Button ${index}:`, {
-                    id: btn.id,
-                    text: btn.textContent,
-                    visible: btn.offsetWidth > 0 && btn.offsetHeight > 0,
-                    display: window.getComputedStyle(btn).display,
-                    visibility: window.getComputedStyle(btn).visibility
-                });
-            });
+        
         }, 100);
         
         // Create audio tools row (will be hidden by default)
@@ -920,7 +901,6 @@ export class LyricsDisplay {
                     console.error('❌ Failed to initiate audio loading for:', audioPath);
                 }
             } else if (hasCurrentAudio) {
-                // console.log('🎵 Audio already loaded, skipping auto-load');
             } else {
                 console.error('❌ AudioController not available or loadAudio method missing');
             }
@@ -1216,7 +1196,6 @@ export class LyricsDisplay {
                 if (this.recordMode) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('⚠️ Timecode editing is disabled in record mode');
                     return;
                 }
                 
@@ -1236,11 +1215,7 @@ export class LyricsDisplay {
                     
                     // Save to localStorage when drag is complete
                     const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                    if (saveSuccess) {
-                        console.log(`✅ Touch-adjusted timecode for line ${index + 1} saved successfully`);
-                    } else {
-                        console.error(`❌ Failed to save touch-adjusted timecode for line ${index + 1}`);
-                    }
+                 
                 } else {
                     // Handle double-tap detection for iOS
                     if (!timeSpan._lastTapTime) {
@@ -1249,7 +1224,6 @@ export class LyricsDisplay {
                         const timeBetweenTaps = currentTime - timeSpan._lastTapTime;
                         if (timeBetweenTaps < 300) { // 300ms for double-tap
                             // Double-tap detected - open edit modal
-                            console.log('📱 Double-tap detected on iOS timecode');
                             this.editTimecodeTouch(index, timeSpan);
                             timeSpan._lastTapTime = 0; // Reset
                         } else {
@@ -1270,7 +1244,6 @@ export class LyricsDisplay {
                 // Block timecode editing in record mode
                 if (this.recordMode) {
                     e.stopPropagation();
-                    console.log('⚠️ Timecode editing is disabled in record mode');
                     return;
                 }
                 
@@ -1288,7 +1261,6 @@ export class LyricsDisplay {
                     if (this.recordMode) {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('⚠️ Timecode editing is disabled in record mode');
                         return;
                     }
                     
@@ -1320,7 +1292,6 @@ export class LyricsDisplay {
                 // Block timecode dragging in record mode
                 if (this.recordMode) {
                     e.preventDefault();
-                    console.log('⚠️ Timecode dragging is disabled in record mode');
                     return;
                 }
                 
@@ -1360,11 +1331,7 @@ export class LyricsDisplay {
                     
                     // Save to localStorage when drag is complete
                     const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                    if (saveSuccess) {
-                        console.log(`✅ Drag-adjusted timecode for line ${index + 1} saved to localStorage successfully`);
-                    } else {
-                        console.error(`❌ Failed to save drag-adjusted timecode for line ${index + 1} to localStorage`);
-                    }
+                 
                 }
             });
             
@@ -1458,11 +1425,7 @@ export class LyricsDisplay {
                 
                 // Save to localStorage when recording timecode in record mode
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                if (saveSuccess) {
-                    console.log(`✅ Record mode timecode for line ${index + 1} saved to localStorage successfully`);
-                } else {
-                    console.error(`❌ Failed to save record mode timecode for line ${index + 1} to localStorage`);
-                }
+               
                 
                 if (typeof window.updateTimecodeDisplay === 'function') {
                     window.updateTimecodeDisplay(timecodeMs);
@@ -1470,7 +1433,6 @@ export class LyricsDisplay {
                 if (this.showTimecodes) {
                     this.renderLyrics();
                 }
-                // console.log(`🔴 RECORD: Assigned timecode ${this.formatTimeDisplay(timecodeMs)} to line ${index + 1}: "${line.text}"`);
             } else {
                 // NORMAL MODE: Seek to timecode if available and audio controller exists
                 if (line.time >= 0 && this.audioController) {
@@ -1486,11 +1448,8 @@ export class LyricsDisplay {
                         this.audioController.emit('timeupdate', timeInSeconds);
                     }
                     
-                    // console.log(`🎯 Seeking to line ${index + 1} at ${this.formatTimeDisplay(line.time)}`);
                 } else if (line.time < 0) {
-                    // console.log(`📍 Selected line ${index + 1} (no timecode)`);
                 } else {
-                    // console.log(`📍 Selected line ${index + 1} (no audio controller)`);
                 }
             }
         });
@@ -1573,11 +1532,7 @@ export class LyricsDisplay {
                         
                         // Save to localStorage when recording timecode in record mode (touch)
                         const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                        if (saveSuccess) {
-                            console.log(`✅ Touch record mode timecode for line ${index + 1} saved to localStorage successfully`);
-                        } else {
-                            console.error(`❌ Failed to save touch record mode timecode for line ${index + 1} to localStorage`);
-                        }
+                      
                         
                         // Re-render to show the new timecode (if timecodes are visible)
                         if (this.showTimecodes) {
@@ -1612,7 +1567,6 @@ export class LyricsDisplay {
             }
             
             e.stopPropagation();
-            // console.log(`🖱️ Double-click detected on line ${index + 1}, calling editLineText`);
             this.editLineText(index, textSpan);
         });
         
@@ -1652,14 +1606,12 @@ export class LyricsDisplay {
         
         // Update if this is the first time or if line changed
         if (lineIndex !== this.currentLineIndex || this.currentLineIndex === -1) {
-            // console.log('🎵 Switching to line:', lineIndex, '(from:', this.currentLineIndex + ')');
             this.setActiveLineIndex(lineIndex);
         }
     }
     
     // Set active line index
     setActiveLineIndex(index) {
-        // console.log('🎯 setActiveLineIndex called with:', index, 'previous:', this.currentLineIndex);
         
         // Remove previous highlight
         if (this.currentLineIndex >= 0) {
@@ -1671,7 +1623,6 @@ export class LyricsDisplay {
             }
             
             if (prevElement) {
-                // console.log('🎯 Removing highlight from previous line:', this.currentLineIndex);
                 prevElement.style.backgroundColor = 'transparent';
                 prevElement.style.border = '1px solid transparent';
                 prevElement.style.transform = 'scale(1)';
@@ -1692,34 +1643,26 @@ export class LyricsDisplay {
             }
             
             if (element) {
-                // console.log('🎯 Applying highlight to new line:', index);
                 element.style.backgroundColor = 'red';
                 element.style.color = 'black';
-                // element.style.border = '2px solid #ffc107';
                 element.style.transform = 'scale(1.05)';
                 element.style.fontWeight = 'bold';
                 element.style.transition = 'all 0.3s ease';
                 
-                // console.log('🎯 Scrolling to active line');
                 // Auto-scroll to active line
                 element.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center'
                 });
             } else {
-                // console.log('❌ Could not find element for index:', index);
             }
         }
     }
     
     // Create bulk edit interface
     createBulkEditInterface(container) {
-        // console.log('🎯 createBulkEditInterface called');
-        // console.log('🎯 currentLyrics:', this.currentLyrics);
-        // console.log('🎯 currentLyrics.lines:', this.currentLyrics?.lines);
         
         if (!this.currentLyrics || !this.currentLyrics.lines) {
-            // console.log('❌ No currentLyrics or lines available for editing');
             container.innerHTML = '<div style="color: red; padding: 20px;">Error: No lyrics data available for editing</div>';
             return;
         }
@@ -1732,7 +1675,6 @@ export class LyricsDisplay {
         
         // Create textarea with all lyrics text
         const lyricsText = this.currentLyrics.lines.map(line => line.text).join('\n');
-        // console.log('🎯 lyricsText to display:', lyricsText);
         
         // Create textarea using DOM directly to ensure compatibility
         const editArea = document.createElement('textarea');
@@ -1753,8 +1695,6 @@ export class LyricsDisplay {
             outline: none;
         `;
         
-        // console.log('🎯 editArea created:', editArea);
-        // console.log('🎯 editArea.value:', editArea.value);
         
         container.appendChild(editArea);
         
@@ -1768,15 +1708,13 @@ export class LyricsDisplay {
     
     // Toggle edit mode
     toggleEditMode() {
-        // console.log('🎯 toggleEditMode called, current editMode:', this.editMode);
         // If exiting edit mode, apply changes
         if (this.editMode) {
-            // console.log('🎯 Exiting edit mode, applying changes');
             if (this.originalLinesBackup) {
                 this.applyBulkEditChanges();
             }
         } else {
-            // console.log('🎯 Entering edit mode');
+            // log('🎯 Entering edit mode');
         }
         this.editMode = !this.editMode;
         // Keep icon, only change color (uses theme colors)
@@ -1791,7 +1729,6 @@ export class LyricsDisplay {
                 this.cancelEditButton.style.display = 'none';
             }
         }
-        // console.log('🎯 New editMode:', this.editMode, 'calling renderLyrics');
         this.renderLyrics();
         // Synchronize input values with metadata on each entry in edit mode
         if (this.editMode) {
@@ -1849,15 +1786,12 @@ export class LyricsDisplay {
         // Save to storage using the correct method
         const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
         if (saveSuccess) {
-            // console.log('✅ Lyrics saved successfully');
         } else {
-            // console.error('❌ Failed to save lyrics');
         }
         
         // Clear backup
         this.originalLinesBackup = null;
         
-        // console.log('✅ Bulk edit changes applied');
     }
     
     // Toggle record mode
@@ -1870,14 +1804,11 @@ export class LyricsDisplay {
         this.recordButton.dataset.originalBgColor = newColor;
         
         if (this.recordMode) {
-            // console.log('🔴 Record mode: ON - Click lines to assign current audio time as timecode');
-            // console.log('🔴 Auto-scroll disabled, line seeking disabled');
             
             // Store original lines for saving later
             this.originalLinesForRecord = this.currentLyrics ? 
                 JSON.parse(JSON.stringify(this.currentLyrics.lines)) : null;
         } else {
-            // console.log('⏹️ Record mode: OFF - Saving recorded timecodes and restoring normal behavior');
             
             // Save all recorded timecodes when exiting record mode
             if (this.currentLyrics && this.originalLinesForRecord) {
@@ -1903,7 +1834,6 @@ export class LyricsDisplay {
                 this.applyModeStyles(this.fullscreenMode);
             }
             
-            console.log(`🎨 Updated ${mode} styles:`, this.originalStyles[mode]);
         }
     }
     
@@ -2008,7 +1938,6 @@ export class LyricsDisplay {
             this.applyModeStyles(false);
         }
         
-        console.log(`🖼️ Fullscreen mode: ${this.fullscreenMode ? 'ON' : 'OFF'}`);
         
         // Re-render lyrics to update timecode visibility based on fullscreen state
         if (this.currentLyrics) {
@@ -2044,7 +1973,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             this.audioToolRow.style.transition = 'all 0.3s ease';
         }
         
-        console.log(`🍔 Toolbar ${this.toolbarVisible ? 'shown' : 'hidden'}`);
     }
     
     // Update toolbar visibility without toggling (for initialization)
@@ -2071,7 +1999,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             this.hamburgerButton.textContent = this.toolbarVisible ? '✕' : '☰';
         }
         
-        console.log(`🍔 Toolbar initialized as ${this.toolbarVisible ? 'shown' : 'hidden'}`);
     }
     
     // Toggle timecode display
@@ -2087,7 +2014,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         // Re-render lyrics to show/hide timecodes
         this.renderLyrics();
         
-        console.log(`⏱️ Timecode display: ${this.showTimecodes ? 'ON' : 'OFF'}`);
     }
     
     // Update timecode button appearance based on current state
@@ -2113,7 +2039,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         // Update title visibility
         this.updateTitleVisibility();
         
-        console.log(`📄 Title display: ${this.showTitle ? 'ON' : 'OFF'}`);
     }
     
     // Toggle artist visibility
@@ -2126,7 +2051,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         // Update artist visibility
         this.updateArtistVisibility();
         
-        console.log(`� Artist display: ${this.showArtist ? 'ON' : 'OFF'}`);
     }
     
     // Update title visibility
@@ -2177,24 +2101,14 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         this.updateTitleVisibility();
         this.updateArtistVisibility();
         
-        console.log(`📄 Metadata display: Title ${this.showTitle ? 'ON' : 'OFF'}, Artist ${this.showArtist ? 'ON' : 'OFF'}`);
     }
     
     // Show timecode options panel (DEPRECATED - moved to settings panel)
-    /* 
-    showTimecodeOptionsPanel() {
-        // This method has been moved to the settings panel
-        // Timecode options are now available in Settings > Timecode Options
-        console.log('⚠️ showTimecodeOptionsPanel is deprecated - use settings panel instead');
-    }
-    */
+   
     
     // Confirm clearing all timecodes
     confirmClearAllTimecodes() {
-        if (!this.currentLyrics) {
-            console.log('❌ No lyrics loaded');
-            return;
-        }
+        
         
         // Import the UI manager for confirmation dialog
         import('./ui.js').then(({ UIManager }) => {
@@ -2205,10 +2119,8 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                     // Clear all timecodes
                     this.currentLyrics.clearAllTimecodes();
                     this.renderLyrics(); // Re-render to update display
-                    console.log('🗑️ All timecodes cleared');
                 },
                 () => {
-                    console.log('❌ Clear timecodes cancelled');
                 }
             );
         });
@@ -2223,12 +2135,10 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         this.fontSizeLabel.textContent = `${this.fontSize}px`;
         StorageManager.saveFontSize(this.fontSize);
-        console.log(`🔤 Font size: ${this.fontSize}px`);
     }
     
     // Edit font size directly by typing
     editFontSizeDirectly() {
-        console.log('🖱️ Double-click detected on font size label, opening editor');
         
         // Get current value without "px" suffix
         const currentValue = this.fontSize.toString();
@@ -2252,7 +2162,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             fontFamily: inherit;
         `;
         
-        console.log(`📝 Input created with value: ${input.value}`);
         
         // Replace the label with input temporarily
         this.fontSizeLabel.style.display = 'none';
@@ -2264,7 +2173,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             const newSize = parseInt(input.value, 10);
             
             if (isNaN(newSize) || newSize < CONSTANTS.UI.MIN_FONT_SIZE || newSize > CONSTANTS.UI.MAX_FONT_SIZE) {
-                console.warn('⚠️ Invalid font size, keeping original value');
                 // Keep original value
             } else if (newSize !== this.fontSize) {
                 // Apply new font size
@@ -2275,7 +2183,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 
                 this.fontSizeLabel.textContent = `${this.fontSize}px`;
                 StorageManager.saveFontSize(this.fontSize);
-                console.log(`✏️ Font size updated to: ${this.fontSize}px`);
             }
             
             // Restore the label
@@ -2287,7 +2194,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             // Restore the label without changes
             input.parentNode.removeChild(input);
             this.fontSizeLabel.style.display = 'inline-block';
-            console.log('❌ Font size edit cancelled');
         };
         
         // Save on Enter, cancel on Escape
@@ -2316,7 +2222,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         // Block timecode editing in record mode
         if (this.recordMode) {
-            console.log('⚠️ Timecode editing is blocked in record mode');
             return;
         }
         
@@ -2426,13 +2331,8 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             
             // Save to localStorage using the same method as the save button
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log(`✅ Drag-adjusted timecode for line ${lineIndex + 1} saved to localStorage successfully`);
-            } else {
-                console.error(`❌ Failed to save drag-adjusted timecode for line ${lineIndex + 1} to localStorage`);
-            }
+          
             
-            console.log(`🎯 Timecode adjusted via drag: ${this.formatTimeDisplay(this.currentLyrics.lines[lineIndex].time)}`);
         };
         
         // Add mouse event listeners to input
@@ -2455,16 +2355,10 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 
                 // Save to localStorage using the same method as the save button
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                if (saveSuccess) {
-                    console.log(`✅ Timecode for line ${lineIndex + 1} saved to localStorage successfully`);
-                } else {
-                    console.error(`❌ Failed to save timecode for line ${lineIndex + 1} to localStorage`);
-                }
+              
                 
                 timeSpan.textContent = this.formatTimeDisplay(finalTime);
-                console.log(`✏️ Updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(finalTime)}`);
             } else {
-                console.warn('⚠️ Invalid time format, keeping original value');
             }
             
             // Clean up mouse event listeners
@@ -2507,7 +2401,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         // Block timecode editing in record mode
         if (this.recordMode) {
-            console.log('⚠️ Timecode editing is blocked in record mode');
             return;
         }
         
@@ -2808,9 +2701,8 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                     // Save to localStorage
                     const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                     if (saveSuccess) {
-                        console.log(`✅ Touch-edited timecode for line ${lineIndex + 1} saved successfully`);
+                        log(`✅ Touch-edited timecode for line ${lineIndex + 1} saved successfully`);
                         if (correctionsMade > 0) {
-                            console.log(`🔧 ${correctionsMade} additional corrections were applied to maintain timecode order`);
                         }
                     } else {
                         console.error(`❌ Failed to save touch-edited timecode for line ${lineIndex + 1}`);
@@ -2818,14 +2710,10 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                     
                     // Update the original timeSpan with the final time (after all corrections)
                     timeSpan.textContent = this.formatTimeDisplay(finalTime);
-                    console.log(`✏️ Touch-updated timecode for line ${lineIndex + 1}: ${this.formatTimeDisplay(finalTime)}`);
                     
                     // If corrections were made, show a brief notification
-                    if (correctionsMade > 0) {
-                        console.log(`📢 iOS Timecode correction: Line ${lineIndex + 1} and ${correctionsMade} subsequent line(s) were adjusted to maintain order`);
-                    }
+                  
                 } else {
-                    console.warn('⚠️ Invalid time format, keeping original value');
                     this.currentLyrics.lines[lineIndex].time = currentTime;
                 }
                 
@@ -2894,7 +2782,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
     
     // Edit line text via double-click
     editLineText(lineIndex, textSpan) {
-        console.log(`🖱️ editLineText called for line ${lineIndex + 1}`);
         
         // Lock line editing during record mode
         if (this.recordMode) {
@@ -2902,12 +2789,10 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         }
         
         if (!this.currentLyrics) {
-            console.log('❌ No currentLyrics in editLineText');
             return;
         }
         
         const currentText = this.currentLyrics.lines[lineIndex].text;
-        console.log(`📝 Current text: "${currentText}"`);
         
         // Auto-assign timecode if line has no timecode
         const currentLine = this.currentLyrics.lines[lineIndex];
@@ -2930,9 +2815,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 // Save to localStorage
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 if (saveSuccess) {
-                    console.log(`⏰ Auto-assigned timecode ${this.formatTimeDisplay(newTimecode)} to line ${lineIndex + 1} (previous + 1s)`);
                 } else {
-                    console.error(`❌ Failed to save auto-assigned timecode for line ${lineIndex + 1}`);
                 }
                 
                 // Trigger timecode verification to ensure chronological order
@@ -2951,7 +2834,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                     return;
                 }
             } else {
-                console.log(`⏰ No previous timecode found for line ${lineIndex + 1}, proceeding without auto-assignment`);
             }
         }
         
@@ -3009,7 +2891,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         editContainer.appendChild(input);
         editContainer.appendChild(deleteButton);
         
-        console.log(`📝 Input created with value: "${input.value}"`);
         
         // Replace the text span with edit container temporarily
         textSpan.style.display = 'none';
@@ -3028,14 +2909,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 
                 // Save to localStorage using the same method as the save button
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                if (saveSuccess) {
-                    console.log(`✅ Line ${lineIndex + 1} saved to localStorage successfully`);
-                } else {
-                    console.error(`❌ Failed to save line ${lineIndex + 1} to localStorage`);
-                }
+             
                 
                 textSpan.textContent = newText;
-                console.log(`✏️ Updated text for line ${lineIndex + 1}: "${newText}"`);
             }
             
             // Restore the span
@@ -3051,7 +2927,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 editContainer.parentNode.removeChild(editContainer);
                 textSpan.style.display = 'inline';
             }
-            console.log('❌ Text edit cancelled');
         };
         
         const insertNewLine = (atPosition) => {
@@ -3086,24 +2961,15 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             
             // Save to localStorage
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log(`✅ Line split/inserted at line ${lineIndex + 1} saved successfully`);
-            } else {
-                console.error(`❌ Failed to save split/inserted line`);
-            }
-            
+          
             // Refresh the display to show the new line
             this.renderLyrics();
             
-            console.log(`📝 Line split: "${beforeText}" | "${afterText}"`);
         };
         
         const deleteLine = () => {
-            console.log('🗑️ deleteLine() called for line', lineIndex + 1);
-            console.log('🗑️ Total lines before deletion:', this.currentLyrics.lines.length);
             
             if (this.currentLyrics.lines.length <= 1) {
-                console.warn('⚠️ Cannot delete the last remaining line');
                 return;
             }
             
@@ -3111,26 +2977,17 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             this.currentLyrics.lines.splice(lineIndex, 1);
             this.currentLyrics.updateLastModified();
             
-            console.log('🗑️ Total lines after deletion:', this.currentLyrics.lines.length);
-            
             // Save to localStorage
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log(`✅ Line ${lineIndex + 1} deleted and saved successfully`);
-            } else {
-                console.error(`❌ Failed to save after deleting line ${lineIndex + 1}`);
-            }
+           
             
             // Refresh the display
-            console.log('🗑️ Refreshing display after deletion');
             this.renderLyrics();
             
-            console.log(`🗑️ Deleted line ${lineIndex + 1}`);
         };
         
         // Delete button click handler
         deleteButton.addEventListener('click', (e) => {
-            console.log('🗑️ Delete button clicked for line', lineIndex + 1);
             e.preventDefault();
             e.stopPropagation();
             
@@ -3138,11 +2995,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             if (editContainer.parentNode) {
                 editContainer.parentNode.removeChild(editContainer);
                 textSpan.style.display = 'inline';
-                console.log('🗑️ Edit interface cleaned up');
             }
             
             // Then delete the line
-            console.log('🗑️ Calling deleteLine()');
             deleteLine();
         });
         
@@ -3186,10 +3041,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
     
     // Edit metadata field (title or artist) via double-click
     editMetadataField(displayElement, fieldName, currentValue) {
-        console.log(`🖱️ editMetadataField called for ${fieldName}: "${currentValue}"`);
         
         if (!this.currentLyrics) {
-            console.log('❌ No currentLyrics in editMetadataField');
+            log('❌ No currentLyrics in editMetadataField');
             return;
         }
         
@@ -3211,7 +3065,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             margin: ${displayElement.style.margin || '0'};
         `;
         
-        console.log(`📝 Input created with value: "${input.value}"`);
         
         // Replace the display element with input temporarily
         displayElement.style.display = 'none';
@@ -3230,11 +3083,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 
                 // Save to localStorage using StorageManager
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                if (saveSuccess) {
-                    console.log(`✅ ${fieldName} saved to localStorage successfully: "${newValue}"`);
-                } else {
-                    console.error(`❌ Failed to save ${fieldName} to localStorage`);
-                }
+              
                 
                 // Update the display element text
                 if (fieldName === 'artist') {
@@ -3243,7 +3092,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                     displayElement.textContent = newValue;
                 }
                 
-                console.log(`✏️ Updated ${fieldName}: "${newValue}"`);
             }
             
             // Restore the display element
@@ -3259,7 +3107,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 input.parentNode.removeChild(input);
                 displayElement.style.display = '';
             }
-            console.log(`❌ ${fieldName} edit cancelled`);
         };
         
         // Enter to save
@@ -3310,17 +3157,10 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             
             // Save to localStorage using the same method as the save button
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log(`✅ Recorded timecode for line ${nextLineIndex + 1} saved to localStorage successfully`);
-            } else {
-                console.error(`❌ Failed to save recorded timecode for line ${nextLineIndex + 1} to localStorage`);
-            }
-            
+          
+
             this.renderLyrics();
-            console.log(`⏺️ Recorded timecode ${this.formatTimeDisplay(currentTime)} for line ${nextLineIndex + 1}`);
-        } else {
-            console.log('⚠️ No untimed lines found');
-        }
+        } 
     }
     
     // Find next line without time
@@ -3356,14 +3196,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         // Save to localStorage using the same method as the save button
         const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-        if (saveSuccess) {
-            console.log(`✅ Set timecode for line ${lineIndex + 1} saved to localStorage successfully`);
-        } else {
-            console.error(`❌ Failed to save set timecode for line ${lineIndex + 1} to localStorage`);
-        }
+     
         
         this.renderLyrics();
-        console.log(`⏰ Set time ${this.formatTimeDisplay(currentTime)} for line ${lineIndex + 1}`);
     }
     
     // Clear time for specific line
@@ -3374,11 +3209,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         // Save to localStorage using the same method as the save button
         const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-        if (saveSuccess) {
-            console.log(`✅ Cleared timecode for line ${lineIndex + 1} saved to localStorage successfully`);
-        } else {
-            console.error(`❌ Failed to save cleared timecode for line ${lineIndex + 1} to localStorage`);
-        }
+       
         
         this.renderLyrics();
     }
@@ -3392,14 +3223,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             
             // Save to localStorage using the same method as the save button
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log('✅ Cleared all timecodes saved to localStorage successfully');
-            } else {
-                console.error('❌ Failed to save cleared timecodes to localStorage');
-            }
+           
             
             this.renderLyrics();
-            console.log('🗑️ All timecodes cleared');
         }
     }
     
@@ -3413,14 +3239,9 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             
             // Save to localStorage using the same method as the save button
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log('✅ New line saved to localStorage successfully');
-            } else {
-                console.error('❌ Failed to save new line to localStorage');
-            }
+       
             
             this.renderLyrics();
-            console.log('➕ New line added');
         }
     }
     
@@ -3441,15 +3262,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
 
         const activeLine = this.currentLyrics.getActiveLineAt(timeMs);
         
-        // Debug for understanding line selection near zero
-        // if (timeMs < 1000) {
-        //     console.log(`🏠 Timecode near zero (${timeMs}ms):`, {
-        //         timeMs,
-        //         activeLine: activeLine ? { text: activeLine.text.substring(0, 30), time: activeLine.time } : null,
-        //         firstLineTime: this.currentLyrics.lines[0]?.time,
-        //         shouldBeFirstLine: timeMs < this.currentLyrics.lines[0]?.time
-        //     });
-        // }
+    
         
         if (activeLine && activeLine !== this.activeLine) {
             this.highlightLine(activeLine);
@@ -3521,7 +3334,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
     // Navigate to line using arrow keys
     navigateToLine(direction) {
         if (!this.currentLyrics || !this.currentLyrics.lines.length) {
-            console.log('❌ No lyrics available for navigation');
             return;
         }
         
@@ -3530,7 +3342,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         // If no line is currently selected, start with the first line
         if (this.currentLineIndex < 0) {
             newIndex = 0;
-            console.log('🎯 No line selected, starting with first line');
         } else {
             if (direction === 'up') {
                 // Move to previous line
@@ -3551,7 +3362,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             }
         }
         
-        console.log(`🔄 Navigating ${direction} from line ${this.currentLineIndex + 1} to line ${newIndex + 1}`);
+        log(`🔄 Navigating ${direction} from line ${this.currentLineIndex + 1} to line ${newIndex + 1}`);
         
         // Set the new active line
         this.setActiveLineIndex(newIndex);
@@ -3570,18 +3381,14 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 this.audioController.emit('timeupdate', timeInSeconds);
             }
             
-            console.log(`🎯 Navigated to line ${newIndex + 1} and seeking to ${this.formatTimeDisplay(line.time)}`);
         } else if (line.time < 0) {
-            console.log(`📍 Navigated to line ${newIndex + 1} (no timecode)`);
         } else {
-            console.log(`📍 Navigated to line ${newIndex + 1} (no audio controller)`);
         }
     }
     
     // Save recorded timecodes when exiting record mode
     saveRecordedTimecodes() {
         if (!this.currentLyrics) {
-            console.log('❌ No current lyrics to save');
             return;
         }
         
@@ -3591,13 +3398,11 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         // Save to storage using the correct method
         const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
         if (saveSuccess) {
-            console.log('✅ Recorded timecodes saved successfully');
             
             // Count how many timecodes were recorded
             const recordedCount = this.currentLyrics.lines.filter(line => line.time >= 0).length;
-            console.log(`📊 Total timecodes recorded: ${recordedCount}/${this.currentLyrics.lines.length}`);
         } else {
-            console.error('❌ Failed to save recorded timecodes');
+            log('❌ Failed to save recorded timecodes');
         }
     }
     
@@ -3620,7 +3425,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         let correctionLog = [];
         const minimumIncrement = 100; // milliseconds
 
-        console.log(`🔍 Verifying timecode order after modifying line ${modifiedLineIndex + 1}...`);
 
         // Start from the modified line and check forward - with cascading corrections
         let hasMoreCorrections = true;
@@ -3661,20 +3465,12 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
 
         // Log corrections if any were made
         if (correctionsMade > 0) {
-            console.log(`⚡ Made ${correctionsMade} timecode corrections in ${iterations} iteration(s):`);
-            correctionLog.forEach(correction => {
-                console.log(`  📝 Iter ${correction.iteration} - Line ${correction.lineIndex + 1}: ${this.formatTimeDisplay(correction.oldTimecode)} → ${this.formatTimeDisplay(correction.newTimecode)}`);
-                console.log(`     Reason: ${correction.reason}`);
-            });
+         
 
             // Update last modified and save to localStorage
             this.currentLyrics.updateLastModified();
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log(`✅ Corrected timecodes saved to localStorage successfully`);
-            } else {
-                console.error(`❌ Failed to save corrected timecodes to localStorage`);
-            }
+           
 
             // Re-render lyrics to show the corrections
             if (this.showTimecodes) {
@@ -3683,9 +3479,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             
             // Update any visible timecode displays in the DOM
             this.updateVisibleTimecodeDisplays();
-        } else {
-            console.log(`✅ Timecode order verification complete - no corrections needed`);
-        }
+        } 
 
         return correctionsMade;
     }
@@ -3700,7 +3494,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         let correctionsMade = 0;
         let correctionLog = [];
 
-        console.log(`🔍 Verifying all timecode order for entire song...`);
 
         // Check all lines with timecodes
         for (let i = 0; i < lines.length - 1; i++) {
@@ -3732,29 +3525,18 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
 
         // Log corrections if any were made
         if (correctionsMade > 0) {
-            console.log(`⚡ Made ${correctionsMade} timecode corrections for entire song:`);
-            correctionLog.forEach(correction => {
-                console.log(`  📝 Line ${correction.lineIndex + 1}: ${this.formatTimeDisplay(correction.oldTimecode)} → ${this.formatTimeDisplay(correction.newTimecode)}`);
-                console.log(`     Reason: ${correction.reason}`);
-            });
+          
 
             // Update last modified and save to localStorage
             this.currentLyrics.updateLastModified();
             const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-            if (saveSuccess) {
-                console.log(`✅ All corrected timecodes saved to localStorage successfully`);
-            } else {
-                console.error(`❌ Failed to save all corrected timecodes to localStorage`);
-            }
+         
 
             // Re-render lyrics to show the corrections
             if (this.showTimecodes) {
                 this.renderLyrics();
             }
-        } else {
-            console.log(`✅ All timecode order verification complete - no corrections needed`);
-        }
-
+        } 
         return correctionsMade;
     }
 
@@ -3764,14 +3546,12 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             // Find the line element by its data attribute
             const lineElement = document.querySelector(`[data-line-index="${lineIndex}"]`);
             if (!lineElement) {
-                console.warn(`⚠️ Could not find line element for index ${lineIndex}`);
                 return null;
             }
 
             // Find the line content div (the flex container)
             const lineContent = lineElement.querySelector('.lyrics-line > div');
             if (!lineContent) {
-                console.warn(`⚠️ Could not find line content within line ${lineIndex}`);
                 return null;
             }
 
@@ -3791,7 +3571,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                 return spans[spans.length - 1];
             }
 
-            console.warn(`⚠️ Could not find text span within line ${lineIndex}`);
             return null;
         } catch (error) {
             console.error(`❌ Error finding text span for line ${lineIndex}:`, error);
@@ -3809,7 +3588,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             // Find all visible timecode spans in the lyrics display
             const lyricsContainer = document.getElementById('lyrics-container');
             if (!lyricsContainer) {
-                console.warn('⚠️ Lyrics container not found for timecode display update');
                 return;
             }
 
@@ -3823,7 +3601,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
                         // Check if this is a timecode span (has timecode-like content)
                         if (span.textContent && span.textContent.match(/^\s*\[.*\]\s*$/)) {
                             span.textContent = this.formatTimeDisplay(line.time);
-                            console.log(`🔄 Updated visible timecode display for line ${lineIndex + 1}: ${this.formatTimeDisplay(line.time)}`);
                         }
                     }
                 }

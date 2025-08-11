@@ -5,11 +5,7 @@
 import { showSongLibrary } from './src/components/songLibraryModal.js';
 import { showSettingsModal, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector } from './src/components/settings.js';
 
-// iOS-compatible logging function (duplicate from audio.js for startup logging)
-function startupLog(message) {
-    const prefixedMessage = `⚛️ ATOME-APP: ${message}`;
-    console.log(prefixedMessage);
-}
+
 
 // Utility function to check if volume control is supported on the current platform
 function isVolumeControlSupported() {
@@ -24,24 +20,17 @@ function safeApplyVolume(audioPlayer, volumePercent, context = '') {
         // Check that we can actually set the volume property
         if (audioPlayer && typeof audioPlayer.volume !== 'undefined') {
             audioPlayer.volume = volumeValue;
-            console.log(`🔊 Volume applied${context ? ' (' + context + ')' : ''}: ${volumePercent}%`);
             return true;
         } else {
-            console.log(`🔊 Audio player does not support volume control${context ? ' (' + context + ')' : ''}`);
             return false;
         }
     } catch (error) {
-        console.log(`🔊 Volume application failed${context ? ' (' + context + ')' : ''}:`, error.message);
         return false;
     }
 }
 
 // Application startup message
-startupLog('===============================================');
-startupLog('🚀 ATOME APPLICATION STARTING...');
-startupLog('📱 Platform: ' + ((/iPad|iPhone|iPod/.test(navigator.userAgent)) ? 'iOS' : 'Desktop'));
-startupLog('🕐 Time: ' + new Date().toISOString());
-startupLog('===============================================');
+
 
 // Import all modules
 import { CONSTANTS } from './src/core/constants.js';
@@ -152,7 +141,6 @@ function applyInitialSettings() {
             lyricsContainer.style.fontSize = `${fontSize}px`;
         }
         
-        console.log('⚙️ Initial settings applied');
     } catch (error) {
         console.error('❌ Error applying initial settings:', error);
     }
@@ -235,8 +223,6 @@ function initializeLyrix() {
                     midiElement.style.border = '3px solid #f00'; // Red border for visibility
                     midiElement.style.color = '#000'; // Black text for contrast
                 }
-            } else {
-                console.warn('⚠️ MIDI Inspector not found in DOM');
             }
         }, 500);
         
@@ -828,7 +814,7 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         songs: songs.map(song => {
             // Log the audioPath format for debugging
             if (song.audioPath) {
-                console.log(`📤 Exporting song "${song.metadata?.title || 'Unknown'}" with audioPath: "${song.audioPath}"`);
+                (`📤 Exporting song "${song.metadata?.title || 'Unknown'}" with audioPath: "${song.audioPath}"`);
                 
                 // Verify that audioPath is just a filename (not a full URL)
                 if (song.audioPath.startsWith('http://') || song.audioPath.startsWith('https://') || song.audioPath.includes('assets/audios/')) {
@@ -979,7 +965,6 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         }, 100);
     }
     
-    console.log(`✅ Successfully exported ${songs.length} songs to LRX format`);
 }
 
 // Direct download fallback for LRX export without modal
@@ -1012,7 +997,6 @@ function exportAllSongsToLRXDirectDownload(songs) {
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
 
-    console.log(`✅ Direct download initiated for ${songs.length} songs`);
 }
 
 // Import songs from LRX format
@@ -1071,18 +1055,11 @@ function importFromLRX(file) {
                         album: syncedLyrics.album
                     });
                     // Root fields are already correct
-                    // Log avant sauvegarde pour debug
-                    console.log('[IMPORT DEBUG] Before save:', {
-                        title: syncedLyrics.title,
-                        artist: syncedLyrics.artist,
-                        album: syncedLyrics.album,
-                        metadata: syncedLyrics.metadata
-                    });
+                   
                     // Add to library
                     const success = lyricsLibrary.saveSong(syncedLyrics);
                     if (success) {
                         importedCount++;
-                        console.log(`✅ Imported song: ${syncedLyrics.metadata.title || syncedLyrics.title || 'Unknown'} | Artist: ${syncedLyrics.metadata.artist || syncedLyrics.artist || 'Unknown Artist'}`);
                     } else {
                         errors.push(`Failed to import song: ${syncedLyrics.metadata.title || syncedLyrics.title || 'Unknown'}`);
                     }
@@ -1588,7 +1565,7 @@ function exportSongsAsSeparateFiles(selectedSongIds) {
                 
                 downloadCount++;
                 if (downloadCount === selectedSongIds.length) {
-                    console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
+                    (`✅ Successfully exported ${downloadCount} songs as separate files`);
                 }
             }, index * 500); // 500ms delay between downloads
         }
@@ -1640,7 +1617,6 @@ function exportSongsAsSingleFile(selectedSongIds) {
         URL.revokeObjectURL(saveLink.href);
     }, 100);
     
-    console.log(`✅ Successfully exported ${selectedSongIds.length} songs as single text file`);
 }
 
 // Helper function to load and display a song
@@ -1677,7 +1653,6 @@ function loadAndDisplaySong(songKey) {
         // Store current song key for navigation
         if (lyricsDisplay) {
             lyricsDisplay.currentSongKey = songKey;
-            console.log(`🎵 Stored currentSongKey in lyricsDisplay: ${songKey}`);
         }
         window.currentSongKey = songKey;
         StorageManager.setLastOpenedSong(songKey);
@@ -1743,7 +1718,6 @@ function navigateToPreviousSong() {
     
     if (previousSong) {
         loadAndDisplaySong(previousSong.key || previousSong.songId);
-        console.log(`⏮️ Navigated to previous song: ${previousSong.metadata?.title || previousSong.title}`);
     }
 }
 
@@ -1774,7 +1748,6 @@ function navigateToNextSong() {
     
     if (nextSong) {
         loadAndDisplaySong(nextSong.key || nextSong.songId);
-        console.log(`⏭️ navigated to next song: ${nextSong.metadata?.title || nextSong.title}`);
     }
 }
 
@@ -1870,12 +1843,7 @@ function createMainInterface() {
                     if (audioController.isPlaying()) {
                         audioController.pause();
                     } else {
-                        // Log the audio file path before playing
-                        if (currentSong && currentSong.metadata && currentSong.metadata.audioPath) {
-                            console.log('▶️ Audio file path:', currentSong.metadata.audioPath);
-                        } else {
-                            console.log('▶️ Audio file path: [unknown or not set]');
-                        }
+                      
                         audioController.play();
                     }
                 } catch (error) {
@@ -2238,7 +2206,6 @@ function createMainInterface() {
                         volumeCurrentLabel.textContent = `${Math.round(value)}%`;
                     }
                     
-                    console.log(`🔊 Volume stored for later: ${Math.round(value)}% (audioPlayer not ready)`);
                 }
             }
         });
@@ -2300,7 +2267,6 @@ function createMainInterface() {
         // Apply timecode display visibility setting immediately
         const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true';
         timecodeDisplay.style.display = isTimecodeDisplayVisible ? 'block' : 'none';
-        console.log(`🕐 Timecode display initial visibility: ${isTimecodeDisplayVisible ? 'visible' : 'hidden'}`);
         
         // Store scrub and timecode tools for potential move to lyrics toolbar
         window.leftPanelScrubTools = {
@@ -2381,7 +2347,6 @@ function loadLastSong() {
             // Check if audio file exists before loading
             if (currentSong.getAudioPath && currentSong.getAudioPath()) {
                 const audioPath = currentSong.getAudioPath();
-                console.log('🎵 Checking last song audio:', audioPath);
                 
                 // Test if audio file exists by creating a test audio element
                 const testAudio = new Audio();
@@ -2393,7 +2358,6 @@ function loadLastSong() {
                 });
                 
                 testAudio.addEventListener('canplaythrough', function() {
-                    console.log('✅ Last song audio verified, loading:', audioPath);
                     lyricsDisplay.displayLyrics(currentSong);
                     
                     // Update audio title with current song filename
@@ -2428,18 +2392,15 @@ function seekToPendingTime() {
             const currentTime = audioController.audioPlayer.currentTime;
             const isSeekingForward = pendingSeekTime > currentTime;
             
-            // console.log(`🎯 SEEKING ${isSeekingForward ? 'forward' : 'backward'} from ${currentTime.toFixed(2)}s to ${pendingSeekTime.toFixed(2)}s`);
             
             // Mark that we're seeking to prevent timeupdate conflicts
             lastSeekTime = Date.now();
-            // console.log ("=====> Seeking to pending time: "+pendingSeekTime);
             // Perform the actual seek
             audioController.audioPlayer.currentTime = pendingSeekTime;
             
             // Clear the pending seek time
             pendingSeekTime = null;
             
-            // console.log('✅ Audio seeked successfully');
             
         } catch (error) {
             console.error('❌ Error seeking audio:', error);
@@ -2450,7 +2411,6 @@ function seekToPendingTime() {
 
 // Reset audio slider to zero
 function resetAudioSlider() {
-    // console.log('🔄 RESETTING SLIDER TO ZERO!');
     
     // Clear any pending seek operation
     pendingSeekTime = null;
@@ -2465,7 +2425,6 @@ function resetAudioSlider() {
         if (sliderHandle) {
             // Reset handle position to 0% (left side)
             sliderHandle.style.left = '0%';
-            // console.log('✅ Squirrel slider handle reset to 0%');
             
             // Also look for progression element and reset it
             const progressionElements = scrubSlider.querySelectorAll('.hs-slider-progression, [class*="progression"]');
@@ -2473,16 +2432,13 @@ function resetAudioSlider() {
                 progressionElements.forEach(prog => {
                     prog.style.width = '0%';
                 });
-                // console.log('✅ Slider progression reset to 0%');
             }
             
             // If the slider has an internal value property, reset it too
             if (scrubSliderRef && scrubSliderRef.setValue) {
                 try {
                     scrubSliderRef.setValue(0);
-                    // console.log('✅ Squirrel slider setValue(0) called');
                 } catch (e) {
-                    console.log('⚠️ setValue failed:', e);
                 }
             }
         } else {
@@ -2490,39 +2446,21 @@ function resetAudioSlider() {
             const sliderInput = scrubSlider.querySelector('input[type="range"]');
             if (sliderInput) {
                 sliderInput.value = 0;
-                console.log('✅ Standard slider INPUT reset to 0%');
-            } else {
-                console.log('❌ Neither Squirrel handle nor standard input found!');
-            }
+            } 
         }
-    } else {
-        console.log('❌ Slider container not found! Will try again in 100ms...');
-        // If slider not found, try again after a short delay
-        // setTimeout(() => {
-        //     const delayedSlider = document.getElementById('audio_scrub_slider');
-        //     if (delayedSlider) {
-        //         const delayedHandle = document.getElementById('audio_scrub_slider_handle');
-        //         if (delayedHandle) {
-        //             delayedHandle.style.left = '0%';
-        //             console.log('✅ Squirrel slider handle reset DELAYED to 0%');
-        //         }
-        //     }
-        // }, 100);
-    }
+    } 
+ 
     
     // Reset time labels
     if (currentTimeLabel) {
         currentTimeLabel.textContent = '0:00';
-        // console.log('✅ Current time label reset');
     }
     if (totalTimeLabel) {
         totalTimeLabel.textContent = '0:00';
-        // console.log('✅ Total time label reset');
     }
     
     // Reset timecode display
     updateTimecodeDisplay(0);
-    // console.log('✅ Timecode display reset');
 }
 
 // Update scrub slider display
@@ -2587,7 +2525,6 @@ function updateSliderDuration() {
             totalTimeLabel.textContent = timeString;
             
             startupLog(`📏 ✅ Updated total_time_label to: ${timeString}`);
-            console.log(`📏 Updated audio duration display: ${timeString}`);
         } else {
             startupLog(`📏 ⚠️ Duration is ${duration} (invalid), will retry...`);
             // Try again after a short delay if duration isn't available yet
@@ -2659,7 +2596,6 @@ window.updateTimecode = updateTimecode;
 
 // File import dialog function
 function showFileImportDialog() {
-    console.log('🔧 showFileImportDialog called - accepting .lrx files');
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = false;
@@ -2723,7 +2659,6 @@ window.Lyrix = {
     displayTransportInfo,
     testMidi: () => {
         if (midiUtilities) {
-            console.log('🧪 Testing MIDI from window.Lyrix...');
             midiUtilities.testMidiData();
         } else {
             console.error('❌ MIDI utilities not available');
