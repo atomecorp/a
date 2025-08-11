@@ -3,7 +3,7 @@
 
 // Import modal modules from new organized structure
 import { showSongLibrary } from './src/components/songLibraryModal.js';
-import { showSettingsModal, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector } from './src/components/settings.js';
+import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector } from './src/components/settings.js';
 
 
 
@@ -195,6 +195,7 @@ function initializeLyrix() {
         // Export imported modal functions to global scope
         window.showSongLibrary = showSongLibrary;
         window.showSettingsModal = showSettingsModal;
+        window.toggleSettingsPanel = toggleSettingsPanel;
         window.toggleAudioPlayerControls = toggleAudioPlayerControls;
         window.toggleAudioSync = toggleAudioSync;
         window.toggleMidiInspector = toggleMidiInspector;
@@ -1796,11 +1797,14 @@ function createMainInterface() {
     const settingsButton = UIManager.createInterfaceButton('⚙️', {
         id: 'settings_button',
         onClick: () => {
-            showSettingsModal();
+            toggleSettingsPanel();
         },
         css: {
             marginBottom: '15px'
-        }
+        },
+        'aria-expanded': 'false',
+        'aria-controls': 'settings-panel',
+        'aria-label': 'Open settings panel'
     });
     
     const importButton = UIManager.createInterfaceButton('📁', {
