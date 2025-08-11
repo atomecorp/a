@@ -1342,7 +1342,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         if (!fullSong) return null;
         return {
             text: `${(fullSong.metadata?.title || fullSong.title || 'Untitled')} - ${(fullSong.metadata?.artist || fullSong.artist || 'Unknown Artist')}${(fullSong.metadata?.album || fullSong.album) ? ` (${fullSong.metadata?.album || fullSong.album})` : ''}`,
-            value: songSummary.songId,
+            value: songSummary.key, // Use key instead of songId for consistency
             song: fullSong,
             selected: false
         };
@@ -1535,7 +1535,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         });
 
         // Store selection state on the element for later retrieval
-        itemDiv.dataset.songId = item.value;
+        itemDiv.dataset.songId = item.value; // Now contains song key instead of songId
         itemDiv.dataset.selected = 'false';
         Object.defineProperty(itemDiv, 'isSelected', {
             get() { return selected; },
@@ -1561,9 +1561,9 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         onClick: () => {
             // Find all selected song divs
             const selectedDivs = Array.from(listContainer.children).filter(div => div.isSelected);
-            const selectedSongIds = selectedDivs.map(div => div.dataset.songId);
+            const selectedSongKeys = selectedDivs.map(div => div.dataset.songId); // This contains song keys now
 
-            if (selectedSongIds.length === 0) {
+            if (selectedSongKeys.length === 0) {
                 Modal({
                     title: '❌ No Selection',
                     content: '<p>Please select at least one song to export.</p>',
@@ -1577,10 +1577,10 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
             if (exportSeparateFiles) {
                 // Export each song as a separate file
-                exportSongsAsSeparateFiles(selectedSongIds);
+                exportSongsAsSeparateFiles(selectedSongKeys);
             } else {
                 // Export all songs in a single file
-                exportSongsAsSingleFile(selectedSongIds);
+                exportSongsAsSingleFile(selectedSongKeys);
             }
         }
     });
@@ -1592,13 +1592,13 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 }
 
 // Function to export songs as separate files
-function exportSongsAsSeparateFiles(selectedSongIds) {
+function exportSongsAsSeparateFiles(selectedSongKeys) {
     let downloadCount = 0;
     
-    selectedSongIds.forEach((songId, index) => {
-        const song = lyricsLibrary.getSongById(songId);
+    selectedSongKeys.forEach((songKey, index) => {
+        const song = lyricsLibrary.getSong(songKey); // Use getSong with key
         if (song) {
-            let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
+            let exportText = `${song.metadata?.title || song.title || 'Untitled'}\n\n`;
             
             if (song.lines && song.lines.length > 0) {
                 song.lines.forEach(line => {
@@ -1609,29 +1609,21 @@ function exportSongsAsSeparateFiles(selectedSongIds) {
             }
             
             // Create safe filename
-            const safeTitle = (song.metadata.title || 'Untitled')
+            const safeTitle = (song.metadata?.title || song.title || 'Untitled')
                 .replace(/[^a-z0-9]/gi, '_')
                 .replace(/_+/g, '_')
                 .replace(/^_|_$/g, '');
             
-            // Use download method with delay to avoid browser blocking
+            // Use enhanced mobile-friendly download method
             setTimeout(() => {
-                const blob = new Blob([exportText], { type: 'text/plain' });
-                const saveLink = document.createElement('a');
-                saveLink.href = URL.createObjectURL(blob);
-                saveLink.download = `${safeTitle}.txt`;
-                saveLink.style.display = 'none';
+                const dataStr = exportText;
+                const filename = `${safeTitle}.txt`;
                 
-                document.body.appendChild(saveLink);
-                saveLink.click();
-                document.body.removeChild(saveLink);
-                
-                setTimeout(() => {
-                    URL.revokeObjectURL(saveLink.href);
-                }, 100);
+                // Use the same mobile-friendly export as .lrx files
+                showMobileExportModal(dataStr, filename, 'TXT');
                 
                 downloadCount++;
-                if (downloadCount === selectedSongIds.length) {
+                if (downloadCount === selectedSongKeys.length) {
                     console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
                 }
             }, index * 500); // 500ms delay between downloads
@@ -1640,15 +1632,15 @@ function exportSongsAsSeparateFiles(selectedSongIds) {
 }
 
 // Function to export songs as a single file
-function exportSongsAsSingleFile(selectedSongIds) {
+function exportSongsAsSingleFile(selectedSongKeys) {
     // Generate export text - simple format
     let exportText = '';
 
-    selectedSongIds.forEach((songId, index) => {
-        const song = lyricsLibrary.getSongById(songId);
+    selectedSongKeys.forEach((songKey, index) => {
+        const song = lyricsLibrary.getSong(songKey); // Use getSong with key
         if (song) {
             // Add song title
-            exportText += `${song.metadata.title || 'Untitled'}\n\n`;
+            exportText += `${song.metadata?.title || song.title || 'Untitled'}\n\n`;
             
             // Add lyrics only
             if (song.lines && song.lines.length > 0) {
@@ -1661,30 +1653,17 @@ function exportSongsAsSingleFile(selectedSongIds) {
             }
             
             // Add spacing between songs (only if not the last song)
-            if (index < selectedSongIds.length - 1) {
-                exportText += '\n\n';
+            if (index < selectedSongKeys.length - 1) {
+                exportText += '\n\n---\n\n';
             }
         }
     });
 
-    // Use download method that works on all browsers including Safari
-    const blob = new Blob([exportText], { type: 'text/plain' });
-    const saveLink = document.createElement('a');
-    saveLink.href = URL.createObjectURL(blob);
-    saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
-    saveLink.style.display = 'none';
+    // Use enhanced mobile-friendly export modal
+    const filename = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
+    showMobileExportModal(exportText, filename, 'TXT');
     
-    // Add to document, click, and remove
-    document.body.appendChild(saveLink);
-    saveLink.click();
-    document.body.removeChild(saveLink);
-    
-    // Clean up the object URL
-    setTimeout(() => {
-        URL.revokeObjectURL(saveLink.href);
-    }, 100);
-    
-    console.log(`✅ Successfully exported ${selectedSongIds.length} songs as single text file`);
+    console.log(`✅ Successfully exported ${selectedSongKeys.length} songs as single text file`);
 }
 
 // Song library panel state
@@ -1905,6 +1884,7 @@ function createSongLibraryPanel(songs) {
     });
 
     const autoFillInput = $('input', {
+        id: 'midi-root-note-input', // Add ID for autoFillMidiNotes function
         type: 'number',
         min: '0',
         max: '127',
@@ -1918,6 +1898,23 @@ function createSongLibraryPanel(songs) {
             fontSize: '10px',
             textAlign: 'center'
         }
+    });
+
+    // Prevent click events from propagating to prevent panel closure
+    autoFillInput.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+
+    autoFillInput.addEventListener('focus', (e) => {
+        e.stopPropagation();
+    });
+
+    autoFillInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+    });
+
+    autoFillInput.addEventListener('keyup', (e) => {
+        e.stopPropagation();
     });
 
     const autoFillButton = $('button', {
@@ -2132,9 +2129,91 @@ function createSongListContent(container, songs) {
             css: {
                 display: 'flex',
                 gap: '4px',
-                marginLeft: '8px'
+                marginLeft: '8px',
+                alignItems: 'center'
             }
         });
+
+        // MIDI input and learn button
+        const midiContainer = $('div', {
+            css: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+                marginRight: '4px'
+            }
+        });
+
+        // Get existing MIDI assignment for this song
+        const existingMidiNote = window.midiUtilities?.getMidiSongAssignment?.(song.key) || '';
+
+        const midiInput = $('input', {
+            type: 'number',
+            min: '0',
+            max: '127',
+            placeholder: 'MIDI',
+            value: existingMidiNote,
+            css: {
+                width: '35px',
+                height: '20px',
+                padding: '1px 2px',
+                border: '1px solid #ccc',
+                borderRadius: '2px',
+                fontSize: '9px',
+                textAlign: 'center'
+            }
+        });
+
+        // Prevent click events from propagating to parent (song item)
+        midiInput.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        midiInput.addEventListener('focus', (e) => {
+            e.stopPropagation();
+        });
+
+        midiInput.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+        });
+
+        midiInput.addEventListener('keyup', (e) => {
+            e.stopPropagation();
+        });
+
+        // Save MIDI assignment when input changes
+        midiInput.addEventListener('input', (e) => {
+            e.stopPropagation();
+            const midiNote = e.target.value.trim();
+            if (midiNote && midiNote >= 0 && midiNote <= 127) {
+                window.midiUtilities?.setMidiSongAssignment?.(song.key, midiNote);
+                console.log(`🎹 MIDI note ${midiNote} assigned to song "${song.title}"`);
+            } else if (midiNote === '') {
+                window.midiUtilities?.removeMidiSongAssignment?.(song.key);
+                console.log(`🎹 MIDI assignment removed for song "${song.title}"`);
+            }
+        });
+
+        const midiLearnButton = $('button', {
+            text: '🎹',
+            css: {
+                backgroundColor: '#9c27b0',
+                color: 'white',
+                border: 'none',
+                padding: '2px 4px',
+                borderRadius: '2px',
+                fontSize: '8px',
+                cursor: 'pointer',
+                minWidth: '18px',
+                height: '20px'
+            },
+            onClick: (e) => {
+                e.stopPropagation();
+                startMidiLearnForSong(song.key, midiInput, midiLearnButton);
+            }
+        });
+
+        midiContainer.append(midiInput, midiLearnButton);
 
         // Load button
         const loadButton = $('button', {
@@ -2178,7 +2257,7 @@ function createSongListContent(container, songs) {
             }
         });
 
-        actionButtons.append(loadButton, deleteButton);
+        actionButtons.append(midiContainer, loadButton, deleteButton);
 
         // Click handler for song item
         songItem.addEventListener('click', () => {
@@ -2229,11 +2308,41 @@ function getCustomSongOrder() {
 }
 
 function autoFillMidiNotes() {
-    // This function will be called from the panel
-    // Implementation depends on midiUtilities
-    if (window.midiUtilities && window.midiUtilities.autoFill) {
-        window.midiUtilities.autoFill();
+    // Get the root note from the input box
+    const autoFillInput = document.getElementById('midi-root-note-input');
+    const rootNote = autoFillInput ? parseInt(autoFillInput.value) || 60 : 60;
+    
+    console.log(`🎹 Auto-filling MIDI notes starting from ${rootNote}`);
+    
+    // Get all songs in order
+    const songs = lyricsLibrary.getAllSongs();
+    if (songs.length === 0) {
+        console.warn('❌ No songs to assign MIDI notes to');
+        return;
     }
+    
+    // Assign MIDI notes sequentially
+    songs.forEach((song, index) => {
+        const midiNote = rootNote + index;
+        if (midiNote <= 127) { // MIDI note range limit
+            window.midiUtilities?.setMidiSongAssignment?.(song.key, midiNote.toString());
+            console.log(`🎵 Assigned MIDI note ${midiNote} to "${song.title}"`);
+        } else {
+            console.warn(`⚠️ MIDI note ${midiNote} exceeds maximum (127) for song "${song.title}"`);
+        }
+    });
+    
+    // Refresh the song list to show the new MIDI assignments
+    const songListPanel = document.getElementById('song-library-panel');
+    if (songListPanel) {
+        const content = songListPanel.querySelector('.song-list-content');
+        if (content) {
+            createSongListContent(content, songs);
+            console.log('✅ Song list refreshed with new MIDI assignments');
+        }
+    }
+    
+    console.log(`✅ Auto-filled MIDI notes for ${Math.min(songs.length, 127 - rootNote + 1)} songs`);
 }
 
 function sortSongsAlphabetically() {
@@ -3728,6 +3837,31 @@ function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
             
             console.log(`🎵 MIDI note ${midiNote} assigned to ${settingKey}`);
         });
+    }
+}
+
+// Helper function for MIDI learning in song list
+function startMidiLearnForSong(songKey, inputElement, buttonElement) {
+    if (window.midiUtilities?.startMidiLearn) {
+        // Change button appearance
+        buttonElement.textContent = '⏹';
+        buttonElement.style.backgroundColor = '#ff4757';
+        
+        window.midiUtilities.startMidiLearn((midiNote) => {
+            // MIDI note learned
+            inputElement.value = midiNote;
+            
+            // Reset button appearance
+            buttonElement.textContent = '🎹';
+            buttonElement.style.backgroundColor = '#9c27b0';
+            
+            // Save the assignment
+            window.midiUtilities.setMidiSongAssignment(songKey, midiNote);
+            
+            console.log(`🎵 MIDI note ${midiNote} assigned to song "${songKey}"`);
+        });
+    } else {
+        console.warn('⚠️ MIDI learning not available');
     }
 }
 
