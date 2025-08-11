@@ -112,6 +112,7 @@ export function openSettingsPanel() {
         id: 'settings-panel',
         css: {
             width: '100%',
+            maxHeight: '40vh', // Limit height to 40% of viewport
             backgroundColor: 'white',
             border: '1px solid #e0e0e0',
             borderRadius: '8px',
@@ -120,20 +121,19 @@ export function openSettingsPanel() {
             overflow: 'hidden',
             transition: 'all 0.3s ease',
             opacity: '0',
-            transform: 'translateY(-10px)'
+            transform: 'translateY(-10px)',
+            display: 'flex',
+            flexDirection: 'column'
         },
         'aria-hidden': 'false',
         role: 'region',
-        'aria-labelledby': 'settings-panel-title'
+        'aria-label': 'Settings panel'
     });
 
-    // Create panel header
-    const header = createSettingsPanelHeader();
-    
-    // Create panel content (reuse existing content creation logic)
+    // Create panel content (no header to save space)
     const content = createSettingsContent();
 
-    settingsPanel.append(header, content);
+    settingsPanel.appendChild(content);
 
     // Insert panel at the beginning of the app container (above lyrics content)
     if (targetContainer === appContainer) {
@@ -205,7 +205,9 @@ function createSettingsPanelHeader() {
             borderBottom: '1px solid #e0e0e0',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            flexShrink: '0', // Prevent header from shrinking
+            minHeight: '60px' // Ensure consistent header height
         }
     });
 
@@ -278,9 +280,47 @@ function createSettingsContent() {
     const content = window.$('div', {
         css: {
             padding: '20px',
-            backgroundColor: 'white'
+            backgroundColor: 'white',
+            flex: '1',
+            overflowY: 'auto',
+            maxHeight: '40vh', // Full panel height since no header
+            position: 'relative'
         }
     });
+
+    // Add small close button in top-right corner
+    const closeButton = window.$('button', {
+        text: '✕',
+        type: 'button',
+        'aria-label': 'Close settings panel',
+        css: {
+            position: 'absolute',
+            top: '10px',
+            right: '10px',
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: '#999',
+            fontSize: '16px',
+            cursor: 'pointer',
+            padding: '5px',
+            borderRadius: '3px',
+            transition: 'color 0.2s',
+            zIndex: '10'
+        },
+        onClick: closeSettingsPanel
+    });
+
+    closeButton.addEventListener('mouseenter', () => {
+        closeButton.style.color = '#666';
+        closeButton.style.backgroundColor = '#f0f0f0';
+    });
+
+    closeButton.addEventListener('mouseleave', () => {
+        closeButton.style.color = '#999';
+        closeButton.style.backgroundColor = 'transparent';
+    });
+
+    content.appendChild(closeButton);
 
     // Helper function to create setting sections
     function createSettingSection(title, items) {
