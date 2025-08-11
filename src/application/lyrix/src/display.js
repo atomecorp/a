@@ -76,7 +76,7 @@ export class LyricsDisplay {
     // Create display elements using Squirrel syntax
     createDisplayElements() {
         // ===== CREATE MAIN DISPLAY STRUCTURE (AUCUN SCROLL SUR BODY OU VIEW) =====
-        // Create the main display container - FIXED pour empêcher tout scroll externe
+        // Create the main display container - FIXED to prevent any external scroll
         this.displayContainer = $('div', {
             id: 'display-container',
             css: {
@@ -90,7 +90,7 @@ export class LyricsDisplay {
                 backgroundColor: UIManager.THEME.colors.surface,
                 border: `1px solid ${UIManager.THEME.colors.border}`,
                 // borderRadius: UIManager.THEME.borderRadius.md,
-                overflow: 'hidden', // CRITIQUE : empêche tout scroll sur le container principal
+                overflow: 'hidden', // CRITICAL: prevents any scroll on the main container
                 zIndex: '50' // Au-dessus du contenu normal mais sous les modales
             }
         });
@@ -105,7 +105,7 @@ export class LyricsDisplay {
                 backgroundColor: UIManager.THEME.colors.background,
                 borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
                 borderRadius: `${UIManager.THEME.borderRadius.md} ${UIManager.THEME.borderRadius.md} 0 0`,
-                flexShrink: 0, // Ne rétrécit JAMAIS
+                flexShrink: 0, // NEVER shrinks
                 zIndex: '100' // Au-dessus du contenu de scroll
             }
         });
@@ -155,16 +155,16 @@ export class LyricsDisplay {
         const savedToolbarState = localStorage.getItem('lyrix_toolbar_visible');
         this.toolbarVisible = savedToolbarState === 'true'; // Default to false (minimized)
         
-        // Create lyrics content area - SEULE zone autorisée à scroller
+        // Create lyrics content area - ONLY zone allowed to scroll
         this.lyricsContent = $('div', {
             id: 'lyrics_content_area',
             css: {
-                flex: '1', // Prend tout l'espace restant après la toolbar
+                flex: '1', // Takes all remaining space after toolbar
                 padding: UIManager.THEME.spacing.xl,
                 backgroundColor: this.originalStyles.normal.backgroundColor,
                 color: this.originalStyles.normal.color,
                 overflow: 'auto', // SEULE zone qui peut scroller
-                height: '0', // Force le flex à calculer la hauteur disponible
+                height: '0', // Forces flex to calculate available height
                 fontSize: `${this.fontSize}px`,
            
                 lineHeight: '1.6',
@@ -461,14 +461,14 @@ export class LyricsDisplay {
         // Update lyrics content positioning based on audio tools visibility
         this.updateLyricsContentPosition();
         
-        // ===== EMPÊCHER TOUT SCROLL SUR BODY ET LYRIX_APP =====
-        // Empêcher le scroll sur le body
+        // ===== PREVENT ALL SCROLL ON BODY AND LYRIX_APP =====
+        // Prevent scroll on body
         document.body.style.overflow = 'hidden';
         document.body.style.height = '100vh';
         document.body.style.margin = '0';
         document.body.style.padding = '0';
         
-        // Empêcher le scroll sur lyrix_app s'il existe
+        // Prevent scroll on lyrix_app if it exists
         const lyrixApp = document.getElementById('lyrix_app');
         if (lyrixApp) {
             lyrixApp.style.overflow = 'hidden';
@@ -477,7 +477,7 @@ export class LyricsDisplay {
             lyrixApp.style.position = 'relative';
         }
         
-        // Ajouter le display container directement au body pour un contrôle total
+        // Add display container directly to body for total control
         document.body.append(this.displayContainer);
         
         // Initialize timecode button appearance based on loaded state
@@ -802,7 +802,7 @@ export class LyricsDisplay {
                     tool.style.display = 'flex';
                     tool.style.alignItems = 'center';
                     tool.style.justifyContent = 'center';
-                    // Note: height et width viennent déjà de default_theme.button dans createEnhancedTimecodeDisplay
+                    // Note: height and width already come from default_theme.button in createEnhancedTimecodeDisplay
                 }
                 
         
@@ -1779,7 +1779,7 @@ export class LyricsDisplay {
             // console.log('🎯 Entering edit mode');
         }
         this.editMode = !this.editMode;
-        // Garder l'icône, changer seulement la couleur (utilise les couleurs du thème)
+        // Keep icon, only change color (uses theme colors)
         this.editButton.style.backgroundColor = this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor;
         // Show/hide edit mode buttons in toolbar
         if (this.saveChangesButton && this.cancelEditButton) {
@@ -1793,7 +1793,7 @@ export class LyricsDisplay {
         }
         // console.log('🎯 New editMode:', this.editMode, 'calling renderLyrics');
         this.renderLyrics();
-        // Synchronise la valeur des inputs avec les métadonnées à chaque entrée en mode édition
+        // Synchronize input values with metadata on each entry in edit mode
         if (this.editMode) {
             setTimeout(() => {
                 const titleInput = document.getElementById('edit_title_input');
@@ -1863,7 +1863,7 @@ export class LyricsDisplay {
     // Toggle record mode
     toggleRecordMode() {
         this.recordMode = !this.recordMode;
-        // Garder l'icône, changer seulement la couleur (utilise les couleurs du thème)
+        // Keep icon, only change color (uses theme colors)
         const newColor = this.recordMode ? default_theme.recordModeActiveColor : default_theme.button.backgroundColor;
         this.recordButton.style.backgroundColor = newColor;
         // Update the stored original color for hover behavior
@@ -2094,10 +2094,10 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
     updateTimecodeButtonAppearance() {
         if (this.timecodeButton) {
             if (this.showTimecodes) {
-                this.timecodeButton.textContent = '🚫'; // Icône pour cacher
+                this.timecodeButton.textContent = '🚫'; // Icon to hide
                 this.timecodeButton.style.backgroundColor = default_theme.editModeActiveColor;
             } else {
-                this.timecodeButton.textContent = '🕐'; // Icône pour afficher
+                this.timecodeButton.textContent = '🕐'; // Icon to show
                 this.timecodeButton.style.backgroundColor = default_theme.button.backgroundColor;
             }
         }
@@ -3467,7 +3467,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             const seconds = (timeMs / 1000).toFixed(3);
             const recordIndicator = this.recordMode ? ' 🔴' : '';
             timecodeElement.textContent = `${seconds}s${recordIndicator}`; // Removed play/pause icons
-            // Ne plus modifier la couleur de fond pour garder le style du thème
+            // No longer modify background color to keep theme style
         }
     }
     

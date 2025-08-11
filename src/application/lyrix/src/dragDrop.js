@@ -33,11 +33,11 @@ export class DragDropManager {
     async editSongTitle(song, newTitle) {
         if (!song || !newTitle || typeof newTitle !== 'string') return false;
         song.metadata.title = newTitle;
-        // Regénérer l'ID si besoin
+        // Regenerate ID if needed
         if (this.lyricsLibrary && this.lyricsLibrary.generateSongId) {
             song.songId = this.lyricsLibrary.generateSongId(newTitle, song.metadata.artist || 'Artiste Inconnu');
         }
-        // Sauvegarder la chanson modifiée
+        // Save the modified song
         this.lyricsLibrary.saveSong(song);
         if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
             this.lyricsDisplay.displayLyrics(song);
@@ -163,14 +163,14 @@ export class DragDropManager {
 
         // Cacher la zone de drop
         this.container.addEventListener('dragleave', (e) => {
-            // Vérifier que nous sortons vraiment du conteneur
+            // Verify that we're actually leaving the container
             if (!this.container.contains(e.relatedTarget)) {
                 this.dropZone.style.display = 'none';
                 this.container.style.filter = '';
             }
         });
 
-        // Gérer le drop
+        // Handle the drop
         this.container.addEventListener('drop', (e) => {
             this.dropZone.style.display = 'none';
             this.container.style.filter = '';
@@ -191,7 +191,7 @@ export class DragDropManager {
             const item = items[i];
             if (item.kind === 'file') {
                 const type = item.type;
-                // Vérifier les types MIME pour les fichiers texte
+                // Check MIME types for text files
                 if (type.startsWith('text/') || 
                     type === 'application/json' ||
                     type === '' || // Fichiers sans extension ou .txt
@@ -211,7 +211,7 @@ export class DragDropManager {
             const item = items[i];
             if (item.kind === 'file') {
                 const type = item.type;
-                // Vérifier les types MIME pour les fichiers audio
+                // Check MIME types for audio files
                 if (type.startsWith('audio/') || 
                     type.startsWith('video/') ||
                     item.getAsFile()?.name.match(/\.(mp3|mp4|wav|m4a|aac|flac|ogg|webm)$/i)) {
@@ -296,8 +296,8 @@ export class DragDropManager {
             // Import each song
             for (const [index, songData] of importData.songs.entries()) {
                 try {
-                    // Extraire les métadonnées avec valeurs par défaut 
-                    // Vérifier à la fois dans metadata et au niveau racine
+                    // Extract metadata with default values 
+                    // Check both in metadata and at root level
                     const title = songData.metadata?.title || songData.title || `Imported ${index + 1}`;
                     const artist = songData.metadata?.artist || songData.artist || 'Unknown Artist';
                     const album = songData.metadata?.album || songData.album || '';
@@ -306,13 +306,13 @@ export class DragDropManager {
 
                     dragLog(`📦 Importing song: "${title}" by "${artist}"`);
 
-                    // Créer l'instance SyncedLyrics avec le constructeur standard
+                    // Create SyncedLyrics instance with standard constructor
                     const syncedLyrics = new SyncedLyrics(title, artist, album, duration, songId);
                     
-                    // Ajouter les autres propriétés
+                    // Add other properties
                     syncedLyrics.lines = songData.lines || [];
                     
-                    // Assigner le audioPath dans les métadonnées (pas directement sur l'objet)
+                    // Assign audioPath in metadata (not directly on the object)
                     if (songData.audioPath) {
                         // MIGRATION: Clean old audioPath format to new format (filename only with spaces)
                         const cleanAudioPath = extractCleanFileName(songData.audioPath);
@@ -335,7 +335,7 @@ export class DragDropManager {
                         syncedLyrics.syncData = songData.syncData;
                     }
                     
-                    // Merger les métadonnées complètes si présentes
+                    // Merge complete metadata if present
                     if (songData.metadata) {
                         syncedLyrics.metadata = {
                             ...syncedLyrics.metadata,
@@ -343,7 +343,7 @@ export class DragDropManager {
                         };
                     }
 
-                    // Sauvegarder dans la bibliothèque
+                    // Save to library
                     const success = this.lyricsLibrary.saveSong(syncedLyrics);
                     if (success) {
                         importedCount++;
@@ -378,7 +378,7 @@ export class DragDropManager {
     async processFile(file) {
         dragLog(`📂 Processing file: ${file.name} (${file.type}) - ${(file.size / 1024).toFixed(1)} KB`);
         
-        // Vérifier si c'est un fichier LRX (Lyrix library)
+        // Check if it's an LRX file (Lyrix library)
         if (this.isLRXFile(file)) {
             try {
                 dragLog('📦 Processing LRX file...');
@@ -394,21 +394,21 @@ export class DragDropManager {
             }
         }
 
-        // Vérifier si c'est un fichier texte (paroles)
+        // Check if it's a text file (lyrics)
         if (this.isTextFile(file)) {
             dragLog('📄 Processing text file...');
             await this.processTextFile(file);
             return;
         }
 
-        // Vérifier si c'est un fichier audio
+        // Check if it's an audio file
         if (this.isAudioFile(file)) {
             dragLog('🎵 Processing audio file...');
             await this.processAudioFile(file);
             return;
         }
 
-        // Type de fichier non supporté
+        // Unsupported file type
         dragLog(`⚠️ Unsupported file type: ${file.name} (${file.type})`);
         console.warn('⚠️ Unsupported file type:', file.name, file.type);
         throw new Error(`Type de fichier non supporté: ${file.type}`);
@@ -452,7 +452,7 @@ export class DragDropManager {
         }
     }
 
-    // Créer le contenu de la zone de drop
+    // Create drop zone content
     createDropZoneContent() {
         if (!this.dropZone) return;
         
@@ -496,31 +496,31 @@ export class DragDropManager {
     }
 
     isTextFile(file) {
-        // Vérifier le type MIME
+        // Check MIME type
         if (file.type.startsWith('text/') || 
             file.type === 'application/json' ||
             file.type === '') {
             return true;
         }
 
-        // Vérifier l'extension
+        // Check extension
         const validExtensions = /\.(txt|lrc|lrx|json|md|lyrics)$/i;
         return validExtensions.test(file.name);
     }
 
     isAudioFile(file) {
-        // Vérifier le type MIME
+        // Check MIME type
         if (file.type.startsWith('audio/') || file.type.startsWith('video/')) {
             return true;
         }
 
-        // Vérifier l'extension
+        // Check extension
         const validExtensions = /\.(mp3|mp4|wav|m4a|aac|flac|ogg|webm)$/i;
         return validExtensions.test(file.name);
     }
 
     isLRXFile(file) {
-        // Vérifier l'extension .lrx
+        // Check .lrx extension
         return /\.lrx$/i.test(file.name);
     }
 
@@ -561,7 +561,7 @@ export class DragDropManager {
             // Extraire le nom du fichier sans extension pour le titre
             const title = filename.replace(/\.[^/.]+$/, '');
 
-            // Vérifier si c'est un fichier LRC (karaoké)
+            // Check if it's an LRC file (karaoke)
             if (filename.toLowerCase().endsWith('.lrc')) {
                 await this.createSongFromLRC(title, content);
                 return;
@@ -580,7 +580,7 @@ export class DragDropManager {
         try {
             console.log('🆕 Creating new song from LRC:', title);
             
-            // Utiliser la méthode existante pour parser le LRC
+            // Use existing method to parse LRC
             const syncedLyrics = SyncedLyrics.fromLRC(lrcContent);
 
             // Si le titre/artiste n'est pas dans le LRC, utiliser le nom du fichier
@@ -591,7 +591,7 @@ export class DragDropManager {
                 syncedLyrics.metadata.artist = 'Artiste Inconnu';
             }
 
-            // Régénérer l'ID avec les nouvelles métadonnées
+            // Regenerate ID with new metadata
             syncedLyrics.songId = this.lyricsLibrary.generateSongId(
                 syncedLyrics.metadata.title, 
                 syncedLyrics.metadata.artist
@@ -633,7 +633,7 @@ export class DragDropManager {
         try {
             console.log('🆕 Creating new song from plain text:', title);
             
-            // Créer une nouvelle chanson directement via la bibliothèque
+            // Create new song directly via library
             const newSong = this.lyricsLibrary.createSong(title, 'Artiste Inconnu', '');
 
             if (!newSong) {
@@ -656,7 +656,7 @@ export class DragDropManager {
                 console.log(`➕ Added line ${index + 1}: ${line.substring(0, 30)}...`);
             });
 
-            // Si aucune ligne n'a été ajoutée, ajouter une ligne par défaut
+            // If no lines were added, add a default line
             if (lines.length === 0) {
                 newSong.addLine(0, 'Paroles importées du fichier...', 'vocal');
                 console.log('➕ Added default line');
@@ -703,10 +703,10 @@ export class DragDropManager {
         // Create the audio file path with BASE_PATH prefix for storage
         const audioFilePath = `${CONSTANTS.AUDIO.BASE_PATH}${fileName}`;
         
-        // Créer un identifiant unique pour le fichier basé sur ses propriétés
+        // Create unique identifier for file based on its properties
         const fileId = `${fileName}_${fileSize}_${lastModified}`;
         
-        // Créer les métadonnées du fichier avec le chemin
+        // Create file metadata with path
         const audioMetadata = {
             fileName: fileName,
             fileSize: fileSize,
@@ -715,7 +715,7 @@ export class DragDropManager {
             filePath: audioFilePath
         };
         
-        // Si une chanson est actuellement chargée, associer le chemin du fichier
+        // If a song is currently loaded, associate the file path
         if (this.currentLyrics) {
             // Store ONLY the filename (not the full path) for .lrx files
             // This prevents issues with URL encoding and allows proper path normalization

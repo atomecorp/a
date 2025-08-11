@@ -242,7 +242,7 @@ export class SyncedLyrics {
         // Use songId as key if no key provided
         const storageKey = key || `${CONSTANTS.STORAGE.LIBRARY_PREFIX}${this.songId}`;
         try {
-            // Ajoute les champs à la racine avant sauvegarde
+            // Add fields to root before saving
             // this.title = this.metadata.title;
             // this.artist = this.metadata.artist;
             // this.album = this.metadata.album;
@@ -270,7 +270,7 @@ export class SyncedLyrics {
             );
             lyrics.lines = parsed.lines;
             lyrics.metadata = parsed.metadata;
-            // Ajoute aussi les champs à la racine pour compatibilité
+            // Also add fields to root for compatibility
             lyrics.title = parsed.metadata.title;
             lyrics.artist = parsed.metadata.artist;
             lyrics.album = parsed.metadata.album;
