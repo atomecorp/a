@@ -2712,10 +2712,12 @@ window.updateTimecode = updateTimecode;
 
 // File import dialog function
 function showFileImportDialog() {
+    console.log('🔧 showFileImportDialog called - accepting .lrx files');
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = false;
-    input.accept = '.txt,.lrc,.json,.lrx,.md,.lyrics,.mp3,.m4a,.wav,.aac,.flac,.ogg,.webm,audio/*,text/*';
+    // Remove accept attribute to allow ALL file types, including .lrx
+    // input.accept = '.txt,.lrc,.json,.lrx,.md,.lyrics,.mp3,.m4a,.wav,.aac,.flac,.ogg,.webm,audio/*,text/*,application/json,application/octet-stream,*/*';
     input.style.display = 'none';
     
     input.addEventListener('change', async (e) => {

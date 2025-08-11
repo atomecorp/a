@@ -136,7 +136,49 @@ export function showSongLibrary() {
         },
         onClick: () => {
             document.body.removeChild(modalContainer);
-            window.showFileImportDialog();
+            // Local file import dialog implementation to ensure .lrx files are accepted
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = false;
+            // Don't use accept attribute to allow all file types including .lrx
+            input.style.display = 'none';
+            
+            input.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try {
+                        // Use the drag drop manager to process the file
+                        if (window.Lyrix && window.Lyrix.dragDropManager) {
+                            await window.Lyrix.dragDropManager.processFile(file);
+                        } else if (window.dragDropManager) {
+                            await window.dragDropManager.processFile(file);
+                        } else {
+                            console.error('❌ DragDropManager not available');
+                        }
+                        // Refresh the song library display
+                        if (window.showSongLibrary) {
+                            window.showSongLibrary();
+                        }
+                    } catch (error) {
+                        console.error('❌ Error processing file:', error);
+                        if (window.Modal) {
+                            window.Modal({
+                                title: '❌ File Import Error',
+                                content: `<p>Failed to import file: ${error.message}</p>`,
+                                buttons: [{ text: 'OK' }],
+                                size: 'small'
+                            });
+                        }
+                    }
+                }
+                // Clean up
+                if (input.parentNode) {
+                    input.parentNode.removeChild(input);
+                }
+            });
+            
+            document.body.appendChild(input);
+            input.click();
         }
     });
 

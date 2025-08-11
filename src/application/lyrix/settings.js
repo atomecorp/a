@@ -209,6 +209,7 @@ export function showSettingsModal() {
         if (window.midiUtilities && window.midiUtilities.getMidiSpecialAssignment) {
             currentMidiNote = window.midiUtilities.getMidiSpecialAssignment(settingKey);
             console.log(`🎹 Loading MIDI special assignment for ${settingKey}: ${currentMidiNote}`);
+            console.log(`🔍 All special assignments:`, window.midiUtilities.getAllSpecialAssignments());
         } else {
             console.warn('⚠️ MIDI utilities not available or getMidiSpecialAssignment method missing');
         }
@@ -228,6 +229,18 @@ export function showSettingsModal() {
                 textAlign: 'center'
             }
         });
+
+        // Force update the input value after creation
+        if (currentMidiNote) {
+            midiInput.value = currentMidiNote;
+            midiInput.setAttribute('value', currentMidiNote);
+        }
+
+        // Store setting key as data attribute for later reference
+        midiInput.setAttribute('data-setting-key', settingKey);
+
+        console.log(`🔍 Input created for ${settingKey} with value: "${currentMidiNote || ''}" (raw: ${currentMidiNote})`);
+        console.log(`🔍 Input element value:`, midiInput.value);
 
         const midiLearnButton = window.$('button', {
             text: '🎹',
@@ -733,4 +746,27 @@ export function showSettingsModal() {
         const firstInput = modal.querySelector('input');
         if (firstInput) firstInput.focus();
     }, 100);
+
+    // Force update all MIDI assignment values after DOM is ready
+    setTimeout(() => {
+        updateAllMidiInputValues(modal);
+    }, 200);
+}
+
+// Function to update all MIDI input values in the modal
+function updateAllMidiInputValues(modal) {
+    if (!window.midiUtilities) return;
+    
+    // Find all MIDI inputs and update their values using the data-setting-key attribute
+    const midiInputs = modal.querySelectorAll('input[data-setting-key]');
+    
+    midiInputs.forEach((input) => {
+        const settingKey = input.getAttribute('data-setting-key');
+        if (settingKey) {
+            const midiNote = window.midiUtilities.getMidiSpecialAssignment(settingKey);
+            if (midiNote) {
+                input.value = midiNote;
+            }
+        }
+    });
 }
