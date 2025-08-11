@@ -318,19 +318,16 @@ export class MidiUtilities {
         if (this.statusLine) {
             this.statusLine.textContent = 'MIDI log cleared. Waiting for data...';
         }
-        console.log('🗑️ MIDI log cleared');
     }
 
     // Method to be called from Swift via JavaScript bridge
     receiveMidiData(data1, data2, data3, timestamp = null) {
-        console.log('🎵 receiveMidiData called with:', data1, data2, data3, timestamp);
         
         // Handle MIDI learning mode
         if (this.isLearning && this.learnCallback) {
             // Check if it's a Note On message (0x90-0x9F)
             if ((data1 & 0xF0) === 0x90 && data3 > 0) {
                 const midiNote = data2;
-                console.log(`🎹 MIDI Learn: Note ${midiNote} captured`);
                 this.learnCallback(midiNote);
                 this.stopMidiLearn();
                 return;
@@ -349,7 +346,6 @@ export class MidiUtilities {
     
     // Test method to simulate MIDI data
     testMidiData() {
-        console.log('🧪 Testing MIDI data...');
         this.receiveMidiData(0x90, 60, 127); // Note On
         setTimeout(() => {
             this.receiveMidiData(0x80, 60, 0); // Note Off
@@ -383,7 +379,6 @@ export class MidiUtilities {
 
     // MIDI Learning Methods
     startMidiLearn(callback) {
-        console.log('🎹 Starting MIDI learn mode...');
         this.isLearning = true;
         this.learnCallback = callback;
         
@@ -395,7 +390,6 @@ export class MidiUtilities {
     }
 
     stopMidiLearn() {
-        console.log('🎹 Stopping MIDI learn mode');
         this.isLearning = false;
         this.learnCallback = null;
         
@@ -410,7 +404,6 @@ export class MidiUtilities {
     setMidiAssignment(songKey, midiNote) {
         this.midiAssignments.set(parseInt(midiNote), songKey);
         this.saveMidiAssignments();
-        console.log(`🎵 MIDI assignment saved: Note ${midiNote} -> ${songKey}`);
     }
 
     getMidiAssignment(songKey) {
@@ -427,7 +420,6 @@ export class MidiUtilities {
             if (assignedSong === songKey) {
                 this.midiAssignments.delete(midiNote);
                 this.saveMidiAssignments();
-                console.log(`🎵 MIDI assignment removed: Note ${midiNote} -> ${songKey}`);
                 break;
             }
         }
@@ -436,13 +428,11 @@ export class MidiUtilities {
     handleMidiSongTrigger(midiNote) {
         const songKey = this.midiAssignments.get(midiNote);
         if (songKey) {
-            console.log(`🎵 MIDI triggered song load: Note ${midiNote} -> ${songKey}`);
             
             // Call the global loadAndDisplaySong function if available
             if (window.loadAndDisplaySong) {
                 window.loadAndDisplaySong(songKey);
             } else {
-                console.warn('❌ loadAndDisplaySong function not available');
             }
         }
     }
@@ -453,7 +443,6 @@ export class MidiUtilities {
             const assignmentsObj = Object.fromEntries(this.midiAssignments);
             localStorage.setItem('lyrix_midi_assignments', JSON.stringify(assignmentsObj));
         } catch (error) {
-            console.error('❌ Error saving MIDI assignments:', error);
         }
     }
 
@@ -463,10 +452,8 @@ export class MidiUtilities {
             if (saved) {
                 const assignmentsObj = JSON.parse(saved);
                 this.midiAssignments = new Map(Object.entries(assignmentsObj).map(([k, v]) => [parseInt(k), v]));
-                console.log('📚 MIDI assignments loaded:', this.midiAssignments.size, 'assignments');
             }
         } catch (error) {
-            console.error('❌ Error loading MIDI assignments:', error);
             this.midiAssignments = new Map();
         }
     }
@@ -478,7 +465,6 @@ export class MidiUtilities {
 
     // Special Assignment Methods (for fullscreen, etc.)
     setMidiSpecialAssignment(actionKey, midiNote) {
-        console.log(`🔧 Setting special assignment: ${actionKey} -> Note ${midiNote}`);
         
         // For fullscreen actions, remove any existing assignment to prevent accumulation
         if (actionKey === 'fullscreen_activate' || actionKey === 'fullscreen_deactivate') {
@@ -487,8 +473,6 @@ export class MidiUtilities {
         
         this.specialAssignments.set(parseInt(midiNote), actionKey);
         this.saveSpecialAssignments();
-        console.log(`🎵 MIDI special assignment saved: Note ${midiNote} -> ${actionKey}`);
-        console.log(`🔍 Current special assignments after save:`, Object.fromEntries(this.specialAssignments));
     }
 
     getMidiSpecialAssignment(actionKey) {
@@ -505,63 +489,47 @@ export class MidiUtilities {
             if (assignedAction === actionKey) {
                 this.specialAssignments.delete(midiNote);
                 this.saveSpecialAssignments();
-                console.log(`🎵 MIDI special assignment removed: Note ${midiNote} -> ${actionKey}`);
                 break;
             }
         }
     }
 
     handleMidiSpecialTrigger(midiNote) {
-        console.log(`🔍 Checking special triggers for MIDI note: ${midiNote}`);
-        console.log(`🔍 Current special assignments:`, Object.fromEntries(this.specialAssignments));
         
         const actionKey = this.specialAssignments.get(midiNote);
         if (actionKey) {
-            console.log(`🎵 MIDI triggered special action: Note ${midiNote} -> ${actionKey}`);
             
             switch (actionKey) {
                 case 'enter_fullscreen':
-                    console.log('🖥️ Calling toggleFullscreen(true) to enter fullscreen...');
                     this.toggleFullscreen(true);
                     break;
                 case 'exit_fullscreen':
-                    console.log('🖥️ Calling toggleFullscreen(false) to exit fullscreen...');
                     this.toggleFullscreen(false);
                     break;
                 case 'fullscreen_activate':
-                    console.log('🖥️ Calling toggleFullscreen(true) for activation...');
                     this.toggleFullscreen(true);
                     break;
                 case 'fullscreen_deactivate':
-                    console.log('🖥️ Calling toggleFullscreen(false) for deactivation...');
                     this.toggleFullscreen(false);
                     break;
                 default:
-                    console.warn(`❌ Unknown special action: ${actionKey}`);
             }
         } else {
-            console.log(`🔍 No special assignment found for MIDI note: ${midiNote}`);
         }
     }
 
     // Unified fullscreen toggle method
     toggleFullscreen(enterFullscreen = null) {
-        console.log(`🖥️ toggleFullscreen called with parameter: ${enterFullscreen}`);
         
         // Try to call the display instance method directly
         if (window.Lyrix && window.Lyrix.lyricsDisplay) {
-            console.log('✅ Found Lyrix display instance, calling toggleFullscreen...');
             window.Lyrix.lyricsDisplay.toggleFullscreen(enterFullscreen);
-            console.log(`✅ Fullscreen ${enterFullscreen === true ? 'activated' : enterFullscreen === false ? 'deactivated' : 'toggled'} via display instance`);
         } else {
             // Fallback to button click (but this won't support the parameter)
-            console.log('⚠️ Lyrix display instance not found, falling back to button click...');
             const fullscreenButton = document.getElementById('fullscreen_mode');
             if (fullscreenButton) {
                 fullscreenButton.click();
-                console.log('✅ Fullscreen button clicked via fallback');
             } else {
-                console.error('❌ Fullscreen button not found (ID: fullscreen_mode)');
             }
         }
     }
@@ -572,7 +540,6 @@ export class MidiUtilities {
             const assignmentsObj = Object.fromEntries(this.specialAssignments);
             localStorage.setItem('lyrix_midi_special_assignments', JSON.stringify(assignmentsObj));
         } catch (error) {
-            console.error('❌ Error saving MIDI special assignments:', error);
         }
     }
 
@@ -582,10 +549,8 @@ export class MidiUtilities {
             if (saved) {
                 const assignmentsObj = JSON.parse(saved);
                 this.specialAssignments = new Map(Object.entries(assignmentsObj).map(([k, v]) => [parseInt(k), v]));
-                console.log('📚 MIDI special assignments loaded:', this.specialAssignments.size, 'assignments');
             }
         } catch (error) {
-            console.error('❌ Error loading MIDI special assignments:', error);
             this.specialAssignments = new Map();
         }
     }
@@ -597,11 +562,9 @@ export class MidiUtilities {
 
     // Test fullscreen functionality manually (for debugging)
     testFullscreenManually() {
-        console.log('🧪 Testing fullscreen manually...');
         this.toggleFullscreen(true);  // Enter fullscreen
         
         setTimeout(() => {
-            console.log('🧪 Testing fullscreen exit...');
             this.toggleFullscreen(false);  // Exit fullscreen
         }, 3000);
     }
