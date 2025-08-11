@@ -41,6 +41,24 @@ export function toggleMidiInspector() {
     }
 }
 
+// Toggle timecode visibility in lyrics lines
+export function toggleTimecodeVisibility() {
+    const showTimecodes = localStorage.getItem('lyrix_show_timecodes') === 'true';
+    
+    // Find all existing timecode elements and toggle their visibility
+    const timecodeElements = document.querySelectorAll('.timecode-span, [class*="timecode"]');
+    timecodeElements.forEach(timecode => {
+        if (timecode) {
+            timecode.style.display = showTimecodes ? 'inline' : 'none';
+        }
+    });
+    
+    // Also trigger any existing timecode update mechanism in LyricsDisplay
+    if (window.lyricsDisplay && window.lyricsDisplay.updateTimecodeVisibility) {
+        window.lyricsDisplay.updateTimecodeVisibility();
+    }
+}
+
 // Start MIDI learn for settings function
 export function startMidiLearnForSetting(settingName, inputElement, buttonElement) {
     if (!window.midiUtilities) {
@@ -288,40 +306,6 @@ function createSettingsContent() {
         }
     });
 
-    // Add small close button in top-right corner
-    const closeButton = window.$('button', {
-        text: '✕',
-        type: 'button',
-        'aria-label': 'Close settings panel',
-        css: {
-            position: 'absolute',
-            top: '10px',
-            right: '10px',
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: '#999',
-            fontSize: '16px',
-            cursor: 'pointer',
-            padding: '5px',
-            borderRadius: '3px',
-            transition: 'color 0.2s',
-            zIndex: '10'
-        },
-        onClick: closeSettingsPanel
-    });
-
-    closeButton.addEventListener('mouseenter', () => {
-        closeButton.style.color = '#666';
-        closeButton.style.backgroundColor = '#f0f0f0';
-    });
-
-    closeButton.addEventListener('mouseleave', () => {
-        closeButton.style.color = '#999';
-        closeButton.style.backgroundColor = 'transparent';
-    });
-
-    content.appendChild(closeButton);
-
     // Helper function to create setting sections
     function createSettingSection(title, items) {
         const section = window.$('div', {
@@ -539,22 +523,60 @@ function createSettingsContent() {
 
         leftColumn.append(labelDiv, descDiv);
 
-        const toggle = window.$('input', {
-            type: 'checkbox',
-            checked: localStorage.getItem(storageKey) === 'true',
+        // Get current state
+        const isEnabled = localStorage.getItem(storageKey) === 'true';
+
+        // Create toggle button
+        const toggleButton = window.$('button', {
+            text: isEnabled ? 'ON' : 'OFF',
+            type: 'button',
             css: {
-                width: '20px',
-                height: '20px',
-                cursor: 'pointer'
+                width: '60px',
+                height: '30px',
+                border: 'none',
+                borderRadius: '15px',
+                backgroundColor: isEnabled ? '#28a745' : '#6c757d',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                transition: 'all 0.3s ease',
+                outline: 'none'
+            },
+            title: `${isEnabled ? 'Disable' : 'Enable'} ${label}`
+        });
+
+        // Toggle functionality
+        toggleButton.addEventListener('click', () => {
+            const currentState = localStorage.getItem(storageKey) === 'true';
+            const newState = !currentState;
+            
+            // Update localStorage
+            localStorage.setItem(storageKey, newState.toString());
+            
+            // Update button appearance
+            toggleButton.textContent = newState ? 'ON' : 'OFF';
+            toggleButton.style.backgroundColor = newState ? '#28a745' : '#6c757d';
+            toggleButton.title = `${newState ? 'Disable' : 'Enable'} ${label}`;
+            
+            // Call the toggle function
+            if (onToggle) {
+                onToggle();
             }
         });
 
-        toggle.addEventListener('change', (e) => {
-            localStorage.setItem(storageKey, e.target.checked);
-            if (onToggle) onToggle();
+        // Hover effects
+        toggleButton.addEventListener('mouseenter', () => {
+            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#218838' : '#5a6268';
         });
 
-        row.append(leftColumn, toggle);
+        toggleButton.addEventListener('mouseleave', () => {
+            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#28a745' : '#6c757d';
+        });
+
+        row.append(leftColumn, toggleButton);
         return row;
     }
 
@@ -573,13 +595,208 @@ function createSettingsContent() {
     const audioControls = [
         createToggleRow('Show Audio Player', 'lyrix_show_audio_controls', 'Display audio player controls', toggleAudioPlayerControls),
         createToggleRow('Enable Audio Sync', 'lyrix_enable_audio_sync', 'Synchronize lyrics with audio playback', toggleAudioSync),
-        createToggleRow('Show MIDI Inspector', 'lyrix_show_midi_inspector', 'Display MIDI input inspector', toggleMidiInspector)
+        createToggleRow('Show MIDI Inspector', 'lyrix_show_midi_inspector', 'Display MIDI input inspector', toggleMidiInspector),
+        createToggleRow('Show Timecodes', 'lyrix_show_timecodes', 'Display time markers in lyrics lines', toggleTimecodeVisibility)
     ];
 
     const audioSection = createSettingSection('🎵 Audio & Display', audioControls);
 
+    // Font size control
+    function createFontSizeControl() {
+        const container = window.$('div', {
+            css: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '15px',
+                padding: '10px',
+                backgroundColor: '#fafafa',
+                borderRadius: '5px',
+                border: '1px solid #eee'
+            }
+        });
+
+        const leftColumn = window.$('div', {
+            css: { flex: '1' }
+        });
+
+        const labelDiv = window.$('div', {
+            text: 'Font Size',
+            css: {
+                fontWeight: '500',
+                marginBottom: '3px',
+                color: '#333'
+            }
+        });
+
+        const descDiv = window.$('div', {
+            text: 'Adjust lyrics text size',
+            css: {
+                fontSize: '12px',
+                color: '#666',
+                fontStyle: 'italic'
+            }
+        });
+
+        leftColumn.append(labelDiv, descDiv);
+
+        const rightColumn = window.$('div', {
+            css: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+            }
+        });
+
+        // Get current font size - check multiple sources
+        let currentFontSize = parseInt(localStorage.getItem('lyrix_font_size'));
+        
+        // If not in localStorage, try to get from actual lyrics container
+        if (!currentFontSize || isNaN(currentFontSize)) {
+            const lyricsContainer = document.querySelector('#lyrics-content, #lyrics_lines_container, .lyrics-container');
+            if (lyricsContainer) {
+                const computedStyle = window.getComputedStyle(lyricsContainer);
+                const fontSize = parseInt(computedStyle.fontSize);
+                if (fontSize && !isNaN(fontSize)) {
+                    currentFontSize = fontSize;
+                }
+            }
+        }
+        
+        // Fallback to default
+        if (!currentFontSize || isNaN(currentFontSize)) {
+            currentFontSize = 16;
+        }
+
+        // Decrease button
+        const decreaseButton = window.$('button', {
+            text: '−',
+            type: 'button',
+            css: {
+                width: '30px',
+                height: '30px',
+                border: '1px solid #ccc',
+                borderRadius: '3px',
+                backgroundColor: '#f8f9fa',
+                color: '#333',
+                cursor: 'pointer',
+                fontSize: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0'
+            },
+            title: 'Decrease font size'
+        });
+
+        // Font size input
+        const fontInput = window.$('input', {
+            type: 'number',
+            min: '10',
+            max: '255',
+            value: currentFontSize.toString(),
+            css: {
+                width: '60px',
+                padding: '5px',
+                border: '1px solid #ccc',
+                borderRadius: '3px',
+                fontSize: '12px',
+                textAlign: 'center'
+            }
+        });
+
+        // Increase button
+        const increaseButton = window.$('button', {
+            text: '+',
+            type: 'button',
+            css: {
+                width: '30px',
+                height: '30px',
+                border: '1px solid #ccc',
+                borderRadius: '3px',
+                backgroundColor: '#f8f9fa',
+                color: '#333',
+                cursor: 'pointer',
+                fontSize: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0'
+            },
+            title: 'Increase font size'
+        });
+
+        // Function to update font size
+        function updateFontSize(newSize) {
+            newSize = Math.max(10, Math.min(255, newSize)); // Clamp between 10-255
+            fontInput.value = newSize;
+            localStorage.setItem('lyrix_font_size', newSize);
+            
+            // Apply immediately to lyrics container if exists
+            const lyricsContainers = document.querySelectorAll('.lyrics-container, #lyrics-content, #lyrics_lines_container');
+            lyricsContainers.forEach(container => {
+                if (container) {
+                    container.style.fontSize = `${newSize}px`;
+                }
+            });
+        }
+
+        // Event listeners
+        decreaseButton.addEventListener('click', () => {
+            const currentSize = parseInt(fontInput.value) || 16;
+            updateFontSize(currentSize - 1);
+        });
+
+        increaseButton.addEventListener('click', () => {
+            const currentSize = parseInt(fontInput.value) || 16;
+            updateFontSize(currentSize + 1);
+        });
+
+        fontInput.addEventListener('change', (e) => {
+            const newSize = parseInt(e.target.value);
+            if (!isNaN(newSize)) {
+                updateFontSize(newSize);
+            }
+        });
+
+        // Hover effects
+        [decreaseButton, increaseButton].forEach(button => {
+            button.addEventListener('mouseenter', () => {
+                button.style.backgroundColor = '#e9ecef';
+            });
+            button.addEventListener('mouseleave', () => {
+                button.style.backgroundColor = '#f8f9fa';
+            });
+        });
+
+        rightColumn.append(decreaseButton, fontInput, increaseButton);
+        container.append(leftColumn, rightColumn);
+        
+        // Update input value when container is created (refresh current value)
+        setTimeout(() => {
+            let refreshedSize = parseInt(localStorage.getItem('lyrix_font_size'));
+            if (!refreshedSize || isNaN(refreshedSize)) {
+                const lyricsContainer = document.querySelector('#lyrics-content, #lyrics_lines_container, .lyrics-container');
+                if (lyricsContainer) {
+                    const computedStyle = window.getComputedStyle(lyricsContainer);
+                    const fontSize = parseInt(computedStyle.fontSize);
+                    if (fontSize && !isNaN(fontSize)) {
+                        refreshedSize = fontSize;
+                    }
+                }
+            }
+            if (refreshedSize && !isNaN(refreshedSize)) {
+                fontInput.value = refreshedSize;
+            }
+        }, 100);
+        
+        return container;
+    }
+
+    const fontSection = createSettingSection('🔤 Font Settings', [createFontSizeControl()]);
+
     // Add sections to content
-    content.append(midiSection, audioSection);
+    content.append(midiSection, audioSection, fontSection);
 
     return content;
 }
@@ -818,22 +1035,60 @@ export function showSettingsModal() {
 
         leftColumn.append(labelDiv, descDiv);
 
-        const toggle = window.$('input', {
-            type: 'checkbox',
-            checked: localStorage.getItem(storageKey) === 'true',
+        // Get current state
+        const isEnabled = localStorage.getItem(storageKey) === 'true';
+
+        // Create toggle button
+        const toggleButton = window.$('button', {
+            text: isEnabled ? 'ON' : 'OFF',
+            type: 'button',
             css: {
-                width: '20px',
-                height: '20px',
-                cursor: 'pointer'
+                width: '60px',
+                height: '30px',
+                border: 'none',
+                borderRadius: '15px',
+                backgroundColor: isEnabled ? '#28a745' : '#6c757d',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                transition: 'all 0.3s ease',
+                outline: 'none'
+            },
+            title: `${isEnabled ? 'Disable' : 'Enable'} ${label}`
+        });
+
+        // Toggle functionality
+        toggleButton.addEventListener('click', () => {
+            const currentState = localStorage.getItem(storageKey) === 'true';
+            const newState = !currentState;
+            
+            // Update localStorage
+            localStorage.setItem(storageKey, newState.toString());
+            
+            // Update button appearance
+            toggleButton.textContent = newState ? 'ON' : 'OFF';
+            toggleButton.style.backgroundColor = newState ? '#28a745' : '#6c757d';
+            toggleButton.title = `${newState ? 'Disable' : 'Enable'} ${label}`;
+            
+            // Call the toggle function
+            if (onToggle) {
+                onToggle();
             }
         });
 
-        toggle.addEventListener('change', (e) => {
-            localStorage.setItem(storageKey, e.target.checked);
-            if (onToggle) onToggle();
+        // Hover effects
+        toggleButton.addEventListener('mouseenter', () => {
+            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#218838' : '#5a6268';
         });
 
-        row.append(leftColumn, toggle);
+        toggleButton.addEventListener('mouseleave', () => {
+            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#28a745' : '#6c757d';
+        });
+
+        row.append(leftColumn, toggleButton);
         return row;
     }
 

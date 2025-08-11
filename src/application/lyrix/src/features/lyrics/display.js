@@ -1089,8 +1089,8 @@ export class LyricsDisplay {
             }
         });
         
-        // Show timecode if enabled and line has a time (but not in fullscreen mode)
-        if (this.showTimecodes && line.time >= 0 && !this.fullscreenMode) {
+        // Always create timecode if line has a time (but not in fullscreen mode), hide/show based on preferences
+        if (line.time >= 0 && !this.fullscreenMode) {
             const timeSpan = $('span', {
                 text: this.formatTimeDisplay(line.time),
                 css: {
@@ -1104,7 +1104,8 @@ export class LyricsDisplay {
                     textAlign: 'center',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
-                    userSelect: 'none'
+                    userSelect: 'none',
+                    overflow: 'hidden'
                 }
             });
             
@@ -1330,6 +1331,9 @@ export class LyricsDisplay {
                  
                 }
             });
+            
+            // Set initial visibility based on user preferences
+            timeSpan.style.display = this.showTimecodes ? 'inline-block' : 'none';
             
             lineContent.append(timeSpan);
         }

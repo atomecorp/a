@@ -3,7 +3,7 @@
 
 // Import modal modules from new organized structure
 import { showSongLibrary } from './src/components/songLibraryModal.js';
-import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector } from './src/components/settings.js';
+import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
 
 
 
@@ -199,6 +199,7 @@ function initializeLyrix() {
         window.toggleAudioPlayerControls = toggleAudioPlayerControls;
         window.toggleAudioSync = toggleAudioSync;
         window.toggleMidiInspector = toggleMidiInspector;
+        window.toggleTimecodeVisibility = toggleTimecodeVisibility;
         // Ensure MIDI inspector is in the toolbar
         const appContainer = document.getElementById('lyrix_app');
         const toolbarRow = document.getElementById('main-toolbar-row');
