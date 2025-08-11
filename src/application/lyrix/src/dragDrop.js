@@ -227,7 +227,6 @@ export class DragDropManager {
     }
 
     async handleDroppedFiles(files) {
-        // console.log('📥 Dropped files:', files);
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         
         // Show processing indicator

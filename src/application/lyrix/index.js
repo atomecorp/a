@@ -1838,17 +1838,6 @@ function createMainInterface() {
         }
     });
     
-    // Create song button moved to song library panel
-    // const createSongButton = UIManager.createInterfaceButton('➕', {
-    //     id: 'create_new_song_button',
-    //     onClick: () => {
-    //         createNewSong();
-    //     },
-    //     css: {
-    //         marginBottom: '10px'
-    //     }
-    // });
-    
     const songListButton = UIManager.createInterfaceButton('☰', {
         id: 'song_list_button',
         onClick: () => {
@@ -2319,12 +2308,6 @@ function createMainInterface() {
         
         // Note: These tools will be moved to lyrics toolbar by display.js
         // leftPanel.append(scrubContainer, timecodeDisplay);
-        
-        // Note: MIDI utilities will also be moved to lyrics toolbar by display.js
-        // if (midiUtilities && midiUtilities.midiContainer) {
-        //     console.log('🎵 Adding MIDI logger to left panel...');
-        //     leftPanel.append(midiUtilities.midiContainer);
-        // }
         
         // Setup audio event listeners
         if (audioController.on) {

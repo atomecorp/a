@@ -168,10 +168,6 @@ export class LyricsLibrary {
             });
             const storageKey = syncedLyrics.saveToStorage();
             if (storageKey) {
-                // Always fallback to root fields if metadata fields are missing or empty
-                // const title = (syncedLyrics.metadata.title && syncedLyrics.metadata.title !== '[no title]') ? syncedLyrics.metadata.title : (syncedLyrics.title || '[no title]');
-                // const artist = (syncedLyrics.metadata.artist && syncedLyrics.metadata.artist !== '[no artist]') ? syncedLyrics.metadata.artist : (syncedLyrics.artist || '[no artist]');
-                //console.log('✅ Chanson sauvegardée:', title, '| Auteur:', artist, 'avec ID:', syncedLyrics.songId);
                 return storageKey;
             } else {
                 throw new Error('Failed to save to storage');
