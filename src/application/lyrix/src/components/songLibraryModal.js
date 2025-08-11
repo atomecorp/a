@@ -3,14 +3,10 @@
 
 // Show song library
 export function showSongLibrary() {
-    console.log('📚 Opening song library...');
-    console.log('🎹 MIDI utilities available:', !!window.midiUtilities);
     if (window.midiUtilities) {
-        console.log('🎹 Current MIDI assignments:', window.midiUtilities.getAllAssignments());
     }
     
     if (!window.lyricsLibrary) {
-        console.error('❌ LyricsLibrary non disponible');
         window.Modal({
             title: '❌ Error',
             content: '<p>Library not initialized</p>',
@@ -153,14 +149,12 @@ export function showSongLibrary() {
                         } else if (window.dragDropManager) {
                             await window.dragDropManager.processFile(file);
                         } else {
-                            console.error('❌ DragDropManager not available');
                         }
                         // Refresh the song library display
                         if (window.showSongLibrary) {
                             window.showSongLibrary();
                         }
                     } catch (error) {
-                        console.error('❌ Error processing file:', error);
                         if (window.Modal) {
                             window.Modal({
                                 title: '❌ File Import Error',
@@ -335,14 +329,12 @@ export function showSongLibrary() {
             order: index
         }));
         localStorage.setItem('lyrix_custom_song_order', JSON.stringify(orderData));
-        console.log('💾 Custom song order saved to localStorage');
     }
 
     function loadCustomSongOrder() {
         try {
             const savedOrder = localStorage.getItem('lyrix_custom_song_order');
             if (!savedOrder) {
-                console.log('📋 No custom song order found, using default');
                 return;
             }
 
@@ -376,9 +368,7 @@ export function showSongLibrary() {
                 ...newSongs
             ];
 
-            console.log(`📋 Custom song order loaded: ${songsWithOrder.length} ordered songs, ${newSongs.length} new songs`);
         } catch (error) {
-            console.error('❌ Error loading custom song order:', error);
         }
     }
 
@@ -407,13 +397,11 @@ export function showSongLibrary() {
         updateSongList();
         setTimeout(() => refreshMidiInputs(), 50);
         saveCustomSongOrder(); // Save the new order
-        console.log('🔤 Songs sorted alphabetically and order saved');
     }
 
     // Function to auto-fill MIDI notes starting from root note
     function autoFillMidiNotes() {
         if (!window.midiUtilities) {
-            console.error('❌ MIDI utilities not available');
             window.Modal({
                 title: '❌ Error',
                 content: '<p>MIDI utilities not available</p>',
@@ -425,7 +413,6 @@ export function showSongLibrary() {
 
         const rootNoteStr = autoFillInput.value.trim();
         if (!rootNoteStr) {
-            console.error('❌ Root note not specified');
             window.Modal({
                 title: '❌ Error',
                 content: '<p>Please enter a root note (0-127)</p>',
@@ -437,7 +424,6 @@ export function showSongLibrary() {
 
         const rootNote = parseInt(rootNoteStr);
         if (isNaN(rootNote) || rootNote < 0 || rootNote > 127) {
-            console.error('❌ Invalid root note');
             window.Modal({
                 title: '❌ Error',
                 content: '<p>Root note must be between 0 and 127</p>',
@@ -461,7 +447,6 @@ export function showSongLibrary() {
             
             // Check if MIDI note is in valid range
             if (midiNote > 127) {
-                console.warn(`⚠️ Skipping ${item.song.title}: MIDI note ${midiNote} exceeds 127`);
                 skippedCount++;
                 return;
             }
@@ -474,9 +459,7 @@ export function showSongLibrary() {
                 window.midiUtilities.setMidiAssignment(item.value, midiNote);
                 assignedCount++;
                 
-                console.log(`🎹 Auto-assigned: ${item.song.title} -> Note ${midiNote}`);
             } catch (error) {
-                console.error(`❌ Error assigning MIDI note to ${item.song.title}:`, error);
                 skippedCount++;
             }
         });
@@ -484,7 +467,6 @@ export function showSongLibrary() {
         // Refresh MIDI inputs in the UI
         setTimeout(() => refreshMidiInputs(), 100);
 
-        console.log(`🎹 Auto-fill complete: ${assignedCount} assigned, ${skippedCount} skipped`);
     }
 
     function updateSongList() {
@@ -592,11 +574,9 @@ export function showSongLibrary() {
                     window.midiUtilities.removeMidiAssignment(item.value);
                     // Set new assignment
                     window.midiUtilities.setMidiAssignment(item.value, midiNote);
-                    console.log(`🎹 Manual MIDI assignment: Note ${midiNote} -> ${item.song.title}`);
                 } else if (window.midiUtilities && e.target.value === '') {
                     // Remove assignment if input is cleared
                     window.midiUtilities.removeMidiAssignment(item.value);
-                    console.log(`🎹 MIDI assignment removed for: ${item.song.title}`);
                 }
             });
 
@@ -624,7 +604,6 @@ export function showSongLibrary() {
             midiLearnButton.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (!window.midiUtilities) {
-                    console.error('❌ MIDI utilities not available');
                     return;
                 }
 
@@ -634,16 +613,13 @@ export function showSongLibrary() {
                     midiLearnButton.style.backgroundColor = '#f0f8ff';
                     midiLearnButton.style.color = '#007acc';
                     midiLearnButton.textContent = '🎹';
-                    console.log('🎹 MIDI learn stopped');
                 } else {
                     // Start learning
                     midiLearnButton.style.backgroundColor = '#ff6b6b';
                     midiLearnButton.style.color = 'white';
                     midiLearnButton.textContent = '⏹️';
-                    console.log(`🎹 MIDI learn started for: ${item.song.title}`);
                     
                     window.midiUtilities.startMidiLearn((midiNote) => {
-                        console.log(`🎹 MIDI learn callback triggered with note: ${midiNote}`);
                         // Remove any existing assignment for this song
                         window.midiUtilities.removeMidiAssignment(item.value);
                         // Set new assignment
@@ -654,7 +630,6 @@ export function showSongLibrary() {
                         midiLearnButton.style.backgroundColor = '#f0f8ff';
                         midiLearnButton.style.color = '#007acc';
                         midiLearnButton.textContent = '🎹';
-                        console.log(`🎹 MIDI learn completed: Note ${midiNote} -> ${item.song.title}`);
                     });
                 }
             });
@@ -682,10 +657,8 @@ export function showSongLibrary() {
                                     document.body.removeChild(modalContainer);
                                     showSongLibrary();
                                 } else {
-                                    console.error('❌ Failed to delete song');
                                 }
                             } catch (error) {
-                                console.error('❌ Error deleting song:', error);
                             }
                         }
                     });
@@ -752,7 +725,6 @@ export function showSongLibrary() {
                     updateSongList();
                     setTimeout(() => refreshMidiInputs(), 50);
                     saveCustomSongOrder(); // Save the new order
-                    console.log(`🔄 Moved song from position ${draggedIndex} to ${targetIndex} and saved order`);
                 }
             });
 
@@ -778,7 +750,6 @@ export function showSongLibrary() {
     // Refresh MIDI inputs after DOM is ready
     setTimeout(() => {
         refreshMidiInputs();
-        console.log('🎹 MIDI inputs refreshed in song library');
     }, 100);
 
     // Footer
