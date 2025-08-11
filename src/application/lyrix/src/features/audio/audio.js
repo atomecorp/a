@@ -12,17 +12,12 @@ function iosLog(message) {
         // For iOS AUv3 apps - send to Xcode console via WebKit message handler
         try {
             if (window.webkit?.messageHandlers?.console) {
-                window.webkit.messageHandlers.console.postMessage(prefixedMessage);
             } else {
                 // Fallback for development
-                console.log('[iOS]', prefixedMessage);
             }
         } catch (e) {
-            console.log('[iOS-fallback]', prefixedMessage);
         }
     } else {
-        // Standard console.log for desktop
-        console.log(prefixedMessage);
     }
 }
 
@@ -82,7 +77,6 @@ export class AudioManager {
                 return fileName ? this.createUrl(fileName) : null;
             } catch (e) {
                 debugLog('NORMALIZE', 'Corrupted audio metadata', e.message);
-                console.warn('⚠️ Corrupted audio metadata:', e);
                 return null;
             }
         }
@@ -150,7 +144,6 @@ export class AudioManager {
             return this.createUrl(decodedFileName);
         } catch (decodeError) {
             // If decoding fails, use the original filename
-            console.warn('⚠️ Audio path decode error, using original:', fileName);
             return this.createUrl(fileName);
         }
     }
@@ -225,7 +218,6 @@ export class AudioManager {
     // Debug audio path
     static debug(input) {
         const result = this.normalize(input);
-        console.log('🔍 Debug audio path:', { input, result });
         return result;
     }
     
@@ -315,7 +307,6 @@ export class AudioController {
             try {
                 callback(...args);
             } catch (error) {
-                console.error('❌ Error in event callback:', error);
             }
         });
     }
@@ -333,7 +324,6 @@ export class AudioController {
             
             if (!normalizedPath) {
                 debugLog('LOAD-AUDIO', 'Failed to normalize audio path', audioPath);
-                console.error('❌ Failed to normalize audio path:', audioPath);
                 return false;
             }
             
@@ -352,7 +342,6 @@ export class AudioController {
             
         } catch (error) {
             iosLog('❌ Error in loadAudio: ' + error);
-            console.error('❌ Error loading audio:', error);
             return false;
         }
     }
@@ -383,7 +372,6 @@ export class AudioController {
                     iosLog('🍎 iOS audio source set successfully for: ' + fileName);
                 } catch (srcError) {
                     iosLog('❌ iOS audio source error: ' + srcError);
-                    console.error('❌ iOS audio source error:', srcError);
                     this.handleIOSAudioError(srcError, fileName);
                 }
             }, 100);
@@ -391,7 +379,6 @@ export class AudioController {
             return true;
             
         } catch (error) {
-            console.error('❌ iOS audio loading error:', error);
             this.handleIOSAudioError(error, fileName);
             return false;
         }
@@ -456,16 +443,13 @@ export class AudioController {
             iosLog('❌ Error type: ' + (e.target.error ? e.target.error.code : 'unknown'));
             iosLog('❌ Error message: ' + (e.target.error ? e.target.error.message : 'no message'));
             iosLog('❌ Audio src was: ' + e.target.src);
-            console.error('❌ iOS audio error:', e.target.error);
             this.handleIOSAudioError(e.target.error, fileName);
         });
         
         this.audioPlayer.addEventListener('stalled', () => {
-            console.warn('⚠️ iOS audio stalled:', fileName);
         });
         
         this.audioPlayer.addEventListener('waiting', () => {
-            console.warn('⚠️ iOS audio waiting:', fileName);
         });
     }
 
@@ -490,7 +474,6 @@ export class AudioController {
                     this.audioPlayer.load();
                     iosLog('🔄 iOS audio reload attempt: ' + fileName);
                 } catch (reloadError) {
-                    console.error('❌ iOS audio reload failed:', reloadError);
                     this.emit('error', error);
                 }
             }, 500);
@@ -603,13 +586,11 @@ export class AudioController {
         
         // Emit 'loaded' when metadata (including duration) is available
         this.audioPlayer.addEventListener('loadedmetadata', () => {
-            console.log('✅ Audio metadata loaded successfully:', fileName);
             debugLog('DESKTOP-AUDIO', 'loadedmetadata event - duration', this.audioPlayer.duration);
             this.emit('loaded', this.audioPlayer.duration);
         });
         
         this.audioPlayer.addEventListener('loadeddata', () => {
-            console.log('✅ Audio data loaded successfully:', fileName);
             this.emit('ready');
         });
         
@@ -629,12 +610,10 @@ export class AudioController {
         });
         
         this.audioPlayer.addEventListener('error', (e) => {
-            console.error('❌ Audio loading error:', e.target.error, 'for file:', fileName);
             this.emit('error', e.target.error);
         });
         
         this.audioPlayer.addEventListener('canplaythrough', () => {
-            console.log('✅ Audio ready to play:', fileName);
             this.emit('ready');
         });
     }
@@ -647,7 +626,6 @@ export class AudioController {
         
         // iOS validation: ensure we return valid numbers
         if (this.isIOS() && (!isFinite(currentTime) || isNaN(currentTime))) {
-            console.warn('⚠️ iOS returned invalid currentTime, using 0');
             return 0;
         }
         
@@ -660,21 +638,18 @@ export class AudioController {
         
         // Validate time value
         if (!isFinite(time) || isNaN(time) || time < 0) {
-            console.warn('⚠️ Invalid time value:', time);
             return;
         }
         
         try {
             this.audioPlayer.currentTime = time;
         } catch (error) {
-            console.error('❌ Error setting current time:', error);
             if (this.isIOS()) {
                 // iOS fallback: try again after a small delay
                 setTimeout(() => {
                     try {
                         this.audioPlayer.currentTime = time;
                     } catch (retryError) {
-                        console.error('❌ iOS time set retry failed:', retryError);
                     }
                 }, 100);
             }
@@ -701,7 +676,6 @@ export class AudioController {
                         this.audioPlayer.pause();
                         this.audioPlayer.muted = false;
                         this.audioPlayer.currentTime = 0;
-                        console.log('📱 iOS audio unlocked');
                     }).catch(() => {
                         // Silent fail - this is expected on first try
                     });
@@ -734,12 +708,9 @@ export class AudioController {
             
             if (playPromise !== undefined) {
                 playPromise.then(() => {
-                    console.log('▶️ Audio playing successfully');
                 }).catch(error => {
-                    console.warn('⚠️ Audio play failed (likely iOS/mobile restrictions):', error.message);
                     // On iOS, user must interact with audio element first
                     if (error.name === 'NotAllowedError') {
-                        console.log('💡 Audio blocked by browser - user interaction required');
                     }
                 });
             }
@@ -756,7 +727,6 @@ export class AudioController {
     // Associate audio file with song
     associate(songIdentifier, audioPath) {
         const normalizedAudioPath = AudioManager.normalize(audioPath);
-        console.log('✅ Audio associated with song:', songIdentifier, '→', normalizedAudioPath);
         return true;
     }
     
@@ -768,7 +738,6 @@ export class AudioController {
     // Control audio player
     control(action, value = null) {
         if (!this.audioPlayer) {
-            console.log('❌ Audio player not initialized');
             return false;
         }
         
@@ -776,13 +745,11 @@ export class AudioController {
             case 'play':
                 this.audioPlayer.play();
                 this.playing = true;
-                console.log('▶️ Audio playing');
                 break;
                 
             case 'pause':
                 this.audioPlayer.pause();
                 this.playing = false;
-                console.log('⏸️ Audio paused');
                 break;
                 
             case 'toggle':
@@ -797,7 +764,6 @@ export class AudioController {
             case 'time':
                 if (value !== null) {
                     this.audioPlayer.currentTime = value;
-                    console.log('⏩ Seeking to', value + 's');
                 }
                 break;
                 
@@ -809,7 +775,6 @@ export class AudioController {
                     const volumeControlDisabled = isIOS || (isSafari && navigator.vendor === 'Apple Computer, Inc.');
                     
                     if (volumeControlDisabled) {
-                        console.log('🔊 Volume control disabled on iOS/Safari - use device volume buttons');
                         // Store the value but don't apply it
                         localStorage.setItem('lyrix_audio_volume', (value * 100).toString());
                         return false;
@@ -817,9 +782,7 @@ export class AudioController {
                     
                     try {
                         this.audioPlayer.volume = Math.max(0, Math.min(1, value));
-                        console.log('🔊 Volume:', (value * 100) + '%');
                     } catch (error) {
-                        console.log('🔊 Volume control not supported:', error.message);
                         return false;
                     }
                 }
@@ -838,7 +801,6 @@ export class AudioController {
                 return !!this.audioPlayer && !!this.audioPath;
                 
             default:
-                console.log('❌ Unknown audio action:', action);
                 return false;
         }
         
@@ -860,7 +822,6 @@ export class AudioController {
         this.currentFileName = file.name;
         this.currentMetadata = metadata;
         
-        console.log('✅ Audio file loaded:', file.name);
         return metadata;
     }
     
@@ -869,7 +830,6 @@ export class AudioController {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         
         try {
-            console.log('🎵 Loading audio from URL:', audioUrl.substring(0, 50) + '...');
             
             // Create or reset audio player
             if (this.audioPlayer) {
@@ -897,9 +857,7 @@ export class AudioController {
                     try {
                         this.audioPlayer.src = audioUrl;
                         this.audioPath = audioUrl;
-                        console.log('🍎 iOS audio URL set successfully');
                     } catch (srcError) {
-                        console.error('❌ iOS audio URL error:', srcError);
                         this.handleIOSAudioError(srcError, 'URL loading');
                     }
                 }, 150);
@@ -916,11 +874,9 @@ export class AudioController {
                 this.setupAudioListeners('URL Audio');
             }
             
-            console.log('✅ Audio URL loading initiated');
             return true;
             
         } catch (error) {
-            console.error('❌ Error loading audio from URL:', error);
             if (isIOS) {
                 this.handleIOSAudioError(error, 'URL loading');
             }
@@ -933,26 +889,21 @@ export class AudioController {
         if (!this.audioPlayer) return;
         
         this.audioPlayer.addEventListener('loadstart', () => {
-            console.log('🍎 iOS audio load started');
         });
         
         this.audioPlayer.addEventListener('loadedmetadata', () => {
-            console.log('🍎 iOS audio metadata loaded from URL');
             this.emit('loaded', this.audioPlayer.duration);
         });
         
         this.audioPlayer.addEventListener('loadeddata', () => {
-            console.log('🍎 iOS audio data loaded from URL');
             this.emit('ready');
         });
         
         this.audioPlayer.addEventListener('canplay', () => {
-            console.log('🍎 iOS audio can play from URL');
             this.emit('canplay');
         });
         
         this.audioPlayer.addEventListener('canplaythrough', () => {
-            console.log('🍎 iOS audio can play through from URL');
             this.emit('ready');
         });
         
@@ -979,20 +930,16 @@ export class AudioController {
         });
         
         this.audioPlayer.addEventListener('error', (e) => {
-            console.error('❌ iOS URL audio error:', e.target.error);
             this.handleIOSAudioError(e.target.error, 'URL playback');
         });
         
         this.audioPlayer.addEventListener('stalled', () => {
-            console.warn('⚠️ iOS URL audio stalled');
         });
         
         this.audioPlayer.addEventListener('waiting', () => {
-            console.warn('⚠️ iOS URL audio waiting');
         });
         
         this.audioPlayer.addEventListener('abort', () => {
-            console.warn('⚠️ iOS URL audio loading aborted');
         });
     }
     
@@ -1011,7 +958,6 @@ export class AudioController {
         this.currentFileName = null;
         this.currentMetadata = null;
         
-        console.log('✅ Audio removed');
     }
     
     // Clear current audio (alias for removeAudio)
@@ -1024,7 +970,6 @@ export class AudioController {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         
         if (isIOS) {
-            console.log('🍎 Performing iOS memory cleanup...');
             
             // Stop and clear audio
             if (this.audioPlayer) {
@@ -1034,7 +979,6 @@ export class AudioController {
                     this.audioPlayer.src = '';
                     this.audioPlayer.load(); // Force reload to clear buffers
                 } catch (error) {
-                    console.warn('⚠️ Audio cleanup warning:', error);
                 }
             }
             
@@ -1042,9 +986,7 @@ export class AudioController {
             if (this.audioPath && this.audioPath.startsWith('blob:')) {
                 try {
                     URL.revokeObjectURL(this.audioPath);
-                    console.log('🍎 Object URL revoked');
                 } catch (error) {
-                    console.warn('⚠️ URL revoke warning:', error);
                 }
             }
             
@@ -1059,7 +1001,6 @@ export class AudioController {
             this.currentMetadata = null;
             this.playing = false;
             
-            console.log('🍎 iOS memory cleanup completed');
         }
     }
 
@@ -1075,11 +1016,9 @@ export class AudioController {
                 const totalMB = Math.round(memoryInfo.totalJSHeapSize / 1024 / 1024);
                 const limitMB = Math.round(memoryInfo.jsHeapSizeLimit / 1024 / 1024);
                 
-                console.log(`🍎 iOS Memory: ${usedMB}MB used / ${totalMB}MB total / ${limitMB}MB limit`);
                 
                 // Warning if memory usage is high
                 if (usedMB > limitMB * 0.8) {
-                    console.warn('⚠️ High memory usage detected on iOS');
                     return false;
                 }
             }
