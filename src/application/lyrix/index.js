@@ -3881,8 +3881,6 @@ function showFileImportDialog() {
     }
 }
 
-// ...existing code...
-
 // Helper function for MIDI learning in settings
 function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
     if (window.Lyrix?.midiUtilities?.startMidiLearn) {
