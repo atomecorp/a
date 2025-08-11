@@ -47,7 +47,6 @@ export class LyricsLibrary {
                 this.builtInSongs = new Set(JSON.parse(status));
             }
         } catch (error) {
-            console.warn('⚠️ Error loading built-in songs status:', error);
             this.builtInSongs = new Set();
         }
     }
@@ -57,7 +56,6 @@ export class LyricsLibrary {
         try {
             localStorage.setItem(CONSTANTS.STORAGE.BUILTIN_SONGS, JSON.stringify([...this.builtInSongs]));
         } catch (error) {
-            console.error('❌ Error saving built-in songs status:', error);
         }
     }
     
@@ -103,7 +101,6 @@ export class LyricsLibrary {
                         });
                     }
                 } catch (error) {
-                    console.warn(`⚠️ Error parsing song data for key ${key}:`, error);
                 }
             }
         });
@@ -158,7 +155,6 @@ export class LyricsLibrary {
     
     // Save a song to the library
     saveSong(syncedLyrics) {
-        console.log('Saving song:', syncedLyrics.title);    
         try {
             // Nettoyage strict AVANT sauvegarde
             ['title','artist','album','duration'].forEach(key => {
@@ -173,7 +169,6 @@ export class LyricsLibrary {
                 throw new Error('Failed to save to storage');
             }
         } catch (error) {
-            // console.error('❌ Erreur de sauvegarde:', error);
             return null;
         }
     }
@@ -191,10 +186,8 @@ export class LyricsLibrary {
             }
             
             localStorage.removeItem(key);
-            console.log('🗑️ Song deleted:', key);
             return true;
         } catch (error) {
-            console.error('❌ Error deleting song:', error);
             return false;
         }
     }
@@ -214,7 +207,6 @@ export class LyricsLibrary {
         this.builtInSongs.clear();
         this.saveBuiltInSongsStatus();
         
-        console.log(`🧹 Deleted ${deletedCount} songs from library`);
         return deletedCount;
     }
     
@@ -276,7 +268,6 @@ export class LyricsLibrary {
                 const exists = localStorage.getItem(existingKey);
                 if (exists && !options.overwrite) {
                     skippedCount++;
-                    console.log(`⏭️ Skipped existing song: ${lyrics.metadata.title}`);
                     return;
                 }
                 // Save song
@@ -287,13 +278,11 @@ export class LyricsLibrary {
                     if (options.markAsBuiltIn) {
                         this.addBuiltInSong(lyrics.songId);
                     }
-                    console.log(`✅ Imported: ${lyrics.metadata.title}`);
                 } else {
                     throw new Error('Failed to save to storage');
                 }
             } catch (error) {
                 errors.push(`Song ${index + 1}: ${error.message}`);
-                console.error(`❌ Import error for song ${index + 1}:`, error);
             }
         });
         
@@ -304,7 +293,6 @@ export class LyricsLibrary {
             errorDetails: errors
         };
         
-        console.log(`📥 Import complete: ${importedCount} imported, ${skippedCount} skipped, ${errors.length} errors`);
         return result;
     }
     
@@ -384,17 +372,13 @@ export class LyricsLibrary {
         let cleanedCount = 0;
         
         if (!validation.isValid) {
-            console.log('🧹 Starting library cleanup...');
             
             validation.issues.forEach(issue => {
-                console.log(`⚠️ ${issue}`);
                 // Here you could implement specific cleanup logic
                 // For now, just log the issues
             });
             
-            console.log(`🧹 Library cleanup complete. Found ${validation.issues.length} issues.`);
         } else {
-            console.log('✅ Library is clean - no issues found');
         }
         
         return {
