@@ -8,7 +8,6 @@ export class StorageManager {
         try {
             localStorage.setItem('lyrix_font_size', size.toString());
         } catch (error) {
-            console.warn('⚠️ Error saving font size:', error);
         }
     }
     
@@ -22,7 +21,6 @@ export class StorageManager {
                 }
             }
         } catch (error) {
-            console.warn('⚠️ Error loading font size:', error);
         }
         return CONSTANTS.UI.DEFAULT_FONT_SIZE;
     }
@@ -32,7 +30,6 @@ export class StorageManager {
         try {
             localStorage.setItem('lyrix_last_song', JSON.stringify(data));
         } catch (error) {
-            console.warn('⚠️ Error saving last song:', error);
         }
     }
     
@@ -44,7 +41,6 @@ export class StorageManager {
                 return data;
             }
         } catch (error) {
-            console.warn('⚠️ Error loading last song:', error);
         }
         return null;
     }
@@ -54,7 +50,6 @@ export class StorageManager {
         try {
             localStorage.setItem('lyrix_library_settings', JSON.stringify(settings));
         } catch (error) {
-            console.error('❌ Error saving library settings:', error);
         }
     }
     
@@ -66,7 +61,6 @@ export class StorageManager {
                 return parsed;
             }
         } catch (error) {
-            console.error('❌ Error loading library settings:', error);
         }
         return {};
     }
@@ -75,9 +69,7 @@ export class StorageManager {
     static saveSongList(songList) {
         try {
             localStorage.setItem(CONSTANTS.STORAGE.SONG_LIST_KEY, JSON.stringify(songList));
-            console.log('💾 Song list saved:', songList.length, 'songs');
         } catch (error) {
-            console.error('❌ Error saving song list:', error);
         }
     }
     
@@ -89,7 +81,6 @@ export class StorageManager {
                 return parsed;
             }
         } catch (error) {
-            console.error('❌ Error loading song list:', error);
         }
         return [];
     }
@@ -101,7 +92,6 @@ export class StorageManager {
             localStorage.setItem(storageKey, JSON.stringify(songData));
             return storageKey;
         } catch (error) {
-            console.error('❌ Error saving song:', error);
             return null;
         }
     }
@@ -115,7 +105,6 @@ export class StorageManager {
             const parsed = JSON.parse(data);
             return parsed;
         } catch (error) {
-            console.error('❌ Error loading song:', error);
             return null;
         }
     }
@@ -125,14 +114,12 @@ export class StorageManager {
         try {
             const existingSong = localStorage.getItem(storageKey);
             if (!existingSong) {
-                console.warn('⚠️ Song not found for deletion:', songId);
                 return false;
             }
             
             localStorage.removeItem(storageKey);
             return true;
         } catch (error) {
-            console.error('❌ Error deleting song:', error);
             return false;
         }
     }
@@ -174,7 +161,6 @@ export class StorageManager {
             const lastSong = this.loadLastSong();
             return lastSong ? lastSong.id : null;
         } catch (error) {
-            console.warn('⚠️ Error getting last opened song:', error);
             return null;
         }
     }
@@ -184,9 +170,7 @@ export class StorageManager {
             localStorage.removeItem('lastOpenedSongKey');
             localStorage.removeItem('lastOpenedSong');
             localStorage.removeItem('currentAudioFile');
-            console.log('🧹 Cleared last opened song from localStorage');
         } catch (error) {
-            console.warn('⚠️ Error clearing last opened song:', error);
         }
     }
     
@@ -196,7 +180,6 @@ export class StorageManager {
         try {
             localStorage.setItem(CONSTANTS.STORAGE.LAST_SONG + '_key', songKey);
         } catch (error) {
-            console.warn('⚠️ Error saving last opened song key:', error);
         }
     }
     
@@ -213,7 +196,6 @@ export class StorageManager {
             songKeys.forEach(key => localStorage.removeItem(key));
             
         } catch (error) {
-            console.warn('⚠️ Error clearing data:', error);
         }
     }
 }
