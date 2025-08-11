@@ -14,7 +14,6 @@ export function exportSongsToLRX(songSummaries, lyricsLibrary) {
         }));
       }
       // Ajout d'un log pour debug
-      console.log('EXPORT LRX', summary.songId, 'lines:', lines.length, lines.slice(0, 3));
       return {
         songId: summary.songId,
         title: song?.metadata?.title || summary.title || '',
