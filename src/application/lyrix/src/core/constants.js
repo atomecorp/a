@@ -4,7 +4,6 @@ export const CONSTANTS = {
     AUDIO: {
         BASE_PATH: './assets/audios/',
         BASE_URL: 'http://localhost:3001/assets/audios/',
-
     },
     
     // Storage keys
@@ -39,7 +38,5 @@ export const CONSTANTS = {
         AUDIO: /\.(mp3|mp4|wav|m4a|aac|flac|ogg|webm)$/i,
         TEXT_MIME: ['text/', 'application/json'],
         AUDIO_MIME: ['audio/', 'video/']
-    },
-    
-
+    }
 };

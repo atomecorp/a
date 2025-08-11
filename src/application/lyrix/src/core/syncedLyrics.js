@@ -1,6 +1,6 @@
 // SyncedLyrics class for Lyrix application
 import { CONSTANTS } from './constants.js';
-import { AudioManager, extractCleanFileName } from './audio.js';
+import { AudioManager, extractCleanFileName } from '../features/audio/audio.js';
 
 export class SyncedLyrics {
     constructor(title, artist, album = '', duration = 0, songId = null) {

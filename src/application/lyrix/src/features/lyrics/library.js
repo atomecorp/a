@@ -1,7 +1,7 @@
 // LyricsLibrary class for Lyrix application
-import { CONSTANTS } from './constants.js';
-import { SyncedLyrics } from './syncedLyrics.js';
-import { StorageManager } from './storage.js';
+import { CONSTANTS } from '../../core/constants.js';
+import { SyncedLyrics } from '../../core/syncedLyrics.js';
+import { StorageManager } from '../../services/storage.js';
 
 // Centralizes creation of a SyncedLyrics instance from a songData object
 export function createSyncedLyricsFromData(songData) {

@@ -1,4 +1,4 @@
-// Song List Modal Module
+// Song Library Modal Component
 // Handles all song library functionality including MIDI controls, export, import, and sorting
 
 // Show song library

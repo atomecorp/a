@@ -1,5 +1,5 @@
 // Storage management for Lyrix application
-import { CONSTANTS } from './constants.js';
+import { CONSTANTS } from '../core/constants.js';
 
 export class StorageManager {
     
@@ -176,6 +176,17 @@ export class StorageManager {
         } catch (error) {
             console.warn('⚠️ Error getting last opened song:', error);
             return null;
+        }
+    }
+
+    static clearLastOpenedSong() {
+        try {
+            localStorage.removeItem('lastOpenedSongKey');
+            localStorage.removeItem('lastOpenedSong');
+            localStorage.removeItem('currentAudioFile');
+            console.log('🧹 Cleared last opened song from localStorage');
+        } catch (error) {
+            console.warn('⚠️ Error clearing last opened song:', error);
         }
     }
     

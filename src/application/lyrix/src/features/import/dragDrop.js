@@ -1,12 +1,12 @@
 // Drag and Drop Module for Lyrix Application
 // Compatible with Tauri and web browsers
 
-import { SongManager } from './songs.js';
-import { SyncedLyrics } from './syncedLyrics.js';
-import { Modal } from './modal.js';
-import { CONSTANTS } from './constants.js';
-import { createSyncedLyricsFromData } from './library.js';
-import { debugLog, extractCleanFileName } from './audio.js';
+import { SongManager } from '../lyrics/songs.js';
+import { SyncedLyrics } from '../../core/syncedLyrics.js';
+import { Modal } from '../../components/modal.js';
+import { CONSTANTS } from '../../core/constants.js';
+import { createSyncedLyricsFromData } from '../lyrics/library.js';
+import { debugLog, extractCleanFileName } from '../audio/audio.js';
 
 // iOS-compatible logging function
 function dragLog(message) {

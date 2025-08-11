@@ -1,7 +1,7 @@
 // Song management for Lyrix application
-import { CONSTANTS } from './constants.js';
-import { StorageManager } from './storage.js';
-import { SyncedLyrics } from './syncedLyrics.js';
+import { CONSTANTS } from '../../core/constants.js';
+import { StorageManager } from '../../services/storage.js';
+import { SyncedLyrics } from '../../core/syncedLyrics.js';
 
 export class SongManager {
     

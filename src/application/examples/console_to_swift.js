@@ -21,7 +21,7 @@
             }
         })(window.console.error);
 
-
+//tests
 
         console.log("Console redefined for Swift communication");
         console.error(" error redefined for Swift communication");

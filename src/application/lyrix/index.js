@@ -1,9 +1,9 @@
 // Lyrix Application - New Entry Point
 // This is the new modular entry point for the Lyrix application
 
-// Import modal modules
-import { showSongLibrary } from './song_list.js';
-import { showSettingsModal, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector } from './settings.js';
+// Import modal modules from new organized structure
+import { showSongLibrary } from './src/components/songLibraryModal.js';
+import { showSettingsModal, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector } from './src/components/settings.js';
 
 // iOS-compatible logging function (duplicate from audio.js for startup logging)
 function startupLog(message) {
@@ -44,18 +44,18 @@ startupLog('🕐 Time: ' + new Date().toISOString());
 startupLog('===============================================');
 
 // Import all modules
-import { CONSTANTS } from './src/constants.js';
-import { StorageManager } from './src/storage.js';
-import { AudioManager, AudioController } from './src/audio.js';
-import { UIManager } from './src/ui.js';
-import { SongManager } from './src/songs.js';
-import { SyncedLyrics } from './src/syncedLyrics.js';
-import { LyricsLibrary } from './src/library.js';
-import { LyricsDisplay } from './src/display.js';
-import { DragDropManager } from './src/dragDrop.js';
-import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/modal.js';
-import { MidiUtilities } from './src/midi_utilities.js';
-import { exportSongsToLRX } from './src/SongUtils.js';
+import { CONSTANTS } from './src/core/constants.js';
+import { StorageManager } from './src/services/storage.js';
+import { AudioManager, AudioController } from './src/features/audio/audio.js';
+import { UIManager } from './src/components/ui.js';
+import { SongManager } from './src/features/lyrics/songs.js';
+import { SyncedLyrics } from './src/core/syncedLyrics.js';
+import { LyricsLibrary } from './src/features/lyrics/library.js';
+import { LyricsDisplay } from './src/features/lyrics/display.js';
+import { DragDropManager } from './src/features/import/dragDrop.js';
+import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/components/modal.js';
+import { MidiUtilities } from './src/features/midi/midi_utilities.js';
+import { exportSongsToLRX } from './src/features/lyrics/SongUtils.js';
 
 // Initialize global objects
 window.dragDropManager = new DragDropManager();
@@ -2361,30 +2361,77 @@ function createMainInterface() {
 
 // Load last opened song
 function loadLastSong() {
+    console.log('🔥 ATOME-APP: loadLastSong function called');
+    
     const lastSongKey = StorageManager.getLastOpenedSong();
+    console.log('🔥 ATOME-APP: lastSongKey from storage:', lastSongKey);
+    
     if (lastSongKey && lyricsLibrary) {
+        console.log('🔥 ATOME-APP: Found lastSongKey and lyricsLibrary, proceeding...');
         
         // Try to get song directly by key first
         currentSong = lyricsLibrary.getSong(lastSongKey);
+        console.log('🔥 ATOME-APP: getSong result:', currentSong ? 'found' : 'not found');
         
         // If not found by key, try by songId
         if (!currentSong) {
             currentSong = lyricsLibrary.getSongById(lastSongKey);
+            console.log('🔥 ATOME-APP: getSongById result:', currentSong ? 'found' : 'not found');
         }
         
         // If still not found, try search by name
         if (!currentSong) {
             currentSong = SongManager.loadByName(lastSongKey, lyricsLibrary);
+            console.log('🔥 ATOME-APP: loadByName result:', currentSong ? 'found' : 'not found');
         }
         
         if (currentSong && lyricsDisplay) {
-            lyricsDisplay.displayLyrics(currentSong);
+            console.log('🔥 ATOME-APP: Found currentSong and lyricsDisplay');
             
-            // Update audio title with current song filename
-            updateAudioTitle();
-            
-            // ALWAYS reset slider when loading any song
-            resetAudioSlider();
+            // Check if audio file exists before loading
+            if (currentSong.getAudioPath && currentSong.getAudioPath()) {
+                const audioPath = currentSong.getAudioPath();
+                console.log('🔥 ATOME-APP: Audio path found:', audioPath);
+                console.log('🎵 Checking last song audio:', audioPath);
+                
+                // Test if audio file exists by creating a test audio element
+                const testAudio = new Audio();
+                console.log('🔥 ATOME-APP: Created test audio element');
+                
+                testAudio.addEventListener('error', function() {
+                    console.log('🔥 ATOME-APP: Test audio ERROR event fired');
+                    console.warn('⚠️ Last song audio file not found, clearing from storage:', audioPath);
+                    StorageManager.clearLastOpenedSong();
+                    currentSong = null;
+                });
+                
+                testAudio.addEventListener('canplaythrough', function() {
+                    console.log('🔥 ATOME-APP: Test audio CANPLAYTHROUGH event fired');
+                    console.log('✅ Last song audio verified, loading:', audioPath);
+                    lyricsDisplay.displayLyrics(currentSong);
+                    
+                    // Update audio title with current song filename
+                    updateAudioTitle();
+                    
+                    // ALWAYS reset slider when loading any song
+                    resetAudioSlider();
+                });
+                
+                // Test audio path
+                const normalizedPath = AudioManager.normalize(audioPath);
+                console.log('🔥 ATOME-APP: Normalized audio path:', normalizedPath);
+                testAudio.src = normalizedPath;
+                console.log('🔥 ATOME-APP: Test audio src assigned');
+            } else {
+                console.log('🔥 ATOME-APP: No audio path found for current song');
+                console.warn('⚠️ Last song has no audio file, clearing from storage');
+                StorageManager.clearLastOpenedSong();
+                currentSong = null;
+            }
+        } else {
+            console.log('🔥 ATOME-APP: No currentSong or lyricsDisplay');
+            console.warn('⚠️ Last song not found in library, clearing from storage');
+            StorageManager.clearLastOpenedSong();
         }
     } else {
         // Even if no last song, reset the slider to zero

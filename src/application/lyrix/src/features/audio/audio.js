@@ -1,5 +1,5 @@
 // Audio management for Lyrix application
-import { CONSTANTS } from './constants.js';
+import { CONSTANTS } from '../../core/constants.js';
 
 // iOS-compatible logging function with clear prefix for filtering
 function iosLog(message) {
@@ -105,7 +105,9 @@ export class AudioManager {
         
         // Extract filename from path and handle iOS-specific encoding issues
         const fileName = audioPath.split(/[/\\]/).pop();
+        debugLog('NORMALIZE', 'Original audioPath', audioPath);
         debugLog('NORMALIZE', 'Extracted fileName', fileName);
+        debugLog('NORMALIZE', 'fileName includes .m4a?', fileName.includes('.m4a'));
         
         // Debug logging for iOS audio paths
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -155,37 +157,81 @@ export class AudioManager {
     
     // Create complete audio URL with fallback
     static createUrl(fileName) {
-        // Check if running on iOS
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        // Force log to test iOS detection
+        console.log('🔥 ATOME-APP: AudioManager.createUrl called with:', fileName);
         
-        if (isIOS) {
-            debugLog('iOS-CREATE', 'Input fileName', fileName);
-            debugLog('iOS-CREATE', 'Contains %20', fileName.includes('%20'));
-            debugLog('iOS-CREATE', 'Contains spaces', fileName.includes(' '));
-            
-            let finalFileName;
-            
-            // If filename already has %20 (from .lrx files), don't re-encode
+        debugLog('CREATE-URL', 'Input fileName', fileName);
+        
+        // Check if running on iOS - Multiple detection methods
+        const userAgent = navigator.userAgent;
+        const isIOSUserAgent = /iPad|iPhone|iPod/.test(userAgent);
+        const isIOSPlatform = /iPhone|iPad|iPod/i.test(navigator.platform);
+        const isIOSStandalone = window.navigator.standalone !== undefined;
+        const isIOSTouch = 'ontouchstart' in window;
+        
+        // AUv3 specific detection - look for iOS file paths or WebKit
+        const isAUv3Context = window.webkit && window.webkit.messageHandlers;
+        const hasIOSPaths = window.location.href.includes('file://') || 
+                           window.location.protocol === 'file:';
+        
+        console.log('🔥 ATOME-APP: iOS Detection Debug:');
+        console.log('🔥 ATOME-APP: User Agent:', userAgent);
+        console.log('🔥 ATOME-APP: Platform:', navigator.platform);
+        console.log('🔥 ATOME-APP: Location:', window.location.href);
+        console.log('🔥 ATOME-APP: Protocol:', window.location.protocol);
+        console.log('🔥 ATOME-APP: isIOSUserAgent:', isIOSUserAgent);
+        console.log('🔥 ATOME-APP: isIOSPlatform:', isIOSPlatform);
+        console.log('🔥 ATOME-APP: isIOSStandalone:', isIOSStandalone);
+        console.log('🔥 ATOME-APP: isIOSTouch:', isIOSTouch);
+        console.log('🔥 ATOME-APP: isAUv3Context:', isAUv3Context);
+        console.log('🔥 ATOME-APP: hasIOSPaths:', hasIOSPaths);
+        
+        // Use the most comprehensive iOS detection
+        const finalIOSDetection = isIOSUserAgent || isIOSPlatform || 
+                                 (isAUv3Context && (isIOSTouch || hasIOSPaths));
+        console.log('🔥 ATOME-APP: Final iOS Detection Result:', finalIOSDetection);
+        
+        debugLog('CREATE-URL', 'Platform detection - finalIOSDetection:', finalIOSDetection);
+        debugLog('CREATE-URL', 'User Agent:', navigator.userAgent);
+        
+        let finalFileName;
+        
+        if (finalIOSDetection) {
+            console.log('🔥 ATOME-APP: Using iOS path logic');
+            // For iOS AUv3: Use relative paths with encoded spaces
             if (fileName.includes('%20')) {
-                finalFileName = fileName;
-                debugLog('iOS-CREATE', 'Using pre-encoded filename from .lrx');
+                finalFileName = fileName; // Keep encoded
+                console.log('🔥 ATOME-APP: iOS - Keeping encoded %20', finalFileName);
             } else if (fileName.includes(' ')) {
-                // Replace spaces with %20 for iOS (for drag&drop files)
-                finalFileName = fileName.replace(/\s+/g, '%20');
-                debugLog('iOS-CREATE', 'Replaced spaces with %20', finalFileName);
-            } else {
-                // Encode normally for files without spaces
                 finalFileName = encodeURIComponent(fileName);
-                debugLog('iOS-CREATE', 'Normal encoding applied');
+                console.log('🔥 ATOME-APP: iOS - Encoded spaces', finalFileName);
+            } else {
+                finalFileName = fileName;
+                console.log('🔥 ATOME-APP: iOS - No spaces to handle', finalFileName);
             }
             
-            // Use local bundle path instead of localhost for iOS
             const finalUrl = `./assets/audios/${finalFileName}`;
-            debugLog('iOS-CREATE', 'Final URL (iOS local)', finalUrl);
+            console.log('🔥 ATOME-APP: Final URL (iOS relative)', finalUrl);
             return finalUrl;
         } else {
-            // Standard encoding for desktop
-            return CONSTANTS.AUDIO.BASE_URL + encodeURIComponent(fileName);
+            console.log('🔥 ATOME-APP: Using Desktop path logic');
+            // For Desktop: Use HTTP URLs with proper encoding
+            if (fileName.includes('%20')) {
+                // If already encoded, decode first then re-encode properly for HTTP
+                const decodedName = decodeURIComponent(fileName);
+                finalFileName = encodeURIComponent(decodedName);
+                console.log('🔥 ATOME-APP: Desktop - Re-encoded from %20', finalFileName);
+            } else if (fileName.includes(' ')) {
+                finalFileName = encodeURIComponent(fileName);
+                console.log('🔥 ATOME-APP: Desktop - Encoded spaces for HTTP', finalFileName);
+            } else {
+                finalFileName = fileName;
+                console.log('🔥 ATOME-APP: Desktop - No spaces to encode', finalFileName);
+            }
+            
+            const finalUrl = `http://127.0.0.1:3000/assets/audios/${finalFileName}`;
+            console.log('🔥 ATOME-APP: Final URL (Desktop HTTP)', finalUrl);
+            return finalUrl;
         }
     }
     
@@ -378,6 +424,10 @@ export class AudioController {
 
     // Desktop audio loading
     loadAudioDesktop(normalizedPath, fileName) {
+        debugLog('LOAD-AUDIO-DESKTOP', 'About to create Audio element with path', normalizedPath);
+        debugLog('LOAD-AUDIO-DESKTOP', 'normalizedPath length', normalizedPath.length);
+        debugLog('LOAD-AUDIO-DESKTOP', 'normalizedPath ends with .m4a?', normalizedPath.endsWith('.m4a'));
+        
         this.audioPlayer = new Audio(normalizedPath);
         this.audioPlayer.preload = 'metadata';
         this.setupAudioListeners(fileName);
@@ -605,18 +655,6 @@ export class AudioController {
         
         this.audioPlayer.addEventListener('error', (e) => {
             console.error('❌ Audio loading error:', e.target.error, 'for file:', fileName);
-            
-            // Try fallback if primary URL failed and it was using server URL
-            if (this.audioPlayer.src.startsWith(CONSTANTS.AUDIO.BASE_URL)) {
-                const fallbackFileName = this.audioPath.split(/[/\\]/).pop();
-                const fallbackPath = AudioManager.createFallbackUrl(fallbackFileName);
-                console.log('🔄 Trying fallback path for:', fallbackFileName);
-                
-                // Create new audio element with fallback
-                this.audioPlayer = new Audio(fallbackPath);
-                this.setupAudioListeners(fileName); // Re-setup listeners
-            }
-            
             this.emit('error', e.target.error);
         });
         

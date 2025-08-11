@@ -1,8 +1,8 @@
 // LyricsDisplay class for Lyrix application
-import { CONSTANTS } from './constants.js';
-import { StorageManager } from './storage.js';
-import { UIManager } from './ui.js';
-import { default_theme } from './style.js';
+import { CONSTANTS } from '../../core/constants.js';
+import { StorageManager } from '../../services/storage.js';
+import { UIManager } from '../../components/ui.js';
+import { default_theme } from '../../components/style.js';
 
 export class LyricsDisplay {
     constructor(container, audioController = null) {
