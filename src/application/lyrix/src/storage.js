@@ -86,7 +86,6 @@ export class StorageManager {
             const songList = localStorage.getItem(CONSTANTS.STORAGE.SONG_LIST_KEY);
             if (songList) {
                 const parsed = JSON.parse(songList);
-                // console.log('📋 Song list loaded:', parsed.length, 'songs');
                 return parsed;
             }
         } catch (error) {
@@ -131,7 +130,6 @@ export class StorageManager {
             }
             
             localStorage.removeItem(storageKey);
-            // console.log('🗑️ Song deleted:', songId);
             return true;
         } catch (error) {
             console.error('❌ Error deleting song:', error);
@@ -186,7 +184,6 @@ export class StorageManager {
         // This is a simplified version that just stores the key
         try {
             localStorage.setItem(CONSTANTS.STORAGE.LAST_SONG + '_key', songKey);
-            // console.log('💾 Last opened song key saved:', songKey);
         } catch (error) {
             console.warn('⚠️ Error saving last opened song key:', error);
         }
@@ -204,7 +201,6 @@ export class StorageManager {
             const songKeys = Object.keys(localStorage).filter(key => key.startsWith(CONSTANTS.STORAGE.LIBRARY_PREFIX));
             songKeys.forEach(key => localStorage.removeItem(key));
             
-            // console.log('🗑️ All Lyrix data cleared');
         } catch (error) {
             console.warn('⚠️ Error clearing data:', error);
         }

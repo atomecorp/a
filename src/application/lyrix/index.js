@@ -53,10 +53,12 @@ import { SyncedLyrics } from './src/syncedLyrics.js';
 import { LyricsLibrary } from './src/library.js';
 import { LyricsDisplay } from './src/display.js';
 import { DragDropManager } from './src/dragDrop.js';
-window.dragDropManager = new DragDropManager();
 import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/modal.js';
-import { MidiUtilities } from '././src/midi_utilities.js';
+import { MidiUtilities } from './src/midi_utilities.js';
 import { exportSongsToLRX } from './src/SongUtils.js';
+
+// Initialize global objects
+window.dragDropManager = new DragDropManager();
 
 // iOS Error Handling Setup
 // Handle iOS thumbnail and view service termination errors globally
