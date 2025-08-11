@@ -332,12 +332,30 @@ function exportAllSongsToLRX() {
     // Utilise la fonction utilitaire pour garantir l'inclusion des paroles
     const exportData = exportSongsToLRX(songSummaries, lyricsLibrary);
 
-    // Create download - Always use dialog for better iOS/Mac compatibility
+    // Create download - iOS compatible version
     const dataStr = JSON.stringify(exportData, null, 2);
     const filename = `lyrix_library_${new Date().toISOString().split('T')[0]}.lrx`;
     
-    // Always show the mobile-friendly export modal for consistent experience across all platforms
-    showMobileExportModal(dataStr, filename, 'LRX');
+    // Check if we're on iOS/mobile
+    const isIOSorMobile = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) || 
+                         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    
+    if (isIOSorMobile) {
+        // iOS/Mobile: Show modal with copy/share options
+        showMobileExportModal(dataStr, filename, 'LRX');
+    } else {
+        // Desktop: Traditional download
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = filename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+    }
 }
 
 // Mobile-friendly export modal for iOS compatibility
@@ -438,9 +456,9 @@ function showMobileExportModal(dataString, filename, fileType) {
         }
     });
 
-    // Share button (iOS native sharing + enhanced Mac support)
+    // Share button (iOS native sharing)
     const shareButton = $('button', {
-        text: '📤 Save File',
+        text: '📤 Share File',
         css: {
             width: '100%',
             padding: '15px',
@@ -457,37 +475,8 @@ function showMobileExportModal(dataString, filename, fileType) {
 
     shareButton.addEventListener('click', async () => {
         try {
-            // Try modern File System Access API first (works on newer browsers including Safari)
-            if (window.showSaveFilePicker) {
-                try {
-                    const fileHandle = await window.showSaveFilePicker({
-                        suggestedName: filename,
-                        types: [{
-                            description: fileType === 'LRX' ? 'Lyrix files' : 'Text files',
-                            accept: {
-                                [fileType === 'LRX' ? 'application/json' : 'text/plain']: [fileType === 'LRX' ? '.lrx' : '.txt']
-                            }
-                        }]
-                    });
-                    
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(dataString);
-                    await writable.close();
-                    
-                    shareButton.textContent = '✅ File Saved!';
-                    shareButton.style.backgroundColor = '#27ae60';
-                    setTimeout(() => {
-                        shareButton.textContent = '📤 Save File';
-                        shareButton.style.backgroundColor = '#9b59b6';
-                    }, 2000);
-                    return;
-                } catch (saveError) {
-                    console.log('File System Access API failed, trying other methods:', saveError);
-                }
-            }
-
-            // Try Web Share API for iOS native sharing
-            if (navigator.share && navigator.canShare) {
+            if (navigator.share) {
+                // Create a blob for sharing
                 const blob = new Blob([dataString], { 
                     type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
                 });
@@ -495,71 +484,45 @@ function showMobileExportModal(dataString, filename, fileType) {
                     type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
                 });
                 
-                if (navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        title: `Lyrix ${fileType} Export`,
-                        text: `Exported ${fileType} file from Lyrix`,
-                        files: [file]
-                    });
-                    
-                    shareButton.textContent = '✅ Shared!';
-                    shareButton.style.backgroundColor = '#27ae60';
-                    setTimeout(() => {
-                        shareButton.textContent = '📤 Save File';
-                        shareButton.style.backgroundColor = '#9b59b6';
-                    }, 2000);
-                    return;
-                }
-            }
-
-            // Fallback: Enhanced download method for better iOS/Mac compatibility
-            const blob = new Blob([dataString], { 
-                type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
-            });
-            const url = URL.createObjectURL(blob);
-            
-            // Create a download link that works better on iOS/Safari
-            const downloadLink = document.createElement('a');
-            downloadLink.href = url;
-            downloadLink.download = filename;
-            downloadLink.target = '_blank';
-            downloadLink.rel = 'noopener noreferrer';
-            
-            // Add to document temporarily to ensure it works on iOS
-            downloadLink.style.display = 'none';
-            document.body.appendChild(downloadLink);
-            
-            // Use both click and iOS-specific event handling
-            if (/iPad|iPhone|iPod/i.test(navigator.userAgent)) {
-                // For iOS, try to open in new tab first
+                await navigator.share({
+                    title: `Lyrix ${fileType} Export`,
+                    text: `Exported ${fileType} file from Lyrix`,
+                    files: [file]
+                });
+            } else {
+                // Fallback: create download link that might work better on some mobile browsers
+                const blob = new Blob([dataString], { 
+                    type: fileType === 'LRX' ? 'application/json' : 'text/plain' 
+                });
+                const url = URL.createObjectURL(blob);
+                
+                // Try to open in new tab/window for manual save
                 const newWindow = window.open(url, '_blank');
                 if (!newWindow) {
+                    // If popup blocked, create download link
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = url;
+                    downloadLink.download = filename;
                     downloadLink.click();
                 }
-            } else {
-                downloadLink.click();
-            }
-            
-            document.body.removeChild(downloadLink);
-            
-            // Clean up the URL after a delay
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            
-            shareButton.textContent = '✅ Download Started';
-            shareButton.style.backgroundColor = '#27ae60';
-            setTimeout(() => {
-                shareButton.textContent = '📤 Save File';
-                shareButton.style.backgroundColor = '#9b59b6';
-            }, 2000);
                 
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                
+                shareButton.textContent = '✅ Opened in new tab';
+                shareButton.style.backgroundColor = '#27ae60';
+                setTimeout(() => {
+                    shareButton.textContent = '📤 Share File';
+                    shareButton.style.backgroundColor = '#9b59b6';
+                }, 2000);
+            }
         } catch (err) {
-            console.error('Failed to save/share file:', err);
-            shareButton.textContent = '❌ Save failed';
+            console.error('Failed to share:', err);
+            shareButton.textContent = '❌ Share failed';
             shareButton.style.backgroundColor = '#e74c3c';
             setTimeout(() => {
-                shareButton.textContent = '📤 Save File';
+                shareButton.textContent = '📤 Share File';
                 shareButton.style.backgroundColor = '#9b59b6';
-            }, 3000);
+            }, 2000);
         }
     });
 
@@ -587,7 +550,7 @@ function showMobileExportModal(dataString, filename, fileType) {
 
     // Instructions
     const instructionsText = $('div', {
-        text: 'Instructions pour sauvegarder votre fichier .lrx :\n\n• 📤 Save File: Sauvegarde directe ou partage via iOS/Mac\n• 📋 Copy to Clipboard: Copie le contenu pour le coller dans une autre app\n• 👁️ View Content: Aperçu du contenu avant sauvegarde\n\nSur iOS: Utilisez "Save File" puis choisissez "Enregistrer dans Fichiers"\nSur Mac: "Save File" ouvrira la boîte de dialogue de sauvegarde',
+        text: 'Instructions:\n• Copy to Clipboard: Copy the file content to paste in another app\n• Share File: Use iOS sharing to save to Files app or send to other apps\n• View Content: Preview the file content before saving',
         css: {
             fontSize: '14px',
             color: '#666',
@@ -1342,7 +1305,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         if (!fullSong) return null;
         return {
             text: `${(fullSong.metadata?.title || fullSong.title || 'Untitled')} - ${(fullSong.metadata?.artist || fullSong.artist || 'Unknown Artist')}${(fullSong.metadata?.album || fullSong.album) ? ` (${fullSong.metadata?.album || fullSong.album})` : ''}`,
-            value: songSummary.key, // Use key instead of songId for consistency
+            value: songSummary.songId,
             song: fullSong,
             selected: false
         };
@@ -1535,7 +1498,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         });
 
         // Store selection state on the element for later retrieval
-        itemDiv.dataset.songId = item.value; // Now contains song key instead of songId
+        itemDiv.dataset.songId = item.value;
         itemDiv.dataset.selected = 'false';
         Object.defineProperty(itemDiv, 'isSelected', {
             get() { return selected; },
@@ -1561,9 +1524,9 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         onClick: () => {
             // Find all selected song divs
             const selectedDivs = Array.from(listContainer.children).filter(div => div.isSelected);
-            const selectedSongKeys = selectedDivs.map(div => div.dataset.songId); // This contains song keys now
+            const selectedSongIds = selectedDivs.map(div => div.dataset.songId);
 
-            if (selectedSongKeys.length === 0) {
+            if (selectedSongIds.length === 0) {
                 Modal({
                     title: '❌ No Selection',
                     content: '<p>Please select at least one song to export.</p>',
@@ -1577,10 +1540,10 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
             if (exportSeparateFiles) {
                 // Export each song as a separate file
-                exportSongsAsSeparateFiles(selectedSongKeys);
+                exportSongsAsSeparateFiles(selectedSongIds);
             } else {
                 // Export all songs in a single file
-                exportSongsAsSingleFile(selectedSongKeys);
+                exportSongsAsSingleFile(selectedSongIds);
             }
         }
     });
@@ -1592,13 +1555,13 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 }
 
 // Function to export songs as separate files
-function exportSongsAsSeparateFiles(selectedSongKeys) {
+function exportSongsAsSeparateFiles(selectedSongIds) {
     let downloadCount = 0;
     
-    selectedSongKeys.forEach((songKey, index) => {
-        const song = lyricsLibrary.getSong(songKey); // Use getSong with key
+    selectedSongIds.forEach((songId, index) => {
+        const song = lyricsLibrary.getSongById(songId);
         if (song) {
-            let exportText = `${song.metadata?.title || song.title || 'Untitled'}\n\n`;
+            let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
             
             if (song.lines && song.lines.length > 0) {
                 song.lines.forEach(line => {
@@ -1609,21 +1572,29 @@ function exportSongsAsSeparateFiles(selectedSongKeys) {
             }
             
             // Create safe filename
-            const safeTitle = (song.metadata?.title || song.title || 'Untitled')
+            const safeTitle = (song.metadata.title || 'Untitled')
                 .replace(/[^a-z0-9]/gi, '_')
                 .replace(/_+/g, '_')
                 .replace(/^_|_$/g, '');
             
-            // Use enhanced mobile-friendly download method
+            // Use download method with delay to avoid browser blocking
             setTimeout(() => {
-                const dataStr = exportText;
-                const filename = `${safeTitle}.txt`;
+                const blob = new Blob([exportText], { type: 'text/plain' });
+                const saveLink = document.createElement('a');
+                saveLink.href = URL.createObjectURL(blob);
+                saveLink.download = `${safeTitle}.txt`;
+                saveLink.style.display = 'none';
                 
-                // Use the same mobile-friendly export as .lrx files
-                showMobileExportModal(dataStr, filename, 'TXT');
+                document.body.appendChild(saveLink);
+                saveLink.click();
+                document.body.removeChild(saveLink);
+                
+                setTimeout(() => {
+                    URL.revokeObjectURL(saveLink.href);
+                }, 100);
                 
                 downloadCount++;
-                if (downloadCount === selectedSongKeys.length) {
+                if (downloadCount === selectedSongIds.length) {
                     console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
                 }
             }, index * 500); // 500ms delay between downloads
@@ -1632,15 +1603,15 @@ function exportSongsAsSeparateFiles(selectedSongKeys) {
 }
 
 // Function to export songs as a single file
-function exportSongsAsSingleFile(selectedSongKeys) {
+function exportSongsAsSingleFile(selectedSongIds) {
     // Generate export text - simple format
     let exportText = '';
 
-    selectedSongKeys.forEach((songKey, index) => {
-        const song = lyricsLibrary.getSong(songKey); // Use getSong with key
+    selectedSongIds.forEach((songId, index) => {
+        const song = lyricsLibrary.getSongById(songId);
         if (song) {
             // Add song title
-            exportText += `${song.metadata?.title || song.title || 'Untitled'}\n\n`;
+            exportText += `${song.metadata.title || 'Untitled'}\n\n`;
             
             // Add lyrics only
             if (song.lines && song.lines.length > 0) {
@@ -1653,33 +1624,35 @@ function exportSongsAsSingleFile(selectedSongKeys) {
             }
             
             // Add spacing between songs (only if not the last song)
-            if (index < selectedSongKeys.length - 1) {
-                exportText += '\n\n---\n\n';
+            if (index < selectedSongIds.length - 1) {
+                exportText += '\n\n';
             }
         }
     });
 
-    // Use enhanced mobile-friendly export modal
-    const filename = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
-    showMobileExportModal(exportText, filename, 'TXT');
+    // Use download method that works on all browsers including Safari
+    const blob = new Blob([exportText], { type: 'text/plain' });
+    const saveLink = document.createElement('a');
+    saveLink.href = URL.createObjectURL(blob);
+    saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
+    saveLink.style.display = 'none';
     
-    console.log(`✅ Successfully exported ${selectedSongKeys.length} songs as single text file`);
+    // Add to document, click, and remove
+    document.body.appendChild(saveLink);
+    saveLink.click();
+    document.body.removeChild(saveLink);
+    
+    // Clean up the object URL
+    setTimeout(() => {
+        URL.revokeObjectURL(saveLink.href);
+    }, 100);
+    
+    console.log(`✅ Successfully exported ${selectedSongIds.length} songs as single text file`);
 }
 
-// Song library panel state
-let songLibraryPanel = null;
-let isSongLibraryPanelOpen = false;
-
-// Show song library as panel
+// Show song library
 function showSongLibrary() {
     console.log('📚 Opening song library...');
-    
-    // Toggle panel visibility
-    if (isSongLibraryPanelOpen) {
-        hideSongLibraryPanel();
-        return;
-    }
-    
     console.log('🎹 MIDI utilities available:', !!window.midiUtilities);
     if (window.midiUtilities) {
         console.log('🎹 Current MIDI assignments:', window.midiUtilities.getAllAssignments());
@@ -1687,68 +1660,34 @@ function showSongLibrary() {
     
     if (!lyricsLibrary) {
         console.error('❌ LyricsLibrary non disponible');
+        Modal({
+            title: '❌ Error',
+            content: '<p>Library not initialized</p>',
+            buttons: [{ text: 'OK' }],
+            size: 'small'
+        });
         return;
     }
 
     const songs = lyricsLibrary.getAllSongs();
     
-    // Create or show song library panel
-    createSongLibraryPanel(songs);
-}
-
-function hideSongLibraryPanel() {
-    if (songLibraryPanel) {
-        songLibraryPanel.style.display = 'none';
-        isSongLibraryPanelOpen = false;
-        
-        // Update lyrics display position
-        const lyricsDisplay = document.getElementById('lyrics-display');
-        if (lyricsDisplay) {
-            lyricsDisplay.style.marginTop = '0px';
-        }
-    }
-}
-
-function createSongLibraryPanel(songs) {
-    // Find the main display container
-    const displayContainer = document.getElementById('display-container');
-    if (!displayContainer) {
-        console.error('❌ Display container not found');
-        return;
-    }
+    // Always show the song library, even if empty, so users can create or import songs
     
-    // Remove existing panel if any
-    if (songLibraryPanel) {
-        songLibraryPanel.remove();
-        songLibraryPanel = null;
-    }
-    
-    // Create the song library panel
-    songLibraryPanel = $('div', {
-        id: 'song-library-panel',
-        css: {
-            position: 'relative',
-            width: '100%',
-            backgroundColor: UIManager.THEME.colors.surface,
-            borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            zIndex: '90',
-            maxHeight: '60vh',
-            overflow: 'auto',
-            display: 'none' // Initially hidden
-        }
+    // Create custom modal with export/import buttons
+    const modalContainer = UIManager.createEnhancedModalOverlay();
+    const modal = UIManager.createEnhancedModalContainer({
+        id: 'song-library-modal',
+        css: { maxWidth: '700px', width: '90%' }
     });
 
     // Header with title and action buttons
     const header = $('div', {
         css: {
-            padding: '12px',
+            padding: UIManager.THEME.spacing.lg,
             backgroundColor: UIManager.THEME.colors.primary,
+            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
             borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
-            color: 'white',
-            position: 'sticky',
-            top: '0',
-            zIndex: '95'
+            color: 'white'
         }
     });
 
@@ -1757,40 +1696,21 @@ function createSongLibraryPanel(songs) {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: '8px'
+            marginBottom: '10px'
         }
     });
 
     const headerTitle = $('h3', {
         id: 'song-library-header',
-        text: '📚 Song Library',
-        css: { margin: '0', color: 'white', fontSize: '16px' }
-    });
-
-    // Close button
-    const closeButton = $('button', {
-        text: '✖',
-        css: {
-            backgroundColor: 'transparent',
-            color: 'white',
-            border: 'none',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            fontSize: '14px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-        },
-        onClick: () => {
-            hideSongLibraryPanel();
-        }
+        // text: '📚 Song Library',
+        css: { margin: '0', color: 'white' }
     });
 
     // Action buttons container
     const actionButtons = $('div', {
         css: {
             display: 'flex',
-            gap: '6px',
-            flexWrap: 'wrap'
+            gap: '8px'
         }
     });
 
@@ -1802,13 +1722,13 @@ function createSongLibraryPanel(songs) {
             backgroundColor: '#2ecc71',
             color: 'white',
             border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
             cursor: 'pointer'
         },
         onClick: () => {
-            hideSongLibraryPanel();
+            document.body.removeChild(modalContainer);
             createNewSong();
         }
     });
@@ -1821,14 +1741,14 @@ function createSongLibraryPanel(songs) {
             backgroundColor: '#27ae60',
             color: 'white',
             border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
             cursor: 'pointer'
         },
         onClick: () => {
-            hideSongLibraryPanel();
-            exportAllSongsToLRX();
+            document.body.removeChild(modalContainer);
+            exportAllSongsToLRX(); // Direct download, no dialog
         }
     });
 
@@ -1840,18 +1760,18 @@ function createSongLibraryPanel(songs) {
             backgroundColor: '#3498db',
             color: 'white',
             border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
             cursor: 'pointer'
         },
         onClick: () => {
-            hideSongLibraryPanel();
+            document.body.removeChild(modalContainer);
             exportSelectedSongsAsTextWithFolderDialog();
         }
     });
 
-    // Import file button
+    // Import file button - moved from toolbar to song library panel
     const importFileButton = $('button', {
         id: 'import_file_button_library',
         text: '📁 Import',
@@ -1859,13 +1779,13 @@ function createSongLibraryPanel(songs) {
             backgroundColor: '#f39c12',
             color: 'white',
             border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
             cursor: 'pointer'
         },
         onClick: () => {
-            hideSongLibraryPanel();
+            document.body.removeChild(modalContainer);
             showFileImportDialog();
         }
     });
@@ -1875,46 +1795,37 @@ function createSongLibraryPanel(songs) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '4px',
+            gap: '5px',
             backgroundColor: '#f8f9fa',
-            padding: '3px 6px',
-            borderRadius: '3px',
+            padding: '4px 8px',
+            borderRadius: '4px',
             border: '1px solid #ddd'
         }
     });
 
+    const autoFillLabel = $('span', {
+        //text: '',
+        css: {
+            fontSize: '11px',
+            color: '#666',
+            fontWeight: '500'
+        }
+    });
+
     const autoFillInput = $('input', {
-        id: 'midi-root-note-input', // Add ID for autoFillMidiNotes function
         type: 'number',
         min: '0',
         max: '127',
         placeholder: 'Root',
-        value: '60',
+        value: '60', // Default to middle C
         css: {
-            width: '40px',
-            padding: '2px 3px',
+            width: '50px',
+            padding: '2px 4px',
             border: '1px solid #ccc',
-            borderRadius: '2px',
-            fontSize: '10px',
+            borderRadius: '3px',
+            fontSize: '11px',
             textAlign: 'center'
         }
-    });
-
-    // Prevent click events from propagating to prevent panel closure
-    autoFillInput.addEventListener('click', (e) => {
-        e.stopPropagation();
-    });
-
-    autoFillInput.addEventListener('focus', (e) => {
-        e.stopPropagation();
-    });
-
-    autoFillInput.addEventListener('keydown', (e) => {
-        e.stopPropagation();
-    });
-
-    autoFillInput.addEventListener('keyup', (e) => {
-        e.stopPropagation();
     });
 
     const autoFillButton = $('button', {
@@ -1923,9 +1834,9 @@ function createSongLibraryPanel(songs) {
             backgroundColor: '#4caf50',
             color: 'white',
             border: 'none',
-            padding: '3px 6px',
-            borderRadius: '2px',
-            fontSize: '10px',
+            padding: '4px 8px',
+            borderRadius: '3px',
+            fontSize: '11px',
             cursor: 'pointer'
         },
         onClick: () => {
@@ -1933,18 +1844,18 @@ function createSongLibraryPanel(songs) {
         }
     });
 
-    autoFillContainer.append(autoFillInput, autoFillButton);
+    autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 
     // Sort alphabetically button
     const sortAlphabeticallyButton = $('button', {
-        text: '🔤 Sort',
+        text: '🔤 Sort A-Z',
         css: {
             backgroundColor: '#9c27b0',
             color: 'white',
             border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
             cursor: 'pointer'
         },
         onClick: () => {
@@ -1952,573 +1863,588 @@ function createSongLibraryPanel(songs) {
         }
     });
 
-    // Delete all button
+    // Bouton supprimer toutes les chansons
     const deleteAllButton = $('button', {
         text: '🗑️',
         css: {
             backgroundColor: '#e74c3c',
             color: 'white',
             border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            fontSize: '12px',
             cursor: 'pointer'
         },
         onClick: () => {
-            if (confirm('Voulez-vous vraiment supprimer toutes les chansons ? Cette action est irréversible.')) {
-                lyricsLibrary.deleteAllSongs();
-                hideSongLibraryPanel();
-                // Reopen to show empty library
-                setTimeout(() => showSongLibrary(), 100);
-            }
+            Modal({
+                title: 'Confirmation',
+                content: '<p>Voulez-vous vraiment supprimer toutes les chansons ? Cette action est irréversible.</p>',
+                buttons: [
+                    { text: 'Annuler' },
+                    { text: 'Supprimer', onClick: () => {
+                        lyricsLibrary.deleteAllSongs();
+                        document.body.removeChild(modalContainer);
+                        // No need for additional confirmation modal - user can see the empty library
+                        showSongLibrary(); // Reopen the library to show it's now empty
+                    }, css: { backgroundColor: '#e74c3c', color: 'white' } }
+                ],
+                size: 'small'
+            });
         }
     });
-
     actionButtons.append(createNewSongButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
-    headerTop.append(headerTitle, closeButton);
+    headerTop.append(headerTitle, actionButtons);
 
     // Instructions
     const instructions = $('div', {
         text: 'Select a song to load, or use the action buttons above',
         css: {
-            fontSize: '11px',
-            color: 'rgba(255,255,255,0.8)',
+            fontSize: '14px',
+            opacity: '0.9',
             fontStyle: 'italic'
         }
     });
 
-    header.append(headerTop, actionButtons, instructions);
+    header.append(headerTop, instructions);
 
-    // Content area
-    const content = $('div', {
-        className: 'song-list-content',
+    // Content with search and song list
+    const content = UIManager.createModalContent({});
+    
+    // Search input
+    const searchInput = $('input', {
+        type: 'text',
+        placeholder: 'Search songs...',
         css: {
-            padding: '12px',
-            maxHeight: '40vh',
-            overflow: 'auto'
-        }
-    });
-
-    // Create song list content
-    createSongListContent(content, songs);
-
-    // Assemble panel
-    songLibraryPanel.append(header, content);
-
-    // Insert panel after toolbar but before lyrics
-    const toolbar = document.getElementById('lyrics-toolbar');
-    if (toolbar && toolbar.parentNode) {
-        toolbar.parentNode.insertBefore(songLibraryPanel, toolbar.nextSibling);
-    } else {
-        displayContainer.appendChild(songLibraryPanel);
-    }
-
-    // Show panel with animation
-    songLibraryPanel.style.display = 'block';
-    isSongLibraryPanelOpen = true;
-
-    // Adjust lyrics display position
-    requestAnimationFrame(() => {
-        const panelHeight = songLibraryPanel.offsetHeight;
-        const lyricsDisplay = document.getElementById('lyrics-display');
-        if (lyricsDisplay) {
-            lyricsDisplay.style.marginTop = `${panelHeight}px`;
-            lyricsDisplay.style.transition = 'margin-top 0.3s ease';
-        }
-    });
-}
-
-function createSongListContent(container, songs) {
-    // Clear existing content
-    container.innerHTML = '';
-    
-    if (songs.length === 0) {
-        const emptyMessage = $('div', {
-            text: 'No songs in library. Create a new song or import an LRX file.',
-            css: {
-                textAlign: 'center',
-                padding: '20px',
-                color: '#666',
-                fontStyle: 'italic'
-            }
-        });
-        container.appendChild(emptyMessage);
-        return;
-    }
-
-    // Get current song order or use default alphabetical
-    const customOrder = getCustomSongOrder();
-    let orderedSongs;
-    
-    if (customOrder && customOrder.length > 0) {
-        console.log('📋 Using custom song order');
-        orderedSongs = customOrder.map(songKey => songs.find(song => song.key === songKey)).filter(Boolean);
-        
-        // Add any new songs not in custom order at the end
-        const songsInOrder = new Set(orderedSongs.map(song => song.key));
-        const newSongs = songs.filter(song => !songsInOrder.has(song.key));
-        orderedSongs = [...orderedSongs, ...newSongs];
-    } else {
-        console.log('📋 No custom song order found, using default');
-        orderedSongs = songs.sort((a, b) => {
-            const titleA = (a.title || 'Untitled').toLowerCase();
-            const titleB = (b.title || 'Untitled').toLowerCase();
-            return titleA.localeCompare(titleB);
-        });
-    }
-
-    // Create song list
-    const songList = $('div', {
-        css: {
-            display: 'grid',
-            gap: '8px'
-        }
-    });
-
-    orderedSongs.forEach((song, index) => {
-        const isCurrentSong = window.currentSongKey === song.key;
-        
-        const songItem = $('div', {
-            css: {
-                display: 'flex',
-                alignItems: 'center',
-                padding: '8px',
-                backgroundColor: isCurrentSong ? '#e3f2fd' : '#f9f9f9',
-                border: isCurrentSong ? '2px solid #2196f3' : '1px solid #ddd',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-            }
-        });
-
-        // Song info
-        const songInfo = $('div', {
-            css: {
-                flex: '1',
-                minWidth: '0'
-            }
-        });
-
-        const title = $('div', {
-            text: song.title || 'Untitled',
-            css: {
-                fontWeight: 'bold',
-                fontSize: '13px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                color: isCurrentSong ? '#1976d2' : '#333'
-            }
-        });
-
-        const artist = $('div', {
-            text: song.artist || 'Unknown Artist',
-            css: {
-                fontSize: '11px',
-                color: '#666',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-            }
-        });
-
-        songInfo.append(title, artist);
-
-        // Action buttons
-        const actionButtons = $('div', {
-            css: {
-                display: 'flex',
-                gap: '4px',
-                marginLeft: '8px',
-                alignItems: 'center'
-            }
-        });
-
-        // MIDI input and learn button
-        const midiContainer = $('div', {
-            css: {
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-                marginRight: '4px'
-            }
-        });
-
-        // Get existing MIDI assignment for this song
-        const existingMidiNote = window.midiUtilities?.getMidiSongAssignment?.(song.key) || '';
-
-        const midiInput = $('input', {
-            type: 'number',
-            min: '0',
-            max: '127',
-            placeholder: 'MIDI',
-            value: existingMidiNote,
-            css: {
-                width: '35px',
-                height: '20px',
-                padding: '1px 2px',
-                border: '1px solid #ccc',
-                borderRadius: '2px',
-                fontSize: '9px',
-                textAlign: 'center'
-            }
-        });
-
-        // Prevent click events from propagating to parent (song item)
-        midiInput.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-
-        midiInput.addEventListener('focus', (e) => {
-            e.stopPropagation();
-        });
-
-        midiInput.addEventListener('keydown', (e) => {
-            e.stopPropagation();
-        });
-
-        midiInput.addEventListener('keyup', (e) => {
-            e.stopPropagation();
-        });
-
-        // Save MIDI assignment when input changes
-        midiInput.addEventListener('input', (e) => {
-            e.stopPropagation();
-            const midiNote = e.target.value.trim();
-            if (midiNote && midiNote >= 0 && midiNote <= 127) {
-                window.midiUtilities?.setMidiSongAssignment?.(song.key, midiNote);
-                console.log(`🎹 MIDI note ${midiNote} assigned to song "${song.title}"`);
-            } else if (midiNote === '') {
-                window.midiUtilities?.removeMidiSongAssignment?.(song.key);
-                console.log(`🎹 MIDI assignment removed for song "${song.title}"`);
-            }
-        });
-
-        const midiLearnButton = $('button', {
-            text: '🎹',
-            css: {
-                backgroundColor: '#9c27b0',
-                color: 'white',
-                border: 'none',
-                padding: '2px 4px',
-                borderRadius: '2px',
-                fontSize: '8px',
-                cursor: 'pointer',
-                minWidth: '18px',
-                height: '20px'
-            },
-            onClick: (e) => {
-                e.stopPropagation();
-                startMidiLearnForSong(song.key, midiInput, midiLearnButton);
-            }
-        });
-
-        midiContainer.append(midiInput, midiLearnButton);
-
-        // Load button
-        const loadButton = $('button', {
-            text: '▶',
-            css: {
-                backgroundColor: '#4caf50',
-                color: 'white',
-                border: 'none',
-                padding: '4px 6px',
-                borderRadius: '3px',
-                fontSize: '10px',
-                cursor: 'pointer'
-            },
-            onClick: (e) => {
-                e.stopPropagation();
-                hideSongLibraryPanel();
-                loadAndDisplaySong(song.key);
-            }
-        });
-
-        // Delete button
-        const deleteButton = $('button', {
-            text: '🗑',
-            css: {
-                backgroundColor: '#f44336',
-                color: 'white',
-                border: 'none',
-                padding: '4px 6px',
-                borderRadius: '3px',
-                fontSize: '10px',
-                cursor: 'pointer'
-            },
-            onClick: (e) => {
-                e.stopPropagation();
-                if (confirm(`Supprimer la chanson "${song.title}" ?`)) {
-                    lyricsLibrary.deleteSong(song.key);
-                    // Refresh panel content
-                    const updatedSongs = lyricsLibrary.getAllSongs();
-                    createSongListContent(container, updatedSongs);
-                }
-            }
-        });
-
-        actionButtons.append(midiContainer, loadButton, deleteButton);
-
-        // Click handler for song item
-        songItem.addEventListener('click', () => {
-            hideSongLibraryPanel();
-            loadAndDisplaySong(song.key);
-        });
-
-        // Hover effects
-        songItem.addEventListener('mouseenter', () => {
-            if (!isCurrentSong) {
-                songItem.style.backgroundColor = '#f0f0f0';
-                songItem.style.borderColor = '#bbb';
-            }
-        });
-
-        songItem.addEventListener('mouseleave', () => {
-            if (!isCurrentSong) {
-                songItem.style.backgroundColor = '#f9f9f9';
-                songItem.style.borderColor = '#ddd';
-            }
-        });
-
-        songItem.append(songInfo, actionButtons);
-        songList.appendChild(songItem);
-    });
-
-    container.appendChild(songList);
-
-    // Add MIDI refresh
-    if (window.midiUtilities) {
-        console.log('🎹 MIDI inputs refreshed in song library');
-        // Note: refreshInputs() method doesn't exist, MIDI inputs will be handled elsewhere
-    }
-}
-
-// Helper functions for song library panel
-function getCustomSongOrder() {
-    try {
-        const savedOrder = localStorage.getItem('lyrix_custom_song_order');
-        if (!savedOrder) return null;
-        
-        const orderData = JSON.parse(savedOrder);
-        return orderData.map(item => item.songKey);
-    } catch (error) {
-        console.error('❌ Error loading custom song order:', error);
-        return null;
-    }
-}
-
-function autoFillMidiNotes() {
-    // Get the root note from the input box
-    const autoFillInput = document.getElementById('midi-root-note-input');
-    const rootNote = autoFillInput ? parseInt(autoFillInput.value) || 60 : 60;
-    
-    console.log(`🎹 Auto-filling MIDI notes starting from ${rootNote}`);
-    
-    // Get all songs in order
-    const songs = lyricsLibrary.getAllSongs();
-    if (songs.length === 0) {
-        console.warn('❌ No songs to assign MIDI notes to');
-        return;
-    }
-    
-    // Assign MIDI notes sequentially
-    songs.forEach((song, index) => {
-        const midiNote = rootNote + index;
-        if (midiNote <= 127) { // MIDI note range limit
-            window.midiUtilities?.setMidiSongAssignment?.(song.key, midiNote.toString());
-            console.log(`🎵 Assigned MIDI note ${midiNote} to "${song.title}"`);
-        } else {
-            console.warn(`⚠️ MIDI note ${midiNote} exceeds maximum (127) for song "${song.title}"`);
-        }
-    });
-    
-    // Refresh the song list to show the new MIDI assignments
-    const songListPanel = document.getElementById('song-library-panel');
-    if (songListPanel) {
-        const content = songListPanel.querySelector('.song-list-content');
-        if (content) {
-            createSongListContent(content, songs);
-            console.log('✅ Song list refreshed with new MIDI assignments');
-        }
-    }
-    
-    console.log(`✅ Auto-filled MIDI notes for ${Math.min(songs.length, 127 - rootNote + 1)} songs`);
-}
-
-function sortSongsAlphabetically() {
-    // This will trigger a refresh of the panel with sorted content
-    if (isSongLibraryPanelOpen) {
-        const songs = lyricsLibrary.getAllSongs();
-        songs.sort((a, b) => {
-            const titleA = (a.title || 'Untitled').toLowerCase();
-            const titleB = (b.title || 'Untitled').toLowerCase();
-            return titleA.localeCompare(titleB);
-        });
-        
-        // Refresh panel content
-        const content = songLibraryPanel.querySelector('.song-list-content');
-        if (content) {
-            createSongListContent(content, songs);
-        }
-    }
-}
-
-// Settings panel state
-let settingsPanel = null;
-let isSettingsPanelOpen = false;
-
-// Show settings as panel
-function showSettingsModal() {
-    console.log('🔧 Opening settings panel...');
-    
-    // Toggle panel visibility
-    if (isSettingsPanelOpen) {
-        hideSettingsPanel();
-        return;
-    }
-    
-    // Create or show settings panel
-    createSettingsPanel();
-}
-
-function hideSettingsPanel() {
-    if (settingsPanel) {
-        settingsPanel.style.display = 'none';
-        isSettingsPanelOpen = false;
-        
-        // Update lyrics display position
-        const lyricsDisplay = document.getElementById('lyrics-display');
-        if (lyricsDisplay) {
-            lyricsDisplay.style.marginTop = '0px';
-        }
-    }
-}
-
-function createSettingsPanel() {
-    // Find the main display container
-    const displayContainer = document.getElementById('display-container');
-    if (!displayContainer) {
-        console.error('❌ Display container not found');
-        return;
-    }
-    
-    // Remove existing panel if any
-    if (settingsPanel) {
-        settingsPanel.remove();
-        settingsPanel = null;
-    }
-    
-    // Create the settings panel
-    settingsPanel = $('div', {
-        id: 'settings-panel',
-        css: {
-            position: 'relative',
             width: '100%',
-            backgroundColor: UIManager.THEME.colors.surface,
-            borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            zIndex: '90',
-            maxHeight: '70vh',
-            overflow: 'auto',
-            display: 'none' // Initially hidden
-        }
-    });
-
-    // Header with title and close button
-    const header = $('div', {
-        css: {
-            padding: '12px',
-            backgroundColor: UIManager.THEME.colors.primary,
-            borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
-            color: 'white',
-            position: 'sticky',
-            top: '0',
-            zIndex: '95'
-        }
-    });
-
-    const headerTop = $('div', {
-        css: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-        }
-    });
-
-    const headerTitle = $('h3', {
-        text: '⚙️ Settings - MIDI Control, UI Visibility & Timecode Options',
-        css: { margin: '0', color: 'white', fontSize: '16px' }
-    });
-
-    // Close button
-    const closeButton = $('button', {
-        text: '✖',
-        css: {
-            backgroundColor: 'transparent',
-            color: 'white',
-            border: 'none',
-            padding: '4px 8px',
+            padding: '10px',
+            border: '1px solid #ddd',
             borderRadius: '4px',
+            marginBottom: '15px',
             fontSize: '14px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-        },
-        onClick: () => {
-            hideSettingsPanel();
+            boxSizing: 'border-box'
         }
     });
 
-    headerTop.append(headerTitle, closeButton);
-    header.appendChild(headerTop);
+    // Song list container
+    const listContainer = UIManager.createListContainer({});
+    
+    // Prepare items for display
+    const songItems = songs.map(song => ({
+        text: `${(song.metadata?.title || song.title || 'Untitled')} - ${(song.metadata?.artist || song.artist || 'Unknown Artist')}${(song.metadata?.album || song.album) ? ` (${song.metadata?.album || song.album})` : ''}`,
+        value: song.key,
+        song: song
+    }));
 
-    // Content area
-    const content = $('div', {
-        className: 'settings-content',
-        css: {
-            padding: '12px',
-            maxWidth: '600px',
-            margin: '0 auto'
-        }
-    });
+    let filteredItems = [...songItems];
 
-    // Create settings content
-    createSettingsContent(content);
-
-    // Assemble panel
-    settingsPanel.append(header, content);
-
-    // Insert panel after toolbar but before lyrics
-    const toolbar = document.getElementById('lyrics-toolbar');
-    if (toolbar && toolbar.parentNode) {
-        toolbar.parentNode.insertBefore(settingsPanel, toolbar.nextSibling);
-    } else {
-        displayContainer.appendChild(settingsPanel);
+    // Functions to manage custom song order persistence
+    function saveCustomSongOrder() {
+        const orderData = filteredItems.map((item, index) => ({
+            songKey: item.value,
+            order: index
+        }));
+        localStorage.setItem('lyrix_custom_song_order', JSON.stringify(orderData));
+        console.log('💾 Custom song order saved to localStorage');
     }
 
-    // Show panel with animation
-    settingsPanel.style.display = 'block';
-    isSettingsPanelOpen = true;
+    function loadCustomSongOrder() {
+        try {
+            const savedOrder = localStorage.getItem('lyrix_custom_song_order');
+            if (!savedOrder) {
+                console.log('📋 No custom song order found, using default');
+                return;
+            }
 
-    // Adjust lyrics display position
-    requestAnimationFrame(() => {
-        const panelHeight = settingsPanel.offsetHeight;
-        const lyricsDisplay = document.getElementById('lyrics-display');
-        if (lyricsDisplay) {
-            lyricsDisplay.style.marginTop = `${panelHeight}px`;
-            lyricsDisplay.style.transition = 'margin-top 0.3s ease';
+            const orderData = JSON.parse(savedOrder);
+            const orderMap = new Map();
+            orderData.forEach(item => {
+                orderMap.set(item.songKey, item.order);
+            });
+
+            // Separate songs with saved order from new songs
+            const songsWithOrder = [];
+            const newSongs = [];
+            
+            filteredItems.forEach(item => {
+                if (orderMap.has(item.value)) {
+                    songsWithOrder.push({
+                        ...item,
+                        savedOrder: orderMap.get(item.value)
+                    });
+                } else {
+                    newSongs.push(item);
+                }
+            });
+
+            // Sort songs with saved order
+            songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
+            
+            // Combine: ordered songs first, then new songs at the end
+            filteredItems = [
+                ...songsWithOrder.map(item => ({ ...item, savedOrder: undefined })),
+                ...newSongs
+            ];
+
+            console.log(`📋 Custom song order loaded: ${songsWithOrder.length} ordered songs, ${newSongs.length} new songs`);
+        } catch (error) {
+            console.error('❌ Error loading custom song order:', error);
+        }
+    }
+
+    // Load custom order on initialization
+    loadCustomSongOrder();
+
+    // Function to refresh all MIDI input values
+    function refreshMidiInputs() {
+        if (!window.midiUtilities) return;
+        
+        const midiInputs = listContainer.querySelectorAll('input[data-song-key]');
+        midiInputs.forEach(input => {
+            const songKey = input.getAttribute('data-song-key');
+            const midiNote = window.midiUtilities.getMidiAssignment(songKey);
+            input.value = midiNote || '';
+        });
+    }
+
+    // Function to sort songs alphabetically
+    function sortSongsAlphabetically() {
+        filteredItems.sort((a, b) => {
+            const titleA = (a.song.metadata?.title || a.song.title || 'Untitled').toLowerCase();
+            const titleB = (b.song.metadata?.title || b.song.title || 'Untitled').toLowerCase();
+            return titleA.localeCompare(titleB);
+        });
+        updateSongList();
+        setTimeout(() => refreshMidiInputs(), 50);
+        saveCustomSongOrder(); // Save the new order
+        console.log('🔤 Songs sorted alphabetically and order saved');
+    }
+
+    // Function to auto-fill MIDI notes starting from root note
+    function autoFillMidiNotes() {
+        if (!window.midiUtilities) {
+            console.error('❌ MIDI utilities not available');
+            Modal({
+                title: '❌ Error',
+                content: '<p>MIDI utilities not available</p>',
+                buttons: [{ text: 'OK' }],
+                size: 'small'
+            });
+            return;
+        }
+
+        const rootNoteStr = autoFillInput.value.trim();
+        if (!rootNoteStr) {
+            console.error('❌ Root note not specified');
+            Modal({
+                title: '❌ Error',
+                content: '<p>Please enter a root note (0-127)</p>',
+                buttons: [{ text: 'OK' }],
+                size: 'small'
+            });
+            return;
+        }
+
+        const rootNote = parseInt(rootNoteStr);
+        if (isNaN(rootNote) || rootNote < 0 || rootNote > 127) {
+            console.error('❌ Invalid root note');
+            Modal({
+                title: '❌ Error',
+                content: '<p>Root note must be between 0 and 127</p>',
+                buttons: [{ text: 'OK' }],
+                size: 'small'
+            });
+            return;
+        }
+
+        // Perform auto-fill directly
+        performAutoFill(rootNote);
+    }
+
+    // Function to perform the actual auto-fill
+    function performAutoFill(rootNote) {
+        let assignedCount = 0;
+        let skippedCount = 0;
+
+        filteredItems.forEach((item, index) => {
+            const midiNote = rootNote + index;
+            
+            // Check if MIDI note is in valid range
+            if (midiNote > 127) {
+                console.warn(`⚠️ Skipping ${item.song.title}: MIDI note ${midiNote} exceeds 127`);
+                skippedCount++;
+                return;
+            }
+
+            try {
+                // Remove any existing assignment for this song
+                window.midiUtilities.removeMidiAssignment(item.value);
+                
+                // Set new assignment
+                window.midiUtilities.setMidiAssignment(item.value, midiNote);
+                assignedCount++;
+                
+                console.log(`🎹 Auto-assigned: ${item.song.title} -> Note ${midiNote}`);
+            } catch (error) {
+                console.error(`❌ Error assigning MIDI note to ${item.song.title}:`, error);
+                skippedCount++;
+            }
+        });
+
+        // Refresh MIDI inputs in the UI
+        setTimeout(() => refreshMidiInputs(), 100);
+
+        console.log(`🎹 Auto-fill complete: ${assignedCount} assigned, ${skippedCount} skipped`);
+    }
+
+    function updateSongList() {
+        listContainer.innerHTML = '';
+        
+        // Check if there are no songs to display
+        if (filteredItems.length === 0) {
+            const emptyMessage = $('div', {
+                css: {
+                    textAlign: 'center',
+                    padding: '40px 20px',
+                    color: '#666',
+                    fontSize: '16px'
+                }
+            });
+            
+            const emptyIcon = $('div', {
+                text: '🎵',
+                css: {
+                    fontSize: '48px',
+                    marginBottom: '15px'
+                }
+            });
+            
+            const emptyText = $('div', {
+                text: songs.length === 0 ? 
+                    'No songs in your library yet.\nUse the buttons above to create a new song or import existing ones.' : 
+                    'No songs match your search.',
+                css: {
+                    lineHeight: '1.6',
+                    whiteSpace: 'pre-line'
+                }
+            });
+            
+            emptyMessage.append(emptyIcon, emptyText);
+            listContainer.appendChild(emptyMessage);
+            return;
+        }
+        
+        filteredItems.forEach((item, index) => {
+            const itemDiv = UIManager.createListItem({});
+            
+            // Add drag and drop functionality
+            itemDiv.draggable = true;
+            itemDiv.dataset.songIndex = index;
+            itemDiv.style.cursor = 'grab';
+            
+            // Add drag handle visual indicator
+            const dragHandle = $('span', {
+                text: '⋮⋮',
+                css: {
+                    marginRight: '8px',
+                    color: '#999',
+                    fontSize: '14px',
+                    cursor: 'grab',
+                    userSelect: 'none'
+                }
+            });
+            
+            const textSpan = UIManager.createListItemText({
+                text: item.text
+            });
+
+            // MIDI controls container
+            const midiControls = $('div', {
+                css: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    marginLeft: '10px'
+                }
+            });
+
+            // MIDI note input box - get fresh value each time the list is updated
+            let currentMidiNote = null;
+            if (window.midiUtilities) {
+                currentMidiNote = window.midiUtilities.getMidiAssignment(item.value);
+            }
+            
+            const midiInput = $('input', {
+                type: 'number',
+                min: '0',
+                max: '127',
+                placeholder: 'Note',
+                value: currentMidiNote || '',
+                css: {
+                    width: '50px',
+                    padding: '2px 4px',
+                    border: '1px solid #ccc',
+                    borderRadius: '3px',
+                    fontSize: '11px',
+                    textAlign: 'center'
+                }
+            });
+            
+            // Store reference to input for updating
+            midiInput.setAttribute('data-song-key', item.value);
+
+            // Update MIDI assignment when input changes
+            midiInput.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const midiNote = parseInt(e.target.value);
+                if (window.midiUtilities && !isNaN(midiNote) && midiNote >= 0 && midiNote <= 127) {
+                    // Remove any existing assignment for this song
+                    window.midiUtilities.removeMidiAssignment(item.value);
+                    // Set new assignment
+                    window.midiUtilities.setMidiAssignment(item.value, midiNote);
+                    console.log(`🎹 Manual MIDI assignment: Note ${midiNote} -> ${item.song.title}`);
+                } else if (window.midiUtilities && e.target.value === '') {
+                    // Remove assignment if input is cleared
+                    window.midiUtilities.removeMidiAssignment(item.value);
+                    console.log(`🎹 MIDI assignment removed for: ${item.song.title}`);
+                }
+            });
+
+            // MIDI learn button
+            const midiLearnButton = $('button', {
+                text: '🎹',
+                css: {
+                    width: '25px',
+                    height: '25px',
+                    border: '1px solid #007acc',
+                    borderRadius: '3px',
+                    backgroundColor: '#f0f8ff',
+                    color: '#007acc',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0'
+                },
+                title: `Learn MIDI note for ${item.song.title}`
+            });
+
+            // MIDI learn functionality
+            midiLearnButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!window.midiUtilities) {
+                    console.error('❌ MIDI utilities not available');
+                    return;
+                }
+
+                if (window.midiUtilities.isLearning) {
+                    // Stop learning
+                    window.midiUtilities.stopMidiLearn();
+                    midiLearnButton.style.backgroundColor = '#f0f8ff';
+                    midiLearnButton.style.color = '#007acc';
+                    midiLearnButton.textContent = '🎹';
+                    console.log('🎹 MIDI learn stopped');
+                } else {
+                    // Start learning
+                    midiLearnButton.style.backgroundColor = '#ff6b6b';
+                    midiLearnButton.style.color = 'white';
+                    midiLearnButton.textContent = '⏹️';
+                    console.log(`🎹 MIDI learn started for: ${item.song.title}`);
+                    
+                    window.midiUtilities.startMidiLearn((midiNote) => {
+                        console.log(`🎹 MIDI learn callback triggered with note: ${midiNote}`);
+                        // Remove any existing assignment for this song
+                        window.midiUtilities.removeMidiAssignment(item.value);
+                        // Set new assignment
+                        window.midiUtilities.setMidiAssignment(item.value, midiNote);
+                        // Update input field
+                        midiInput.value = midiNote;
+                        // Reset button appearance
+                        midiLearnButton.style.backgroundColor = '#f0f8ff';
+                        midiLearnButton.style.color = '#007acc';
+                        midiLearnButton.textContent = '🎹';
+                        console.log(`🎹 MIDI learn completed: Note ${midiNote} -> ${item.song.title}`);
+                    });
+                }
+            });
+
+            midiControls.append(midiInput, midiLearnButton);
+
+            // Delete button
+            const deleteButton = UIManager.createDeleteButton({
+                onClick: (e) => {
+                    e.stopPropagation();
+                    
+                    ConfirmModal({
+                        title: '🗑️ Delete Song',
+                        message: `Are you sure you want to delete "${item.song.title}" by ${item.song.artist}?`,
+                        confirmText: 'Delete',
+                        cancelText: 'Cancel',
+                        onConfirm: () => {
+                            try {
+                                // Remove MIDI assignment when deleting song
+                                if (window.midiUtilities) {
+                                    window.midiUtilities.removeMidiAssignment(item.value);
+                                }
+                                const success = lyricsLibrary.deleteSong(item.value);
+                                if (success) {
+                                    document.body.removeChild(modalContainer);
+                                    showSongLibrary();
+                                } else {
+                                    console.error('❌ Failed to delete song');
+                                }
+                            } catch (error) {
+                                console.error('❌ Error deleting song:', error);
+                            }
+                        }
+                    });
+                }
+            });
+
+            // Controls container for MIDI and delete buttons
+            const controlsContainer = $('div', {
+                css: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                }
+            });
+
+            controlsContainer.append(midiControls, deleteButton);
+
+            // Click handler for song selection
+            itemDiv.addEventListener('click', (e) => {
+                if (e.target !== deleteButton && 
+                    e.target !== midiLearnButton && 
+                    e.target !== midiInput && 
+                    e.target !== dragHandle &&
+                    !midiControls.contains(e.target)) {
+                    document.body.removeChild(modalContainer);
+                    loadAndDisplaySong(item.value);
+                }
+            });
+
+            // Drag and drop event handlers
+            itemDiv.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', index);
+                itemDiv.style.opacity = '0.5';
+                itemDiv.style.cursor = 'grabbing';
+            });
+
+            itemDiv.addEventListener('dragend', (e) => {
+                itemDiv.style.opacity = '1';
+                itemDiv.style.cursor = 'grab';
+            });
+
+            itemDiv.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                itemDiv.style.borderTop = '2px solid #007acc';
+            });
+
+            itemDiv.addEventListener('dragleave', (e) => {
+                itemDiv.style.borderTop = '';
+            });
+
+            itemDiv.addEventListener('drop', (e) => {
+                e.preventDefault();
+                itemDiv.style.borderTop = '';
+                const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                const targetIndex = index;
+                
+                if (draggedIndex !== targetIndex) {
+                    // Reorder the filteredItems array
+                    const draggedItem = filteredItems[draggedIndex];
+                    filteredItems.splice(draggedIndex, 1);
+                    filteredItems.splice(targetIndex, 0, draggedItem);
+                    
+                    // Update the display
+                    updateSongList();
+                    setTimeout(() => refreshMidiInputs(), 50);
+                    saveCustomSongOrder(); // Save the new order
+                    console.log(`🔄 Moved song from position ${draggedIndex} to ${targetIndex} and saved order`);
+                }
+            });
+
+            itemDiv.append(dragHandle, textSpan, controlsContainer);
+            listContainer.appendChild(itemDiv);
+        });
+    }
+
+    // Search functionality
+    searchInput.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        filteredItems = songItems.filter(item => 
+            item.text.toLowerCase().includes(searchTerm)
+        );
+        updateSongList();
+        // Refresh MIDI inputs after search
+        setTimeout(() => refreshMidiInputs(), 50);
+    });
+
+    content.append(searchInput, listContainer);
+    updateSongList();
+    
+    // Refresh MIDI inputs after DOM is ready
+    setTimeout(() => {
+        refreshMidiInputs();
+        console.log('🎹 MIDI inputs refreshed in song library');
+    }, 100);
+
+    // Footer
+    const footer = UIManager.createModalFooter({});
+    
+    const cancelButton = UIManager.createCancelButton({
+        text: 'Close',
+        onClick: () => document.body.removeChild(modalContainer)
+    });
+
+    footer.appendChild(cancelButton);
+
+    // Assemble modal
+    modal.append(header, content, footer);
+    modalContainer.appendChild(modal);
+    
+    // Add to DOM
+    document.body.appendChild(modalContainer);
+
+    // Close on overlay click
+    modalContainer.addEventListener('click', (e) => {
+        if (e.target === modalContainer) {
+            document.body.removeChild(modalContainer);
         }
     });
+
+    // Focus search input
+    setTimeout(() => searchInput.focus(), 100);
 }
 
-function createSettingsContent(container) {
-    // Clear existing content
-    container.innerHTML = '';
+// Show settings modal with MIDI fullscreen assignments
+function showSettingsModal() {
+    console.log('🔧 Opening settings modal...');
+    
+    // Create settings content
+    const settingsContent = $('div', {
+        css: {
+            padding: '20px',
+            maxWidth: '400px'
+        }
+    });
+
+    // Title
+    const title = $('h3', {
+        text: 'Settings - MIDI Control, UI Visibility & Timecode Options',
+        css: {
+            margin: '0 0 20px 0',
+            color: '#333',
+            textAlign: 'center'
+        }
+    });
 
     // Fullscreen activation section
     const activateSection = $('div', {
         css: {
-            marginBottom: '15px',
-            padding: '12px',
+            marginBottom: '20px',
+            padding: '15px',
             backgroundColor: '#f8f9fa',
             borderRadius: '5px',
             border: '1px solid #e9ecef'
@@ -2529,9 +2455,8 @@ function createSettingsContent(container) {
         text: 'Activate Fullscreen',
         css: {
             fontWeight: 'bold',
-            marginBottom: '8px',
-            color: '#495057',
-            fontSize: '14px'
+            marginBottom: '10px',
+            color: '#495057'
         }
     });
 
@@ -2539,7 +2464,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
@@ -2548,12 +2473,12 @@ function createSettingsContent(container) {
         placeholder: 'MIDI Note',
         css: {
             flex: '1',
-            height: '28px',
-            fontSize: '12px',
+            height: '30px',
+            fontSize: '14px',
             textAlign: 'center',
             border: '1px solid #ccc',
-            borderRadius: '3px',
-            padding: '4px'
+            borderRadius: '4px',
+            padding: '5px'
         }
     });
 
@@ -2563,19 +2488,19 @@ function createSettingsContent(container) {
         activateInput.value = savedActivateNote;
     }
 
-    const activateLearnButton = $('button', {
+    const activateLearnButton = Button({
         text: '🎹 Learn',
+        onClick: () => {
+            startMidiLearnForSetting(activateInput, 'fullscreen_activate', activateLearnButton);
+        },
         css: {
-            padding: '4px 8px',
+            padding: '5px 10px',
             backgroundColor: '#007bff',
             color: 'white',
             border: 'none',
-            borderRadius: '3px',
+            borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '11px'
-        },
-        onClick: () => {
-            startMidiLearnForSetting(activateInput, 'fullscreen_activate', activateLearnButton);
+            fontSize: '12px'
         }
     });
 
@@ -2585,8 +2510,8 @@ function createSettingsContent(container) {
     // Fullscreen deactivation section
     const deactivateSection = $('div', {
         css: {
-            marginBottom: '15px',
-            padding: '12px',
+            marginBottom: '20px',
+            padding: '15px',
             backgroundColor: '#f8f9fa',
             borderRadius: '5px',
             border: '1px solid #e9ecef'
@@ -2597,9 +2522,8 @@ function createSettingsContent(container) {
         text: 'Deactivate Fullscreen',
         css: {
             fontWeight: 'bold',
-            marginBottom: '8px',
-            color: '#495057',
-            fontSize: '14px'
+            marginBottom: '10px',
+            color: '#495057'
         }
     });
 
@@ -2607,7 +2531,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
@@ -2616,12 +2540,12 @@ function createSettingsContent(container) {
         placeholder: 'MIDI Note',
         css: {
             flex: '1',
-            height: '28px',
-            fontSize: '12px',
+            height: '30px',
+            fontSize: '14px',
             textAlign: 'center',
             border: '1px solid #ccc',
-            borderRadius: '3px',
-            padding: '4px'
+            borderRadius: '4px',
+            padding: '5px'
         }
     });
 
@@ -2631,19 +2555,19 @@ function createSettingsContent(container) {
         deactivateInput.value = savedDeactivateNote;
     }
 
-    const deactivateLearnButton = $('button', {
+    const deactivateLearnButton = Button({
         text: '🎹 Learn',
+        onClick: () => {
+            startMidiLearnForSetting(deactivateInput, 'fullscreen_deactivate', deactivateLearnButton);
+        },
         css: {
-            padding: '4px 8px',
+            padding: '5px 10px',
             backgroundColor: '#007bff',
             color: 'white',
             border: 'none',
-            borderRadius: '3px',
+            borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '11px'
-        },
-        onClick: () => {
-            startMidiLearnForSetting(deactivateInput, 'fullscreen_deactivate', deactivateLearnButton);
+            fontSize: '12px'
         }
     });
 
@@ -2669,11 +2593,285 @@ function createSettingsContent(container) {
         }
     });
 
+    // Audio Player Controls section
+    const audioSection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#e3f2fd',
+            borderRadius: '5px',
+            border: '1px solid #2196F3'
+        }
+    });
+
+    const audioTitle = $('div', {
+        text: '🎵 Audio Player Controls',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '5px',
+            color: '#1976D2'
+        }
+    });
+
+    // Experimental warning
+    const audioWarning = $('div', {
+        text: '⚠️ EXPERIMENTAL FEATURE - NOT RECOMMENDED FOR USE',
+        css: {
+            fontSize: '11px',
+            color: '#ff5722',
+            fontWeight: '600',
+            marginBottom: '10px',
+            padding: '4px 8px',
+            backgroundColor: '#fff3e0',
+            borderRadius: '3px',
+            border: '1px solid #ff9800',
+            textAlign: 'center'
+        }
+    });
+
+    const audioDisclaimer = $('div', {
+        text: 'This feature is unstable and may cause interface issues. Use at your own risk.',
+        css: {
+            fontSize: '10px',
+            color: '#666',
+            fontStyle: 'italic',
+            marginBottom: '10px',
+            textAlign: 'center'
+        }
+    });
+
+    const audioContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+        }
+    });
+
+    // Load current state from localStorage
+    const isAudioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true'; // Default to false
+
+    const audioButton = UIManager.createInterfaceButton(
+        isAudioEnabled ? '✅' : '❌', 
+        {
+            onClick: () => toggleAudioPlayerControls(audioButton, audioLabel)
+        }
+    );
+
+    const audioLabel = $('span', {
+        text: isAudioEnabled ? 'Audio Controls Visible' : 'Audio Controls Hidden',
+        css: {
+            fontSize: '14px',
+            color: '#1976D2',
+            fontWeight: '500'
+        }
+    });
+
+    audioContainer.append(audioButton, audioLabel);
+    audioSection.append(audioTitle, audioWarning, audioDisclaimer, audioContainer);
+
+    // Audio Sync section
+    const syncSection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#fff3e0',
+            borderRadius: '5px',
+            border: '1px solid #ff9800'
+        }
+    });
+
+    const syncTitle = $('h4', {
+        text: '⚠️ EXPERIMENTAL FEATURES',
+        css: {
+            fontSize: '16px',
+            marginBottom: '5px',
+            color: '#e65100'
+        }
+    });
+
+    // Subtitle for sync section
+    const syncSubtitle = $('div', {
+        text: '🔄 Audio Sync with Host Timecode',
+        css: {
+            fontSize: '14px',
+            marginBottom: '10px',
+            color: '#e65100',
+            fontWeight: '500'
+        }
+    });
+
+    // Experimental warning for sync
+    const syncWarning = $('div', {
+        text: '⚠️ EXPERIMENTAL FEATURE - REQUIRES HOST APPLICATION SUPPORT',
+        css: {
+            fontSize: '11px',
+            color: '#d84315',
+            fontWeight: '600',
+            marginBottom: '10px',
+            padding: '4px 8px',
+            backgroundColor: '#fbe9e7',
+            borderRadius: '3px',
+            border: '1px solid #f44336',
+            textAlign: 'center'
+        }
+    });
+
+    const syncDisclaimer = $('div', {
+        text: 'This feature attempts to sync audio playback with host application timecode. May not work in all environments.',
+        css: {
+            fontSize: '10px',
+            color: '#666',
+            fontStyle: 'italic',
+            marginBottom: '10px',
+            textAlign: 'center'
+        }
+    });
+
+    const syncContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '10px'
+        }
+    });
+
+    // Load current sync state from localStorage
+    const isSyncEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
+
+    const syncButton = UIManager.createInterfaceButton(
+        isSyncEnabled ? '✅' : '❌', 
+        {
+            onClick: () => toggleAudioSync(syncButton, syncLabel)
+        }
+    );
+
+    const syncLabel = $('span', {
+        text: isSyncEnabled ? 'Host Sync Enabled' : 'Host Sync Disabled',
+        css: {
+            fontSize: '14px',
+            color: '#e65100',
+            fontWeight: '500'
+        }
+    });
+
+    syncContainer.append(syncButton, syncLabel);
+
+    // Test sync container
+    const testSyncContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginTop: '10px'
+        }
+    });
+
+    const testPlayButton = UIManager.createInterfaceButton('▶️', {
+        onClick: () => {
+            console.log('🔄 Testing host sync - simulating timecode progression');
+            const timecodeDisplay = document.getElementById('timecode-display');
+            if (timecodeDisplay) {
+                // Simulate timecode progression
+                let time = 0;
+                const interval = setInterval(() => {
+                    time += 0.1;
+                    timecodeDisplay.textContent = `${time.toFixed(3)}s`;
+                    if (time >= 2) {
+                        clearInterval(interval);
+                    }
+                }, 100);
+            } else {
+                console.warn('⚠️ Host timecode display not found for test');
+            }
+        }
+    });
+
+    const testStopButton = UIManager.createInterfaceButton('⏹️', {
+        onClick: () => {
+            console.log('🔄 Testing host sync - simulating timecode stop');
+            const timecodeDisplay = document.getElementById('timecode-display');
+            if (timecodeDisplay) {
+                // Keep timecode static to simulate stop
+                const currentTime = timecodeDisplay.textContent;
+                setTimeout(() => {
+                    timecodeDisplay.textContent = currentTime; // Keep same time
+                }, 1000);
+            } else {
+                console.warn('⚠️ Host timecode display not found for test');
+            }
+        }
+    });
+
+    const testLabel = $('span', {
+        text: 'Test sync manually',
+        css: {
+            fontSize: '12px',
+            color: '#666',
+            fontStyle: 'italic'
+        }
+    });
+
+    testSyncContainer.append(testPlayButton, testStopButton, testLabel);
+
+    syncSection.append(syncTitle, syncSubtitle, syncWarning, syncDisclaimer, syncContainer, testSyncContainer);
+
+    // MIDI Inspector section
+    const midiSection = $('div', {
+        css: {
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#f3e5f5',
+            borderRadius: '5px',
+            border: '1px solid #9c27b0'
+        }
+    });
+
+    const midiTitle = $('div', {
+        text: '🎹 MIDI Inspector',
+        css: {
+            fontWeight: 'bold',
+            marginBottom: '10px',
+            color: '#7b1fa2'
+        }
+    });
+
+    const midiContainer = $('div', {
+        css: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+        }
+    });
+
+    // Load current state from localStorage
+    const isMidiEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true'; // Default to false
+
+    const midiButton = UIManager.createInterfaceButton(
+        isMidiEnabled ? '✅' : '❌', 
+        {
+            onClick: () => toggleMidiInspector(midiButton, midiLabel)
+        }
+    );
+
+    const midiLabel = $('span', {
+        text: isMidiEnabled ? 'MIDI Inspector Visible' : 'MIDI Inspector Hidden',
+        css: {
+            fontSize: '14px',
+            color: '#7b1fa2',
+            fontWeight: '500'
+        }
+    });
+
+    midiContainer.append(midiButton, midiLabel);
+    midiSection.append(midiTitle, midiContainer);
+
     // Timecode Display section
     const timecodeDisplaySection = $('div', {
         css: {
-            marginBottom: '15px',
-            padding: '12px',
+            marginBottom: '20px',
+            padding: '15px',
             backgroundColor: '#e8f5e8',
             borderRadius: '5px',
             border: '1px solid #4caf50'
@@ -2684,9 +2882,8 @@ function createSettingsContent(container) {
         text: '🕐 Timecode Display',
         css: {
             fontWeight: 'bold',
-            marginBottom: '8px',
-            color: '#2e7d32',
-            fontSize: '14px'
+            marginBottom: '10px',
+            color: '#2e7d32'
         }
     });
 
@@ -2694,12 +2891,13 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '10px',
+            marginBottom: '10px'
         }
     });
 
     // Load current state from localStorage
-    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true';
+    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true'; // Default to false (hidden)
 
     const timecodeDisplayButton = UIManager.createInterfaceButton(
         isTimecodeDisplayVisible ? '✅' : '❌', 
@@ -2711,20 +2909,21 @@ function createSettingsContent(container) {
     const timecodeDisplayLabel = $('span', {
         text: isTimecodeDisplayVisible ? 'Timecode Display Visible' : 'Timecode Display Hidden',
         css: {
-            fontSize: '12px',
+            fontSize: '14px',
             color: '#2e7d32',
             fontWeight: '500'
         }
     });
 
     timecodeDisplayContainer.append(timecodeDisplayButton, timecodeDisplayLabel);
+
     timecodeDisplaySection.append(timecodeDisplayTitle, timecodeDisplayContainer);
 
     // Timecode Options section
     const timecodeOptionsSection = $('div', {
         css: {
-            marginBottom: '15px',
-            padding: '12px',
+            marginBottom: '20px',
+            padding: '15px',
             backgroundColor: '#e3f2fd',
             borderRadius: '5px',
             border: '1px solid #2196f3'
@@ -2735,9 +2934,8 @@ function createSettingsContent(container) {
         text: '⏱️ Timecode Options',
         css: {
             fontWeight: 'bold',
-            marginBottom: '8px',
-            color: '#1976d2',
-            fontSize: '14px'
+            marginBottom: '10px',
+            color: '#1976d2'
         }
     });
 
@@ -2745,7 +2943,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
@@ -2754,7 +2952,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
@@ -2774,7 +2972,7 @@ function createSettingsContent(container) {
     const showTimecodesLabel = $('span', {
         text: lyricsDisplay?.showTimecodes ? 'Timecodes Visible' : 'Timecodes Hidden',
         css: {
-            fontSize: '12px',
+            fontSize: '14px',
             color: '#1976d2',
             fontWeight: '500'
         }
@@ -2787,29 +2985,75 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
     const clearAllTimecodesButton = UIManager.createInterfaceButton('🗑️', {
         onClick: () => {
+            console.log('🗑️ Clear all timecodes button clicked');
+            console.log('🔍 Debug info:', {
+                lyricsDisplay: !!lyricsDisplay,
+                currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
+                songId: lyricsDisplay?.currentLyrics?.songId,
+                linesCount: lyricsDisplay?.currentLyrics?.lines?.length
+            });
+            
             if (lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes) {
-                if (confirm(`Are you sure you want to remove all timecodes from "${lyricsDisplay.currentLyrics.title || 'current song'}"?\n\nThis action cannot be undone.`)) {
+                // Show confirmation modal instead of system confirm
+                ConfirmModal({
+                    title: '🗑️ Clear All Timecodes',
+                    message: `Are you sure you want to remove all timecodes from "${lyricsDisplay.currentLyrics.title || 'current song'}"?\n\nThis action cannot be undone.`,
+                    confirmText: 'Clear All',
+                    cancelText: 'Cancel',
+                    confirmStyle: 'danger',
+                    onConfirm: () => {
+                    console.log('🗑️ User confirmed, clearing timecodes...');
                     lyricsDisplay.currentLyrics.clearAllTimecodes();
                     
                     // Save to localStorage
                     const saveSuccess = StorageManager.saveSong(lyricsDisplay.currentLyrics.songId, lyricsDisplay.currentLyrics);
                     if (saveSuccess) {
-                        console.log('✅ Cleared all timecodes saved successfully');
+                        console.log('✅ Cleared all timecodes saved to localStorage successfully');
+                    } else {
+                        console.error('❌ Failed to save cleared timecodes to localStorage');
                     }
                     
-                    // Force re-render
+                    // Force re-render of lyrics to show the changes
                     if (lyricsDisplay.renderLyrics) {
                         lyricsDisplay.renderLyrics();
+                        console.log('� Lyrics re-rendered after clearing timecodes');
+                    } else {
+                        console.error('❌ renderLyrics method not found');
                     }
-                }
+                    
+                    console.log('�🗑️ All timecodes cleared from settings');
+                    },
+                    onCancel: () => {
+                        console.log('❌ User cancelled clearing timecodes');
+                    }
+                });
             } else {
-                alert('No lyrics loaded to clear timecodes from');
+                console.error('❌ Debug info:', {
+                    lyricsDisplay: !!lyricsDisplay,
+                    currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
+                    clearAllTimecodes: !!(lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes)
+                });
+                // Use custom modal instead of system alert for Tauri compatibility
+                Modal({
+                    title: '⚠️ No Lyrics Available',
+                    content: $('div', {
+                        text: 'No lyrics loaded to clear timecodes from, or method not available.',
+                        css: { padding: '10px', textAlign: 'center' }
+                    }),
+                    buttons: [
+                        {
+                            text: 'OK',
+                            style: 'primary',
+                            action: () => {} // Just close modal
+                        }
+                    ]
+                });
             }
         }
     });
@@ -2817,7 +3061,7 @@ function createSettingsContent(container) {
     const clearTimecodesLabel = $('span', {
         text: 'Remove all timecodes from current song',
         css: {
-            fontSize: '11px',
+            fontSize: '12px',
             color: '#666',
             fontStyle: 'italic'
         }
@@ -2831,8 +3075,8 @@ function createSettingsContent(container) {
     // Metadata Display Options section
     const metadataOptionsSection = $('div', {
         css: {
-            marginBottom: '15px',
-            padding: '12px',
+            marginBottom: '20px',
+            padding: '15px',
             backgroundColor: '#f8f4ff',
             borderRadius: '5px',
             border: '1px solid #e0d4f7'
@@ -2843,9 +3087,9 @@ function createSettingsContent(container) {
         text: 'Metadata Display Options',
         css: {
             fontWeight: 'bold',
-            marginBottom: '8px',
+            marginBottom: '15px',
             color: '#6a1b9a',
-            fontSize: '14px'
+            fontSize: '16px'
         }
     });
 
@@ -2853,7 +3097,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
@@ -2862,7 +3106,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
@@ -2882,7 +3126,7 @@ function createSettingsContent(container) {
     const showTitleLabel = $('span', {
         text: lyricsDisplay?.showTitle ? 'Title Visible' : 'Title Hidden',
         css: {
-            fontSize: '12px',
+            fontSize: '14px',
             color: '#6a1b9a',
             fontWeight: '500'
         }
@@ -2895,7 +3139,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px'
+            gap: '10px'
         }
     });
 
@@ -2915,7 +3159,7 @@ function createSettingsContent(container) {
     const showArtistLabel = $('span', {
         text: lyricsDisplay?.showArtist ? 'Artist Visible' : 'Artist Hidden',
         css: {
-            fontSize: '12px',
+            fontSize: '14px',
             color: '#6a1b9a',
             fontWeight: '500'
         }
@@ -2929,8 +3173,8 @@ function createSettingsContent(container) {
     // Font Size Controls section
     const fontSizeSection = $('div', {
         css: {
-            marginBottom: '15px',
-            padding: '12px',
+            marginBottom: '20px',
+            padding: '15px',
             backgroundColor: '#f0f8ff',
             borderRadius: '5px',
             border: '1px solid #87ceeb'
@@ -2941,9 +3185,8 @@ function createSettingsContent(container) {
         text: '📝 Font Size Controls',
         css: {
             fontWeight: 'bold',
-            marginBottom: '8px',
-            color: '#4682b4',
-            fontSize: '14px'
+            marginBottom: '10px',
+            color: '#4682b4'
         }
     });
 
@@ -2951,7 +3194,7 @@ function createSettingsContent(container) {
         css: {
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
+            gap: '10px',
             justifyContent: 'center'
         }
     });
@@ -2971,12 +3214,12 @@ function createSettingsContent(container) {
     const fontSizeLabel = $('span', {
         text: `${currentFontSize}px`,
         css: {
-            padding: '4px 8px',
+            padding: '5px 10px',
             backgroundColor: '#f0f0f0',
-            borderRadius: '3px',
-            fontSize: '12px',
+            borderRadius: '4px',
+            fontSize: '14px',
             fontWeight: '500',
-            minWidth: '40px',
+            minWidth: '50px',
             textAlign: 'center',
             border: '1px solid #ccc'
         }
@@ -2996,6 +3239,7 @@ function createSettingsContent(container) {
         e.preventDefault();
         if (lyricsDisplay) {
             lyricsDisplay.editFontSizeDirectly();
+            // Update label after editing
             setTimeout(() => {
                 fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
             }, 100);
@@ -3005,212 +3249,34 @@ function createSettingsContent(container) {
     const fontSizeHint = $('div', {
         text: 'Click A- / A+ or double-click size to adjust',
         css: {
-            fontSize: '10px',
+            fontSize: '11px',
             color: '#666',
             fontStyle: 'italic',
             textAlign: 'center',
-            marginTop: '4px'
+            marginTop: '5px'
         }
     });
 
     fontSizeContainer.append(fontMinusButton, fontSizeLabel, fontPlusButton);
     fontSizeSection.append(fontSizeTitle, fontSizeContainer, fontSizeHint);
 
-    // MIDI Inspector section
-    const midiSection = $('div', {
-        css: {
-            marginBottom: '15px',
-            padding: '12px',
-            backgroundColor: '#f3e5f5',
-            borderRadius: '5px',
-            border: '1px solid #9c27b0'
-        }
+    // Assemble the content - move experimental features to the bottom
+    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, metadataOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
+
+    // Show modal
+    Modal({
+        title: '⚙️ Settings',
+        content: settingsContent,
+        buttons: [
+            {
+                text: 'Close',
+                style: 'primary',
+                action: () => {
+                    console.log('🔧 Settings modal closed');
+                }
+            }
+        ]
     });
-
-    const midiTitle = $('div', {
-        text: '🎹 MIDI Inspector',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '8px',
-            color: '#7b1fa2',
-            fontSize: '14px'
-        }
-    });
-
-    const midiContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-        }
-    });
-
-    // Load current state from localStorage
-    const isMidiEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
-
-    const midiButton = UIManager.createInterfaceButton(
-        isMidiEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleMidiInspector(midiButton, midiLabel)
-        }
-    );
-
-    const midiLabel = $('span', {
-        text: isMidiEnabled ? 'MIDI Inspector Visible' : 'MIDI Inspector Hidden',
-        css: {
-            fontSize: '12px',
-            color: '#7b1fa2',
-            fontWeight: '500'
-        }
-    });
-
-    midiContainer.append(midiButton, midiLabel);
-    midiSection.append(midiTitle, midiContainer);
-
-    // Audio Player Controls section - EXPERIMENTAL
-    const audioSection = $('div', {
-        css: {
-            marginBottom: '15px',
-            padding: '12px',
-            backgroundColor: '#e3f2fd',
-            borderRadius: '5px',
-            border: '1px solid #2196F3'
-        }
-    });
-
-    const audioTitle = $('div', {
-        text: '🎵 Audio Player Controls',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '4px',
-            color: '#1976D2',
-            fontSize: '14px'
-        }
-    });
-
-    const audioWarning = $('div', {
-        text: '⚠️ EXPERIMENTAL FEATURE - NOT RECOMMENDED FOR USE',
-        css: {
-            fontSize: '10px',
-            color: '#ff5722',
-            fontWeight: '600',
-            marginBottom: '8px',
-            padding: '3px 6px',
-            backgroundColor: '#fff3e0',
-            borderRadius: '3px',
-            border: '1px solid #ff9800',
-            textAlign: 'center'
-        }
-    });
-
-    const audioContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-        }
-    });
-
-    // Load current state from localStorage
-    const isAudioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-
-    const audioButton = UIManager.createInterfaceButton(
-        isAudioEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleAudioPlayerControls(audioButton, audioLabel)
-        }
-    );
-
-    const audioLabel = $('span', {
-        text: isAudioEnabled ? 'Audio Controls Visible' : 'Audio Controls Hidden',
-        css: {
-            fontSize: '12px',
-            color: '#1976D2',
-            fontWeight: '500'
-        }
-    });
-
-    audioContainer.append(audioButton, audioLabel);
-    audioSection.append(audioTitle, audioWarning, audioContainer);
-
-    // Audio Sync section - EXPERIMENTAL  
-    const syncSection = $('div', {
-        css: {
-            marginBottom: '15px',
-            padding: '12px',
-            backgroundColor: '#fff3e0',
-            borderRadius: '5px',
-            border: '1px solid #ff9800'
-        }
-    });
-
-    const syncTitle = $('div', {
-        text: '🔄 Audio Sync with Host',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '4px',
-            color: '#e65100',
-            fontSize: '14px'
-        }
-    });
-
-    const syncWarning = $('div', {
-        text: '⚠️ EXPERIMENTAL - REQUIRES HOST SUPPORT',
-        css: {
-            fontSize: '10px',
-            color: '#d84315',
-            fontWeight: '600',
-            marginBottom: '8px',
-            padding: '3px 6px',
-            backgroundColor: '#fbe9e7',
-            borderRadius: '3px',
-            border: '1px solid #f44336',
-            textAlign: 'center'
-        }
-    });
-
-    const syncContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-        }
-    });
-
-    // Load current sync state from localStorage
-    const isSyncEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
-
-    const syncButton = UIManager.createInterfaceButton(
-        isSyncEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleAudioSync(syncButton, syncLabel)
-        }
-    );
-
-    const syncLabel = $('span', {
-        text: isSyncEnabled ? 'Host Sync Enabled' : 'Host Sync Disabled',
-        css: {
-            fontSize: '12px',
-            color: '#e65100',
-            fontWeight: '500'
-        }
-    });
-
-    syncContainer.append(syncButton, syncLabel);
-    syncSection.append(syncTitle, syncWarning, syncContainer);
-
-    // Assemble all sections
-    container.append(
-        activateSection, 
-        deactivateSection, 
-        timecodeDisplaySection, 
-        timecodeOptionsSection, 
-        metadataOptionsSection, 
-        fontSizeSection, 
-        midiSection, 
-        audioSection, 
-        syncSection
-    );
 }
 
 // Toggle audio player controls visibility
@@ -3815,8 +3881,6 @@ function showFileImportDialog() {
     }
 }
 
-// ...existing code...
-
 // Helper function for MIDI learning in settings
 function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
     if (window.Lyrix?.midiUtilities?.startMidiLearn) {
@@ -3837,31 +3901,6 @@ function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
             
             console.log(`🎵 MIDI note ${midiNote} assigned to ${settingKey}`);
         });
-    }
-}
-
-// Helper function for MIDI learning in song list
-function startMidiLearnForSong(songKey, inputElement, buttonElement) {
-    if (window.midiUtilities?.startMidiLearn) {
-        // Change button appearance
-        buttonElement.textContent = '⏹';
-        buttonElement.style.backgroundColor = '#ff4757';
-        
-        window.midiUtilities.startMidiLearn((midiNote) => {
-            // MIDI note learned
-            inputElement.value = midiNote;
-            
-            // Reset button appearance
-            buttonElement.textContent = '🎹';
-            buttonElement.style.backgroundColor = '#9c27b0';
-            
-            // Save the assignment
-            window.midiUtilities.setMidiSongAssignment(songKey, midiNote);
-            
-            console.log(`🎵 MIDI note ${midiNote} assigned to song "${songKey}"`);
-        });
-    } else {
-        console.warn('⚠️ MIDI learning not available');
     }
 }
 
@@ -5021,5 +5060,4 @@ export {
     CONSTANTS
 };
 
-// console.log('🎵 Lyrix module initialized');
-// Lyrix module loaded
+
