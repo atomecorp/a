@@ -654,7 +654,6 @@ export function SelectModal(options = {}) {
                                 // Save the assignment
                                 window.Lyrix.midiUtilities.setMidiAssignment(itemValue, midiNote);
                                 
-                                console.log(`🎵 MIDI note ${midiNote} assigned to song: ${itemValue}`);
                             });
                         }
                     }
