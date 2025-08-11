@@ -16,15 +16,11 @@ function dragLog(message) {
     if (isIOS) {
         try {
             if (window.webkit?.messageHandlers?.console) {
-                window.webkit.messageHandlers.console.postMessage(prefixedMessage);
             } else {
-                console.log('[iOS]', prefixedMessage);
             }
         } catch (e) {
-            console.log('[iOS-fallback]', prefixedMessage);
         }
     } else {
-        console.log(prefixedMessage);
     }
 }
 
@@ -61,7 +57,6 @@ export class DragDropManager {
     // Show custom alert using Modal system (currently disabled to avoid pop-ups)
     showCustomAlert(title, message) {
         // Just log to console instead of showing modal
-        console.log(`${title}: ${message}`);
         
         // Uncomment below to re-enable modal alerts
         /*
@@ -235,14 +230,12 @@ export class DragDropManager {
         try {
             if (isIOS) {
                 // iOS: Process files sequentially with delays to minimize system conflicts
-                console.log('🍎 iOS sequential processing mode');
                 await this.processFilesSequentiallyWithDelay(files);
             } else {
                 // Desktop: Process files in parallel
                 await this.processFilesInParallel(files);
             }
         } catch (error) {
-            console.error('❌ File processing error:', error);
         } finally {
             this.showProcessingIndicator(false);
         }
@@ -260,12 +253,9 @@ export class DragDropManager {
                 
                 await this.processFile(file);
             } catch (error) {
-                console.error('❌ iOS file processing error:', error);
                 // More specific error handling for iOS
                 if (error.message.includes('view service') || error.message.includes('thumbnail')) {
-                    console.error(`Failed to process ${file.name}. Try selecting files one at a time.`);
                 } else {
-                    console.error(`Error processing ${file.name}: ${error.message}`);
                 }
             }
         }
@@ -280,7 +270,6 @@ export class DragDropManager {
 
     async importLRXFile(content) {
         try {
-            console.log('📦 [importLRXFile] Parsing LRX file...');
             
             const importData = JSON.parse(content);
             
@@ -353,23 +342,18 @@ export class DragDropManager {
                     }
                 } catch (error) {
                     dragLog(`❌ Error importing song ${index + 1}: ${error.message}`);
-                    console.error(`❌ Error importing song ${index + 1}:`, error);
                     errors.push(`Error importing song ${index + 1}: ${error.message}`);
                 }
             }
 
             // Log final results
             if (errors.length > 0) {
-                console.log(`📥 LRX Import completed: ${importedCount} songs imported successfully, ${errors.length} errors`);
-                console.warn('Import errors:', errors);
             } else {
-                console.log(`📥 LRX Import completed successfully: ${importedCount} songs imported`);
             }
 
             return { success: true, imported: importedCount, errors };
 
         } catch (error) {
-            console.error('❌ Error parsing LRX file:', error);
             throw error;
         }
     }
@@ -388,7 +372,6 @@ export class DragDropManager {
                 return;
             } catch (error) {
                 dragLog(`❌ Error reading LRX file: ${error.message}`);
-                console.error('❌ Erreur lecture fichier LRX:', error);
                 throw error;
             }
         }
@@ -409,21 +392,17 @@ export class DragDropManager {
 
         // Unsupported file type
         dragLog(`⚠️ Unsupported file type: ${file.name} (${file.type})`);
-        console.warn('⚠️ Unsupported file type:', file.name, file.type);
         throw new Error(`Type de fichier non supporté: ${file.type}`);
     }
 
     // Process text file (lyrics)
     async processTextFile(file) {
         try {
-            console.log('📄 Reading text file content...');
             const content = await this.readFileContent(file);
-            console.log(`📄 Text content length: ${content.length} characters`);
             
             const filename = file.name;
             await this.createSongFromText(filename, content);
         } catch (error) {
-            console.error('❌ Error processing text file:', error);
             throw error;
         }
     }
@@ -431,10 +410,8 @@ export class DragDropManager {
     // Process audio file
     async processAudioFile(file) {
         try {
-            console.log('🎵 Processing audio file...');
             await this.loadAudioFileAsync(file);
         } catch (error) {
-            console.error('❌ Error processing audio file:', error);
             throw error;
         }
     }
@@ -570,14 +547,11 @@ export class DragDropManager {
             await this.createSongFromPlainText(title, content);
 
         } catch (error) {
-            console.error('❌ Erreur création chanson:', error);
-            console.error(`Erreur lors de la création de la chanson: ${error.message}`);
         }
     }
 
     async createSongFromLRC(title, lrcContent) {
         try {
-            console.log('🆕 Creating new song from LRC:', title);
             
             // Use existing method to parse LRC
             const syncedLyrics = SyncedLyrics.fromLRC(lrcContent);
@@ -596,33 +570,25 @@ export class DragDropManager {
                 syncedLyrics.metadata.artist
             );
 
-            console.log(`✅ LRC parsed - Song: ${syncedLyrics.metadata.title}, Lines: ${syncedLyrics.lines.length}`);
 
             // Sauvegarder et charger
-            console.log('💾 Saving LRC song to library...');
             const saved = this.lyricsLibrary.saveSong(syncedLyrics);
-            console.log('💾 LRC Save result:', saved);
             
             if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
-                console.log('📺 Displaying LRC lyrics...');
                 this.lyricsDisplay.displayLyrics(syncedLyrics);
                 this.currentLyrics = syncedLyrics;
                 
                 // Notify main application that a song was loaded
                 if (this.onSongLoaded) {
-                    console.log('📢 Notifying main app that LRC song was loaded');
                     this.onSongLoaded(syncedLyrics);
                 }
             } else {
-                console.error('❌ LyricsDisplay not available for LRC');
             }
             
             // Success message in console instead of modal
-            console.log(`✅ Chanson LRC "${syncedLyrics.metadata.title}" créée avec ${syncedLyrics.lines.length} lignes synchronisées!`);
             return syncedLyrics;
 
         } catch (error) {
-            console.error('❌ Erreur parsing LRC:', error);
             // Fallback vers texte simple
             await this.createSongFromPlainText(title, lrcContent);
         }
@@ -630,7 +596,6 @@ export class DragDropManager {
 
     async createSongFromPlainText(title, textContent) {
         try {
-            console.log('🆕 Creating new song from plain text:', title);
             
             // Create new song directly via library
             const newSong = this.lyricsLibrary.createSong(title, 'Artiste Inconnu', '');
@@ -639,56 +604,43 @@ export class DragDropManager {
                 throw new Error('Impossible de créer la chanson');
             }
 
-            console.log('✅ New song instance created:', newSong.metadata.title);
 
             // Diviser le texte en lignes
             const lines = textContent.split('\n')
                 .map(line => line.trim())
                 .filter(line => line.length > 0);
 
-            console.log(`📄 Processing ${lines.length} lines of text`);
 
             // Ajouter chaque ligne avec un timecode automatique (5 secondes entre chaque ligne)
             lines.forEach((line, index) => {
                 const timeMs = index * 5000; // 5 secondes entre chaque ligne
                 newSong.addLine(timeMs, line, 'vocal');
-                console.log(`➕ Added line ${index + 1}: ${line.substring(0, 30)}...`);
             });
 
             // If no lines were added, add a default line
             if (lines.length === 0) {
                 newSong.addLine(0, 'Paroles importées du fichier...', 'vocal');
-                console.log('➕ Added default line');
             }
 
-            console.log(`🎵 Song has ${newSong.lines.length} lines total`);
 
             // Sauvegarder et charger
-            console.log('💾 Saving song to library...');
             const saved = this.lyricsLibrary.saveSong(newSong);
-            console.log('💾 Save result:', saved);
             
             if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
-                console.log('📺 Displaying lyrics...');
                 this.lyricsDisplay.displayLyrics(newSong);
                 this.currentLyrics = newSong;
                 
                 // Notify main application that a song was loaded
                 if (this.onSongLoaded) {
-                    console.log('📢 Notifying main app that song was loaded');
                     this.onSongLoaded(newSong);
                 }
             } else {
-                console.error('❌ LyricsDisplay not available or displayLyrics method missing');
             }
             
             // Success message in console instead of modal
-            console.log(`✅ Chanson "${title}" créée avec ${lines.length} lignes! Vous pouvez maintenant éditer les timecodes en mode édition.`);
             return newSong;
             
         } catch (error) {
-            console.error('❌ Erreur création chanson texte:', error);
-            console.error(`Erreur lors de la création de la chanson: ${error.message}`);
             throw error;
         }
     }
@@ -747,7 +699,6 @@ export class DragDropManager {
         const sizeInMB = (fileSize / (1024 * 1024)).toFixed(1);
         
         // Audio file loaded successfully - update the audio player title
-        console.log(`📁 Audio file associated: ${fileName} (${sizeInMB} MB)`);
         
         // Update the audio player title directly
         this.updateAudioPlayerTitle(fileName);
@@ -768,12 +719,10 @@ export class DragDropManager {
                 return; // Success, exit retry loop
                 
             } catch (error) {
-                console.error(`Attempt ${attempt} failed:`, error);
                 
                 // Check for iOS-specific errors
                 if (isIOS && (error.message.includes('view service') || error.message.includes('thumbnail'))) {
                     if (attempt < maxRetries) {
-                        console.log(`Retrying in ${attempt * 500}ms...`);
                         await new Promise(resolve => setTimeout(resolve, attempt * 500));
                         continue;
                     } else {
@@ -811,20 +760,16 @@ export class DragDropManager {
     // iOS-specific audio file loading with enhanced memory management
     loadAudioFileIOS(file, resolve, reject) {
         try {
-            console.log('🍎 iOS audio file loading:', file.name);
             
             // Check memory constraints before processing
             if (file.size > 50 * 1024 * 1024) { // 50MB limit for iOS
-                console.warn('⚠️ Large file detected on iOS:', file.size / (1024*1024), 'MB');
             }
             
             // Enhanced object URL creation with error handling
             let fileURL;
             try {
                 fileURL = URL.createObjectURL(file);
-                console.log('🍎 Object URL created successfully');
             } catch (urlError) {
-                console.error('❌ Failed to create object URL:', urlError);
                 reject(new Error(`iOS file URL creation failed: ${urlError.message}`));
                 return;
             }
@@ -862,7 +807,6 @@ export class DragDropManager {
                         this.onSongLoaded(this.currentLyrics);
                     }
                 } catch (saveError) {
-                    console.warn('⚠️ Failed to save audio metadata:', saveError);
                     // Continue processing despite save error
                 }
             }
@@ -870,19 +814,16 @@ export class DragDropManager {
             // Load audio with iOS-specific handling and timeout
             if (this.audioController) {
                 const loadTimeout = setTimeout(() => {
-                    console.error('❌ iOS audio loading timeout');
                     reject(new Error('iOS audio loading timeout after 30 seconds'));
                 }, 30000);
                 
                 try {
                     // Enhanced iOS audio loading
                     if (this.audioController.loadFromUrl) {
-                        console.log('🍎 Using enhanced loadFromUrl for iOS');
                         
                         // Add success listener before loading
                         const loadSuccessHandler = () => {
                             clearTimeout(loadTimeout);
-                            console.log('✅ iOS audio loaded successfully:', fileName);
                             this.audioController.off('loaded', loadSuccessHandler);
                             this.audioController.off('error', loadErrorHandler);
                             resolve();
@@ -890,7 +831,6 @@ export class DragDropManager {
                         
                         const loadErrorHandler = (error) => {
                             clearTimeout(loadTimeout);
-                            console.error('❌ iOS audio load error:', error);
                             this.audioController.off('loaded', loadSuccessHandler);
                             this.audioController.off('error', loadErrorHandler);
                             
@@ -921,12 +861,10 @@ export class DragDropManager {
                     }
                 } catch (loadError) {
                     clearTimeout(loadTimeout);
-                    console.error('❌ iOS audio loading exception:', loadError);
                     URL.revokeObjectURL(fileURL);
                     reject(loadError);
                 }
             } else {
-                console.error('❌ No audio controller available');
                 URL.revokeObjectURL(fileURL);
                 reject(new Error('Audio controller not available'));
                 return;
@@ -938,10 +876,8 @@ export class DragDropManager {
             this.currentAudioMetadata = audioMetadata;
             
             const sizeInMB = (fileSize / (1024 * 1024)).toFixed(1);
-            console.log(`🍎 iOS audio file processing initiated: ${fileName} (${sizeInMB} MB)`);
             
         } catch (error) {
-            console.error('❌ iOS audio file processing error:', error);
             reject(error);
         }
     }
@@ -1006,12 +942,9 @@ export class DragDropManager {
                 // Clean the filename and decode URL encoding
                 const cleanFileName = decodeURIComponent(fileName);
                 audioTitleElement.textContent = cleanFileName;
-                console.log(`🎵 Audio player title updated: ${cleanFileName}`);
             } else {
-                console.warn('⚠️ Audio player title element not found');
             }
         } catch (error) {
-            console.error('❌ Error updating audio player title:', error);
         }
     }
 
