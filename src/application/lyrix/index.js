@@ -2361,52 +2361,38 @@ function createMainInterface() {
 
 // Load last opened song
 function loadLastSong() {
-    console.log('🔥 ATOME-APP: loadLastSong function called');
-    
     const lastSongKey = StorageManager.getLastOpenedSong();
-    console.log('🔥 ATOME-APP: lastSongKey from storage:', lastSongKey);
     
     if (lastSongKey && lyricsLibrary) {
-        console.log('🔥 ATOME-APP: Found lastSongKey and lyricsLibrary, proceeding...');
-        
         // Try to get song directly by key first
         currentSong = lyricsLibrary.getSong(lastSongKey);
-        console.log('🔥 ATOME-APP: getSong result:', currentSong ? 'found' : 'not found');
         
         // If not found by key, try by songId
         if (!currentSong) {
             currentSong = lyricsLibrary.getSongById(lastSongKey);
-            console.log('🔥 ATOME-APP: getSongById result:', currentSong ? 'found' : 'not found');
         }
         
         // If still not found, try search by name
         if (!currentSong) {
             currentSong = SongManager.loadByName(lastSongKey, lyricsLibrary);
-            console.log('🔥 ATOME-APP: loadByName result:', currentSong ? 'found' : 'not found');
         }
         
         if (currentSong && lyricsDisplay) {
-            console.log('🔥 ATOME-APP: Found currentSong and lyricsDisplay');
-            
             // Check if audio file exists before loading
             if (currentSong.getAudioPath && currentSong.getAudioPath()) {
                 const audioPath = currentSong.getAudioPath();
-                console.log('🔥 ATOME-APP: Audio path found:', audioPath);
                 console.log('🎵 Checking last song audio:', audioPath);
                 
                 // Test if audio file exists by creating a test audio element
                 const testAudio = new Audio();
-                console.log('🔥 ATOME-APP: Created test audio element');
                 
                 testAudio.addEventListener('error', function() {
-                    console.log('🔥 ATOME-APP: Test audio ERROR event fired');
                     console.warn('⚠️ Last song audio file not found, clearing from storage:', audioPath);
                     StorageManager.clearLastOpenedSong();
                     currentSong = null;
                 });
                 
                 testAudio.addEventListener('canplaythrough', function() {
-                    console.log('🔥 ATOME-APP: Test audio CANPLAYTHROUGH event fired');
                     console.log('✅ Last song audio verified, loading:', audioPath);
                     lyricsDisplay.displayLyrics(currentSong);
                     
@@ -2419,17 +2405,13 @@ function loadLastSong() {
                 
                 // Test audio path
                 const normalizedPath = AudioManager.normalize(audioPath);
-                console.log('🔥 ATOME-APP: Normalized audio path:', normalizedPath);
                 testAudio.src = normalizedPath;
-                console.log('🔥 ATOME-APP: Test audio src assigned');
             } else {
-                console.log('🔥 ATOME-APP: No audio path found for current song');
                 console.warn('⚠️ Last song has no audio file, clearing from storage');
                 StorageManager.clearLastOpenedSong();
                 currentSong = null;
             }
         } else {
-            console.log('🔥 ATOME-APP: No currentSong or lyricsDisplay');
             console.warn('⚠️ Last song not found in library, clearing from storage');
             StorageManager.clearLastOpenedSong();
         }

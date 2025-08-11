@@ -157,9 +157,6 @@ export class AudioManager {
     
     // Create complete audio URL with fallback
     static createUrl(fileName) {
-        // Force log to test iOS detection
-        console.log('🔥 ATOME-APP: AudioManager.createUrl called with:', fileName);
-        
         debugLog('CREATE-URL', 'Input fileName', fileName);
         
         // Check if running on iOS - Multiple detection methods
@@ -174,63 +171,41 @@ export class AudioManager {
         const hasIOSPaths = window.location.href.includes('file://') || 
                            window.location.protocol === 'file:';
         
-        console.log('🔥 ATOME-APP: iOS Detection Debug:');
-        console.log('🔥 ATOME-APP: User Agent:', userAgent);
-        console.log('🔥 ATOME-APP: Platform:', navigator.platform);
-        console.log('🔥 ATOME-APP: Location:', window.location.href);
-        console.log('🔥 ATOME-APP: Protocol:', window.location.protocol);
-        console.log('🔥 ATOME-APP: isIOSUserAgent:', isIOSUserAgent);
-        console.log('🔥 ATOME-APP: isIOSPlatform:', isIOSPlatform);
-        console.log('🔥 ATOME-APP: isIOSStandalone:', isIOSStandalone);
-        console.log('🔥 ATOME-APP: isIOSTouch:', isIOSTouch);
-        console.log('🔥 ATOME-APP: isAUv3Context:', isAUv3Context);
-        console.log('🔥 ATOME-APP: hasIOSPaths:', hasIOSPaths);
-        
         // Use the most comprehensive iOS detection
         const finalIOSDetection = isIOSUserAgent || isIOSPlatform || 
                                  (isAUv3Context && (isIOSTouch || hasIOSPaths));
-        console.log('🔥 ATOME-APP: Final iOS Detection Result:', finalIOSDetection);
         
-        debugLog('CREATE-URL', 'Platform detection - finalIOSDetection:', finalIOSDetection);
-        debugLog('CREATE-URL', 'User Agent:', navigator.userAgent);
+        debugLog('CREATE-URL', 'Platform detection - iOS:', finalIOSDetection);
         
         let finalFileName;
         
         if (finalIOSDetection) {
-            console.log('🔥 ATOME-APP: Using iOS path logic');
             // For iOS AUv3: Use relative paths with encoded spaces
             if (fileName.includes('%20')) {
                 finalFileName = fileName; // Keep encoded
-                console.log('🔥 ATOME-APP: iOS - Keeping encoded %20', finalFileName);
             } else if (fileName.includes(' ')) {
                 finalFileName = encodeURIComponent(fileName);
-                console.log('🔥 ATOME-APP: iOS - Encoded spaces', finalFileName);
             } else {
                 finalFileName = fileName;
-                console.log('🔥 ATOME-APP: iOS - No spaces to handle', finalFileName);
             }
             
             const finalUrl = `./assets/audios/${finalFileName}`;
-            console.log('🔥 ATOME-APP: Final URL (iOS relative)', finalUrl);
+            debugLog('CREATE-URL', 'Final URL (iOS relative)', finalUrl);
             return finalUrl;
         } else {
-            console.log('🔥 ATOME-APP: Using Desktop path logic');
             // For Desktop: Use HTTP URLs with proper encoding
             if (fileName.includes('%20')) {
                 // If already encoded, decode first then re-encode properly for HTTP
                 const decodedName = decodeURIComponent(fileName);
                 finalFileName = encodeURIComponent(decodedName);
-                console.log('🔥 ATOME-APP: Desktop - Re-encoded from %20', finalFileName);
             } else if (fileName.includes(' ')) {
                 finalFileName = encodeURIComponent(fileName);
-                console.log('🔥 ATOME-APP: Desktop - Encoded spaces for HTTP', finalFileName);
             } else {
                 finalFileName = fileName;
-                console.log('🔥 ATOME-APP: Desktop - No spaces to encode', finalFileName);
             }
             
             const finalUrl = `http://127.0.0.1:3000/assets/audios/${finalFileName}`;
-            console.log('🔥 ATOME-APP: Final URL (Desktop HTTP)', finalUrl);
+            debugLog('CREATE-URL', 'Final URL (Desktop HTTP)', finalUrl);
             return finalUrl;
         }
     }
