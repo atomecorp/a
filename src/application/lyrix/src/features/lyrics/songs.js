@@ -10,66 +10,51 @@ export class SongManager {
         const results = library.searchSongs(searchTerm);
         
         if (results.length === 0) {
-            console.log('❌ No songs found for:', searchTerm);
             return null;
         }
         
         if (results.length === 1) {
             const song = library.getSongById(results[0].songId);
-            console.log('✅ Song loaded:', song.metadata.title, 'by', song.metadata.artist);
             return song;
         }
         
         // Multiple results
-        console.log('🔍 Multiple songs found for "' + searchTerm + '":');
         results.forEach((result, index) => {
-            console.log(`  ${index + 1}. ${result.title} - ${result.artist} (ID: ${result.songId})`);
         });
         
         // Return first by default
         const song = library.getSongById(results[0].songId);
-        console.log('✅ First song loaded:', song.metadata.title);
         return song;
     }
     
     // Show library statistics
     static showStats(library) {
         const stats = library.getStats();
-        console.log('📊 Library statistics:');
-        console.log(`  - ${stats.totalSongs} songs`);
-        console.log(`  - ${stats.uniqueArtists} unique artists`);
-        console.log(`  - ${stats.totalLines} lyric lines`);
-        console.log(`  - Total duration: ${(stats.totalDuration / 1000 / 60).toFixed(1)} minutes`);
         return stats;
     }
     
     // Load song in display
     static loadInDisplay(songName, library, display) {
         if (!display) {
-            console.log('❌ LyricsDisplay not initialized');
             return null;
         }
         
         const song = this.loadByName(songName, library);
         if (song) {
             display.loadLyrics(song);
-            console.log('✅ Song loaded in display:', song.metadata.title);
         }
         return song;
     }
     
     // Create new song
     // static create(title, artist, album = '', library) {
-    //     console.log('🆕 Creating new song:', title, 'by', library);
     //     if (!title || !artist) {
-    //         console.log('❌ Title and artist required');
     //         return null;
     //     }
     //     // Create the song with metadata only
     //     const newSong = library.createSong(title, artist, album);
     //     newSong.addLine(0, 'First lyric line...', 'vocal');
     //     library.saveSong(newSong);
-    //     console.log('✅ New song created:', newSong);
     //     return newSong;
     // }
     
@@ -81,7 +66,6 @@ export class SongManager {
     //     if (typeof songIdentifier === 'string' && !songIdentifier.includes('_')) {
     //         const results = library.searchSongs(songIdentifier);
     //         if (results.length === 0) {
-    //             console.log('❌ Song not found:', songIdentifier);
     //             return false;
     //         }
     //         songId = results[0].songId;
@@ -95,17 +79,14 @@ export class SongManager {
     //         display.renderLines();
     //     }
         
-    //     console.log(success ? '✅ Song deleted' : '❌ Deletion failed');
     //     return success;
     // }
     
     // List all songs
     // static listAll(library) {
     //     const songs = library.getAllSongs();
-    //     console.log('📋 Song list (' + songs.length + '):');
     //     songs.forEach((song, index) => {
     //         const audioIcon = song.hasAudio ? '🎵' : '📝';
-    //         console.log(`  ${index + 1}. ${audioIcon} ${song.title} - ${song.artist}`);
     //     });
     //     return songs;
     // }
@@ -127,7 +108,6 @@ export class SongManager {
     
     // Create demo songs
     static createDemoSongs(library) {
-        console.log('🎵 Creating demo songs...');
         
         // Create Darkbox song
         const darkboxData = CONSTANTS.DEMO_SONGS.DARKBOX;
@@ -151,7 +131,6 @@ export class SongManager {
         }
         library.saveSong(digitalSong);
         
-        console.log('✅ Demo songs created');
         return { darkboxSong, digitalSong };
     }
     
@@ -170,7 +149,6 @@ export class SongManager {
             return this.importFromPlainText(title, content, library);
             
         } catch (error) {
-            console.error('❌ Error importing song:', error);
             return null;
         }
     }
@@ -194,11 +172,9 @@ export class SongManager {
             );
             
             library.saveSong(syncedLyrics);
-            console.log('✅ LRC song created:', syncedLyrics.metadata.title);
             return syncedLyrics;
             
         } catch (error) {
-            console.error('❌ Error parsing LRC:', error);
             // Fallback to plain text
             return this.importFromPlainText(title, lrcContent, library);
         }
@@ -225,14 +201,12 @@ export class SongManager {
         }
         
         library.saveSong(newSong);
-        console.log('✅ Text song created:', title, `(${lines.length} lines)`);
         return newSong;
     }
     
     // Export song to LRC format
     static exportToLRC(song) {
         if (!song || !song.toLRC) {
-            console.error('❌ Invalid song for LRC export');
             return null;
         }
         
@@ -251,13 +225,11 @@ export class SongManager {
                 Math.round(allSongs.reduce((sum, song) => sum + song.linesCount, 0) / allSongs.length) : 0
         };
         
-        console.log('📊 Song statistics:', stats);
         return stats;
     }
     
     // Clean up duplicate songs
     static cleanupDuplicates(library) {
-        console.log('🧹 Cleaning up duplicate songs...');
         
         const allSongs = library.getAllSongs();
         const duplicateGroups = {};
@@ -283,12 +255,10 @@ export class SongManager {
                 for (let i = 1; i < group.length; i++) {
                     library.deleteSong(group[i].songId);
                     deletedCount++;
-                    console.log('🗑️ Deleted duplicate:', group[i].title);
                 }
             }
         });
         
-        console.log(`✅ Cleanup completed - ${deletedCount} duplicates removed`);
         return deletedCount;
     }
 }
