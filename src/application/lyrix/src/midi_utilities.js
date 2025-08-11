@@ -530,6 +530,14 @@ export class MidiUtilities {
             console.log(`🎵 MIDI triggered special action: Note ${midiNote} -> ${actionKey}`);
             
             switch (actionKey) {
+                case 'enter_fullscreen':
+                    console.log('🖥️ Calling toggleFullscreen(true) to enter fullscreen...');
+                    this.toggleFullscreen(true);
+                    break;
+                case 'exit_fullscreen':
+                    console.log('🖥️ Calling toggleFullscreen(false) to exit fullscreen...');
+                    this.toggleFullscreen(false);
+                    break;
                 case 'fullscreen_activate':
                     console.log('🖥️ Calling toggleFullscreen(true) for activation...');
                     this.toggleFullscreen(true);
