@@ -1659,16 +1659,64 @@ function loadAndDisplaySong(songKey) {
     return false;
 }
 
-// Navigate to previous song in library
-function navigateToPreviousSong() {
+// Get songs in custom display order (respects user reordering)
+function getSongsInCustomOrder() {
     if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary not available');
-        return;
+        return [];
     }
     
     const songs = lyricsLibrary.getAllSongs();
     if (songs.length === 0) {
-        console.warn('⚠️ No songs in library');
+        return [];
+    }
+    
+    try {
+        // Load custom order from localStorage
+        const savedOrder = localStorage.getItem('lyrix_custom_song_order');
+        if (!savedOrder) {
+            return songs; // Return original order if no custom order saved
+        }
+
+        const orderData = JSON.parse(savedOrder);
+        const orderMap = new Map();
+        orderData.forEach(item => {
+            orderMap.set(item.songKey, item.order);
+        });
+
+        // Separate songs into ordered and new ones
+        const songsWithOrder = [];
+        const newSongs = [];
+        
+        songs.forEach(song => {
+            const savedOrder = orderMap.get(song.key || song.songId);
+            if (savedOrder !== undefined) {
+                songsWithOrder.push({ ...song, savedOrder });
+            } else {
+                newSongs.push(song);
+            }
+        });
+
+        // Sort songs with saved order
+        songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
+        
+        // Combine: ordered songs first, then new songs at the end
+        return [
+            ...songsWithOrder.map(song => ({ ...song, savedOrder: undefined })),
+            ...newSongs
+        ];
+    } catch (error) {
+        return songs; // Return original order if parsing fails
+    }
+}
+
+// Navigate to previous song in library
+function navigateToPreviousSong() {
+    if (!lyricsLibrary) {
+        return;
+    }
+    
+    const songs = getSongsInCustomOrder();
+    if (songs.length === 0) {
         return;
     }
     
@@ -1692,13 +1740,11 @@ function navigateToPreviousSong() {
 // Navigate to next song in library
 function navigateToNextSong() {
     if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary not available');
         return;
     }
     
-    const songs = lyricsLibrary.getAllSongs();
+    const songs = getSongsInCustomOrder();
     if (songs.length === 0) {
-        console.warn('⚠️ No songs in library');
         return;
     }
     
