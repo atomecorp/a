@@ -1528,50 +1528,99 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
 // Function to export songs as separate files
 function exportSongsAsSeparateFiles(selectedSongIds) {
-    let downloadCount = 0;
+    console.log('🔧 Exporting songs as separate files');
     
-    selectedSongIds.forEach((songId, index) => {
-        const song = lyricsLibrary.getSongById(songId);
-        if (song) {
-            let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
-            
-            if (song.lines && song.lines.length > 0) {
-                song.lines.forEach(line => {
-                    exportText += `${line.text}\n`;
-                });
-            } else {
-                exportText += '(No lyrics available)\n';
-            }
-            
-            // Create safe filename
-            const safeTitle = (song.metadata.title || 'Untitled')
-                .replace(/[^a-z0-9]/gi, '_')
-                .replace(/_+/g, '_')
-                .replace(/^_|_$/g, '');
-            
-            // Use download method with delay to avoid browser blocking
-            setTimeout(() => {
-                const blob = new Blob([exportText], { type: 'text/plain' });
-                const saveLink = document.createElement('a');
-                saveLink.href = URL.createObjectURL(blob);
-                saveLink.download = `${safeTitle}.txt`;
-                saveLink.style.display = 'none';
+    // Check if we're on iOS/AUv3
+    const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
+    
+    if (isAUv3) {
+        console.log('🔧 iOS/AUv3 detected - using iOS save dialogs for separate files');
+        
+        // For iOS, export each file using the native save dialog
+        selectedSongIds.forEach((songId, index) => {
+            const song = lyricsLibrary.getSongById(songId);
+            if (song) {
+                let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
                 
-                document.body.appendChild(saveLink);
-                saveLink.click();
-                document.body.removeChild(saveLink);
-                
-                setTimeout(() => {
-                    URL.revokeObjectURL(saveLink.href);
-                }, 100);
-                
-                downloadCount++;
-                if (downloadCount === selectedSongIds.length) {
-                    (`✅ Successfully exported ${downloadCount} songs as separate files`);
+                if (song.lines && song.lines.length > 0) {
+                    song.lines.forEach(line => {
+                        exportText += `${line.text}\n`;
+                    });
+                } else {
+                    exportText += '(No lyrics available)\n';
                 }
-            }, index * 500); // 500ms delay between downloads
-        }
-    });
+                
+                // Create safe filename
+                const safeTitle = (song.metadata.title || 'Untitled')
+                    .replace(/[^a-z0-9]/gi, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_|_$/g, '');
+                
+                // Use iOS native save dialog with delay between calls
+                setTimeout(() => {
+                    const payload = {
+                        action: 'saveFileWithDocumentPicker',
+                        requestId: `${Date.now()}_${index}`,
+                        fileName: `${safeTitle}.txt`,
+                        data: exportText,
+                        encoding: 'utf8'
+                    };
+                    
+                    console.log(`🔧 Sending file ${index + 1}/${selectedSongIds.length} to Swift bridge: ${safeTitle}.txt`);
+                    window.webkit.messageHandlers.swiftBridge.postMessage(payload);
+                }, index * 1000); // 1 second delay between iOS save dialogs
+            }
+        });
+        
+    } else {
+        console.log('🔧 Desktop/Web detected - using HTML5 downloads for separate files');
+        
+        // Desktop/Web: Original logic with HTML5 downloads
+        let downloadCount = 0;
+        
+        selectedSongIds.forEach((songId, index) => {
+            const song = lyricsLibrary.getSongById(songId);
+            if (song) {
+                let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
+                
+                if (song.lines && song.lines.length > 0) {
+                    song.lines.forEach(line => {
+                        exportText += `${line.text}\n`;
+                    });
+                } else {
+                    exportText += '(No lyrics available)\n';
+                }
+                
+                // Create safe filename
+                const safeTitle = (song.metadata.title || 'Untitled')
+                    .replace(/[^a-z0-9]/gi, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_|_$/g, '');
+                
+                // Use download method with delay to avoid browser blocking
+                setTimeout(() => {
+                    const blob = new Blob([exportText], { type: 'text/plain' });
+                    const saveLink = document.createElement('a');
+                    saveLink.href = URL.createObjectURL(blob);
+                    saveLink.download = `${safeTitle}.txt`;
+                    saveLink.style.display = 'none';
+                    
+                    document.body.appendChild(saveLink);
+                    saveLink.click();
+                    document.body.removeChild(saveLink);
+                    
+                    setTimeout(() => {
+                        URL.revokeObjectURL(saveLink.href);
+                    }, 100);
+                    
+                    downloadCount++;
+                    if (downloadCount === selectedSongIds.length) {
+                        console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
+                    }
+                }, index * 500); // 500ms delay between downloads
+            }
+        });
+    }
 }
 
 // Function to export songs as a single file
@@ -1602,22 +1651,49 @@ function exportSongsAsSingleFile(selectedSongIds) {
         }
     });
 
-    // Use download method that works on all browsers including Safari
-    const blob = new Blob([exportText], { type: 'text/plain' });
-    const saveLink = document.createElement('a');
-    saveLink.href = URL.createObjectURL(blob);
-    saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
-    saveLink.style.display = 'none';
+    // Check if we're on iOS/AUv3
+    const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
     
-    // Add to document, click, and remove
-    document.body.appendChild(saveLink);
-    saveLink.click();
-    document.body.removeChild(saveLink);
-    
-    // Clean up the object URL
-    setTimeout(() => {
-        URL.revokeObjectURL(saveLink.href);
-    }, 100);
+    if (isAUv3) {
+        console.log('🔧 iOS/AUv3 detected - using iOS save dialog for single file');
+        
+        // Use iOS native save dialog
+        const currentDate = new Date().toISOString().split('T')[0];
+        const fileName = `lyrix_songs_${currentDate}.txt`;
+        
+        const payload = {
+            action: 'saveFileWithDocumentPicker',
+            requestId: Date.now().toString(),
+            fileName: fileName,
+            data: exportText,
+            encoding: 'utf8'
+        };
+        
+        console.log(`🔧 Sending single file to Swift bridge: ${fileName}`);
+        window.webkit.messageHandlers.swiftBridge.postMessage(payload);
+        
+    } else {
+        console.log('🔧 Desktop/Web detected - using HTML5 download for single file');
+        
+        // Desktop/Web: Use download method that works on all browsers including Safari
+        const blob = new Blob([exportText], { type: 'text/plain' });
+        const saveLink = document.createElement('a');
+        saveLink.href = URL.createObjectURL(blob);
+        saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
+        saveLink.style.display = 'none';
+        
+        // Add to document, click, and remove
+        document.body.appendChild(saveLink);
+        saveLink.click();
+        document.body.removeChild(saveLink);
+        
+        // Clean up the object URL
+        setTimeout(() => {
+            URL.revokeObjectURL(saveLink.href);
+        }, 100);
+        
+        console.log(`✅ Single file download initiated`);
+    }
     
 }
 
