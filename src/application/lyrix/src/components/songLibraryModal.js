@@ -3,6 +3,20 @@
 
 import { exportSongsToLRX } from '../features/lyrics/SongUtils.js';
 
+// Toggle song library panel (show/hide)
+export function toggleSongLibrary() {
+    const existingPanel = document.getElementById('song-library-panel');
+    if (existingPanel) {
+        // Panel exists, remove it (close)
+        existingPanel.remove();
+        return false; // Panel closed
+    } else {
+        // Panel doesn't exist, show it
+        showSongLibrary();
+        return true; // Panel opened
+    }
+}
+
 // Show song library
 export function showSongLibrary() {
     if (window.midiUtilities) {
@@ -40,9 +54,9 @@ export function showSongLibrary() {
         css: {
             width: '100%',
             height: '400px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #ddd',
-            borderRadius: '8px',
+            // backgroundColor: '#ffffff',
+            // border: '1px solid #ddd',
+            // borderRadius: '8px',
             margin: '10px 0',
             boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
             overflow: 'hidden',

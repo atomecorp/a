@@ -2,7 +2,7 @@
 // This is the new modular entry point for the Lyrix application
 
 // Import modal modules from new organized structure
-import { showSongLibrary } from './src/components/songLibraryModal.js';
+import { showSongLibrary, toggleSongLibrary } from './src/components/songLibraryModal.js';
 import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
 
 
@@ -1866,7 +1866,17 @@ function createMainInterface() {
     const songListButton = UIManager.createInterfaceButton('📂', {
         id: 'song_list_button',
         onClick: () => {
-            showSongLibrary();
+            const isOpen = toggleSongLibrary();
+            // Update button appearance based on state
+            if (isOpen) {
+                songListButton.style.backgroundColor = '#007bff';
+                songListButton.style.color = 'white';
+                songListButton.textContent = '📂';
+            } else {
+                songListButton.style.backgroundColor = '';
+                songListButton.style.color = '';
+                songListButton.textContent = '📂';
+            }
         }
     });
     
