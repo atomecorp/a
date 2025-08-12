@@ -9,6 +9,14 @@ let isSettingsOpen = false;
 let settingsPanel = null;
 let originalLyricsViewerContainer = null;
 
+// Expose settings state for cross-panel communication
+window.settingsState = {
+    get isSettingsOpen() { return isSettingsOpen; },
+    set isSettingsOpen(value) { isSettingsOpen = value; },
+    get settingsPanel() { return settingsPanel; },
+    set settingsPanel(value) { settingsPanel = value; }
+};
+
 // Toggle audio player controls visibility
 export function toggleAudioPlayerControls() {
     const audioPlayer = document.getElementById('audioPlayer');
@@ -139,6 +147,12 @@ export function toggleSettingsPanel() {
 export function openSettingsPanel() {
     if (isSettingsOpen || settingsPanel) {
         return; // Panel already open
+    }
+
+    // Close song library panel if it's open (mutual exclusion)
+    const songLibraryPanel = document.getElementById('song-library-panel');
+    if (songLibraryPanel) {
+        songLibraryPanel.remove();
     }
 
     isSettingsOpen = true;

@@ -32,6 +32,17 @@ export function showSongLibrary() {
         return;
     }
 
+    // Close settings panel if it's open (mutual exclusion)
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) {
+        settingsPanel.remove();
+        // Also reset settings panel state if needed
+        if (window.settingsState) {
+            window.settingsState.isSettingsOpen = false;
+            window.settingsState.settingsPanel = null;
+        }
+    }
+
     const songs = window.lyricsLibrary.getAllSongs();
     
     // Always show the song library, even if empty, so users can create or import songs
