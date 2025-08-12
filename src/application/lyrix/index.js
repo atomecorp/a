@@ -1266,14 +1266,14 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         css: { maxWidth: '600px', width: '90%' }
     });
 
-    // Header
-    const header = UIManager.createModalHeader({});
-    const headerTitle = $('h3', {
-            id: 'export-songs-header',
-        text: '📄 Select Songs to Export as Text',
-        css: { margin: '0', color: 'white' }
-    });
-    header.appendChild(headerTitle);
+    // // Header
+    // const header = UIManager.createModalHeader({});
+    // const headerTitle = $('h3', {
+    //         id: 'export-songs-header',
+    //     text: '📄 Select Songs to Export as Text',
+    //     css: { margin: '0', color: 'white' }
+    // });
+    // header.appendChild(headerTitle);
 
     // Content
     const content = UIManager.createModalContent({});
@@ -1327,81 +1327,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     selectAllContainer.appendChild(selectAllBtn);
     content.appendChild(selectAllContainer);
 
-    // Export format option
-    const formatContainer = $('div', {
-        css: {
-            marginBottom: '15px',
-            padding: '10px',
-            backgroundColor: UIManager.THEME.colors.background,
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '15px'
-        }
-    });
 
-    const formatLabel = $('span', {
-        text: 'Export format:',
-        css: {
-            fontWeight: 'bold',
-            color: '#333'
-        }
-    });
-
-    let exportSeparateFiles = false;
-
-    const singleFileBtn = $('button', {
-        text: '📄 Single File',
-        css: {
-            padding: '6px 12px',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            backgroundColor: '#27ae60',
-            color: 'white',
-            fontWeight: 'bold'
-        }
-    });
-
-    const separateFilesBtn = $('button', {
-        text: '📁 Separate Files',
-        css: {
-            padding: '6px 12px',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            backgroundColor: '#eee',
-            color: '#333'
-        }
-    });
-
-    function updateFormatButtons() {
-        if (exportSeparateFiles) {
-            singleFileBtn.style.backgroundColor = '#eee';
-            singleFileBtn.style.color = '#333';
-            separateFilesBtn.style.backgroundColor = '#27ae60';
-            separateFilesBtn.style.color = 'white';
-        } else {
-            singleFileBtn.style.backgroundColor = '#27ae60';
-            singleFileBtn.style.color = 'white';
-            separateFilesBtn.style.backgroundColor = '#eee';
-            separateFilesBtn.style.color = '#333';
-        }
-    }
-
-    singleFileBtn.addEventListener('click', () => {
-        exportSeparateFiles = false;
-        updateFormatButtons();
-    });
-
-    separateFilesBtn.addEventListener('click', () => {
-        exportSeparateFiles = true;
-        updateFormatButtons();
-    });
-
-    formatContainer.append(formatLabel, singleFileBtn, separateFilesBtn);
-    content.appendChild(formatContainer);
 
     // Song list
     const listContainer = UIManager.createListContainer({});
@@ -1487,18 +1413,13 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
             document.body.removeChild(modalContainer);
 
-            if (exportSeparateFiles) {
-                // Export each song as a separate file
-                exportSongsAsSeparateFiles(selectedSongIds);
-            } else {
-                // Export all songs in a single file
-                exportSongsAsSingleFile(selectedSongIds);
-            }
+            // Export all songs in a single file
+            exportSongsAsSingleFile(selectedSongIds);
         }
     });
 
     footer.append(cancelButton, exportButton);
-    modal.append(header, content, footer);
+    modal.append(content, footer);
     modalContainer.appendChild(modal);
     document.body.appendChild(modalContainer);
 }
