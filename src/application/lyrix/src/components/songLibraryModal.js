@@ -20,11 +20,43 @@ export function showSongLibrary() {
     
     // Always show the song library, even if empty, so users can create or import songs
     
-    // Create custom modal with export/import buttons
-    const modalContainer = window.UIManager.createEnhancedModalOverlay();
-    const modal = window.UIManager.createEnhancedModalContainer({
+    // Create inline panel instead of modal - insert between toolbar and lyrics
+    const toolbar = document.querySelector('#lyrics-toolbar, .lyrics-toolbar, [id*="toolbar"]') || 
+                   document.querySelector('#lyrix_app > div:first-child');
+    const lyricsContainer = document.querySelector('#lyrics-content, #lyrics_lines_container, .lyrics-container') || 
+                           document.querySelector('#lyrix_app > div:last-child');
+    
+    // Remove existing song library panel if it exists
+    const existingPanel = document.getElementById('song-library-panel');
+    if (existingPanel) {
+        existingPanel.remove();
+    }
+    
+    // Create panel container (not modal)
+    const modalContainer = window.$('div', {
+        id: 'song-library-panel',
+        css: {
+            width: '100%',
+            height: '400px',
+            backgroundColor: '#ffffff',
+            border: '1px solid #ddd',
+            borderRadius: '8px',
+            margin: '10px 0',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
+        }
+    });
+    
+    const modal = window.$('div', {
         id: 'song-library-modal',
-        css: { maxWidth: '700px', width: '90%' }
+        css: { 
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column'
+        }
     });
 
     // Header with title and action buttons
@@ -39,6 +71,7 @@ export function showSongLibrary() {
     });
 
     const headerTop = window.$('div', {
+        id: 'song-library-header-top',
         css: {
             display: 'flex',
             justifyContent: 'space-between',
@@ -74,7 +107,7 @@ export function showSongLibrary() {
             cursor: 'pointer'
         },
         onClick: () => {
-            document.body.removeChild(modalContainer);
+            modalContainer.remove();
             window.createNewSong();
         }
     });
@@ -93,7 +126,7 @@ export function showSongLibrary() {
             cursor: 'pointer'
         },
         onClick: () => {
-            document.body.removeChild(modalContainer);
+            modalContainer.remove();
             window.exportAllSongsToLRX(); // Direct download, no dialog
         }
     });
@@ -112,7 +145,7 @@ export function showSongLibrary() {
             cursor: 'pointer'
         },
         onClick: () => {
-            document.body.removeChild(modalContainer);
+            modalContainer.remove();
             window.exportSelectedSongsAsTextWithFolderDialog();
         }
     });
@@ -131,7 +164,7 @@ export function showSongLibrary() {
             cursor: 'pointer'
         },
         onClick: () => {
-            document.body.removeChild(modalContainer);
+            modalContainer.remove();
             // Local file import dialog implementation to ensure .lrx files are accepted
             const input = document.createElement('input');
             input.type = 'file';
@@ -268,7 +301,7 @@ export function showSongLibrary() {
                     { text: 'Annuler' },
                     { text: 'Supprimer', onClick: () => {
                         window.lyricsLibrary.deleteAllSongs();
-                        document.body.removeChild(modalContainer);
+                        modalContainer.remove();
                         // No need for additional confirmation modal - user can see the empty library
                         showSongLibrary(); // Reopen the library to show it's now empty
                     }, css: { backgroundColor: '#e74c3c', color: 'white' } }
@@ -280,17 +313,9 @@ export function showSongLibrary() {
     actionButtons.append(createNewSongButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     headerTop.append(headerTitle, actionButtons);
 
-    // Instructions
-    const instructions = window.$('div', {
-        text: 'Select a song to load, or use the action buttons above',
-        css: {
-            fontSize: '14px',
-            opacity: '0.9',
-            fontStyle: 'italic'
-        }
-    });
 
-    header.append(headerTop, instructions);
+
+    header.append(headerTop);
 
     // Content with search and song list
     const content = window.UIManager.createModalContent({});
@@ -654,7 +679,7 @@ export function showSongLibrary() {
                                 }
                                 const success = window.lyricsLibrary.deleteSong(item.value);
                                 if (success) {
-                                    document.body.removeChild(modalContainer);
+                                    modalContainer.remove();
                                     showSongLibrary();
                                 } else {
                                 }
@@ -683,7 +708,7 @@ export function showSongLibrary() {
                     e.target !== midiInput && 
                     e.target !== dragHandle &&
                     !midiControls.contains(e.target)) {
-                    document.body.removeChild(modalContainer);
+                    modalContainer.remove();
                     window.loadAndDisplaySong(item.value);
                 }
             });
@@ -752,29 +777,21 @@ export function showSongLibrary() {
         refreshMidiInputs();
     }, 100);
 
-    // Footer
-    const footer = window.UIManager.createModalFooter({});
-    
-    const cancelButton = window.UIManager.createCancelButton({
-        text: 'Close',
-        onClick: () => document.body.removeChild(modalContainer)
-    });
-
-    footer.appendChild(cancelButton);
-
-    // Assemble modal
-    modal.append(header, content, footer);
+    // Assemble panel (without footer/close button)
+    modal.append(header, content);
     modalContainer.appendChild(modal);
     
-    // Add to DOM
-    document.body.appendChild(modalContainer);
-
-    // Close on overlay click
-    modalContainer.addEventListener('click', (e) => {
-        if (e.target === modalContainer) {
-            document.body.removeChild(modalContainer);
+    // Insert between toolbar and lyrics (not as modal overlay)
+    if (toolbar && lyricsContainer) {
+        if (toolbar.nextSibling) {
+            toolbar.parentNode.insertBefore(modalContainer, toolbar.nextSibling);
+        } else {
+            toolbar.parentNode.appendChild(modalContainer);
         }
-    });
+    } else {
+        // Fallback: add to body if toolbar/lyrics not found
+        document.body.appendChild(modalContainer);
+    }
 
     // Focus search input
     setTimeout(() => searchInput.focus(), 100);
