@@ -1412,16 +1412,26 @@ export class LyricsDisplay {
             // Track manual selection for AUv3 mode (already done in setActiveLineIndex, but keeping for clarity)
             
             if (this.recordMode) {
-                // RECORD MODE: Assign the timecode currently displayed in #timecode-display
+                // RECORD MODE: Use the current time from host (AUv3) or fallback to 0
                 let timecodeMs = 0;
-                const timecodeElement = document.getElementById('timecode-display');
-                if (timecodeElement) {
-                    const text = timecodeElement.textContent.replace('s', '').trim();
-                    const seconds = parseFloat(text);
-                    if (isFinite(seconds)) {
-                        timecodeMs = Math.round(seconds * 1000);
+                
+                // In AUv3 context, use the current time from host
+                const isAUv3Context = window.webkit && window.webkit.messageHandlers;
+                if (isAUv3Context && typeof this.currentTime === 'number' && this.currentTime >= 0) {
+                    timecodeMs = this.currentTime;
+                } else {
+                    // Fallback: try to read from timecode display, but sanitize the value
+                    const timecodeElement = document.getElementById('timecode-display');
+                    if (timecodeElement) {
+                        const text = timecodeElement.textContent.replace('s', '').replace('🔴', '').trim();
+                        const seconds = parseFloat(text);
+                        if (isFinite(seconds) && seconds >= 0) {
+                            timecodeMs = Math.round(seconds * 1000);
+                        }
+                        // If value is invalid or negative, timecodeMs stays 0
                     }
                 }
+                
                 this.currentLyrics.lines[index].time = timecodeMs;
                 this.currentLyrics.updateLastModified();
                 
@@ -1514,37 +1524,47 @@ export class LyricsDisplay {
                 // Track manual selection (already done in setActiveLineIndex, but keeping for clarity)
                 
                 if (this.recordMode) {
-                    // RECORD MODE: Get current time from timecode display (works with both audio controller and AUv3 host)
-                    let currentTime = 0;
-                    const timecodeElement = document.getElementById('timecode-display');
-                    if (timecodeElement) {
-                        const text = timecodeElement.textContent.replace('s', '').replace('🔴', '').trim();
-                        const seconds = parseFloat(text);
-                        if (isFinite(seconds)) {
-                            currentTime = Math.round(seconds * 1000); // Convert to ms
+                    // RECORD MODE: Use the current time from host (AUv3) or fallback to audio controller/display
+                    let timecodeMs = 0;
+                    
+                    // In AUv3 context, use the current time from host
+                    const isAUv3Context = window.webkit && window.webkit.messageHandlers;
+                    if (isAUv3Context && typeof this.currentTime === 'number' && this.currentTime >= 0) {
+                        timecodeMs = this.currentTime;
+                    } else {
+                        // Fallback: try to read from timecode display
+                        const timecodeElement = document.getElementById('timecode-display');
+                        if (timecodeElement) {
+                            const text = timecodeElement.textContent.replace('s', '').replace('🔴', '').trim();
+                            const seconds = parseFloat(text);
+                            if (isFinite(seconds) && seconds >= 0) {
+                                timecodeMs = Math.round(seconds * 1000);
+                            }
+                        }
+                        
+                        // Fallback to audio controller if available and timecode is still 0
+                        if (timecodeMs === 0 && this.audioController) {
+                            const audioTime = this.audioController.getCurrentTime() * 1000;
+                            if (audioTime >= 0) {
+                                timecodeMs = audioTime;
+                            }
                         }
                     }
                     
-                    // Fallback to audio controller if timecode display is not available
-                    if (currentTime === 0 && this.audioController) {
-                        currentTime = this.audioController.getCurrentTime() * 1000; // Convert to ms
-                    }
+                    // Always assign the timecode, even if it's 0
+                    this.currentLyrics.lines[index].time = timecodeMs;
+                    this.currentLyrics.updateLastModified();
                     
-                    if (currentTime > 0) {
-                        this.currentLyrics.lines[index].time = currentTime;
-                        this.currentLyrics.updateLastModified();
-                        
-                        // Verify and correct timecode order after recording
-                        this.verifyAndCorrectTimecodeOrder(index);
-                        
-                        // Save to localStorage when recording timecode in record mode (touch)
-                        const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                      
-                        
-                        // Re-render to show the new timecode (if timecodes are visible)
-                        if (this.showTimecodes) {
-                            this.renderLyrics();
-                        }
+                    // Verify and correct timecode order after recording
+                    this.verifyAndCorrectTimecodeOrder(index);
+                    
+                    // Save to localStorage when recording timecode in record mode (touch)
+                    const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                  
+                    
+                    // Re-render to show the new timecode (if timecodes are visible)
+                    if (this.showTimecodes) {
+                        this.renderLyrics();
                     }
                 } else {
                     // NORMAL MODE: Seek to timecode if available and audio controller exists
