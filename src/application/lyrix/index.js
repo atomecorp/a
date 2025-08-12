@@ -1824,68 +1824,10 @@ function createMainInterface() {
             showSongLibrary();
         }
     });
-
-    // Song Tools button and panel functionality
-    let songToolsPanelVisible = false;
     
-    function toggleSongToolsPanel() {
-        const existingPanel = document.getElementById('song_tools_panel');
-        
-        if (songToolsPanelVisible && existingPanel) {
-            // Close panel
-            existingPanel.remove();
-            songToolsPanelVisible = false;
-            console.log('Song tools panel closed');
-        } else {
-            // Open panel
-            const toolbar = document.querySelector('.lyrics-toolbar, #lyrics-toolbar, [class*="toolbar"]') || 
-                           document.querySelector('#lyrix_app > div:first-child');
-            const lyricsContainer = document.querySelector('#lyrics-content') || 
-                                   document.querySelector('#lyrics_lines_container') || 
-                                   document.querySelector('.lyrics-container') || 
-                                   document.querySelector('#lyrix_app > div:last-child');
-            
-            if (toolbar && lyricsContainer) {
-                const songToolsPanel = window.$('div', {
-                    id: 'song_tools_panel',
-                    css: {
-                        height: '200px',
-                        backgroundColor: '#f0f0f0',
-                        border: '1px solid #ccc',
-                        borderRadius: '8px',
-                        margin: '10px 0',
-                        padding: '20px',
-                        boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-                    },
-                    text: 'Song Tools Panel - Empty panel for future features'
-                });
-                
-                // Insert after toolbar and before lyrics
-                if (toolbar.nextSibling) {
-                    toolbar.parentNode.insertBefore(songToolsPanel, toolbar.nextSibling);
-                } else {
-                    toolbar.parentNode.appendChild(songToolsPanel);
-                }
-                
-                songToolsPanelVisible = true;
-                console.log('Song tools panel opened');
-            }
-        }
-    }
-
-    const songToolsButton = UIManager.createInterfaceButton('🔧', {
-        id: 'song_tools',
-        onClick: () => {
-            toggleSongToolsPanel();
-        },
-        css: {
-            marginBottom: '10px'
-        }
-    });    
     // Store tool elements for potential move to lyrics toolbar
     window.leftPanelTools = {
         settingsButton,
-        songToolsButton,
         // importButton moved to song library panel
         // createSongButton, // Moved to song library panel
         songListButton

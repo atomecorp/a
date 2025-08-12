@@ -566,9 +566,8 @@ export class LyricsDisplay {
         
         // Get the main buttons from stored references (import button moved to song library panel)
         if (window.leftPanelTools) {
-            const { settingsButton, songToolsButton, songListButton } = window.leftPanelTools;
+            const { settingsButton, songListButton } = window.leftPanelTools;
             if (settingsButton) tools.push(settingsButton);
-            if (songToolsButton) tools.push(songToolsButton);
             if (songListButton) tools.push(songListButton);
         }
         
