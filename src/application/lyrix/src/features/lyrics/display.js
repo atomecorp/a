@@ -63,6 +63,7 @@ export class LyricsDisplay {
         this.currentLineIndex = -1;
         this.fontSize = StorageManager.loadFontSize();
         this.lastScrollTime = 0;
+        this.lastManualSelection = 0; // Track manual selections in AUv3 mode
         
         this.init();
     }
@@ -1404,7 +1405,9 @@ export class LyricsDisplay {
             }
             
             // Set this line as active
-            this.setActiveLineIndex(index);
+            this.setActiveLineIndex(index, true); // true = manual selection
+            
+            // Track manual selection for AUv3 mode (already done in setActiveLineIndex, but keeping for clarity)
             
             if (this.recordMode) {
                 // RECORD MODE: Assign the timecode currently displayed in #timecode-display
@@ -1504,7 +1507,9 @@ export class LyricsDisplay {
                 }
                 lastTapTime = currentTime;
                 
-                this.setActiveLineIndex(index);
+                this.setActiveLineIndex(index, true); // true = manual selection (touch)
+                
+                // Track manual selection (already done in setActiveLineIndex, but keeping for clarity)
                 
                 if (this.recordMode) {
                     // RECORD MODE: Get current time from timecode display (works with both audio controller and AUv3 host)
@@ -1583,35 +1588,13 @@ export class LyricsDisplay {
         return `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
     }
     
-    // Update active line by time
-    updateActiveLineByTime(timeMs) {
-        if (!this.currentLyrics) return;
+    // Set active line index - unified function for all line changes
+    setActiveLineIndex(index, isManual = false) {
         
-        // In record mode, don't auto-update active lines to prevent unwanted scroll
-        if (this.recordMode) {
-            // Only update timecode display, not active lines
-            this.updateTimecodeDisplay(timeMs);
-            return;
+        // Track manual selections for AUv3 mode
+        if (isManual) {
+            this.lastManualSelection = Date.now();
         }
-        
-        // Throttle scroll updates
-        const now = Date.now();
-        if (now - this.lastScrollTime < 100) return; // Max 10 updates per second
-        this.lastScrollTime = now;
-        
-        const activeLine = this.currentLyrics.getActiveLineAt(timeMs);
-        if (!activeLine) return;
-        
-        const lineIndex = this.currentLyrics.lines.findIndex(line => line === activeLine);
-        
-        // Update if this is the first time or if line changed
-        if (lineIndex !== this.currentLineIndex || this.currentLineIndex === -1) {
-            this.setActiveLineIndex(lineIndex);
-        }
-    }
-    
-    // Set active line index
-    setActiveLineIndex(index) {
         
         // Remove previous highlight
         if (this.currentLineIndex >= 0) {
@@ -1627,6 +1610,7 @@ export class LyricsDisplay {
                 prevElement.style.border = '1px solid transparent';
                 prevElement.style.transform = 'scale(1)';
                 prevElement.style.fontWeight = 'normal';
+                prevElement.style.color = '#666';
             }
         }
         
@@ -1643,18 +1627,30 @@ export class LyricsDisplay {
             }
             
             if (element) {
-                element.style.backgroundColor = 'red';
-                element.style.color = 'black';
+                // Highlight the new active line
+                element.style.backgroundColor = 'rgba(0, 150, 255, 0.2)';
+                element.style.color = '#fff';
                 element.style.transform = 'scale(1.05)';
                 element.style.fontWeight = 'bold';
                 element.style.transition = 'all 0.3s ease';
                 
-                // Auto-scroll to active line
-                element.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center'
-                });
-            } else {
+                // Determine if we should scroll
+                let shouldScroll = !this.recordMode && !this.editMode;
+                
+                // In AUv3 mode, don't scroll for automatic updates if user recently made manual selection
+                const isAUv3Context = window.webkit && window.webkit.messageHandlers;
+                if (isAUv3Context && !isManual && shouldScroll) {
+                    const timeSinceManualSelection = Date.now() - this.lastManualSelection;
+                    shouldScroll = timeSinceManualSelection >= 5000; // Same grace period
+                }
+                
+                // Scroll to active line if appropriate
+                if (shouldScroll) {
+                    element.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
             }
         }
     }
@@ -3252,24 +3248,42 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
             return;
         }
 
+        // Always update timecode display
+        this.updateTimecodeDisplay(timeMs);
+
         // In record mode, don't auto-update active lines to prevent unwanted scroll
         if (this.recordMode) {
-            // Only update timecode display, not active lines
-            this.updateTimecodeDisplay(timeMs);
             return;
         }
 
-        const activeLine = this.currentLyrics.getActiveLineAt(timeMs);
+        // Detect AUv3 context
+        const isAUv3Context = window.webkit && window.webkit.messageHandlers;
         
-    
-        
-        if (activeLine && activeLine !== this.activeLine) {
-            this.highlightLine(activeLine);
-            this.activeLine = activeLine;
+        // In AUv3 mode, be more conservative with automatic line updates
+        if (isAUv3Context) {
+            // Only update if user hasn't made a manual selection recently
+            const timeSinceManualSelection = Date.now() - this.lastManualSelection;
+            if (timeSinceManualSelection < 5000) { // 5 seconds grace period
+                return;
+            }
         }
-        
-        // Update external timecode display
-        this.updateTimecodeDisplay(timeMs);
+
+        // Find the line that should be active at this time
+        const targetLine = this.currentLyrics.getActiveLineAt(timeMs);
+        if (!targetLine) {
+            return;
+        }
+
+        // Find the index of this line
+        const targetIndex = this.currentLyrics.lines.findIndex(line => line === targetLine);
+        if (targetIndex < 0) {
+            return;
+        }
+
+        // Only update if it's actually a different line
+        if (targetIndex !== this.currentLineIndex) {
+            this.setActiveLineIndex(targetIndex, false); // false = not manual
+        }
     }
     
     // Update timecode display
@@ -3284,28 +3298,6 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
     }
     
     // Highlight active line with scroll
-    highlightLine(line) {
-        // Remove previous highlight
-        document.querySelectorAll('.lyrics-line').forEach(el => {
-            el.style.color = '#666';
-            el.style.fontWeight = 'normal';
-            el.style.backgroundColor = 'transparent';
-        });
-
-        // Highlight active line
-        const lineElement = document.getElementById(line.id);
-        if (lineElement) {
-            lineElement.style.color = '#fff';
-            lineElement.style.fontWeight = 'bold';
-            lineElement.style.backgroundColor = 'rgba(0, 150, 255, 0.2)';
-            
-            // Scroll to active line only if scroll is not blocked (record mode or edit mode)
-            if (!this.recordMode && !this.editMode) {
-                lineElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }
-    }
-    
     // Get active line at specific time
     getActiveLineAt(timeMs) {
         if (!this.currentLyrics) return null;
@@ -3364,7 +3356,7 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         log(`🔄 Navigating ${direction} from line ${this.currentLineIndex + 1} to line ${newIndex + 1}`);
         
         // Set the new active line
-        this.setActiveLineIndex(newIndex);
+        this.setActiveLineIndex(newIndex, true); // true = manual navigation (keyboard)
         
         // If the line has a timecode and we have an audio controller, seek to it
         const line = this.currentLyrics.lines[newIndex];
