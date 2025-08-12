@@ -292,6 +292,7 @@ export function showSongLibrary() {
 
     // Auto Fill MIDI container
     const autoFillContainer = window.$('div', {
+        id: 'auto-fill-midi-container',
         css: {
             display: 'flex',
             alignItems: 'center',
@@ -312,6 +313,7 @@ export function showSongLibrary() {
     });
 
     const autoFillInput = window.$('input', {
+        id: 'auto-fill-midi-input',
         type: 'number',
         min: '0',
         max: '127',
@@ -328,6 +330,7 @@ export function showSongLibrary() {
     });
 
     const autoFillButton = window.$('button', {
+        id: 'auto-fill-midi-button',
         text: '🎹 Fill',
         css: {
             backgroundColor: '#4caf50',
@@ -347,6 +350,7 @@ export function showSongLibrary() {
 
     // Sort alphabetically button
     const sortAlphabeticallyButton = window.$('button', {
+        id: 'sort-alphabetically-button',
         text: '🔤 Sort A-Z',
         css: {
             backgroundColor: '#9c27b0',
@@ -364,6 +368,7 @@ export function showSongLibrary() {
 
     // Bouton supprimer toutes les chansons
     const deleteAllButton = window.$('button', {
+        id: 'delete-all-songs-button',
         text: '🗑️',
         css: {
             backgroundColor: '#e74c3c',
