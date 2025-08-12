@@ -59,6 +59,40 @@ export function toggleTimecodeVisibility() {
     }
 }
 
+// Toggle title visibility in lyrics display
+export function toggleTitleVisibility() {
+    const showTitle = localStorage.getItem('lyrix_show_title') === 'true';
+    
+    // Update display instance if available
+    if (window.Lyrix && window.Lyrix.lyricsDisplay) {
+        window.Lyrix.lyricsDisplay.showTitle = showTitle;
+        window.Lyrix.lyricsDisplay.updateTitleVisibility();
+    }
+    
+    // Also update directly in DOM
+    const titleElement = document.getElementById('edit_title_input') || document.getElementById('lyrics-title-display');
+    if (titleElement) {
+        titleElement.style.display = showTitle ? 'block' : 'none';
+    }
+}
+
+// Toggle artist visibility in lyrics display
+export function toggleArtistVisibility() {
+    const showArtist = localStorage.getItem('lyrix_show_artist') === 'true';
+    
+    // Update display instance if available
+    if (window.Lyrix && window.Lyrix.lyricsDisplay) {
+        window.Lyrix.lyricsDisplay.showArtist = showArtist;
+        window.Lyrix.lyricsDisplay.updateArtistVisibility();
+    }
+    
+    // Also update directly in DOM
+    const artistElement = document.getElementById('edit_artist_input') || document.getElementById('lyrics-artist-display');
+    if (artistElement) {
+        artistElement.style.display = showArtist ? 'block' : 'none';
+    }
+}
+
 // Start MIDI learn for settings function
 export function startMidiLearnForSetting(settingName, inputElement, buttonElement) {
     if (!window.midiUtilities) {
@@ -593,7 +627,9 @@ function createSettingsContent() {
     const midiSection = createSettingSection('🎹 MIDI Assignments', midiAssignments);
 
     const audioControls = [
-        createToggleRow('Show Timecodes', 'lyrix_show_timecodes', 'Display time markers in lyrics lines', toggleTimecodeVisibility)
+        createToggleRow('Show Timecodes', 'lyrix_show_timecodes', 'Display time markers in lyrics lines', toggleTimecodeVisibility),
+        createToggleRow('Show Song Title', 'lyrix_show_title', 'Display song title in lyrics view', toggleTitleVisibility),
+        createToggleRow('Show Artist Name', 'lyrix_show_artist', 'Display artist name in lyrics view', toggleArtistVisibility)
     ];
 
     const audioSection = createSettingSection('🎵 Audio & Display', audioControls);
