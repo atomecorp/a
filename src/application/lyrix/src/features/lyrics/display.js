@@ -2816,7 +2816,6 @@ export class LyricsDisplay {
         textSpan.style.display = 'none';
         textSpan.parentNode.insertBefore(editContainer, textSpan);
         input.focus();
-        input.select();
         
         const saveEdit = () => {
             const newText = input.value; // Don't trim here to allow spaces-only lines
