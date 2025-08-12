@@ -591,8 +591,6 @@ export class MidiUtilities {
             const playButton = document.getElementById('audio-play-button');
             if (playButton) {
                 playButton.click();
-            } else {
-                console.warn('Play/Pause button not found');
             }
         }
     }
@@ -609,8 +607,6 @@ export class MidiUtilities {
             const stopButton = document.getElementById('audio-stop-button');
             if (stopButton) {
                 stopButton.click();
-            } else {
-                console.warn('Stop button not found');
             }
         }
     }
@@ -627,8 +623,6 @@ export class MidiUtilities {
             const nextButton = document.getElementById('next_song');
             if (nextButton) {
                 nextButton.click();
-            } else {
-                console.warn('Next song button not found');
             }
         }
     }
@@ -645,8 +639,6 @@ export class MidiUtilities {
             const previousButton = document.getElementById('previous_song');
             if (previousButton) {
                 previousButton.click();
-            } else {
-                console.warn('Previous song button not found');
             }
         }
     }

@@ -159,18 +159,20 @@ export function openSettingsPanel() {
 
     // Find the main app container and lyrics content
     const appContainer = document.getElementById('lyrix_app');
-    const lyricsContent = document.querySelector('#lyrics-content') || 
+    const displayContainer = document.getElementById('display-container');
+    const lyricsContent = document.querySelector('#lyrics_content_area') || 
+                         document.querySelector('#lyrics-content') || 
                          document.querySelector('#lyrics-metadata-container')?.parentNode ||
                          document.querySelector('#lyrics_lines_container')?.parentNode ||
+                         displayContainer ||
                          appContainer;
 
-    if (!appContainer) {
-        console.warn('Main app container (#lyrix_app) not found for settings panel positioning');
+    if (!appContainer && !displayContainer && !lyricsContent) {
         return;
     }
 
-    // Use the lyrics content container if found, otherwise app container
-    const targetContainer = lyricsContent || appContainer;
+    // Use the lyrics content container if found, otherwise display container, otherwise app container
+    const targetContainer = lyricsContent || displayContainer || appContainer;
     originalLyricsViewerContainer = targetContainer;
 
     // Create the inline settings panel
@@ -201,13 +203,27 @@ export function openSettingsPanel() {
 
     settingsPanel.appendChild(content);
 
-    // Insert panel at the beginning of the app container (above lyrics content)
+    // Insert panel at the appropriate location
     if (targetContainer === appContainer) {
         // Insert as first child of app container
         appContainer.insertBefore(settingsPanel, appContainer.firstChild);
-    } else {
-        // Insert before the lyrics content
+    } else if (targetContainer === displayContainer) {
+        // Insert the panel at the beginning of the display container (after toolbar, before lyrics content)
+        const toolbar = displayContainer.querySelector('#lyrics-toolbar');
+        const lyricsContent = displayContainer.querySelector('#lyrics_content_area');
+        if (toolbar && lyricsContent) {
+            // Insert between toolbar and lyrics content
+            displayContainer.insertBefore(settingsPanel, lyricsContent);
+        } else {
+            // Fallback: insert as first child
+            displayContainer.insertBefore(settingsPanel, displayContainer.firstChild);
+        }
+    } else if (targetContainer && targetContainer.parentNode) {
+        // Insert before the target container
         targetContainer.parentNode.insertBefore(settingsPanel, targetContainer);
+    } else {
+        // Fallback: append to body
+        document.body.appendChild(settingsPanel);
     }
 
     // Animate panel in
