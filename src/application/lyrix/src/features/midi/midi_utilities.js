@@ -581,43 +581,73 @@ export class MidiUtilities {
         }, 3000);
     }
 
-    // Trigger play/pause functionality
+        // Trigger play/pause functionality
     triggerPlayPause() {
-        const playButton = document.getElementById('audio-play-button');
-        if (playButton) {
-            playButton.click();
+        // Try to call the audio controller directly first
+        if (window.Lyrix && window.Lyrix.audioController) {
+            window.Lyrix.audioController.control('toggle');
         } else {
-            console.warn('Play/Pause button not found');
+            // Fallback to button click
+            const playButton = document.getElementById('audio-play-button');
+            if (playButton) {
+                playButton.click();
+            } else {
+                console.warn('Play/Pause button not found');
+            }
         }
     }
 
     // Trigger stop functionality
     triggerStop() {
-        const stopButton = document.getElementById('audio-stop-button');
-        if (stopButton) {
-            stopButton.click();
+        // Try to call the audio controller directly first
+        if (window.Lyrix && window.Lyrix.audioController) {
+            window.Lyrix.audioController.control('pause');
+            // Also reset to beginning if possible
+            window.Lyrix.audioController.control('seek', 0);
         } else {
-            console.warn('Stop button not found');
+            // Fallback to button click
+            const stopButton = document.getElementById('audio-stop-button');
+            if (stopButton) {
+                stopButton.click();
+            } else {
+                console.warn('Stop button not found');
+            }
         }
     }
 
     // Trigger next song functionality
     triggerNextSong() {
-        const nextButton = document.getElementById('next_song');
-        if (nextButton) {
-            nextButton.click();
+        // Try to call the navigation function directly first
+        if (window.Lyrix && window.Lyrix.navigateToNextSong) {
+            window.Lyrix.navigateToNextSong();
+        } else if (window.navigateToNextSong) {
+            window.navigateToNextSong();
         } else {
-            console.warn('Next song button not found');
+            // Fallback to button click
+            const nextButton = document.getElementById('next_song');
+            if (nextButton) {
+                nextButton.click();
+            } else {
+                console.warn('Next song button not found');
+            }
         }
     }
 
     // Trigger previous song functionality
     triggerPreviousSong() {
-        const previousButton = document.getElementById('previous_song');
-        if (previousButton) {
-            previousButton.click();
+        // Try to call the navigation function directly first
+        if (window.Lyrix && window.Lyrix.navigateToPreviousSong) {
+            window.Lyrix.navigateToPreviousSong();
+        } else if (window.navigateToPreviousSong) {
+            window.navigateToPreviousSong();
         } else {
-            console.warn('Previous song button not found');
+            // Fallback to button click
+            const previousButton = document.getElementById('previous_song');
+            if (previousButton) {
+                previousButton.click();
+            } else {
+                console.warn('Previous song button not found');
+            }
         }
     }
 }
