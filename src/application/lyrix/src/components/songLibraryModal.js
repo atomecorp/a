@@ -371,7 +371,7 @@ export function showSongLibrary() {
         id: 'delete-all-songs-button',
         text: '🗑️',
         css: {
-            backgroundColor: '#e74c3c',
+            backgroundColor: 'transparent',
             color: 'white',
             border: 'none',
             padding: '6px 12px',

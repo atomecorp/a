@@ -593,9 +593,6 @@ function createSettingsContent() {
     const midiSection = createSettingSection('🎹 MIDI Assignments', midiAssignments);
 
     const audioControls = [
-        createToggleRow('Show Audio Player', 'lyrix_show_audio_controls', 'Display audio player controls', toggleAudioPlayerControls),
-        createToggleRow('Enable Audio Sync', 'lyrix_enable_audio_sync', 'Synchronize lyrics with audio playback', toggleAudioSync),
-        createToggleRow('Show MIDI Inspector', 'lyrix_show_midi_inspector', 'Display MIDI input inspector', toggleMidiInspector),
         createToggleRow('Show Timecodes', 'lyrix_show_timecodes', 'Display time markers in lyrics lines', toggleTimecodeVisibility)
     ];
 
@@ -1110,14 +1107,6 @@ export function showSettingsModal() {
 
     const midiSection = createSettingSection('🎹 MIDI Assignments', midiAssignments);
 
-    // Audio Controls Section
-    const audioControls = [
-        createToggleRow('Show Audio Player', 'lyrix_show_audio_controls', 'Display audio player controls', toggleAudioPlayerControls),
-        createToggleRow('Enable Audio Sync', 'lyrix_enable_audio_sync', 'Synchronize lyrics with audio playback', toggleAudioSync)
-    ];
-
-    const audioSection = createSettingSection('🎵 Audio Player', audioControls);
-
     // Sync Settings Section
     const syncSettings = [
         createToggleRow('Auto-Scroll', 'lyrix_auto_scroll', 'Automatically scroll lyrics during playback'),
@@ -1379,22 +1368,13 @@ export function showSettingsModal() {
     const fontSettings = [fontSizeContainer];
     const fontSection = createSettingSection('📝 Display', fontSettings);
 
-    // MIDI Inspector Section
-    const midiInspectorSettings = [
-        createToggleRow('Show MIDI Inspector', 'lyrix_show_midi_inspector', 'Display MIDI input monitoring panel', toggleMidiInspector)
-    ];
-
-    const midiInspectorSection = createSettingSection('🔍 MIDI Inspector', midiInspectorSettings);
-
     // Add all sections to content
     content.append(
         midiSection,
-        audioSection, 
         syncSection,
         timecodeSection,
         metadataSection,
-        fontSection,
-        midiInspectorSection
+        fontSection
     );
 
     // Footer

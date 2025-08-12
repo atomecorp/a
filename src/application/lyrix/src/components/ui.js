@@ -1671,7 +1671,7 @@ export class UIManager {
             text: '🗑️',
             ...config,
             css: {
-                backgroundColor: this.THEME.colors.danger,
+                 backgroundColor: 'transparent',
                 color: 'white',
                 border: 'none',
                 borderRadius: this.THEME.borderRadius.sm,
