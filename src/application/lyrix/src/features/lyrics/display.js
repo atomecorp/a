@@ -64,6 +64,8 @@ export class LyricsDisplay {
         this.fontSize = StorageManager.loadFontSize();
         this.lastScrollTime = 0;
         this.lastManualSelection = 0; // Track manual selections in AUv3 mode
+        this.lastHostTime = -1; // Track host time changes to detect playback
+        this.lastHostTimeUpdate = 0; // Track when host time last changed
         
         this.init();
     }
@@ -3261,10 +3263,24 @@ this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';
         
         // In AUv3 mode, be more conservative with automatic line updates
         if (isAUv3Context) {
+            // Track if host time is changing (indicates playback)
+            const now = Date.now();
+            const timeChanged = Math.abs(timeMs - this.lastHostTime) > 50; // 50ms tolerance
+            
+            if (timeChanged) {
+                this.lastHostTimeUpdate = now;
+            }
+            this.lastHostTime = timeMs;
+            
             // Only update if user hasn't made a manual selection recently
-            const timeSinceManualSelection = Date.now() - this.lastManualSelection;
-            if (timeSinceManualSelection < 5000) { // 5 seconds grace period
-                return;
+            const timeSinceManualSelection = now - this.lastManualSelection;
+            
+            // AND only if host is actively playing (time changed recently)
+            const timeSinceHostUpdate = now - this.lastHostTimeUpdate;
+            const hostIsPlaying = timeSinceHostUpdate < 2000; // Host updated within 2 seconds
+            
+            if (timeSinceManualSelection < 5000 || !hostIsPlaying) {
+                return; // Don't sync if manual selection recent OR host not playing
             }
         }
 
