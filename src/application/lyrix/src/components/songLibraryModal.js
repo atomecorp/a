@@ -1,6 +1,8 @@
 // Song Library Modal Component
 // Handles all song library functionality including MIDI controls, export, import, and sorting
 
+import { exportSongsToLRX } from '../features/lyrics/SongUtils.js';
+
 // Show song library
 export function showSongLibrary() {
     if (window.midiUtilities) {
@@ -126,8 +128,75 @@ export function showSongLibrary() {
             cursor: 'pointer'
         },
         onClick: () => {
-            modalContainer.remove();
-            window.exportAllSongsToLRX(); // Direct download, no dialog
+            console.log('🔧 Export LRX button clicked');
+            
+            try {
+                // Close the modal first
+                modalContainer.remove();
+                
+                // Get all songs data
+                if (!lyricsLibrary) {
+                    console.error('❌ LyricsLibrary non disponible');
+                    return;
+                }
+
+                const songSummaries = lyricsLibrary.getAllSongs();
+                if (songSummaries.length === 0) {
+                    console.warn('❌ No songs available to export');
+                    return;
+                }
+
+                // Create export data
+                const exportData = exportSongsToLRX(songSummaries, lyricsLibrary);
+                const dataStr = JSON.stringify(exportData, null, 2);
+                
+                // Default filename with current date
+                const currentDate = new Date().toISOString().split('T')[0];
+                const defaultFileName = `song_library_${currentDate}.lrx`;
+                
+                console.log(`🔧 Preparing export with default name: ${defaultFileName}`);
+                
+                // Check if we're on iOS/AUv3
+                const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
+                
+                if (isAUv3) {
+                    console.log('🔧 iOS/AUv3 detected - using iOS save dialog');
+                    
+                    // Use iOS native save dialog via Swift bridge
+                    const payload = {
+                        action: 'saveFileWithDocumentPicker',
+                        requestId: Date.now().toString(),
+                        fileName: defaultFileName,
+                        data: dataStr,
+                        encoding: 'utf8'
+                    };
+                    
+                    console.log('🔧 Sending to Swift bridge:', payload.action);
+                    window.webkit.messageHandlers.swiftBridge.postMessage(payload);
+                    
+                } else {
+                    console.log('🔧 Desktop/Web detected - using HTML5 download');
+                    
+                    // For desktop/web: create download link
+                    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(dataBlob);
+                    
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = url;
+                    downloadLink.download = defaultFileName;
+                    downloadLink.style.display = 'none';
+                    
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    URL.revokeObjectURL(url);
+                    
+                    console.log(`✅ Download initiated: ${defaultFileName}`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Export failed:', error.message);
+            }
         }
     });
 
