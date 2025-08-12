@@ -295,6 +295,7 @@ function updateSettingsButtonAria(isOpen) {
 // Create settings content (shared by panel and modal)
 function createSettingsContent() {
     const content = window.$('div', {
+         id: 'letrucaffecer',
         css: {
             padding: '20px',
             backgroundColor: 'white',
