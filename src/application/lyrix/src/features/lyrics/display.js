@@ -90,8 +90,8 @@ export class LyricsDisplay {
                 height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
-                backgroundColor: UIManager.THEME.colors.surface,
-                border: `1px solid ${UIManager.THEME.colors.border}`,
+                backgroundColor: UIManager.THEME.colors.primary,
+                // border: `1px solid ${UIManager.THEME.colors.border}`,
                 // borderRadius: UIManager.THEME.borderRadius.md,
                 overflow: 'hidden', // CRITICAL: prevents any scroll on the main container
                 zIndex: '50' // Au-dessus du contenu normal mais sous les modales

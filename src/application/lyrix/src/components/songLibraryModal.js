@@ -71,30 +71,28 @@ export function showSongLibrary() {
             width: '100%',
             height: '100%',
             display: 'flex',
-            flexDirection: 'column'
-        }
-    });
-
-    // Header with title and action buttons
-    const header = window.$('div', {
-        css: {
-            padding: window.UIManager.THEME.spacing.lg,
+            flexDirection: 'column',
+               //         padding: window.UIManager.THEME.spacing.lg,
             backgroundColor: window.UIManager.THEME.colors.primary,
-            borderRadius: `${window.UIManager.THEME.borderRadius.lg} ${window.UIManager.THEME.borderRadius.lg} 0 0`,
-            borderBottom: `1px solid ${window.UIManager.THEME.colors.border}`,
-            color: 'white'
+    //         borderRadius: `${window.UIManager.THEME.borderRadius.lg} ${window.UIManager.THEME.borderRadius.lg} 0 0`,
+    //         borderBottom: `1px solid ${window.UIManager.THEME.colors.border}`,
         }
     });
 
-    const headerTop = window.$('div', {
-        id: 'song-library-header-top',
-        css: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '10px'
-        }
-    });
+    // const headerTop = window.$('div', {
+    //     id: 'song-library-header-top',
+    //     css: {
+    //         display: 'flex',
+    //         justifyContent: 'space-between',
+    //         alignItems: 'center',
+    //         marginBottom: '10px',
+    //         padding: window.UIManager.THEME.spacing.lg,
+    //         backgroundColor: window.UIManager.THEME.colors.primary,
+    //         borderRadius: `${window.UIManager.THEME.borderRadius.lg} ${window.UIManager.THEME.borderRadius.lg} 0 0`,
+    //         borderBottom: `1px solid ${window.UIManager.THEME.colors.border}`,
+    //         color: 'white'
+    //     }
+    // });
 
     const headerTitle = window.$('h3', {
         id: 'song-library-header',
@@ -394,11 +392,7 @@ export function showSongLibrary() {
         }
     });
     actionButtons.append(createNewSongButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
-    headerTop.append(headerTitle, actionButtons);
-
-
-
-    header.append(headerTop);
+    modal.append(headerTitle, actionButtons);
 
     // Content with search and song list
     const content = window.UIManager.createModalContent({});
@@ -408,6 +402,7 @@ export function showSongLibrary() {
         type: 'text',
         placeholder: 'Search songs...',
         css: {
+            display: 'none',
             width: '100%',
             padding: '10px',
             border: '1px solid #ddd',
@@ -861,7 +856,7 @@ export function showSongLibrary() {
     }, 100);
 
     // Assemble panel (without footer/close button)
-    modal.append(header, content);
+    modal.append( content);
     modalContainer.appendChild(modal);
     
     // Insert between toolbar and lyrics (not as modal overlay)

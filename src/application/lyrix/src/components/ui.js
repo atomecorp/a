@@ -485,7 +485,7 @@ export class UIManager {
     // ===== THEME AND STYLES =====
     static THEME = {
         colors: {
-            primary: '#4a6fa5',
+            primary: '#303c4eff',
             secondary: '#16213e', 
             background: '#1a1a2e',
             surface: '#0f3460',
@@ -1179,23 +1179,6 @@ export class UIManager {
         return element;
     }
 
-    // Display container for lyrics
-    static createDisplayContainer(config = {}) {
-        return $('div', {
-            id: 'display-container',
-            ...config,
-            css: {
-                flex: '1',
-                display: 'flex',
-                flexDirection: 'column',
-                backgroundColor: this.THEME.colors.surface,
-                border: `1px solid ${this.THEME.colors.border}`,
-                borderRadius: this.THEME.borderRadius.md,
-                overflow: 'hidden',
-                ...config.css
-            }
-        });
-    }
 
     // Lyrics toolbar
     static createLyricsToolbar(config = {}) {
