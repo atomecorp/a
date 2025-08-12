@@ -1657,7 +1657,8 @@ export class LyricsDisplay {
                 element.style.transition = 'all 0.3s ease';
                 
                 // Determine if we should scroll
-                let shouldScroll = !this.recordMode && !this.editMode;
+                // Allow scrolling in record mode for manual selections, but not in edit mode
+                let shouldScroll = !this.editMode && (!this.recordMode || isManual);
                 
                 // In AUv3 mode, don't scroll for automatic updates if user recently made manual selection
                 const isAUv3Context = window.webkit && window.webkit.messageHandlers;
@@ -1672,6 +1673,9 @@ export class LyricsDisplay {
                         behavior: 'smooth',
                         block: 'center'
                     });
+                    if (this.recordMode && isManual) {
+                        console.log(`🔧 Ligne ${index} recentrée en mode record (setActiveLineIndex)`);
+                    }
                 }
             }
         }
