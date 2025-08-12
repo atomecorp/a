@@ -512,6 +512,18 @@ export class MidiUtilities {
                 case 'fullscreen_deactivate':
                     this.toggleFullscreen(false);
                     break;
+                case 'play_pause':
+                    this.triggerPlayPause();
+                    break;
+                case 'stop':
+                    this.triggerStop();
+                    break;
+                case 'next_song':
+                    this.triggerNextSong();
+                    break;
+                case 'previous_song':
+                    this.triggerPreviousSong();
+                    break;
                 default:
             }
         } else {
@@ -567,5 +579,45 @@ export class MidiUtilities {
         setTimeout(() => {
             this.toggleFullscreen(false);  // Exit fullscreen
         }, 3000);
+    }
+
+    // Trigger play/pause functionality
+    triggerPlayPause() {
+        const playButton = document.getElementById('audio-play-button');
+        if (playButton) {
+            playButton.click();
+        } else {
+            console.warn('Play/Pause button not found');
+        }
+    }
+
+    // Trigger stop functionality
+    triggerStop() {
+        const stopButton = document.getElementById('audio-stop-button');
+        if (stopButton) {
+            stopButton.click();
+        } else {
+            console.warn('Stop button not found');
+        }
+    }
+
+    // Trigger next song functionality
+    triggerNextSong() {
+        const nextButton = document.getElementById('next_song');
+        if (nextButton) {
+            nextButton.click();
+        } else {
+            console.warn('Next song button not found');
+        }
+    }
+
+    // Trigger previous song functionality
+    triggerPreviousSong() {
+        const previousButton = document.getElementById('previous_song');
+        if (previousButton) {
+            previousButton.click();
+        } else {
+            console.warn('Previous song button not found');
+        }
     }
 }

@@ -314,11 +314,6 @@ export function showSongLibrary() {
 
     const autoFillInput = window.$('input', {
         id: 'auto-fill-midi-input',
-        type: 'number',
-        min: '0',
-        max: '127',
-        placeholder: 'Root',
-        value: '60', // Default to middle C
         css: {
             width: '50px',
             padding: '2px 4px',
@@ -328,6 +323,13 @@ export function showSongLibrary() {
             textAlign: 'center'
         }
     });
+    
+    // Set HTML attributes that Squirrel might not handle properly
+    autoFillInput.type = 'number';
+    autoFillInput.min = '0';
+    autoFillInput.max = '127';
+    autoFillInput.placeholder = 'Root';
+    autoFillInput.value = '33'; // Default to note 33
 
     const autoFillButton = window.$('button', {
         id: 'auto-fill-midi-button',
