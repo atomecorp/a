@@ -314,34 +314,57 @@ export class LyricsDisplay {
             }
         });
         
-        // Add all main toolbar elements (timecode display without timecode options button)
-        const mainToolElements = [
-            ...this.nonAudioTools,
-            this.editButton,
-            this.recordButton,
-            this.fullscreenButton,
-            this.previousSongButton,
-            this.nextSongButton
-        ];
+        // Add all main toolbar elements in the requested order
+        const mainToolElements = [];
         
-        // Add timecode display after timecode button if it exists
+        // 1. Settings button (from nonAudioTools)
+        if (this.nonAudioTools && this.nonAudioTools.length > 0) {
+            const settingsButton = this.nonAudioTools.find(tool => tool.id === 'settings_button');
+            if (settingsButton) mainToolElements.push(settingsButton);
+        }
+        
+        // 2. Song list button (from nonAudioTools)  
+        if (this.nonAudioTools && this.nonAudioTools.length > 0) {
+            const songListButton = this.nonAudioTools.find(tool => tool.id === 'song_list_button');
+            if (songListButton) mainToolElements.push(songListButton);
+        }
+        
+        // 3. Previous song button
+        mainToolElements.push(this.previousSongButton);
+        
+        // 4. Next song button
+        mainToolElements.push(this.nextSongButton);
+        
+        // 5. Record button
+        mainToolElements.push(this.recordButton);
+        
+        // 6-7. Audio buttons (stop, play) - these come from audioButtons array
+        if (this.audioButtons && this.audioButtons.length > 0) {
+            mainToolElements.push(...this.audioButtons);
+        }
+        
+        // 8. Timecode display
         if (this.timecodeDisplay) {
             mainToolElements.push(this.timecodeDisplay);
         }
         
-        // Add font size container
-        // Font size controls can be used within edit mode but not shown in main toolbar anymore
-        // mainToolElements.push(this.fontSizeContainer); // Moved to settings panel
+        // 9. Fullscreen button
+        mainToolElements.push(this.fullscreenButton);
         
-        // Add edit mode buttons (save and cancel)
-        mainToolElements.push(this.saveChangesButton, this.cancelEditButton);
+        // 10. Edit button (most to the right, followed only by edit mode buttons)
+        mainToolElements.push(this.editButton);
         
-        // Add audio buttons after font size container (play button, then stop button)
-        if (this.audioButtons && this.audioButtons.length > 0) {
-    
-            mainToolElements.push(...this.audioButtons);
-        } else {
+        // Add any remaining nonAudioTools that weren't specifically positioned
+        if (this.nonAudioTools && this.nonAudioTools.length > 0) {
+            this.nonAudioTools.forEach(tool => {
+                if (tool.id !== 'settings_button' && tool.id !== 'song_list_button') {
+                    mainToolElements.push(tool);
+                }
+            });
         }
+        
+        // Add edit mode buttons (save and cancel) - these should be at the very end
+        mainToolElements.push(this.saveChangesButton, this.cancelEditButton);
         
         mainToolRow.append(...mainToolElements);
         
