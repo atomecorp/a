@@ -2290,14 +2290,14 @@ function createMainInterface() {
             
             // Primary event - when audio metadata (including duration) is loaded
             audioController.on('loaded', (duration) => {
-                startupLog(`📏 Audio loaded event - duration: ${duration}s`);
+                console.log(`📏 Audio loaded event - duration: ${duration}s`);
                 updateSliderDuration();
                 // Apply saved volume when audio is loaded
                 if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('loadedmetadata', () => {
-                startupLog('📏 Loadedmetadata event triggered');
+                console.log('📏 Loadedmetadata event triggered');
                 updateSliderDuration();
                 // Apply saved volume when metadata is loaded
                 if (window.applySavedVolume) window.applySavedVolume();
@@ -2305,14 +2305,14 @@ function createMainInterface() {
             
             // Also listen for loadeddata and canplay events as fallbacks
             audioController.on('loadeddata', () => {
-                startupLog('📏 Loadeddata event triggered');
+                console.log('📏 Loadeddata event triggered');
                 updateSliderDuration();
                 // Apply saved volume when data is loaded
                 if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('canplay', () => {
-                startupLog('📏 Canplay event triggered');
+                console.log('📏 Canplay event triggered');
                 updateSliderDuration();
                 // Apply saved volume when audio can play
                 if (window.applySavedVolume) window.applySavedVolume();
@@ -2514,14 +2514,14 @@ function updateScrubSliderDisplay(currentTime) {
 function updateSliderDuration() {
     const totalTimeLabel = document.getElementById('total_time_label');
     
-    startupLog('📏 updateSliderDuration() called');
+    console.log('📏 updateSliderDuration() called');
     
     if (totalTimeLabel && audioController && audioController.audioPlayer) {
         const duration = audioController.audioPlayer.duration || 0;
         
-        startupLog(`📏 Audio duration found: ${duration}s`);
-        startupLog(`📏 Audio player ready state: ${audioController.audioPlayer.readyState}`);
-        startupLog(`📏 Audio player src: ${audioController.audioPlayer.src ? audioController.audioPlayer.src.substring(0, 50) + '...' : 'empty'}`);
+        console.log(`📏 Audio duration found: ${duration}s`);
+        console.log(`📏 Audio player ready state: ${audioController.audioPlayer.readyState}`);
+        console.log(`📏 Audio player src: ${audioController.audioPlayer.src ? audioController.audioPlayer.src.substring(0, 50) + '...' : 'empty'}`);
         
         if (duration > 0 && isFinite(duration)) {
             const durationMin = Math.floor(duration / 60);
@@ -2529,26 +2529,26 @@ function updateSliderDuration() {
             const timeString = `${durationMin}:${durationSec.toString().padStart(2, '0')}`;
             totalTimeLabel.textContent = timeString;
             
-            startupLog(`📏 ✅ Updated total_time_label to: ${timeString}`);
+            console.log(`📏 ✅ Updated total_time_label to: ${timeString}`);
         } else {
-            startupLog(`📏 ⚠️ Duration is ${duration} (invalid), will retry...`);
+            console.log(`📏 ⚠️ Duration is ${duration} (invalid), will retry...`);
             // Try again after a short delay if duration isn't available yet
             setTimeout(() => {
                 if (audioController && audioController.audioPlayer) {
                     const retryDuration = audioController.audioPlayer.duration;
-                    startupLog(`📏 🔄 Retrying - new duration: ${retryDuration}s, readyState: ${audioController.audioPlayer.readyState}`);
+                    console.log(`📏 🔄 Retrying - new duration: ${retryDuration}s, readyState: ${audioController.audioPlayer.readyState}`);
                     if (retryDuration > 0) {
-                        startupLog('📏 🔄 Retrying updateSliderDuration...');
+                        console.log('📏 🔄 Retrying updateSliderDuration...');
                         updateSliderDuration();
                     }
                 }
             }, 250);
         }
     } else {
-        startupLog('📏 ❌ Missing elements - totalTimeLabel: ' + !!totalTimeLabel + ', audioController: ' + !!audioController + ', audioPlayer: ' + !!(audioController && audioController.audioPlayer));
+        console.log('📏 ❌ Missing elements - totalTimeLabel: ' + !!totalTimeLabel + ', audioController: ' + !!audioController + ', audioPlayer: ' + !!(audioController && audioController.audioPlayer));
         
         if (audioController && audioController.audioPlayer) {
-            startupLog(`📏 Audio player details - src: ${audioController.audioPlayer.src ? 'present' : 'empty'}, readyState: ${audioController.audioPlayer.readyState}`);
+            console.log(`📏 Audio player details - src: ${audioController.audioPlayer.src ? 'present' : 'empty'}, readyState: ${audioController.audioPlayer.readyState}`);
         }
     }
 }
