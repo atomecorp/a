@@ -7,27 +7,7 @@ import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, togg
 
 
 
-// Utility function to check if volume control is supported on the current platform
-function isVolumeControlSupported() {
-    return true; // Always allow volume control on all platforms
-}
 
-// Utility function to safely apply volume with platform detection
-function safeApplyVolume(audioPlayer, volumePercent, context = '') {
-    try {
-        const volumeValue = volumePercent / 100;
-        
-        // Check that we can actually set the volume property
-        if (audioPlayer && typeof audioPlayer.volume !== 'undefined') {
-            audioPlayer.volume = volumeValue;
-            return true;
-        } else {
-            return false;
-        }
-    } catch (error) {
-        return false;
-    }
-}
 
 // Application startup message
 
@@ -154,11 +134,8 @@ function initializeLyrix() {
         uiManager = new UIManager();
         lyricsLibrary = new LyricsLibrary();
         
-        // Apply saved volume to audio controller
-        const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-        if (audioController && audioController.audioPlayer) {
-            safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'startup');
-        }
+        // Initialize Audio Controller without volume
+        audioController = new AudioController();
         
         // Create main UI
         createMainInterface();
@@ -406,7 +383,7 @@ function showMobileExportModal(dataString, filename, fileType) {
         css: {
             padding: UIManager.THEME.spacing.lg,
             backgroundColor: UIManager.THEME.colors.primary,
-            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
+            // borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
             color: 'white'
         }
     });
@@ -601,16 +578,16 @@ function showMobileExportModal(dataString, filename, fileType) {
 
     content.append(copyButton, shareButton, viewButton, instructionsText);
 
-    // Footer
-    const footer = $('div', {
-        css: {
-            padding: UIManager.THEME.spacing.lg,
-            backgroundColor: UIManager.THEME.colors.background,
-            borderTop: `1px solid ${UIManager.THEME.colors.border}`,
-            borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
-            textAlign: 'center'
-        }
-    });
+    // // Footer
+    // const footer = $('div', {
+    //     css: {
+    //         padding: UIManager.THEME.spacing.lg,
+    //         backgroundColor: UIManager.THEME.colors.background,
+    //         borderTop: `1px solid ${UIManager.THEME.colors.border}`,
+    //         // borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
+    //         textAlign: 'center'
+    //     }
+    // });
 
     const closeButton = $('button', {
         text: 'Close',
@@ -657,7 +634,7 @@ function showContentViewModal(dataString, filename, fileType) {
         css: {
             padding: UIManager.THEME.spacing.md,
             backgroundColor: UIManager.THEME.colors.primary,
-            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
+            // borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
             color: 'white',
             display: 'flex',
             justifyContent: 'space-between',
@@ -1747,14 +1724,6 @@ function loadAndDisplaySong(songKey) {
         if (song.hasAudio() && audioController) {
             audioController.loadAudio(song.getAudioPath());
             
-            // Apply saved volume to newly loaded audio
-            const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-            setTimeout(() => {
-                if (audioController && audioController.audioPlayer) {
-                    safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'new audio');
-                }
-            }, 100);
-            
             // Reset slider to zero when loading new audio
             resetAudioSlider();
             updateSliderDuration();
@@ -1894,7 +1863,7 @@ function createMainInterface() {
         }
     });
     
-    const songListButton = UIManager.createInterfaceButton('☰', {
+    const songListButton = UIManager.createInterfaceButton('📂', {
         id: 'song_list_button',
         onClick: () => {
             showSongLibrary();
@@ -1904,9 +1873,9 @@ function createMainInterface() {
     // Store tool elements for potential move to lyrics toolbar
     window.leftPanelTools = {
         settingsButton,
+        songListButton
         // importButton moved to song library panel
         // createSongButton, // Moved to song library panel
-        songListButton
     };
     
     // Note: These tools will be moved to lyrics toolbar by display.js
@@ -2179,167 +2148,24 @@ function createMainInterface() {
         
         const currentTimeLabel = $('span', {
             id: 'current_time_label',
+            css: {
+                textAlign: 'left',
+                display: 'none',
+            },
             text: '0:00'
         });
         
         const totalTimeLabel = $('span', {
             id: 'total_time_label',
+             css: {
+                textAlign: 'left',
+                display: 'none',
+            },
             text: '0:00'
         });
         
         timeLabels.append(currentTimeLabel, totalTimeLabel);
         scrubContainer.append(scrubSlider, timeLabels);
-
-        // Add volume control slider
-        const volumeContainer = $('div', {
-            id: 'audio-volume-slider-container',
-            css: {
-                // marginBottom: '15px',
-                width: '190px',
-                height: '13px',
-                // padding: '10px',
-                backgroundColor: 'transparent',
-                borderRadius: '4px',
-                // border: '1px solid #dee2e6',
-                display: initialDisplay
-            }
-        });
-
-        // Add data attribute for identification
-        volumeContainer.setAttribute('data-element', 'volume-slider');
-
-        const volumeLabel = $('div', {
-            // text: '🔊 Volume',
-            css: {
-                fontSize: '14px',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#495057'
-            }
-        });
-
-        // Load saved volume from localStorage (default: 70%)
-        const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-        
-        // Create Squirrel slider for volume control
-        const volumeSlider = Slider({
-            type: 'horizontal',
-            min: 0,
-            max: 100,
-            value: parseInt(savedVolume),
-            showLabel: false,
-            id: 'audio_volume_slider',
-            skin: {
-                container: {
-                    width: '100%',
-                    height: '20px',
-                    marginBottom: '5px'
-                },
-                track: {
-                    height: '6px',
-                    backgroundColor: '#ddd',
-                    borderRadius: '3px'
-                },
-                progression: {
-                    backgroundColor: '#28a745',
-                    borderRadius: '3px'
-                },
-                handle: {
-                    width: '16px',
-                    height: '16px',
-                    backgroundColor: '#28a745',
-                    border: '2px solid #fff',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                    cursor: 'pointer'
-                }
-            },
-            onInput: (value) => {
-                // Update audio volume immediately on all platforms
-                if (audioController && audioController.audioPlayer) {
-                    if (safeApplyVolume(audioController.audioPlayer, value, 'slider')) {
-                        // Save volume to localStorage only if successfully applied
-                        localStorage.setItem('lyrix_audio_volume', value.toString());
-                        
-                        // Update volume value display in toolbar
-                        const volumeValueDisplay = document.getElementById('volume-value-display');
-                        if (volumeValueDisplay) {
-                            volumeValueDisplay.textContent = `${Math.round(value)}%`;
-                        }
-                        
-                        // Update current volume label
-                        const volumeCurrentLabel = document.getElementById('volume_current_label');
-                        if (volumeCurrentLabel) {
-                            volumeCurrentLabel.textContent = `${Math.round(value)}%`;
-                        }
-                    }
-                } else {
-                    // Store volume for when audio player becomes available
-                    localStorage.setItem('lyrix_audio_volume', value.toString());
-                    
-                    // Update volume value display in toolbar
-                    const volumeValueDisplay = document.getElementById('volume-value-display');
-                    if (volumeValueDisplay) {
-                        volumeValueDisplay.textContent = `${Math.round(value)}%`;
-                    }
-                    
-                    // Update current volume label
-                    const volumeCurrentLabel = document.getElementById('volume_current_label');
-                    if (volumeCurrentLabel) {
-                        volumeCurrentLabel.textContent = `${Math.round(value)}%`;
-                    }
-                    
-                }
-            }
-        });
-
-        // Volume value container
-        const volumeValueContainer = $('div', {
-            css: {
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: '12px',
-                color: '#666',
-                fontFamily: 'monospace',
-                marginTop: '5px'
-            }
-        });
-
-        const volumeMinLabel = $('span', {
-            text: 'volume'
-        });
-
-        // Add current volume display
-        const volumeCurrentLabel = $('span', {
-            id: 'volume_current_label',
-            text: `${savedVolume}%`,
-            css: {
-                fontWeight: '600',
-                color: '#28a745'
-            }
-        });
-
-      
-
-        volumeValueContainer.append(volumeMinLabel, volumeCurrentLabel);
-        volumeContainer.append(volumeLabel, volumeSlider, volumeValueContainer);
-
-        // Add volume container to audio tools for display
-        if (window.leftPanelAudioTools) {
-            window.leftPanelAudioTools.volumeContainer = volumeContainer;
-        }
-
-        // Apply saved volume to audio player when it's loaded
-        if (audioController && audioController.audioPlayer) {
-            safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'initial volume');
-        }
-        
-        // Add function to apply saved volume when audio becomes available
-        window.applySavedVolume = function() {
-            const savedVol = localStorage.getItem('lyrix_audio_volume') || '70';
-            if (audioController && audioController.audioPlayer) {
-                safeApplyVolume(audioController.audioPlayer, parseInt(savedVol), 'delayed application');
-            }
-        };
         
         // Add timecode display for AUv3 host compatibility
         const timecodeDisplay = UIManager.createEnhancedTimecodeDisplay({
@@ -2369,30 +2195,22 @@ function createMainInterface() {
             audioController.on('loaded', (duration) => {
                 console.log(`📏 Audio loaded event - duration: ${duration}s`);
                 updateSliderDuration();
-                // Apply saved volume when audio is loaded
-                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('loadedmetadata', () => {
                 console.log('📏 Loadedmetadata event triggered');
                 updateSliderDuration();
-                // Apply saved volume when metadata is loaded
-                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             // Also listen for loadeddata and canplay events as fallbacks
             audioController.on('loadeddata', () => {
                 console.log('📏 Loadeddata event triggered');
                 updateSliderDuration();
-                // Apply saved volume when data is loaded
-                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('canplay', () => {
                 console.log('📏 Canplay event triggered');
                 updateSliderDuration();
-                // Apply saved volume when audio can play
-                if (window.applySavedVolume) window.applySavedVolume();
             });
         }
     }

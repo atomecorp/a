@@ -113,51 +113,6 @@ export class LyricsDisplay {
             }
         });
 
-        // Create hamburger button (always visible, positioned at top-left)
-        this.hamburgerButton = $('button', {
-            id: 'hamburger-menu-button',
-            text: '☰',
-            css: {
-                position: 'absolute',
-                top: '0px',
-                left: '0px',
-                width: '30px',
-                height: '30px',
-                backgroundColor: this.originalStyles.sidebar.backgroundColor, // Dark background
-                border: '0px solid #34495e',
-                borderRadius: '3px',
-                color: this.originalStyles.sidebar.color, // Light text color
-                fontSize: '18px',
-                cursor: 'pointer',
-                zIndex: '101',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }
-        });
-
-        // Hamburger button hover effects
-        this.hamburgerButton.addEventListener('mouseenter', () => {
-            this.hamburgerButton.style.backgroundColor = this.originalStyles.hamburgerButton.hover;
-            this.hamburgerButton.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
-        });
-
-        this.hamburgerButton.addEventListener('mouseleave', () => {
-            this.hamburgerButton.style.backgroundColor = this.originalStyles.hamburgerButton.normal;
-            this.hamburgerButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-        });
-
-        // Hamburger button click handler
-        this.hamburgerButton.addEventListener('click', () => {
-            this.toggleToolbarVisibility();
-        });
-
-        // Load toolbar visibility state from localStorage
-        const savedToolbarState = localStorage.getItem('lyrix_toolbar_visible');
-        this.toolbarVisible = savedToolbarState === 'true'; // Default to false (minimized)
-        
         // Create lyrics content area - ONLY zone allowed to scroll
         this.lyricsContent = $('div', {
             id: 'lyrics_content_area',
@@ -349,13 +304,12 @@ export class LyricsDisplay {
         const mainToolRow = $('div', {
             id: 'main-toolbar-row',
             css: {
-                display: this.toolbarVisible ? 'flex' : 'none', // Hidden by default
+                display: 'flex', // Always visible
                 gap: '8px',
                 alignItems: 'center',
                 flexWrap: 'wrap',
-                padding: '0px 0px 0px 33px', // Extra left padding to avoid hamburger menu overlap (52px = 36px button + 8px margin + 8px clearance)
+                padding: '8px', // Regular padding without hamburger button
                 backgroundColor: this.originalStyles.buttons.transparent,
-                // borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
                 transition: 'all 0.3s ease' // Smooth transition for show/hide
             }
         });
@@ -397,11 +351,12 @@ export class LyricsDisplay {
         
         }, 100);
         
-        // Create audio tools row (will be hidden by default)
+        // Create audio tools row (visibility depends on audio player setting)
+        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
         const audioToolRow = $('div', {
             id: 'audio-tools-row',
             css: {
-                display: 'none', // Hidden by default since toolbar starts hidden
+                display: isAudioPlayerEnabled ? 'flex' : 'none', // Visible if audio is enabled
                 flexDirection: 'column',
                 gap: '4px',
                 width: '100%',
@@ -434,7 +389,7 @@ export class LyricsDisplay {
         });
         
         // Add both rows to the toolbar
-        this.toolbar.append(this.hamburgerButton, mainToolRow, audioToolRow);
+        this.toolbar.append(mainToolRow, audioToolRow);
         
         // Store references to toolbar rows for dynamic visibility
         this.mainToolRow = mainToolRow;
@@ -646,46 +601,7 @@ export class LyricsDisplay {
                 buttons.push(playButton);
             }
             
-            // Add volume slider after play/stop buttons
-            const volumeContainer = document.getElementById('audio-volume-slider-container');
-            if (volumeContainer) {
-                // Create a container for volume slider + value display
-                const volumeWrapper = document.createElement('div');
-                volumeWrapper.id = 'volume-wrapper-toolbar';
-                volumeWrapper.style.cssText = `
-                    display: flex;
-                    align-items: center;
-                    gap: 5px;
-                    margin-left: 10px;
-                `;
-                
-                // Style the volume container for toolbar
-                volumeContainer.style.width = '120px';
-                volumeContainer.style.height = '25px';
-                volumeContainer.style.marginBottom = '0';
-                volumeContainer.style.display = 'flex';
-                volumeContainer.style.alignItems = 'center';
-                
-                // Create volume value display
-                // const volumeValue = document.createElement('span');
-                // volumeValue.id = 'volume-value-display';
-                // volumeValue.style.cssText = `
-                //     font-size: 11px;
-                //     color: #666;
-                //     min-width: 25px;
-                //     text-align: right;
-                // `;
-                
-                // Get current volume from localStorage and display it
-                const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-                // volumeValue.textContent = savedVolume + '%';
-                
-                // Move volume container to wrapper and add value display
-                volumeWrapper.appendChild(volumeContainer);
-                // volumeWrapper.appendChild(volumeValue);
-                
-                buttons.push(volumeWrapper);
-            }
+            // No volume slider needed anymore
         } else {
         }
         
@@ -1967,60 +1883,20 @@ export class LyricsDisplay {
         }
     }
     
-    // Toggle toolbar visibility (hamburger menu functionality)
-    toggleToolbarVisibility() {
-        this.toolbarVisible = !this.toolbarVisible;
-        
-        // Save state to localStorage
-        localStorage.setItem('lyrix_toolbar_visible', this.toolbarVisible.toString());
-        
-        // Update main toolbar row visibility
-        if (this.mainToolRow) {
-            this.mainToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
-        }
-        
-        // Update audio toolbar row visibility if audio is enabled
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        if (this.audioToolRow && isAudioPlayerEnabled) {
-            this.audioToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
-        }
-        
-        // Update hamburger button icon
-this.hamburgerButton.textContent = this.toolbarVisible ? '⋮' : '☰';        
-        // Animate the toolbar transition
-        if (this.mainToolRow) {
-            this.mainToolRow.style.transition = 'all 0.3s ease';
-        }
-        if (this.audioToolRow) {
-            this.audioToolRow.style.transition = 'all 0.3s ease';
-        }
-        
-    }
+    // Toolbar is always visible now, no toggle needed
     
     // Update toolbar visibility without toggling (for initialization)
     updateToolbarVisibility() {
-        // Update main toolbar row visibility
+        // Toolbar is always visible now
         if (this.mainToolRow) {
-            this.mainToolRow.style.display = this.toolbarVisible ? 'flex' : 'none';
+            this.mainToolRow.style.display = 'flex';
         }
         
-        // Update audio toolbar row visibility - always hide if toolbar is hidden
+        // Update audio toolbar row visibility - show if audio is enabled
         if (this.audioToolRow) {
-            if (this.toolbarVisible) {
-                // Only show if toolbar is visible AND audio is enabled
-                const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-                this.audioToolRow.style.display = isAudioPlayerEnabled ? 'flex' : 'none';
-            } else {
-                // Always hide if toolbar is hidden
-                this.audioToolRow.style.display = 'none';
-            }
+            const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+            this.audioToolRow.style.display = isAudioPlayerEnabled ? 'flex' : 'none';
         }
-        
-        // Update hamburger button icon
-        if (this.hamburgerButton) {
-            this.hamburgerButton.textContent = this.toolbarVisible ? '✕' : '☰';
-        }
-        
     }
     
     // Toggle timecode display

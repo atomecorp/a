@@ -220,7 +220,6 @@ function createSettingsPanelHeader() {
         css: {
             padding: '15px 20px',
             backgroundColor: '#f8f9fa',
-            borderBottom: '1px solid #e0e0e0',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -815,8 +814,6 @@ export function showSettingsModal() {
         css: {
             padding: window.UIManager.THEME.spacing.lg,
             backgroundColor: window.UIManager.THEME.colors.primary,
-            borderRadius: `${window.UIManager.THEME.borderRadius.lg} ${window.UIManager.THEME.borderRadius.lg} 0 0`,
-            borderBottom: `1px solid ${window.UIManager.THEME.colors.border}`,
             color: 'white'
         }
     });

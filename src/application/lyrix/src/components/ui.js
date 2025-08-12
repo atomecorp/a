@@ -1208,8 +1208,8 @@ export class UIManager {
                 gap: this.THEME.spacing.sm,
                 padding: this.THEME.spacing.md,
                 backgroundColor: this.THEME.colors.background,
-                borderBottom: `1px solid ${this.THEME.colors.border}`,
-                borderRadius: `${this.THEME.borderRadius.md} ${this.THEME.borderRadius.md} 0 0`,
+                // borderBottom: `1px solid ${this.THEME.colors.border}`,
+                // borderRadius: `${this.THEME.borderRadius.md} ${this.THEME.borderRadius.md} 0 0`,
                 // Rendre la barre d'outils sticky pour qu'elle reste en haut lors du scroll
                 position: 'sticky',
                 top: '0',
