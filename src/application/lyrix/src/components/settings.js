@@ -433,13 +433,14 @@ function updateSettingsButtonAria(isOpen) {
 // Create settings content (shared by panel and modal)
 function createSettingsContent() {
     const content = window.$('div', {
-         id: 'letrucaffecer',
+        id: 'settings_overflow_container',
         css: {
             padding: '20px',
             backgroundColor: 'white',
             flex: '1',
+            height: '100%',
             overflowY: 'auto',
-            maxHeight: '40vh', // Full panel height since no header
+            maxHeight: '100%', // Full panel height since no header
             position: 'relative'
         }
     });
@@ -1654,6 +1655,35 @@ function addResizeListeners(panel, grip, storageKey) {
             // Reset grip appearance
             grip.style.backgroundColor = '#e0e0e0';
             grip.querySelector('div').style.backgroundColor = '#999';
+            
+            // IMPORTANT: Trigger a resize event to update the lyrics content area
+            // This forces the lyrics container to recalculate its height
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+                
+                // Also directly update lyrics content area height if it exists
+                const lyricsContentArea = document.getElementById('lyrics_content_area');
+                if (lyricsContentArea) {
+                    // Force recalculation of height
+                    lyricsContentArea.style.height = 'auto';
+                    requestAnimationFrame(() => {
+                        // Calculate available height
+                        const container = lyricsContentArea.parentElement;
+                        if (container) {
+                            const containerHeight = container.offsetHeight;
+                            const toolbar = container.querySelector('#lyrics-toolbar');
+                            const settingsPanel = document.getElementById('lyrix_settings_panel');
+                            
+                            let availableHeight = containerHeight;
+                            if (toolbar) availableHeight -= toolbar.offsetHeight;
+                            if (settingsPanel) availableHeight -= settingsPanel.offsetHeight;
+                            
+                            lyricsContentArea.style.height = `${Math.max(200, availableHeight)}px`;
+                            console.log('🔄 Updated lyrics content area height:', lyricsContentArea.style.height);
+                        }
+                    });
+                }
+            }, 10);
         }
     });
 }

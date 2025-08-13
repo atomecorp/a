@@ -440,6 +440,11 @@ export class LyricsDisplay {
         // Add display container directly to body for total control
         document.body.append(this.displayContainer);
         
+        // Initial layout update
+        setTimeout(() => {
+            this.updateContentAreaHeight();
+        }, 100); // Small delay to ensure settings panel is rendered
+        
         // Initialize timecode button appearance based on loaded state
         this.updateTimecodeButtonAppearance();
         
@@ -462,6 +467,12 @@ export class LyricsDisplay {
             }
         });
         
+        // Listen for window resize and settings panel resize
+        this.resizeHandler = () => {
+            this.updateContentAreaHeight();
+        };
+        window.addEventListener('resize', this.resizeHandler);
+        
         // Global keyboard shortcuts - work anywhere in the document
         this.keyboardHandler = (e) => {
             this.handleKeyboard(e);
@@ -476,6 +487,37 @@ export class LyricsDisplay {
         }
     }
     
+    // Update the height of lyrics content area when layout changes
+    updateContentAreaHeight() {
+        const displayContainer = this.displayContainer;
+        if (!displayContainer) return;
+        
+        // Check if settings panel exists and calculate its total height
+        const settingsPanel = document.getElementById('lyrix_settings_panel');
+        const settingsGrip = document.getElementById('settings-resize-grip');
+        
+        let settingsHeight = 0;
+        if (settingsPanel) {
+            settingsHeight += settingsPanel.offsetHeight;
+        }
+        if (settingsGrip) {
+            settingsHeight += settingsGrip.offsetHeight;
+        }
+        
+        // Update display container height to account for settings panel
+        const availableHeight = window.innerHeight - settingsHeight;
+        displayContainer.style.height = `${Math.max(300, availableHeight)}px`;
+        
+        // Also update the position if settings panel is above
+        if (settingsPanel && settingsPanel.offsetTop === 0) {
+            displayContainer.style.top = `${settingsHeight}px`;
+        } else {
+            displayContainer.style.top = '0px';
+        }
+        
+        console.log('🔄 Updated display container height:', availableHeight, 'px, settings height:', settingsHeight, 'px');
+    }
+
     // Handle keyboard shortcuts
     handleKeyboard(e) {
         // Don't handle keyboard shortcuts if user is typing in an input field
@@ -824,6 +866,11 @@ export class LyricsDisplay {
         // Set current lyrics and render
         this.currentLyrics = syncedLyrics;
         this.renderLyrics();
+        
+        // Update content area height after rendering
+        setTimeout(() => {
+            this.updateContentAreaHeight();
+        }, 10);
         
         // If we're in edit mode, update the edit fields with new song data
         if (this.editMode) {
@@ -1941,6 +1988,12 @@ export class LyricsDisplay {
             }
         }
         this.renderLyrics();
+        
+        // Update content area height after toggle
+        setTimeout(() => {
+            this.updateContentAreaHeight();
+        }, 10);
+        
         // Synchronize input values with metadata on each entry in edit mode
         if (this.editMode) {
             setTimeout(() => {
