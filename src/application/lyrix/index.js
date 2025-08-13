@@ -2096,8 +2096,11 @@ function createMainInterface() {
                 try {
                     if (audioController.isPlaying()) {
                         audioController.pause();
-                    
+                                    playButton.style.backgroundColor = 'transparent';
+
                     } else {
+                                        playButton.style.backgroundColor = 'white';
+
                         audioController.play();
                     }
                 } catch (error) {
