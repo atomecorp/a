@@ -825,6 +825,11 @@ export class LyricsDisplay {
         this.currentLyrics = syncedLyrics;
         this.renderLyrics();
         
+        // If we're in edit mode, update the edit fields with new song data
+        if (this.editMode) {
+            this.updateEditFields();
+        }
+        
         // Auto-load associated audio if available (but only if no audio is currently loaded)
         if (syncedLyrics.hasAudio()) {
             const audioPath = syncedLyrics.getAudioPath();
@@ -845,6 +850,38 @@ export class LyricsDisplay {
         }
     }
     
+    // Update edit fields with current song data (when changing songs in edit mode)
+    updateEditFields() {
+        if (!this.currentLyrics || !this.editMode) {
+            return;
+        }
+        
+        // Update title input
+        const titleInput = document.getElementById('edit_title_input');
+        if (titleInput) {
+            titleInput.value = this.currentLyrics.metadata.title || '';
+            console.log('🔄 Updated title input:', titleInput.value);
+        }
+        
+        // Update artist input
+        const artistInput = document.getElementById('edit_artist_input');
+        if (artistInput) {
+            artistInput.value = this.currentLyrics.metadata.artist || '';
+            console.log('🔄 Updated artist input:', artistInput.value);
+        }
+        
+        // Update time offset input if it exists
+        const offsetInput = document.getElementById('time-offset-input');
+        if (offsetInput) {
+            // Ensure metadata has timeOffset
+            if (!this.currentLyrics.metadata.timeOffset) {
+                this.currentLyrics.metadata.timeOffset = 0;
+            }
+            offsetInput.value = (this.currentLyrics.metadata.timeOffset / 1000).toFixed(2);
+            console.log('🔄 Updated offset input:', offsetInput.value);
+        }
+    }
+
     // Render lyrics content
     renderLyrics() {
         if (!this.currentLyrics) {
