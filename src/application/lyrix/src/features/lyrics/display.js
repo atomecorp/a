@@ -108,8 +108,6 @@ export class LyricsDisplay {
                 display: 'flex',
                 flexDirection: 'column', // Colonnes pour main row + audio row
                 backgroundColor: UIManager.THEME.colors.background,
-                borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
-                borderRadius: `${UIManager.THEME.borderRadius.md} ${UIManager.THEME.borderRadius.md} 0 0`,
                 flexShrink: 0, // NEVER shrinks
                 zIndex: '100' // Au-dessus du contenu de scroll
             }

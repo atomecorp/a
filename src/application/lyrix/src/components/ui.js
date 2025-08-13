@@ -487,7 +487,7 @@ export class UIManager {
         colors: {
             primary: '#303c4eff',
             secondary: '#16213e', 
-            background: '#1a1a2e',
+            background: '#7f7f7fff',
             surface: '#0f3460',
             accent: '#f39c12',
             success: '#27ae60',
@@ -1183,27 +1183,7 @@ export class UIManager {
     }
 
 
-    // Lyrics toolbar
-    static createLyricsToolbar(config = {}) {
-        return $('div', {
-            id: 'lyrics-toolbar',
-            ...config,
-            css: {
-                display: 'flex',
-                alignItems: 'center',
-                gap: this.THEME.spacing.sm,
-                padding: this.THEME.spacing.md,
-                backgroundColor: this.THEME.colors.background,
-                // borderBottom: `1px solid ${this.THEME.colors.border}`,
-                // borderRadius: `${this.THEME.borderRadius.md} ${this.THEME.borderRadius.md} 0 0`,
-                // Rendre la barre d'outils sticky pour qu'elle reste en haut lors du scroll
-                position: 'sticky',
-                top: '0',
-                zIndex: '100', // S'assurer qu'elle reste au-dessus du contenu
-                ...config.css
-            }
-        });
-    }
+
 
     // Lyrics content area
     static createLyricsContent(config = {}) {
