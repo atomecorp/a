@@ -1679,8 +1679,49 @@ export class LyricsDisplay {
         }, 100);
     }
     
+    // Create a new empty song when no song is loaded and edit mode is activated
+    createNewEmptySong() {
+        // Import SyncedLyrics if not available
+        if (!window.Lyrix || !window.Lyrix.SyncedLyrics) {
+            console.error('❌ SyncedLyrics not available');
+            return;
+        }
+        
+        // Create a new song with default metadata - SyncedLyrics constructor requires title and artist
+        const newSong = new window.Lyrix.SyncedLyrics('New Song', 'Unknown Artist', '');
+        
+        // Add one empty line to start with
+        newSong.lines = [
+            {
+                id: newSong.generateLineId(),
+                text: '',
+                time: -1
+            }
+        ];
+        
+        // Update creation and modification dates (already set by constructor but refresh them)
+        newSong.updateLastModified();
+        
+        // Set the new song as current lyrics
+        this.currentLyrics = newSong;
+        
+        // Save the new song to the library if available
+        if (window.Lyrix && window.Lyrix.lyricsLibrary && window.Lyrix.lyricsLibrary.addSong) {
+            window.Lyrix.lyricsLibrary.addSong(newSong);
+        }
+        
+        console.log('✅ Created new empty song for editing');
+    }
+    
     // Toggle edit mode
     toggleEditMode() {
+        // Check if no song is loaded when trying to enter edit mode
+        if (!this.editMode && !this.currentLyrics) {
+            // Create a new empty song
+            this.createNewEmptySong();
+            // Don't return, continue with edit mode activation
+        }
+        
         // If exiting edit mode, apply changes
         if (this.editMode) {
             if (this.originalLinesBackup) {
