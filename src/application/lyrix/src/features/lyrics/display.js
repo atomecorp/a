@@ -960,11 +960,12 @@ export class LyricsDisplay {
             const offsetInput = $('input', {
                 id: 'time_offset_input',
                 type: 'text',
-                value: storedOffset.toString(), // Force string conversion to ensure display
+                value: storedOffset.toFixed(2), // Format to 2 decimal places for better display
                 css: {
                     width: '60px',
                     textAlign: 'center',
-                    fontSize: '0.9em',
+                    fontSize: '0.75em', // Reduced font size
+                    fontWeight: 'normal', // Remove bold
                     padding: '2px 4px',
                     border: '1px solid #ddd',
                     borderRadius: '3px',
@@ -976,8 +977,8 @@ export class LyricsDisplay {
             // Force the value immediately after creation to be 100% sure
             setTimeout(() => {
                 if (offsetInput.value === '' || offsetInput.value === 'undefined' || offsetInput.value === 'null') {
-                    offsetInput.value = '0';
-                    console.log('🎯 Force fixed empty input to: 0');
+                    offsetInput.value = '0.00';
+                    console.log('🎯 Force fixed empty input to: 0.00');
                 }
             }, 10);
             
