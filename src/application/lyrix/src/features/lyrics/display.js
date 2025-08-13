@@ -2457,7 +2457,7 @@ export class LyricsDisplay {
         let startY = 0;
         let startTime = this.currentLyrics.lines[lineIndex].time;
         let lastUpdateY = 0;
-        let justFinishedDrag = false; // Flag to prevent outside click after drag
+        let outsideClickEnabled = true; // Control when outside click is active
         const DRAG_THRESHOLD = 5; // pixels to differentiate between click and drag
         
         const handleMouseDown = (e) => {
@@ -2466,8 +2466,8 @@ export class LyricsDisplay {
             lastUpdateY = e.clientY;
             startTime = this.currentLyrics.lines[lineIndex].time;
             
-            // Prevent outside click during potential drag
-            justFinishedDrag = true;
+            // Disable outside click detection during any mouse operation
+            outsideClickEnabled = false;
             
             // Don't prevent default - allow text selection to work
             document.addEventListener('mousemove', handleMouseMove);
@@ -2515,10 +2515,13 @@ export class LyricsDisplay {
         };
         
         const handleMouseUp = (e) => {
+            console.log('🎯 handleMouseUp', { isDragging, dragStarted });
+            
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
             
             if (isDragging) {
+                console.log('✅ Finishing DRAG - staying in edit mode');
                 // End drag operation but STAY in edit mode
                 isDragging = false;
                 dragStarted = false;
@@ -2536,22 +2539,18 @@ export class LyricsDisplay {
                 // Save to localStorage using the same method as the save button
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 
-                // Prevent the mouseup from triggering outside click
-                e.stopPropagation();
-                e.preventDefault();
-                
                 // Keep focus and stay in edit mode
                 input.focus();
                 
-                // Reset flag after a longer delay for fast drags
+                // Re-enable outside click after drag is completely done
                 setTimeout(() => {
-                    justFinishedDrag = false;
-                }, 300); // Increased from 100ms to 300ms
+                    console.log('🔄 Re-enabling outside click after drag');
+                    outsideClickEnabled = true;
+                }, 50);
             } else {
-                // If it was just a click (no drag), allow normal behavior
-                setTimeout(() => {
-                    justFinishedDrag = false;
-                }, 50); // Short delay for clicks
+                console.log('✅ Finishing CLICK - re-enabling outside click');
+                // It was just a click (no drag), re-enable outside click immediately
+                outsideClickEnabled = true;
             }
         };
         
@@ -2560,18 +2559,30 @@ export class LyricsDisplay {
         
         // Detect clicks outside the input
         const handleOutsideClick = (e) => {
-            // Don't close if we just finished dragging
-            if (justFinishedDrag || isDragging) {
+            console.log('🔍 handleOutsideClick triggered', {
+                outsideClickEnabled,
+                target: e.target,
+                inputContains: input.contains(e.target),
+                isInput: e.target === input
+            });
+            
+            // Only process outside clicks when explicitly enabled
+            if (!outsideClickEnabled) {
+                console.log('❌ Outside click DISABLED - ignoring');
                 return;
             }
             
             if (!input.contains(e.target) && e.target !== input) {
+                console.log('✅ Outside click VALID - calling saveEdit');
                 saveEdit();
                 document.removeEventListener('click', handleOutsideClick);
+            } else {
+                console.log('❌ Click was inside input - ignoring');
             }
         };
         
         const saveEdit = () => {
+            console.log('🔴 saveEdit called - WHO CALLED ME?', new Error().stack);
             const newTimeText = input.value.trim();
             let newTime = this.parseTimeInput(newTimeText);
 
