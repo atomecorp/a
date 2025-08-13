@@ -153,6 +153,12 @@ export function openSettingsPanel() {
     const songLibraryPanel = document.getElementById('song-library-panel');
     if (songLibraryPanel) {
         songLibraryPanel.remove();
+        
+        // Also remove the song library resize grip
+        const songLibraryGrip = document.getElementById('song-library-resize-grip');
+        if (songLibraryGrip) {
+            songLibraryGrip.remove();
+        }
     }
 
     isSettingsOpen = true;
@@ -180,18 +186,19 @@ export function openSettingsPanel() {
         id: 'settings-panel',
         css: {
             width: '100%',
-            maxHeight: '40vh', // Limit height to 40% of viewport
+            height: localStorage.getItem('lyrix_settings_panel_height') || '40vh', // Use saved height or default
             backgroundColor: 'white',
             border: '1px solid #e0e0e0',
             borderRadius: '8px',
-            marginBottom: '20px',
+            marginBottom: '5px', // Reduced margin for grip
             boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
             overflow: 'hidden',
-            transition: 'all 0.3s ease',
+            transition: 'opacity 0.3s ease, transform 0.3s ease', // Remove height from transition
             opacity: '0',
             transform: 'translateY(-10px)',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            resize: 'none' // Disable default resize
         },
         'aria-hidden': 'false',
         role: 'region',
@@ -200,13 +207,49 @@ export function openSettingsPanel() {
 
     // Create panel content (no header to save space)
     const content = createSettingsContent();
-
     settingsPanel.appendChild(content);
+
+    // Create resize grip
+    const resizeGrip = window.$('div', {
+        id: 'settings-resize-grip',
+        css: {
+            width: '100%',
+            height: '8px',
+            backgroundColor: '#e0e0e0',
+            cursor: 'ns-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: '0 0 4px 4px',
+            transition: 'background-color 0.2s ease',
+            marginBottom: '15px'
+        },
+        title: 'Drag to resize settings panel'
+    });
+
+    // Add grip visual indicator
+    const gripIndicator = window.$('div', {
+        css: {
+            width: '30px',
+            height: '3px',
+            backgroundColor: '#999',
+            borderRadius: '2px',
+            position: 'relative'
+        }
+    });
+
+    gripIndicator.innerHTML = '<div style="position: absolute; top: -2px; left: 0; width: 30px; height: 1px; background-color: #999; border-radius: 1px;"></div><div style="position: absolute; top: 4px; left: 0; width: 30px; height: 1px; background-color: #999; border-radius: 1px;"></div>';
+    
+    resizeGrip.appendChild(gripIndicator);
+
+    // Add resize functionality
+    addResizeListeners(settingsPanel, resizeGrip, 'lyrix_settings_panel_height');
 
     // Insert panel at the appropriate location
     if (targetContainer === appContainer) {
         // Insert as first child of app container
         appContainer.insertBefore(settingsPanel, appContainer.firstChild);
+        appContainer.insertBefore(resizeGrip, settingsPanel.nextSibling);
     } else if (targetContainer === displayContainer) {
         // Insert the panel at the beginning of the display container (after toolbar, before lyrics content)
         const toolbar = displayContainer.querySelector('#lyrics-toolbar');
@@ -214,16 +257,20 @@ export function openSettingsPanel() {
         if (toolbar && lyricsContent) {
             // Insert between toolbar and lyrics content
             displayContainer.insertBefore(settingsPanel, lyricsContent);
+            displayContainer.insertBefore(resizeGrip, lyricsContent);
         } else {
             // Fallback: insert as first child
             displayContainer.insertBefore(settingsPanel, displayContainer.firstChild);
+            displayContainer.insertBefore(resizeGrip, settingsPanel.nextSibling);
         }
     } else if (targetContainer && targetContainer.parentNode) {
         // Insert before the target container
         targetContainer.parentNode.insertBefore(settingsPanel, targetContainer);
+        targetContainer.parentNode.insertBefore(resizeGrip, targetContainer);
     } else {
         // Fallback: append to body
         document.body.appendChild(settingsPanel);
+        document.body.appendChild(resizeGrip);
     }
 
     // Animate panel in
@@ -257,10 +304,19 @@ export function closeSettingsPanel() {
     settingsPanel.style.opacity = '0';
     settingsPanel.style.transform = 'translateY(-10px)';
 
-    // Remove panel from DOM after animation
+    // Also hide the resize grip
+    const resizeGrip = document.getElementById('settings-resize-grip');
+    if (resizeGrip) {
+        resizeGrip.style.opacity = '0';
+    }
+
+    // Remove panel and grip from DOM after animation
     setTimeout(() => {
         if (settingsPanel && settingsPanel.parentNode) {
             settingsPanel.parentNode.removeChild(settingsPanel);
+        }
+        if (resizeGrip && resizeGrip.parentNode) {
+            resizeGrip.parentNode.removeChild(resizeGrip);
         }
         settingsPanel = null;
     }, 300);
@@ -1510,6 +1566,78 @@ export function showSettingsModal() {
     setTimeout(() => {
         updateAllMidiInputValues(modal);
     }, 200);
+}
+
+// Add resize functionality to panels
+function addResizeListeners(panel, grip, storageKey) {
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    // Hover effects for the grip
+    grip.addEventListener('mouseenter', () => {
+        grip.style.backgroundColor = '#d0d0d0';
+        grip.querySelector('div').style.backgroundColor = '#666';
+    });
+
+    grip.addEventListener('mouseleave', () => {
+        if (!isResizing) {
+            grip.style.backgroundColor = '#e0e0e0';
+            grip.querySelector('div').style.backgroundColor = '#999';
+        }
+    });
+
+    // Start resizing
+    grip.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = parseInt(window.getComputedStyle(panel).height, 10);
+        
+        grip.style.backgroundColor = '#007acc';
+        grip.querySelector('div').style.backgroundColor = 'white';
+        
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        
+        e.preventDefault();
+    });
+
+    // Handle resizing
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        
+        const deltaY = e.clientY - startY;
+        const newHeight = startHeight + deltaY;
+        
+        // Set minimum and maximum heights
+        const minHeight = 150; // minimum 150px
+        const maxHeight = window.innerHeight * 0.8; // maximum 80% of viewport height
+        
+        const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+        
+        panel.style.height = `${clampedHeight}px`;
+        
+        e.preventDefault();
+    });
+
+    // Stop resizing
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            
+            // Save the new height
+            const finalHeight = panel.style.height;
+            localStorage.setItem(storageKey, finalHeight);
+            
+            // Reset cursor and selection
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            
+            // Reset grip appearance
+            grip.style.backgroundColor = '#e0e0e0';
+            grip.querySelector('div').style.backgroundColor = '#999';
+        }
+    });
 }
 
 // Function to update all MIDI input values in the modal

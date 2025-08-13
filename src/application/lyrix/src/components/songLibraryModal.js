@@ -9,6 +9,13 @@ export function toggleSongLibrary() {
     if (existingPanel) {
         // Panel exists, remove it (close)
         existingPanel.remove();
+        
+        // Also remove the resize grip
+        const existingGrip = document.getElementById('song-library-resize-grip');
+        if (existingGrip) {
+            existingGrip.remove();
+        }
+        
         return false; // Panel closed
     } else {
         // Panel doesn't exist, show it
@@ -36,6 +43,13 @@ export function showSongLibrary() {
     const settingsPanel = document.getElementById('settings-panel');
     if (settingsPanel) {
         settingsPanel.remove();
+        
+        // Also remove the settings resize grip
+        const settingsGrip = document.getElementById('settings-resize-grip');
+        if (settingsGrip) {
+            settingsGrip.remove();
+        }
+        
         // Also reset settings panel state if needed
         if (window.settingsState) {
             window.settingsState.isSettingsOpen = false;
@@ -60,11 +74,12 @@ export function showSongLibrary() {
     }
     
     // Create panel container (not modal)
+    const savedHeight = localStorage.getItem('lyrix_song_library_panel_height') || '400px';
     const modalContainer = window.$('div', {
         id: 'song-library-panel',
         css: {
             width: '100%',
-            height: '400px',
+            height: savedHeight,
             // backgroundColor: '#ffffff',
             // border: '1px solid #ddd',
             // borderRadius: '8px',
@@ -72,7 +87,9 @@ export function showSongLibrary() {
             boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
             overflow: 'hidden',
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            resize: 'vertical',
+            minHeight: '150px'
         }
     });
     
@@ -864,18 +881,127 @@ export function showSongLibrary() {
     modal.append( content);
     modalContainer.appendChild(modal);
     
+    // Create resize grip
+    const resizeGrip = window.$('div', {
+        id: 'song-library-resize-grip',
+        css: {
+            width: '100%',
+            height: '8px',
+            backgroundColor: '#e0e0e0',
+            cursor: 'ns-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderTop: '1px solid #d0d0d0',
+            position: 'relative'
+        }
+    });
+    
+    // Add visual indicator (dots)
+    const gripIndicator = window.$('div', {
+        css: {
+            width: '30px',
+            height: '4px',
+            backgroundColor: '#999',
+            borderRadius: '2px'
+        }
+    });
+    
+    resizeGrip.appendChild(gripIndicator);
+    
     // Insert between toolbar and lyrics (not as modal overlay)
     if (toolbar && lyricsContainer) {
         if (toolbar.nextSibling) {
             toolbar.parentNode.insertBefore(modalContainer, toolbar.nextSibling);
+            toolbar.parentNode.insertBefore(resizeGrip, modalContainer.nextSibling);
         } else {
             toolbar.parentNode.appendChild(modalContainer);
+            toolbar.parentNode.appendChild(resizeGrip);
         }
+        
+        // Add resize functionality
+        addResizeListeners(modalContainer, resizeGrip, 'lyrix_song_library_panel_height');
     } else {
         // Fallback: add to body if toolbar/lyrics not found
         document.body.appendChild(modalContainer);
+        document.body.appendChild(resizeGrip);
+        
+        // Add resize functionality
+        addResizeListeners(modalContainer, resizeGrip, 'lyrix_song_library_panel_height');
     }
 
     // Focus search input
     setTimeout(() => searchInput.focus(), 100);
+}
+
+// Add resize functionality to panels
+function addResizeListeners(panel, grip, storageKey) {
+    let isResizing = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    // Hover effects for the grip
+    grip.addEventListener('mouseenter', () => {
+        grip.style.backgroundColor = '#d0d0d0';
+        grip.querySelector('div').style.backgroundColor = '#666';
+    });
+
+    grip.addEventListener('mouseleave', () => {
+        if (!isResizing) {
+            grip.style.backgroundColor = '#e0e0e0';
+            grip.querySelector('div').style.backgroundColor = '#999';
+        }
+    });
+
+    // Start resizing
+    grip.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        startY = e.clientY;
+        startHeight = parseInt(window.getComputedStyle(panel).height, 10);
+        
+        grip.style.backgroundColor = '#007acc';
+        grip.querySelector('div').style.backgroundColor = 'white';
+        
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        
+        e.preventDefault();
+    });
+
+    // Handle resizing
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        
+        const deltaY = e.clientY - startY;
+        const newHeight = startHeight + deltaY;
+        
+        // Set minimum and maximum heights
+        const minHeight = 150; // minimum 150px
+        const maxHeight = window.innerHeight * 0.8; // maximum 80% of viewport height
+        
+        const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
+        
+        panel.style.height = `${clampedHeight}px`;
+        
+        e.preventDefault();
+    });
+
+    // Stop resizing
+    document.addEventListener('mouseup', () => {
+        if (isResizing) {
+            isResizing = false;
+            
+            // Save the new height
+            const finalHeight = panel.style.height;
+            localStorage.setItem(storageKey, finalHeight);
+            
+            // Reset cursor and selection
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            
+            // Reset grip appearance
+            grip.style.backgroundColor = '#e0e0e0';
+            grip.querySelector('div').style.backgroundColor = '#999';
+        }
+    });
 }
