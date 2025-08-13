@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Version Test</title>
+</head>
+<body>
+    <h1>Test de la version</h1>
+    <div id="version-display"></div>
+    <button onclick="testVersion()">Tester version</button>
+    
+    <script type="module">
+        import { APP_INFO, getVersionString, getFullVersionInfo, getPlatformVersionInfo } from './src/application/lyrix/src/core/infos.js';
+        
+        // Export to window for testing
+        window.APP_INFO = APP_INFO;
+        window.getVersionString = getVersionString;
+        window.getFullVersionInfo = getFullVersionInfo;
+        window.getPlatformVersionInfo = getPlatformVersionInfo;
+        
+        window.testVersion = function() {
+            const display = document.getElementById('version-display');
+            display.innerHTML = `
+                <p>APP_INFO: ${JSON.stringify(APP_INFO)}</p>
+                <p>getVersionString(): ${getVersionString()}</p>
+                <p>getFullVersionInfo(): ${getFullVersionInfo()}</p>
+                <p>getPlatformVersionInfo(): ${getPlatformVersionInfo()}</p>
+            `;
+        }
+        
+        console.log('Version info loaded:', APP_INFO);
+    </script>
+</body>
+</html>
