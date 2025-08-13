@@ -69,7 +69,8 @@ export function toggleTimecodeVisibility() {
 
 // Toggle title visibility in lyrics display
 export function toggleTitleVisibility() {
-    const showTitle = localStorage.getItem('lyrix_show_title') === 'true';
+    const savedTitleState = localStorage.getItem('lyrix_show_title');
+    const showTitle = savedTitleState !== 'false'; // Default to true if not set, same logic as display.js
     
     // Update display instance if available
     if (window.Lyrix && window.Lyrix.lyricsDisplay) {
@@ -86,7 +87,8 @@ export function toggleTitleVisibility() {
 
 // Toggle artist visibility in lyrics display
 export function toggleArtistVisibility() {
-    const showArtist = localStorage.getItem('lyrix_show_artist') === 'true';
+    const savedArtistState = localStorage.getItem('lyrix_show_artist');
+    const showArtist = savedArtistState !== 'false'; // Default to true if not set, same logic as display.js
     
     // Update display instance if available
     if (window.Lyrix && window.Lyrix.lyricsDisplay) {
@@ -98,6 +100,18 @@ export function toggleArtistVisibility() {
     const artistElement = document.getElementById('edit_artist_input') || document.getElementById('lyrics-artist-display');
     if (artistElement) {
         artistElement.style.display = showArtist ? 'block' : 'none';
+    }
+}
+
+// Helper function to get correct default value for storage keys
+function getToggleState(storageKey) {
+    if (storageKey === 'lyrix_show_title' || storageKey === 'lyrix_show_artist') {
+        // For title and artist, default to true (same logic as display.js)
+        const savedState = localStorage.getItem(storageKey);
+        return savedState !== 'false'; // Default to true if not set
+    } else {
+        // For other settings, default to false
+        return localStorage.getItem(storageKey) === 'true';
     }
 }
 
@@ -648,7 +662,7 @@ function createSettingsContent() {
         leftColumn.append(labelDiv, descDiv);
 
         // Get current state
-        const isEnabled = localStorage.getItem(storageKey) === 'true';
+        const isEnabled = getToggleState(storageKey);
 
         // Create toggle button
         const toggleButton = window.$('button', {
@@ -672,7 +686,7 @@ function createSettingsContent() {
 
         // Toggle functionality
         toggleButton.addEventListener('click', () => {
-            const currentState = localStorage.getItem(storageKey) === 'true';
+            const currentState = getToggleState(storageKey);
             const newState = !currentState;
             
             // Update localStorage
@@ -691,12 +705,12 @@ function createSettingsContent() {
 
         // Hover effects
         toggleButton.addEventListener('mouseenter', () => {
-            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            const isCurrentlyEnabled = getToggleState(storageKey);
             toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#218838' : '#5a6268';
         });
 
         toggleButton.addEventListener('mouseleave', () => {
-            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            const isCurrentlyEnabled = getToggleState(storageKey);
             toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#28a745' : '#6c757d';
         });
 
@@ -1157,7 +1171,7 @@ export function showSettingsModal() {
         leftColumn.append(labelDiv, descDiv);
 
         // Get current state
-        const isEnabled = localStorage.getItem(storageKey) === 'true';
+        const isEnabled = getToggleState(storageKey);
 
         // Create toggle button
         const toggleButton = window.$('button', {
@@ -1181,7 +1195,7 @@ export function showSettingsModal() {
 
         // Toggle functionality
         toggleButton.addEventListener('click', () => {
-            const currentState = localStorage.getItem(storageKey) === 'true';
+            const currentState = getToggleState(storageKey);
             const newState = !currentState;
             
             // Update localStorage
@@ -1200,12 +1214,12 @@ export function showSettingsModal() {
 
         // Hover effects
         toggleButton.addEventListener('mouseenter', () => {
-            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            const isCurrentlyEnabled = getToggleState(storageKey);
             toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#218838' : '#5a6268';
         });
 
         toggleButton.addEventListener('mouseleave', () => {
-            const isCurrentlyEnabled = localStorage.getItem(storageKey) === 'true';
+            const isCurrentlyEnabled = getToggleState(storageKey);
             toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#28a745' : '#6c757d';
         });
 
