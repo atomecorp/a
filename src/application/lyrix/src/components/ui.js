@@ -1516,7 +1516,7 @@ export class UIManager {
             css: {
                 padding: this.THEME.spacing.lg,
                 color: this.THEME.colors.text,
-                maxHeight: '400px',
+                maxHeight: '100%',
                 overflow: 'auto',
                 userSelect: 'none',
                 webkitUserSelect: 'none',
@@ -1616,7 +1616,7 @@ export class UIManager {
         return $('div', {
             ...config,
             css: {
-                maxHeight: '300px',
+                maxHeight: '100%',
                 overflow: 'auto',
                 border: `1px solid ${this.THEME.colors.border}`,
                 borderRadius: this.THEME.borderRadius.sm,

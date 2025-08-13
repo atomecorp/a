@@ -591,7 +591,7 @@ export function SelectModal(options = {}) {
     // Create list
     listContainer = $('div', {
         css: {
-            maxHeight: '300px',
+            maxHeight: '100%',
             overflowY: 'auto',
             border: '1px solid #ddd',
             borderRadius: '4px'
