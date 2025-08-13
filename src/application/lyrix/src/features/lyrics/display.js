@@ -948,6 +948,20 @@ export class LyricsDisplay {
             }
             let storedOffset = this.currentLyrics.metadata.timeOffset;
             
+            // DEBUG: Log all metadata to see what's actually stored
+            console.log('🔍 Full metadata at render:', JSON.stringify(this.currentLyrics.metadata, null, 2));
+            console.log('🔍 Song ID:', this.currentLyrics.songId);
+            
+            // Try to reload from storage if offset is 0 (maybe metadata wasn't loaded properly)
+            if (storedOffset === 0 && this.currentLyrics.songId) {
+                const reloadedSong = StorageManager.loadSong(this.currentLyrics.songId);
+                if (reloadedSong && reloadedSong.metadata && reloadedSong.metadata.timeOffset !== undefined) {
+                    storedOffset = reloadedSong.metadata.timeOffset;
+                    this.currentLyrics.metadata.timeOffset = storedOffset;
+                    console.log('🔄 Reloaded offset from storage:', storedOffset);
+                }
+            }
+            
             // Extra safety - force to 0 if still problematic
             if (storedOffset === undefined || storedOffset === null || isNaN(storedOffset)) {
                 storedOffset = 0;
@@ -977,8 +991,10 @@ export class LyricsDisplay {
             // Force the value immediately after creation to be 100% sure
             setTimeout(() => {
                 if (offsetInput.value === '' || offsetInput.value === 'undefined' || offsetInput.value === 'null') {
-                    offsetInput.value = '0.00';
-                    console.log('🎯 Force fixed empty input to: 0.00');
+                    offsetInput.value = storedOffset.toFixed(2);
+                    console.log('🎯 Force fixed empty input to:', storedOffset.toFixed(2));
+                } else {
+                    console.log('🎯 Input already has value:', offsetInput.value, '- no need to force fix');
                 }
             }, 10);
             
@@ -1028,16 +1044,21 @@ export class LyricsDisplay {
                 this.currentLyrics.metadata.timeOffset = value;
                 this.currentTimeOffset = value;
                 
-                // Save the song
+                // Save the song with both methods to ensure persistence
                 if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
                     this.lyricsLibrary.saveSong(this.currentLyrics);
                 }
                 
-                console.log('🎯 Blur event, stored offset:', value);
+                // Also save directly with StorageManager
+                if (this.currentLyrics.songId) {
+                    StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                }
+                
+                console.log('🎯 Blur event, stored offset:', value, 'in song:', this.currentLyrics.songId);
                 
                 // If empty when focus lost, reset to current stored value
                 if (e.target.value === '') {
-                    e.target.value = value.toString();
+                    e.target.value = value.toFixed(2);
                 }
             });
             
@@ -1050,18 +1071,23 @@ export class LyricsDisplay {
                     this.currentLyrics.metadata.timeOffset = value;
                     this.currentTimeOffset = value;
                     
-                    // Save the song
+                    // Save the song with both methods to ensure persistence
                     if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
                         this.lyricsLibrary.saveSong(this.currentLyrics);
                     }
                     
-                    console.log('🎯 Enter pressed, stored offset:', value);
+                    // Also save directly with StorageManager
+                    if (this.currentLyrics.songId) {
+                        StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                    }
+                    
+                    console.log('🎯 Enter pressed, stored offset:', value, 'in song:', this.currentLyrics.songId);
                     e.target.blur(); // Remove focus after saving
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
                     // Reset to stored value on escape
                     const storedValue = this.currentLyrics.metadata.timeOffset || 0;
-                    e.target.value = storedValue.toString();
+                    e.target.value = storedValue.toFixed(2);
                     this.currentTimeOffset = storedValue;
                     e.target.blur();
                 }
@@ -3833,12 +3859,17 @@ export class LyricsDisplay {
                 this.currentLyrics.metadata.timeOffset = finalValue;
                 this.currentTimeOffset = finalValue;
                 
-                // Save the song with new offset value
+                // Save the song with both methods to ensure persistence
                 if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
                     this.lyricsLibrary.saveSong(this.currentLyrics);
                 }
                 
-                console.log('🎯 Drag ended, stored offset:', finalValue);
+                // Also save directly with StorageManager
+                if (this.currentLyrics.songId) {
+                    StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                }
+                
+                console.log('🎯 Drag ended, stored offset:', finalValue, 'in song:', this.currentLyrics.songId);
             }
             mouseIsDown = false;
         });
@@ -3878,12 +3909,17 @@ export class LyricsDisplay {
                 this.currentLyrics.metadata.timeOffset = finalValue;
                 this.currentTimeOffset = finalValue;
                 
-                // Save the song with new offset value
+                // Save the song with both methods to ensure persistence
                 if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
                     this.lyricsLibrary.saveSong(this.currentLyrics);
                 }
                 
-                console.log('🎯 Touch ended, stored offset:', finalValue);
+                // Also save directly with StorageManager
+                if (this.currentLyrics.songId) {
+                    StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                }
+                
+                console.log('🎯 Touch ended, stored offset:', finalValue, 'in song:', this.currentLyrics.songId);
             }
         });
     }
