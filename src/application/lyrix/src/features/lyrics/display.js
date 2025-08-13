@@ -2466,6 +2466,9 @@ export class LyricsDisplay {
             lastUpdateY = e.clientY;
             startTime = this.currentLyrics.lines[lineIndex].time;
             
+            // Prevent outside click during potential drag
+            justFinishedDrag = true;
+            
             // Don't prevent default - allow text selection to work
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
@@ -2519,7 +2522,6 @@ export class LyricsDisplay {
                 // End drag operation but STAY in edit mode
                 isDragging = false;
                 dragStarted = false;
-                justFinishedDrag = true; // Set flag to prevent outside click
                 
                 input.style.cursor = 'text';
                 input.style.borderColor = '#007bff'; // Back to blue
@@ -2536,14 +2538,20 @@ export class LyricsDisplay {
                 
                 // Prevent the mouseup from triggering outside click
                 e.stopPropagation();
+                e.preventDefault();
                 
                 // Keep focus and stay in edit mode
                 input.focus();
                 
-                // Reset flag after a short delay
+                // Reset flag after a longer delay for fast drags
                 setTimeout(() => {
                     justFinishedDrag = false;
-                }, 100);
+                }, 300); // Increased from 100ms to 300ms
+            } else {
+                // If it was just a click (no drag), allow normal behavior
+                setTimeout(() => {
+                    justFinishedDrag = false;
+                }, 50); // Short delay for clicks
             }
         };
         
