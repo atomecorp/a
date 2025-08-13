@@ -3,7 +3,7 @@
 
 // Import modal modules from new organized structure
 import { showSongLibrary, toggleSongLibrary } from './src/components/songLibraryModal.js';
-import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
+import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility, toggleExperimentalControls } from './src/components/settings.js';
 
 
 
@@ -199,6 +199,12 @@ function applyInitialSettings() {
         const showMidiInspector = localStorage.getItem('lyrix_show_midi_inspector') === 'true';
         if (typeof toggleMidiInspector === 'function') {
             toggleMidiInspector();
+        }
+        
+        // Apply experimental controls visibility
+        const showExperimentalControls = localStorage.getItem('lyrix_show_experimental') === 'true';
+        if (typeof toggleExperimentalControls === 'function') {
+            toggleExperimentalControls();
         }
         
         // Apply font size
@@ -2088,7 +2094,8 @@ function createMainInterface() {
         // Check audio player controls setting state
         // By default, audio controls are hidden unless enabled in settings
         const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        const initialDisplay = isAudioPlayerEnabled ? 'block' : 'none';
+        const isExperimentalEnabled = localStorage.getItem('lyrix_show_experimental') === 'true';
+        const initialDisplay = (isAudioPlayerEnabled && isExperimentalEnabled) ? 'block' : 'none';
         
         const playButton = UIManager.createInterfaceButton('▶️', {
             id: 'audio-play-button',

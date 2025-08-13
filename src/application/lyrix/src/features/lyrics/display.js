@@ -376,12 +376,15 @@ export class LyricsDisplay {
         
         }, 100);
         
-        // Create audio tools row (visibility depends on audio player setting)
+        // Create audio tools row (visibility depends on audio player setting AND experimental setting)
         const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+        const isExperimentalEnabled = localStorage.getItem('lyrix_show_experimental') === 'true';
+        const shouldShowAudioTools = isAudioPlayerEnabled && isExperimentalEnabled;
+        
         const audioToolRow = $('div', {
             id: 'audio-tools-row',
             css: {
-                display: isAudioPlayerEnabled ? 'flex' : 'none', // Visible if audio is enabled
+                display: shouldShowAudioTools ? 'block' : 'none', // Visible only if both audio and experimental are enabled
                 flexDirection: 'column',
                 gap: '4px',
                 width: '100%',
@@ -775,17 +778,17 @@ export class LyricsDisplay {
         if (!this.audioToolRow) return;
         
         // Show/hide audio tools row - only if toolbar is visible and audio is enabled
-        if (this.toolbarVisible) {
-            const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-            if (isAudioPlayerEnabled && this.audioTools.length > 0) {
-                this.audioToolRow.style.display = 'flex';
-            } else {
-                this.audioToolRow.style.display = 'none';
-            }
-        } else {
-            // Always hide if toolbar is hidden
-            this.audioToolRow.style.display = 'none';
-        }
+        // if (this.toolbarVisible) {
+        //     const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+        //     // if (isAudioPlayerEnabled && this.audioTools.length > 0) {
+        //     //     this.audioToolRow.style.display = 'flex';
+        //     // } else {
+        //     //     this.audioToolRow.style.display = 'none';
+        //     // }
+        // } else {
+        //     // Always hide if toolbar is hidden
+        //     // this.audioToolRow.style.display = 'none';
+        // }
         
     }
     
@@ -2219,10 +2222,10 @@ export class LyricsDisplay {
         }
         
         // Update audio toolbar row visibility - show if audio is enabled
-        if (this.audioToolRow) {
-            const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-            this.audioToolRow.style.display = isAudioPlayerEnabled ? 'flex' : 'none';
-        }
+        // if (this.audioToolRow) {
+        //     const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+        //     // this.audioToolRow.style.display = isAudioPlayerEnabled ? 'flex' : 'none';
+        // }
     }
     
     // Toggle timecode display

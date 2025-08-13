@@ -103,6 +103,52 @@ export function toggleArtistVisibility() {
     }
 }
 
+// Toggle experimental audio controls visibility
+export function toggleExperimentalControls() {
+    const showExperimental = getToggleState('lyrix_show_experimental');
+    const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
+    
+    // Show only if both audio player is enabled AND experimental is enabled
+    const shouldShow = isAudioPlayerEnabled && showExperimental;
+    const displayValue = shouldShow ? 'block' : 'none';
+    
+    // Hide/show audio-tools-row (from display.js)
+    const audioToolsRow = document.getElementById('audio-tools-row');
+    if (audioToolsRow) {
+        audioToolsRow.style.display = displayValue;
+        audioToolsRow.style.visibility = shouldShow ? 'visible' : 'hidden';
+    }
+    
+    // Force hide/show audio-controls-container (from index.js)
+    const audioControlsContainer = document.getElementById('audio-controls-container');
+    if (audioControlsContainer) {
+        audioControlsContainer.style.display = displayValue;
+        audioControlsContainer.style.visibility = shouldShow ? 'visible' : 'hidden';
+    }
+    
+    // Also individually hide/show buttons as backup
+    const stopButton = document.getElementById('audio-stop-button');
+    if (stopButton) {
+        stopButton.style.display = shouldShow ? 'inline-block' : 'none';
+    }
+    
+    const playButton = document.getElementById('audio-play-button');
+    if (playButton) {
+        playButton.style.display = shouldShow ? 'inline-block' : 'none';
+    }
+    
+    // Debug log
+    console.log('🔧 Experimental controls:', shouldShow ? 'VISIBLE' : 'HIDDEN', {
+        showExperimental,
+        isAudioPlayerEnabled,
+        shouldShow,
+        audioToolsRowFound: !!audioToolsRow,
+        containerFound: !!audioControlsContainer,
+        stopButtonFound: !!stopButton,
+        playButtonFound: !!playButton
+    });
+}
+
 // Helper function to get correct default value for storage keys
 function getToggleState(storageKey) {
     if (storageKey === 'lyrix_show_title' || storageKey === 'lyrix_show_artist') {
@@ -746,7 +792,8 @@ function createSettingsContent() {
     const audioControls = [
         createToggleRow('Show Timecodes', 'lyrix_show_timecodes', 'Display time markers in lyrics lines', toggleTimecodeVisibility),
         createToggleRow('Show Song Title', 'lyrix_show_title', 'Display song title in lyrics view', toggleTitleVisibility),
-        createToggleRow('Show Artist Name', 'lyrix_show_artist', 'Display artist name in lyrics view', toggleArtistVisibility)
+        createToggleRow('Show Artist Name', 'lyrix_show_artist', 'Display artist name in lyrics view', toggleArtistVisibility),
+        createToggleRow('Experimental', 'lyrix_show_experimental', 'Show experimental audio controls', toggleExperimentalControls)
     ];
 
     const audioSection = createSettingSection('🎵 Audio & Display', audioControls);
