@@ -869,12 +869,22 @@ export class LyricsDisplay {
         
         let title;
         if (this.editMode) {
+            // Create container for title and time offset control
+            const titleContainer = $('div', {
+                id: 'title-offset-container',
+                css: {
+                    display: 'flex',
+                    gap: '10px',
+                    alignItems: 'center',
+                    margin: '0 0 5px 0'
+                }
+            });
+            
             title = $('input', {
                 id: 'edit_title_input',
                 type: 'text',
                 value: this.currentLyrics.metadata.title || '',
                 css: {
-                    margin: '0 0 5px 0',
                     color: this.originalStyles.formElements.color,
                     fontSize: '1.3em',
                     fontWeight: 'bold',
@@ -882,7 +892,7 @@ export class LyricsDisplay {
                     borderRadius: '4px',
                     border: `2px solid ${this.originalStyles.formElements.color}`,
                     backgroundColor: this.originalStyles.formElements.backgroundColor,
-                    width: '100%'
+                    flex: '1' // Take remaining space
                 }
             });
             title.addEventListener('input', (e) => {
@@ -894,6 +904,139 @@ export class LyricsDisplay {
                     this.lyricsLibrary.saveSong(this.currentLyrics);
                 }
             });
+            
+            // Create time offset control
+            const offsetContainer = $('div', {
+                id: 'time-offset-container',
+                css: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '4px 8px',
+                    backgroundColor: this.originalStyles.formElements.backgroundColor,
+                    border: `2px solid ${this.originalStyles.formElements.color}`,
+                    borderRadius: '4px',
+                    minWidth: '180px'
+                }
+            });
+            
+            const offsetLabel = $('span', {
+                text: 'Offset:',
+                css: {
+                    fontSize: '0.9em',
+                    color: this.originalStyles.formElements.textColor,
+                    fontWeight: 'normal',
+                    userSelect: 'none',
+                    webkitUserSelect: 'none',
+                    mozUserSelect: 'none',
+                    msUserSelect: 'none',
+                    webkitTouchCallout: 'none'
+                }
+            });
+            
+            // Get stored offset value for this song or default to 0
+            const storedOffset = this.currentLyrics.metadata.timeOffset || 0;
+            
+            const offsetInput = $('input', {
+                id: 'time_offset_input',
+                type: 'text',
+                value: '0', // Always show "0" by default
+                css: {
+                    width: '60px',
+                    textAlign: 'center',
+                    fontSize: '0.9em',
+                    padding: '2px 4px',
+                    border: '1px solid #ddd',
+                    borderRadius: '3px',
+                    fontFamily: 'monospace',
+                    backgroundColor: '#fff'
+                }
+            });
+            
+            const offsetUnit = $('span', {
+                text: 's',
+                css: {
+                    fontSize: '0.9em',
+                    color: this.originalStyles.formElements.textColor,
+                    userSelect: 'none',
+                    webkitUserSelect: 'none',
+                    mozUserSelect: 'none',
+                    msUserSelect: 'none',
+                    webkitTouchCallout: 'none'
+                }
+            });
+            
+            // Store current offset value (always start at 0 for display, storedOffset is for reference)
+            this.currentTimeOffset = 0; // Always start display at 0
+            this.isInputFocused = false;
+            this.isDragging = false; // Initialize drag state
+            
+            // Add drag functionality to offset input
+            this.setupOffsetInputDrag(offsetInput);
+            
+            // Add manual input functionality
+            offsetInput.addEventListener('input', (e) => {
+                if (!this.isDragging) {
+                    const value = parseFloat(e.target.value) || 0;
+                    this.updateTimeOffset(value);
+                }
+            });
+            
+            offsetInput.addEventListener('focus', (e) => {
+                this.isInputFocused = true;
+                // Only clear input when focused if it's exactly "0" AND user wants to type
+                // We'll clear it on first keypress instead
+            });
+            
+            offsetInput.addEventListener('blur', (e) => {
+                this.isInputFocused = false;
+                // If empty when focus lost, reset to 0
+                if (e.target.value === '') {
+                    e.target.value = '0';
+                    this.updateTimeOffset(0);
+                }
+            });
+            
+            offsetInput.addEventListener('keydown', (e) => {
+                // Clear "0" on first keypress when focused (but not for special keys)
+                if (this.isInputFocused && e.target.value === '0' && 
+                    !['Enter', 'Escape', 'Tab', 'Backspace', 'Delete', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                    e.target.value = '';
+                }
+                
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const value = parseFloat(e.target.value) || 0;
+                    if (value !== 0) {
+                        this.applyTimeOffset(value);
+                        this.showOffsetAppliedFeedback(value);
+                        // Reset input and store offset in song metadata
+                        setTimeout(() => {
+                            e.target.value = '0';
+                            this.currentTimeOffset = 0;
+                            // Store the applied offset in song metadata for future reference
+                            this.currentLyrics.metadata.timeOffset = 0;
+                            if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
+                                this.lyricsLibrary.saveSong(this.currentLyrics);
+                            }
+                        }, 1000);
+                    } else {
+                        e.target.value = '0';
+                        this.updateTimeOffset(0);
+                        this.currentLyrics.metadata.timeOffset = 0;
+                    }
+                    e.target.blur(); // Remove focus after applying
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.target.value = '0'; // Always reset to 0 on escape
+                    this.updateTimeOffset(0);
+                    e.target.blur();
+                }
+            });
+            
+            offsetContainer.append(offsetLabel, offsetInput, offsetUnit);
+            titleContainer.append(title, offsetContainer);
+            title = titleContainer; // Replace title with container
         } else {
             title = $('h2', {
                 id: 'lyrics-title-display',
@@ -3604,5 +3747,216 @@ export class LyricsDisplay {
             });
         } catch (error) {
         }
+    }
+    
+    // Setup drag functionality for time offset input
+    setupOffsetInputDrag(offsetInput) {
+        let isDragging = false;
+        let startY = 0;
+        let startValue = 0;
+        let mouseIsDown = false;
+        
+        // Mouse events for desktop
+        offsetInput.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left mouse button only
+                mouseIsDown = true;
+                startY = e.clientY;
+                startValue = parseFloat(offsetInput.value) || 0;
+                
+                // Start drag immediately on mousedown if not focused for typing
+                if (!this.isInputFocused) {
+                    isDragging = true;
+                    this.isDragging = true;
+                    offsetInput.style.cursor = 'ns-resize';
+                    offsetInput.style.backgroundColor = '#e3f2fd';
+                    offsetInput.blur(); // Remove focus to prevent typing conflicts
+                    e.preventDefault(); // Prevent text selection
+                }
+            }
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging && mouseIsDown) {
+                const deltaY = startY - e.clientY; // Invert: up = positive
+                const sensitivity = 0.01; // 0.01 second per pixel
+                const newValue = startValue + (deltaY * sensitivity);
+                
+                offsetInput.value = newValue.toFixed(2);
+                this.updateTimeOffset(newValue);
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                this.isDragging = false;
+                mouseIsDown = false;
+                offsetInput.style.cursor = 'text';
+                offsetInput.style.backgroundColor = '#fff';
+                
+                // Apply the final offset and show feedback
+                const finalValue = parseFloat(offsetInput.value) || 0;
+                if (finalValue !== 0) {
+                    this.applyTimeOffset(finalValue);
+                    this.showOffsetAppliedFeedback(finalValue);
+                    // Reset input and store in song metadata
+                    setTimeout(() => {
+                        offsetInput.value = '0';
+                        this.currentTimeOffset = 0;
+                        this.currentLyrics.metadata.timeOffset = 0;
+                        if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
+                            this.lyricsLibrary.saveSong(this.currentLyrics);
+                        }
+                    }, 1000);
+                } else {
+                    offsetInput.value = '0';
+                    this.currentTimeOffset = 0;
+                    this.currentLyrics.metadata.timeOffset = 0;
+                }
+            }
+            mouseIsDown = false;
+        });
+        
+        // Touch events for mobile
+        offsetInput.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1 && !this.isInputFocused) {
+                isDragging = true;
+                this.isDragging = true;
+                startY = e.touches[0].clientY;
+                startValue = parseFloat(offsetInput.value) || 0;
+                offsetInput.style.backgroundColor = '#e3f2fd';
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('touchmove', (e) => {
+            if (isDragging && e.touches.length === 1) {
+                const deltaY = startY - e.touches[0].clientY;
+                const sensitivity = 0.01;
+                const newValue = startValue + (deltaY * sensitivity);
+                
+                offsetInput.value = newValue.toFixed(2);
+                this.updateTimeOffset(newValue);
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('touchend', () => {
+            if (isDragging) {
+                isDragging = false;
+                this.isDragging = false;
+                offsetInput.style.backgroundColor = '#fff';
+                
+                // Apply the final offset and show feedback
+                const finalValue = parseFloat(offsetInput.value) || 0;
+                if (finalValue !== 0) {
+                    this.applyTimeOffset(finalValue);
+                    this.showOffsetAppliedFeedback(finalValue);
+                    setTimeout(() => {
+                        offsetInput.value = '0';
+                        this.currentTimeOffset = 0;
+                        this.currentLyrics.metadata.timeOffset = 0;
+                        if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
+                            this.lyricsLibrary.saveSong(this.currentLyrics);
+                        }
+                    }, 1000);
+                } else {
+                    offsetInput.value = '0';
+                    this.currentTimeOffset = 0;
+                    this.currentLyrics.metadata.timeOffset = 0;
+                }
+            }
+        });
+    }
+    
+    // Update time offset preview (visual feedback during drag)
+    updateTimeOffset(offsetSeconds) {
+        this.currentTimeOffset = offsetSeconds;
+        
+        // Update all visible timecode displays to show preview
+        if (this.currentLyrics && this.currentLyrics.lines) {
+            const timecodeSpans = document.querySelectorAll('.timecode-span');
+            timecodeSpans.forEach((span, index) => {
+                if (this.currentLyrics.lines[index] && this.currentLyrics.lines[index].time >= 0) {
+                    const originalTime = this.currentLyrics.lines[index].time;
+                    const previewTime = Math.max(0, originalTime + (offsetSeconds * 1000));
+                    span.textContent = this.formatTimeDisplay(previewTime);
+                    
+                    // Visual feedback for preview
+                    span.style.backgroundColor = offsetSeconds !== 0 ? '#007bff' : this.originalStyles.editPanel.backgroundColor;
+                    span.style.color = offsetSeconds !== 0 ? 'white' : this.originalStyles.formElements.textColor;
+                }
+            });
+        }
+    }
+    
+    // Apply time offset to all timecodes permanently
+    applyTimeOffset(offsetSeconds) {
+        if (!this.currentLyrics || !this.currentLyrics.lines || offsetSeconds === 0) {
+            return;
+        }
+        
+        const offsetMs = offsetSeconds * 1000;
+        let appliedCount = 0;
+        
+        // Apply offset to all lines with timecodes
+        this.currentLyrics.lines.forEach((line, index) => {
+            if (line.time >= 0) {
+                const newTime = Math.max(0, line.time + offsetMs);
+                line.time = newTime;
+                appliedCount++;
+            }
+        });
+        
+        if (appliedCount > 0) {
+            // Update last modified timestamp
+            this.currentLyrics.updateLastModified();
+            
+            // Verify and correct timecode order after applying offset
+            this.verifyAndCorrectAllTimecodes();
+            
+            // Save to localStorage
+            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+            
+            // Reset visual feedback
+            const timecodeSpans = document.querySelectorAll('.timecode-span');
+            timecodeSpans.forEach(span => {
+                span.style.backgroundColor = this.originalStyles.editPanel.backgroundColor;
+                span.style.color = this.originalStyles.formElements.textColor;
+            });
+            
+            // Re-render to show final values
+            this.renderLyrics();
+            
+            console.log(`Applied time offset of ${offsetSeconds}s to ${appliedCount} lines`);
+        }
+    }
+    
+    // Show feedback when offset is applied
+    showOffsetAppliedFeedback(appliedValue) {
+        // Find the offset input to show feedback
+        const offsetInput = document.getElementById('time_offset_input');
+        if (!offsetInput) return;
+        
+        // Store original styles
+        const originalBgColor = offsetInput.style.backgroundColor;
+        const originalColor = offsetInput.style.color;
+        
+        // Show applied value with visual feedback
+        offsetInput.style.backgroundColor = appliedValue > 0 ? '#d4edda' : '#f8d7da'; // Green for positive, red for negative
+        offsetInput.style.color = appliedValue > 0 ? '#155724' : '#721c24';
+        offsetInput.style.fontWeight = 'bold';
+        
+        // Show the applied value briefly
+        const sign = appliedValue > 0 ? '+' : '';
+        offsetInput.value = `${sign}${appliedValue.toFixed(2)}`;
+        
+        // Restore original appearance after delay
+        setTimeout(() => {
+            offsetInput.style.backgroundColor = originalBgColor;
+            offsetInput.style.color = originalColor;
+            offsetInput.style.fontWeight = 'normal';
+        }, 1000);
     }
 }
