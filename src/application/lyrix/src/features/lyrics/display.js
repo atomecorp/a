@@ -2435,6 +2435,10 @@ export class LyricsDisplay {
             color: #333;
             cursor: text;
             user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            pointer-events: auto;
         `;
         
         // Add a hint tooltip
@@ -2444,32 +2448,45 @@ export class LyricsDisplay {
         timeSpan.style.display = 'none';
         timeSpan.parentNode.insertBefore(input, timeSpan);
         input.focus();
-        input.select();
+        
+        // Don't auto-position cursor, let user click where they want
         
         // Add slide up/down functionality for timecode increment/decrement
         let isDragging = false;
+        let dragStarted = false;
         let startY = 0;
         let startTime = this.currentLyrics.lines[lineIndex].time;
         let lastUpdateY = 0;
+        let justFinishedDrag = false; // Flag to prevent outside click after drag
+        const DRAG_THRESHOLD = 5; // pixels to differentiate between click and drag
         
         const handleMouseDown = (e) => {
-            isDragging = true;
+            dragStarted = false;
             startY = e.clientY;
-            startTime = this.currentLyrics.lines[lineIndex].time;
             lastUpdateY = e.clientY;
-            input.style.cursor = 'ns-resize';
-            input.style.borderColor = '#28a745'; // Green border when dragging
-            input.style.backgroundColor = '#f8fff8'; // Light green background
-            e.preventDefault();
+            startTime = this.currentLyrics.lines[lineIndex].time;
             
+            // Don't prevent default - allow text selection to work
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
         };
         
         const handleMouseMove = (e) => {
+            const deltaY = Math.abs(e.clientY - startY);
+            
+            // Only start dragging if mouse moved enough (distinguishes from click)
+            if (!dragStarted && deltaY > DRAG_THRESHOLD) {
+                dragStarted = true;
+                isDragging = true;
+                input.style.cursor = 'ns-resize';
+                input.style.borderColor = '#28a745'; // Green border when dragging
+                input.style.backgroundColor = '#f8fff8'; // Light green background
+                // Don't blur - keep the input focused for continued editing
+            }
+            
             if (!isDragging) return;
             
-            const deltaY = lastUpdateY - e.clientY; // Invert: up = positive
+            const movementDelta = lastUpdateY - e.clientY; // Invert: up = positive
             let sensitivity = 50; // Base sensitivity: milliseconds per pixel
             
             // Increase precision when holding Shift
@@ -2481,12 +2498,10 @@ export class LyricsDisplay {
                 sensitivity = 200; // Coarse adjustment
             }
             
-            // Update every pixel to provide smooth feedback
-            if (Math.abs(deltaY) >= 1) {
-                const timeChange = deltaY * sensitivity;
-                let newTime = Math.max(0, startTime + timeChange);
-                
-                // Update the input display and actual time
+            const newTime = Math.max(0, startTime + movementDelta * sensitivity);
+            
+            // Update the input value in real-time during drag
+            if (Math.abs(movementDelta) > 0) {
                 this.currentLyrics.lines[lineIndex].time = newTime;
                 const formattedTime = this.formatTimeDisplay(newTime);
                 input.value = formattedTime.replace(/[\[\]]/g, '').trim();
@@ -2497,35 +2512,61 @@ export class LyricsDisplay {
         };
         
         const handleMouseUp = (e) => {
-            if (!isDragging) return;
-            
-            isDragging = false;
-            input.style.cursor = 'text';
-            input.style.borderColor = '#007bff'; // Back to blue
-            input.style.backgroundColor = 'white'; // Back to white
-            
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
             
-            // Update lyrics and save to localStorage
-            this.currentLyrics.updateLastModified();
-            
-            // Verify and correct timecode order after drag adjustment
-            this.verifyAndCorrectTimecodeOrder(lineIndex);
-            
-            // Save to localStorage using the same method as the save button
-            const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-          
-            
+            if (isDragging) {
+                // End drag operation but STAY in edit mode
+                isDragging = false;
+                dragStarted = false;
+                justFinishedDrag = true; // Set flag to prevent outside click
+                
+                input.style.cursor = 'text';
+                input.style.borderColor = '#007bff'; // Back to blue
+                input.style.backgroundColor = 'white'; // Back to white
+                
+                // Update lyrics and save to localStorage
+                this.currentLyrics.updateLastModified();
+                
+                // Verify and correct timecode order after drag adjustment
+                this.verifyAndCorrectTimecodeOrder(lineIndex);
+                
+                // Save to localStorage using the same method as the save button
+                const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                
+                // Prevent the mouseup from triggering outside click
+                e.stopPropagation();
+                
+                // Keep focus and stay in edit mode
+                input.focus();
+                
+                // Reset flag after a short delay
+                setTimeout(() => {
+                    justFinishedDrag = false;
+                }, 100);
+            }
         };
         
         // Add mouse event listeners to input
         input.addEventListener('mousedown', handleMouseDown);
         
+        // Detect clicks outside the input
+        const handleOutsideClick = (e) => {
+            // Don't close if we just finished dragging
+            if (justFinishedDrag || isDragging) {
+                return;
+            }
+            
+            if (!input.contains(e.target) && e.target !== input) {
+                saveEdit();
+                document.removeEventListener('click', handleOutsideClick);
+            }
+        };
+        
         const saveEdit = () => {
             const newTimeText = input.value.trim();
             let newTime = this.parseTimeInput(newTimeText);
-            
+
             if (newTime !== null) {
                 // Update the time
                 this.currentLyrics.lines[lineIndex].time = newTime;
@@ -2539,31 +2580,27 @@ export class LyricsDisplay {
                 
                 // Save to localStorage using the same method as the save button
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-              
                 
                 timeSpan.textContent = this.formatTimeDisplay(finalTime);
-            } else {
             }
             
-            // Clean up mouse event listeners
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+            // Clean up event listeners
+            document.removeEventListener('click', handleOutsideClick);
             
             // Restore the span
             input.parentNode.removeChild(input);
             timeSpan.style.display = 'inline-block';
         };
-        
+
         const cancelEdit = () => {
-            // Clean up mouse event listeners
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+            // Clean up event listeners
+            document.removeEventListener('click', handleOutsideClick);
             
             // Restore the span without changes
             input.parentNode.removeChild(input);
             timeSpan.style.display = 'inline-block';
         };
-        
+
         // Save on Enter, cancel on Escape
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
@@ -2575,8 +2612,10 @@ export class LyricsDisplay {
             }
         });
         
-        // Save when losing focus
-        input.addEventListener('blur', saveEdit);
+        // Add outside click listener after a small delay to avoid immediate trigger
+        setTimeout(() => {
+            document.addEventListener('click', handleOutsideClick);
+        }, 100);
     }
 
     // Touch-optimized timecode editing for iOS/mobile devices
@@ -2699,10 +2738,10 @@ export class LyricsDisplay {
             input.value = currentTimeFormatted;
         }, 50);
         
-        // Focus and select all text for easy editing
+        // Focus and let user position cursor manually
         setTimeout(() => {
             input.focus();
-            input.select();
+            // Don't auto-position, let user click where they want
         }, 100);
         
         // Swipe adjustment area
