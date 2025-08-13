@@ -140,7 +140,7 @@ export class LyricsDisplay {
             id: 'edit_mode',
             onClick: () => this.toggleEditMode(),
             css: {
-                backgroundColor: this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor
+                // backgroundColor: this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor
             }
         });
         
@@ -274,7 +274,7 @@ export class LyricsDisplay {
                 this.toggleEditMode(); // Exit edit mode after saving
             },
             css: {
-                backgroundColor: this.originalStyles.buttons.save,
+                // backgroundColor: this.originalStyles.buttons.save,
                 display: 'none' // Initially hidden
             }
         });
@@ -1965,25 +1965,28 @@ export class LyricsDisplay {
         
         // If exiting edit mode, apply changes
         if (this.editMode) {
+            this.editButton.style.backgroundColor= 'transparent'
             if (this.originalLinesBackup) {
                 this.applyBulkEditChanges();
             }
         } else {
+                   this.editButton.style.backgroundColor= 'white'
             // log('🎯 Entering edit mode');
         }
         this.editMode = !this.editMode;
         // Keep icon, only change color (uses theme colors)
-        this.editButton.style.backgroundColor = this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor;
+
+        // this.editButton.style.backgroundColor = this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor;
         // Show/hide edit mode buttons in toolbar
-        if (this.saveChangesButton && this.cancelEditButton) {
-            if (this.editMode) {
-                this.saveChangesButton.style.display = 'inline-block';
-                this.cancelEditButton.style.display = 'inline-block';
-            } else {
-                this.saveChangesButton.style.display = 'none';
-                this.cancelEditButton.style.display = 'none';
-            }
-        }
+        // if (this.saveChangesButton && this.cancelEditButton) {
+        //     if (this.editMode) {
+        //         this.saveChangesButton.style.display = 'inline-block';
+        //         this.cancelEditButton.style.display = 'inline-block';
+        //     } else {
+        //         this.saveChangesButton.style.display = 'none';
+        //         this.cancelEditButton.style.display = 'none';
+        //     }
+        // }
         this.renderLyrics();
         
         // Update content area height after toggle

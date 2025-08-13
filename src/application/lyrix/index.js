@@ -2035,7 +2035,7 @@ function createMainInterface() {
     const settingsButton = UIManager.createInterfaceButton('⚙️', {
         id: 'settings_button',
         onClick: () => {
-            toggleSettingsPanel();
+            toggleSettingsPanel('settings_button');
         },
         css: {
             marginBottom: '15px'
@@ -2058,7 +2058,17 @@ function createMainInterface() {
     const songListButton = UIManager.createInterfaceButton('📂', {
         id: 'song_list_button',
         onClick: () => {
-            toggleSongLibrary();
+            const isOpen = toggleSongLibrary();
+            // Update button appearance based on state
+            if (isOpen) {
+                songListButton.style.backgroundColor = 'white';
+                songListButton.style.color = 'white';
+                songListButton.textContent = '📂';
+            } else {
+                songListButton.style.backgroundColor = 'transparent';
+                songListButton.style.color = '';
+                songListButton.textContent = '📂';
+            }
         }
     });
     
@@ -2081,12 +2091,13 @@ function createMainInterface() {
         const initialDisplay = isAudioPlayerEnabled ? 'block' : 'none';
         
         const playButton = UIManager.createInterfaceButton('▶️', {
+            id: 'audio-play-button',
             onClick: () => {
                 try {
                     if (audioController.isPlaying()) {
                         audioController.pause();
+                    
                     } else {
-                      
                         audioController.play();
                     }
                 } catch (error) {
@@ -2100,10 +2111,11 @@ function createMainInterface() {
         });
         
         // Add ID and data attribute for identification
-        playButton.id = 'audio-play-button';
+        // playButton.id = 'audio-play-button';
         playButton.setAttribute('data-element', 'play-button');
         
         const stopButton = UIManager.createInterfaceButton('⏹️', {
+              id: 'audio-stop-button',
             onClick: () => {
                 try {
                     audioController.pause();
@@ -2123,8 +2135,8 @@ function createMainInterface() {
         // Add data attribute for identification
         stopButton.setAttribute('data-element', 'stop-button');
         
-        // Add ID for identification
-        stopButton.id = 'audio-stop-button';
+        // // Add ID for identification
+        // stopButton.id = 'audio-stop-button';
         
         const audioControls = $('div', {
             id: 'audio-controls-container',

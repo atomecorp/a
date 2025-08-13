@@ -149,11 +149,23 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
 }
 
 // Toggle settings panel (replaces modal behavior)
-export function toggleSettingsPanel() {
+export function toggleSettingsPanel(id_passed) {
     if (isSettingsOpen) {
         closeSettingsPanel();
+        
+        // Remettre la couleur de fond normale du bouton
+        const button = document.getElementById(id_passed);
+        if (button) {
+            button.style.backgroundColor = 'transparent';
+        }
     } else {
         openSettingsPanel();
+        
+        // Changer la couleur de fond du bouton pour indiquer qu'il est actif
+        const button = document.getElementById(id_passed);
+        if (button) {
+            button.style.backgroundColor = '#ffffffff'; // Bleu pour indiquer l'état actif
+        }
     }
 }
 
