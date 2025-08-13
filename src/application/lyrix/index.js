@@ -2058,17 +2058,7 @@ function createMainInterface() {
     const songListButton = UIManager.createInterfaceButton('📂', {
         id: 'song_list_button',
         onClick: () => {
-            const isOpen = toggleSongLibrary();
-            // Update button appearance based on state
-            if (isOpen) {
-                songListButton.style.backgroundColor = '#007bff';
-                songListButton.style.color = 'white';
-                songListButton.textContent = '📂';
-            } else {
-                songListButton.style.backgroundColor = '';
-                songListButton.style.color = '';
-                songListButton.textContent = '📂';
-            }
+            toggleSongLibrary();
         }
     });
     
