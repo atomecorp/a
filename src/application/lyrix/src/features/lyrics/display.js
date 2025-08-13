@@ -1702,12 +1702,20 @@ export class LyricsDisplay {
         // Update creation and modification dates (already set by constructor but refresh them)
         newSong.updateLastModified();
         
-        // Set the new song as current lyrics
-        this.currentLyrics = newSong;
-        
         // Save the new song to the library if available
-        if (window.Lyrix && window.Lyrix.lyricsLibrary && window.Lyrix.lyricsLibrary.addSong) {
-            window.Lyrix.lyricsLibrary.addSong(newSong);
+        if (window.Lyrix && window.Lyrix.lyricsLibrary && window.Lyrix.lyricsLibrary.saveSong) {
+            const storageKey = window.Lyrix.lyricsLibrary.saveSong(newSong);
+            
+            // Set this song as the current song using the proper flow
+            if (storageKey && window.loadAndDisplaySong) {
+                window.loadAndDisplaySong(storageKey);
+            } else {
+                // Fallback: set it manually
+                this.currentLyrics = newSong;
+            }
+        } else {
+            // Fallback: set it manually
+            this.currentLyrics = newSong;
         }
         
         console.log('✅ Created new empty song for editing');

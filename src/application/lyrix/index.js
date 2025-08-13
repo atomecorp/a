@@ -2315,7 +2315,17 @@ function loadLastSong() {
         }
         
         if (currentSong && lyricsDisplay) {
-            // Check if audio file exists before loading
+            // Always load the song first (lyrics display)
+            lyricsDisplay.displayLyrics(currentSong);
+            window.currentSong = currentSong;
+            
+            // Update audio title with current song filename
+            updateAudioTitle();
+            
+            // ALWAYS reset slider when loading any song
+            resetAudioSlider();
+            
+            // Try to load audio if available, but don't fail if not found
             if (currentSong.getAudioPath && currentSong.getAudioPath()) {
                 const audioPath = currentSong.getAudioPath();
                 
@@ -2323,28 +2333,19 @@ function loadLastSong() {
                 const testAudio = new Audio();
                 
                 testAudio.addEventListener('error', function() {
-                    console.warn('⚠️ Last song audio file not found, clearing from storage:', audioPath);
-                    StorageManager.clearLastOpenedSong();
-                    currentSong = null;
+                    console.warn('⚠️ Last song audio file not found, but keeping song loaded:', audioPath);
+                    // Don't clear the song from storage, just note the audio issue
                 });
                 
                 testAudio.addEventListener('canplaythrough', function() {
-                    lyricsDisplay.displayLyrics(currentSong);
-                    
-                    // Update audio title with current song filename
-                    updateAudioTitle();
-                    
-                    // ALWAYS reset slider when loading any song
-                    resetAudioSlider();
+                    console.log('✅ Audio file loaded successfully for last song');
                 });
                 
                 // Test audio path
                 const normalizedPath = AudioManager.normalize(audioPath);
                 testAudio.src = normalizedPath;
             } else {
-                console.warn('⚠️ Last song has no audio file, clearing from storage');
-                StorageManager.clearLastOpenedSong();
-                currentSong = null;
+                console.log('ℹ️ Last song has no audio file, but loaded lyrics successfully');
             }
         } else {
             console.warn('⚠️ Last song not found in library, clearing from storage');
