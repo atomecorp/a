@@ -234,6 +234,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                let amplitude = data["amplitude"] as? Double {
                 print("🎵 JS->Swift: playNote \(note) at \(frequency)Hz")
                 WebViewManager.audioController?.playNote(frequency: frequency, note: note, amplitude: Float(amplitude))
+           
             }
             
         case "stopNote":

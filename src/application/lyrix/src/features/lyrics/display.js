@@ -66,6 +66,8 @@ export class LyricsDisplay {
         this.lastManualSelection = 0; // Track manual selections in AUv3 mode
         this.lastHostTime = -1; // Track host time changes to detect playback
         this.lastHostTimeUpdate = 0; // Track when host time last changed
+        this.hostTimecodeActive = false; // Track if host is actively sending timecode
+        this.lastLocalAudioUpdate = 0; // Track local audio updates
         
         this.init();
     }
@@ -479,12 +481,7 @@ export class LyricsDisplay {
         };
         document.addEventListener('keydown', this.keyboardHandler);
         
-        // Auto-scroll when audio is playing
-        if (this.audioController) {
-            this.audioController.on('timeupdate', (currentTime) => {
-                this.updateActiveLineByTime(currentTime * 1000); // Convert to ms
-            });
-        }
+        // Note: timeupdate listener is handled in index.js to avoid double calls
     }
     
     // Update the height of lyrics content area when layout changes
@@ -3517,45 +3514,54 @@ export class LyricsDisplay {
     }
     
     // Update time and synchronize lyrics (core functionality from original)
-    updateTime(timeMs) {
-        this.currentTime = timeMs;
-        
+    updateTime(timeMs, source = 'unknown') {
         if (!this.currentLyrics) {
             return;
         }
 
-        // Always update timecode display
-        this.updateTimecodeDisplay(timeMs);
+        // Priority management: Host AUv3 has priority when both sources are active
+        const now = Date.now();
+        
+        // Track last update time for each source
+        if (!this.lastUpdateTimes) {
+            this.lastUpdateTimes = {};
+        }
+        this.lastUpdateTimes[source] = now;
+        
+        // Check if both host and local are sending updates (within last 500ms)
+        const hostActive = this.lastUpdateTimes.host && (now - this.lastUpdateTimes.host) < 500;
+        const localActive = this.lastUpdateTimes.local && (now - this.lastUpdateTimes.local) < 500;
+        
+        // If both are active and this is a local update, ignore it to give priority to host
+        if (hostActive && localActive && source === 'local') {
+            console.log('🎯 Host priority: ignoring local update while host is active');
+            return;
+        }
+        
+        // Also check if we're receiving conflicting updates too quickly
+        if (this.lastUpdateTime && (now - this.lastUpdateTime) < 16) { // ~60fps throttle
+            // Only allow host updates through when throttling
+            if (source !== 'host') {
+                return;
+            }
+        }
+        this.lastUpdateTime = now;
+
+        // CRITICAL: Filter timecode display updates for parasitic zero resets
+        // This prevents the timecode display from jumping to 0 when host sends resets
+        if (timeMs === 0 && this.currentTime > 1000 && source === 'host') {
+            // Host is sending a zero reset but we have valid content - skip timecode display update
+            console.log(`🚨 Blocking timecode display reset to zero (current: ${(this.currentTime/1000).toFixed(3)}s)`);
+            // Still update scroll/lyrics but skip the timecode and currentTime update
+        } else {
+            // Normal update: update both currentTime and timecode display
+            this.currentTime = timeMs;
+            this.updateTimecodeDisplay(timeMs);
+        }
 
         // In record mode, don't auto-update active lines to prevent unwanted scroll
         if (this.recordMode) {
             return;
-        }
-
-        // Detect AUv3 context
-        const isAUv3Context = window.webkit && window.webkit.messageHandlers;
-        
-        // In AUv3 mode, be more conservative with automatic line updates
-        if (isAUv3Context) {
-            // Track if host time is changing (indicates playback)
-            const now = Date.now();
-            const timeChanged = Math.abs(timeMs - this.lastHostTime) > 50; // 50ms tolerance
-            
-            if (timeChanged) {
-                this.lastHostTimeUpdate = now;
-            }
-            this.lastHostTime = timeMs;
-            
-            // Only update if user hasn't made a manual selection recently
-            const timeSinceManualSelection = now - this.lastManualSelection;
-            
-            // AND only if host is actively playing (time changed recently)
-            const timeSinceHostUpdate = now - this.lastHostTimeUpdate;
-            const hostIsPlaying = timeSinceHostUpdate < 2000; // Host updated within 2 seconds
-            
-            if (timeSinceManualSelection < 5000 || !hostIsPlaying) {
-                return; // Don't sync if manual selection recent OR host not playing
-            }
         }
 
         // Find the line that should be active at this time
@@ -3580,10 +3586,25 @@ export class LyricsDisplay {
     updateTimecodeDisplay(timeMs) {
         const timecodeElement = document.getElementById('timecode-display');
         if (timecodeElement) {
+            // Additional protection: don't update display to 0 if we recently had a valid time
+            if (timeMs === 0 && this.lastValidTimecodeUpdate && (Date.now() - this.lastValidTimecodeUpdate) < 2000) {
+                // Throttle protection logging to avoid spam
+                if (!this.lastProtectionLog || (Date.now() - this.lastProtectionLog) > 3000) {
+                    console.log(`🛡️ Protecting timecode display from resets (last valid: ${(this.lastValidTimecode/1000).toFixed(3)}s)`);
+                    this.lastProtectionLog = Date.now();
+                }
+                return; // Keep the current display value
+            }
+            
             const seconds = (timeMs / 1000).toFixed(3);
             const recordIndicator = this.recordMode ? ' 🔴' : '';
-            timecodeElement.textContent = `${seconds}s${recordIndicator}`; // Removed play/pause icons
-            // No longer modify background color to keep theme style
+            timecodeElement.textContent = `${seconds}s${recordIndicator}`;
+            
+            // Track valid timecode updates (not zero resets)
+            if (timeMs > 0) {
+                this.lastValidTimecodeUpdate = Date.now();
+                this.lastValidTimecode = timeMs;
+            }
         }
     }
     

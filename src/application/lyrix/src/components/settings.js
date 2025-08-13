@@ -20,7 +20,7 @@ window.settingsState = {
 // Toggle audio player controls visibility
 export function toggleAudioPlayerControls() {
     const audioPlayer = document.getElementById('audioPlayer');
-    const showControls = localStorage.getItem('lyrix_show_audio_controls') === 'true';
+    const showControls = getToggleState('lyrix_show_audio_controls');
     
     if (audioPlayer) {
         audioPlayer.style.display = showControls ? 'block' : 'none';
@@ -29,7 +29,7 @@ export function toggleAudioPlayerControls() {
 
 // Toggle audio sync functionality
 export function toggleAudioSync() {
-    const enableSync = localStorage.getItem('lyrix_enable_audio_sync') === 'true';
+    const enableSync = getToggleState('lyrix_enable_audio_sync');
     
     if (window.audioController) {
         window.audioController.syncEnabled = enableSync;
@@ -38,7 +38,7 @@ export function toggleAudioSync() {
 
 // Toggle MIDI inspector functionality
 export function toggleMidiInspector() {
-    const showInspector = localStorage.getItem('lyrix_show_midi_inspector') === 'true';
+    const showInspector = getToggleState('lyrix_show_midi_inspector');
     
     if (window.midiUtilities && window.midiUtilities.inspector) {
         if (showInspector) {
@@ -51,7 +51,7 @@ export function toggleMidiInspector() {
 
 // Toggle timecode visibility in lyrics lines
 export function toggleTimecodeVisibility() {
-    const showTimecodes = localStorage.getItem('lyrix_show_timecodes') === 'true';
+    const showTimecodes = getToggleState('lyrix_show_timecodes');
     
     // Find all existing timecode elements and toggle their visibility
     const timecodeElements = document.querySelectorAll('.timecode-span, [class*="timecode"]');
@@ -1297,7 +1297,7 @@ export function showSettingsModal() {
 
     const timecodeToggle = window.$('input', {
         type: 'checkbox',
-        checked: localStorage.getItem('lyrix_show_timecode') === 'true',
+        checked: getToggleState('lyrix_show_timecode'),
         css: {
             width: '20px',
             height: '20px',

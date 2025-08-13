@@ -76,6 +76,10 @@ let isProgrammaticUpdate = false; // Prevent slider callback during programmatic
 let lastSeekTime = 0; // Track when we last seeked to prevent immediate timeupdate conflicts
 let pendingSeekTime = null; // Store the time to seek to when user releases slider
 
+// Parasitic reset tracking
+window.parasiticResetCount = 0;
+window.lastParasiticResetLog = 0;
+
 // Function to update display title with current song information
 function updateAudioTitle() {
     if (currentSong) {
@@ -231,7 +235,19 @@ function initializeLyrix() {
             audioController.on('timeupdate', (currentTime) => {
                 // Convert seconds to milliseconds for lyrics synchronization
                 const timeMs = currentTime * 1000;
-                lyricsDisplay.updateTime(timeMs);
+                
+                // Check if host has been active recently (within last 500ms)
+                const now = Date.now();
+                const hostRecentlyActive = lyricsDisplay && lyricsDisplay.lastUpdateTimes && 
+                                         lyricsDisplay.lastUpdateTimes.host && 
+                                         (now - lyricsDisplay.lastUpdateTimes.host) < 500;
+                
+                if (hostRecentlyActive) {
+                    console.log('🎯 Local audio defers to active host timecode');
+                    // Still send the update but mark it as local - the display will handle priority
+                }
+                
+                lyricsDisplay.updateTime(timeMs, 'local'); // Mark as local audio source
             });
         }
         
@@ -296,7 +312,7 @@ function initializeLyrix() {
             dragDropManager = new DragDropManager(audioController, lyricsLibrary, lyricsDisplay);
             dragDropManager.onSongLoaded = (song) => {
                 updateAudioTitle();
-                resetAudioSlider();
+                resetAudioSlider(true); // Force reset when loading new song
             };
             dragDropManager.initialize(appContainer);
 
@@ -1740,11 +1756,11 @@ function loadAndDisplaySong(songKey) {
             audioController.loadAudio(song.getAudioPath());
             
             // Reset slider to zero when loading new audio
-            resetAudioSlider();
+            resetAudioSlider(true); // Force reset when loading new audio
             updateSliderDuration();
         } else {
             // If no audio, also reset the slider
-            resetAudioSlider();
+            resetAudioSlider(true); // Force reset when no audio
         }
         
         return true;
@@ -1861,11 +1877,126 @@ function navigateToNextSong() {
 
 // Update timecode display
 function updateTimecode(timeMs) {
+    // Emergency host blocking system
+    if (window.blockAllHostUpdates) {
+        console.log('🛑 Host update blocked by emergency blocking system');
+        return;
+    }
+    
+    // Enhanced conflict detection for host vs local audio
+    if (timeMs === 0) {
+        // Check if local audio is playing
+        const localAudioPlaying = audioController && audioController.isPlaying && audioController.isPlaying();
+        
+        // Check if we recently had a valid time (not a cold start)
+        const hadRecentValidTime = lyricsDisplay && lyricsDisplay.currentTime > 1000;
+        
+        if (localAudioPlaying || hadRecentValidTime) {
+            // Count parasitic resets
+            window.parasiticResetCount++;
+            
+            // Throttle parasitic reset logging to avoid spam (every 5 seconds)
+            const now = Date.now();
+            if (!window.lastParasiticResetLog || (now - window.lastParasiticResetLog) > 5000) {
+                console.log(`🚨 Blocking parasitic host resets (${window.parasiticResetCount} total blocked, logged every 5s)`);
+                window.lastParasiticResetLog = now;
+                
+                // Also log details to help identify the pattern
+                const localTime = audioController && audioController.getCurrentTime ? audioController.getCurrentTime() : 0;
+                console.log(`📊 Current state: Local audio playing=${localAudioPlaying}, Local time=${localTime.toFixed(3)}s, Host sending=0s`);
+                
+                // Auto-suggest host blocking if too many resets
+                if (window.parasiticResetCount > 100) {
+                    console.log('💡 Suggestion: Run toggleHostBlocking(true) to stop all host updates if this continues');
+                }
+            }
+            return;
+        }
+    }
+    
+    // Check for potential conflicts between host and local audio
+    const localAudioPlaying = audioController && audioController.isPlaying && audioController.isPlaying();
+    const localCurrentTime = audioController && audioController.getCurrentTime ? audioController.getCurrentTime() * 1000 : 0;
+    
+    // If local audio is playing and host time is significantly different, log the conflict
+    if (localAudioPlaying && timeMs > 0 && Math.abs(timeMs - localCurrentTime) > 200) {
+        console.log(`🎯 Host/Local conflict detected: Host=${(timeMs/1000).toFixed(3)}s, Local=${(localCurrentTime/1000).toFixed(3)}s - Host takes priority`);
+    }
+    
     // This function can be used by external hosts to update timecode
     if (lyricsDisplay) {
-        lyricsDisplay.updateTime(timeMs);
+        lyricsDisplay.updateTime(timeMs, 'host'); // Mark as host source for prioritization
     }
 }
+
+// Diagnostic function for parasitic resets (available in console)
+window.getParasiticResetStats = function() {
+    const stats = {
+        totalBlocked: window.parasiticResetCount || 0,
+        lastLogTime: window.lastParasiticResetLog || 0,
+        timeSinceLastLog: window.lastParasiticResetLog ? Date.now() - window.lastParasiticResetLog : 0,
+        localAudioPlaying: audioController && audioController.isPlaying ? audioController.isPlaying() : false,
+        localCurrentTime: audioController && audioController.getCurrentTime ? audioController.getCurrentTime() : 0,
+        displayCurrentTime: lyricsDisplay ? lyricsDisplay.currentTime : 0,
+        hostBlockingActive: window.blockAllHostUpdates || false
+    };
+    console.log('📊 Parasitic Reset Statistics:', stats);
+    return stats;
+};
+
+// Reset the counter (available in console)
+window.resetParasiticResetCounter = function() {
+    window.parasiticResetCount = 0;
+    window.lastParasiticResetLog = 0;
+    console.log('🔄 Parasitic reset counter reset');
+};
+
+// Emergency function to block ALL host updates (available in console)
+window.blockAllHostUpdates = false;
+window.toggleHostBlocking = function(block = null) {
+    if (block === null) {
+        window.blockAllHostUpdates = !window.blockAllHostUpdates;
+    } else {
+        window.blockAllHostUpdates = !!block;
+    }
+    
+    const status = window.blockAllHostUpdates ? 'ENABLED' : 'DISABLED';
+    console.log(`🛑 Host update blocking ${status}`);
+    
+    if (window.blockAllHostUpdates) {
+        console.log('⚠️ ALL host timecode updates will be ignored until you run toggleHostBlocking(false)');
+    }
+    
+    return window.blockAllHostUpdates;
+};
+
+// Helper function to show available console commands
+window.help = function() {
+    console.log(`
+🆘 Lyrix Console Commands:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 DIAGNOSTICS:
+• getParasiticResetStats() - Show reset blocking statistics
+• resetParasiticResetCounter() - Reset the counter to zero
+
+🛑 HOST CONTROL:
+• toggleHostBlocking() - Toggle ALL host timecode blocking
+• toggleHostBlocking(true) - Block ALL host updates
+• toggleHostBlocking(false) - Allow host updates again
+
+🎵 AUDIO CONTROL:
+• audioController.play() - Start local audio
+• audioController.pause() - Pause local audio
+• audioController.getCurrentTime() - Get current time
+
+📝 LYRICS:
+• lyricsDisplay.currentTime - Current display time
+• lyricsDisplay.currentLineIndex - Current line index
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+};
 
 // Create main interface
 function createMainInterface() {
@@ -1987,8 +2118,8 @@ function createMainInterface() {
                 try {
                     audioController.pause();
                     audioController.setCurrentTime(0);
-                    // Reset slider to zero when stopping
-                    resetAudioSlider();
+                    // Reset slider UI but don't force lyrics to reset
+                    resetAudioSlider(false); // Don't force lyrics reset on stop
                 } catch (error) {
                     console.error('❌ ERREUR Stop:', error);
                 }
@@ -2106,7 +2237,7 @@ function createMainInterface() {
                     
                     // Update lyrics display while scrubbing
                     if (lyricsDisplay) {
-                        lyricsDisplay.updateTime(timecodeMs);
+                        lyricsDisplay.updateTime(timecodeMs, 'scrub');
                     } 
                     
                     // Update time labels immediately
@@ -2323,7 +2454,7 @@ function loadLastSong() {
             updateAudioTitle();
             
             // ALWAYS reset slider when loading any song
-            resetAudioSlider();
+            resetAudioSlider(true); // Force reset when loading song
             
             // Try to load audio if available, but don't fail if not found
             if (currentSong.getAudioPath && currentSong.getAudioPath()) {
@@ -2353,7 +2484,7 @@ function loadLastSong() {
         }
     } else {
         // Even if no last song, reset the slider to zero
-        resetAudioSlider();
+        resetAudioSlider(true); // Force reset at startup
     }
 }
 
@@ -2382,7 +2513,7 @@ function seekToPendingTime() {
 }
 
 // Reset audio slider to zero
-function resetAudioSlider() {
+function resetAudioSlider(forceLyricsReset = false) {
     
     // Clear any pending seek operation
     pendingSeekTime = null;
@@ -2431,8 +2562,10 @@ function resetAudioSlider() {
         totalTimeLabel.textContent = '0:00';
     }
     
-    // Reset timecode display
-    updateTimecodeDisplay(0);
+    // Reset timecode display only if explicitly requested or when loading new songs
+    if (forceLyricsReset) {
+        updateTimecodeDisplay(0);
+    }
 }
 
 // Update scrub slider display
@@ -2471,8 +2604,11 @@ function updateScrubSliderDisplay(currentTime) {
             const currentSec = Math.floor(currentTime % 60);
             currentTimeLabel.textContent = `${currentMin}:${currentSec.toString().padStart(2, '0')}`;
             
-            // Update timecode
-            updateTimecodeDisplay(currentTime * 1000);
+            // Update timecode - but don't reset to zero if audio is still loaded and was playing
+            const shouldUpdateTimecode = currentTime > 0 || !audioController || !audioController.audioPlayer || audioController.audioPlayer.readyState === 0;
+            if (shouldUpdateTimecode) {
+                updateTimecodeDisplay(currentTime * 1000);
+            }
         }
     }
 }

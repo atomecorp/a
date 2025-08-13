@@ -1159,6 +1159,9 @@ export class UIManager {
             id: 'timecode-display',
             ...config,
             css: {
+                // display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
                 // Use unified button style EXCEPT width
                 ...default_theme.button,
                 // Timecode specifics
@@ -1174,7 +1177,7 @@ export class UIManager {
         });
         
         // Ajouter la classe CSS pour que styleModeToolsForToolbar puisse l'identifier
-        element.classList.add('timecode-display');
+        // element.classList.add('timecode-display');
         
         return element;
     }
