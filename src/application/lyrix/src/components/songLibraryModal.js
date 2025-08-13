@@ -3,19 +3,26 @@
 
 import { exportSongsToLRX } from '../features/lyrics/SongUtils.js';
 
+// Helper function to properly close song library panel and remove all related elements
+function closeSongLibraryPanel() {
+    const existingPanel = document.getElementById('song-library-panel');
+    const existingGrip = document.getElementById('song-library-resize-grip');
+    
+    if (existingPanel) {
+        existingPanel.remove();
+    }
+    
+    if (existingGrip) {
+        existingGrip.remove();
+    }
+}
+
 // Toggle song library panel (show/hide)
 export function toggleSongLibrary() {
     const existingPanel = document.getElementById('song-library-panel');
     if (existingPanel) {
-        // Panel exists, remove it (close)
-        existingPanel.remove();
-        
-        // Also remove the resize grip
-        const existingGrip = document.getElementById('song-library-resize-grip');
-        if (existingGrip) {
-            existingGrip.remove();
-        }
-        
+        // Panel exists, close it properly
+        closeSongLibraryPanel();
         return false; // Panel closed
     } else {
         // Panel doesn't exist, show it
@@ -155,7 +162,7 @@ export function showSongLibrary() {
         onClick: () => {
             try {
                 // Close the modal first
-                modalContainer.remove();
+                closeSongLibraryPanel();
                 
                 // Get all songs data
                 if (!lyricsLibrary) {
@@ -226,7 +233,7 @@ export function showSongLibrary() {
             cursor: 'pointer'
         },
         onClick: () => {
-            modalContainer.remove();
+            closeSongLibraryPanel();
             window.exportSelectedSongsAsTextWithFolderDialog();
         }
     });
@@ -245,7 +252,7 @@ export function showSongLibrary() {
             cursor: 'pointer'
         },
         onClick: () => {
-            modalContainer.remove();
+            closeSongLibraryPanel();
             // Local file import dialog implementation to ensure .lrx files are accepted
             const input = document.createElement('input');
             input.type = 'file';
@@ -389,7 +396,7 @@ export function showSongLibrary() {
                     { text: 'Annuler' },
                     { text: 'Supprimer', onClick: () => {
                         window.lyricsLibrary.deleteAllSongs();
-                        modalContainer.remove();
+                        closeSongLibraryPanel();
                         // No need for additional confirmation modal - user can see the empty library
                         showSongLibrary(); // Reopen the library to show it's now empty
                     }, css: { backgroundColor: '#e74c3c', color: 'white' } }
@@ -764,7 +771,7 @@ export function showSongLibrary() {
                                 }
                                 const success = window.lyricsLibrary.deleteSong(item.value);
                                 if (success) {
-                                    modalContainer.remove();
+                                    closeSongLibraryPanel();
                                     showSongLibrary();
                                 } else {
                                 }
@@ -793,7 +800,7 @@ export function showSongLibrary() {
                     e.target !== midiInput && 
                     e.target !== dragHandle &&
                     !midiControls.contains(e.target)) {
-                    modalContainer.remove();
+                    closeSongLibraryPanel();
                     window.loadAndDisplaySong(item.value);
                 }
             });
