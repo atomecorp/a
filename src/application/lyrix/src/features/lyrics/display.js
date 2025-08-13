@@ -1020,6 +1020,11 @@ export class LyricsDisplay {
         });
         
         lineDiv.className = 'lyrics-line';
+        lineDiv.style.userSelect = 'none';
+        lineDiv.style.webkitUserSelect = 'none';
+        lineDiv.style.mozUserSelect = 'none';
+        lineDiv.style.msUserSelect = 'none';
+        lineDiv.style.webkitTouchCallout = 'none';
         
         // Create line content container
         const lineContent = $('div', {
@@ -1286,16 +1291,23 @@ export class LyricsDisplay {
             css: {
                 fontSize: 'inherit',
                 lineHeight: 'inherit',
-                flex: '1'
+                flex: '1',
+                userSelect: 'none',
+                webkitUserSelect: 'none',
+                mozUserSelect: 'none',
+                msUserSelect: 'none',
+                webkitTouchCallout: 'none'
             }
         });
+        
+        // Add class for CSS targeting
+        textSpan.className = 'text-span';
         
         // Add touch-friendly styling for text editing
         if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
             textSpan.setAttribute('title', 'Hold to edit lyrics');
-            textSpan.style.userSelect = 'none';
-            textSpan.style.webkitUserSelect = 'none';
-            textSpan.style.webkitTouchCallout = 'none';
+        } else {
+            textSpan.setAttribute('title', 'Double-click to edit lyrics');
         }
         
         lineContent.append(textSpan);
@@ -2780,7 +2792,15 @@ export class LyricsDisplay {
             color: #333;
             flex: 1;
             box-sizing: border-box;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
+            -webkit-touch-callout: default !important;
         `;
+        
+        // Ensure the input allows text selection and is marked as editable
+        input.className = 'editable-content text-input';
         
         // Create delete button
         const deleteButton = document.createElement('button');

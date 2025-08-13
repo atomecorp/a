@@ -1412,6 +1412,10 @@ export class UIManager {
                 fontWeight: '500',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
+                userSelect: 'none',
+                webkitUserSelect: 'none',
+                mozUserSelect: 'none',
+                msUserSelect: 'none',
                 ...config.css
             }
         });
@@ -1432,6 +1436,10 @@ export class UIManager {
                 fontWeight: '500',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
+                userSelect: 'none',
+                webkitUserSelect: 'none',
+                mozUserSelect: 'none',
+                msUserSelect: 'none',
                 ...config.css
             }
         });
@@ -1473,6 +1481,10 @@ export class UIManager {
                 overflow: 'auto',
                 position: 'relative',
                 boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
+                userSelect: 'none',
+                webkitUserSelect: 'none',
+                mozUserSelect: 'none',
+                msUserSelect: 'none',
                 ...config.css
             }
         });
@@ -1488,6 +1500,10 @@ export class UIManager {
                 borderRadius: `${this.THEME.borderRadius.lg} ${this.THEME.borderRadius.lg} 0 0`,
                 borderBottom: `1px solid ${this.THEME.colors.border}`,
                 color: 'white',
+                userSelect: 'none',
+                webkitUserSelect: 'none',
+                mozUserSelect: 'none',
+                msUserSelect: 'none',
                 ...config.css
             }
         });
@@ -1502,6 +1518,10 @@ export class UIManager {
                 color: this.THEME.colors.text,
                 maxHeight: '400px',
                 overflow: 'auto',
+                userSelect: 'none',
+                webkitUserSelect: 'none',
+                mozUserSelect: 'none',
+                msUserSelect: 'none',
                 ...config.css
             }
         });
@@ -1519,6 +1539,10 @@ export class UIManager {
                 backgroundColor: this.THEME.colors.background,
                 borderTop: `1px solid ${this.THEME.colors.border}`,
                 borderRadius: `0 0 ${this.THEME.borderRadius.lg} ${this.THEME.borderRadius.lg}`,
+                userSelect: 'none',
+                webkitUserSelect: 'none',
+                mozUserSelect: 'none',
+                msUserSelect: 'none',
                 ...config.css
             }
         });

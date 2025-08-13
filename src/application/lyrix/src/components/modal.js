@@ -64,6 +64,11 @@ export function Modal(options = {}) {
             flexDirection: 'column',
             transform: animation ? 'scale(0.9)' : 'scale(1)',
             transition: animation ? 'transform 0.3s ease' : 'none',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none',
+            webkitTouchCallout: 'none',
             ...modalSize,
             ...css
         }
@@ -77,7 +82,12 @@ export function Modal(options = {}) {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            backgroundColor: '#f8f9fa'
+            backgroundColor: '#f8f9fa',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none',
+            webkitTouchCallout: 'none'
         }
     });
 
@@ -132,7 +142,12 @@ export function Modal(options = {}) {
         css: {
             padding: '20px',
             flex: '1',
-            overflow: 'auto'
+            overflow: 'auto',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none',
+            webkitTouchCallout: 'none'
         }
     });
 
@@ -151,7 +166,12 @@ export function Modal(options = {}) {
             display: 'flex',
             justifyContent: 'flex-end',
             gap: '10px',
-            backgroundColor: '#f8f9fa'
+            backgroundColor: '#f8f9fa',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none',
+            webkitTouchCallout: 'none'
         }
     });
 
@@ -332,9 +352,17 @@ export function InputModal(options = {}) {
             border: '1px solid #ddd',
             borderRadius: '4px',
             fontSize: '14px',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            userSelect: 'text',
+            webkitUserSelect: 'text',
+            mozUserSelect: 'text',
+            msUserSelect: 'text',
+            webkitTouchCallout: 'default'
         }
     });
+    
+    // Mark input as editable content
+    inputElement.className = 'editable-content text-input';
 
     inputContainer.appendChild(labelElement);
     inputContainer.appendChild(inputElement);
@@ -436,9 +464,17 @@ export function FormModal(options = {}) {
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                userSelect: 'text',
+                webkitUserSelect: 'text',
+                mozUserSelect: 'text',
+                msUserSelect: 'text',
+                webkitTouchCallout: 'default'
             }
         });
+        
+        // Mark input as editable content
+        input.className = 'editable-content text-input';
 
         inputs[field.name] = input;
 
@@ -529,9 +565,17 @@ export function SelectModal(options = {}) {
                 borderRadius: '4px',
                 marginBottom: '15px',
                 fontSize: '14px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                userSelect: 'text',
+                webkitUserSelect: 'text',
+                mozUserSelect: 'text',
+                msUserSelect: 'text',
+                webkitTouchCallout: 'default'
             }
         });
+        
+        // Mark search input as editable content
+        searchInput.className = 'search-input editable-content';
 
         searchInput.addEventListener('input', (e) => {
             const searchTerm = e.target.value.toLowerCase();

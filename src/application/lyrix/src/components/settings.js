@@ -198,6 +198,10 @@ export function openSettingsPanel() {
             transform: 'translateY(-10px)',
             display: 'flex',
             flexDirection: 'column',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none',
             resize: 'none' // Disable default resize
         },
         'aria-hidden': 'false',

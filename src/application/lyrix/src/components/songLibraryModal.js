@@ -89,7 +89,11 @@ export function showSongLibrary() {
             display: 'flex',
             flexDirection: 'column',
             resize: 'vertical',
-            minHeight: '150px'
+            minHeight: '150px',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
     

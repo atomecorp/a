@@ -93,6 +93,89 @@ function updateAudioTitle() {
     }
 }
 
+// Function to inject global CSS for text selection control
+function injectTextSelectionStyles() {
+    const styleId = 'lyrix-text-selection-styles';
+    
+    // Remove existing styles if any
+    const existingStyle = document.getElementById(styleId);
+    if (existingStyle) {
+        existingStyle.remove();
+    }
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+        /* Disable text selection for all panels and UI elements */
+        #settings-panel,
+        #song-library-panel,
+        #settings-resize-grip,
+        #song-library-resize-grip,
+        .toolbar,
+        .lyrics-toolbar,
+        #lyrics-toolbar,
+        .modal-overlay,
+        .modal-header,
+        .modal-footer,
+        .button,
+        button,
+        .ui-button,
+        .grip,
+        .panel-header,
+        .panel-content:not(.lyrics-content):not(.editable-content),
+        .settings-section,
+        .midi-section,
+        .export-modal,
+        .save-text-modal,
+        .fullscreen-lyrics {
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+            -webkit-touch-callout: none !important;
+        }
+        
+        /* Allow text selection only for specific input elements */
+        input,
+        textarea,
+        [contenteditable="true"],
+        .editable-content,
+        .lyrics-line.editing,
+        .search-input,
+        .midi-input,
+        .filename-input,
+        .text-input {
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
+            user-select: text !important;
+            -webkit-touch-callout: default !important;
+        }
+        
+        /* Special case for lyrics content - disable selection unless editing */
+        #lyrics_lines_container,
+        .lyrics-line:not(.editing) {
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+            -webkit-touch-callout: none !important;
+        }
+        
+        /* Disable text selection on grip handles */
+        .resize-grip,
+        [id*="resize-grip"] {
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+            -webkit-touch-callout: none !important;
+        }
+    `;
+    
+    document.head.appendChild(style);
+}
+
 // Apply initial settings from localStorage
 function applyInitialSettings() {
     try {
@@ -188,6 +271,9 @@ function initializeLyrix() {
         }
         // Apply saved settings on startup
         applyInitialSettings();
+        
+        // Inject text selection control styles
+        injectTextSelectionStyles();
 
         // Debug: Force MIDI inspector visible if enabled
         setTimeout(() => {
@@ -375,7 +461,14 @@ function exportAllSongsToLRX() {
 function showMobileExportModal(dataString, filename, fileType) {
     const modalContainer = UIManager.createEnhancedModalOverlay();
     const modal = UIManager.createEnhancedModalContainer({
-        css: { maxWidth: '500px', width: '90%' }
+        css: { 
+            maxWidth: '500px', 
+            width: '90%',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
+        }
     });
 
     // Header
@@ -384,7 +477,11 @@ function showMobileExportModal(dataString, filename, fileType) {
             padding: UIManager.THEME.spacing.lg,
             backgroundColor: UIManager.THEME.colors.primary,
             // borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
-            color: 'white'
+            color: 'white',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -407,7 +504,11 @@ function showMobileExportModal(dataString, filename, fileType) {
     // Content
     const content = $('div', {
         css: {
-            padding: UIManager.THEME.spacing.lg
+            padding: UIManager.THEME.spacing.lg,
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -578,16 +679,20 @@ function showMobileExportModal(dataString, filename, fileType) {
 
     content.append(copyButton, shareButton, viewButton, instructionsText);
 
-    // // Footer
-    // const footer = $('div', {
-    //     css: {
-    //         padding: UIManager.THEME.spacing.lg,
-    //         backgroundColor: UIManager.THEME.colors.background,
-    //         borderTop: `1px solid ${UIManager.THEME.colors.border}`,
-    //         // borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
-    //         textAlign: 'center'
-    //     }
-    // });
+    // Footer
+    const footer = $('div', {
+        css: {
+            padding: UIManager.THEME.spacing.lg,
+            backgroundColor: UIManager.THEME.colors.background,
+            borderTop: `1px solid ${UIManager.THEME.colors.border}`,
+            // borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
+            textAlign: 'center',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
+        }
+    });
 
     const closeButton = $('button', {
         text: 'Close',
@@ -597,7 +702,11 @@ function showMobileExportModal(dataString, filename, fileType) {
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -626,7 +735,15 @@ function showMobileExportModal(dataString, filename, fileType) {
 function showContentViewModal(dataString, filename, fileType) {
     const modalContainer = UIManager.createEnhancedModalOverlay();
     const modal = UIManager.createEnhancedModalContainer({
-        css: { maxWidth: '800px', width: '95%', maxHeight: '90vh' }
+        css: { 
+            maxWidth: '800px', 
+            width: '95%', 
+            maxHeight: '90vh',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
+        }
     });
 
     // Header
@@ -638,7 +755,11 @@ function showContentViewModal(dataString, filename, fileType) {
             color: 'white',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -656,7 +777,11 @@ function showContentViewModal(dataString, filename, fileType) {
             border: '1px solid rgba(255,255,255,0.3)',
             borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '12px'
+            fontSize: '12px',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -667,7 +792,11 @@ function showContentViewModal(dataString, filename, fileType) {
         css: {
             padding: UIManager.THEME.spacing.md,
             maxHeight: '60vh',
-            overflow: 'auto'
+            overflow: 'auto',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -682,7 +811,11 @@ function showContentViewModal(dataString, filename, fileType) {
             fontFamily: 'monospace',
             fontSize: '12px',
             resize: 'vertical',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            userSelect: 'text', // Explicitly allow selection in textarea
+            webkitUserSelect: 'text',
+            mozUserSelect: 'text',
+            msUserSelect: 'text'
         }
     });
 
@@ -1263,7 +1396,14 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     // Create custom modal with checkboxes
     const modalContainer = UIManager.createEnhancedModalOverlay();
     const modal = UIManager.createEnhancedModalContainer({
-        css: { maxWidth: '600px', width: '90%' }
+        css: { 
+            maxWidth: '600px', 
+            width: '90%',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
+        }
     });
 
     // // Header
@@ -1301,6 +1441,10 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     selectAllBtn.style.fontWeight = 'bold';
     selectAllBtn.style.fontSize = '15px';
     selectAllBtn.style.transition = 'background 0.2s';
+    selectAllBtn.style.userSelect = 'none';
+    selectAllBtn.style.webkitUserSelect = 'none';
+    selectAllBtn.style.mozUserSelect = 'none';
+    selectAllBtn.style.msUserSelect = 'none';
 
     function updateSelectAllBtn() {
         if (allSelected) {
@@ -1347,11 +1491,19 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         selectBtn.style.cursor = 'pointer';
         selectBtn.style.padding = '4px 10px';
         selectBtn.style.transition = 'background 0.2s';
+        selectBtn.style.userSelect = 'none';
+        selectBtn.style.webkitUserSelect = 'none';
+        selectBtn.style.mozUserSelect = 'none';
+        selectBtn.style.msUserSelect = 'none';
 
         const label = document.createElement('span');
         label.textContent = item.text;
         label.style.flex = '1';
         label.style.cursor = 'pointer';
+        label.style.userSelect = 'none';
+        label.style.webkitUserSelect = 'none';
+        label.style.mozUserSelect = 'none';
+        label.style.msUserSelect = 'none';
 
         function updateBtn() {
             if (selected) {
