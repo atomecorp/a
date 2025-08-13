@@ -357,64 +357,6 @@ function initializeLyrix() {
     }
 }
 
-// Create a new song
-function createNewSong() {
-    // Use FormModal instead of prompts
-    FormModal({
-        title: '🎵 Create New Song',
-        fields: [
-            {
-                name: 'title',
-                label: 'Song Title',
-                placeholder: 'Enter song title...',
-                required: true
-            },
-            {
-                name: 'artist',
-                label: 'Artist Name',
-                placeholder: 'Enter artist name...',
-                defaultValue: 'Unknown Artist'
-            },
-            {
-                name: 'album',
-                label: 'Album (optional)',
-                placeholder: 'Enter album name...'
-            }
-        ],
-        onSubmit: (values) => {
-            try {
-                // Create the song with metadata only
-                const metadata = {
-                    title: values.title || '',
-                    artist: values.artist || 'Unknown Artist',
-                    album: values.album || '',
-                    duration: 0
-                };
-                const songId = lyricsLibrary.generateSongId(metadata.title, metadata.artist);
-                const song = new SyncedLyrics(metadata.title, metadata.artist, metadata.album, metadata.duration, songId);
-                song.metadata = metadata;
-                song.songId = songId;
-                song.lines = [];
-                lyricsLibrary.saveSong(song);
-                if (song) {
-                    loadAndDisplaySong(song.songId);
-                }
-            } catch (error) {
-                console.error('❌ ERREUR lors de la création:', error);
-                Modal({
-                    title: '❌ Error',
-                    content: `<p>Error creating song: ${error.message}</p>`,
-                    buttons: [{ text: 'OK' }],
-                    size: 'small'
-                });
-            }
-        },
-        onCancel: () => {
-            // User cancelled
-        }
-    });
-}
-
 // Export songs to LRX format
 function exportAllSongsToLRX() {
     if (!lyricsLibrary) {
@@ -2665,7 +2607,6 @@ window.displayTransportInfo = displayTransportInfo;
 window.loadAndDisplaySong = loadAndDisplaySong;
 window.navigateToPreviousSong = navigateToPreviousSong;
 window.navigateToNextSong = navigateToNextSong;
-window.createNewSong = createNewSong;
 window.exportAllSongsToLRX = exportAllSongsToLRX;
 window.exportSelectedSongsAsTextWithFolderDialog = exportSelectedSongsAsTextWithFolderDialog;
 window.showFileImportDialog = showFileImportDialog;

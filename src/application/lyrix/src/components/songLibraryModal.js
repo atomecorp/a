@@ -139,25 +139,6 @@ export function showSongLibrary() {
         }
     });
 
-    // Create new song button
-    const createNewSongButton = window.$('button', {
-        id: 'create_new_song_button',
-        text: '➕ New',
-        css: {
-            backgroundColor: '#2ecc71',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            modalContainer.remove();
-            window.createNewSong();
-        }
-    });
-
     // Export all to LRX button
     const exportLRXButton = window.$('button', {
         id: 'export-lrx-format',
@@ -417,7 +398,7 @@ export function showSongLibrary() {
             });
         }
     });
-    actionButtons.append(createNewSongButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
+    actionButtons.append(importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     modal.append(headerTitle, actionButtons);
 
     // Content with search and song list
@@ -622,7 +603,7 @@ export function showSongLibrary() {
             
             const emptyText = window.$('div', {
                 text: songs.length === 0 ? 
-                    'No songs in your library yet.\nUse the buttons above to create a new song or import existing ones.' : 
+                    'No songs in your library yet.\nUse the buttons above to import existing songs.' : 
                     'No songs match your search.',
                 css: {
                     lineHeight: '1.6',
