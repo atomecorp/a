@@ -962,17 +962,17 @@ export class LyricsDisplay {
         
         metadata.append(title, artist);
         
-        if (this.currentLyrics.metadata.album) {
-            const album = $('div', {
-                id: 'lyrics-album-display',
-                text: `Album: ${this.currentLyrics.metadata.album}`,
-                css: {
-                    color: '#666',
-                    fontSize: '0.9em'
-                }
-            });
-            metadata.append(album);
-        }
+        // if (this.currentLyrics.metadata.album) {
+        //     const album = $('div', {
+        //         id: 'lyrics-album-display',
+        //         text: `Album: ${this.currentLyrics.metadata.album}`,
+        //         css: {
+        //             color: '#666',
+        //             fontSize: '0.9em'
+        //         }
+        //     });
+        //     metadata.append(album);
+        // }
         
         this.lyricsContent.append(metadata);
         
