@@ -1429,57 +1429,7 @@ export class LyricsDisplay {
                 });
             }
             
-            // Mouse drag to adjust timecode
-            let isDragging = false;
-            let startX = 0;
-            let startTime = line.time;
-            
-            timeSpan.addEventListener('mousedown', (e) => {
-                // Block timecode dragging in record mode
-                if (this.recordMode) {
-                    e.preventDefault();
-                    return;
-                }
-                
-                if (e.detail === 1) { // Single click, not double click
-                    isDragging = true;
-                    startX = e.clientX;
-                    startTime = line.time;
-                    timeSpan.style.backgroundColor = '#007bff';
-                    timeSpan.style.color = 'white';
-                    e.preventDefault();
-                }
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (isDragging && timeSpan) {
-                    const deltaX = e.clientX - startX;
-                    const timeDelta = deltaX * 10; // 10ms per pixel
-                    const newTime = Math.max(0, startTime + timeDelta);
-                    
-                    // Update the display
-                    timeSpan.textContent = this.formatTimeDisplay(newTime);
-                    
-                    // Update the actual time in the lyrics object
-                    this.currentLyrics.lines[index].time = newTime;
-                    this.currentLyrics.updateLastModified();
-                }
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isDragging) {
-                    isDragging = false;
-                    timeSpan.style.backgroundColor = '#f0f0f0';
-                    timeSpan.style.color = '#666';
-                    
-                    // Verify and correct timecode order after drag adjustment
-                    this.verifyAndCorrectTimecodeOrder(index);
-                    
-                    // Save to localStorage when drag is complete
-                    const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
-                 
-                }
-            });
+            // Only double-click editing is allowed - no drag on spans
             
             // Set initial visibility based on user preferences
             timeSpan.style.display = this.showTimecodes ? 'inline-block' : 'none';
@@ -2515,13 +2465,10 @@ export class LyricsDisplay {
         };
         
         const handleMouseUp = (e) => {
-            console.log('🎯 handleMouseUp', { isDragging, dragStarted });
-            
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
             
             if (isDragging) {
-                console.log('✅ Finishing DRAG - staying in edit mode');
                 // End drag operation but STAY in edit mode
                 isDragging = false;
                 dragStarted = false;
@@ -2544,11 +2491,9 @@ export class LyricsDisplay {
                 
                 // Re-enable outside click after drag is completely done
                 setTimeout(() => {
-                    console.log('🔄 Re-enabling outside click after drag');
                     outsideClickEnabled = true;
                 }, 50);
             } else {
-                console.log('✅ Finishing CLICK - re-enabling outside click');
                 // It was just a click (no drag), re-enable outside click immediately
                 outsideClickEnabled = true;
             }
@@ -2559,30 +2504,18 @@ export class LyricsDisplay {
         
         // Detect clicks outside the input
         const handleOutsideClick = (e) => {
-            console.log('🔍 handleOutsideClick triggered', {
-                outsideClickEnabled,
-                target: e.target,
-                inputContains: input.contains(e.target),
-                isInput: e.target === input
-            });
-            
             // Only process outside clicks when explicitly enabled
             if (!outsideClickEnabled) {
-                console.log('❌ Outside click DISABLED - ignoring');
                 return;
             }
             
             if (!input.contains(e.target) && e.target !== input) {
-                console.log('✅ Outside click VALID - calling saveEdit');
                 saveEdit();
                 document.removeEventListener('click', handleOutsideClick);
-            } else {
-                console.log('❌ Click was inside input - ignoring');
             }
         };
         
         const saveEdit = () => {
-            console.log('🔴 saveEdit called - WHO CALLED ME?', new Error().stack);
             const newTimeText = input.value.trim();
             let newTime = this.parseTimeInput(newTimeText);
 
