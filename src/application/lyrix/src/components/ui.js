@@ -68,27 +68,124 @@ export class UIManager {
             },
             onmouseover: (e) => {
                 // Only apply transform and shadow effects, no color change
-                e.target.style.transform = 'translateY(-1px)';
-                e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                }
                 if (config.onmouseover) config.onmouseover(e);
             },
             onmouseout: (e) => {
                 // Only reset transform and shadow, no color change
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                }
                 if (config.onmouseout) config.onmouseout(e);
             },
             onmousedown: (e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+                }
                 if (config.onmousedown) config.onmousedown(e);
             },
             onmouseup: (e) => {
-                e.target.style.transform = 'translateY(-1px)';
-                e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                }
                 if (config.onmouseup) config.onmouseup(e);
             }
         });
+    }
+    
+    // Create SVG icon element
+    static createSVGIcon(svgPath, size = 20, color = 'currentColor') {
+        return fetch(svgPath)
+            .then(response => response.text())
+            .then(svgText => {
+                const parser = new DOMParser();
+                const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+                const svgElement = svgDoc.documentElement;
+                
+                // Set size and color
+                svgElement.setAttribute('width', size);
+                svgElement.setAttribute('height', size);
+                svgElement.setAttribute('fill', color);
+                
+                return svgElement;
+            })
+            .catch(error => {
+                console.error('Error loading SVG:', error);
+                return document.createTextNode('⚙️'); // Fallback to emoji
+            });
+    }
+    
+    // Create interface button with SVG icon and active state support
+    static createSVGInterfaceButton(svgPath, config = {}) {
+        const button = $('button', {
+            ...config,
+            css: {
+                // Use unified button style
+                ...default_theme.button,
+                fontSize: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                ...config.css
+            },
+            onmouseover: (e) => {
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                }
+                if (config.onmouseover) config.onmouseover(e);
+            },
+            onmouseout: (e) => {
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                }
+                if (config.onmouseout) config.onmouseout(e);
+            },
+            onmousedown: (e) => {
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+                }
+                if (config.onmousedown) config.onmousedown(e);
+            },
+            onmouseup: (e) => {
+                if (e.target && e.target.style) {
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+                }
+                if (config.onmouseup) config.onmouseup(e);
+            }
+        });
+        
+        // Load SVG icon
+        this.createSVGIcon(svgPath, config.iconSize || 20, config.iconColor || 'currentColor')
+            .then(svgElement => {
+                button.innerHTML = '';
+                button.appendChild(svgElement);
+            });
+        
+        // Add method to toggle active state
+        button.setActive = (isActive) => {
+            const svg = button.querySelector('svg');
+            if (svg) {
+                if (isActive) {
+                    svg.setAttribute('fill', config.activeColor || '#007bff');
+                    button.style.backgroundColor = config.activeBgColor || 'rgba(0, 123, 255, 0.1)';
+                } else {
+                    svg.setAttribute('fill', config.iconColor || 'currentColor');
+                    button.style.backgroundColor = default_theme.button.backgroundColor;
+                }
+            }
+        };
+        
+        return button;
     }
     
     // Create danger button (red)

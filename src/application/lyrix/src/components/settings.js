@@ -3,7 +3,6 @@
 // Converted from modal to inline panel that appears above lyrics viewer
 import { CONSTANTS } from '../core/constants.js';
 import { StorageManager } from '../services/storage.js';
-import { getFullVersionInfo, getPlatformVersionInfo } from '../core/infos.js';
 
 // Settings panel state management
 let isSettingsOpen = false;
@@ -476,7 +475,7 @@ function handlePanelEscapeKey(event) {
     }
 }
 
-// Update settings button aria attributes
+// Update settings button aria attributes and visual state
 function updateSettingsButtonAria(isOpen) {
     const settingsButton = document.getElementById('settings_button');
     if (settingsButton) {
@@ -486,6 +485,15 @@ function updateSettingsButtonAria(isOpen) {
         // Update button text for screen readers
         const ariaLabel = isOpen ? 'Close settings panel' : 'Open settings panel';
         settingsButton.setAttribute('aria-label', ariaLabel);
+        
+        // Simple visual state change
+        if (isOpen) {
+            settingsButton.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
+            settingsButton.style.color = '#007bff';
+        } else {
+            settingsButton.style.backgroundColor = '';
+            settingsButton.style.color = '';
+        }
     }
 }
 
@@ -996,50 +1004,11 @@ function createSettingsContent() {
     // Add sections to content
     content.append(midiSection, audioSection, fontSection);
 
-    // Add version info at the bottom
-    const versionInfo = window.$('div', {
-        css: {
-            fontSize: '13px',
-            color: '#666',
-            textAlign: 'center',
-            fontStyle: 'italic',
-            padding: '10px 0',
-            borderTop: '1px solid #eee',
-            marginTop: '20px'
-        }
-    });
-    
-    // Set version text dynamically from infos.js
-    if (window.getVersionString && typeof window.getVersionString === 'function') {
-        versionInfo.textContent = window.getVersionString();
-    } else if (window.APP_INFO && window.APP_INFO.version) {
-        versionInfo.textContent = `v${window.APP_INFO.version}`;
-    } else {
-        versionInfo.textContent = 'v0.09'; // fallback
-    }
-    
-    content.append(versionInfo);
-
     return content;
 }
 
 // Show settings modal
 export function showSettingsModal() {
-    
-    // Console log all infos when opening settings panel
-    console.log('=== SETTINGS PANEL DEBUG INFO ===');
-    console.log('window.APP_INFO:', window.APP_INFO);
-    console.log('window.getFullVersionInfo:', window.getFullVersionInfo);
-    console.log('window.getVersionString:', window.getVersionString);
-    console.log('window.getPlatformVersionInfo:', window.getPlatformVersionInfo);
-    if (window.getFullVersionInfo) {
-        try {
-            console.log('getFullVersionInfo() result:', window.getFullVersionInfo());
-        } catch (e) {
-            console.log('Error calling getFullVersionInfo():', e);
-        }
-    }
-    console.log('================================');
     
     const modalContainer = window.UIManager.createEnhancedModalOverlay();
     const modal = window.UIManager.createEnhancedModalContainer({

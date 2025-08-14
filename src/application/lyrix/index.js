@@ -14,7 +14,6 @@ import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, togg
 
 // Import all modules
 import { CONSTANTS } from './src/core/constants.js';
-import { APP_INFO, getVersionString, getFullVersionInfo, getPlatformVersionInfo } from './src/core/infos.js';
 import { StorageManager } from './src/services/storage.js';
 import { AudioManager, AudioController } from './src/features/audio/audio.js';
 import { UIManager } from './src/components/ui.js';
@@ -283,13 +282,6 @@ function initializeLyrix() {
         window.toggleAudioSync = toggleAudioSync;
         window.toggleMidiInspector = toggleMidiInspector;
         window.toggleTimecodeVisibility = toggleTimecodeVisibility;
-        
-        // Export app information to global scope
-        window.APP_INFO = APP_INFO;
-        window.getVersionString = getVersionString;
-        window.getFullVersionInfo = getFullVersionInfo;
-        window.getPlatformVersionInfo = getPlatformVersionInfo;
-        
         // Ensure MIDI inspector is in the toolbar
         const appContainer = document.getElementById('lyrix_app');
         const toolbarRow = document.getElementById('main-toolbar-row');
@@ -2819,4 +2811,5 @@ export {
     ConfirmModal,
     CONSTANTS
 };
+
 
