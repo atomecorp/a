@@ -179,9 +179,16 @@ function createFileContentWindow() {
     });
 
     const closeButton = Button({
-        text: '✕',
-        onAction: function() { window.style.display = 'none'; },
-        offAction: function() { window.style.display = 'none'; },
+        onText: '✕',
+        offText: '✕',
+        onAction: function(state) { 
+            console.log('🔴 [CLOSE BUTTON] onAction appelée ! State:', state);
+            window.style.display = 'none'; 
+        },
+        offAction: function(state) { 
+            console.log('🔵 [CLOSE BUTTON] offAction appelée ! State:', state);
+            window.style.display = 'none'; 
+        },
         parent: header,
         css: {
             backgroundColor: 'transparent',
@@ -244,12 +251,15 @@ function createFileContentWindow() {
     });
 
     const refreshButton = Button({
-        text: 'Actualiser',
-        onAction: async function() {
+        onText: 'Actualiser',
+        offText: 'Actualiser', 
+        onAction: async function(state) {
+            console.log('🔴 [REFRESH BUTTON] onAction appelée ! State:', state);
             const path = pathInput.value.trim() || './';
             await testFolderListing(path);
         },
-        offAction: async function() {
+        offAction: async function(state) {
+            console.log('🔵 [REFRESH BUTTON] offAction appelée ! State:', state);
             const path = pathInput.value.trim() || './';
             await testFolderListing(path);
         },
@@ -266,8 +276,64 @@ function createFileContentWindow() {
         }
     });
 
+    // Input pour le nom de fichier à écrire
+    const filenameInput = $('input', {
+        id: 'input_filename',
+        type: 'text',
+        value: 'test.txt',
+        placeholder: 'Nom du fichier à créer (ex: test.txt, Projects/mon_fichier.json)',
+        css: {
+            flex: '1',
+            padding: '6px 10px',
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderRadius: '4px',
+            color: '#fff',
+            fontSize: '14px',
+            marginTop: '8px'
+        }
+    });
+
+    // Bouton Write Test
+    const writeTestButton = Button({
+        onText: '📝 Write Test',
+        offText: '📝 Write Test',
+        onAction: async function(state) {
+            console.log('🔴 [WRITE BUTTON] onAction appelée ! State:', state);
+            const filename = filenameInput.value.trim();
+            if (!filename) {
+                alert('Veuillez entrer un nom de fichier');
+                return;
+            }
+            await testWriteFileLocal(filename);
+        },
+        offAction: async function(state) {
+            console.log('🔵 [WRITE BUTTON] offAction appelée ! State:', state);
+            const filename = filenameInput.value.trim();
+            if (!filename) {
+                alert('Veuillez entrer un nom de fichier');
+                return;
+            }
+            await testWriteFileLocal(filename);
+        },
+        parent: controls,
+        css: {
+            backgroundColor: '#ff6b35',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            position: 'relative',
+            marginTop: '8px'
+        }
+    });
+
     controls.appendChild(pathInput);
     controls.appendChild(refreshButton);
+    controls.appendChild(filenameInput);
+    controls.appendChild(writeTestButton);
 
     window.appendChild(header);
     window.appendChild(content);
@@ -396,6 +462,54 @@ async function testFolderListing(path = './') {
         } else {
             errorContent += '- Swift Bridge: Non disponible (pas dans un environnement iOS/AUv3)\n';
         }
+        
+        display.textContent = errorContent;
+    }
+}
+
+// Fonction de test pour écrire un fichier (utilise ios_file_writer.js)
+async function testWriteFileLocal(filename) {
+    console.log('🧪 [WRITE TEST] Test d\'écriture de fichier:', filename);
+    
+    const display = document.getElementById('file_content_display');
+    if (!display) {
+        console.error('Élément d\'affichage non trouvé');
+        return;
+    }
+
+    // Afficher un message de chargement
+    display.textContent = `📝 Écriture du fichier "${filename}"...\n\nVeuillez patienter...`;
+
+    try {
+        // Vérifier que la fonction est disponible
+        if (typeof window.testWriteFile !== 'function') {
+            throw new Error('Fonction testWriteFile non disponible. Assurez-vous que ios_file_writer.js est chargé.');
+        }
+
+        // Utiliser la fonction du module ios_file_writer.js
+        const result = await window.testWriteFile(filename);
+        
+        console.log('✅ [WRITE TEST] Fichier écrit avec succès:', result);
+        
+        let successContent = `✅ Fichier "${filename}" écrit avec succès!\n\n`;
+        successContent += `Timestamp: ${new Date().toLocaleString()}\n`;
+        successContent += `Taille du contenu: ${result.contentSize} caractères\n`;
+        successContent += `Message Swift: ${result.message}\n\n`;
+        successContent += 'Le fichier a été créé avec un contenu de test généré automatiquement.';
+        
+        display.textContent = successContent;
+
+    } catch (error) {
+        console.error('❌ [WRITE TEST] Erreur lors de l\'écriture:', error);
+        
+        let errorContent = `❌ Erreur lors de l'écriture du fichier "${filename}"\n\n`;
+        errorContent += `Message d'erreur: ${error.message}\n\n`;
+        errorContent += 'Détails techniques:\n';
+        errorContent += `- Timestamp: ${new Date().toISOString()}\n`;
+        errorContent += `- Bridge Swift disponible: ${!!window.webkit?.messageHandlers?.swiftBridge}\n`;
+        errorContent += `- Module ios_file_writer chargé: ${typeof window.testWriteFile === 'function'}\n`;
+        errorContent += `- Action envoyée: saveFile\n`;
+        errorContent += `- Path: ${filename}\n`;
         
         display.textContent = errorContent;
     }
