@@ -243,6 +243,22 @@ function createFileContentWindow() {
         }
     });
 
+    // Affichage du chemin complet du fichier audio courant
+    const currentAudioPath = $('div', {
+        id: 'current-audio-path',
+        text: 'Chemin courant: ./assets/audios/wWw.m4a',
+        css: {
+            color: '#00ff00',
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            backgroundColor: '#2a2a2a',
+            padding: '4px 8px',
+            borderRadius: '3px',
+            marginBottom: '8px',
+            wordBreak: 'break-all'
+        }
+    });
+
     const testAudio = $('audio', {
         id: 'test-audio-player',
         attrs: {
@@ -272,6 +288,7 @@ function createFileContentWindow() {
     });
 
     const audioPathInput = $('input', {
+        id: 'audio_path_test_input',
         type: 'text',
         value: './assets/audios/wWw.m4a',
         placeholder: 'Enter audio file path to test...',
@@ -329,6 +346,7 @@ function createFileContentWindow() {
     });
 
     audioDebugSection.appendChild(audioLabel);
+    audioDebugSection.appendChild(currentAudioPath);
     audioDebugSection.appendChild(testAudio);
     audioDebugSection.appendChild(pathTestLabel);
     audioDebugSection.appendChild(audioPathInput);
@@ -459,6 +477,33 @@ function createFileContentWindow() {
         parent: controls,
         css: {
             backgroundColor: '#28a745',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            position: 'relative',
+            marginTop: '8px',
+            marginLeft: '8px'
+        }
+    });
+
+    // Bouton Browse Local Files
+    const browseLocalButton = Button({
+        onText: '🎵 Browse Audio',
+        offText: '🎵 Browse Audio',
+        onAction: async function(state) {
+            console.log('🔴 [BROWSE BUTTON] onAction appelée ! State:', state);
+            await openLocalFilesBrowser();
+        },
+        offAction: async function(state) {
+            console.log('🔵 [BROWSE BUTTON] offAction appelée ! State:', state);
+            await openLocalFilesBrowser();
+        },
+        parent: controls,
+        css: {
+            backgroundColor: '#6f42c1',
             color: 'white',
             border: 'none',
             padding: '6px 12px',
@@ -604,6 +649,7 @@ function createFileContentWindow() {
     controls.appendChild(filenameInput);
     controls.appendChild(writeTestButton);
     controls.appendChild(copyFileButton);
+    controls.appendChild(browseLocalButton);
     
     // Ajouter les contrôles AUv3
     controls.appendChild(auv3Separator);
@@ -1053,6 +1099,278 @@ function openSystemFileSelector() {
             reject(e); 
         }
     });
+}
+
+// Fonction pour ouvrir un navigateur des fichiers locaux et alimenter le lecteur audio
+async function openLocalFilesBrowser() {
+    console.log('🎵 [BROWSE LOCAL] Ouverture du navigateur de fichiers locaux');
+    
+    const display = document.getElementById('file_content_display');
+    const window = document.getElementById('file_content_w');
+    
+    if (!display || !window) {
+        console.error('[BROWSE LOCAL] Elements d\'affichage non trouvés');
+        return;
+    }
+
+    // Afficher la fenêtre
+    window.style.display = 'flex';
+    
+    // Message de chargement
+    display.textContent = `🎵 Navigateur de fichiers audio locaux
+
+Chargement de la liste des fichiers...
+Recherche de fichiers audio compatibles...`;
+
+    try {
+        // Vérifier que la fonction existe
+        if (typeof get_ios_folder_content !== 'function') {
+            throw new Error('Module ios_file_lister non chargé. Rechargez la page.');
+        }
+
+        console.log('[BROWSE LOCAL] Appel de get_ios_folder_content pour lister les fichiers');
+        
+        // Lister tous les fichiers du dossier local
+        const files = await get_ios_folder_content('./');
+        
+        console.log(`[BROWSE LOCAL] ${files.length} fichier(s) trouvé(s):`, files);
+        
+        // Filtrer les fichiers audio
+        const audioExtensions = ['.mp3', '.m4a', '.wav', '.flac', '.ogg', '.aac', '.mp4'];
+        const audioFiles = files.filter(file => {
+            if (file.isDirectory) return false;
+            const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+            return audioExtensions.includes(extension);
+        });
+        
+        // Créer l'interface de navigation
+        let content = `🎵 Navigateur de fichiers audio locaux\n`;
+        content += `🕒 Dernière mise à jour: ${new Date().toLocaleString()}\n`;
+        content += `📂 Dossier: Application locale\n`;
+        content += '='.repeat(60) + '\n\n';
+        
+        if (audioFiles.length > 0) {
+            content += `🎵 ${audioFiles.length} fichier(s) audio trouvé(s):\n\n`;
+            
+            audioFiles.forEach((file, index) => {
+                const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+                const sizeFormatted = file.size ? formatFileSize(file.size) : 'Taille inconnue';
+                
+                content += `${index + 1}. 🎵 ${file.name}\n`;
+                content += `   📏 Taille: ${sizeFormatted}\n`;
+                content += `   🔗 Cliquez pour charger dans le lecteur audio\n\n`;
+            });
+            
+            content += `💡 INSTRUCTIONS:\n`;
+            content += `• Cliquez sur le nom d'un fichier pour le charger\n`;
+            content += `• Le lecteur audio sera automatiquement mis à jour\n`;
+            content += `• Les chemins sont optimisés pour iOS/AUv3\n\n`;
+            content += `🎯 Le lecteur audio se trouve dans la section "Test Audio File" ci-dessus.`;
+            
+        } else {
+            const totalFiles = files.length;
+            content += `🔍 Aucun fichier audio trouvé sur ${totalFiles} fichier(s) total.\n\n`;
+            content += `📁 Extensions recherchées: ${audioExtensions.join(', ')}\n\n`;
+            content += `💡 SUGGESTIONS:\n`;
+            content += `• Utilisez le bouton "📂 Copy File" pour ajouter des fichiers audio\n`;
+            content += `• Copiez des fichiers .mp3, .m4a, .wav dans le dossier local\n`;
+            content += `• Vérifiez que les fichiers ont les bonnes extensions\n\n`;
+            content += `📂 Fichiers présents:\n`;
+            if (files.length > 0) {
+                files.slice(0, 10).forEach((file, index) => {
+                    const type = file.isDirectory ? '📁' : '📄';
+                    content += `${index + 1}. ${type} ${file.name}\n`;
+                });
+                if (files.length > 10) {
+                    content += `... et ${files.length - 10} autres fichiers\n`;
+                }
+            } else {
+                content += `(Aucun fichier dans le dossier local)\n`;
+            }
+        }
+        
+        // Afficher le contenu avec gestion des clics
+        display.textContent = content;
+        
+        // Ajouter la gestion des clics pour charger les fichiers audio
+        if (audioFiles.length > 0) {
+            setupAudioFileClickHandlers(audioFiles, display);
+        }
+        
+    } catch (error) {
+        console.error('[BROWSE LOCAL] Erreur:', error);
+        
+        let errorContent = `❌ Erreur lors de la navigation des fichiers locaux\n\n`;
+        errorContent += `Message d'erreur: ${error.message}\n\n`;
+        errorContent += 'Détails techniques:\n';
+        errorContent += `- Timestamp: ${new Date().toISOString()}\n`;
+        errorContent += `- Module ios_file_lister chargé: ${typeof window.get_ios_folder_content === 'function'}\n`;
+        errorContent += `- Bridge Swift disponible: ${!!window.webkit?.messageHandlers?.swiftBridge}\n`;
+        errorContent += `- Chemin recherché: ./\n\n`;
+        
+        errorContent += `🔧 Actions à vérifier:\n`;
+        errorContent += `1. Le module ios_file_lister.js est bien chargé\n`;
+        errorContent += `2. Le bridge Swift fonctionne correctement\n`;
+        errorContent += `3. Des fichiers existent dans le dossier local\n`;
+        errorContent += `4. Utilisez "📂 Copy File" pour ajouter des fichiers`;
+        
+        display.textContent = errorContent;
+    }
+}
+
+// Fonction pour configurer les gestionnaires de clic sur les fichiers audio
+function setupAudioFileClickHandlers(audioFiles, displayElement) {
+    console.log('🎵 [AUDIO HANDLERS] Configuration des clics pour', audioFiles.length, 'fichiers');
+    
+    // Créer une interface cliquable
+    displayElement.style.cursor = 'pointer';
+    displayElement.style.userSelect = 'none';
+    
+    // Gestionnaire de clic sur l'élément d'affichage
+    const clickHandler = (event) => {
+        const clickText = event.target.textContent || '';
+        const wholeText = displayElement.textContent || '';
+        
+        // Chercher quel fichier a été cliqué en analysant le texte
+        for (let i = 0; i < audioFiles.length; i++) {
+            const file = audioFiles[i];
+            if (clickText.includes(file.name) || wholeText.includes(file.name)) {
+                // Appeler loadAudioFile SANS await pour éviter les plantages
+                loadAudioFile(file).catch(error => {
+                    console.error('❌ [AUDIO CLICK] Erreur:', error);
+                    // Pas d'alert() qui peut bloquer l'AUv3
+                });
+                break;
+            }
+        }
+    };
+    
+    // Supprimer l'ancien gestionnaire s'il existe
+    displayElement.removeEventListener('click', displayElement._audioClickHandler);
+    
+    // Ajouter le nouveau gestionnaire
+    displayElement._audioClickHandler = clickHandler;
+    displayElement.addEventListener('click', clickHandler);
+    
+    console.log('✅ [AUDIO HANDLERS] Gestionnaires de clic configurés');
+}
+
+// Fonction pour charger un fichier audio dans le lecteur via Base64 et Blob URL
+async function loadAudioFile(file) {
+    console.log(`🎵 [LOAD AUDIO] Chargement du fichier: ${file.name}`);
+    
+    // Trouver le lecteur audio
+    const audioPlayer = document.getElementById('test-audio-player');
+    if (!audioPlayer) {
+        console.error('❌ [LOAD AUDIO] Lecteur audio non trouvé (ID: test-audio-player)');
+        return;
+    }
+    
+    // Détecter l'environnement iOS/AUv3
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isAUv3 = !!window.webkit?.messageHandlers?.swiftBridge;
+    
+    let audioPath;
+    
+    if (isIOS || isAUv3) {
+        try {
+            // Environnement iOS : charger le fichier en Base64 puis créer une URL Blob
+            console.log(`🍎 [LOAD AUDIO] Chargement iOS via Base64 → Blob URL`);
+            
+            // Lire le fichier en Base64 avec ios_web_view_filereader
+            if (typeof window.readFileFromIOS !== 'function') {
+                throw new Error('Fonction readFileFromIOS non disponible');
+            }
+            
+            // Lire le fichier
+            const base64Data = await window.readFileFromIOS(file.name);
+            console.log(`✅ [LOAD AUDIO] Fichier lu en Base64, taille: ${base64Data.length} caractères`);
+            
+            // Convertir Base64 en Blob
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            // Détecter le type MIME selon l'extension
+            let mimeType = 'audio/mpeg'; // défaut
+            if (file.name.endsWith('.m4a')) mimeType = 'audio/mp4';
+            else if (file.name.endsWith('.wav')) mimeType = 'audio/wav';
+            else if (file.name.endsWith('.ogg')) mimeType = 'audio/ogg';
+            
+            const blob = new Blob([bytes], { type: mimeType });
+            
+            // Créer une URL Blob virtuelle
+            audioPath = URL.createObjectURL(blob);
+            console.log(`🌐 [LOAD AUDIO] URL Blob créée: ${audioPath.substring(0, 50)}...`);
+            
+        } catch (error) {
+            console.error('❌ [LOAD AUDIO] Erreur lors du chargement iOS:', error);
+            // Fallback : essayer le nom direct
+            audioPath = file.name;
+        }
+    } else {
+        // Environnement desktop : utiliser assets
+        audioPath = `./assets/audios/${file.name}`;
+        console.log(`🖥️ [LOAD AUDIO] Chemin desktop: ${audioPath}`);
+    }
+    
+    // Mettre à jour le lecteur audio
+    try {
+        audioPlayer.src = audioPath;
+        audioPlayer.load(); // Forcer le rechargement
+        
+        console.log(`✅ [LOAD AUDIO] Fichier chargé: ${file.name} → ${audioPath.substring(0, 100)}...`);
+        
+        // Mettre à jour l'input de test de chemin si il existe
+        const pathInput = document.getElementById('audio_path_test_input');
+        if (pathInput) {
+            pathInput.value = audioPath;
+        }
+        
+        // Mettre à jour l'affichage du chemin courant
+        const currentPathDisplay = document.getElementById('current-audio-path');
+        if (currentPathDisplay) {
+            if (audioPath.startsWith('blob:')) {
+                currentPathDisplay.textContent = `Chemin courant: BLOB URL (${file.name} chargé en mémoire)`;
+            } else {
+                currentPathDisplay.textContent = `Chemin courant: ${audioPath}`;
+            }
+        }
+        
+        // Afficher une confirmation
+        const display = document.getElementById('file_content_display');
+        if (display) {
+            let confirmContent = display.textContent + '\n\n';
+            confirmContent += `🎵 FICHIER CHARGÉ DANS LE LECTEUR AUDIO:\n`;
+            confirmContent += `• Nom: ${file.name}\n`;
+            confirmContent += `• Chemin: ${audioPath}\n`;
+            confirmContent += `• Taille: ${file.size ? formatFileSize(file.size) : 'Inconnue'}\n`;
+            confirmContent += `• Lecteur: test-audio-player\n\n`;
+            confirmContent += `🎯 Le fichier est maintenant prêt à être lu dans le lecteur audio !`;
+            
+            display.textContent = confirmContent;
+        }
+        
+        // Optionnel : démarrer la lecture automatiquement
+        // audioPlayer.play().catch(err => console.log('Auto-play prevented:', err));
+        
+    } catch (error) {
+        console.error('❌ [LOAD AUDIO] Erreur lors du chargement:', error);
+        alert(`Erreur lors du chargement du fichier audio: ${error.message}`);
+    }
+}
+
+// Fonction utilitaire pour formater la taille des fichiers (si pas déjà définie)
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 // === FONCTIONS DE TEST AUV3 ===
