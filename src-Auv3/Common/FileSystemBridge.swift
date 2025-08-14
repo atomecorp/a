@@ -94,15 +94,22 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         let folderURL = storageURL.appendingPathComponent(folder, isDirectory: true)
         print("📂 SWIFT:listFiles storageURL=\(storageURL.path) folderURL=\(folderURL.path)")
         do {
-            let fileURLs = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey], options: .skipsHiddenFiles)
+            let fileURLs = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey], options: .skipsHiddenFiles)
             let files = fileURLs.compactMap { url -> [String: Any]? in
-                guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]), let isFile = resourceValues.isRegularFile, isFile else { return nil }
-                print("📄 SWIFT:listFiles found file=\(url.lastPathComponent)")
-                return [
-                    "name": url.lastPathComponent,
-                    "size": resourceValues.fileSize ?? 0,
-                    "modified": resourceValues.contentModificationDate?.timeIntervalSince1970 ?? 0
-                ]
+                guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey]) else { return nil }
+                let isFile = resourceValues.isRegularFile ?? false
+                let isDirectory = resourceValues.isDirectory ?? false
+                
+                if isFile || isDirectory {
+                    print("📄 SWIFT:listFiles found \(isDirectory ? "directory" : "file")=\(url.lastPathComponent)")
+                    return [
+                        "name": url.lastPathComponent,
+                        "isDirectory": isDirectory,
+                        "size": resourceValues.fileSize ?? 0,
+                        "modified": resourceValues.contentModificationDate?.timeIntervalSince1970 ?? 0
+                    ]
+                }
+                return nil
             }
             if let requestId = requestId { // unified AUv3API pathway
                 sendBridgeResult(to: webView, payload: ["action":"listFilesResult","requestId":requestId,"success":true,"files":files])
