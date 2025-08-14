@@ -41,6 +41,8 @@
 
 import('./lyrix/index.js');
 // import('./examples/ios_apis.js');
+import('./ios_file_lister.js');
+import('./test_and_rd.js');
 
 // import('./examples/web_recorder.js');
 // import('./examples/web_navigation.js');
