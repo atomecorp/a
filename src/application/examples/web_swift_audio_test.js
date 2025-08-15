@@ -27,7 +27,7 @@ createBasicConsole();
     });
 
     // Code minimaliste pour lister les fichiers locaux (utilise la même fonction que test_and_rd.js)
-    console.log('🔍 Listing local files...');
+
     
     if (typeof window.get_ios_folder_content === 'function') {
         window.get_ios_folder_content('./')

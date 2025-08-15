@@ -133,3 +133,29 @@ if (typeof window !== 'undefined') {
     console.log('✅ [auv3_file_lister] Fonctions exportées globalement');
     console.log('📂 [auv3_file_lister] Chemins supportés: "." (racine), "Projects", "Exports", "Recordings"');
 }
+
+
+
+//usage example
+
+ 
+    // if (typeof window.get_ios_folder_content === 'function') {
+    //     window.get_ios_folder_content('./')
+    //         .then(files => {
+    //             console.log('📂 Local files found:', files);
+    //             console.log('📋 Files list:');
+    //             if (Array.isArray(files)) {
+    //                 files.forEach((file, index) => {
+    //                     console.log(`${index + 1}. ${file.name} (${file.isDirectory ? 'DIR' : 'FILE'})`);
+    //                 });
+    //             } else {
+    //                 console.log('📄 Raw result:', files);
+    //             }
+    //         })
+    //         .catch(error => {
+    //             console.error('❌ Error listing files:', error);
+    //         });
+    // } else {
+    //     console.error('❌ get_ios_folder_content not available. Type of function:', typeof window.get_ios_folder_content);
+    //     console.log('🔍 Available webkit functions:', window.webkit?.messageHandlers ? Object.keys(window.webkit.messageHandlers) : 'No webkit available');
+    // }
