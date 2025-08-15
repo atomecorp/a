@@ -135,10 +135,8 @@ if (typeof window !== 'undefined') {
 }
 
 
-
 //usage example
 
- 
     // if (typeof window.get_ios_folder_content === 'function') {
     //     window.get_ios_folder_content('./')
     //         .then(files => {
