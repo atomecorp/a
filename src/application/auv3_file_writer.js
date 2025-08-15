@@ -158,3 +158,34 @@ if (typeof window !== 'undefined') {
     console.log('✅ [auv3_file_writer] Fonctions exportées globalement');
     console.log('💾 [auv3_file_writer] writeFileToAUv3() et testWriteAUv3File() disponibles');
 }
+
+//usage examples
+
+// if (typeof window.testWriteFile === 'function') {
+//     // Test simple: écrire un fichier texte (comme dans test_and_rd.js)
+//     window.testWriteFile('my_test.txt')
+//         .then(result => {
+//             console.log('✅ File written successfully:', result);
+//             console.log('📄 Success:', result.success);
+//             console.log('📊 Content size:', result.contentSize, 'characters');
+//             console.log('💬 Message:', result.message);
+//         })
+//         .catch(error => {
+//             console.error('❌ Error writing file:', error);
+//         });
+        
+//     // Test avec un autre nom de fichier
+//     setTimeout(() => {
+//         window.testWriteFile('hello_world.txt')
+//             .then(result => {
+//                 console.log('✅ Second file written:', result);
+//             })
+//             .catch(error => {
+//                 console.error('❌ Error writing second file:', error);
+//             });
+//     }, 2000);
+    
+// } else {
+//     console.error('❌ testWriteFile not available. Type of function:', typeof window.testWriteFile);
+//     console.log('🔍 Available iOS functions:', window.writeFileToIOS ? 'writeFileToIOS available' : 'writeFileToIOS not available');
+// }

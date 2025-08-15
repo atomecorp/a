@@ -116,3 +116,27 @@ if (typeof window !== 'undefined') {
     window.formatFileList = formatFileList;
     console.log('[ios_file_lister] Fonctions exportées globalement');
 }
+
+
+//usage example
+
+
+//     if (typeof window.get_ios_folder_content === 'function') {
+//     window.get_ios_folder_content('./')
+//         .then(files => {
+//             console.log('📂 iOS files found:', files);
+//             console.log('📋 Files list:');
+//             if (Array.isArray(files)) {
+//                 files.forEach((file, index) => {
+//                     console.log(`${index + 1}. ${file.name} (${file.isDirectory ? 'DIR' : 'FILE'})`);
+//                 });
+//             } else {
+//                 console.log('📄 Raw result:', files);
+//             }
+//         })
+//         .catch(error => {
+//             console.error('❌ Error listing iOS files:', error);
+//         });
+// } else {
+//     console.error('❌ get_ios_folder_content not available. Type of function:', typeof window.get_ios_folder_content);
+// }
