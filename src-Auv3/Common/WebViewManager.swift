@@ -211,7 +211,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         case "audioChord":
             if let data = data as? [String: Any] {
                 handleAudioChord(data: data)
-            }        case "getSampleRate":
+            }
+        case "getSampleRate":
             sendSampleRateToJS()
             
         case "performCalculation":
@@ -253,8 +254,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     private func handleAudioBuffer(data: [String: Any]) {
-        guard let frequency = data["frequency"] as? Double,
-              let sampleRate = data["sampleRate"] as? Double,
+      guard let _ = data["frequency"] as? Double,
+          let sampleRate = data["sampleRate"] as? Double,
               let duration = data["duration"] as? Double,
               let audioDataArray = data["audioData"] as? [Double] else {
             return

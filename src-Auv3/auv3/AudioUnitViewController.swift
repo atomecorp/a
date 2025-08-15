@@ -43,10 +43,17 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         }
       
         let config = WKWebViewConfiguration()
+        config.setURLSchemeHandler(AudioSchemeHandler(), forURLScheme: "atome")
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = [.audio]
         webView = WKWebView(frame: view.bounds, configuration: config)
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(webView)
         WebViewManager.setupWebView(for: webView, audioController: self)
+        // Load custom scheme index
+        if let url = URL(string: "atome://index.html") {
+            webView.load(URLRequest(url: url))
+        }
     }
 
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
