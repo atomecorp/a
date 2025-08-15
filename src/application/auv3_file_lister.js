@@ -2,21 +2,33 @@
  * auv3_file_lister.js
  * Module pour lister les fichiers du dossier local de l'AUv3 depuis l'application principale
  * 
- * Chemins AUv3 corrects (App Groups):
+ * Supporte n'importe quel chemin dans le container App Groups:
  * - "." ou "" = racine du container App Groups
- * - "Projects" = dossier Projects dans App Groups  
- * - "Exports" = dossier Exports dans App Groups
- * - "Recordings" = dossier Recordings dans App Groups
+ * - "./" = racine du container App Groups
+ * - "./toto" = sous-dossier "toto" 
+ * - "./toto/titi/" = sous-dossier imbriqué
+ * - N'importe quel autre chemin relatif
  */
 
 /**
  * Fonction pour lister le contenu d'un dossier AUv3 depuis l'app principale
- * @param {string} path - Chemin relatif dans l'App Groups (ex: "Projects", "Exports", "." pour racine)
+ * @param {string} path - Chemin relatif dans l'App Groups (ex: "./", "./Projects", "./toto/titi/", etc.)
  * @returns {Promise<Array>} Liste des fichiers et dossiers
  */
-function get_auv3_folder_content(path = '.') {
+function get_auv3_folder_content(path = './') {
     return new Promise((resolve, reject) => {
-        console.log(`📂 [AUv3 LISTER] Listage du dossier AUv3: "${path}"`);
+        // Normaliser le chemin pour accepter différents formats
+        let normalizedPath = path;
+        if (path === '.' || path === '') {
+            normalizedPath = './';
+        }
+        // S'assurer que le chemin se termine par '/' si c'est un dossier
+        if (!normalizedPath.endsWith('/') && !normalizedPath.includes('.')) {
+            normalizedPath += '/';
+        }
+        
+        console.log(`📂 [AUv3 LISTER] Listage du dossier AUv3: "${normalizedPath}"`);
+        console.log(`📝 [AUv3 LISTER] Chemin original: "${path}" → normalisé: "${normalizedPath}"`);
         
         // Vérifier que le bridge Swift est disponible
         if (!window.webkit?.messageHandlers?.swiftBridge) {
@@ -31,7 +43,7 @@ function get_auv3_folder_content(path = '.') {
             const timeoutDuration = 10000; // 10 secondes
             
             console.log(`🔄 [AUv3 LISTER] Envoi de la requête (ID: ${requestId})`);
-            console.log(`🔍 [AUv3 LISTER] Chemin demandé: "${path}"`);
+            console.log(`🔍 [AUv3 LISTER] Chemin demandé: "${normalizedPath}"`);
             
             // Timer pour timeout
             const timeoutTimer = setTimeout(() => {
@@ -50,7 +62,7 @@ function get_auv3_folder_content(path = '.') {
                         
                         if (event.detail.success) {
                             const files = event.detail.files || [];
-                            console.log(`📋 [AUv3 LISTER] ${files.length} fichier(s) trouvé(s)`);
+                            console.log(`📋 [AUv3 LISTER] ${files.length} fichier(s) trouvé(s) dans "${normalizedPath}"`);
                             resolve(files);
                         } else {
                             const error = new Error(event.detail.error || 'Erreur inconnue lors du listage AUv3');
@@ -69,12 +81,11 @@ function get_auv3_folder_content(path = '.') {
             // Écouter la réponse
             window.addEventListener('auv3ListFilesResponse', handleResponse);
             
-            // Envoyer la requête à Swift
-            // Action corrigée pour accéder aux App Groups AUv3
+            // Envoyer la requête à Swift avec le chemin normalisé
             const message = {
                 action: 'listFilesAUv3', // Action spécifique pour les fichiers AUv3
                 requestId: requestId,
-                path: path, // Chemin direct dans App Groups (ex: "Projects", ".")
+                path: normalizedPath, // Chemin normalisé (ex: "./", "./toto/", "./toto/titi/")
                 source: 'main_app' // Indiquer qu'on vient de l'app principale
             };
             
@@ -131,16 +142,31 @@ if (typeof window !== 'undefined') {
     window.get_auv3_folder_content = get_auv3_folder_content;
     window.formatAUv3FileList = formatAUv3FileList;
     console.log('✅ [auv3_file_lister] Fonctions exportées globalement');
-    console.log('📂 [auv3_file_lister] Chemins supportés: "." (racine), "Projects", "Exports", "Recordings"');
+    console.log('📂 [auv3_file_lister] Supporte tous les chemins: "./", "./toto/", "./toto/titi/", etc.');
+    console.log('📝 [auv3_file_lister] Exemples: get_auv3_folder_content("./"), get_auv3_folder_content("./Projects/")');
 }
 
 
-//usage example
+//usage examples
 
-    // if (typeof window.get_ios_folder_content === 'function') {
-    //     window.get_ios_folder_content('./')
+    // Exemples d'utilisation avec différents chemins:
+    
+    // Lister la racine
+    // get_auv3_folder_content('./') ou get_auv3_folder_content('.')
+    
+    // Lister un sous-dossier
+    // get_auv3_folder_content('./Projects/')
+    // get_auv3_folder_content('./Exports/')  
+    // get_auv3_folder_content('./MonDossier/')
+    
+    // Lister un dossier imbriqué
+    // get_auv3_folder_content('./toto/titi/')
+    // get_auv3_folder_content('./Projects/MyProject/')
+
+    // if (typeof window.get_auv3_folder_content === 'function') {
+    //     window.get_auv3_folder_content('./')
     //         .then(files => {
-    //             console.log('📂 Local files found:', files);
+    //             console.log('📂 AUv3 files found:', files);
     //             console.log('📋 Files list:');
     //             if (Array.isArray(files)) {
     //                 files.forEach((file, index) => {
@@ -151,9 +177,8 @@ if (typeof window !== 'undefined') {
     //             }
     //         })
     //         .catch(error => {
-    //             console.error('❌ Error listing files:', error);
+    //             console.error('❌ Error listing AUv3 files:', error);
     //         });
     // } else {
-    //     console.error('❌ get_ios_folder_content not available. Type of function:', typeof window.get_ios_folder_content);
-    //     console.log('🔍 Available webkit functions:', window.webkit?.messageHandlers ? Object.keys(window.webkit.messageHandlers) : 'No webkit available');
+    //     console.error('❌ get_auv3_folder_content not available');
     // }
