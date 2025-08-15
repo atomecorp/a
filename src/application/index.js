@@ -32,7 +32,7 @@
 
 // import('./examples/leaflet.js');
 
-import('./examples/console.js');
+// import('./examples/console.js');
 // import('./examples/leaflet.js');
 // import('./examples/audio.js');
 

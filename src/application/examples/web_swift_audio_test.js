@@ -1,15 +1,28 @@
-// Exemple minimaliste d'ios_file_writer.js (comme writeFileToAUv3 mais pour iOS)
-console.log('💾 Writing iOS file...');
-
-if (typeof window.writeFileToIOS === 'function') {
-    window.writeFileToIOS('my_test.txt', 'hello world')
-        .then(result => {
-            console.log('✅ File written successfully:', result);
-            console.log('📄 Message:', result.message);
-        })
-        .catch(error => {
-            console.error('❌ Error writing file:', error);
-        });
-} else {
-    console.error('❌ writeFileToIOS not available. Type of function:', typeof window.writeFileToIOS);
-}
+      function createBasicConsole() {
+  const console1 = Console({
+    title: 'Debug Console',
+    position: { x: 50, y: 50 },
+    size: { width: 500, height: 350 },
+    template: 'dark_theme'
+  });
+  
+  console1.show();
+  return console1;
+}$
+    
+    createBasicConsole()
+   
+   
+   $('audio', {
+      id: 'riffPlayer',
+      attrs: {
+        src: 'assets/audios/riff.m4a',
+        controls: true
+      },
+      css: {
+        margin: '20px',
+        width: '300px',
+        outline: 'none',
+        borderRadius: '6px'
+      }
+    });
