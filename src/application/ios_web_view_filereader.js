@@ -409,3 +409,33 @@ if (typeof window !== 'undefined') {
     window.arrayBufferToBase64 = arrayBufferToBase64;
     console.log('[ios_web_view_filereader] Fonctions exportées globalement');
 }
+
+
+
+// usage example:
+
+  
+    // if (typeof window.get_ios_webview_folder_content === 'function') {
+    //     window.get_ios_webview_folder_content('./assets/audios')
+    //         .then(files => {
+    //             console.log('📂 WebView files found:', files);
+    //         })
+    //         .catch(error => {
+    //             console.error('❌ Error listing WebView files:', error);
+    //         });
+    // } else {
+    //     console.error('❌ get_ios_webview_folder_content not available');
+    // }
+    
+    // // Test 2: Lire un fichier
+    // if (typeof window.readWebViewFile === 'function') {
+    //     window.readWebViewFile('assets/audios/riff.m4a')
+    //         .then(content => {
+    //             console.log('📖 WebView file read, size:', content.length, 'characters');
+    //         })
+    //         .catch(error => {
+    //             console.error('❌ Error reading WebView file:', error);
+    //         });
+    // } else {
+    //     console.error('❌ readWebViewFile not available');
+    // }
