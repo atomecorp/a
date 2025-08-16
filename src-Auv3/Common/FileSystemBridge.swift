@@ -50,6 +50,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleSaveProjectInternal(body: body, webView: message.webView)
         case "copyToIOSLocal":
             handleCopyToIOSLocal(body: body, webView: message.webView)
+        case "copyMultipleToIOSLocal":
+            handleCopyMultipleToIOSLocal(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -295,6 +297,14 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                 webkit.messageHandlers.fileSystem.postMessage({
                     action: 'copyToIOSLocal',
                     requestedDestPath: requestedDestPath || './',
+                    fileTypes: fileTypes || ['m4a','mp3','wav','atome','json']
+                });
+            },
+            copy_multiple_to_ios_local: function(requestedDestFolder, fileTypes, callback){
+                window.fileSystemCallback = callback;
+                webkit.messageHandlers.fileSystem.postMessage({
+                    action: 'copyMultipleToIOSLocal',
+                    requestedDestPath: requestedDestFolder || './',
                     fileTypes: fileTypes || ['m4a','mp3','wav','atome','json']
                 });
             }
@@ -546,6 +556,23 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async {
                 if success, let relPath = relPath {
                     self?.sendSuccessResponse(to: webView, data: ["path": relPath])
+                } else {
+                    self?.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Import failed")
+                }
+            }
+        }
+    }
+
+    private func handleCopyMultipleToIOSLocal(body: [String: Any], webView: WKWebView?) {
+        print("📥 SWIFT: handleCopyMultipleToIOSLocal body=\(body)")
+        guard let webView = webView else { return }
+        let requestedDestPath = (body["requestedDestPath"] as? String) ?? "./"
+        let fileTypes = body["fileTypes"] as? [String] ?? ["m4a","mp3","wav","atome","json"]
+        guard let vc = findViewController(from: webView) else { sendErrorResponse(to: webView, error: "No VC"); return }
+        iCloudFileManager.shared.importFilesToRelativeFolder(fileTypes: fileTypes, requestedDestPath: requestedDestPath, from: vc) { [weak self] success, relPaths, error in
+            DispatchQueue.main.async {
+                if success, let relPaths = relPaths {
+                    self?.sendSuccessResponse(to: webView, data: ["paths": relPaths])
                 } else {
                     self?.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Import failed")
                 }

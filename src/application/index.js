@@ -55,9 +55,9 @@
 ////////////////////
 
 
-import('./examples/web_swift_audio_test.js');
+// import('./examples/web_swift_audio_test.js');
 
-// import('./examples/drag_2_ios_local.js');
+import('./examples/drag_2_ios_local.js');
 
 
 

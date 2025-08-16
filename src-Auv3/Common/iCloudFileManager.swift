@@ -534,6 +534,35 @@ public class iCloudFileManager: ObservableObject {
         }
     }
 
+    // MARK: - Import multiple vers un dossier
+    public func importFilesToRelativeFolder(fileTypes: [String], requestedDestPath: String, from viewController: UIViewController, completion: @escaping (Bool, [String]?, Error?) -> Void) {
+        print("📥 SWIFT: importFilesToRelativeFolder demandé dest='\(requestedDestPath)' types=\(fileTypes)")
+        self.loadFilesWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, results, error in
+            guard let self = self else { return }
+            guard success, let results = results, !results.isEmpty else {
+                completion(false, nil, error ?? NSError(domain: "ImportMultiple", code: -3, userInfo: [NSLocalizedDescriptionKey:"Aucun fichier sélectionné"]))
+                return
+            }
+            let folder = self.normalizeFolderDestination(requested: requestedDestPath)
+            print("📥 SWIFT: Dossier destination normalisé = '\(folder)' (vide -> racine)")
+            var saved: [String] = []
+            var lastError: Error?
+            let group = DispatchGroup()
+            for (name,data) in results {
+                let relPath = folder.isEmpty ? name : folder + "/" + name
+                group.enter()
+                self.saveFile(data: data, to: relPath) { ok, err in
+                    if ok { saved.append(relPath) } else { lastError = err }
+                    group.leave()
+                }
+            }
+            group.notify(queue: .main) {
+                if saved.isEmpty { completion(false, nil, lastError ?? NSError(domain: "ImportMultiple", code: -4, userInfo: [NSLocalizedDescriptionKey:"Echec copie"])) }
+                else { completion(true, saved, lastError) }
+            }
+        }
+    }
+
     private func normalizeDestination(originalName: String, requested: String) -> String {
         var req = requested.trimmingCharacters(in: .whitespacesAndNewlines)
         if req.hasPrefix("./") { req.removeFirst(2) }
@@ -545,6 +574,17 @@ public class iCloudFileManager: ObservableObject {
         if last.contains(".") { return req } // suppose que c'est un nom de fichier complet
         // Sinon traiter comme dossier
         return req + "/" + originalName
+    }
+
+    private func normalizeFolderDestination(requested: String) -> String {
+        var req = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+        if req.hasPrefix("./") { req.removeFirst(2) }
+        if req == "." { return "" }
+        if req.isEmpty { return "" }
+        // Si fourni un chemin qui ressemble à un fichier (a une extension) on prend juste son dossier parent
+        let last = (req as NSString).lastPathComponent
+        if last.contains(".") { return ((req as NSString).deletingLastPathComponent) }
+        return req.hasSuffix("/") ? String(req.dropLast()) : req
     }
     
     // MARK: - Demande d'autorisation d'accès aux fichiers
