@@ -1,34 +1,67 @@
 
 
-function fct_to_trig(state) {
-    console.log('trig: ' + state);
+// === BOUTON: Ouvrir une fenêtre système pour browser les fichiers (Document Picker) ===
+// Utilise le bridge FileSystemBridge -> action: loadFileWithDocumentPicker
+function openSystemFileBrowser() {
+    console.log('[drag_2_ios_local] ouverture du sélecteur de fichiers système');
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fileSystem) {
+        // Définir callbacks de résultat si besoin
+        window.documentPickerLoadResult = function(success, content, error){
+            if (success) {
+                console.log('✅ Fichier chargé via Document Picker, longueur contenu:', content ? content.length : 0);
+            } else {
+                console.warn('❌ Echec chargement Document Picker:', error);
+            }
+        };
+        window.webkit.messageHandlers.fileSystem.postMessage({
+            action: 'loadFileWithDocumentPicker',
+            fileTypes: ['m4a','mp3','wav','atome','json']
+        });
+    } else {
+        console.warn('Bridge fileSystem indisponible dans ce contexte.');
+    }
 }
 
-function fct_to_trig2(state) {
-    console.log('trigger 2 : ' + state);
-}
-
-// === EXEMPLE 1: Votre bouton existant ===
-const toggle = Button({
-    onText: 'ON',
-    offText: 'OFF',
-    onAction: fct_to_trig,
-    offAction: fct_to_trig2,
-    parent: '#view', // parent direct
-    onStyle: { backgroundColor: '#28a745', color: 'white' },
-    offStyle: { backgroundColor: '#dc3545', color: 'white' },
+const browseBtn = Button({
+    onText: 'Browse',
+    offText: 'Browse',
+    parent: '#view',
+    onAction: openSystemFileBrowser,
+    offAction: openSystemFileBrowser,
     css: {
-        width: '50px',
-        height: '24px',
-        left: '120px',
+        width: '110px',
+        height: '30px',
+        left: '200px',
         top: '120px',
         borderRadius: '6px',
-        backgroundColor: 'orange',
+        backgroundColor: '#007bff',
+        color: 'white',
         position: 'relative',
-        border: 'none',
+        border: '2px solid rgba(255,255,255,0.25)',
         cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-        border: '3px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 2px 4px rgba(255,255,1,1)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.4)',
+        fontSize: '14px'
     }
 });
+
+console.log('[drag_2_ios_local] Bouton Browse ajouté');
+
+function resetPermission(){
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fileSystem){
+        window.webkit.messageHandlers.fileSystem.postMessage({action:'resetFileAccessPermission'});
+        console.log('[drag_2_ios_local] Permission fichiers réinitialisée – prochaine ouverture re‑demandera.');
+    }
+}
+
+const resetBtn = Button({
+    onText:'ResetPerm',
+    offText:'ResetPerm',
+    parent:'#view',
+    onAction: resetPermission,
+    offAction: resetPermission,
+    css:{
+        width:'110px',height:'30px',left:'200px',top:'160px',borderRadius:'6px',backgroundColor:'#6c757d',color:'white',position:'relative',border:'2px solid rgba(255,255,255,0.25)',cursor:'pointer',boxShadow:'0 2px 4px rgba(0,0,0,0.4)',fontSize:'12px'
+    }
+});
+
+console.log('[drag_2_ios_local] Bouton ResetPerm ajouté');

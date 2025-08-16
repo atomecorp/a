@@ -245,8 +245,21 @@ final class LocalHTTPServer {
         }
         // Try AVAsset track count
         let asset = AVURLAsset(url: effectiveURL)
-        let audioTracks = asset.tracks(withMediaType: .audio).count
-        lines.append("av_asset_audio_tracks=\(audioTracks)")
+        var trackCount = 0
+        if #available(iOS 16.0, *) {
+            // Charger les pistes audio de façon synchrone via sémaphore (pas d'async dans cette méthode)
+            let sem = DispatchSemaphore(value: 0)
+            var loaded: [AVAssetTrack]? = nil
+            Task.detached {
+                if let t = try? await asset.loadTracks(withMediaType: .audio) { loaded = t }
+                sem.signal()
+            }
+            _ = sem.wait(timeout: .now() + 2)
+            trackCount = loaded?.count ?? 0
+        } else {
+            trackCount = asset.tracks.count
+        }
+        lines.append("av_asset_audio_tracks=\(trackCount)")
         let body = lines.joined(separator: "\n")
         let payload = Data(body.utf8)
         let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
@@ -424,8 +437,18 @@ final class LocalHTTPServer {
         print("🛠 Re-encode attempt: \(original.lastPathComponent)")
         let asset = AVURLAsset(url: original)
     // Obtain first audio track (deprecated API acceptable as fallback inside extension)
-    let track = asset.tracks(withMediaType: .audio).first
-        guard let track = track else { print("❌ Re-encode: no audio track"); return nil }
+        var audioTrack: AVAssetTrack?
+        if #available(iOS 16.0, *) {
+            let sem = DispatchSemaphore(value: 0)
+            Task.detached {
+                if let t = try? await asset.loadTracks(withMediaType: .audio) { audioTrack = t.first }
+                sem.signal()
+            }
+            _ = sem.wait(timeout: .now() + 2)
+        } else {
+            audioTrack = asset.tracks.first
+        }
+        guard let track = audioTrack else { print("❌ Re-encode: no audio track"); return nil }
         let reader: AVAssetReader
         do { reader = try AVAssetReader(asset: asset) } catch { print("❌ Re-encode reader error: \(error)"); return nil }
         let outputSettings: [String: Any] = [ AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMIsFloatKey: false, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsNonInterleaved: false, AVLinearPCMIsBigEndianKey: false ]
@@ -458,3 +481,5 @@ final class LocalHTTPServer {
         return nil
     }
 }
+
+// (Helper async supprimé; utilisation d'attente sémaphore pour compat non-async)

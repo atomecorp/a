@@ -29,6 +29,9 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleSaveFile(body: body, webView: message.webView)
         case "loadFile":
             handleLoadFile(body: body, webView: message.webView)
+        case "resetFileAccessPermission":
+            iCloudFileManager.shared.resetFileAccessPermission()
+            sendSuccessResponse(to: message.webView, data: ["message":"file access permission reset"])        
         case "listFiles":
             handleListFiles(body: body, webView: message.webView)
         case "deleteFile":
