@@ -54,8 +54,20 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             sendErrorResponse(to: webView, error: "Invalid parameters")
             return
         }
-        
-        let fileData = Data(data.utf8)
+        // Support binaire encodé base64 avec marqueur __BASE64__ (ajouté par hmlt_2_ios_local.js)
+        let fileData: Data
+        if data.hasPrefix("__BASE64__") {
+            let b64 = String(data.dropFirst("__BASE64__".count))
+            if let decoded = Data(base64Encoded: b64) {
+                fileData = decoded
+                print("💾 handleSaveFile: décodage base64 (")
+            } else {
+                print("⚠️ handleSaveFile: échec décodage base64, sauvegarde en UTF-8 brut")
+                fileData = Data(b64.utf8)
+            }
+        } else {
+            fileData = Data(data.utf8)
+        }
         iCloudFileManager.shared.saveFile(data: fileData, to: path) { success, error in
             DispatchQueue.main.async {
                 if success {

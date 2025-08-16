@@ -1,3 +1,40 @@
+  // Console redefinition
+        window.console.log = (function(oldLog) {
+            return function(message) {
+                oldLog(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("LOG: " + message);
+                } catch(e) {
+                    oldLog();
+                }
+            }
+        })(window.console.log);
+
+        window.console.error = (function(oldErr) {
+            return function(message) {
+                oldErr(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("ERROR: " + message);
+                } catch(e) {
+                    oldErr();
+                }
+            }
+        })(window.console.error);
+
+$('span', {
+  // pas besoin de 'tag'
+  id: 'test1',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'Je suis un SPAN ! 🎯'
+});
+
 /**
  * ios_file_writer.js
  * Code minimaliste pour écrire des fichiers sur iOS/AUv3
@@ -101,7 +138,7 @@ if (typeof window !== 'undefined') {
 // console.log('💾 Writing iOS file...');
 
 // if (typeof window.writeFileToIOS === 'function') {
-//     window.writeFileToIOS('my_test.txt', 'hello world')
+//     window.writeFileToIOS('my_test_prefect.txt', 'hello nice world')
 //         .then(result => {
 //             console.log('✅ File written successfully:', result);
 //             console.log('📄 Message:', result.message);
