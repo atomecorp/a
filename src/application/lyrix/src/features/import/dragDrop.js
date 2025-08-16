@@ -411,6 +411,12 @@ export class DragDropManager {
     async processAudioFile(file) {
         try {
             await this.loadAudioFileAsync(file);
+            // Après chargement audio, tenter copie dans stockage local (Recordings/)
+            try {
+                await this.copyAudioFileToLocal(file);
+            } catch(copyErr) {
+                dragLog(`⚠️ Audio copy skipped: ${copyErr.message}`);
+            }
         } catch (error) {
             throw error;
         }
@@ -961,6 +967,69 @@ export class DragDropManager {
         this.audioController = null;
         this.lyricsLibrary = null;
         this.lyricsDisplay = null;
+    }
+
+    // -------------------------------------------------------------
+    // Copie du fichier audio importé dans le stockage local iOS/Files
+    // -------------------------------------------------------------
+    async copyAudioFileToLocal(file){
+        if(!file || !this.isAudioFile(file)) return; // seulement audio
+        if(!(window.AtomeFileSystem && window.webkit?.messageHandlers?.fileSystem)) return; // bridge absent
+        // Ne pas copier > 120MB (limite arbitraire pour éviter mémoire excessive)
+        if(file.size > 120 * 1024 * 1024) throw new Error('fichier trop volumineux pour copie');
+
+        const baseFolder = 'Recordings';
+        const originalName = file.name;
+        const finalName = await this.computeAvailableFileName(baseFolder, originalName);
+        const relPath = baseFolder + '/' + finalName;
+        dragLog(`📥 Préparation copie audio vers ${relPath}`);
+
+        const arrayBuffer = await file.arrayBuffer();
+        const b64 = this.arrayBufferToBase64(arrayBuffer);
+        // Utiliser le marqueur __BASE64__ pour déclencher décodage côté Swift
+        await this.saveViaBridge(relPath, '__BASE64__'+b64);
+        dragLog(`✅ Audio copié localement: ${relPath}`);
+        return relPath;
+    }
+
+    async computeAvailableFileName(folder, desiredName){
+        // Récup liste existante
+        const existing = await this.listFilesPromise(folder).catch(()=>[]);
+        const existingNames = new Set(existing.map(f=>f.name));
+        if(!existingNames.has(desiredName)) return desiredName;
+        const dot = desiredName.lastIndexOf('.');
+        const base = dot>0 ? desiredName.slice(0,dot) : desiredName;
+        const ext = dot>0 ? desiredName.slice(dot) : '';
+        let idx = 1;
+        while(existingNames.has(base+`_${idx}`+ext)) idx++;
+        return base+`_${idx}`+ext;
+    }
+
+    listFilesPromise(folder){
+        return new Promise((resolve,reject)=>{
+            window.fileSystemCallback = function(res){
+                if(res.success) resolve(res.data.files||[]); else reject(new Error(res.error||'listFiles error'));
+            };
+            window.webkit.messageHandlers.fileSystem.postMessage({action:'listFiles', folder});
+        });
+    }
+
+    saveViaBridge(path, data){
+        return new Promise((resolve,reject)=>{
+            window.fileSystemCallback = function(res){
+                if(res.success) resolve(); else reject(new Error(res.error||'save error'));
+            };
+            window.webkit.messageHandlers.fileSystem.postMessage({action:'saveFile', path, data});
+        });
+    }
+
+    arrayBufferToBase64(buffer){
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        const len = bytes.length;
+        for(let i=0;i<len;i++) binary += String.fromCharCode(bytes[i]);
+        // btoa peut échouer si très large; segmentation possible si besoin futur
+        return btoa(binary);
     }
 }
 

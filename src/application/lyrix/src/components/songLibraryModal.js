@@ -256,40 +256,41 @@ export function showSongLibrary() {
             // Local file import dialog implementation to ensure .lrx files are accepted
             const input = document.createElement('input');
             input.type = 'file';
-            input.multiple = false;
+            // Activer import multiple (drag & drop déjà multiple)
+            input.multiple = true;
             // Don't use accept attribute to allow all file types including .lrx
             input.style.display = 'none';
             
             input.addEventListener('change', async (e) => {
-                const file = e.target.files[0];
-                if (file) {
+                const files = Array.from(e.target.files || []);
+                if (files.length) {
                     try {
-                        // Use the drag drop manager to process the file
-                        if (window.Lyrix && window.Lyrix.dragDropManager) {
-                            await window.Lyrix.dragDropManager.processFile(file);
-                        } else if (window.dragDropManager) {
-                            await window.dragDropManager.processFile(file);
-                        } else {
+                        const manager = (window.Lyrix && window.Lyrix.dragDropManager) ? window.Lyrix.dragDropManager : window.dragDropManager;
+                        if (manager) {
+                            // iOS: séquentiel avec petit délai; autres plateformes: parallèle simple
+                            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                            if (isIOS) {
+                                for (let i=0;i<files.length;i++) {
+                                    if (i>0) await new Promise(r=>setTimeout(r,120));
+                                    await manager.processFile(files[i]);
+                                }
+                            } else {
+                                for (const f of files) { await manager.processFile(f); }
+                            }
                         }
-                        // Refresh the song library display
-                        if (window.showSongLibrary) {
-                            window.showSongLibrary();
-                        }
+                        if (window.showSongLibrary) { window.showSongLibrary(); }
                     } catch (error) {
                         if (window.Modal) {
                             window.Modal({
                                 title: '❌ File Import Error',
-                                content: `<p>Failed to import file: ${error.message}</p>`,
+                                content: `<p>Failed to import one or more files: ${error.message}</p>`,
                                 buttons: [{ text: 'OK' }],
                                 size: 'small'
                             });
                         }
                     }
                 }
-                // Clean up
-                if (input.parentNode) {
-                    input.parentNode.removeChild(input);
-                }
+                if (input.parentNode) { input.parentNode.removeChild(input); }
             });
             
             document.body.appendChild(input);
