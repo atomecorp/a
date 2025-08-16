@@ -45,7 +45,7 @@ $('span', {
 // Lien direct (port fixe 60406) pour tester accès brut au fichier depuis WebView
 $('a', {
   id: 'direct_alive_link_60406',
-  attrs: { href: 'http://127.0.0.1:60406/audio/Alive.m4a' },
+  attrs: { href: 'http://127.0.0.1:60406/audio/Runaway.m4a' },
   text: 'Lien direct Alive.m4a (port 60406)',
   css: { display: 'block', margin: '10px', fontSize: '14px', color: '#0af', textDecoration: 'underline' }
 });
@@ -66,7 +66,7 @@ $('a', {
   });
 
   // Ajout audio minimal (lecture manuelle après chargement OK)
-  const audioURL = 'http://127.0.0.1:' + window.__ATOME_LOCAL_HTTP_PORT__ + '/audio/Alive.m4a';
+  const audioURL = 'http://127.0.0.1:' + window.__ATOME_LOCAL_HTTP_PORT__ + '/audio/Vampire.m4a';
   const a = $('audio', {
     id: 'alive_http_player',
     attrs: { controls: true, playsinline: true },

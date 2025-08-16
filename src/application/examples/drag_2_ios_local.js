@@ -113,7 +113,7 @@ function copyMultipleToLocalDemo(){
     };
     window.webkit.messageHandlers.fileSystem.postMessage({
         action:'copyMultipleToIOSLocal',
-        requestedDestPath:'./Projects/',
+        requestedDestPath:'./',
         fileTypes:['m4a','mp3','wav','atome','json']
     });
 }
