@@ -499,6 +499,53 @@ public class iCloudFileManager: ObservableObject {
             }
         }
     }
+
+    // MARK: - Multiple files loader
+    public func loadFilesWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
+        print("🔥 SWIFT: loadFilesWithDocumentPicker (multiple) appelé")
+        if fileAccessGrantedOnce {
+            DispatchQueue.main.async { self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion) }
+        } else {
+            self.requestFileAccessPermission(from: viewController) { [weak self] granted in
+                guard let self = self else { return }
+                guard granted else { completion(false, nil, NSError(domain: "FileAccess", code: -1, userInfo: [NSLocalizedDescriptionKey: "Permission requise"])) ; return }
+                self.fileAccessGrantedOnce = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
+                }
+            }
+        }
+    }
+
+    // MARK: - Import direct: picker -> stockage local (avec option renommage)
+    public func importFileToRelativePath(fileTypes: [String], requestedDestPath: String, from viewController: UIViewController, completion: @escaping (Bool, String?, Error?) -> Void) {
+        print("📥 SWIFT: importFileToRelativePath demandé dest='\(requestedDestPath)' types=\(fileTypes)")
+        self.loadFileWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, data, originalName, error in
+            guard let self = self else { return }
+            guard success, let data = data, let originalName = originalName else {
+                completion(false, nil, error ?? NSError(domain: "Import", code: -2, userInfo: [NSLocalizedDescriptionKey:"Selection échouée"]))
+                return
+            }
+            let finalRelPath = self.normalizeDestination(originalName: originalName, requested: requestedDestPath)
+            print("📥 SWIFT: Import -> sauvegarde sous relPath='\(finalRelPath)'")
+            self.saveFile(data: data, to: finalRelPath) { ok, saveErr in
+                completion(ok, ok ? finalRelPath : nil, saveErr)
+            }
+        }
+    }
+
+    private func normalizeDestination(originalName: String, requested: String) -> String {
+        var req = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+        if req.hasPrefix("./") { req.removeFirst(2) }
+        if req == "." { req = "" }
+        if req.isEmpty { return originalName }
+        if req.hasSuffix("/") { return req + originalName }
+        // S'il y a un chemin complet, déterminer si dernier composant a une extension
+        let last = (req as NSString).lastPathComponent
+        if last.contains(".") { return req } // suppose que c'est un nom de fichier complet
+        // Sinon traiter comme dossier
+        return req + "/" + originalName
+    }
     
     // MARK: - Demande d'autorisation d'accès aux fichiers
     private func requestFileAccessPermission(from viewController: UIViewController, completion: @escaping (Bool) -> Void) {
@@ -581,6 +628,33 @@ public class iCloudFileManager: ObservableObject {
                 print("� SWIFT: Document Picker visible (app ou extension)")
             }
         }
+    }
+    private func proceedWithMultipleDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
+        print("🔥 SWIFT: proceedWithMultipleDocumentPicker")
+        let multipleDelegate = DocumentPickerLoadMultipleDelegate { success, results, error in
+            completion(success, results, error)
+        }
+        // Retenir via objc_setAssociatedObject sur viewController pour durée de vie
+        objc_setAssociatedObject(viewController, "DocumentPickerLoadMultipleDelegate", multipleDelegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        var utTypes: [UTType] = []
+        for fileType in fileTypes {
+            switch fileType.lowercased() {
+            case "atome": if let t = UTType("one.atome.app.atome-project") ?? UTType(filenameExtension: "atome") { utTypes.append(t) } else { utTypes.append(.data) }
+            case "json": utTypes.append(.json)
+            case "txt": utTypes.append(.text)
+            case "m4a": if let t = UTType(filenameExtension: "m4a") { utTypes.append(t) } else { utTypes.append(.mpeg4Audio) }
+            case "mp3": if #available(iOS 15.0, *) { utTypes.append(UTType.mp3) } else { utTypes.append(.audio) }
+            case "wav": if #available(iOS 15.0, *) { utTypes.append(UTType.wav) } else { utTypes.append(.audio) }
+            default: utTypes.append(.data)
+            }
+        }
+        utTypes.append(contentsOf: [.audio, .data, .item, .content])
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
+        picker.delegate = multipleDelegate
+        picker.allowsMultipleSelection = true
+        picker.shouldShowFileExtensions = true
+        picker.modalPresentationStyle = .fullScreen
+        DispatchQueue.main.async { viewController.present(picker, animated: true) }
     }
     // MARK: - Helpers présentation picker
     private func topViewController(from root: UIViewController?) -> UIViewController? {
@@ -759,5 +833,23 @@ class DocumentPickerLoadDelegate: NSObject, UIDocumentPickerDelegate {
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
         print("🔥 SWIFT: documentPickerLoad was cancelled")
         completion(false, nil, nil, NSError(domain: "DocumentPickerLoad", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
+    }
+}
+
+// MARK: - Multiple selection delegate
+class DocumentPickerLoadMultipleDelegate: NSObject, UIDocumentPickerDelegate {
+    private let completion: (Bool, [(String, Data)]?, Error?) -> Void
+    init(completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) { self.completion = completion }
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        print("🔥 SWIFT: multiple didPickDocumentsAt count=\(urls.count)")
+        var results: [(String, Data)] = []
+        for url in urls {
+            let started = url.startAccessingSecurityScopedResource(); defer { if started { url.stopAccessingSecurityScopedResource() } }
+            if let data = try? Data(contentsOf: url) { results.append((url.lastPathComponent, data)) }
+        }
+        completion(!results.isEmpty, results.isEmpty ? nil : results, results.isEmpty ? NSError(domain: "DocumentPickerMultiple", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data"]) : nil)
+    }
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        completion(false, nil, NSError(domain: "DocumentPickerMultiple", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
     }
 }

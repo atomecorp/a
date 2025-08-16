@@ -65,3 +65,36 @@ const resetBtn = Button({
 });
 
 console.log('[drag_2_ios_local] Bouton ResetPerm ajouté');
+
+// === DEMO: copy_to_ios_local ===
+function copyToLocalDemo(){
+    if(!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fileSystem)){
+        console.warn('bridge indisponible'); return;
+    }
+    // Exemple: destination ./Projects/ (garde le nom original)
+    window.fileSystemCallback = function(res){
+        if(res.success){
+            console.log('✅ Import enregistré path=', res.data.path);
+        } else {
+            console.warn('❌ Import échoué', res.error);
+        }
+    };
+    window.webkit.messageHandlers.fileSystem.postMessage({
+        action:'copyToIOSLocal',
+        requestedDestPath:'./',
+        fileTypes:['m4a','mp3','wav','atome','json']
+    });
+}
+
+const copyBtn = Button({
+    onText:'Import→Local',
+    offText:'Import→Local',
+    parent:'#view',
+    onAction: copyToLocalDemo,
+    offAction: copyToLocalDemo,
+    css:{
+        width:'130px',height:'30px',left:'200px',top:'200px',borderRadius:'6px',backgroundColor:'#28a745',color:'white',position:'relative',border:'2px solid rgba(255,255,255,0.25)',cursor:'pointer',boxShadow:'0 2px 4px rgba(0,0,0,0.4)',fontSize:'12px'
+    }
+});
+
+console.log('[drag_2_ios_local] Bouton Import→Local ajouté');

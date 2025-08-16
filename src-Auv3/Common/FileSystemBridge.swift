@@ -44,8 +44,12 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleSaveFileWithDocumentPicker(body: body, webView: message.webView)
         case "loadFileWithDocumentPicker":
             handleLoadFileWithDocumentPicker(body: body, webView: message.webView)
+        case "loadFilesWithDocumentPicker":
+            handleLoadFilesWithDocumentPicker(body: body, webView: message.webView)
         case "saveProjectInternal":
             handleSaveProjectInternal(body: body, webView: message.webView)
+        case "copyToIOSLocal":
+            handleCopyToIOSLocal(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -278,6 +282,21 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                 webkit.messageHandlers.fileSystem.postMessage({
                     action: 'showStorageSettings'
                 });
+            },
+            loadFilesWithDocumentPicker: function(fileTypes, callback) {
+                window.fileSystemCallback = callback;
+                webkit.messageHandlers.fileSystem.postMessage({
+                    action: 'loadFilesWithDocumentPicker',
+                    fileTypes: fileTypes || []
+                });
+            },
+            copy_to_ios_local: function(requestedDestPath, fileTypes, callback){
+                window.fileSystemCallback = callback;
+                webkit.messageHandlers.fileSystem.postMessage({
+                    action: 'copyToIOSLocal',
+                    requestedDestPath: requestedDestPath || './',
+                    fileTypes: fileTypes || ['m4a','mp3','wav','atome','json']
+                });
             }
         };
         
@@ -476,6 +495,25 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         }
         print("🔥 SWIFT: Appel à loadFileWithDocumentPicker terminé")
     }
+
+    private func handleLoadFilesWithDocumentPicker(body: [String: Any], webView: WKWebView?) {
+        print("🔥 SWIFT: handleLoadFilesWithDocumentPicker (multiple) appelé")
+        guard let webView = webView else { sendErrorResponse(to: webView, error: "Invalid webView"); return }
+        let fileTypes = body["fileTypes"] as? [String] ?? ["atome","json","m4a","mp3","wav"]
+        guard let viewController = findViewController(from: webView) else { sendErrorResponse(to: webView, error: "Cannot find view controller"); return }
+        iCloudFileManager.shared.loadFilesWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, results, error in
+            guard self != nil else { return }
+            DispatchQueue.main.async {
+                if success, let results = results {
+                    // Convertir en tableau d'objets {name, content(base64)} pour ne pas casser JSON
+                    let mapped: [[String:Any]] = results.map { (name,data) in ["name":name, "base64":data.base64EncodedString()] }
+                    self?.sendSuccessResponse(to: webView, data: ["files": mapped])
+                } else {
+                    self?.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Unknown error")
+                }
+            }
+        }
+    }
     
     private func handleSaveProjectInternal(body: [String: Any], webView: WKWebView?) {
         guard let fileName = body["fileName"] as? String, let dataString = body["data"] as? String, let requestId = body["requestId"] as? Int else { return }
@@ -495,6 +533,23 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         } catch {
             print("❌ SWIFT:saveProjectInternal error=\(error.localizedDescription)")
             sendBridgeResult(to: webView, payload: ["action":"saveProjectInternalResult","requestId":requestId,"success":false,"error":error.localizedDescription])
+        }
+    }
+
+    private func handleCopyToIOSLocal(body: [String: Any], webView: WKWebView?) {
+        print("📥 SWIFT: handleCopyToIOSLocal body=\(body)")
+        guard let webView = webView else { return }
+        let requestedDestPath = (body["requestedDestPath"] as? String) ?? "./"
+        let fileTypes = body["fileTypes"] as? [String] ?? ["m4a","mp3","wav","atome","json"]
+        guard let vc = findViewController(from: webView) else { sendErrorResponse(to: webView, error: "No VC"); return }
+        iCloudFileManager.shared.importFileToRelativePath(fileTypes: fileTypes, requestedDestPath: requestedDestPath, from: vc) { [weak self] success, relPath, error in
+            DispatchQueue.main.async {
+                if success, let relPath = relPath {
+                    self?.sendSuccessResponse(to: webView, data: ["path": relPath])
+                } else {
+                    self?.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Import failed")
+                }
+            }
         }
     }
 
