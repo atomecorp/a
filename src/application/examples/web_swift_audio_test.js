@@ -1,54 +1,77 @@
-function createBasicConsole() {
-  const console1 = Console({
-    title: 'Debug Console',
-    position: { x: 50, y: 50 },
-    size: { width: 500, height: 350 },
-    template: 'dark_theme'
-  });
-  
-  console1.show();
-  return console1;
-}
-console.log('[web_swift_audio_test] Creating debug console');
-createBasicConsole();
-   
-   
-   // Replace static audio with custom scheme + fallback
-(function(){
-  const existing = document.getElementById('riffPlayer');
-  if(existing) existing.remove();
-  const player = $('audio', {
-    id: 'alivePlayer',
-    // Use triple slash so host is empty and path is /audio/Alive.m4a
-    attrs: { controls: true, src: 'atome:///audio/Alive.m4a', playsinline: true },
-    css: { margin: '20px', width: '320px' }
-  });
-  console.log('[web_swift_audio_test] Injected <audio id="alivePlayer" src="atome:///audio/Alive.m4a">');
-  const events = ['loadstart','loadedmetadata','loadeddata','canplay','canplaythrough','play','playing','pause','stalled','suspend','ended'];
-  events.forEach(ev=> player.addEventListener(ev, ()=> console.log(`[audio event] ${ev}`)));
-  player.addEventListener('error', (e)=>{
-    const mediaError = player.error;
-    console.log('⚠️ audio error', mediaError ? mediaError.code : 'no-code', mediaError);
-  }, { once:false });
+  // Console redefinition
+        window.console.log = (function(oldLog) {
+            return function(message) {
+                oldLog(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("LOG: " + message);
+                } catch(e) {
+                    oldLog();
+                }
+            }
+        })(window.console.log);
 
-  let fallbackTried = false;
-  player.addEventListener('error', async ()=>{
-    if(fallbackTried) return;
-    fallbackTried = true;
-    console.log('⚠️ atome:// playback error, attempting Blob fallback');
-    if(typeof window.readFileFromIOS === 'function') {
-      try {
-        const base64 = await window.readFileFromIOS('Alive.m4a');
-        const binary = atob(base64);
-        const len = binary.length;
-        const bytes = new Uint8Array(len);
-        for (let i=0;i<len;i++) bytes[i]=binary.charCodeAt(i);
-        const blob = new Blob([bytes], { type: 'audio/mp4' });
-        const url = URL.createObjectURL(blob);
-        player.src = url;
-        player.load();
-        console.log('✅ Fallback Blob URL loaded');
-      } catch(e){ console.log('❌ Fallback failed', e); }
-    }
+        window.console.error = (function(oldErr) {
+            return function(message) {
+                oldErr(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("ERROR: " + message);
+                } catch(e) {
+                    oldErr();
+                }
+            }
+        })(window.console.error);
+
+//tests
+
+        console.log("Console redefined for Swift communication");
+        console.error(" error redefined for Swift communication");
+
+
+
+$('span', {
+  // pas besoin de 'tag'
+  id: 'server_test',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: "j'attend le serveur ....."
+});
+
+// Lien direct (port fixe 60406) pour tester accès brut au fichier depuis WebView
+$('a', {
+  id: 'direct_alive_link_60406',
+  attrs: { href: 'http://127.0.0.1:60406/audio/Alive.m4a' },
+  text: 'Lien direct Alive.m4a (port 60406)',
+  css: { display: 'block', margin: '10px', fontSize: '14px', color: '#0af', textDecoration: 'underline' }
+});
+
+// Charge my_test.txt depuis le serveur local et met le contenu dans #server_test
+(function pollPort(){
+  if(typeof window.__ATOME_LOCAL_HTTP_PORT__ === 'undefined') { return setTimeout(pollPort,100); }
+  const span = document.getElementById('server_test');
+  const url = 'http://127.0.0.1:' + window.__ATOME_LOCAL_HTTP_PORT__ + '/text/my_test.txt';
+  span.textContent = 'requête: ' + url;
+  fetch(url).then(r=>{
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.text();
+  }).then(txt=>{
+    span.textContent = txt;
+  }).catch(e=>{
+    span.textContent = 'erreur: '+e.message;
   });
+
+  // Ajout audio minimal (lecture manuelle après chargement OK)
+  const audioURL = 'http://127.0.0.1:' + window.__ATOME_LOCAL_HTTP_PORT__ + '/audio/Alive.m4a';
+  const a = $('audio', {
+    id: 'alive_http_player',
+    attrs: { controls: true, playsinline: true },
+    css: { display: 'block', margin: '10px', width: '320px' }
+  });
+  a.src = audioURL;
+  console.log('[audio] element ajouté src=', audioURL);
 })();

@@ -44,6 +44,11 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
         webView.navigationDelegate = WebViewManager.shared
 
+        // Start lightweight embedded HTTP server (once) to serve audio via standard stack
+        if LocalHTTPServer.shared.port == nil {
+            LocalHTTPServer.shared.start()
+        }
+
         let scriptSource = """
         window.onerror = function(m, s, l, c, e) {
             var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
@@ -61,6 +66,19 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 console.warn("Error sending to Swift:", x);
             }
         });
+        // Early helper: prefer local HTTP server if port present
+        window.__atomePreferHTTP = function(id, filename){
+            try {
+                if(!window.__ATOME_LOCAL_HTTP_PORT__) return false;
+                var el = document.getElementById(id);
+                if(!el) return false;
+                var url = 'http://127.0.0.1:'+window.__ATOME_LOCAL_HTTP_PORT__+'/audio/'+filename;
+                console.log('[atome http] trying', url);
+                el.src = url;
+                return true;
+            } catch(e){ console.warn('atome http helper error', e); }
+            return false;
+        };
         """
 
         let contentController = webView.configuration.userContentController
@@ -386,6 +404,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         // Silent page loading for performance
         WebViewManager.sendToJS("test", "creerDivRouge")
         // Simplified initialization
+        if let p = LocalHTTPServer.shared.port {
+            let js = "window.__ATOME_LOCAL_HTTP_PORT__=" + String(p) + ";"
+            webView.evaluateJavaScript(js, completionHandler: nil)
+            print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")
+        } else {
+            print("⚠️ LocalHTTPServer port not ready at navigation finish")
+        }
     }
     
     private func performCalculation(_ numbers: [Int]) {
