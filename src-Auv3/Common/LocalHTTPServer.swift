@@ -130,6 +130,10 @@ final class LocalHTTPServer {
         } else if path.hasPrefix("/audio/") {
             let name = String(path.dropFirst("/audio/".count))
             serveAudio(named: name, rangeHeader: rangeHeader, on: connection)
+        } else if path == "/health" {
+            serveHealth(on: connection)
+        } else if path == "/tree" {
+            serveTree(on: connection)
         } else {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
         }
@@ -327,6 +331,75 @@ final class LocalHTTPServer {
         var data = Data(head.utf8)
         data.append(payload)
         connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    // MARK: - Health & Tree Endpoints
+
+    private func serveHealth(on connection: NWConnection) {
+        let pid = getpid()
+        let port = self.port ?? 0
+        let obj: [String: Any] = [
+            "ok": true,
+            "pid": pid,
+            "port": port,
+            "time": ISO8601DateFormatter().string(from: Date())
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: []) else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "json fail", on: connection); return
+        }
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: \(data.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n"
+        var out = Data(head.utf8); out.append(data)
+        connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    private struct FileNode: Codable {
+        let name: String
+        let isDirectory: Bool
+        let size: UInt64?
+        let children: [FileNode]?
+    }
+
+    private func serveTree(on connection: NWConnection) {
+        // Root: app Documents directory; we can add more roots later (App Group, iCloud)
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "no docs", on: connection); return
+        }
+        let rootNode = buildNode(url: docs, depth: 0, maxDepth: 12)
+        let obj: [String: Any] = [
+            "root": docs.lastPathComponent,
+            "tree": encodeNodeDict(node: rootNode)
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: []) else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "json fail", on: connection); return
+        }
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: \(data.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n"
+        var out = Data(head.utf8); out.append(data)
+        connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+    }
+
+    private func buildNode(url: URL, depth: Int, maxDepth: Int) -> FileNode {
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+        if !exists { return FileNode(name: url.lastPathComponent, isDirectory: false, size: nil, children: nil) }
+        if isDir.boolValue {
+            if depth >= maxDepth { return FileNode(name: url.lastPathComponent, isDirectory: true, size: nil, children: []) }
+            let childrenURLs = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey], options: [.skipsHiddenFiles])) ?? []
+            let nodes = childrenURLs.map { buildNode(url: $0, depth: depth + 1, maxDepth: maxDepth) }.sorted { $0.name.lowercased() < $1.name.lowercased() }
+            return FileNode(name: url.lastPathComponent, isDirectory: true, size: nil, children: nodes)
+        } else {
+            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.uint64Value
+            return FileNode(name: url.lastPathComponent, isDirectory: false, size: size, children: nil)
+        }
+    }
+
+    private func encodeNodeDict(node: FileNode) -> [String: Any] {
+        var dict: [String: Any] = [
+            "name": node.name,
+            "isDirectory": node.isDirectory
+        ]
+        if let size = node.size { dict["size"] = size }
+        if let children = node.children { dict["children"] = children.map { encodeNodeDict(node: $0) } }
+        return dict
     }
 
     // MARK: - Text file serving
