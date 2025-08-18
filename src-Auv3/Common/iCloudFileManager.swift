@@ -126,8 +126,15 @@ public class iCloudFileManager: ObservableObject {
         }
         // Lancer sync globale après init (newest-wins sur les 2-3 racines)
         FileSyncCoordinator.shared.syncAll(force: true)
-        // Démarrer l'auto-sync (toutes les ~10s) seulement côté app principale pour limiter la charge
-        if isApp { FileSyncCoordinator.shared.startAutoSync(every: 10) }
+        // Démarrer l'auto-sync:
+        // Avant: seulement côté app principale -> latence de propagation depuis l'extension.
+        // Maintenant: activer aussi dans l'extension AUv3 mais avec intervalle plus court pour réduire délai d'apparition.
+        if isApp {
+            FileSyncCoordinator.shared.startAutoSync(every: 8)
+        } else {
+            // Extension: intervalle un peu plus long pour limiter coût mais éviter longues attentes
+            FileSyncCoordinator.shared.startAutoSync(every: 12)
+        }
     }
     
     private func initializeLocalFileStructure() {

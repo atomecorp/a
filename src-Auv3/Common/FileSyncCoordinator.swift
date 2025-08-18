@@ -60,7 +60,8 @@ final class FileSyncCoordinator {
                 self.pending = true
                 return
             }
-            if !force, let last = self.lastSync, Date().timeIntervalSince(last) < 5 { return }
+            // Throttle window réduit (5s -> 2s) pour une propagation plus rapide entre app & extension
+            if !force, let last = self.lastSync, Date().timeIntervalSince(last) < 2 { return }
             self.syncing = true
             self.pending = false
             self._runSync()
@@ -139,7 +140,7 @@ final class FileSyncCoordinator {
         // Detect deletions (paths that existed before but now missing in at least one root)
         let now = Date().timeIntervalSince1970
         // Pass 1: mark missing previously tracked paths
-        for (path, rec) in inventory {
+    for (path, rec) in inventory {
             if rec.deletedAt != nil { continue }
             var presentSomewhere = false
             for (_, inv) in inventories { if inv[path] != nil { presentSomewhere = true; break } }
@@ -148,6 +149,7 @@ final class FileSyncCoordinator {
                 updated.deletedAt = now
                 inventory[path] = updated
                 inventoryDirty = true
+        print("🕳️ Mark deletion (missing everywhere) path=\(path)")
             }
         }
 
@@ -172,22 +174,27 @@ final class FileSyncCoordinator {
                 // 3. Deletion older than a grace window (2s) -> treat reappearance as recreation
                 let nowTs = now
                 let presentInVisible = (visibleRoot != nil) ? (inventories[visibleRoot!]?[rel] != nil) : false
-                let resurrect = (newestMTime > deletedAt) || presentInVisible || (nowTs - deletedAt > 2.0)
+                // Grace window allongée 2s -> 4s pour éviter oscillations (fichier copié puis marqué supprimé trop vite)
+                let resurrect = (newestMTime > deletedAt) || presentInVisible || (nowTs - deletedAt > 4.0)
                 if resurrect {
                     existing.deletedAt = nil
                     existing.lastModified = max(existing.lastModified, newestMTime, deletedAt + 0.001)
                     inventory[rel] = existing; inventoryDirty = true
+                    print("♻️ Resurrect rel=\(rel) mtime=\(newestMTime) deletedAt=\(deletedAt) presentVisible=\(presentInVisible)")
                 } else {
                     // Enforce deletion: remove surviving copies
+                    print("✂️ Enforce tombstone rel=\(rel) keep deletedAt=\(deletedAt) metas=\(metas.count)")
                     for m in metas { deleteItemIfExists(m.root.appendingPathComponent(rel)) }
                     continue
                 }
             } else if rec == nil {
                 inventory[rel] = InventoryRecord(lastModified: newestMTime, deletedAt: nil, lastSeenVisible: nil); inventoryDirty = true
+                print("➕ Track new rel=\(rel) mtime=\(newestMTime)")
             } else {
                 // update lastModified if advanced
                 if let existing = rec, newestMTime > existing.lastModified + 0.5 {
                     inventory[rel]?.lastModified = newestMTime; inventoryDirty = true
+                    print("🕓 Advance mtime rel=\(rel) -> \(newestMTime)")
                 }
             }
 
@@ -204,10 +211,16 @@ final class FileSyncCoordinator {
                let cRoot = canonicalRoot, inventories[cRoot]?[rel] != nil {
                 let canonMod = inventories[cRoot]![rel]!.modDate.timeIntervalSince1970
                 // Additional guard: ensure disappearance has persisted for > 1 sync interval (we approximate using time since lastSeenVisible)
-                if let lsv = existing.lastSeenVisible, now - lsv > 2.0, canonMod <= existing.lastModified + 0.5 {
-                    var updated = existing; updated.deletedAt = now; inventory[rel] = updated; inventoryDirty = true
-                    for m in metas { deleteItemIfExists(m.root.appendingPathComponent(rel)) }
-                    continue
+                if let lsv = existing.lastSeenVisible, now - lsv > 4.0, canonMod <= existing.lastModified + 0.5 {
+                    // EXTRA SAFEGUARD: if file still exists in canonical root, DO NOT tombstone (prevents flicker)
+                    if inventories[cRoot]?[rel] == nil {
+                        var updated = existing; updated.deletedAt = now; inventory[rel] = updated; inventoryDirty = true
+                        print("🗑️ Propagate deletion rel=\(rel) lastSeenVisible=\(lsv) canonMod=\(canonMod)")
+                        for m in metas { deleteItemIfExists(m.root.appendingPathComponent(rel)) }
+                        continue
+                    } else {
+                        print("🚫 Skip deletion rel=\(rel) still present in canonical root; preventing flicker")
+                    }
                 }
             }
 

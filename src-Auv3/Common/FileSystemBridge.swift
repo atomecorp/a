@@ -81,6 +81,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             DispatchQueue.main.async {
                 if success {
                     self.sendSuccessResponse(to: webView, data: ["message": "File saved successfully"])
+                    // Force immediate sync propagation
+                    FileSyncCoordinator.shared.syncAll(force: true)
                 } else {
                     self.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Unknown error")
                 }
@@ -137,6 +139,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             } else {
                 sendSuccessResponse(to: webView, data: ["files": files])
             }
+            // After listing (user likely expects freshness) schedule non-forced sync to pick external changes
+            FileSyncCoordinator.shared.syncAll()
         } catch {
             print("❌ SWIFT:listFiles error=\(error.localizedDescription)")
             if let requestId = requestId {
@@ -163,6 +167,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         do {
             try FileManager.default.removeItem(at: fileURL)
             sendSuccessResponse(to: webView, data: ["message": "File deleted successfully"])
+            // Immediate sync to propagate tombstone
+            FileSyncCoordinator.shared.syncAll(force: true)
         } catch {
             sendErrorResponse(to: webView, error: "Failed to delete file: \(error.localizedDescription)")
         }
