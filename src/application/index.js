@@ -32,7 +32,7 @@
 
 // import('./examples/leaflet.js');
 
-import('./examples/console.js');
+// import('./examples/console.js');
 // import('./examples/leaflet.js');
 // import('./examples/audio.js');
 
@@ -43,7 +43,7 @@ import('./examples/console.js');
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-import('./lyrix/index.js');
+// import('./lyrix/index.js');
 // import('./ios_file_lister.js');
 // import('./ios_file_reader.js');
 // import('./ios_file_writer.js');
@@ -54,10 +54,10 @@ import('./lyrix/index.js');
 // import('./test_and_rd.js');
 
 ////
-// import('./examples/web_swift_audio_test.js');
-// import('./examples/import_muliple_ios.js');
-// import('./examples/auv3file_browser.js');
-// import('./examples/swift_server.js');
+import('./examples/web_swift_audio_test.js');
+import('./examples/import_muliple_ios.js');
+import('./examples/auv3file_browser.js');
+import('./examples/swift_server.js');
 ////
 
 

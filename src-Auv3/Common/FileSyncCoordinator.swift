@@ -13,6 +13,45 @@ final class FileSyncCoordinator {
     private var pending = false
     private var timer: DispatchSourceTimer? = nil
 
+    // MARK: - Inventory / Tombstones (Option A canonical storage)
+    private struct InventoryRecord: Codable { var lastModified: TimeInterval; var deletedAt: TimeInterval?; var lastSeenVisible: TimeInterval? }
+    private var inventory: [String: InventoryRecord] = [:]
+    private var inventoryLoaded = false
+    private var inventoryDirty = false
+
+    private func inventoryFileURL() -> URL? {
+        // Store in App Group if possible else first documents
+        if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents/.atome_sync", isDirectory: true) {
+            return group.appendingPathComponent("inventory.json", isDirectory: false)
+        }
+        if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent(".atome_sync", isDirectory: true) {
+            return docs.appendingPathComponent("inventory.json", isDirectory: false)
+        }
+        return nil
+    }
+
+    private func loadInventoryIfNeeded() {
+        guard !inventoryLoaded, let url = inventoryFileURL() else { return }
+        defer { inventoryLoaded = true }
+        do {
+            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if fm.fileExists(atPath: url.path) {
+                let data = try Data(contentsOf: url)
+                let decoded = try JSONDecoder().decode([String: InventoryRecord].self, from: data)
+                inventory = decoded
+            }
+        } catch { print("⚠️ Inventory load failed: \(error)") }
+    }
+
+    private func persistInventoryIfNeeded() {
+        guard inventoryDirty, let url = inventoryFileURL() else { return }
+        do {
+            let data = try JSONEncoder().encode(inventory)
+            try data.write(to: url, options: .atomic)
+            inventoryDirty = false
+        } catch { print("⚠️ Inventory save failed: \(error)") }
+    }
+
     // Public API
     func syncAll(force: Bool = false) {
         queue.async { [weak self] in
@@ -29,6 +68,29 @@ final class FileSyncCoordinator {
             self.lastSync = Date()
             if self.pending { self.pending = false; self.syncAll(force: true) }
         }
+    }
+
+    // Blocking sync (used by /sync_now endpoint) returns stats
+    func blockingSync() -> (changed: Int, deleted: Int, roots: [String]) {
+        var changed = 0
+        var deleted = 0
+        var rootsPaths: [String] = []
+        queue.sync {
+            let beforeInventory = Set(inventory.keys)
+            let beforeFiles: [String: Date] = [:] // placeholder for future fine-grained diff
+            let roots = availableRoots()
+            rootsPaths = roots.map { $0.path }
+            let prevInventory = inventory // copy
+            let prevDeleted = prevInventory.filter { $0.value.deletedAt != nil }.count
+            self._runSync()
+            let afterDeleted = inventory.filter { $0.value.deletedAt != nil }.count
+            deleted = afterDeleted - prevDeleted
+            // Changed heuristic: new entries or resurrected ones
+            let afterInventory = Set(inventory.keys)
+            changed = afterInventory.subtracting(beforeInventory).count
+            self.lastSync = Date()
+        }
+        return (changed: changed, deleted: max(0, deleted), roots: rootsPaths)
     }
 
     // MARK: - Auto Sync
@@ -54,23 +116,107 @@ final class FileSyncCoordinator {
 
     // MARK: - Core Sync Logic
     private func _runSync() {
+        loadInventoryIfNeeded()
         let roots = availableRoots()
-        if roots.count < 2 { return }
+        if roots.isEmpty { return }
+        // Determine canonical root (App Group prioritized)
+        let canonicalRoot: URL? = {
+            if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) { return group }
+            return roots.first
+        }()
+        // Identify visible user Documents root (first non-group documents)
+        let visibleRoot: URL? = {
+            if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first { return docs }
+            return nil
+        }()
         var inventories: [URL: [String: FileMeta]] = [:]
         for root in roots {
             inventories[root] = buildInventory(root: root)
         }
         var allRelPaths: Set<String> = []
         for inv in inventories.values { allRelPaths.formUnion(inv.keys) }
+
+        // Detect deletions (paths that existed before but now missing in at least one root)
+        let now = Date().timeIntervalSince1970
+        // Pass 1: mark missing previously tracked paths
+        for (path, rec) in inventory {
+            if rec.deletedAt != nil { continue }
+            var presentSomewhere = false
+            for (_, inv) in inventories { if inv[path] != nil { presentSomewhere = true; break } }
+            if !presentSomewhere {
+                var updated = rec
+                updated.deletedAt = now
+                inventory[path] = updated
+                inventoryDirty = true
+            }
+        }
+
+        // Pass 2: process current paths
         for rel in allRelPaths {
             var metas: [(root: URL, meta: FileMeta)] = []
             for (root, inv) in inventories { if let m = inv[rel] { metas.append((root, m)) } }
             guard !metas.isEmpty else { continue }
-            if metas.first!.meta.isDir { for root in roots { ensureDirectory(root.appendingPathComponent(rel)) }; continue }
-            let winner = metas.max { a, b in
+            let isDir = metas.first!.meta.isDir
+            // Inventory record
+            var rec = inventory[rel]
+            let newestMeta = metas.max { a, b in
                 if a.meta.modDate == b.meta.modDate { return a.meta.size < b.meta.size }
                 return a.meta.modDate < b.meta.modDate
             }!
+            let newestMTime = newestMeta.meta.modDate.timeIntervalSince1970
+
+            if var existing = rec, let deletedAt = existing.deletedAt {
+                // More permissive resurrection conditions:
+                // 1. mtime newer than deletion
+                // 2. File now present in visible user root (explicit user action)
+                // 3. Deletion older than a grace window (2s) -> treat reappearance as recreation
+                let nowTs = now
+                let presentInVisible = (visibleRoot != nil) ? (inventories[visibleRoot!]?[rel] != nil) : false
+                let resurrect = (newestMTime > deletedAt) || presentInVisible || (nowTs - deletedAt > 2.0)
+                if resurrect {
+                    existing.deletedAt = nil
+                    existing.lastModified = max(existing.lastModified, newestMTime, deletedAt + 0.001)
+                    inventory[rel] = existing; inventoryDirty = true
+                } else {
+                    // Enforce deletion: remove surviving copies
+                    for m in metas { deleteItemIfExists(m.root.appendingPathComponent(rel)) }
+                    continue
+                }
+            } else if rec == nil {
+                inventory[rel] = InventoryRecord(lastModified: newestMTime, deletedAt: nil, lastSeenVisible: nil); inventoryDirty = true
+            } else {
+                // update lastModified if advanced
+                if let existing = rec, newestMTime > existing.lastModified + 0.5 {
+                    inventory[rel]?.lastModified = newestMTime; inventoryDirty = true
+                }
+            }
+
+            // Track presence in visible root
+            if let vRoot = visibleRoot, inventories[vRoot]?[rel] != nil {
+                if var existing = inventory[rel] { existing.lastSeenVisible = now; inventory[rel] = existing; inventoryDirty = true }
+            }
+
+            // User deletion propagation: file missing in visible root but exists elsewhere and was previously seen there -> propagate deletion
+            if let vRoot = visibleRoot,
+               inventories[vRoot]?[rel] == nil,
+               let existing = inventory[rel], existing.deletedAt == nil,
+               existing.lastSeenVisible != nil,
+               let cRoot = canonicalRoot, inventories[cRoot]?[rel] != nil {
+                let canonMod = inventories[cRoot]![rel]!.modDate.timeIntervalSince1970
+                // Additional guard: ensure disappearance has persisted for > 1 sync interval (we approximate using time since lastSeenVisible)
+                if let lsv = existing.lastSeenVisible, now - lsv > 2.0, canonMod <= existing.lastModified + 0.5 {
+                    var updated = existing; updated.deletedAt = now; inventory[rel] = updated; inventoryDirty = true
+                    for m in metas { deleteItemIfExists(m.root.appendingPathComponent(rel)) }
+                    continue
+                }
+            }
+
+            if isDir { for root in roots { ensureDirectory(root.appendingPathComponent(rel)) }; continue }
+            // Winner: canonical root file if exists, else newest
+            let winner: (root: URL, meta: FileMeta) = {
+                if let canon = canonicalRoot, let meta = inventories[canon]?[rel] { return (canon, meta) }
+                return newestMeta
+            }()
             for root in roots {
                 let dest = root.appendingPathComponent(rel)
                 if root == winner.root { continue }
@@ -86,6 +232,7 @@ final class FileSyncCoordinator {
         print("🔄 FileSyncCoordinator sync complete roots=")
         for r in roots { print("   • \(r.path)") }
     cleanupSpuriousArtifacts(in: roots)
+        persistInventoryIfNeeded()
     }
 
     private struct FileMeta { let isDir: Bool; let size: UInt64; let modDate: Date }
@@ -124,11 +271,18 @@ final class FileSyncCoordinator {
         } catch { print("⚠️ Sync copy failed: \(error)") }
     }
 
+    private func deleteItemIfExists(_ url: URL) {
+        if fm.fileExists(atPath: url.path) {
+            do { try fm.removeItem(at: url); print("🗑️ Deleted \(url.lastPathComponent)") } catch { print("⚠️ Delete failed: \(error)") }
+        }
+    }
+
     private func availableRoots() -> [URL] {
         var roots: [URL] = []
-        if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first { roots.append(docs) }
-        if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) { roots.append(group) }
-        if let ubiq = fm.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents", isDirectory: true) { roots.append(ubiq) }
+    // Option A: prioritize App Group as canonical; still include visible Documents as mirror, plus iCloud if present.
+    if let group = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) { roots.append(group) }
+    if let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first { roots.append(docs) }
+    if let ubiq = fm.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents", isDirectory: true) { roots.append(ubiq) }
         var seen: Set<String> = []
         return roots.filter { r in let k = r.path; if seen.contains(k) { return false }; seen.insert(k); return true }
     }

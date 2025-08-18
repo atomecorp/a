@@ -137,6 +137,8 @@ final class LocalHTTPServer {
             serveHealth(on: connection)
         } else if path == "/tree" {
             serveTree(on: connection)
+        } else if path == "/sync_now" {
+            serveSyncNow(on: connection)
         } else {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
         }
@@ -144,20 +146,43 @@ final class LocalHTTPServer {
 
     private func candidateFileURLs(for name: String) -> [URL] {
         var candidates: [URL] = []
-        // 1. Documents/iCloud container (primary dynamic storage)
+        // 1. App Group canonical Documents (Option A) – ensures both processes see same files
+        if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) {
+            candidates.append(group.appendingPathComponent(name))
+        }
+        // 2. Process-local Documents (mirror)
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             candidates.append(docs.appendingPathComponent(name))
         }
-        // 2. Main bundle direct
+        // 3. Main bundle direct
         if let bundleURL = Bundle.main.url(forResource: name.replacingOccurrences(of: ".m4a", with: ""), withExtension: "m4a") {
             candidates.append(bundleURL)
         }
-        // 3. Inside src/ if packaged (e.g., src/audio)
+        // 4. Inside src/ if packaged (e.g., src/audio)
         if let srcRoot = Bundle.main.url(forResource: "src", withExtension: nil) {
             candidates.append(srcRoot.appendingPathComponent(name))
             candidates.append(srcRoot.appendingPathComponent("audio/").appendingPathComponent(name))
         }
         return candidates
+    }
+
+    private func serveSyncNow(on connection: NWConnection) {
+        let start = Date()
+        let result = FileSyncCoordinator.shared.blockingSync()
+        let duration = Int(Date().timeIntervalSince(start) * 1000)
+        let json: [String: Any] = [
+            "status": "done",
+            "startedAt": Int(start.timeIntervalSince1970),
+            "durationMs": duration,
+            "roots": result.roots,
+            "changed": result.changed,
+            "deleted": result.deleted
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: json, options: []) {
+            sendRaw(status: 200, reason: "OK", headers: ["Content-Type": "application/json", "Cache-Control": "no-store"], body: data, on: connection)
+        } else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "JSON encode failed", on: connection)
+        }
     }
 
     private func serveAudio(named name: String, rangeHeader: String?, on connection: NWConnection) {
@@ -336,6 +361,21 @@ final class LocalHTTPServer {
         connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
     }
 
+    private func sendRaw(status: Int, reason: String, headers: [String:String], body: Data, on connection: NWConnection) {
+        var headerLines: [String] = []
+        var hasCT = false
+        var hasCL = false
+        for (k,v) in headers { headerLines.append("\(k): \(v)"); if k.lowercased()=="content-type" { hasCT=true }; if k.lowercased()=="content-length" { hasCL=true } }
+        if !hasCT { headerLines.append("Content-Type: application/octet-stream") }
+        if !hasCL { headerLines.append("Content-Length: \(body.count)") }
+        headerLines.append("Access-Control-Allow-Origin: *")
+        headerLines.append("Access-Control-Allow-Headers: *")
+        headerLines.append("Connection: close")
+        let head = "HTTP/1.1 \(status) \(reason)\r\n" + headerLines.joined(separator: "\r\n") + "\r\n\r\n"
+        var out = Data(head.utf8); out.append(body)
+        connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+    }
+
     // MARK: - Health & Tree Endpoints
 
     private func serveHealth(on connection: NWConnection) {
@@ -363,13 +403,17 @@ final class LocalHTTPServer {
     }
 
     private func serveTree(on connection: NWConnection) {
-        // Root: app Documents directory; we can add more roots later (App Group, iCloud)
-        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            sendSimple(status: 500, reason: "Internal Server Error", body: "no docs", on: connection); return
+        // Root preference: App Group canonical Documents (Option A) else fallback to process-local Documents
+        let fm = FileManager.default
+        let groupRoot = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true)
+        let docsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask).first
+        guard let root = groupRoot ?? docsRoot else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "no root", on: connection); return
         }
-        let rootNode = buildNode(url: docs, depth: 0, maxDepth: 12)
+        let rootNode = buildNode(url: root, depth: 0, maxDepth: 12)
         let obj: [String: Any] = [
-            "root": docs.lastPathComponent,
+            "root": root.lastPathComponent,
+            "group": groupRoot != nil,
             "tree": encodeNodeDict(node: rootNode)
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: obj, options: []) else {
