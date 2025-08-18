@@ -79,7 +79,58 @@ $('span', {
     css: { display: 'block', margin: '10px', width: '320px' }
   });
   player.src = audioURL;
-  $('div', { text: 'Lecture de: ' + targetRelative, css:{margin:'4px',fontSize:'12px',color:'#ccc'} });
+  const infoDiv = $('div', { id:'runaway_player_info', text: 'Lecture de: ' + targetRelative, css:{margin:'4px',fontSize:'12px',color:'#ccc'} });
+  // Input box (Squirrel) pour afficher/modifier le chemin courant
+  const pathInput = $('input', {
+    id: 'runaway_player_source',
+    attrs: { type: 'text', value: targetRelative, spellcheck: false },
+    css: {
+      display: 'block',
+      margin: '6px 10px',
+      width: '320px',
+      padding: '6px 8px',
+      background: '#101010',
+      color: '#eee',
+      border: '1px solid #333',
+      borderRadius: '4px',
+      fontFamily: 'monospace',
+      fontSize: '12px'
+    },
+    on: {
+      change: updateAudioSource,
+      keydown: e => { if(e.key === 'Enter') updateAudioSource(); }
+    }
+  });
+
+  // Bouton de validation (Squirrel)
+  Button({
+    id: 'runaway_player_load_btn',
+    onText: 'Load', offText: 'Load',
+    onAction: ()=> updateAudioSource(),
+    offAction: ()=> updateAudioSource(),
+    css: { margin:'4px 10px 10px 10px', width:'70px', height:'26px' }
+  });
+
+  function updateAudioSource(){
+    let val = pathInput.value.trim();
+    if(!val) return;
+    // URL absolue ?
+    let newURL;
+    if(/^[a-z]+:\/\//i.test(val)) {
+      newURL = val;
+    } else {
+      // Normaliser: retirer éventuel préfixe audio/ déjà présent pour éviter doublon
+      const rel = val.replace(/^\/+/, '');
+      const cleaned = rel.startsWith('audio/') ? rel.slice('audio/'.length) : rel;
+      newURL = 'http://127.0.0.1:' + dynamicPort + '/audio/' + cleaned.split('/').map(encodeURIComponent).join('/');
+    }
+    console.log('[audio] switch ->', newURL, ' (from input:', val, ')');
+    player.pause();
+    player.src = newURL;
+    player.load();
+    player.play().catch(()=>{});
+    infoDiv.textContent = 'Lecture de: ' + val;
+  }
   console.log('[audio] lecture directe Runaway ->', audioURL);
 })();
 
