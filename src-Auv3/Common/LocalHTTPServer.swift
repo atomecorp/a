@@ -131,8 +131,11 @@ final class LocalHTTPServer {
             let name = String(path.dropFirst("/audio_head/".count))
             serveAudioHead(named: name, on: connection)
         } else if path.hasPrefix("/audio/") {
-            let name = String(path.dropFirst("/audio/".count))
-            serveAudio(named: name, rangeHeader: rangeHeader, on: connection)
+            let rawName = String(path.dropFirst("/audio/".count))
+            // Decode any percent-encoded characters (spaces etc.) so underlying file with plain spaces is found
+            let decodedName = rawName.removingPercentEncoding ?? rawName
+            if rawName != decodedName { print("🧪 Decoded audio name raw=\(rawName) decoded=\(decodedName)") }
+            serveAudio(named: decodedName, rangeHeader: rangeHeader, on: connection)
         } else if path == "/health" {
             serveHealth(on: connection)
         } else if path == "/tree" {
