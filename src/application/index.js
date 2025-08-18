@@ -55,7 +55,7 @@
 ////////////////////
 
 
-// import('./examples/web_swift_audio_test.js');
+
 
 //////
 
@@ -75,10 +75,11 @@ function createBasicConsole() {
 createBasicConsole()
 
 ////
+// import('./examples/web_swift_audio_test.js');
 
 // import('./examples/drag_2_ios_local.js');
 
-// import('./examples/auv3file_browser.js');
+import('./examples/auv3file_browser.js');
 
 
 import('./examples/swift_server.js');

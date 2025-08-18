@@ -144,6 +144,12 @@ async function _fillPanel(){
 	}
 }
 
+// --- Delete panel ---
+function _deletePanel(){
+	const p = document.querySelector('#swift_srv_panel');
+	if(p) p.remove();
+}
+
 // --- Draggable ---
 function _makePanelDraggable(panelSel, handleSel){
 	const panel = typeof panelSel==='string'? document.querySelector(panelSel): panelSel;
@@ -169,7 +175,7 @@ if(!document.querySelector('#swift_srv_btn')){
 		onText:'SwiftSrv',
 		offText:'SwiftSrv',
 		onAction: _fillPanel,
-		offAction: _fillPanel,
+		offAction: _deletePanel,
 		css:{
 			position:'absolute',
 			top:'80px',
