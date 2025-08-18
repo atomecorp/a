@@ -118,7 +118,10 @@ final class LocalHTTPServer {
             sendSimple(status: 405, reason: "Method Not Allowed", body: "Method Not Allowed", on: connection)
             return
         }
-        if path.hasPrefix("/text/") {
+    // Opportunistic sync trigger (throttled inside coordinator)
+    FileSyncCoordinator.shared.syncAll()
+
+    if path.hasPrefix("/text/") {
             let name = String(path.dropFirst("/text/".count))
             serveText(named: name, on: connection)
         } else if path.hasPrefix("/audio_meta/") {

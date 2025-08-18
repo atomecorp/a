@@ -117,9 +117,17 @@ public class iCloudFileManager: ObservableObject {
         
         // Si c'est l'app principale, synchroniser les fichiers depuis App Groups
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-        if !bundleIdentifier.contains(".appex") {
+        let isApp = !bundleIdentifier.contains(".appex")
+        if isApp {
+            // Première passe : AppGroup -> Visible
             syncFromAppGroupsToVisibleDocuments()
+            // Deuxième passe : Visible -> AppGroup (pour récupérer les fichiers déjà présents côté app)
+            syncFromVisibleDocumentsToAppGroups()
         }
+        // Lancer sync globale après init (newest-wins sur les 2-3 racines)
+        FileSyncCoordinator.shared.syncAll(force: true)
+        // Démarrer l'auto-sync (toutes les ~10s) seulement côté app principale pour limiter la charge
+        if isApp { FileSyncCoordinator.shared.startAutoSync(every: 10) }
     }
     
     private func initializeLocalFileStructure() {
@@ -785,6 +793,51 @@ public class iCloudFileManager: ObservableObject {
             
         } catch {
             print("❌ Erreur lors de la synchronisation: \(error)")
+        }
+    }
+
+    // MARK: - Reverse Synchronisation (Visible -> App Groups)
+    private func syncFromVisibleDocumentsToAppGroups() {
+        print("🔄 Synchronisation depuis Documents visible vers App Groups...")
+        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
+            print("❌ App Groups non disponible pour reverse sync")
+            return
+        }
+        let appGroupDocuments = groupURL.appendingPathComponent("Documents")
+        let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+        do {
+            let fm = FileManager.default
+            let folders = ["Projects", "Exports", "Recordings", "Templates"]
+            // Créer racine Documents si nécessaire côté App Group
+            try fm.createDirectory(at: appGroupDocuments, withIntermediateDirectories: true)
+            for folder in folders {
+                let srcFolder = visibleDocuments.appendingPathComponent(folder)
+                let dstFolder = appGroupDocuments.appendingPathComponent(folder)
+                if fm.fileExists(atPath: srcFolder.path) {
+                    if !fm.fileExists(atPath: dstFolder.path) {
+                        try fm.createDirectory(at: dstFolder, withIntermediateDirectories: true)
+                    }
+                    let contents = try fm.contentsOfDirectory(at: srcFolder, includingPropertiesForKeys: [.contentModificationDateKey])
+                    for srcFile in contents {
+                        let dstFile = dstFolder.appendingPathComponent(srcFile.lastPathComponent)
+                        var shouldCopy = false
+                        if !fm.fileExists(atPath: dstFile.path) { shouldCopy = true }
+                        else {
+                            let srcDate = try srcFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                            let dstDate = try dstFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                            if let s = srcDate, let d = dstDate, s > d { try fm.removeItem(at: dstFile); shouldCopy = true }
+                        }
+                        if shouldCopy {
+                            try fm.copyItem(at: srcFile, to: dstFile)
+                            print("📄 Copié: \(srcFile.lastPathComponent) vers App Groups")
+                        }
+                    }
+                }
+            }
+            print("✅ Synchronisation Documents visible → App Groups terminée")
+        } catch {
+            print("❌ Erreur reverse sync: \(error)")
         }
     }
     
