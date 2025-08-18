@@ -81,20 +81,17 @@ export class AudioManager {
             }
         }
         
-        // Already formed complete URL - return as is
-        if (audioPath.startsWith(CONSTANTS.AUDIO.BASE_URL)) {
-            debugLog('NORMALIZE', 'Path already has BASE_URL, returning as-is');
+        // If it's already a fully qualified dynamic server URL (/audio/), keep it
+        if (/^https?:\/\/[^\s]+\/audio\//i.test(audioPath)) {
+            debugLog('NORMALIZE', 'Already dynamic server /audio/ URL, returning as-is');
             return audioPath;
         }
-        if (audioPath.startsWith('http://') || audioPath.startsWith('https://')) {
-            debugLog('NORMALIZE', 'Path is HTTP URL, returning as-is');
-            return audioPath;
-        }
-        
-        // Relative path with BASE_PATH
-        if (audioPath.startsWith(CONSTANTS.AUDIO.BASE_PATH)) {
-            debugLog('NORMALIZE', 'Path has BASE_PATH, processing...');
-            return this.createUrl(audioPath.replace(CONSTANTS.AUDIO.BASE_PATH, ''));
+
+        // Legacy absolute HTTP paths (old BASE_URL) -> extract filename
+        if (audioPath.includes('/assets/audios/')) {
+            const fname = audioPath.split('/').pop();
+            debugLog('NORMALIZE', 'Legacy assets path detected, migrating', fname);
+            return this.createUrl(fname);
         }
         
         // Extract filename from path and handle iOS-specific encoding issues
@@ -138,12 +135,11 @@ export class AudioManager {
             return finalUrl;
         }
         
-        // Desktop handling - decode then re-encode
+        // Unified handling now: decode if possible then createUrl (which picks server/asset)
         try {
             const decodedFileName = decodeURIComponent(fileName);
             return this.createUrl(decodedFileName);
         } catch (decodeError) {
-            // If decoding fails, use the original filename
             return this.createUrl(fileName);
         }
     }
@@ -151,56 +147,28 @@ export class AudioManager {
     // Create complete audio URL with fallback
     static createUrl(fileName) {
         debugLog('CREATE-URL', 'Input fileName', fileName);
-        
-        // Check if running on iOS - Multiple detection methods
-        const userAgent = navigator.userAgent;
-        const isIOSUserAgent = /iPad|iPhone|iPod/.test(userAgent);
-        const isIOSPlatform = /iPhone|iPad|iPod/i.test(navigator.platform);
-        const isIOSStandalone = window.navigator.standalone !== undefined;
-        const isIOSTouch = 'ontouchstart' in window;
-        
-        // AUv3 specific detection - look for iOS file paths or WebKit
-        const isAUv3Context = window.webkit && window.webkit.messageHandlers;
-        const hasIOSPaths = window.location.href.includes('file://') || 
-                           window.location.protocol === 'file:';
-        
-        // Use the most comprehensive iOS detection
-        const finalIOSDetection = isIOSUserAgent || isIOSPlatform || 
-                                 (isAUv3Context && (isIOSTouch || hasIOSPaths));
-        
-        debugLog('CREATE-URL', 'Platform detection - iOS:', finalIOSDetection);
-        
-        let finalFileName;
-        
-        if (finalIOSDetection) {
-            // For iOS AUv3: Use relative paths with encoded spaces
-            if (fileName.includes('%20')) {
-                finalFileName = fileName; // Keep encoded
-            } else if (fileName.includes(' ')) {
-                finalFileName = encodeURIComponent(fileName);
-            } else {
-                finalFileName = fileName;
-            }
-            
-            const finalUrl = `./assets/audios/${finalFileName}`;
-            debugLog('CREATE-URL', 'Final URL (iOS relative)', finalUrl);
-            return finalUrl;
-        } else {
-            // For Desktop: Use HTTP URLs with proper encoding
-            if (fileName.includes('%20')) {
-                // If already encoded, decode first then re-encode properly for HTTP
-                const decodedName = decodeURIComponent(fileName);
-                finalFileName = encodeURIComponent(decodedName);
-            } else if (fileName.includes(' ')) {
-                finalFileName = encodeURIComponent(fileName);
-            } else {
-                finalFileName = fileName;
-            }
-            
-            const finalUrl = `http://127.0.0.1:3000/assets/audios/${finalFileName}`;
-            debugLog('CREATE-URL', 'Final URL (Desktop HTTP)', finalUrl);
-            return finalUrl;
+        // Always work with a plain file name (strip any preceding audio/ or assets/audios/)
+        let baseName = fileName.split(/[/\\]/).pop();
+        if (!baseName) baseName = fileName; // safeguard
+        // If it still contains assets/audios/ remove
+        baseName = baseName.replace(/^assets%2Faudios%2F/i,'');
+
+        // Normalise spaces / encoding: decode then re-encode for URL path
+        try { baseName = decodeURIComponent(baseName); } catch(e) {}
+        const encodedName = encodeURIComponent(baseName);
+
+        // Dynamic local server port (injected by native Swift HTTP server)
+        const port = window.ATOME_LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__;
+        if (port) {
+            const serverUrl = `http://127.0.0.1:${port}/audio/${encodedName}`;
+            debugLog('CREATE-URL', 'Using dynamic local server', serverUrl);
+            return serverUrl;
         }
+
+        // Fallback: keep previous platform distinction minimal (relative asset path)
+        const fallbackUrl = `./assets/audios/${encodedName}`;
+        debugLog('CREATE-URL', 'Fallback asset URL (no port yet)', fallbackUrl);
+        return fallbackUrl;
     }
     
     // Create fallback relative URL (for when server is not available)

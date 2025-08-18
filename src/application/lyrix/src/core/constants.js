@@ -2,8 +2,7 @@
 export const CONSTANTS = {
     // Audio configuration
     AUDIO: {
-        BASE_PATH: './assets/audios/',
-        BASE_URL: 'http://localhost:3001/assets/audios/',
+    BASE_PATH: './assets/audios/', // fallback when local server port not yet known
     },
     
     // Storage keys

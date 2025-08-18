@@ -15,7 +15,7 @@ import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, togg
 // Import all modules
 import { CONSTANTS } from './src/core/constants.js';
 import { StorageManager } from './src/services/storage.js';
-import { AudioManager, AudioController } from './src/features/audio/audio.js';
+import { AudioManager, AudioController, extractCleanFileName } from './src/features/audio/audio.js';
 import { UIManager } from './src/components/ui.js';
 import { SongManager } from './src/features/lyrics/songs.js';
 import { SyncedLyrics } from './src/core/syncedLyrics.js';
@@ -226,6 +226,36 @@ function initializeLyrix() {
         audioController = new AudioController();
         uiManager = new UIManager();
         lyricsLibrary = new LyricsLibrary();
+
+        // One-time migration of legacy audioPath values (assets/audios or hardcoded HTTP) -> clean filename
+        (function migrateLegacyAudioPaths(){
+            const MIGRATION_KEY = 'lyrix_audio_migrated_v1';
+            if (localStorage.getItem(MIGRATION_KEY) === 'done') return; // already migrated
+            try {
+                const all = lyricsLibrary.getAllSongs();
+                let changed = 0;
+                all.forEach(summary => {
+                    if (!summary.audioPath) return;
+                    const ap = summary.audioPath;
+                    // Detect legacy patterns
+                    if (/\/assets\/audios\//.test(ap) || /http:\/\/127\.0\.0\.1:3000\/assets\/audios\//.test(ap)) {
+                        const clean = extractCleanFileName(ap);
+                        if (clean && clean !== ap) {
+                            const song = lyricsLibrary.getSong(summary.key);
+                            if (song && song.metadata) {
+                                song.metadata.audioPath = clean; // store only filename
+                                song.saveToStorage();
+                                changed++;
+                            }
+                        }
+                    }
+                });
+                localStorage.setItem(MIGRATION_KEY, 'done');
+                console.log(`🎵 Migration audio paths v1: ${changed} entrées mises à jour`);
+            } catch(e) {
+                console.error('Migration audio paths v1 failed', e);
+            }
+        })();
         
         // Initialize Audio Controller without volume
         audioController = new AudioController();
