@@ -20,7 +20,7 @@ function listFolder(folder){
 
 // === Construction récursive du tree ===
 async function buildFullTree(){
-	const roots = ['Projects','Exports','Recordings','Templates'];
+	const roots = ['./'];
 	const lines = [];
 	for(const root of roots){
 		try {

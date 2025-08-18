@@ -57,7 +57,26 @@
 
 // import('./examples/web_swift_audio_test.js');
 
-// import('./examples/drag_2_ios_local.js');
+//////
+
+// === CONSOLE DE BASE ===
+function createBasicConsole() {
+  const console1 = Console({
+    title: 'Debug Console',
+    position: { x: 50, y: 50 },
+    size: { width: 500, height: 350 },
+    template: 'dark_theme'
+  });
+  
+  console1.show();
+  return console1;
+}
+
+createBasicConsole()
+
+////
+
+import('./examples/drag_2_ios_local.js');
 
 import('./examples/auv3file_browser.js');
 
