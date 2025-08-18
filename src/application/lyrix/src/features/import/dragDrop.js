@@ -973,28 +973,40 @@ export class DragDropManager {
     // Copie du fichier audio importé dans le stockage local iOS/Files
     // -------------------------------------------------------------
     async copyAudioFileToLocal(file){
-        if(!file || !this.isAudioFile(file)) return; // seulement audio
-        if(!(window.AtomeFileSystem && window.webkit?.messageHandlers?.fileSystem)) return; // bridge absent
+        if(!file){ dragLog('🚫 copyAudioFileToLocal: file null'); return; }
+        if(!this.isAudioFile(file)){ dragLog('🚫 copyAudioFileToLocal: pas audio'); return; }
+        const bridgeOk = !!(window.AtomeFileSystem && window.webkit?.messageHandlers?.fileSystem);
+        if(!bridgeOk){
+            dragLog('⚠️ copyAudioFileToLocal: bridge fileSystem absent -> fallback (pas de copie native)');
+            return; // on pourrait ajouter un fallback download si nécessaire
+        }
         // Ne pas copier > 120MB (limite arbitraire pour éviter mémoire excessive)
         if(file.size > 120 * 1024 * 1024) throw new Error('fichier trop volumineux pour copie');
-
-        const baseFolder = 'Recordings';
-        const originalName = file.name;
-        const finalName = await this.computeAvailableFileName(baseFolder, originalName);
-        const relPath = baseFolder + '/' + finalName;
-        dragLog(`📥 Préparation copie audio vers ${relPath}`);
+    // Enregistrer désormais directement à la racine du dossier local (pas dans Recordings/)
+    const baseFolder = ''; // racine
+    const originalName = file.name;
+    const finalName = await this.computeAvailableFileName(baseFolder, originalName);
+    const relPath = finalName; // pas de préfixe dossier
+    dragLog(`📥 Préparation copie audio vers racine: ${relPath} (size=${(file.size/1024).toFixed(1)}KB type=${file.type||'n/a'})`);
 
         const arrayBuffer = await file.arrayBuffer();
         const b64 = this.arrayBufferToBase64(arrayBuffer);
         // Utiliser le marqueur __BASE64__ pour déclencher décodage côté Swift
-        await this.saveViaBridge(relPath, '__BASE64__'+b64);
-        dragLog(`✅ Audio copié localement: ${relPath}`);
+        try {
+            await this.saveViaBridge(relPath, '__BASE64__'+b64);
+            dragLog(`✅ Audio copié localement: ${relPath}`);
+        } catch(err){
+            dragLog(`❌ Echec saveViaBridge: ${err.message}`);
+            return;
+        }
+    // Déclenche une synchronisation serveur pour exposer immédiatement ce fichier via /audio & /tree
+    this.triggerServerSync();
         return relPath;
     }
 
     async computeAvailableFileName(folder, desiredName){
         // Récup liste existante
-        const existing = await this.listFilesPromise(folder).catch(()=>[]);
+    const existing = await this.listFilesPromise(folder || '.').catch(()=>[]);
         const existingNames = new Set(existing.map(f=>f.name));
         if(!existingNames.has(desiredName)) return desiredName;
         const dot = desiredName.lastIndexOf('.');
@@ -1030,6 +1042,19 @@ export class DragDropManager {
         for(let i=0;i<len;i++) binary += String.fromCharCode(bytes[i]);
         // btoa peut échouer si très large; segmentation possible si besoin futur
         return btoa(binary);
+    }
+
+    // -------------------------------------------------------------
+    // Déclenche un /sync_now sur le serveur local (si port connu)
+    // -------------------------------------------------------------
+    triggerServerSync(){
+        try {
+            const port = (window.ATOME_LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null);
+            if(!port) { dragLog('ℹ️ Port serveur inconnu, sync immédiate sautée'); return; }
+            fetch(`http://127.0.0.1:${port}/sync_now`).then(r=>{
+                if(!r.ok) dragLog('⚠️ /sync_now HTTP '+r.status); else dragLog('🔄 /sync_now déclenché');
+            }).catch(err=> dragLog('⚠️ /sync_now erreur: '+err.message));
+        } catch(err){ /* ignore */ }
     }
 }
 
