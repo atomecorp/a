@@ -43,7 +43,7 @@
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-import('./lyrix/index.js');
+// import('./lyrix/index.js');
 // import('./ios_file_lister.js');
 // import('./ios_file_reader.js');
 // import('./ios_file_writer.js');
@@ -59,7 +59,7 @@ import('./lyrix/index.js');
 
 // import('./examples/drag_2_ios_local.js');
 
-// import('./examples/auv3file_browser.js');
+import('./examples/auv3file_browser.js');
 
 
 
