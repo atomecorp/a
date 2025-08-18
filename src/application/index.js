@@ -43,7 +43,7 @@
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-// import('./lyrix/index.js');
+import('./lyrix/index.js');
 // import('./ios_file_lister.js');
 // import('./ios_file_reader.js');
 // import('./ios_file_writer.js');
@@ -54,15 +54,11 @@
 // import('./test_and_rd.js');
 
 ////
-import('./examples/web_swift_audio_test.js');
-
-// import('./examples/drag_2_ios_local.js');
-
+// import('./examples/web_swift_audio_test.js');
+// import('./examples/import_muliple_ios.js');
 // import('./examples/auv3file_browser.js');
-
-
 // import('./examples/swift_server.js');
-
+////
 
 
 
