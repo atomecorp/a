@@ -347,8 +347,25 @@ function initializeLyrix() {
         if (appContainer) {
             dragDropManager = new DragDropManager(audioController, lyricsLibrary, lyricsDisplay);
             dragDropManager.onSongLoaded = (song) => {
+                // Rafraîchir titre audio & slider
                 updateAudioTitle();
-                resetAudioSlider(true); // Force reset when loading new song
+                resetAudioSlider(true);
+                try {
+                    // Si lyricsDisplay existe, re-render pour refléter audioPath mis à jour
+                    if (lyricsDisplay && lyricsDisplay.displayLyrics) {
+                        lyricsDisplay.displayLyrics(song);
+                    }
+                    // Mettre à jour la sélection dans la liste si ouverte
+                    const listContainer = document.getElementById('song-library-list');
+                    if (listContainer) {
+                        const selected = listContainer.querySelector('[data-song-id="'+song.songId+'"]');
+                        if (selected) {
+                            // Ajouter un petit flash visuel pour signaler maj
+                            selected.style.outline = '2px solid #27ae60';
+                            setTimeout(()=>{ selected.style.outline=''; }, 800);
+                        }
+                    }
+                } catch(e){ /* silent */ }
             };
             dragDropManager.initialize(appContainer);
 

@@ -413,7 +413,10 @@ export class DragDropManager {
             await this.loadAudioFileAsync(file);
             // Après chargement audio, tenter copie dans stockage local (Recordings/)
             try {
-                await this.copyAudioFileToLocal(file);
+                const destPath = await this.copyAudioFileToLocal(file);
+                if (destPath) {
+                    await this.refreshSongAudioBinding(destPath, file.name);
+                }
             } catch(copyErr) {
                 dragLog(`⚠️ Audio copy skipped: ${copyErr.message}`);
             }
@@ -1055,6 +1058,34 @@ export class DragDropManager {
                 if(!r.ok) dragLog('⚠️ /sync_now HTTP '+r.status); else dragLog('🔄 /sync_now déclenché');
             }).catch(err=> dragLog('⚠️ /sync_now erreur: '+err.message));
         } catch(err){ /* ignore */ }
+    }
+
+    // -------------------------------------------------------------
+    // Rafraîchit la chanson courante si le nom final diffère (collision renommée)
+    // et recharge l'audio avec le nom réel copié sur disque.
+    // -------------------------------------------------------------
+    async refreshSongAudioBinding(destPath, originalName){
+        try {
+            const newFileName = destPath.split('/').pop();
+            if(!newFileName) return;
+            if(this.currentLyrics){
+                const currentStored = this.currentLyrics.getAudioPath && this.currentLyrics.getAudioPath();
+                // currentStored peut être l'ancien nom (originalName) – si différent on met à jour
+                if(!currentStored || extractCleanFileName(currentStored) !== extractCleanFileName(newFileName)){
+                    this.currentLyrics.setAudioPath(newFileName);
+                    if(this.lyricsLibrary){ this.lyricsLibrary.saveSong(this.currentLyrics); }
+                    dragLog(`🔁 Song audioPath mis à jour -> ${newFileName}`);
+                    // Recharger l'audio avec le vrai nom final si différent
+                    if(this.audioController && this.audioController.loadAudio){
+                        this.audioController.loadAudio(newFileName);
+                    }
+                    // Notifier UI
+                    if(this.onSongLoaded){ this.onSongLoaded(this.currentLyrics); }
+                }
+            }
+        } catch(e){
+            dragLog(`⚠️ refreshSongAudioBinding erreur: ${e.message}`);
+        }
     }
 }
 
