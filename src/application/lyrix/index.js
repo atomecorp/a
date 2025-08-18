@@ -414,6 +414,8 @@ function initializeLyrix() {
         
         // Load any existing song
         loadLastSong();
+    // Assure re-liaison audio quand le port local HTTP arrive après l'initialisation
+    setupDeferredAudioRebind();
         
         // Remove loading message
         const loadingDiv = document.getElementById('loading');
@@ -2487,6 +2489,33 @@ function createMainInterface() {
 }
 
 // Load last opened song
+function setupDeferredAudioRebind(){
+    let attempts = 0;
+    const maxAttempts = 15; // ~7.5s total
+    const intervalMs = 500;
+    function tryBind(){
+        attempts++;
+        // Besoin: port disponible + currentSong avec audioPath + audioController sans player chargé ou player src encore ancien
+        const port = window.ATOME_LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__;
+        if(port && currentSong && currentSong.getAudioPath && currentSong.getAudioPath()){
+            const fileName = currentSong.getAudioPath().split(/[/\\]/).pop();
+            if(audioController && audioController.loadAudio){
+                const ok = audioController.loadAudio(fileName);
+                if(ok){
+                    console.log('🔁 Rebind audio après dispo port local:', fileName);
+                    return; // stop retries
+                }
+            }
+        }
+        if(attempts < maxAttempts){
+            setTimeout(tryBind, intervalMs);
+        } else {
+            console.log('⏱️ Fin des tentatives de rebind audio (port ou fichier indisponible)');
+        }
+    }
+    setTimeout(tryBind, intervalMs);
+}
+
 function loadLastSong() {
     const lastSongKey = StorageManager.getLastOpenedSong();
     
@@ -2515,25 +2544,18 @@ function loadLastSong() {
             // ALWAYS reset slider when loading any song
             resetAudioSlider(true); // Force reset when loading song
             
-            // Try to load audio if available, but don't fail if not found
+            // Charger l'audio réel via le contrôleur (et non plus un test invisible)
             if (currentSong.getAudioPath && currentSong.getAudioPath()) {
                 const audioPath = currentSong.getAudioPath();
-                
-                // Test if audio file exists by creating a test audio element
-                const testAudio = new Audio();
-                
-                testAudio.addEventListener('error', function() {
-                    console.warn('⚠️ Last song audio file not found, but keeping song loaded:', audioPath);
-                    // Don't clear the song from storage, just note the audio issue
-                });
-                
-                testAudio.addEventListener('canplaythrough', function() {
-                    console.log('✅ Audio file loaded successfully for last song');
-                });
-                
-                // Test audio path
-                const normalizedPath = AudioManager.normalize(audioPath);
-                testAudio.src = normalizedPath;
+                const fileName = audioPath.split(/[/\\]/).pop();
+                if (audioController && audioController.loadAudio) {
+                    const ok = audioController.loadAudio(fileName);
+                    if (!ok) {
+                        console.warn('⚠️ Impossible de charger audio au démarrage:', fileName);
+                    } else {
+                        console.log('🎵 Audio rechargé au démarrage:', fileName);
+                    }
+                }
             } else {
                 console.log('ℹ️ Last song has no audio file, but loaded lyrics successfully');
             }
