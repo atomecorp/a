@@ -745,8 +745,13 @@ export function showSongLibrary() {
                 if (window.midiUtilities.isLearning) {
                     // Stop learning
                     window.midiUtilities.stopMidiLearn();
-                    midiLearnButton.style.backgroundColor = '#f0f8ff';
+                    midiLearnButton.style.backgroundColor = 'transparent';
+                    midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
                     midiLearnButton.style.color = '#007acc';
+                    setTimeout(() => {
+                        midiLearnButton.style.backgroundColor = 'transparent';
+                        midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
+                    }, 0);
                     midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='12px'; img.style.height='12px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                 } else {
                     // Start learning
@@ -762,8 +767,13 @@ export function showSongLibrary() {
                         // Update input field
                         midiInput.value = midiNote;
                         // Reset button appearance
-                        midiLearnButton.style.backgroundColor = '#f0f8ff';
+                        midiLearnButton.style.backgroundColor = 'transparent';
+                        midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
                         midiLearnButton.style.color = '#007acc';
+                        setTimeout(() => {
+                            midiLearnButton.style.backgroundColor = 'transparent';
+                            midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
+                        }, 0);
                         midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='12px'; img.style.height='12px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                     });
                 }

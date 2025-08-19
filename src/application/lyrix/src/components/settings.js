@@ -120,6 +120,19 @@ function getToggleState(storageKey) {
 
 // Start MIDI learn for settings function
 export function startMidiLearnForSetting(settingName, inputElement, buttonElement) {
+    // Force le fond transparent après toute interaction (blur ou mouseup)
+    const forceTransparent = () => {
+        buttonElement.style.backgroundColor = 'transparent';
+        buttonElement.style.setProperty('background-color', 'transparent', 'important');
+        // Double forçage asynchrone pour écraser tout style réappliqué par le framework
+        setTimeout(() => {
+            buttonElement.style.backgroundColor = 'transparent';
+            buttonElement.style.setProperty('background-color', 'transparent', 'important');
+        }, 0);
+    };
+    buttonElement.addEventListener('blur', forceTransparent);
+    buttonElement.addEventListener('mouseup', forceTransparent);
+    buttonElement.addEventListener('click', forceTransparent);
     if (!window.midiUtilities) {
         return;
     }
@@ -127,7 +140,9 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
     if (window.midiUtilities.isLearning) {
         // Stop learning
         window.midiUtilities.stopMidiLearn();
-        buttonElement.style.backgroundColor = '#f0f8ff';
+    buttonElement.style.backgroundColor = 'transparent';
+    // Force aussi important pour écraser tout style résiduel
+    buttonElement.style.setProperty('background-color', 'transparent', 'important');
     buttonElement.style.color = '#007acc';
     buttonElement.innerHTML='';
     try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
@@ -145,7 +160,8 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
             // Update input field
             inputElement.value = midiNote;
             // Reset button appearance
-            buttonElement.style.backgroundColor = '#f0f8ff';
+            buttonElement.style.backgroundColor = 'transparent';
+            buttonElement.style.setProperty('background-color', 'transparent', 'important');
             buttonElement.style.color = '#007acc';
             buttonElement.innerHTML='';
             try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
