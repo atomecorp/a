@@ -1830,12 +1830,13 @@ export class LyricsDisplay {
             }
             
             if (element) {
-                // Highlight the new active line
-                element.style.backgroundColor = 'rgba(0, 150, 255, 0.2)';
-                element.style.color = '#fff';
-                element.style.transform = 'scale(1.05)';
-                element.style.fontWeight = 'bold';
-                element.style.transition = 'all 0.3s ease';
+                // Highlight the new active line (harmonized subdued highlight)
+                const highlightBg = this.fullscreenMode ? 'rgb(37, 48, 64)' : 'rgba(0, 150, 255, 0.15)';
+                element.style.backgroundColor = highlightBg;
+                element.style.color = '#ffffff';
+                element.style.transform = 'scale(1.03)';
+                element.style.fontWeight = '600';
+                element.style.transition = 'all 0.25s ease';
                 
                 // Determine if we should scroll
                 // Allow scrolling in record mode for manual selections, but not in edit mode
