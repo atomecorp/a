@@ -3,6 +3,7 @@
 
 import { exportSongsToLRX } from '../features/lyrics/SongUtils.js';
 import default_theme from './style.js';
+import { closeSettingsPanel } from './settings.js';
 
 // Helper function to properly close song library panel and remove all related elements
 function closeSongLibraryPanel() {
@@ -15,6 +16,14 @@ function closeSongLibraryPanel() {
     
     if (existingGrip) {
         existingGrip.remove();
+    }
+
+    // Restore original settings button visibility if it was hidden
+    const originalSettings = document.getElementById('settings_button');
+    if (originalSettings && originalSettings.__hiddenBySongLibrary) {
+        originalSettings.style.display = originalSettings.__originalDisplay || '';
+        delete originalSettings.__hiddenBySongLibrary;
+        delete originalSettings.__originalDisplay;
     }
 
     // Always ensure the song list toggle button reflects closed state
@@ -30,12 +39,24 @@ export function toggleSongLibrary() {
     if (existingPanel) {
         // Panel exists, close it properly
         closeSongLibraryPanel();
+    // If settings panel is open, also close it when explicitly toggling off song list
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel && typeof closeSettingsPanel === 'function') {
+        closeSettingsPanel();
+    }
     const btn = document.getElementById('song_list_button');
     if (btn && btn._setActive) btn._setActive(false);
         return false; // Panel closed
     } else {
         // Panel doesn't exist, show it
         showSongLibrary();
+        // Immediately hide original settings button if still visible
+        const origSettings = document.getElementById('settings_button');
+        if (origSettings && !origSettings.__hiddenBySongLibrary) {
+            origSettings.__originalDisplay = origSettings.style.display;
+            origSettings.style.display = 'none';
+            origSettings.__hiddenBySongLibrary = true;
+        }
     const btn = document.getElementById('song_list_button');
     if (btn && btn._setActive) btn._setActive(true);
         return true; // Panel opened
@@ -282,7 +303,20 @@ export function showSongLibrary() {
     const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', text: '🗑️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', backgroundColor: 'rgba(239,68,68,0.15)', border: `1px solid ${default_theme.colors.border}` }, onClick: () => {
         window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
     }});
-    actionButtons.append(importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
+    // Create inline settings button (new instance) shown only inside song list panel
+    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', text: '⚙️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px' }, onClick: () => { toggleSettingsPanel('settings_button_inline'); } });
+
+    // Hide original settings button while panel open (if exists)
+    const originalSettings = document.getElementById('settings_button');
+    if (originalSettings && originalSettings.style) {
+        if (!originalSettings.__hiddenBySongLibrary) {
+            originalSettings.__originalDisplay = originalSettings.style.display;
+            originalSettings.__hiddenBySongLibrary = true;
+        }
+        originalSettings.style.display = 'none';
+    }
+
+    actionButtons.append(inlineSettingsButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     modal.append(headerTitle, actionButtons);
 
     // Content with search and song list

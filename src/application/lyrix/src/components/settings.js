@@ -206,7 +206,7 @@ export function toggleSettingsPanel(id_passed) {
             if (button._setActive) { button._setActive(false); } else { button.style.backgroundColor = 'transparent'; }
         }
     } else {
-        openSettingsPanel();
+    openSettingsPanel(id_passed);
         
         // Changer la couleur de fond du bouton pour indiquer qu'il est actif
         const button = document.getElementById(id_passed);
@@ -217,27 +217,19 @@ export function toggleSettingsPanel(id_passed) {
 }
 
 // Open settings panel above lyrics viewer
-export function openSettingsPanel() {
+export function openSettingsPanel(triggerId) {
     if (isSettingsOpen || settingsPanel) {
         return; // Panel already open
     }
 
-    // Close song library panel if it's open (mutual exclusion)
+    // Close song library panel only if not triggered from inline song library settings button
     const songLibraryPanel = document.getElementById('song-library-panel');
-    if (songLibraryPanel) {
+    if (songLibraryPanel && triggerId !== 'settings_button_inline') {
         songLibraryPanel.remove();
-        
-        // Also remove the song library resize grip
         const songLibraryGrip = document.getElementById('song-library-resize-grip');
-        if (songLibraryGrip) {
-            songLibraryGrip.remove();
-        }
-        // Ensure the song list button visual state is reset when its panel is force-closed
+        if (songLibraryGrip) songLibraryGrip.remove();
         const songListButton = document.getElementById('song_list_button');
-        if (songListButton) {
-            songListButton.style.backgroundColor = 'transparent';
-            songListButton.style.color = '';
-        }
+        if (songListButton && songListButton._setActive) songListButton._setActive(false);
     }
 
     isSettingsOpen = true;

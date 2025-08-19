@@ -2109,12 +2109,14 @@ function createMainInterface() {
             toggleSettingsPanel('settings_button');
         },
         css: {
-            marginBottom: '15px'
+        marginBottom: '15px',
+        display: 'none' // permanently hidden placeholder
         },
         'aria-expanded': 'false',
         'aria-controls': 'settings-panel',
         'aria-label': 'Open settings panel'
     });
+    settingsButton.dataset.forceHidden = 'true';
     
     const importButton = UIManager.createInterfaceButton('📁', {
         id: 'import_file_button',
@@ -2374,8 +2376,8 @@ function createMainInterface() {
                 progression.style.boxShadow = 'inset 0 0 4px rgba(0,0,0,0.4)';
             }
             if (handle) {
-                handle.style.width = '28px';
-                handle.style.height = '28px';
+                handle.style.width = '22px';
+                handle.style.height = '22px';
                 handle.style.top = '50%';
                 handle.style.transform = 'translate(-50%, -50%)';
                 handle.style.backgroundColor = '#3b82f6';

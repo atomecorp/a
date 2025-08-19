@@ -101,7 +101,7 @@ export class LyricsDisplay {
         });
         
         // Create toolbar - SOLIDAIRE et FIXE en haut (ne scroll jamais)
-        this.toolbar = $('div', {
+    this.toolbar = $('div', {
             id: 'lyrics-toolbar',
             css: {
                 position: 'relative', // Relatif dans le flex container
@@ -134,7 +134,7 @@ export class LyricsDisplay {
         this.displayContainer.append(this.toolbar, this.lyricsContent);
         
         // Edit mode button
-        this.editButton = UIManager.createInterfaceButton('✏️', {
+    this.editButton = UIManager.createInterfaceButton('✏️', {
             id: 'edit_mode',
             onClick: () => this.toggleEditMode(),
             css: {
@@ -301,11 +301,11 @@ export class LyricsDisplay {
         this.styleModeToolsForToolbar();
         
         // Create main toolbar row (non-audio tools + lyrics controls + timecode display)
-        const mainToolRow = $('div', {
+    const mainToolRow = $('div', {
             id: 'main-toolbar-row',
             css: {
                 display: 'flex', // Always visible
-                gap: '8px',
+        gap: '6px',
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 padding: '8px', // Regular padding without hamburger button
