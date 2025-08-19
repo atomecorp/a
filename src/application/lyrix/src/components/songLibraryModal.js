@@ -309,9 +309,19 @@ export function showSongLibrary() {
     });
 
     // Bouton supprimer toutes les chansons
-    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', text: '🗑️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', backgroundColor: 'rgba(239,68,68,0.15)', border: `1px solid ${default_theme.colors.border}` }, onClick: () => {
+    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', backgroundColor: 'rgba(239,68,68,0.15)', border: `1px solid ${default_theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => {
         window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
     }});
+    try {
+        deleteAllButton.innerHTML='';
+        const img = document.createElement('img');
+        img.src = 'assets/images/icons/delete.svg';
+        img.alt = 'delete all';
+        img.style.width = '16px';
+        img.style.height = '16px';
+        img.style.pointerEvents = 'none';
+        deleteAllButton.appendChild(img);
+    } catch(e) { /* silent */ }
     // Create inline settings button (new instance) shown only inside song list panel
     const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => {
         // Required behavior: close song library panel but keep song list button marked active
@@ -696,7 +706,7 @@ export function showSongLibrary() {
                     e.stopPropagation();
                     
                     window.ConfirmModal({
-                        title: '🗑️ Delete Song',
+                        title: 'Delete Song',
                         message: `Are you sure you want to delete "${item.song.title}" by ${item.song.artist}?`,
                         confirmText: 'Delete',
                         cancelText: 'Cancel',

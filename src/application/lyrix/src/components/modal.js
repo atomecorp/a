@@ -720,7 +720,7 @@ export function SelectModal(options = {}) {
 
             // Add delete button if onDelete callback is provided
             if (onDelete && typeof onDelete === 'function') {
-                const deleteButton = UIManager.createInterfaceButton('🗑️', {
+                const deleteButton = UIManager.createInterfaceButton('', {
                     css: {
                         width: `${parseInt(default_theme.button.height) * 1.3}px`,  // 1.3x la hauteur pour les modales
                         height: `${parseInt(default_theme.button.height) * 0.7}px`, // 70% de la hauteur normale
@@ -728,6 +728,17 @@ export function SelectModal(options = {}) {
                         fontSize: '14px'
                     }
                 });
+                // Inject delete SVG icon
+                try {
+                    deleteButton.innerHTML='';
+                    const img = document.createElement('img');
+                    img.src = 'assets/images/icons/delete.svg';
+                    img.alt = 'delete';
+                    img.style.width = '14px';
+                    img.style.height = '14px';
+                    img.style.pointerEvents = 'none';
+                    deleteButton.appendChild(img);
+                } catch(e) { /* silent */ }
 
                 deleteButton.addEventListener('mouseenter', () => {
                     deleteButton.style.backgroundColor = '#ff4757';

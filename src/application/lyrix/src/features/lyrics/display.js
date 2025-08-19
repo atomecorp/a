@@ -3200,7 +3200,19 @@ export class LyricsDisplay {
         
         // Create delete button
         const deleteButton = document.createElement('button');
-        deleteButton.innerHTML = '🗑️';
+        // Replace trash emoji with SVG icon
+        deleteButton.innerHTML = '';
+        (function attachDeleteIcon(btn){
+            try {
+                const img = document.createElement('img');
+                img.src = 'assets/images/icons/delete.svg';
+                img.alt = 'delete';
+                img.style.width = '14px';
+                img.style.height = '14px';
+                img.style.pointerEvents = 'none';
+                btn.appendChild(img);
+            } catch(e) { /* silent */ }
+        })(deleteButton);
         deleteButton.type = 'button'; // Explicitly set button type
         deleteButton.style.cssText = `
             background: #dc3545;

@@ -1563,7 +1563,7 @@ export function showSettingsModal() {
         },
         onClick: () => {
             window.ConfirmModal({
-                title: '🗑️ Reset MIDI Assignments',
+                title: 'Reset MIDI Assignments',
                 message: 'Are you sure you want to clear all MIDI assignments? This action cannot be undone.',
                 confirmText: 'Reset All',
                 cancelText: 'Cancel',

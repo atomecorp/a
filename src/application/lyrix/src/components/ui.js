@@ -1776,11 +1776,10 @@ export class UIManager {
 
     // Delete button for items
     static createDeleteButton(config = {}) {
-        return $('button', {
-            text: '🗑️',
+        const btn = $('button', {
             ...config,
             css: {
-                 backgroundColor: 'transparent',
+                backgroundColor: 'transparent',
                 color: 'white',
                 border: 'none',
                 borderRadius: this.THEME.borderRadius.sm,
@@ -1796,6 +1795,19 @@ export class UIManager {
                 ...config.css
             }
         });
+        // Inject delete.svg icon automatically if no content provided
+        if (!btn.innerHTML || btn.innerHTML.trim() === '') {
+            try {
+                const img = document.createElement('img');
+                img.src = 'assets/images/icons/delete.svg';
+                img.alt = 'delete';
+                img.style.width = '16px';
+                img.style.height = '16px';
+                img.style.pointerEvents = 'none';
+                btn.appendChild(img);
+            } catch(e) { /* silent */ }
+        }
+        return btn;
     }
 
     // No items message
