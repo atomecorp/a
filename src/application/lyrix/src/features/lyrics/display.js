@@ -1292,10 +1292,10 @@ export class LyricsDisplay {
                 borderRadius: '4px',
                 cursor: this.editMode ? 'pointer' : 'default',
                 transition: 'all 0.3s ease',
-                backgroundColor: index === this.currentLineIndex ? '#fff3cd' : 'transparent',
-                border: index === this.currentLineIndex ? '2px solid #ffc107' : '1px solid transparent',
-                transform: index === this.currentLineIndex ? 'scale(1.05)' : 'scale(1)',
-                fontWeight: index === this.currentLineIndex ? 'bold' : 'normal'
+                backgroundColor: index === this.currentLineIndex ? 'rgb(37, 48, 64)' : 'transparent',
+                border: index === this.currentLineIndex ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
+                transform: index === this.currentLineIndex ? 'scale(1.03)' : 'scale(1)',
+                fontWeight: index === this.currentLineIndex ? '600' : '400'
             }
         });
         
