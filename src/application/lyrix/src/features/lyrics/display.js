@@ -997,7 +997,7 @@ export class LyricsDisplay {
             });
             
             // Create time offset control
-            const offsetContainer = $('div', { id: 'time-offset-container', css: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', backgroundColor: this.originalStyles.formElements.backgroundColor, border: `2px solid ${this.originalStyles.formElements.color}`, borderRadius: '4px', minWidth: '160px', width: '100%', boxSizing: 'border-box' } });
+            const offsetContainer = $('div', { id: 'time-offset-container', css: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', backgroundColor: 'rgb(48, 60, 78)', border: 'none', borderRadius: '4px', minWidth: '160px', width: '100%', boxSizing: 'border-box' } });
             
             const offsetLabel = $('span', {
                 text: 'time offset:',
@@ -1067,6 +1067,7 @@ export class LyricsDisplay {
                     borderRadius: '3px',
                     fontFamily: 'monospace',
             backgroundColor: 'rgb(48, 60, 78)',
+            color: '#fff'
                 }
             });
             
@@ -1894,15 +1895,16 @@ export class LyricsDisplay {
             width: 100%;
             min-height: 400px;
             padding: 15px;
-            border: 2px solid #2196F3;
+            border: none;
             border-radius: 8px;
-            background-color: #f5f5f5;
-            color: #333;
+            background-color: rgb(48, 60, 78);
+            color: #fff;
             font-size: 16px;
             line-height: 1.6;
             font-family: inherit;
             resize: vertical;
             outline: none;
+            box-sizing: border-box;
         `;
         // Wrapper to ensure centering even if parent container is flex or has alignment rules
         const bulkWrapper = document.createElement('div');
