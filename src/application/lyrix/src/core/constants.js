@@ -18,7 +18,7 @@ export const CONSTANTS = {
     UI: {
         DEFAULT_FONT_SIZE: 24,
         MIN_FONT_SIZE: 12,
-        MAX_FONT_SIZE: 100,
+    MAX_FONT_SIZE: 150,
         DEFAULT_LINE_SPACING: 2000, // milliseconds
         LONG_PRESS_DURATION: 800, // milliseconds
         AUTO_SAVE_DELAY: 500 // milliseconds
