@@ -740,9 +740,9 @@ function createSettingsContent() {
                 justifyContent: 'space-between',
                 marginBottom: '15px',
                 padding: '10px',
-                backgroundColor: '#fafafa',
+                backgroundColor: 'rgb(52, 66, 86)',
                 borderRadius: '5px',
-                border: '1px solid #eee'
+                border: 'none'
             }
         });
 
@@ -755,7 +755,7 @@ function createSettingsContent() {
             css: {
                 fontWeight: '500',
                 marginBottom: '3px',
-                color: '#333'
+                color: '#fff'
             }
         });
 
@@ -763,7 +763,7 @@ function createSettingsContent() {
             text: 'Adjust lyrics text size',
             css: {
                 fontSize: '12px',
-                color: '#666',
+                color: '#cbd5e1',
                 fontStyle: 'italic'
             }
         });
@@ -805,10 +805,10 @@ function createSettingsContent() {
             css: {
                 width: '30px',
                 height: '30px',
-                border: '1px solid #ccc',
+                border: 'none',
                 borderRadius: '3px',
-                backgroundColor: '#f8f9fa',
-                color: '#333',
+                backgroundColor: 'rgb(58, 74, 96)',
+                color: '#fff',
                 cursor: 'pointer',
                 fontSize: '16px',
                 display: 'flex',
@@ -844,10 +844,10 @@ function createSettingsContent() {
             css: {
                 width: '30px',
                 height: '30px',
-                border: '1px solid #ccc',
+                border: 'none',
                 borderRadius: '3px',
-                backgroundColor: '#f8f9fa',
-                color: '#333',
+                backgroundColor: 'rgb(58, 74, 96)',
+                color: '#fff',
                 cursor: 'pointer',
                 fontSize: '16px',
                 display: 'flex',
