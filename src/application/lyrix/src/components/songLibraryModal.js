@@ -291,8 +291,9 @@ export function showSongLibrary() {
     autoFillInput.value = '33'; // Default to note 33
 
     const autoFillButton = window.$('button', {
-        id: 'auto-fill-midi-button', text: '🎹 Fill', css: { ...default_theme.button, width: 'auto', padding: '0 8px', fontSize: '11px', backgroundColor: default_theme.colors.success, border: `1px solid ${default_theme.colors.border}` }, onClick: () => autoFillMidiNotes()
+        id: 'auto-fill-midi-button', css: { ...default_theme.button, width: 'auto', padding: '0 8px', fontSize: '11px', backgroundColor: default_theme.colors.success, border: `1px solid ${default_theme.colors.border}`, display: 'flex', alignItems: 'center', gap: '4px' }, onClick: () => autoFillMidiNotes()
     });
+    try { autoFillButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='auto fill'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Fill'; span.style.fontSize='11px'; autoFillButton.append(img, span);} catch(e) {}
 
     autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 
@@ -646,7 +647,7 @@ export function showSongLibrary() {
 
             // MIDI learn button
             const midiLearnButton = window.$('button', {
-                text: '🎹',
+                text: '',
                 css: {
                     width: '25px',
                     height: '25px',
@@ -663,6 +664,17 @@ export function showSongLibrary() {
                 },
                 title: `Learn MIDI note for ${item.song.title}`
             });
+            // Initial icon injection so it shows before first click
+            try {
+                midiLearnButton.innerHTML='';
+                const img=document.createElement('img');
+                img.src='assets/images/icons/target.svg';
+                img.alt='midi';
+                img.style.width='12px';
+                img.style.height='12px';
+                img.style.pointerEvents='none';
+                midiLearnButton.appendChild(img);
+            } catch(e) { /* silent */ }
 
             // MIDI learn functionality
             midiLearnButton.addEventListener('click', (e) => {
@@ -676,7 +688,7 @@ export function showSongLibrary() {
                     window.midiUtilities.stopMidiLearn();
                     midiLearnButton.style.backgroundColor = '#f0f8ff';
                     midiLearnButton.style.color = '#007acc';
-                    midiLearnButton.textContent = '🎹';
+                    midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='12px'; img.style.height='12px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                 } else {
                     // Start learning
                     midiLearnButton.style.backgroundColor = '#ff6b6b';
@@ -693,7 +705,7 @@ export function showSongLibrary() {
                         // Reset button appearance
                         midiLearnButton.style.backgroundColor = '#f0f8ff';
                         midiLearnButton.style.color = '#007acc';
-                        midiLearnButton.textContent = '🎹';
+                        midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='12px'; img.style.height='12px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                     });
                 }
             });

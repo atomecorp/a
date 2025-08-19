@@ -128,8 +128,9 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
         // Stop learning
         window.midiUtilities.stopMidiLearn();
         buttonElement.style.backgroundColor = '#f0f8ff';
-        buttonElement.style.color = '#007acc';
-        buttonElement.textContent = '🎹';
+    buttonElement.style.color = '#007acc';
+    buttonElement.innerHTML='';
+    try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
     } else {
         // Start learning
         buttonElement.style.backgroundColor = '#ff6b6b';
@@ -146,7 +147,8 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
             // Reset button appearance
             buttonElement.style.backgroundColor = '#f0f8ff';
             buttonElement.style.color = '#007acc';
-            buttonElement.textContent = '🎹';
+            buttonElement.innerHTML='';
+            try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
         });
     }
 }
@@ -540,7 +542,7 @@ function createSettingsContent() {
         midiInput.setAttribute('data-setting-key', settingKey);
 
         const midiLearnButton = window.$('button', {
-            text: '🎹',
+            text: '',
             type: 'button',
             css: {
                 width: '30px',
@@ -557,7 +559,8 @@ function createSettingsContent() {
                 padding: '0'
             },
             title: `Learn MIDI note for ${label}`
-        });
+    });
+    try { midiLearnButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
 
         midiLearnButton.addEventListener('click', () => {
             startMidiLearnForSetting(settingKey, midiInput, midiLearnButton);
@@ -712,7 +715,7 @@ function createSettingsContent() {
         createMidiAssignmentRow('Exit Fullscreen', 'exit_fullscreen', 'Exit fullscreen mode'),
     ];
 
-    const midiSection = createSettingSection('🎹 MIDI Assignments', midiAssignments);
+    const midiSection = createSettingSection('MIDI Assignments', midiAssignments);
 
     const audioControls = [
         createToggleRow('Show Timecodes', 'lyrix_show_timecodes', 'Display time markers in lyrics lines', toggleTimecodeVisibility),

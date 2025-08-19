@@ -661,13 +661,14 @@ export function SelectModal(options = {}) {
                 }
 
                 // MIDI learn button
-                const midiLearnButton = UIManager.createInterfaceButton('🎹', {
+                const midiLearnButton = UIManager.createInterfaceButton('', {
                     css: {
                         width: `${parseInt(default_theme.button.height) * 1.3}px`,  // 1.3x la hauteur pour les modales
                         height: `${parseInt(default_theme.button.height) * 0.7}px`, // 70% de la hauteur normale
                         fontSize: '12px'
                     }
                 });
+                try { midiLearnButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
 
                 let isLearning = false;
 
@@ -678,7 +679,7 @@ export function SelectModal(options = {}) {
                         // Cancel learning
                         isLearning = false;
                         midiLearnButton.style.backgroundColor = '#007bff';
-                        midiLearnButton.textContent = '🎹';
+                        midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                         window.Lyrix?.midiUtilities?.stopMidiLearn?.();
                     } else {
                         // Start learning
@@ -693,7 +694,7 @@ export function SelectModal(options = {}) {
                                 midiNoteInput.value = midiNote;
                                 isLearning = false;
                                 midiLearnButton.style.backgroundColor = '#007bff';
-                                midiLearnButton.textContent = '🎹';
+                                midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                                 
                                 // Save the assignment
                                 window.Lyrix.midiUtilities.setMidiAssignment(itemValue, midiNote);
