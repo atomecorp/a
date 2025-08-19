@@ -221,16 +221,8 @@ export function openSettingsPanel(triggerId) {
     if (isSettingsOpen || settingsPanel) {
         return; // Panel already open
     }
-
-    // Close song library panel only if not triggered from inline song library settings button
-    const songLibraryPanel = document.getElementById('song-library-panel');
-    if (songLibraryPanel && triggerId !== 'settings_button_inline') {
-        songLibraryPanel.remove();
-        const songLibraryGrip = document.getElementById('song-library-resize-grip');
-        if (songLibraryGrip) songLibraryGrip.remove();
-        const songListButton = document.getElementById('song_list_button');
-        if (songListButton && songListButton._setActive) songListButton._setActive(false);
-    }
+    // New behavior: keep song library panel open (and its button active) when opening settings
+    // So we intentionally do NOT close song library here anymore.
 
     isSettingsOpen = true;
 
@@ -359,6 +351,23 @@ export function closeSettingsPanel() {
 
     // Remove escape key listener
     document.removeEventListener('keydown', handlePanelEscapeKey);
+
+    // New requirement: when settings are closed, also exit edit mode and close song list to return to normal view
+    // Exit edit mode if active
+    if (window.Lyrix && window.Lyrix.lyricsDisplay && window.Lyrix.lyricsDisplay.editMode) {
+        try { window.Lyrix.lyricsDisplay.toggleEditMode(); } catch(e) {}
+    }
+    // Close song library panel if present
+    const songLibraryPanel = document.getElementById('song-library-panel');
+    if (songLibraryPanel) {
+        try {
+            songLibraryPanel.remove();
+            const songLibraryGrip = document.getElementById('song-library-resize-grip');
+            if (songLibraryGrip) songLibraryGrip.remove();
+        } catch(e) {}
+        const songListButton = document.getElementById('song_list_button');
+        if (songListButton && songListButton._setActive) songListButton._setActive(false);
+    }
 }
 
 // Create settings panel header

@@ -6,7 +6,7 @@ import default_theme from './style.js';
 import { closeSettingsPanel } from './settings.js';
 
 // Helper function to properly close song library panel and remove all related elements
-function closeSongLibraryPanel() {
+function closeSongLibraryPanel(keepButtonActive = false) {
     const existingPanel = document.getElementById('song-library-panel');
     const existingGrip = document.getElementById('song-library-resize-grip');
     
@@ -28,7 +28,7 @@ function closeSongLibraryPanel() {
 
     // Always ensure the song list toggle button reflects closed state
     const btn = document.getElementById('song_list_button');
-    if (btn && btn._setActive) {
+    if (btn && btn._setActive && !keepButtonActive) {
         btn._setActive(false);
     }
 }
@@ -36,16 +36,25 @@ function closeSongLibraryPanel() {
 // Toggle song library panel (show/hide)
 export function toggleSongLibrary() {
     const existingPanel = document.getElementById('song-library-panel');
+    const settingsPanel = document.getElementById('settings-panel');
+
+    // New case: settings panel open, song library closed -> clicking song list button should close settings and deactivate
+    if (!existingPanel && settingsPanel) {
+        if (typeof closeSettingsPanel === 'function') closeSettingsPanel();
+        const btn = document.getElementById('song_list_button');
+        if (btn && btn._setActive) btn._setActive(false);
+        return false;
+    }
     if (existingPanel) {
         // Panel exists, close it properly
         closeSongLibraryPanel();
     // If settings panel is open, also close it when explicitly toggling off song list
-    const settingsPanel = document.getElementById('settings-panel');
-    if (settingsPanel && typeof closeSettingsPanel === 'function') {
+    const settingsPanel2 = document.getElementById('settings-panel');
+    if (settingsPanel2 && typeof closeSettingsPanel === 'function') {
         closeSettingsPanel();
     }
-    const btn = document.getElementById('song_list_button');
-    if (btn && btn._setActive) btn._setActive(false);
+    const btn2 = document.getElementById('song_list_button');
+    if (btn2 && btn2._setActive) btn2._setActive(false);
         return false; // Panel closed
     } else {
         // Panel doesn't exist, show it
@@ -305,7 +314,10 @@ export function showSongLibrary() {
     }});
     // Create inline settings button (new instance) shown only inside song list panel
     const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', text: '⚙️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px' }, onClick: () => {
-        try { closeSongLibraryPanel(); } catch(e) { /* ignore */ }
+        // Required behavior: close song library panel but keep song list button marked active
+        closeSongLibraryPanel(true);
+        const btn = document.getElementById('song_list_button');
+        if (btn && btn._setActive) btn._setActive(true);
         toggleSettingsPanel('settings_button_inline');
     } });
 
