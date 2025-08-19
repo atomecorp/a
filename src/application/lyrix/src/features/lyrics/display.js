@@ -1978,23 +1978,31 @@ export class LyricsDisplay {
         
         // If exiting edit mode, apply changes
         // Safe theme access with fallbacks to prevent TypeError
-        const _theme = (UIManager && UIManager.THEME) ? UIManager.THEME : (default_theme || {});
-        const defaultBtnBg = (_theme.button && _theme.button.backgroundColor) || 'transparent';
-        const surfaceAlt = (_theme.colors && _theme.colors.surfaceAlt) || defaultBtnBg;
-        const activeBtnBg = (_theme.buttonActive && _theme.buttonActive.backgroundColor) || 'rgb(58,74,96)';
+    const _theme = (UIManager && UIManager.THEME) ? UIManager.THEME : (default_theme || {});
+    const defaultBtnBg = (_theme.button && _theme.button.backgroundColor) || 'transparent';
+    const surfaceAlt = (_theme.colors && _theme.colors.surfaceAlt) || defaultBtnBg;
 
-        if (this.editMode) {
-            // Leaving edit mode
-            this.editButton.style.backgroundColor = defaultBtnBg || surfaceAlt;
+        const wasInEdit = this.editMode;
+        // Flip state first
+        this.editMode = !this.editMode;
+        if (!this.editMode && wasInEdit) {
+            // Just exited edit mode -> revert active state
+            if (this.editButton && this.editButton._setActive) {
+                this.editButton._setActive(false);
+            } else {
+                this.editButton.style.backgroundColor = defaultBtnBg || surfaceAlt;
+            }
             if (this.originalLinesBackup) {
                 this.applyBulkEditChanges();
             }
-        } else {
-            // Entering edit mode: highlight with active background (lighter blue)
-            this.editButton.style.backgroundColor = activeBtnBg;
-            // log('🎯 Entering edit mode');
+        } else if (this.editMode && !wasInEdit) {
+            // Just entered edit mode -> activate persistent state
+            if (this.editButton && this.editButton._setActive) {
+                this.editButton._setActive(true);
+            } else {
+                this.editButton.style.backgroundColor = (_theme.buttonActive && _theme.buttonActive.backgroundColor) || 'rgb(58,74,96)';
+            }
         }
-        this.editMode = !this.editMode;
         // Keep icon, only change color (uses theme colors)
 
         // this.editButton.style.backgroundColor = this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor;
