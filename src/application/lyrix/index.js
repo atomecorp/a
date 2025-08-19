@@ -2324,8 +2324,8 @@ function createMainInterface() {
         // Add data attribute for identification
         scrubContainer.setAttribute('data-element', 'scrub-slider');
         
-        // Create Squirrel slider for audio scrubbing
-        const scrubSlider = Slider({
+    // Create Squirrel slider for audio scrubbing
+    const scrubSlider = Slider({
             type: 'horizontal',
             min: 0,
             max: 100,
@@ -2341,9 +2341,12 @@ function createMainInterface() {
                     marginRight: '8px'
                 },
                 track: {
-                    height: '3px', // further reduced
-                    backgroundColor: '#ddd',
-                    borderRadius: '3px'
+            // THEME OVERRIDE: unified dark blue rail
+            height: '3px', // further reduced
+            backgroundColor: 'rgb(48,60,78)',
+            borderRadius: '3px',
+            border: 'none',
+            boxShadow: 'none'
                 },
                 progression: {
                     // Darker, greyer blue progression
@@ -2406,7 +2409,34 @@ function createMainInterface() {
                 }
             }
         });
-        
+        // Force track / progression styles after creation (defensive override)
+        setTimeout(() => {
+            try {
+                const trackEl = document.getElementById('audio_scrub_slider_track');
+                const progEl = document.getElementById('audio_scrub_slider_progression');
+                if (trackEl) {
+                    trackEl.style.backgroundColor = 'rgb(48,60,78)';
+                    trackEl.style.border = 'none';
+                    trackEl.style.boxShadow = 'none';
+                }
+                if (progEl) {
+                    // Slight contrast for progression
+                    progEl.style.backgroundColor = 'rgb(74,106,133)';
+                    progEl.style.border = 'none';
+                }
+            } catch (e) {
+                console.warn('Scrub slider post-style failed', e);
+            }
+        }, 0);
+
+        // Global CSS (once) to override any default slider track style
+        if (!document.getElementById('scrub-slider-global-style')) {
+            const styleTag = document.createElement('style');
+            styleTag.id = 'scrub-slider-global-style';
+            styleTag.textContent = `#audio-scrub-slider-container .hs-slider-track, #audio_scrub_slider_track {\n  background-color: rgb(48,60,78) !important;\n  border: none !important;\n  box-shadow: none !important;\n}\n#audio-scrub-slider-container .hs-slider-progression, #audio_scrub_slider_progression {\n  background-color: rgb(74,106,133) !important;\n  border: none !important;\n}`;
+            document.head.appendChild(styleTag);
+        }
+
         // Store reference for direct updates
         scrubSliderRef = scrubSlider;
 

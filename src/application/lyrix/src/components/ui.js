@@ -1230,7 +1230,7 @@ export class UIManager {
                 gap: this.THEME.spacing.sm,
                 padding: this.THEME.spacing.md,
                 backgroundColor: this.THEME.colors.background,
-                border: `1px solid ${this.THEME.colors.border}`,
+                border: 'none',
                 borderRadius: this.THEME.borderRadius.sm,
                 ...config.css
             }

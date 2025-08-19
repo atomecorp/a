@@ -730,6 +730,51 @@ export class LyricsDisplay {
                     // Slider will take full width and be styled separately - reduced to half height
                     tool.style.minHeight = '20px';
                     tool.style.padding = '2px 5px';
+                    tool.style.background = 'transparent';
+                    tool.style.border = 'none';
+                    tool.style.outline = 'none';
+                    tool.style.boxShadow = 'none';
+                    // Force child range input track color & remove borders
+                    const range = tool.querySelector('input[type="range"]');
+                    if (range) {
+                        range.style.background = 'rgb(48, 60, 78)';
+                        range.style.border = 'none';
+                        range.style.height = '6px';
+                        range.style.borderRadius = '4px';
+                        range.style.outline = 'none';
+                        range.style.boxShadow = 'none';
+                        // Inject a style tag once for pseudo-element coloring if not already
+                        if (!document.getElementById('scrub-slider-style')) {
+                            const styleTag = document.createElement('style');
+                            styleTag.id = 'scrub-slider-style';
+                            styleTag.textContent = `#audio-scrub-slider-container input[type="range"]::-webkit-slider-runnable-track{background:rgb(48,60,78);border:none;}\n#audio-scrub-slider-container input[type="range"]::-moz-range-track{background:rgb(48,60,78);border:none;}\n#audio-scrub-slider-container input[type="range"]{background:rgb(48,60,78);}`;
+                            document.head.appendChild(styleTag);
+                        }
+                    }
+                    // Ensure an id in case missing
+                    if (!tool.id) tool.id = 'audio-scrub-slider-container';
+                    // Observer fallback if slider created later inside container
+                    if (!tool.__scrubObserver) {
+                        const observer = new MutationObserver(muts => {
+                            muts.forEach(m => {
+                                m.addedNodes.forEach(n => {
+                                    if (n.nodeType === 1) {
+                                        const r = n.matches && n.matches('input[type="range"]') ? n : n.querySelector && n.querySelector('input[type="range"]');
+                                        if (r) {
+                                            r.style.background = 'rgb(48, 60, 78)';
+                                            r.style.border = 'none';
+                                            r.style.height = '6px';
+                                            r.style.borderRadius = '4px';
+                                            r.style.outline = 'none';
+                                            r.style.boxShadow = 'none';
+                                        }
+                                    }
+                                });
+                            });
+                        });
+                        observer.observe(tool, { childList: true, subtree: true });
+                        tool.__scrubObserver = observer;
+                    }
                 }
                 
                 if (tool.id === 'audio-player-title') {
