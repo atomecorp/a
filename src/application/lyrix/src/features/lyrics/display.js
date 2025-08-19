@@ -114,7 +114,8 @@ export class LyricsDisplay {
                 // Unified dark blue background requested (rgb(37,48,64))
                 backgroundColor: 'rgb(37, 48, 64)',
                 flexShrink: 0, // NEVER shrinks
-                zIndex: '100' // Au-dessus du contenu de scroll
+                zIndex: '100', // Au-dessus du contenu de scroll
+                top: '15px' // Décalage ajusté à 15px
             }
         });
 
@@ -1047,11 +1048,11 @@ export class LyricsDisplay {
             const offsetLabel = $('span', {
                 text: 'time offset:',
                 css: {
-                    // Fixed small pixel font size (independent from global font size)
-                    fontSize: '10px',
-                    color: this.originalStyles.formElements.textColor,
-                    fontWeight: '400',
+                    fontSize: '24px',
+                    color: '#ffffff',
+                    fontWeight: '600',
                     letterSpacing: '0.5px',
+                    lineHeight: '1',
                     userSelect: 'none',
                     webkitUserSelect: 'none',
                     mozUserSelect: 'none',
