@@ -189,7 +189,7 @@ export function showSongLibrary() {
     });
 
     // Action buttons container (clean rebuild)
-    const actionButtons = window.$('div', { css: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', paddingLeft: '12px', boxSizing: 'border-box', width: '100%' } });
+    const actionButtons = window.$('div', { css: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } });
 
     // Unified small button factory (consistent bg, font, sizing)
     const UNIFIED_BTN_BG = default_theme.colors.surfaceAlt;
@@ -421,8 +421,7 @@ export function showSongLibrary() {
     // Song list container (override background to match action buttons: rgb(37,48,64))
     const listContainer = window.UIManager.createListContainer({
         css: {
-            backgroundColor: 'rgb(37, 48, 64)',
-            paddingLeft: '12px'
+            backgroundColor: 'rgb(37, 48, 64)'
         }
     });
     

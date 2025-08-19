@@ -93,10 +93,7 @@ export class LyricsDisplay {
                 top: '0',
                 left: '0',
                 width: '100vw',
-                // Use dynamic viewport height to avoid iOS white bar
-                height: 'calc(var(--app-vh))',
-                paddingTop: 'var(--safe-top)',
-                paddingBottom: 'var(--safe-bottom)',
+                height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
                 backgroundColor: UIManager.THEME.colors.primary,
@@ -429,7 +426,7 @@ export class LyricsDisplay {
         // ===== PREVENT ALL SCROLL ON BODY AND LYRIX_APP =====
         // Prevent scroll on body
         document.body.style.overflow = 'hidden';
-    document.body.style.height = 'calc(var(--app-vh))';
+        document.body.style.height = '100vh';
         document.body.style.margin = '0';
         document.body.style.padding = '0';
         
@@ -437,49 +434,13 @@ export class LyricsDisplay {
         const lyrixApp = document.getElementById('lyrix_app');
         if (lyrixApp) {
             lyrixApp.style.overflow = 'hidden';
-            lyrixApp.style.height = 'calc(var(--app-vh))';
+            lyrixApp.style.height = '100vh';
             lyrixApp.style.width = '100vw';
             lyrixApp.style.position = 'relative';
         }
         
         // Add display container directly to body for total control
         document.body.append(this.displayContainer);
-
-        // === iOS FULL HEIGHT FIX (dynamic visualViewport) ===
-        if (!window.__lyrixFullHeightFixInstalled) {
-            window.__lyrixFullHeightFixInstalled = true;
-            const applyFullHeight = () => {
-                // Prefer visualViewport for iOS (excludes browser UI chrome)
-                const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-                if (vh && vh > 0) {
-                    document.documentElement.style.setProperty('--app-vh', vh + 'px');
-                }
-                // Target key containers
-                const ids = ['lyrix-app', 'display-container', 'lyrix_app'];
-                ids.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) {
-                        el.style.height = 'var(--app-vh)';
-                        el.style.minHeight = 'var(--app-vh)';
-                        // Allow full bleed behind notch (content areas manage their own safe padding if needed)
-                        if (id === 'display-container' || id === 'lyrix-app' || id === 'lyrix_app') {
-                            el.style.paddingTop = '0';
-                            el.style.paddingBottom = '0';
-                        }
-                    }
-                });
-            };
-            // Initial & listeners
-            applyFullHeight();
-            window.addEventListener('resize', applyFullHeight, { passive: true });
-            window.addEventListener('orientationchange', () => setTimeout(applyFullHeight, 80), { passive: true });
-            if (window.visualViewport) {
-                window.visualViewport.addEventListener('resize', applyFullHeight, { passive: true });
-            }
-            // Mutation observer fallback if main container injected later
-            const mo = new MutationObserver(() => applyFullHeight());
-            mo.observe(document.documentElement, { childList: true, subtree: true });
-        }
         
         // Initial layout update
         setTimeout(() => {
@@ -1412,8 +1373,8 @@ export class LyricsDisplay {
                 text: this.formatTimeDisplay(line.time),
                 css: {
                     fontSize: '0.8em',
-                    color: this.originalStyles.formElements.textColor,
-                    backgroundColor: this.originalStyles.editPanel.backgroundColor,
+                    color: '#fff',
+                    backgroundColor: 'rgb(48,60,78)',
                     padding: '2px 6px',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
@@ -1447,13 +1408,13 @@ export class LyricsDisplay {
             
             // Add hover effects
             timeSpan.addEventListener('mouseenter', () => {
-                timeSpan.style.backgroundColor = '#e0e0e0';
-                timeSpan.style.color = '#333';
+                timeSpan.style.backgroundColor = 'rgb(48,60,78)';
+                timeSpan.style.color = '#fff';
             });
-            
+
             timeSpan.addEventListener('mouseleave', () => {
-                timeSpan.style.backgroundColor = '#f0f0f0';
-                timeSpan.style.color = '#666';
+                timeSpan.style.backgroundColor = 'rgb(48,60,78)';
+                timeSpan.style.color = '#fff';
             });
             
             // Simple touch-friendly editing for timecode (like other buttons)
@@ -2244,7 +2205,7 @@ export class LyricsDisplay {
             this.lyricsContent.style.top = '0';
             this.lyricsContent.style.left = '0';
             this.lyricsContent.style.width = '100vw';
-            this.lyricsContent.style.height = 'calc(var(--app-vh))';
+            this.lyricsContent.style.height = '100vh';
             this.lyricsContent.style.zIndex = '9999';
             // Force persistent unified background in normal mode
             this.lyricsContent.style.backgroundColor = 'rgb(37, 48, 64)';
@@ -2653,8 +2614,8 @@ export class LyricsDisplay {
             border-radius: 3px;
             min-width: 60px;
             text-align: center;
-            background-color: white;
-            color: #333;
+            background-color: rgb(48,60,78);
+            color: #fff;
             cursor: text;
             user-select: text;
             -webkit-user-select: text;
@@ -3302,8 +3263,8 @@ export class LyricsDisplay {
             padding: 4px 8px;
             border: 2px solid #007bff;
             border-radius: 4px;
-            background-color: white;
-            color: #333;
+            background-color: rgb(48,60,78);
+            color: #fff;
             flex: 1;
             box-sizing: border-box;
             user-select: text !important;

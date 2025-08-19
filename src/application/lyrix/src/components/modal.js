@@ -30,7 +30,7 @@ export function Modal(options = {}) {
             top: '0',
             left: '0',
             width: '100vw',
-            height: 'calc(var(--app-vh))',
+            height: '100vh',
             backgroundColor: overlay ? 'rgba(0, 0, 0, 0.5)' : 'transparent',
             display: 'flex',
             justifyContent: 'center',
@@ -46,7 +46,7 @@ export function Modal(options = {}) {
         small: { width: '300px', minHeight: '200px' },
         medium: { width: '500px', minHeight: '300px' },
         large: { width: '700px', minHeight: '400px' },
-    fullscreen: { width: '90vw', height: 'calc(var(--app-vh) - 10vh)' }
+        fullscreen: { width: '90vw', height: '90vh' }
     };
 
     const modalSize = sizePresets[size] || sizePresets.medium;

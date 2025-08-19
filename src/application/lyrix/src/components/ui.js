@@ -337,7 +337,7 @@ export class UIManager {
                 top: '0',
                 left: '0',
                 width: '100vw',
-                height: 'calc(var(--app-vh))',
+                height: '100vh',
                 background: 'rgba(0, 0, 0, 0.7)',
                 zIndex: '10000',
                 display: 'flex',
@@ -452,7 +452,7 @@ export class UIManager {
                 top: '0',
                 left: '0',
                 width: '100vw',
-                height: 'calc(var(--app-vh))',
+                height: '100vh',
                 background: 'rgba(0, 0, 0, 0.7)',
                 zIndex: '10000',
                 display: 'flex',
@@ -582,10 +582,10 @@ export class UIManager {
         return $('div', {
             id: 'timecode',
             css: {
-                // Use unified button style (including width/height)
                 ...default_theme.button,
-                // Timecode specifics
-                fontFamily: 'monospace'
+                fontFamily: 'monospace',
+                backgroundColor: 'rgb(48,60,78)',
+                color: '#fff'
             },
             text: '0.000s'
         });
@@ -1052,7 +1052,7 @@ export class UIManager {
             ...config,
             css: {
                 width: '100vw',
-                height: 'calc(var(--app-vh))',
+                height: '100vh',
                 backgroundColor: this.THEME.colors.background,
                 color: this.THEME.colors.text,
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -1287,19 +1287,17 @@ export class UIManager {
             id: 'timecode-display',
             ...config,
             css: {
-                // display: 'none',
                 alignItems: 'center',
                 justifyContent: 'center',
-                // Use unified button style EXCEPT width
                 ...default_theme.button,
-                // Timecode specifics
                 fontFamily: 'monospace',
                 textAlign: 'center',
-                // Largeur adaptative pour le timecode
                 width: 'auto',
-                minWidth: '80px', // Plus large que les boutons normaux
+                minWidth: '80px',
                 paddingLeft: '12px',
                 paddingRight: '12px',
+                backgroundColor: 'rgb(48,60,78)',
+                color: '#fff',
                 ...config.css
             }
         });
