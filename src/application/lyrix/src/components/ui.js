@@ -251,7 +251,8 @@ export class UIManager {
             css: {
                 width: '100%',
                 padding: '8px',
-                border: '1px solid #555',
+                border: 'none',
+                outline: 'none',
                 borderRadius: '4px',
                 backgroundColor: 'rgb(48, 60, 78)',
                 color: 'white',
@@ -259,10 +260,11 @@ export class UIManager {
                 ...(config && config.css ? config.css : {})
             },
             ...config,
-            // Ensure background cannot be overridden inadvertently unless explicitly passed
             css: {
                 ...((config && config.css) || {}),
-                backgroundColor: 'rgb(48, 60, 78)'
+                backgroundColor: 'rgb(48, 60, 78)',
+                border: 'none',
+                outline: 'none'
             }
         });
     }
@@ -801,14 +803,16 @@ export class UIManager {
             ...config,
             css: {
                 backgroundColor: 'rgb(48, 60, 78)',
-                border: `1px solid ${this.THEME.colors.border}`,
+                border: 'none',
+                outline: 'none',
                 borderRadius: this.THEME.borderRadius.sm,
                 color: this.THEME.colors.text,
                 padding: this.THEME.spacing.sm,
                 fontSize: this.THEME.fontSize.sm,
                 width: '100%',
                 ...config.css,
-                background: 'rgb(48, 60, 78)'
+                background: 'rgb(48, 60, 78)',
+                borderColor: 'transparent'
             }
         });
     }

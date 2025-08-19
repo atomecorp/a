@@ -527,7 +527,7 @@ function createSettingsContent() {
             css: {
                 width: '60px',
                 padding: '5px',
-                border: '1px solid #ccc',
+        border: 'none',
                 borderRadius: '3px',
                 fontSize: '12px',
         textAlign: 'center',
@@ -825,7 +825,7 @@ function createSettingsContent() {
             css: {
                 width: '60px',
                 padding: '5px',
-                border: '1px solid #ccc',
+        border: 'none',
                 borderRadius: '3px',
                 fontSize: '12px',
         textAlign: 'center',
@@ -1081,7 +1081,7 @@ export function showSettingsModal() {
             css: {
                 width: '60px',
                 padding: '5px',
-                border: '1px solid #ccc',
+        border: 'none',
                 borderRadius: '3px',
                 fontSize: '12px',
         textAlign: 'center',

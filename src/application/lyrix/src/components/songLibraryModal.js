@@ -298,7 +298,7 @@ export function showSongLibrary() {
         css: {
             width: '50px',
             padding: '2px 4px',
-            border: '1px solid #ccc',
+            border: 'none',
             borderRadius: '3px',
             fontSize: '11px',
             textAlign: 'center',
@@ -392,7 +392,7 @@ export function showSongLibrary() {
             display: 'none',
             width: '100%',
             padding: '10px',
-            border: '1px solid #ddd',
+            border: 'none',
             borderRadius: '4px',
             marginBottom: '15px',
             fontSize: '14px',
@@ -480,6 +480,12 @@ export function showSongLibrary() {
             const songKey = input.getAttribute('data-song-key');
             const midiNote = window.midiUtilities.getMidiAssignment(songKey);
             input.value = midiNote || '';
+            // Enforce unified styling if legacy style (white background) persists
+            if (input && input.style) {
+                input.style.backgroundColor = 'rgb(48, 60, 78)';
+                input.style.color = '#fff';
+                input.style.border = input.style.border || '1px solid #ccc';
+            }
         });
     }
 
@@ -646,7 +652,7 @@ export function showSongLibrary() {
                 currentMidiNote = window.midiUtilities.getMidiAssignment(item.value);
             }
             
-            const midiInput = window.$('input', {
+        const midiInput = window.$('input', {
                 type: 'number',
                 min: '0',
                 max: '127',
@@ -655,10 +661,12 @@ export function showSongLibrary() {
                 css: {
                     width: '50px',
                     padding: '2px 4px',
-                    border: '1px solid #ccc',
+            border: 'none',
                     borderRadius: '3px',
                     fontSize: '11px',
-                    textAlign: 'center'
+            textAlign: 'center',
+            backgroundColor: 'rgb(48, 60, 78)',
+            color: '#fff'
                 }
             });
             

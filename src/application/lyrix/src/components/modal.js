@@ -349,7 +349,7 @@ export function InputModal(options = {}) {
         css: {
             width: '100%',
             padding: '10px',
-            border: '1px solid #ddd',
+            border: 'none',
             borderRadius: '4px',
             fontSize: '14px',
             boxSizing: 'border-box',
@@ -463,7 +463,7 @@ export function FormModal(options = {}) {
             css: {
                 width: '100%',
                 padding: '10px',
-                border: '1px solid #ddd',
+                border: 'none',
                 borderRadius: '4px',
                 fontSize: '14px',
                 boxSizing: 'border-box',
@@ -565,7 +565,7 @@ export function SelectModal(options = {}) {
             css: {
                 width: '100%',
                 padding: '10px',
-                border: '1px solid #ddd',
+                border: 'none',
                 borderRadius: '4px',
                 marginBottom: '15px',
                 fontSize: '14px',

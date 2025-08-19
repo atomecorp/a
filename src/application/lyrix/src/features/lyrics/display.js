@@ -981,7 +981,7 @@ export class LyricsDisplay {
             fontWeight: '600',
             padding: '2px 6px',
                     borderRadius: '4px',
-                    border: `2px solid ${this.originalStyles.formElements.color}`,
+                    border: 'none',
                     backgroundColor: 'rgb(48, 60, 78)',
             flex: '1', width: '100%', boxSizing: 'border-box', overflow: 'hidden'
                 }
@@ -1063,7 +1063,7 @@ export class LyricsDisplay {
             fontSize: '10px',
             fontWeight: '400',
             padding: '1px 3px',
-                    border: '1px solid #ddd',
+                    border: 'none',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
             backgroundColor: 'rgb(48, 60, 78)',
@@ -1211,7 +1211,7 @@ export class LyricsDisplay {
                     fontWeight: 'normal',
                     padding: '4px 8px',
                     borderRadius: '4px',
-                    border: `2px solid ${this.originalStyles.formElements.textColor}`,
+                    border: 'none',
             backgroundColor: 'rgb(48, 60, 78)',
                     width: '100%'
                 }
