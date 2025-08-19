@@ -3,6 +3,7 @@
 // Converted from modal to inline panel that appears above lyrics viewer
 import { CONSTANTS } from '../core/constants.js';
 import { StorageManager } from '../services/storage.js';
+import default_theme from './style.js';
 
 // Settings panel state management
 let isSettingsOpen = false;
@@ -202,7 +203,7 @@ export function toggleSettingsPanel(id_passed) {
         // Remettre la couleur de fond normale du bouton
         const button = document.getElementById(id_passed);
         if (button) {
-            button.style.backgroundColor = 'transparent';
+            if (button._setActive) { button._setActive(false); } else { button.style.backgroundColor = 'transparent'; }
         }
     } else {
         openSettingsPanel();
@@ -210,7 +211,7 @@ export function toggleSettingsPanel(id_passed) {
         // Changer la couleur de fond du bouton pour indiquer qu'il est actif
         const button = document.getElementById(id_passed);
         if (button) {
-            button.style.backgroundColor = '#ffffffff'; // Bleu pour indiquer l'état actif
+            if (button._setActive) { button._setActive(true); } else { button.style.backgroundColor = '#ffffffff'; }
         }
     }
 }
@@ -259,66 +260,18 @@ export function openSettingsPanel() {
     const targetContainer = lyricsContent || displayContainer || appContainer;
     originalLyricsViewerContainer = targetContainer;
 
-    // Create the inline settings panel
-    settingsPanel = window.$('div', {
-        id: 'settings-panel',
-        css: {
-            width: '100%',
-            height: localStorage.getItem('lyrix_settings_panel_height') || '40vh', // Use saved height or default
-            backgroundColor: 'white',
-            border: '1px solid #e0e0e0',
-            borderRadius: '8px',
-            marginBottom: '5px', // Reduced margin for grip
-            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-            overflow: 'hidden',
-            transition: 'opacity 0.3s ease, transform 0.3s ease', // Remove height from transition
-            opacity: '0',
-            transform: 'translateY(-10px)',
-            display: 'flex',
-            flexDirection: 'column',
-            userSelect: 'none',
-            webkitUserSelect: 'none',
-            mozUserSelect: 'none',
-            msUserSelect: 'none',
-            resize: 'none' // Disable default resize
-        },
-        'aria-hidden': 'false',
-        role: 'region',
-        'aria-label': 'Settings panel'
-    });
+    // Create the inline settings panel (themed)
+    settingsPanel = window.$('div', { id: 'settings-panel', css: { width: '100%', height: localStorage.getItem('lyrix_settings_panel_height') || '40vh', marginBottom: '6px', overflow: 'hidden', transition: 'opacity 0.3s ease, transform 0.3s ease', opacity: '0', transform: 'translateY(-10px)', display: 'flex', flexDirection: 'column', userSelect: 'none', webkitUserSelect: 'none', mozUserSelect: 'none', msUserSelect: 'none', resize: 'none', backgroundColor: default_theme.colors.surface, border: `1px solid ${default_theme.colors.border}`, borderRadius: default_theme.borderRadius.lg, boxShadow: default_theme.panel.shadow, backdropFilter: default_theme.panel.backdrop }, 'aria-hidden': 'false', role: 'region', 'aria-label': 'Settings panel' });
 
     // Create panel content (no header to save space)
     const content = createSettingsContent();
     settingsPanel.appendChild(content);
 
     // Create resize grip
-    const resizeGrip = window.$('div', {
-        id: 'settings-resize-grip',
-        css: {
-            width: '100%',
-            height: '8px',
-            backgroundColor: '#e0e0e0',
-            cursor: 'ns-resize',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '0 0 4px 4px',
-            transition: 'background-color 0.2s ease',
-            marginBottom: '15px'
-        },
-        title: 'Drag to resize settings panel'
-    });
+    const resizeGrip = window.$('div', { id: 'settings-resize-grip', css: { width: '100%', height: '8px', backgroundColor: default_theme.colors.primary, cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: `0 0 ${default_theme.borderRadius.md} ${default_theme.borderRadius.md}`, transition: 'background-color 0.2s ease', marginBottom: '15px', borderTop: `1px solid ${default_theme.colors.border}` }, title: 'Drag to resize settings panel' });
 
     // Add grip visual indicator
-    const gripIndicator = window.$('div', {
-        css: {
-            width: '30px',
-            height: '3px',
-            backgroundColor: '#999',
-            borderRadius: '2px',
-            position: 'relative'
-        }
-    });
+    const gripIndicator = window.$('div', { css: { width: '34px', height: '3px', backgroundColor: default_theme.colors.textMuted, borderRadius: '2px', position: 'relative', opacity: '0.9' } });
 
     gripIndicator.innerHTML = '<div style="position: absolute; top: -2px; left: 0; width: 30px; height: 1px; background-color: #999; border-radius: 1px;"></div><div style="position: absolute; top: 4px; left: 0; width: 30px; height: 1px; background-color: #999; border-radius: 1px;"></div>';
     

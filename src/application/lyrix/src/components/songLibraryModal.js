@@ -2,6 +2,7 @@
 // Handles all song library functionality including MIDI controls, export, import, and sorting
 
 import { exportSongsToLRX } from '../features/lyrics/SongUtils.js';
+import default_theme from './style.js';
 
 // Helper function to properly close song library panel and remove all related elements
 function closeSongLibraryPanel() {
@@ -15,6 +16,12 @@ function closeSongLibraryPanel() {
     if (existingGrip) {
         existingGrip.remove();
     }
+
+    // Always ensure the song list toggle button reflects closed state
+    const btn = document.getElementById('song_list_button');
+    if (btn && btn._setActive) {
+        btn._setActive(false);
+    }
 }
 
 // Toggle song library panel (show/hide)
@@ -23,10 +30,14 @@ export function toggleSongLibrary() {
     if (existingPanel) {
         // Panel exists, close it properly
         closeSongLibraryPanel();
+    const btn = document.getElementById('song_list_button');
+    if (btn && btn._setActive) btn._setActive(false);
         return false; // Panel closed
     } else {
         // Panel doesn't exist, show it
         showSongLibrary();
+    const btn = document.getElementById('song_list_button');
+    if (btn && btn._setActive) btn._setActive(true);
         return true; // Panel opened
     }
 }
@@ -57,6 +68,7 @@ export function showSongLibrary() {
             settingsGrip.remove();
         }
         
+    // (Theme utilities already imported at top if needed)
         // Also reset settings panel state if needed
         if (window.settingsState) {
             window.settingsState.isSettingsOpen = false;
@@ -65,8 +77,10 @@ export function showSongLibrary() {
         // Reset the settings button visual state (ensure it doesn't look active)
         const settingsButton = document.getElementById('settings_button');
         if (settingsButton) {
-            settingsButton.style.backgroundColor = 'transparent';
-            settingsButton.style.color = '';
+            if (settingsButton._setActive) { settingsButton._setActive(false); } else {
+                settingsButton.style.backgroundColor = 'transparent';
+                settingsButton.style.color = '';
+            }
         }
     }
 
@@ -144,187 +158,88 @@ export function showSongLibrary() {
         css: { margin: '0', color: 'white' }
     });
 
-    // Action buttons container
-    const actionButtons = window.$('div', {
-        css: {
-            display: 'flex',
-            gap: '8px'
-        }
-    });
+    // Action buttons container (clean rebuild)
+    const actionButtons = window.$('div', { css: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } });
 
-    // Export all to LRX button
-    const exportLRXButton = window.$('button', {
+    const makeMiniBtn = (cfg) => window.$('button', { css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px', ...cfg.css }, text: cfg.text, id: cfg.id, onClick: cfg.onClick });
+
+    const exportLRXButton = makeMiniBtn({
         id: 'export-lrx-format',
         text: '💾 Save',
-        css: {
-            backgroundColor: '#27ae60',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
+        css: { backgroundColor: default_theme.colors.success, border: `1px solid ${default_theme.colors.border}` },
         onClick: () => {
             try {
-                // Close the modal first
                 closeSongLibraryPanel();
-                
-                // Get all songs data
-                if (!lyricsLibrary) {
-                    return;
-                }
-
-                const songSummaries = lyricsLibrary.getAllSongs();
-                if (songSummaries.length === 0) {
-                    return;
-                }
-
-                // Create export data
-                const exportData = exportSongsToLRX(songSummaries, lyricsLibrary);
-                const dataStr = JSON.stringify(exportData, null, 2);
-                
-                // Default filename with current date
-                const currentDate = new Date().toISOString().split('T')[0];
-                const defaultFileName = `song_library_${currentDate}.lrx`;
-                
-                // Check if we're on iOS/AUv3
+                const btn = document.getElementById('song_list_button');
+                if (btn && btn._setActive) btn._setActive(false);
+                if (!lyricsLibrary) return;
+                const list = lyricsLibrary.getAllSongs();
+                if (!list.length) return;
+                const data = exportSongsToLRX(list, lyricsLibrary);
+                const json = JSON.stringify(data, null, 2);
+                const date = new Date().toISOString().split('T')[0];
+                const name = `song_library_${date}.lrx`;
                 const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
-                
                 if (isAUv3) {
-                    // Use iOS native save dialog via Swift bridge
-                    const payload = {
-                        action: 'saveFileWithDocumentPicker',
-                        requestId: Date.now().toString(),
-                        fileName: defaultFileName,
-                        data: dataStr,
-                        encoding: 'utf8'
-                    };
-                    
-                    window.webkit.messageHandlers.swiftBridge.postMessage(payload);
-                    
+                    window.webkit.messageHandlers.swiftBridge.postMessage({ action: 'saveFileWithDocumentPicker', requestId: Date.now().toString(), fileName: name, data: json, encoding: 'utf8' });
                 } else {
-                    // For desktop/web: create download link
-                    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                    const url = URL.createObjectURL(dataBlob);
-                    
-                    const downloadLink = document.createElement('a');
-                    downloadLink.href = url;
-                    downloadLink.download = defaultFileName;
-                    downloadLink.style.display = 'none';
-                    
-                    document.body.appendChild(downloadLink);
-                    downloadLink.click();
-                    document.body.removeChild(downloadLink);
-                    URL.revokeObjectURL(url);
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = name; a.style.display = 'none';
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
                 }
-                
-            } catch (error) {
-                // Silent error handling
-            }
+            } catch {}
         }
     });
 
-    // Export selected as text button
-    const exportTextButton = window.$('button', {
+    const exportTextButton = makeMiniBtn({
         id: 'export-songs-as-text',
-        text: 'save txt',
-        css: {
-            backgroundColor: '#3498db',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
+        text: 'TXT',
+        css: { backgroundColor: default_theme.colors.accent, border: `1px solid ${default_theme.colors.border}` },
+        onClick: () => { 
             closeSongLibraryPanel();
-            window.exportSelectedSongsAsTextWithFolderDialog();
+            const btn = document.getElementById('song_list_button');
+            if (btn && btn._setActive) btn._setActive(false);
+            window.exportSelectedSongsAsTextWithFolderDialog && window.exportSelectedSongsAsTextWithFolderDialog(); 
         }
     });
 
-    // Import file button - moved from toolbar to song library panel
-    const importFileButton = window.$('button', {
+    const importFileButton = makeMiniBtn({
         id: 'import_file_button_library',
         text: '📁 Import',
-        css: {
-            backgroundColor: '#f39c12',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
+        css: { backgroundColor: default_theme.colors.accent, border: `1px solid ${default_theme.colors.border}` },
         onClick: () => {
             closeSongLibraryPanel();
-            // Local file import dialog implementation to ensure .lrx files are accepted
+            const btn = document.getElementById('song_list_button');
+            if (btn && btn._setActive) btn._setActive(false);
             const input = document.createElement('input');
-            input.type = 'file';
-            // Activer import multiple (drag & drop déjà multiple)
-            input.multiple = true;
-            // Don't use accept attribute to allow all file types including .lrx
-            input.style.display = 'none';
-            
+            input.type = 'file'; input.multiple = true; input.style.display = 'none';
             input.addEventListener('change', async (e) => {
                 const files = Array.from(e.target.files || []);
                 if (files.length) {
                     try {
-                        const manager = (window.Lyrix && window.Lyrix.dragDropManager) ? window.Lyrix.dragDropManager : window.dragDropManager;
-                        if (manager) {
-                            // iOS: séquentiel avec petit délai; autres plateformes: parallèle simple
+                        const mgr = (window.Lyrix && window.Lyrix.dragDropManager) ? window.Lyrix.dragDropManager : window.dragDropManager;
+                        if (mgr) {
                             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
                             if (isIOS) {
-                                for (let i=0;i<files.length;i++) {
-                                    if (i>0) await new Promise(r=>setTimeout(r,120));
-                                    await manager.processFile(files[i]);
-                                }
-                            } else {
-                                for (const f of files) { await manager.processFile(f); }
-                            }
+                                for (let i=0;i<files.length;i++) { if (i>0) await new Promise(r=>setTimeout(r,120)); await mgr.processFile(files[i]); }
+                            } else { for (const f of files) { await mgr.processFile(f); } }
                         }
-                        if (window.showSongLibrary) { window.showSongLibrary(); }
+                        window.showSongLibrary && window.showSongLibrary();
                     } catch (error) {
-                        if (window.Modal) {
-                            window.Modal({
-                                title: '❌ File Import Error',
-                                content: `<p>Failed to import one or more files: ${error.message}</p>`,
-                                buttons: [{ text: 'OK' }],
-                                size: 'small'
-                            });
-                        }
+                        window.Modal && window.Modal({ title: '❌ File Import Error', content: `<p>Failed to import: ${error.message}</p>`, buttons: [{ text: 'OK' }], size: 'small' });
                     }
                 }
-                if (input.parentNode) { input.parentNode.removeChild(input); }
+                input.parentNode && input.parentNode.removeChild(input);
             });
-            
-            document.body.appendChild(input);
-            input.click();
+            document.body.appendChild(input); input.click();
         }
     });
 
     // Auto Fill MIDI container
-    const autoFillContainer = window.$('div', {
-        id: 'auto-fill-midi-container',
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            backgroundColor: '#f8f9fa',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            border: '1px solid #ddd'
-        }
-    });
-
-    const autoFillLabel = window.$('span', {
-        css: {
-            fontSize: '11px',
-            color: '#666',
-            fontWeight: '500'
-        }
-    });
+    const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: default_theme.colors.surfaceAlt, padding: '4px 8px', borderRadius: default_theme.borderRadius.sm, border: `1px solid ${default_theme.colors.border}` } });
+    const autoFillLabel = window.$('span', { text: 'Auto Fill:', css: { fontSize: '11px', color: default_theme.colors.textMuted, userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
         id: 'auto-fill-midi-input',
@@ -346,72 +261,27 @@ export function showSongLibrary() {
     autoFillInput.value = '33'; // Default to note 33
 
     const autoFillButton = window.$('button', {
-        id: 'auto-fill-midi-button',
-        text: '🎹 Fill',
-        css: {
-            backgroundColor: '#4caf50',
-            color: 'white',
-            border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            autoFillMidiNotes();
-        }
+        id: 'auto-fill-midi-button', text: '🎹 Fill', css: { ...default_theme.button, width: 'auto', padding: '0 8px', fontSize: '11px', backgroundColor: default_theme.colors.success, border: `1px solid ${default_theme.colors.border}` }, onClick: () => autoFillMidiNotes()
     });
 
     autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 
     // Sort alphabetically button
     const sortAlphabeticallyButton = window.$('button', {
-        id: 'sort-alphabetically-button',
-        text: '🔤 Sort A-Z',
-        css: {
-            backgroundColor: '#9c27b0',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            sortSongsAlphabetically();
+        id: 'sort-alphabetically-button', text: '🔤 Sort A-Z', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', backgroundColor: default_theme.colors.surfaceAlt, border: `1px solid ${default_theme.colors.border}` }, onClick: () => {
+            // Directly invoke local sort without rebuilding the whole panel to avoid duplicate separators / grips
+            try {
+                sortSongsAlphabetically();
+            } catch (e) {
+                console.warn('Sort A-Z failed:', e);
+            }
         }
     });
 
     // Bouton supprimer toutes les chansons
-    const deleteAllButton = window.$('button', {
-        id: 'delete-all-songs-button',
-        text: '🗑️',
-        css: {
-            backgroundColor: 'transparent',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            window.Modal({
-                title: 'Confirmation',
-                content: '<p>Voulez-vous vraiment supprimer toutes les chansons ? Cette action est irréversible.</p>',
-                buttons: [
-                    { text: 'Annuler' },
-                    { text: 'Supprimer', onClick: () => {
-                        window.lyricsLibrary.deleteAllSongs();
-                        closeSongLibraryPanel();
-                        // No need for additional confirmation modal - user can see the empty library
-                        showSongLibrary(); // Reopen the library to show it's now empty
-                    }, css: { backgroundColor: '#e74c3c', color: 'white' } }
-                ],
-                size: 'small'
-            });
-        }
-    });
+    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', text: '🗑️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', backgroundColor: 'rgba(239,68,68,0.15)', border: `1px solid ${default_theme.colors.border}` }, onClick: () => {
+        window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
+    }});
     actionButtons.append(importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     modal.append(headerTitle, actionButtons);
 

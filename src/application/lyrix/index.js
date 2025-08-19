@@ -1821,7 +1821,7 @@ function loadAndDisplaySong(songKey) {
         // Always reset play button visual state on song change (audio is paused at top of function)
         const playBtn = document.getElementById('audio-play-button');
         if (playBtn) {
-            playBtn.style.backgroundColor = 'transparent';
+            if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
         }
         
         return true;
@@ -1908,7 +1908,7 @@ function navigateToPreviousSong() {
         // Ensure play button reflects stopped state after navigation
         const playBtn = document.getElementById('audio-play-button');
         if (playBtn) {
-            playBtn.style.backgroundColor = 'transparent';
+            if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
         }
     }
 }
@@ -1941,7 +1941,7 @@ function navigateToNextSong() {
         // Ensure play button reflects stopped state after navigation
         const playBtn = document.getElementById('audio-play-button');
         if (playBtn) {
-            playBtn.style.backgroundColor = 'transparent';
+            if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
         }
     }
 }
@@ -2130,16 +2130,7 @@ function createMainInterface() {
         id: 'song_list_button',
         onClick: () => {
             const isOpen = toggleSongLibrary();
-            // Update button appearance based on state
-            if (isOpen) {
-                songListButton.style.backgroundColor = 'white';
-                songListButton.style.color = 'white';
-                songListButton.textContent = '📂';
-            } else {
-                songListButton.style.backgroundColor = 'transparent';
-                songListButton.style.color = '';
-                songListButton.textContent = '📂';
-            }
+            if (songListButton._setActive) songListButton._setActive(isOpen);
         }
     });
     
@@ -2168,10 +2159,10 @@ function createMainInterface() {
                 try {
                     if (audioController.isPlaying()) {
                         audioController.pause();
-                                    playButton.style.backgroundColor = 'transparent';
+                        if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
 
                     } else {
-                                        playButton.style.backgroundColor = 'white';
+                        if (playButton._setActive) playButton._setActive(true); else playButton.style.backgroundColor = 'white';
 
                         audioController.play();
                     }
@@ -2199,7 +2190,7 @@ function createMainInterface() {
                     resetAudioSlider(false); // Don't force lyrics reset on stop
                     const playBtn = document.getElementById('audio-play-button');
                     if (playBtn) {
-                        playBtn.style.backgroundColor = 'transparent';
+                        if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
                     }
                 } catch (error) {
                     console.error('❌ ERREUR Stop:', error);
@@ -2233,17 +2224,15 @@ function createMainInterface() {
             if (!audioController._uiSyncBound) {
                 audioController.on && audioController.on('play', () => {
                     const btn = document.getElementById('audio-play-button');
-                    if (btn) btn.style.backgroundColor = 'white';
+                    if (btn) { if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white'; }
                 });
                 audioController.on && audioController.on('pause', () => {
                     const btn = document.getElementById('audio-play-button');
-                    if (btn && !audioController.isPlaying()) {
-                        btn.style.backgroundColor = 'transparent';
-                    }
+                    if (btn && !audioController.isPlaying()) { if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor = 'transparent'; }
                 });
                 audioController.on && audioController.on('ended', () => {
                     const btn = document.getElementById('audio-play-button');
-                    if (btn) btn.style.backgroundColor = 'transparent';
+                    if (btn) { if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor = 'transparent'; }
                 });
                 audioController._uiSyncBound = true;
             }
@@ -2289,10 +2278,10 @@ function createMainInterface() {
             id: 'audio_scrub_slider',
             skin: {
                 container: {
-                    width: 'calc(100% - 20px)', // Reduced width to account for handle size
+                    width: 'calc(100% - 20px)',
                     height: '20px',
                     marginBottom: '10px',
-                    marginLeft: '10px', // Center the slider
+                    marginLeft: '10px',
                     marginRight: '10px'
                 },
                 track: {
@@ -2305,7 +2294,7 @@ function createMainInterface() {
                     borderRadius: '3px'
                 },
                 handle: {
-                    width: '14px', // Slightly smaller handle
+                    width: '14px',
                     height: '14px',
                     backgroundColor: '#007bff',
                     border: '2px solid #fff',
@@ -2361,6 +2350,41 @@ function createMainInterface() {
         
         // Store reference for direct updates
         scrubSliderRef = scrubSlider;
+
+        // Enhance slider appearance (design_slider-like) after DOM creation without breaking geometry
+        const enhanceAudioSliderDesign = () => {
+            const track = document.getElementById('audio_scrub_slider_track');
+            const handle = document.getElementById('audio_scrub_slider_handle');
+            const progression = document.getElementById('audio_scrub_slider_progression');
+            if (track) {
+                track.style.height = '18px';
+                track.style.top = '50%';
+                track.style.transform = 'translateY(-50%)';
+                track.style.backgroundColor = '#2a3038';
+                track.style.borderRadius = '18px';
+                track.style.border = '1px solid rgba(255,255,255,0.08)';
+                track.style.boxShadow = 'inset 0 4px 8px rgba(0,0,0,0.35), inset 0 -4px 8px rgba(255,255,255,0.06), inset 4px 0 6px rgba(0,0,0,0.25), inset -4px 0 6px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.25)';
+            }
+            if (progression) {
+                progression.style.height = '100%';
+                progression.style.top = '0';
+                progression.style.left = '0';
+                progression.style.background = 'linear-gradient(90deg,#3b82f6,#60a5fa)';
+                progression.style.borderRadius = '18px';
+                progression.style.boxShadow = 'inset 0 0 4px rgba(0,0,0,0.4)';
+            }
+            if (handle) {
+                handle.style.width = '28px';
+                handle.style.height = '28px';
+                handle.style.top = '50%';
+                handle.style.transform = 'translate(-50%, -50%)';
+                handle.style.backgroundColor = '#3b82f6';
+                handle.style.border = '1px solid rgba(255,255,255,0.35)';
+                handle.style.borderRadius = '50%';
+                handle.style.boxShadow = '0 3px 6px rgba(0,0,0,0.35), 0 6px 12px rgba(0,0,0,0.25), inset 0 1px 3px rgba(255,255,255,0.25), inset 0 -1px 3px rgba(0,0,0,0.35)';
+            }
+        };
+        setTimeout(enhanceAudioSliderDesign, 0);
         
         // Add event listeners to the actual DOM element after it's built
         // setTimeout(() => {

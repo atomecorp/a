@@ -57,46 +57,51 @@ export class UIManager {
 
     // Create standardized interface button with icon
     static createInterfaceButton(icon, config = {}) {
-        return $('button', {
+        const btn = $('button', {
             text: icon,
             ...config,
             css: {
-                // Use unified button style (including width/height)
                 ...default_theme.button,
-                fontSize: '16px', // Icons slightly larger
+                fontSize: '16px',
                 ...config.css
-            },
-            onmouseover: (e) => {
-                // Only apply transform and shadow effects, no color change
-                if (e.target && e.target.style) {
-                    e.target.style.transform = 'translateY(-1px)';
-                    e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-                }
-                if (config.onmouseover) config.onmouseover(e);
-            },
-            onmouseout: (e) => {
-                // Only reset transform and shadow, no color change
-                if (e.target && e.target.style) {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                }
-                if (config.onmouseout) config.onmouseout(e);
-            },
-            onmousedown: (e) => {
-                if (e.target && e.target.style) {
-                    e.target.style.transform = 'translateY(0)';
-                    e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
-                }
-                if (config.onmousedown) config.onmousedown(e);
-            },
-            onmouseup: (e) => {
-                if (e.target && e.target.style) {
-                    e.target.style.transform = 'translateY(-1px)';
-                    e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-                }
-                if (config.onmouseup) config.onmouseup(e);
             }
         });
+
+        // Utility class approach (inline since no CSS file allowed)
+        btn._setActive = (active) => {
+            if (active) {
+                btn.dataset.active = 'true';
+                btn.style.backgroundColor = default_theme.buttonActive.backgroundColor || 'rgba(255,255,255,0.15)';
+                if (default_theme.buttonActive.outline) btn.style.outline = default_theme.buttonActive.outline;
+            } else {
+                btn.dataset.active = 'false';
+                btn.style.backgroundColor = default_theme.button.backgroundColor;
+                btn.style.outline = 'none';
+            }
+        };
+
+        // Default inactive
+        btn._setActive(false);
+
+        // Hover / press interactions (consistent)
+        btn.addEventListener('mouseover', (e) => {
+            e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.4)';
+            if (config.onmouseover) config.onmouseover(e);
+        });
+        btn.addEventListener('mouseout', (e) => {
+            e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.35)';
+            if (config.onmouseout) config.onmouseout(e);
+        });
+        btn.addEventListener('mousedown', (e) => {
+            e.currentTarget.style.transform = 'scale(0.94)';
+            if (config.onmousedown) config.onmousedown(e);
+        });
+        btn.addEventListener('mouseup', (e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            if (config.onmouseup) config.onmouseup(e);
+        });
+
+        return btn;
     }
     
     // Create SVG icon element
