@@ -199,11 +199,14 @@ export function showSongLibrary() {
             css: {
                 ...default_theme.button,
                 backgroundColor: UNIFIED_BTN_BG,
-                border: `1px solid ${default_theme.colors.border}`,
+                // Border removed for uniform flat style across all header action buttons
+                border: 'none',
                 width: 'auto',
                 padding: '0 10px',
                 fontSize: UNIFIED_FONT_SIZE,
                 height: '28px',
+                lineHeight: '28px',
+                boxSizing: 'border-box',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -290,7 +293,7 @@ export function showSongLibrary() {
     try { importFileButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/folder.svg'; img.alt='import'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Import'; span.style.fontSize=UNIFIED_FONT_SIZE; importFileButton.append(img, span);} catch(e) {}
 
     // Auto Fill MIDI container
-    const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: UNIFIED_BTN_BG, height: '28px', padding: '0 8px', borderRadius: default_theme.borderRadius.sm, border: `1px solid ${default_theme.colors.border}`, boxSizing: 'border-box' } });
+    const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: UNIFIED_BTN_BG, height: '28px', padding: '0 8px', borderRadius: default_theme.borderRadius.sm, border: 'none', boxSizing: 'border-box' } });
     const autoFillLabel = window.$('span', { text: 'Auto Fill:', css: { fontSize: UNIFIED_FONT_SIZE, color: default_theme.colors.textMuted, userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
@@ -323,6 +326,7 @@ export function showSongLibrary() {
             alignItems: 'center',
             gap: '4px',
             height: '28px',
+            lineHeight: '28px',
             boxSizing: 'border-box',
             boxShadow: 'none',
             WebkitBoxShadow: 'none'
@@ -335,7 +339,7 @@ export function showSongLibrary() {
 
     // Sort alphabetically button
     const sortAlphabeticallyButton = window.$('button', {
-        id: 'sort-alphabetically-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: 'none', display: 'flex', alignItems: 'center', gap: '4px' }, onClick: () => {
+        id: 'sort-alphabetically-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: 'none', display: 'flex', alignItems: 'center', gap: '4px', height: '28px', lineHeight: '28px', boxSizing: 'border-box' }, onClick: () => {
             // Directly invoke local sort without rebuilding the whole panel to avoid duplicate separators / grips
             try {
                 sortSongsAlphabetically();
@@ -347,7 +351,7 @@ export function showSongLibrary() {
     try { sortAlphabeticallyButton.innerHTML=''; const span=document.createElement('span'); span.textContent='A-Z'; span.style.fontSize=UNIFIED_FONT_SIZE; sortAlphabeticallyButton.append(span);} catch(e) {}
 
     // Bouton supprimer toutes les chansons
-    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => {
+    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '28px', lineHeight: '28px', boxSizing: 'border-box' }, onClick: () => {
         window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
     }});
     try {
@@ -361,7 +365,7 @@ export function showSongLibrary() {
         deleteAllButton.appendChild(img);
     } catch(e) { /* silent */ }
     // Create inline settings button (new instance) shown only inside song list panel
-    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }, onClick: () => {
+    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, height: '28px', lineHeight: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', border: 'none', boxSizing: 'border-box' }, onClick: () => {
         // Required behavior: close song library panel but keep song list button marked active
         closeSongLibraryPanel(true);
         const btn = document.getElementById('song_list_button');
