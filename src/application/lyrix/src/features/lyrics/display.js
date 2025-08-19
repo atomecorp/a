@@ -93,7 +93,10 @@ export class LyricsDisplay {
                 top: '0',
                 left: '0',
                 width: '100vw',
-                height: '100vh',
+                // Use dynamic viewport height to avoid iOS white bar
+                height: 'calc(var(--app-vh))',
+                paddingTop: 'var(--safe-top)',
+                paddingBottom: 'var(--safe-bottom)',
                 display: 'flex',
                 flexDirection: 'column',
                 backgroundColor: UIManager.THEME.colors.primary,
@@ -426,7 +429,7 @@ export class LyricsDisplay {
         // ===== PREVENT ALL SCROLL ON BODY AND LYRIX_APP =====
         // Prevent scroll on body
         document.body.style.overflow = 'hidden';
-        document.body.style.height = '100vh';
+    document.body.style.height = 'calc(var(--app-vh))';
         document.body.style.margin = '0';
         document.body.style.padding = '0';
         
@@ -434,7 +437,7 @@ export class LyricsDisplay {
         const lyrixApp = document.getElementById('lyrix_app');
         if (lyrixApp) {
             lyrixApp.style.overflow = 'hidden';
-            lyrixApp.style.height = '100vh';
+            lyrixApp.style.height = 'calc(var(--app-vh))';
             lyrixApp.style.width = '100vw';
             lyrixApp.style.position = 'relative';
         }
@@ -2205,7 +2208,7 @@ export class LyricsDisplay {
             this.lyricsContent.style.top = '0';
             this.lyricsContent.style.left = '0';
             this.lyricsContent.style.width = '100vw';
-            this.lyricsContent.style.height = '100vh';
+            this.lyricsContent.style.height = 'calc(var(--app-vh))';
             this.lyricsContent.style.zIndex = '9999';
             // Force persistent unified background in normal mode
             this.lyricsContent.style.backgroundColor = 'rgb(37, 48, 64)';
