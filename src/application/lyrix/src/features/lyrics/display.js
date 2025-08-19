@@ -17,7 +17,8 @@ export class LyricsDisplay {
         this.originalStyles = {
             normal: {
                 backgroundColor: '#383838ff',
-                color: 'green'
+                // Harmonized light blue text color replacing green
+                color: '#8fbde8'
             },
             fullscreen: {
                 backgroundColor: '#000',
