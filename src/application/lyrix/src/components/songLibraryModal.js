@@ -191,12 +191,34 @@ export function showSongLibrary() {
     // Action buttons container (clean rebuild)
     const actionButtons = window.$('div', { css: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } });
 
-    const makeMiniBtn = (cfg) => window.$('button', { css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px', ...cfg.css }, text: cfg.text, id: cfg.id, onClick: cfg.onClick });
+    // Unified small button factory (consistent bg, font, sizing)
+    const UNIFIED_BTN_BG = default_theme.colors.surfaceAlt;
+    const UNIFIED_FONT_SIZE = '11px';
+    const makeMiniBtn = (cfg) => {
+        const btn = window.$('button', {
+            css: {
+                ...default_theme.button,
+                backgroundColor: UNIFIED_BTN_BG,
+                border: `1px solid ${default_theme.colors.border}`,
+                width: 'auto',
+                padding: '0 10px',
+                fontSize: UNIFIED_FONT_SIZE,
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                ...cfg.css
+            },
+            text: cfg.text || '',
+            id: cfg.id,
+            onClick: cfg.onClick
+        });
+        return btn;
+    };
 
     const exportLRXButton = makeMiniBtn({
         id: 'export-lrx-format',
-        text: '💾 Save',
-        css: { backgroundColor: default_theme.colors.success, border: `1px solid ${default_theme.colors.border}` },
         onClick: () => {
             try {
                 closeSongLibraryPanel();
@@ -222,11 +244,11 @@ export function showSongLibrary() {
             } catch {}
         }
     });
+    // Replace emoji with SVG save icon
+    try { exportLRXButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/save.svg'; img.alt='save'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Save'; span.style.fontSize=UNIFIED_FONT_SIZE; exportLRXButton.append(img, span);} catch(e) {}
 
     const exportTextButton = makeMiniBtn({
         id: 'export-songs-as-text',
-        text: 'TXT',
-        css: { backgroundColor: default_theme.colors.accent, border: `1px solid ${default_theme.colors.border}` },
         onClick: () => { 
             closeSongLibraryPanel();
             const btn = document.getElementById('song_list_button');
@@ -234,11 +256,10 @@ export function showSongLibrary() {
             window.exportSelectedSongsAsTextWithFolderDialog && window.exportSelectedSongsAsTextWithFolderDialog(); 
         }
     });
+    try { exportTextButton.innerHTML=''; const span=document.createElement('span'); span.textContent='TXT'; span.style.fontSize=UNIFIED_FONT_SIZE; exportTextButton.append(span);} catch(e) {}
 
     const importFileButton = makeMiniBtn({
         id: 'import_file_button_library',
-        text: '📁 Import',
-        css: { backgroundColor: default_theme.colors.accent, border: `1px solid ${default_theme.colors.border}` },
         onClick: () => {
             closeSongLibraryPanel();
             const btn = document.getElementById('song_list_button');
@@ -266,10 +287,11 @@ export function showSongLibrary() {
             document.body.appendChild(input); input.click();
         }
     });
+    try { importFileButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/folder.svg'; img.alt='import'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Import'; span.style.fontSize=UNIFIED_FONT_SIZE; importFileButton.append(img, span);} catch(e) {}
 
     // Auto Fill MIDI container
-    const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: default_theme.colors.surfaceAlt, padding: '4px 8px', borderRadius: default_theme.borderRadius.sm, border: `1px solid ${default_theme.colors.border}` } });
-    const autoFillLabel = window.$('span', { text: 'Auto Fill:', css: { fontSize: '11px', color: default_theme.colors.textMuted, userSelect: 'none' } });
+    const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: UNIFIED_BTN_BG, padding: '4px 8px', borderRadius: default_theme.borderRadius.sm, border: `1px solid ${default_theme.colors.border}` } });
+    const autoFillLabel = window.$('span', { text: 'Auto Fill:', css: { fontSize: UNIFIED_FONT_SIZE, color: default_theme.colors.textMuted, userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
         id: 'auto-fill-midi-input',
@@ -291,15 +313,15 @@ export function showSongLibrary() {
     autoFillInput.value = '33'; // Default to note 33
 
     const autoFillButton = window.$('button', {
-        id: 'auto-fill-midi-button', css: { ...default_theme.button, width: 'auto', padding: '0 8px', fontSize: '11px', backgroundColor: default_theme.colors.success, border: `1px solid ${default_theme.colors.border}`, display: 'flex', alignItems: 'center', gap: '4px' }, onClick: () => autoFillMidiNotes()
+        id: 'auto-fill-midi-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 8px', fontSize: UNIFIED_FONT_SIZE, border: `1px solid ${default_theme.colors.border}`, display: 'flex', alignItems: 'center', gap: '4px' }, onClick: () => autoFillMidiNotes()
     });
-    try { autoFillButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='auto fill'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Fill'; span.style.fontSize='11px'; autoFillButton.append(img, span);} catch(e) {}
+    try { autoFillButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='auto fill'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Fill'; span.style.fontSize=UNIFIED_FONT_SIZE; autoFillButton.append(img, span);} catch(e) {}
 
     autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 
     // Sort alphabetically button
     const sortAlphabeticallyButton = window.$('button', {
-        id: 'sort-alphabetically-button', text: '🔤 Sort A-Z', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', backgroundColor: default_theme.colors.surfaceAlt, border: `1px solid ${default_theme.colors.border}` }, onClick: () => {
+        id: 'sort-alphabetically-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: `1px solid ${default_theme.colors.border}`, display: 'flex', alignItems: 'center', gap: '4px' }, onClick: () => {
             // Directly invoke local sort without rebuilding the whole panel to avoid duplicate separators / grips
             try {
                 sortSongsAlphabetically();
@@ -308,9 +330,10 @@ export function showSongLibrary() {
             }
         }
     });
+    try { sortAlphabeticallyButton.innerHTML=''; const span=document.createElement('span'); span.textContent='A-Z'; span.style.fontSize=UNIFIED_FONT_SIZE; sortAlphabeticallyButton.append(span);} catch(e) {}
 
     // Bouton supprimer toutes les chansons
-    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', backgroundColor: 'rgba(239,68,68,0.15)', border: `1px solid ${default_theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => {
+    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: `1px solid ${default_theme.colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => {
         window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
     }});
     try {
@@ -324,7 +347,7 @@ export function showSongLibrary() {
         deleteAllButton.appendChild(img);
     } catch(e) { /* silent */ }
     // Create inline settings button (new instance) shown only inside song list panel
-    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => {
+    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }, onClick: () => {
         // Required behavior: close song library panel but keep song list button marked active
         closeSongLibraryPanel(true);
         const btn = document.getElementById('song_list_button');
@@ -333,14 +356,14 @@ export function showSongLibrary() {
     } });
     // Inject SVG icon for inline settings
     try {
-        inlineSettingsButton.innerHTML='';
-        const img = document.createElement('img');
-        img.src = 'assets/images/icons/settings.svg';
-        img.alt = 'settings';
-        img.style.width = '16px';
-        img.style.height = '16px';
-        img.style.pointerEvents = 'none';
-        inlineSettingsButton.appendChild(img);
+    inlineSettingsButton.innerHTML='';
+    const img = document.createElement('img');
+    img.src = 'assets/images/icons/settings.svg';
+    img.alt = 'settings';
+    img.style.width = '14px';
+    img.style.height = '14px';
+    img.style.pointerEvents = 'none';
+    const span=document.createElement('span'); span.textContent='Settings'; span.style.fontSize=UNIFIED_FONT_SIZE; inlineSettingsButton.append(img, span);
     } catch(e) { /* silent */ }
 
     // Hide original settings button while panel open (if exists)
