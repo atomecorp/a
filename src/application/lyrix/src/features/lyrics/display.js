@@ -16,7 +16,8 @@ export class LyricsDisplay {
         // Style state management for fullscreen mode
         this.originalStyles = {
             normal: {
-                backgroundColor: '#383838ff',
+                // Unified normal mode background
+                backgroundColor: 'rgb(37, 48, 64)',
                 // Harmonized light blue text color replacing green
                 color: '#8fbde8'
             },
@@ -2133,7 +2134,8 @@ export class LyricsDisplay {
             this.lyricsContent.style.width = '100vw';
             this.lyricsContent.style.height = '100vh';
             this.lyricsContent.style.zIndex = '9999';
-            this.lyricsContent.style.backgroundColor = styles.backgroundColor;
+            // Force persistent unified background in normal mode
+            this.lyricsContent.style.backgroundColor = 'rgb(37, 48, 64)';
             this.lyricsContent.style.color = styles.color;
             // Reduce side padding to allow precise centering
             this.lyricsContent.style.padding = '40px 0';
