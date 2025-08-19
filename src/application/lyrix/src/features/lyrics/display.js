@@ -2127,12 +2127,29 @@ export class LyricsDisplay {
             this.lyricsContent.style.zIndex = '9999';
             this.lyricsContent.style.backgroundColor = styles.backgroundColor;
             this.lyricsContent.style.color = styles.color;
-            this.lyricsContent.style.padding = '40px';
+            // Reduce side padding to allow precise centering
+            this.lyricsContent.style.padding = '40px 0';
             this.lyricsContent.style.overflow = 'auto';
             this.lyricsContent.style.fontSize = `${this.fontSize}px`;
-            this.lyricsContent.style.textAlign = 'center';
+            // Outer container centers child block; text alignment handled in inner wrapper
+            this.lyricsContent.style.textAlign = 'left';
             this.lyricsContent.style.cursor = 'pointer';
             this.lyricsContent.style.flex = 'none';  // Remove flex behavior
+            // Center block and constrain line length
+            this.lyricsContent.style.display = 'flex';
+            this.lyricsContent.style.flexDirection = 'column';
+            this.lyricsContent.style.alignItems = 'center'; // centers inner wrapper horizontally
+            this.lyricsContent.style.justifyContent = 'flex-start';
+            // Wrap inner lines container if exists
+            const inner = this.lyricsContent.querySelector('#lyrics_lines_container');
+            if (inner) {
+                inner.style.maxWidth = '900px';
+                inner.style.width = '100%';
+                inner.style.margin = '0 auto';
+                inner.style.padding = '0 40px';
+                inner.style.boxSizing = 'border-box';
+                inner.style.textAlign = 'left';
+            }
         } else {
             // Apply normal styles
             this.lyricsContent.style.position = 'relative';
@@ -2149,6 +2166,17 @@ export class LyricsDisplay {
             this.lyricsContent.style.cursor = 'default';
             this.lyricsContent.style.flex = '1';
             this.lyricsContent.style.overflow = 'auto';
+            this.lyricsContent.style.display = 'block';
+            // Reset inner container if present
+            const inner = this.lyricsContent.querySelector('#lyrics_lines_container');
+            if (inner) {
+                inner.style.maxWidth = '';
+                inner.style.width = '';
+                inner.style.margin = '';
+                inner.style.padding = '';
+                inner.style.boxSizing = '';
+                inner.style.textAlign = '';
+            }
         }
     }
     
