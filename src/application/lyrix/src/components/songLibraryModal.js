@@ -398,8 +398,12 @@ export function showSongLibrary() {
         }
     });
 
-    // Song list container
-    const listContainer = window.UIManager.createListContainer({});
+    // Song list container (override background to match action buttons: rgb(37,48,64))
+    const listContainer = window.UIManager.createListContainer({
+        css: {
+            backgroundColor: 'rgb(37, 48, 64)'
+        }
+    });
     
     // Prepare items for display
     const songItems = songs.map(song => ({
@@ -595,7 +599,11 @@ export function showSongLibrary() {
         }
         
         filteredItems.forEach((item, index) => {
-            const itemDiv = window.UIManager.createListItem({});
+            const itemDiv = window.UIManager.createListItem({
+                css: {
+                    backgroundColor: '#253040'
+                }
+            });
             
             // Add drag and drop functionality
             itemDiv.draggable = true;

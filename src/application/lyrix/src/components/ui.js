@@ -1705,7 +1705,8 @@ export class UIManager {
                 overflow: 'auto',
                 border: `1px solid ${this.THEME.colors.border}`,
                 borderRadius: this.THEME.borderRadius.sm,
-                backgroundColor: this.THEME.colors.background,
+                // Use surfaceAlt to match action buttons background
+                backgroundColor: this.THEME.colors.surfaceAlt || this.THEME.colors.background,
                 ...config.css
             }
         });
@@ -1722,7 +1723,8 @@ export class UIManager {
                 padding: this.THEME.spacing.md,
                 borderBottom: `1px solid ${this.THEME.colors.border}`,
                 cursor: 'pointer',
-                transition: 'background-color 0.2s ease',
+                transition: 'background-color 0.2s ease, box-shadow 0.2s ease',
+                backgroundColor: this.THEME.colors.surfaceAlt || this.THEME.colors.background,
                 ...config.css
             }
         });
