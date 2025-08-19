@@ -3,7 +3,7 @@
 
 // Import modal modules from new organized structure
 import { showSongLibrary, toggleSongLibrary } from './src/components/songLibraryModal.js';
-import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility, toggleExperimentalControls } from './src/components/settings.js';
+import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
 
 
 
@@ -201,10 +201,9 @@ function applyInitialSettings() {
             toggleMidiInspector();
         }
         
-        // Apply experimental controls visibility
-        const showExperimentalControls = localStorage.getItem('lyrix_show_experimental') === 'true';
-        if (typeof toggleExperimentalControls === 'function') {
-            toggleExperimentalControls();
+        // Experimental controls removed; ensure audio controls visible on first launch
+        if (localStorage.getItem('lyrix_audio_player_enabled') === null) {
+            localStorage.setItem('lyrix_audio_player_enabled', 'true');
         }
         
         // Apply font size (use storage fallback consistent with display)
@@ -2164,9 +2163,12 @@ function createMainInterface() {
     if (audioController) {
         // Check audio player controls setting state
         // By default, audio controls are hidden unless enabled in settings
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        const isExperimentalEnabled = localStorage.getItem('lyrix_show_experimental') === 'true';
-        const initialDisplay = (isAudioPlayerEnabled && isExperimentalEnabled) ? 'block' : 'none';
+        let isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled');
+        if (isAudioPlayerEnabled === null) {
+            localStorage.setItem('lyrix_audio_player_enabled', 'true');
+            isAudioPlayerEnabled = 'true';
+        }
+        const initialDisplay = isAudioPlayerEnabled === 'true' ? 'block' : 'none';
         
         const playButton = UIManager.createInterfaceButton('▶️', {
             id: 'audio-play-button',

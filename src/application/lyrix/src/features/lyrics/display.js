@@ -377,9 +377,14 @@ export class LyricsDisplay {
         }, 100);
         
         // Create audio tools row (visibility depends on audio player setting AND experimental setting)
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        const isExperimentalEnabled = localStorage.getItem('lyrix_show_experimental') === 'true';
-        const shouldShowAudioTools = isAudioPlayerEnabled && isExperimentalEnabled;
+        // Always show audio tools if audio player enabled (experimental flag removed)
+        let isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled');
+        if (isAudioPlayerEnabled === null) {
+            // Default first launch: enable
+            localStorage.setItem('lyrix_audio_player_enabled', 'true');
+            isAudioPlayerEnabled = 'true';
+        }
+        const shouldShowAudioTools = isAudioPlayerEnabled === 'true';
         
         const audioToolRow = $('div', {
             id: 'audio-tools-row',
