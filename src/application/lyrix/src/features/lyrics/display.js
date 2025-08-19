@@ -973,16 +973,16 @@ export class LyricsDisplay {
             // Create container for title and time offset control
             const titleContainer = $('div', { id: 'title-offset-container', css: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px', margin: '0 0 10px 0' } });
             
-        title = $('input', {
+    title = $('input', {
                 id: 'edit_title_input',
                 type: 'text',
                 value: this.currentLyrics.metadata.title || '',
                 css: {
                     color: this.originalStyles.formElements.color,
-                    // Reduced font size for better harmony (was 1.3em)
-                    fontSize: '1.0em',
-                    fontWeight: 'bold',
-                    padding: '4px 8px',
+            // Fixed pixel font size (independent from global lyrics font size)
+            fontSize: '12px',
+            fontWeight: '600',
+            padding: '2px 6px',
                     borderRadius: '4px',
                     border: `2px solid ${this.originalStyles.formElements.color}`,
                     backgroundColor: this.originalStyles.formElements.backgroundColor,
@@ -1000,15 +1000,16 @@ export class LyricsDisplay {
             });
             
             // Create time offset control
-            const offsetContainer = $('div', { id: 'time-offset-container', css: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: this.originalStyles.formElements.backgroundColor, border: `2px solid ${this.originalStyles.formElements.color}`, borderRadius: '4px', minWidth: '180px', width: '100%', boxSizing: 'border-box' } });
+            const offsetContainer = $('div', { id: 'time-offset-container', css: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', backgroundColor: this.originalStyles.formElements.backgroundColor, border: `2px solid ${this.originalStyles.formElements.color}`, borderRadius: '4px', minWidth: '160px', width: '100%', boxSizing: 'border-box' } });
             
             const offsetLabel = $('span', {
-                text: 'Offset:',
+                text: 't.offset:',
                 css: {
-                    // Slightly reduced for harmony (was 0.9em)
-                    fontSize: '0.8em',
+                    // Fixed small pixel font size (independent from global font size)
+                    fontSize: '10px',
                     color: this.originalStyles.formElements.textColor,
-                    fontWeight: 'normal',
+                    fontWeight: '400',
+                    letterSpacing: '0.5px',
                     userSelect: 'none',
                     webkitUserSelect: 'none',
                     mozUserSelect: 'none',
@@ -1054,17 +1055,17 @@ export class LyricsDisplay {
             
             console.log('🎯 Final offset value:', storedOffset, typeof storedOffset);
             
-            const offsetInput = $('input', {
+        const offsetInput = $('input', {
                 id: 'time_offset_input',
                 type: 'text',
                 value: storedOffset.toFixed(2), // Format to 2 decimal places for better display
                 css: {
                     width: '60px',
                     textAlign: 'center',
-                    // Further slightly reduced font size (was 0.75em)
-                    fontSize: '0.7em',
-                    fontWeight: 'normal', // Remove bold
-                    padding: '2px 4px',
+            // Fixed tiny pixel font size (independent)
+            fontSize: '10px',
+            fontWeight: '400',
+            padding: '1px 3px',
                     border: '1px solid #ddd',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
@@ -1085,8 +1086,7 @@ export class LyricsDisplay {
             const offsetUnit = $('span', {
                 text: 's',
                 css: {
-                    // Harmonized with label (was 0.9em)
-                    fontSize: '0.8em',
+                    fontSize: '10px',
                     color: this.originalStyles.formElements.textColor,
                     userSelect: 'none',
                     webkitUserSelect: 'none',
