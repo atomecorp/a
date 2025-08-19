@@ -71,12 +71,14 @@ export class UIManager {
         btn._setActive = (active) => {
             if (active) {
                 btn.dataset.active = 'true';
-                btn.style.backgroundColor = default_theme.buttonActive.backgroundColor || 'rgba(255,255,255,0.15)';
+                btn.style.backgroundColor = default_theme.buttonActive.backgroundColor;
                 if (default_theme.buttonActive.outline) btn.style.outline = default_theme.buttonActive.outline;
+                btn.style.boxShadow = '0 0 0 1px rgba(255,255,255,0.08), 0 2px 6px rgba(0,0,0,0.45)';
             } else {
                 btn.dataset.active = 'false';
                 btn.style.backgroundColor = default_theme.button.backgroundColor;
                 btn.style.outline = 'none';
+                btn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.35)';
             }
         };
 
@@ -85,10 +87,18 @@ export class UIManager {
 
         // Hover / press interactions (consistent)
         btn.addEventListener('mouseover', (e) => {
-            e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.4)';
+            if (btn.dataset.active !== 'true') {
+                e.currentTarget.style.backgroundColor = 'rgb(55,68,86)'; // slightly lighter hover
+            }
+            e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.45)';
             if (config.onmouseover) config.onmouseover(e);
         });
         btn.addEventListener('mouseout', (e) => {
+            if (btn.dataset.active !== 'true') {
+                e.currentTarget.style.backgroundColor = default_theme.button.backgroundColor;
+            } else {
+                e.currentTarget.style.backgroundColor = default_theme.buttonActive.backgroundColor;
+            }
             e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.35)';
             if (config.onmouseout) config.onmouseout(e);
         });

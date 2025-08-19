@@ -109,7 +109,8 @@ export class LyricsDisplay {
                 position: 'relative', // Relatif dans le flex container
                 display: 'flex',
                 flexDirection: 'column', // Colonnes pour main row + audio row
-                backgroundColor: UIManager.THEME.colors.background,
+                // Unified dark blue background requested (rgb(37,48,64))
+                backgroundColor: 'rgb(37, 48, 64)',
                 flexShrink: 0, // NEVER shrinks
                 zIndex: '100' // Au-dessus du contenu de scroll
             }
@@ -121,7 +122,8 @@ export class LyricsDisplay {
             css: {
                 flex: '1', // Takes all remaining space after toolbar
                 padding: UIManager.THEME.spacing.xl,
-                backgroundColor: this.originalStyles.normal.backgroundColor,
+                // Unified dark blue background in normal mode
+                backgroundColor: 'rgb(37, 48, 64)',
                 color: this.originalStyles.normal.color,
                 overflow: 'auto', // SEULE zone qui peut scroller
                 height: '0', // Forces flex to calculate available height
@@ -296,8 +298,8 @@ export class LyricsDisplay {
         gap: '6px',
                 alignItems: 'center',
                 flexWrap: 'wrap',
-                padding: '8px', // Regular padding without hamburger button
-                backgroundColor: this.originalStyles.buttons.transparent,
+                padding: '6px 8px', // Slightly reduced height
+                backgroundColor: UIManager.THEME.colors.surfaceAlt, // unified toolbar background
                 transition: 'all 0.3s ease' // Smooth transition for show/hide
             }
         });
@@ -372,15 +374,15 @@ export class LyricsDisplay {
         }
         const shouldShowAudioTools = isAudioPlayerEnabled === 'true';
         
-        const audioToolRow = $('div', {
+    const audioToolRow = $('div', {
             id: 'audio-tools-row',
             css: {
                 display: shouldShowAudioTools ? 'block' : 'none', // Visible only if both audio and experimental are enabled
                 flexDirection: 'column',
                 gap: '2px',
                 width: '100%',
-                padding: '0 3px 2px 3px', // Reduced vertical padding to save ~10px
-                // backgroundColor: UIManager.THEME.colors.surface
+        padding: '4px 6px 6px 6px', // Compact
+        backgroundColor: UIManager.THEME.colors.surfaceAlt // unified background with toolbar
             }
         });
         

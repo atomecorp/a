@@ -47,8 +47,10 @@ const default_theme = {
         toolbar: 2000
     },
     buttonActive: {
-        backgroundColor: 'rgba(59,130,246,0.25)',
-        outline: '1px solid rgba(255,255,255,0.15)'
+    // Unified active background for toolbar / audio tool buttons
+    // rgb(48,60,78) -> #303C4E
+    backgroundColor: 'rgb(48,60,78)',
+    outline: '1px solid rgba(255,255,255,0.15)'
     },
     // Theme colors (optional - if not defined, uses button.backgroundColor)
     // primaryColor: '#27ae60',     // Vert pour boutons primaires
@@ -61,7 +63,8 @@ const default_theme = {
     recordModeActiveColor: '#f44336',  // Rouge pour mode enregistrement actif
     
     button: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    // Unified default button background to match toolbar & list surfaces (#253040)
+    backgroundColor: '#253040',
         top: '0px',
     color: '#f5f7fa',
     border: '1px solid rgba(255,255,255,0.12)', // Bordure uniforme
