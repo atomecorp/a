@@ -881,12 +881,13 @@ export function showSongLibrary() {
         css: {
             width: '100%',
             height: '8px',
-            backgroundColor: '#e0e0e0',
+            // More greyed blue (darker, desaturated)
+            backgroundColor: '#364754',
             cursor: 'ns-resize',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            borderTop: '1px solid #d0d0d0',
+            borderTop: '1px solid #3d566b',
             position: 'relative'
         }
     });
@@ -896,10 +897,27 @@ export function showSongLibrary() {
         css: {
             width: '30px',
             height: '4px',
-            backgroundColor: '#999',
+            backgroundColor: '#90b0c6',
             borderRadius: '2px'
         }
     });
+
+    // Force stable color on hover (prevent any external CSS turning it white)
+    const stableColor = '#364754';
+    function lockGripColor() {
+        resizeGrip.style.backgroundColor = stableColor;
+    }
+    ['mouseenter','mouseleave','mouseover','mouseout','focus','blur'].forEach(evt => {
+        resizeGrip.addEventListener(evt, lockGripColor);
+    });
+
+    // Add strong CSS override to defeat external :hover rules turning it white
+    if (!document.getElementById('song-library-resize-grip-style')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'song-library-resize-grip-style';
+        styleEl.textContent = `#song-library-resize-grip, #song-library-resize-grip:hover, #song-library-resize-grip:active { background-color: #364754 !important; }`;
+        document.head.appendChild(styleEl);
+    }
     
     resizeGrip.appendChild(gripIndicator);
     
