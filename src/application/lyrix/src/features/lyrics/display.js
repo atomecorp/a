@@ -1115,6 +1115,35 @@ export class LyricsDisplay {
             color: '#fff'
                 }
             });
+
+            // Inject global persistent style once
+            if (!document.getElementById('time-offset-style-lock')) {
+                const style = document.createElement('style');
+                style.id = 'time-offset-style-lock';
+                style.textContent = `#time_offset_input,\n#time_offset_input:focus,\n#time_offset_input:active,\n#time_offset_input:focus-visible,\n#time_offset_input:hover {\n  background-color: rgb(48,60,78) !important;\n  color: #fff !important;\n  border: none !important;\n  outline: none !important;\n  box-shadow: none !important;\n  -webkit-box-shadow: none !important;\n  -webkit-appearance: none !important;\n}\n#time_offset_input::-webkit-contacts-auto-fill-button,\n#time_offset_input::-webkit-credentials-auto-fill-button {\n  display:none !important;\n}`;
+                document.head.appendChild(style);
+            }
+
+            const lockStyles = () => {
+                offsetInput.style.backgroundColor = 'rgb(48, 60, 78)';
+                offsetInput.style.color = '#fff';
+                offsetInput.style.border = 'none';
+                offsetInput.style.outline = 'none';
+                offsetInput.style.boxShadow = 'none';
+                offsetInput.style.webkitAppearance = 'none';
+            };
+            ['focus','blur','click','dblclick','input','mousedown','mouseup','touchstart','touchend'].forEach(evt => {
+                offsetInput.addEventListener(evt, () => {
+                    lockStyles();
+                    // Reassert shortly after in case of async UA repaint
+                    setTimeout(lockStyles, 0);
+                    setTimeout(lockStyles, 30);
+                });
+            });
+            // Initial locks
+            lockStyles();
+            setTimeout(lockStyles, 0);
+            setTimeout(lockStyles, 50);
             
             // Force the value immediately after creation to be 100% sure
             setTimeout(() => {
@@ -4235,28 +4264,12 @@ export class LyricsDisplay {
     
     // Show feedback when offset is applied
     showOffsetAppliedFeedback(appliedValue) {
-        // Find the offset input to show feedback
         const offsetInput = document.getElementById('time_offset_input');
         if (!offsetInput) return;
-        
-        // Store original styles
-        const originalBgColor = offsetInput.style.backgroundColor;
-        const originalColor = offsetInput.style.color;
-        
-        // Show applied value with visual feedback
-        offsetInput.style.backgroundColor = appliedValue > 0 ? '#d4edda' : '#f8d7da'; // Green for positive, red for negative
-        offsetInput.style.color = appliedValue > 0 ? '#155724' : '#721c24';
-        offsetInput.style.fontWeight = 'bold';
-        
-        // Show the applied value briefly
-        const sign = appliedValue > 0 ? '+' : '';
-        offsetInput.value = `${sign}${appliedValue.toFixed(2)}`;
-        
-        // Restore original appearance after delay
-        setTimeout(() => {
-            offsetInput.style.backgroundColor = originalBgColor;
-            offsetInput.style.color = originalColor;
-            offsetInput.style.fontWeight = 'normal';
-        }, 1000);
+        // Subtle pulse feedback only, no color override (keeps theme)
+        offsetInput.animate([
+            { opacity: 0.6 },
+            { opacity: 1 }
+        ], { duration: 220 });
     }
 }
