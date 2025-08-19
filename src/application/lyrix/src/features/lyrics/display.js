@@ -958,7 +958,7 @@ export class LyricsDisplay {
             css: {
                 margin: this.editMode ? '0 0 10px 0' : '0 0 20px 0',
                 padding: '15px 20px',
-                backgroundColor: this.originalStyles.timecodeEdit.backgroundColor,
+                backgroundColor: 'rgb(48, 60, 78)',
                 borderRadius: '8px',
                 width: '100%',
                 boxSizing: 'border-box'
