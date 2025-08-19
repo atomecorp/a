@@ -685,14 +685,14 @@ export function showSongLibrary() {
             });
 
             // MIDI learn button
-            const midiLearnButton = window.$('button', {
+        const midiLearnButton = window.$('button', {
                 text: '',
                 css: {
                     width: '25px',
                     height: '25px',
-                    border: '1px solid #007acc',
+            border: 'none',
                     borderRadius: '3px',
-                    backgroundColor: '#f0f8ff',
+            backgroundColor: 'transparent',
                     color: '#007acc',
                     cursor: 'pointer',
                     fontSize: '12px',
