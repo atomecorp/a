@@ -333,12 +333,12 @@ function createSettingsPanelHeader() {
     const header = window.$('div', {
         css: {
             padding: '15px 20px',
-            backgroundColor: '#f8f9fa',
+            backgroundColor: 'rgb(58, 74, 96)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            flexShrink: '0', // Prevent header from shrinking
-            minHeight: '60px' // Ensure consistent header height
+            flexShrink: '0',
+            minHeight: '60px'
         }
     });
 
@@ -347,7 +347,7 @@ function createSettingsPanelHeader() {
         text: '⚙️ Settings',
         css: { 
             margin: '0', 
-            color: '#333',
+            color: '#fff',
             fontSize: '18px',
             fontWeight: 'bold'
         }
@@ -477,9 +477,9 @@ function createSettingsContent() {
                 justifyContent: 'space-between',
                 marginBottom: '15px',
                 padding: '10px',
-                backgroundColor: '#fafafa',
+                backgroundColor: 'rgb(52, 66, 86)',
                 borderRadius: '5px',
-                border: '1px solid #eee'
+                border: 'none'
             }
         });
 
@@ -492,7 +492,7 @@ function createSettingsContent() {
             css: {
                 fontWeight: '500',
                 marginBottom: '3px',
-                color: '#333'
+                color: '#fff'
             }
         });
 
@@ -500,7 +500,7 @@ function createSettingsContent() {
             text: description,
             css: {
                 fontSize: '12px',
-                color: '#666',
+                color: '#cbd5e1',
                 fontStyle: 'italic'
             }
         });
