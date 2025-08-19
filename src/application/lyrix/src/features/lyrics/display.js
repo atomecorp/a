@@ -936,45 +936,55 @@ export class LyricsDisplay {
         
         // Clear content
         this.lyricsContent.innerHTML = '';
-        
-        // Add song metadata
+        // If in edit mode create centered wrapper
+        let editWrapper = null;
+        if (this.editMode) {
+            editWrapper = document.createElement('div');
+            editWrapper.id = 'edit_mode_center_wrapper';
+            // Full width, left aligned wrapper replacing previous centered max-width constraint (removed gap to eliminate visual offset)
+            editWrapper.style.cssText = 'width:100%;margin:0;display:flex;flex-direction:column;box-sizing:border-box;';
+            this.lyricsContent.appendChild(editWrapper);
+            // Remove any left padding of the scroll area so wrapper is flush left
+            if (this.lyricsContent && this.lyricsContent.style) {
+                this._originalPaddingLeft = this._originalPaddingLeft || this.lyricsContent.style.paddingLeft;
+                this.lyricsContent.style.paddingLeft = '0';
+            }
+        } else if (this._originalPaddingLeft !== undefined) {
+            // Restore original padding when exiting edit mode
+            this.lyricsContent.style.paddingLeft = this._originalPaddingLeft;
+        }
+        // Add song metadata (with responsive width if edit mode)
         const metadata = $('div', {
             id: 'lyrics-metadata-container',
             css: {
-                marginBottom: '20px',
-                padding: '15px',
+                margin: this.editMode ? '0 0 10px 0' : '0 0 20px 0',
+                padding: '15px 20px',
                 backgroundColor: this.originalStyles.timecodeEdit.backgroundColor,
                 borderRadius: '8px',
-                // borderLeft: '4px solid #2196F3'
+                width: '100%',
+                boxSizing: 'border-box'
             }
         });
         
         let title;
         if (this.editMode) {
             // Create container for title and time offset control
-            const titleContainer = $('div', {
-                id: 'title-offset-container',
-                css: {
-                    display: 'flex',
-                    gap: '10px',
-                    alignItems: 'center',
-                    margin: '0 0 5px 0'
-                }
-            });
+            const titleContainer = $('div', { id: 'title-offset-container', css: { display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '10px', margin: '0 0 10px 0' } });
             
-            title = $('input', {
+        title = $('input', {
                 id: 'edit_title_input',
                 type: 'text',
                 value: this.currentLyrics.metadata.title || '',
                 css: {
                     color: this.originalStyles.formElements.color,
-                    fontSize: '1.3em',
+                    // Reduced font size for better harmony (was 1.3em)
+                    fontSize: '1.0em',
                     fontWeight: 'bold',
                     padding: '4px 8px',
                     borderRadius: '4px',
                     border: `2px solid ${this.originalStyles.formElements.color}`,
                     backgroundColor: this.originalStyles.formElements.backgroundColor,
-                    flex: '1' // Take remaining space
+            flex: '1', width: '100%', boxSizing: 'border-box', overflow: 'hidden'
                 }
             });
             title.addEventListener('input', (e) => {
@@ -988,24 +998,13 @@ export class LyricsDisplay {
             });
             
             // Create time offset control
-            const offsetContainer = $('div', {
-                id: 'time-offset-container',
-                css: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '4px 8px',
-                    backgroundColor: this.originalStyles.formElements.backgroundColor,
-                    border: `2px solid ${this.originalStyles.formElements.color}`,
-                    borderRadius: '4px',
-                    minWidth: '180px'
-                }
-            });
+            const offsetContainer = $('div', { id: 'time-offset-container', css: { display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', backgroundColor: this.originalStyles.formElements.backgroundColor, border: `2px solid ${this.originalStyles.formElements.color}`, borderRadius: '4px', minWidth: '180px', width: '100%', boxSizing: 'border-box' } });
             
             const offsetLabel = $('span', {
                 text: 'Offset:',
                 css: {
-                    fontSize: '0.9em',
+                    // Slightly reduced for harmony (was 0.9em)
+                    fontSize: '0.8em',
                     color: this.originalStyles.formElements.textColor,
                     fontWeight: 'normal',
                     userSelect: 'none',
@@ -1060,7 +1059,8 @@ export class LyricsDisplay {
                 css: {
                     width: '60px',
                     textAlign: 'center',
-                    fontSize: '0.75em', // Reduced font size
+                    // Further slightly reduced font size (was 0.75em)
+                    fontSize: '0.7em',
                     fontWeight: 'normal', // Remove bold
                     padding: '2px 4px',
                     border: '1px solid #ddd',
@@ -1083,7 +1083,8 @@ export class LyricsDisplay {
             const offsetUnit = $('span', {
                 text: 's',
                 css: {
-                    fontSize: '0.9em',
+                    // Harmonized with label (was 0.9em)
+                    fontSize: '0.8em',
                     color: this.originalStyles.formElements.textColor,
                     userSelect: 'none',
                     webkitUserSelect: 'none',
@@ -1244,21 +1245,13 @@ export class LyricsDisplay {
             });
         }
         
-        metadata.append(title, artist);
-        
-        // if (this.currentLyrics.metadata.album) {
-        //     const album = $('div', {
-        //         id: 'lyrics-album-display',
-        //         text: `Album: ${this.currentLyrics.metadata.album}`,
-        //         css: {
-        //             color: '#666',
-        //             fontSize: '0.9em'
-        //         }
-        //     });
-        //     metadata.append(album);
-        // }
-        
-        this.lyricsContent.append(metadata);
+    metadata.append(title, artist);
+
+    // Decide parent container (use edit wrapper when in edit mode to ensure centering)
+    const parentForBlocks = (this.editMode && document.getElementById('edit_mode_center_wrapper')) || this.lyricsContent;
+
+    // Append metadata to the correct parent (was directly to lyricsContent before)
+    parentForBlocks.appendChild(metadata);
         
         // Apply metadata visibility setting
         this.updateMetadataVisibility();
@@ -1266,7 +1259,13 @@ export class LyricsDisplay {
         // Add lyrics lines
         const linesContainer = $('div', {
             id: 'lyrics_lines_container',
-            css: {
+            css: this.editMode ? {
+                marginTop: '20px',
+                width: '100%',
+                marginLeft: '0',
+                marginRight: '0',
+                boxSizing: 'border-box'
+            } : {
                 marginTop: '20px'
             }
         });
@@ -1282,7 +1281,7 @@ export class LyricsDisplay {
             });
         }
 
-        this.lyricsContent.append(linesContainer);
+    parentForBlocks.appendChild(linesContainer);
     }
     
     // Create single line element
@@ -1901,9 +1900,20 @@ export class LyricsDisplay {
             resize: vertical;
             outline: none;
         `;
-        
-        
-        container.appendChild(editArea);
+        // Wrapper to ensure centering even if parent container is flex or has alignment rules
+        const bulkWrapper = document.createElement('div');
+        bulkWrapper.id = 'bulk-edit-wrapper';
+        bulkWrapper.style.cssText = `
+            width: 100%;
+            margin: 0; /* align wrapper left */
+            box-sizing: border-box;
+            display: block;
+        `;
+        // Full width textarea in edit mode (no max width constraint now)
+        editArea.style.maxWidth = '100%';
+        bulkWrapper.appendChild(editArea);
+
+        container.appendChild(bulkWrapper);
         
         // Focus the textarea and position cursor at the beginning
         setTimeout(() => {
