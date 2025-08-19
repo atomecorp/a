@@ -158,6 +158,8 @@ export class LyricsDisplay {
         
     // Record mode button (SVG)
     this.recordButton = makeSvgButton('record_mode', 'record.svg', () => this.toggleRecordMode(), { backgroundColor: this.recordMode ? default_theme.recordModeActiveColor : default_theme.button.backgroundColor });
+    // Mark custom active background (persistent red)
+    this.recordButton.dataset.customActiveBg = default_theme.recordModeActiveColor || '#f44336';
         
     // Fullscreen button (SVG)
     this.fullscreenButton = makeSvgButton('fullscreen_mode', 'fullscreen.svg', () => this.toggleFullscreen());
@@ -980,7 +982,7 @@ export class LyricsDisplay {
             padding: '2px 6px',
                     borderRadius: '4px',
                     border: `2px solid ${this.originalStyles.formElements.color}`,
-                    backgroundColor: this.originalStyles.formElements.backgroundColor,
+                    backgroundColor: 'rgb(48, 60, 78)',
             flex: '1', width: '100%', boxSizing: 'border-box', overflow: 'hidden'
                 }
             });
@@ -1050,7 +1052,7 @@ export class LyricsDisplay {
             
             console.log('🎯 Final offset value:', storedOffset, typeof storedOffset);
             
-        const offsetInput = $('input', {
+    const offsetInput = $('input', {
                 id: 'time_offset_input',
                 type: 'text',
                 value: storedOffset.toFixed(2), // Format to 2 decimal places for better display
@@ -1064,7 +1066,7 @@ export class LyricsDisplay {
                     border: '1px solid #ddd',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
-                    backgroundColor: '#fff'
+            backgroundColor: 'rgb(48, 60, 78)',
                 }
             });
             
@@ -1198,7 +1200,7 @@ export class LyricsDisplay {
         
         let artist;
         if (this.editMode) {
-            artist = $('input', {
+        artist = $('input', {
                 id: 'edit_artist_input',
                 type: 'text',
                 value: this.currentLyrics.metadata.artist || '',
@@ -1210,7 +1212,7 @@ export class LyricsDisplay {
                     padding: '4px 8px',
                     borderRadius: '4px',
                     border: `2px solid ${this.originalStyles.formElements.textColor}`,
-                    backgroundColor: this.originalStyles.formElements.backgroundColor,
+            backgroundColor: 'rgb(48, 60, 78)',
                     width: '100%'
                 }
             });
@@ -2090,11 +2092,16 @@ export class LyricsDisplay {
     // Toggle record mode
     toggleRecordMode() {
         this.recordMode = !this.recordMode;
-        // Keep icon, only change color (uses theme colors)
-        const newColor = this.recordMode ? default_theme.recordModeActiveColor : default_theme.button.backgroundColor;
-        this.recordButton.style.backgroundColor = newColor;
-        // Update the stored original color for hover behavior
-        this.recordButton.dataset.originalBgColor = newColor;
+        // Active/inactive color handling with persistent state
+        const activeColor = default_theme.recordModeActiveColor || '#f44336';
+        const inactiveColor = default_theme.button.backgroundColor;
+        if (this.recordButton && this.recordButton._setActive) {
+            this.recordButton.dataset.customActiveBg = activeColor;
+            this.recordButton._setActive(this.recordMode);
+        } else {
+            this.recordButton.style.backgroundColor = this.recordMode ? activeColor : inactiveColor;
+        }
+        this.recordButton.dataset.originalBgColor = this.recordButton.style.backgroundColor;
         
         if (this.recordMode) {
             

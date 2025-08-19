@@ -301,7 +301,9 @@ export function showSongLibrary() {
             border: '1px solid #ccc',
             borderRadius: '3px',
             fontSize: '11px',
-            textAlign: 'center'
+            textAlign: 'center',
+            backgroundColor: 'rgb(48, 60, 78)',
+            color: '#fff'
         }
     });
     
@@ -394,7 +396,9 @@ export function showSongLibrary() {
             borderRadius: '4px',
             marginBottom: '15px',
             fontSize: '14px',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            backgroundColor: 'rgb(48, 60, 78)',
+            color: '#fff'
         }
     });
 

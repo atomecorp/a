@@ -71,9 +71,10 @@ export class UIManager {
 
         // Utility class approach (inline since no CSS file allowed)
         btn._setActive = (active) => {
+            const custom = btn.dataset.customActiveBg;
             if (active) {
                 btn.dataset.active = 'true';
-                btn.style.backgroundColor = default_theme.buttonActive.backgroundColor;
+                btn.style.backgroundColor = custom || default_theme.buttonActive.backgroundColor;
                 if (default_theme.buttonActive.outline) btn.style.outline = default_theme.buttonActive.outline;
                 btn.style.boxShadow = '0 0 0 1px rgba(255,255,255,0.08), 0 2px 6px rgba(0,0,0,0.45)';
             } else {
@@ -99,7 +100,9 @@ export class UIManager {
             if (btn.dataset.active !== 'true') {
                 e.currentTarget.style.backgroundColor = default_theme.button.backgroundColor;
             } else {
-                e.currentTarget.style.backgroundColor = default_theme.buttonActive.backgroundColor;
+                // Preserve custom active bg if defined
+                const custom = btn.dataset.customActiveBg;
+                e.currentTarget.style.backgroundColor = custom || default_theme.buttonActive.backgroundColor;
             }
             e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.35)';
             if (config.onmouseout) config.onmouseout(e);
@@ -241,7 +244,7 @@ export class UIManager {
         });
     }
     
-    // Create input field
+    // Create input field (unified background rgb(48,60,78))
     static createInput(config) {
         return $('input', {
             type: 'text',
@@ -250,11 +253,17 @@ export class UIManager {
                 padding: '8px',
                 border: '1px solid #555',
                 borderRadius: '4px',
-                backgroundColor: '#2c3e50',
+                backgroundColor: 'rgb(48, 60, 78)',
                 color: 'white',
-                fontSize: '14px'
+                fontSize: '14px',
+                ...(config && config.css ? config.css : {})
             },
-            ...config
+            ...config,
+            // Ensure background cannot be overridden inadvertently unless explicitly passed
+            css: {
+                ...((config && config.css) || {}),
+                backgroundColor: 'rgb(48, 60, 78)'
+            }
         });
     }
     
@@ -791,14 +800,15 @@ export class UIManager {
         return $('input', {
             ...config,
             css: {
-                backgroundColor: this.THEME.colors.background,
+                backgroundColor: 'rgb(48, 60, 78)',
                 border: `1px solid ${this.THEME.colors.border}`,
                 borderRadius: this.THEME.borderRadius.sm,
                 color: this.THEME.colors.text,
                 padding: this.THEME.spacing.sm,
                 fontSize: this.THEME.fontSize.sm,
                 width: '100%',
-                ...config.css
+                ...config.css,
+                background: 'rgb(48, 60, 78)'
             }
         });
     }

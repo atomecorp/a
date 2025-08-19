@@ -518,7 +518,7 @@ function createSettingsContent() {
             currentMidiNote = window.midiUtilities.getMidiSpecialAssignment(settingKey);
         }
 
-        const midiInput = window.$('input', {
+    const midiInput = window.$('input', {
             type: 'number',
             min: '0',
             max: '127',
@@ -530,7 +530,9 @@ function createSettingsContent() {
                 border: '1px solid #ccc',
                 borderRadius: '3px',
                 fontSize: '12px',
-                textAlign: 'center'
+        textAlign: 'center',
+        backgroundColor: 'rgb(48, 60, 78)',
+        color: '#fff'
             }
         });
 
@@ -815,7 +817,7 @@ function createSettingsContent() {
         });
 
         // Font size input
-        const fontInput = window.$('input', {
+    const fontInput = window.$('input', {
             type: 'number',
             min: '10',
             max: '255',
@@ -826,7 +828,9 @@ function createSettingsContent() {
                 border: '1px solid #ccc',
                 borderRadius: '3px',
                 fontSize: '12px',
-                textAlign: 'center'
+        textAlign: 'center',
+        backgroundColor: 'rgb(48, 60, 78)',
+        color: '#fff'
             }
         });
 
@@ -1068,7 +1072,7 @@ export function showSettingsModal() {
         } else {
         }
 
-        const midiInput = window.$('input', {
+    const midiInput = window.$('input', {
             type: 'number',
             min: '0',
             max: '127',
@@ -1080,7 +1084,9 @@ export function showSettingsModal() {
                 border: '1px solid #ccc',
                 borderRadius: '3px',
                 fontSize: '12px',
-                textAlign: 'center'
+        textAlign: 'center',
+        backgroundColor: 'rgb(48, 60, 78)',
+        color: '#fff'
             }
         });
 

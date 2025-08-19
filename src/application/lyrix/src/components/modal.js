@@ -357,7 +357,9 @@ export function InputModal(options = {}) {
             webkitUserSelect: 'text',
             mozUserSelect: 'text',
             msUserSelect: 'text',
-            webkitTouchCallout: 'default'
+            webkitTouchCallout: 'default',
+            backgroundColor: 'rgb(48, 60, 78)',
+            color: '#fff'
         }
     });
     
@@ -452,7 +454,7 @@ export function FormModal(options = {}) {
             }
         });
 
-        const input = $('input', {
+    const input = $('input', {
             type: field.type || 'text',
             name: field.name,
             placeholder: field.placeholder || '',
@@ -469,7 +471,9 @@ export function FormModal(options = {}) {
                 webkitUserSelect: 'text',
                 mozUserSelect: 'text',
                 msUserSelect: 'text',
-                webkitTouchCallout: 'default'
+        webkitTouchCallout: 'default',
+        backgroundColor: 'rgb(48, 60, 78)',
+        color: '#fff'
             }
         });
         
@@ -555,7 +559,7 @@ export function SelectModal(options = {}) {
 
     // Add search if enabled
     if (searchable) {
-        const searchInput = $('input', {
+    const searchInput = $('input', {
             type: 'text',
             placeholder: 'Search...',
             css: {
@@ -570,7 +574,9 @@ export function SelectModal(options = {}) {
                 webkitUserSelect: 'text',
                 mozUserSelect: 'text',
                 msUserSelect: 'text',
-                webkitTouchCallout: 'default'
+        webkitTouchCallout: 'default',
+        backgroundColor: 'rgb(48, 60, 78)',
+        color: '#fff'
             }
         });
         
