@@ -923,6 +923,46 @@ function createSettingsContent() {
             updateFontSize(currentSize + 1);
         });
 
+        // Press & hold auto-repeat logic
+        let repeatTimeout = null;
+        let repeatInterval = null;
+        const INITIAL_DELAY = 400; // ms before repeat starts
+        const REPEAT_RATE = 70; // ms per step
+        let activeDirection = null; // 'inc' | 'dec'
+
+        function stepOnce(direction) {
+            const currentSize = parseInt(fontInput.value) || 16;
+            updateFontSize(direction === 'inc' ? currentSize + 1 : currentSize - 1);
+        }
+
+        function startRepeat(direction) {
+            activeDirection = direction;
+            clearTimers();
+            // Start after initial delay
+            repeatTimeout = setTimeout(() => {
+                stepOnce(direction); // first repeat step
+                repeatInterval = setInterval(() => stepOnce(direction), REPEAT_RATE);
+            }, INITIAL_DELAY);
+        }
+
+        function clearTimers() {
+            if (repeatTimeout) { clearTimeout(repeatTimeout); repeatTimeout = null; }
+            if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+            activeDirection = null;
+        }
+
+        // Mouse / touch events for decrease
+        ['mousedown','touchstart'].forEach(evt => {
+            decreaseButton.addEventListener(evt, (e) => { e.preventDefault(); startRepeat('dec'); });
+            increaseButton.addEventListener(evt, (e) => { e.preventDefault(); startRepeat('inc'); });
+        });
+        ['mouseup','mouseleave','touchend','touchcancel'].forEach(evt => {
+            decreaseButton.addEventListener(evt, clearTimers);
+            increaseButton.addEventListener(evt, clearTimers);
+        });
+        // Global mouseup (in case pointer released outside)
+        document.addEventListener('mouseup', clearTimers);
+
         fontInput.addEventListener('change', (e) => {
             const newSize = parseInt(e.target.value);
             if (!isNaN(newSize)) {
