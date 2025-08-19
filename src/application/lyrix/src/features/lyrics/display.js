@@ -444,6 +444,42 @@ export class LyricsDisplay {
         
         // Add display container directly to body for total control
         document.body.append(this.displayContainer);
+
+        // === iOS FULL HEIGHT FIX (dynamic visualViewport) ===
+        if (!window.__lyrixFullHeightFixInstalled) {
+            window.__lyrixFullHeightFixInstalled = true;
+            const applyFullHeight = () => {
+                // Prefer visualViewport for iOS (excludes browser UI chrome)
+                const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+                if (vh && vh > 0) {
+                    document.documentElement.style.setProperty('--app-vh', vh + 'px');
+                }
+                // Target key containers
+                const ids = ['lyrix-app', 'display-container', 'lyrix_app'];
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        el.style.height = 'var(--app-vh)';
+                        el.style.minHeight = 'var(--app-vh)';
+                        // Allow full bleed behind notch (content areas manage their own safe padding if needed)
+                        if (id === 'display-container' || id === 'lyrix-app' || id === 'lyrix_app') {
+                            el.style.paddingTop = '0';
+                            el.style.paddingBottom = '0';
+                        }
+                    }
+                });
+            };
+            // Initial & listeners
+            applyFullHeight();
+            window.addEventListener('resize', applyFullHeight, { passive: true });
+            window.addEventListener('orientationchange', () => setTimeout(applyFullHeight, 80), { passive: true });
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', applyFullHeight, { passive: true });
+            }
+            // Mutation observer fallback if main container injected later
+            const mo = new MutationObserver(() => applyFullHeight());
+            mo.observe(document.documentElement, { childList: true, subtree: true });
+        }
         
         // Initial layout update
         setTimeout(() => {
