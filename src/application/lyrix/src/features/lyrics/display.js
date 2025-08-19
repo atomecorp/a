@@ -135,29 +135,28 @@ export class LyricsDisplay {
         // Assemble the structure: toolbar solidaire + content scrollable
         this.displayContainer.append(this.toolbar, this.lyricsContent);
         
-        // Edit mode button
-    this.editButton = UIManager.createInterfaceButton('✏️', {
-            id: 'edit_mode',
-            onClick: () => this.toggleEditMode(),
-            css: {
-                // backgroundColor: this.editMode ? default_theme.editModeActiveColor : default_theme.button.backgroundColor
-            }
-        });
+        // Helper to create SVG icon button
+        const makeSvgButton = (id, svgFile, onClick, extraCss={}) => {
+            const btn = UIManager.createInterfaceButton('', { id, onClick, css: { padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', ...extraCss } });
+            const img = document.createElement('img');
+            img.src = `assets/images/icons/${svgFile}`;
+            img.alt = id;
+            img.style.width = '18px';
+            img.style.height = '18px';
+            img.style.pointerEvents = 'none';
+            btn.innerHTML='';
+            btn.appendChild(img);
+            return btn;
+        };
+
+        // Edit mode button (SVG)
+        this.editButton = makeSvgButton('edit_mode', 'edit.svg', () => this.toggleEditMode());
         
-        // Record mode button
-        this.recordButton = UIManager.createInterfaceButton('⏺️', {
-            id: 'record_mode',
-            onClick: () => this.toggleRecordMode(),
-            css: {
-                backgroundColor: this.recordMode ? default_theme.recordModeActiveColor : default_theme.button.backgroundColor
-            }
-        });
+    // Record mode button (SVG)
+    this.recordButton = makeSvgButton('record_mode', 'record.svg', () => this.toggleRecordMode(), { backgroundColor: this.recordMode ? default_theme.recordModeActiveColor : default_theme.button.backgroundColor });
         
-        // Fullscreen button
-        this.fullscreenButton = UIManager.createInterfaceButton('⛶', {
-            id: 'fullscreen_mode',
-            onClick: () => this.toggleFullscreen()
-        });
+    // Fullscreen button (SVG)
+    this.fullscreenButton = makeSvgButton('fullscreen_mode', 'fullscreen.svg', () => this.toggleFullscreen());
 
         // Add simple touch support for fullscreen button (mobile compatibility)
         this.fullscreenButton.addEventListener('touchstart', (e) => {
@@ -176,28 +175,15 @@ export class LyricsDisplay {
         //     onClick: () => this.showTimecodeOptionsPanel()
         // });
         
-        // Song navigation buttons
-        this.previousSongButton = UIManager.createInterfaceButton('⏮️', {
-            id: 'previous_song',
-            onClick: () => {
-                if (window.navigateToPreviousSong) {
-                    window.navigateToPreviousSong();
-                } else {
-                }
-            },
-            title: 'Previous Song'
+        // Song navigation buttons (SVG)
+        this.previousSongButton = makeSvgButton('previous_song', 'previous.svg', () => {
+            if (window.navigateToPreviousSong) { window.navigateToPreviousSong(); }
         });
-        
-        this.nextSongButton = UIManager.createInterfaceButton('⏭️', {
-            id: 'next_song',
-            onClick: () => {
-                if (window.navigateToNextSong) {
-                    window.navigateToNextSong();
-                } else {
-                }
-            },
-            title: 'Next Song'
+        this.previousSongButton.title = 'Previous Song';
+        this.nextSongButton = makeSvgButton('next_song', 'next.svg', () => {
+            if (window.navigateToNextSong) { window.navigateToNextSong(); }
         });
+        this.nextSongButton.title = 'Next Song';
         
         // Font size controls
         this.fontSizeContainer = $('div', {
@@ -377,9 +363,14 @@ export class LyricsDisplay {
         }, 100);
         
         // Create audio tools row (visibility depends on audio player setting AND experimental setting)
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        const isExperimentalEnabled = localStorage.getItem('lyrix_show_experimental') === 'true';
-        const shouldShowAudioTools = isAudioPlayerEnabled && isExperimentalEnabled;
+        // Always show audio tools if audio player enabled (experimental flag removed)
+        let isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled');
+        if (isAudioPlayerEnabled === null) {
+            // Default first launch: enable
+            localStorage.setItem('lyrix_audio_player_enabled', 'true');
+            isAudioPlayerEnabled = 'true';
+        }
+        const shouldShowAudioTools = isAudioPlayerEnabled === 'true';
         
         const audioToolRow = $('div', {
             id: 'audio-tools-row',
