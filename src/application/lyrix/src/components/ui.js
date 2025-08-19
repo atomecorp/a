@@ -1910,7 +1910,7 @@ export class UIManager {
     // MIDI test button
     static createMidiTestButton(config = {}) {
         return $('div', {
-            text: '🎵 Test MIDI',
+            text: 'Test MIDI',
             ...config,
             css: {
                 backgroundColor: this.THEME.colors.primary,

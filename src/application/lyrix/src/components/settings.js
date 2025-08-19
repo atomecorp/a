@@ -665,19 +665,32 @@ function createSettingsContent() {
                 height: '30px',
                 border: 'none',
                 borderRadius: '15px',
-                backgroundColor: isEnabled ? '#28a745' : '#6c757d',
+                // Inverted: dark when ON, lighter when OFF
+                backgroundColor: isEnabled ? 'rgb(44, 56, 72)' : 'rgb(58, 74, 96)',
                 color: 'white',
                 cursor: 'pointer',
                 fontSize: '12px',
                 fontWeight: 'bold',
-                transition: 'all 0.3s ease',
+                transition: 'background-color 150ms ease, box-shadow 150ms ease, transform 80ms ease',
                 outline: 'none'
             },
             title: `${isEnabled ? 'Disable' : 'Enable'} ${label}`
         });
 
+        // Initial shadow states
+        const applyStateShadow = (enabled) => {
+            if (enabled) {
+                toggleButton.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.6), inset 0 -1px 0 rgba(255,255,255,0.05)';
+                toggleButton.style.transform = 'translateY(1px)';
+            } else {
+                toggleButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.5)';
+                toggleButton.style.transform = 'translateY(0)';
+            }
+        };
+        applyStateShadow(isEnabled);
+
         // Toggle functionality
-        toggleButton.addEventListener('click', () => {
+    toggleButton.addEventListener('click', () => {
             const currentState = getToggleState(storageKey);
             const newState = !currentState;
             
@@ -686,8 +699,9 @@ function createSettingsContent() {
             
             // Update button appearance
             toggleButton.textContent = newState ? 'ON' : 'OFF';
-            toggleButton.style.backgroundColor = newState ? '#28a745' : '#6c757d';
+            toggleButton.style.backgroundColor = newState ? 'rgb(44, 56, 72)' : 'rgb(58, 74, 96)';
             toggleButton.title = `${newState ? 'Disable' : 'Enable'} ${label}`;
+            applyStateShadow(newState);
             
             // Call the toggle function
             if (onToggle) {
@@ -698,13 +712,25 @@ function createSettingsContent() {
         // Hover effects
         toggleButton.addEventListener('mouseenter', () => {
             const isCurrentlyEnabled = getToggleState(storageKey);
-            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#218838' : '#5a6268';
+            // Lighten each state slightly
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? 'rgb(52, 66, 86)' : 'rgb(66, 84, 108)';
+            if (!isCurrentlyEnabled) toggleButton.style.boxShadow = '0 3px 6px rgba(0,0,0,0.55)';
         });
 
         toggleButton.addEventListener('mouseleave', () => {
             const isCurrentlyEnabled = getToggleState(storageKey);
-            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#28a745' : '#6c757d';
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? 'rgb(44, 56, 72)' : 'rgb(58, 74, 96)';
+            applyStateShadow(isCurrentlyEnabled);
         });
+
+        // Active press feedback
+        toggleButton.addEventListener('mousedown', () => {
+            toggleButton.style.transform = 'translateY(2px)';
+            toggleButton.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.65)';
+        });
+        ['mouseup','mouseleave'].forEach(ev=>toggleButton.addEventListener(ev, () => {
+            applyStateShadow(getToggleState(storageKey));
+        }));
 
         row.append(leftColumn, toggleButton);
         return row;
@@ -729,7 +755,7 @@ function createSettingsContent() {
     // Experimental section removed
     ];
 
-    const audioSection = createSettingSection('🎵 Audio & Display', audioControls);
+    const audioSection = createSettingSection('Audio & Display', audioControls);
 
     // Font size control
     function createFontSizeControl() {
@@ -939,10 +965,10 @@ function createSettingsContent() {
         // Hover effects
         [decreaseButton, increaseButton].forEach(button => {
             button.addEventListener('mouseenter', () => {
-                button.style.backgroundColor = '#e9ecef';
+                button.style.backgroundColor = 'rgb(66, 84, 108)';
             });
             button.addEventListener('mouseleave', () => {
-                button.style.backgroundColor = '#f8f9fa';
+                button.style.backgroundColor = 'rgb(58, 74, 96)';
             });
         });
 
