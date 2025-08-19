@@ -313,13 +313,24 @@ export function showSongLibrary() {
         window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
     }});
     // Create inline settings button (new instance) shown only inside song list panel
-    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', text: '⚙️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px' }, onClick: () => {
+    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => {
         // Required behavior: close song library panel but keep song list button marked active
         closeSongLibraryPanel(true);
         const btn = document.getElementById('song_list_button');
         if (btn && btn._setActive) btn._setActive(true);
         toggleSettingsPanel('settings_button_inline');
     } });
+    // Inject SVG icon for inline settings
+    try {
+        inlineSettingsButton.innerHTML='';
+        const img = document.createElement('img');
+        img.src = 'assets/images/icons/settings.svg';
+        img.alt = 'settings';
+        img.style.width = '16px';
+        img.style.height = '16px';
+        img.style.pointerEvents = 'none';
+        inlineSettingsButton.appendChild(img);
+    } catch(e) { /* silent */ }
 
     // Hide original settings button while panel open (if exists)
     const originalSettings = document.getElementById('settings_button');
