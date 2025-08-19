@@ -2346,14 +2346,15 @@ function createMainInterface() {
                     borderRadius: '3px'
                 },
                 progression: {
-                    backgroundColor: '#007bff',
+                    // Darker, greyer blue progression
+                    backgroundColor: '#4a6a85',
                     borderRadius: '3px'
                 },
                 handle: {
                     width: '9px', // further reduced by 3px
                     height: '9px',
                     backgroundColor: '#fff',
-                    border: '2px solid #007bff',
+                    border: '2px solid #4a6a85',
                     borderRadius: '50%',
                     boxShadow: '0 0 2px rgba(0,0,0,0.3)',
                     top: '-3px' // recenter for reduced size
@@ -2427,8 +2428,8 @@ function createMainInterface() {
                 progression.style.height = '100%';
                 progression.style.top = '0';
                 progression.style.left = '0';
-                // Harmonious gradient (desaturated teal to soft green)
-                progression.style.background = 'linear-gradient(90deg,#4b8175,#6fa98f)';
+                // Darker greyer blue gradient
+                progression.style.background = 'linear-gradient(90deg,#223447,#4a6a85)';
                 progression.style.borderRadius = '18px';
                 progression.style.boxShadow = 'inset 0 0 4px rgba(0,0,0,0.35)';
             }
@@ -2437,10 +2438,10 @@ function createMainInterface() {
                 handle.style.height = '22px';
                 handle.style.top = '50%';
                 handle.style.transform = 'translate(-50%, -50%)';
-                handle.style.backgroundColor = '#6fa98f';
-                handle.style.border = '1px solid rgba(255,255,255,0.3)';
+                handle.style.backgroundColor = '#4a6a85';
+                handle.style.border = '1px solid rgba(255,255,255,0.28)';
                 handle.style.borderRadius = '50%';
-                handle.style.boxShadow = '0 3px 6px rgba(0,0,0,0.35), 0 6px 12px rgba(0,0,0,0.25), inset 0 1px 3px rgba(255,255,255,0.20), inset 0 -1px 3px rgba(0,0,0,0.35)';
+                handle.style.boxShadow = '0 3px 6px rgba(0,0,0,0.5), 0 6px 12px rgba(0,0,0,0.35), inset 0 1px 3px rgba(255,255,255,0.20), inset 0 -1px 3px rgba(0,0,0,0.55)';
             }
         };
         setTimeout(enhanceAudioSliderDesign, 0);
