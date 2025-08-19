@@ -1021,10 +1021,10 @@ export class LyricsDisplay {
                 value: this.currentLyrics.metadata.title || '',
                 css: {
                     color: '#ffffff',
-            // Fixed pixel font size (independent from global lyrics font size)
-            fontSize: '12px',
+            // Fixed pixel font size increased for readability
+            fontSize: '24px',
             fontWeight: '600',
-            padding: '2px 6px',
+            padding: '4px 8px',
                     borderRadius: '4px',
                     border: 'none',
                     backgroundColor: 'rgb(48, 60, 78)',
@@ -1104,10 +1104,10 @@ export class LyricsDisplay {
                 css: {
                     width: '60px',
                     textAlign: 'center',
-            // Fixed tiny pixel font size (independent)
-            fontSize: '10px',
+            // Increased fixed pixel font size for legibility
+            fontSize: '24px',
             fontWeight: '400',
-            padding: '1px 3px',
+            padding: '2px 6px',
                     border: 'none',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
@@ -1973,7 +1973,7 @@ export class LyricsDisplay {
             border-radius: 8px;
             background-color: rgb(48, 60, 78);
             color: #fff;
-            font-size: 16px;
+            font-size: 24px;
             line-height: 1.6;
             font-family: inherit;
             resize: vertical;
