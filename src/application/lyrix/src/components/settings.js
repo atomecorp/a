@@ -421,7 +421,7 @@ function createSettingsContent() {
         id: 'settings_overflow_container',
         css: {
             padding: '20px',
-            backgroundColor: 'white',
+            backgroundColor: 'rgb(48, 60, 78)',
             flex: '1',
             height: '100%',
             overflowY: 'auto',
@@ -435,27 +435,30 @@ function createSettingsContent() {
         const section = window.$('div', {
             css: {
                 marginBottom: '25px',
-                border: '1px solid #e0e0e0',
+                border: 'none',
                 borderRadius: '8px',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                backgroundColor: 'rgb(52, 66, 86)' // slightly lighter/greyed blue
             }
         });
 
         const sectionHeader = window.$('div', {
             text: title,
             css: {
-                backgroundColor: '#f8f9fa',
+                backgroundColor: 'rgb(58, 74, 96)',
                 padding: '12px 15px',
                 fontWeight: 'bold',
                 fontSize: '16px',
-                color: '#333',
-                borderBottom: '1px solid #e0e0e0'
+                color: '#fff',
+                borderBottom: '1px solid rgba(255,255,255,0.08)'
             }
         });
 
         const sectionContent = window.$('div', {
             css: {
-                padding: '15px'
+                padding: '15px',
+                backgroundColor: 'rgb(52, 66, 86)',
+                color: '#fff'
             }
         });
 
@@ -549,10 +552,10 @@ function createSettingsContent() {
             css: {
                 width: '30px',
                 height: '30px',
-                border: '1px solid #007acc',
+                border: 'none',
                 borderRadius: '3px',
-                backgroundColor: '#f0f8ff',
-                color: '#007acc',
+                backgroundColor: 'rgb(58, 74, 96)',
+                color: '#fff',
                 cursor: 'pointer',
                 fontSize: '14px',
                 display: 'flex',
@@ -584,10 +587,10 @@ function createSettingsContent() {
             css: {
                 width: '25px',
                 height: '25px',
-                border: '1px solid #dc3545',
+                border: 'none',
                 borderRadius: '3px',
-                backgroundColor: '#fff5f5',
-                color: '#dc3545',
+                backgroundColor: 'rgb(58, 74, 96)',
+                color: '#fff',
                 cursor: 'pointer',
                 fontSize: '12px',
                 display: 'flex',
@@ -620,9 +623,9 @@ function createSettingsContent() {
                 justifyContent: 'space-between',
                 marginBottom: '15px',
                 padding: '10px',
-                backgroundColor: '#fafafa',
+                backgroundColor: 'rgb(52, 66, 86)',
                 borderRadius: '5px',
-                border: '1px solid #eee'
+                border: 'none'
             }
         });
 
@@ -635,7 +638,7 @@ function createSettingsContent() {
             css: {
                 fontWeight: '500',
                 marginBottom: '3px',
-                color: '#333'
+                color: '#fff'
             }
         });
 
