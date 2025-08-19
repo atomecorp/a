@@ -47,10 +47,10 @@ const default_theme = {
         toolbar: 2000
     },
     buttonActive: {
-    // Unified active background for toolbar / audio tool buttons
-    // rgb(48,60,78) -> #303C4E
-    backgroundColor: 'rgb(48,60,78)',
-    outline: '1px solid rgba(255,255,255,0.15)'
+        // Lightened active background (previously rgb(48,60,78))
+        // New: rgb(58,74,96) -> #3A4A60 for clearer active contrast
+        backgroundColor: 'rgb(58,74,96)',
+        outline: '1px solid rgba(255,255,255,0.15)'
     },
     // Theme colors (optional - if not defined, uses button.backgroundColor)
     // primaryColor: '#27ae60',     // Vert pour boutons primaires

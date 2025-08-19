@@ -2,6 +2,8 @@
 import { default_theme } from './style.js';
 
 export class UIManager {
+    // Expose theme for legacy references (e.g., UIManager.THEME...)
+    static THEME = default_theme;
     
     // Create a button using Squirrel Button component
     static createButton(config) {

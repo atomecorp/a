@@ -1977,13 +1977,21 @@ export class LyricsDisplay {
         }
         
         // If exiting edit mode, apply changes
+        // Safe theme access with fallbacks to prevent TypeError
+        const _theme = (UIManager && UIManager.THEME) ? UIManager.THEME : (default_theme || {});
+        const defaultBtnBg = (_theme.button && _theme.button.backgroundColor) || 'transparent';
+        const surfaceAlt = (_theme.colors && _theme.colors.surfaceAlt) || defaultBtnBg;
+        const activeBtnBg = (_theme.buttonActive && _theme.buttonActive.backgroundColor) || 'rgb(58,74,96)';
+
         if (this.editMode) {
-            this.editButton.style.backgroundColor= 'transparent'
+            // Leaving edit mode
+            this.editButton.style.backgroundColor = defaultBtnBg || surfaceAlt;
             if (this.originalLinesBackup) {
                 this.applyBulkEditChanges();
             }
         } else {
-                   this.editButton.style.backgroundColor= 'white'
+            // Entering edit mode: highlight with active background (lighter blue)
+            this.editButton.style.backgroundColor = activeBtnBg;
             // log('🎯 Entering edit mode');
         }
         this.editMode = !this.editMode;
