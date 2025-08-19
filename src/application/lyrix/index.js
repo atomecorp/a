@@ -207,11 +207,18 @@ function applyInitialSettings() {
             toggleExperimentalControls();
         }
         
-        // Apply font size
-        const fontSize = localStorage.getItem('lyrix_font_size') || '16';
-        const lyricsContainer = document.querySelector('.lyrics-container');
-        if (lyricsContainer) {
-            lyricsContainer.style.fontSize = `${fontSize}px`;
+        // Apply font size (use storage fallback consistent with display)
+        const storedFont = localStorage.getItem('lyrix_font_size');
+        if (storedFont) {
+            // Delay in case display not yet built
+            setTimeout(() => {
+                const area = document.getElementById('lyrics_content_area');
+                if (area) area.style.fontSize = `${storedFont}px`;
+                if (window.lyricsDisplay) {
+                    window.lyricsDisplay.fontSize = parseInt(storedFont, 10);
+                    window.lyricsDisplay.applyGlobalFontSize && window.lyricsDisplay.applyGlobalFontSize();
+                }
+            }, 0);
         }
         
     } catch (error) {
@@ -265,6 +272,12 @@ function initializeLyrix() {
         
         // Initialize display (no longer needs a container, will append to lyrix_app)
         lyricsDisplay = new LyricsDisplay(null, audioController);
+        // Re-sync font size immediately after display creation
+        const storedFontImmediate = localStorage.getItem('lyrix_font_size');
+        if (storedFontImmediate) {
+            lyricsDisplay.fontSize = parseInt(storedFontImmediate, 10);
+            lyricsDisplay.applyGlobalFontSize && lyricsDisplay.applyGlobalFontSize();
+        }
             
         // Connect audio time updates to lyrics display
         if (audioController && audioController.on) {

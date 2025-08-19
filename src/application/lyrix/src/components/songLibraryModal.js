@@ -304,7 +304,10 @@ export function showSongLibrary() {
         window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
     }});
     // Create inline settings button (new instance) shown only inside song list panel
-    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', text: '⚙️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px' }, onClick: () => { toggleSettingsPanel('settings_button_inline'); } });
+    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', text: '⚙️', css: { ...default_theme.button, width: 'auto', padding: '0 10px', fontSize: '12px', height: '28px' }, onClick: () => {
+        try { closeSongLibraryPanel(); } catch(e) { /* ignore */ }
+        toggleSettingsPanel('settings_button_inline');
+    } });
 
     // Hide original settings button while panel open (if exists)
     const originalSettings = document.getElementById('settings_button');

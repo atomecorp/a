@@ -889,13 +889,18 @@ function createSettingsContent() {
             fontInput.value = newSize;
             localStorage.setItem('lyrix_font_size', newSize);
             
-            // Apply immediately to lyrics container if exists
-            const lyricsContainers = document.querySelectorAll('.lyrics-container, #lyrics-content, #lyrics_lines_container');
-            lyricsContainers.forEach(container => {
-                if (container) {
-                    container.style.fontSize = `${newSize}px`;
-                }
-            });
+            // Prefer central API if available for consistent fullscreen behavior
+            if (window.Lyrix && window.Lyrix.lyricsDisplay && typeof window.Lyrix.lyricsDisplay.setFontSize === 'function') {
+                window.Lyrix.lyricsDisplay.setFontSize(newSize);
+            } else {
+                // Fallback: apply directly
+                const lyricsContainers = document.querySelectorAll('.lyrics-container, #lyrics-content, #lyrics_lines_container');
+                lyricsContainers.forEach(container => {
+                    if (container) {
+                        container.style.fontSize = `${newSize}px`;
+                    }
+                });
+            }
         }
 
         // Event listeners

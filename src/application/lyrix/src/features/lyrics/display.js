@@ -76,6 +76,8 @@ export class LyricsDisplay {
     init() {
         this.createDisplayElements();
         this.setupEventListeners();
+    // Apply stored font size immediately
+    this.applyGlobalFontSize && this.applyGlobalFontSize();
     }
     
     // Create display elements using Squirrel syntax
@@ -1282,6 +1284,7 @@ export class LyricsDisplay {
         }
 
     parentForBlocks.appendChild(linesContainer);
+    if (this.applyGlobalFontSize) this.applyGlobalFontSize();
     }
     
     // Create single line element
@@ -2127,7 +2130,7 @@ export class LyricsDisplay {
     applyModeStyles(isFullscreen) {
         const styles = isFullscreen ? this.originalStyles.fullscreen : this.originalStyles.normal;
         
-        if (isFullscreen) {
+    if (isFullscreen) {
             // Apply fullscreen styles
             this.lyricsContent.style.position = 'fixed';
             this.lyricsContent.style.top = '0';
@@ -2160,6 +2163,7 @@ export class LyricsDisplay {
                 inner.style.boxSizing = 'border-box';
                 inner.style.textAlign = 'left';
             }
+            if (this.applyGlobalFontSize) this.applyGlobalFontSize();
         } else {
             // Apply normal styles
             this.lyricsContent.style.position = 'relative';
@@ -2187,6 +2191,7 @@ export class LyricsDisplay {
                 inner.style.boxSizing = '';
                 inner.style.textAlign = '';
             }
+            if (this.applyGlobalFontSize) this.applyGlobalFontSize();
         }
     }
     
@@ -2392,12 +2397,41 @@ export class LyricsDisplay {
     // Adjust font size
     adjustFontSize(delta) {
         this.fontSize = Math.max(CONSTANTS.UI.MIN_FONT_SIZE, Math.min(CONSTANTS.UI.MAX_FONT_SIZE, this.fontSize + delta));
-        
-        // Apply font size to lyrics content
-        this.lyricsContent.style.fontSize = `${this.fontSize}px`;
+        // Re-apply mode styles (keeps fullscreen layout) and uniform font size
+        if (this.fullscreenMode) {
+            this.applyModeStyles(true);
+        } else {
+            this.lyricsContent.style.fontSize = `${this.fontSize}px`;
+        }
+        this.applyGlobalFontSize();
         
         this.fontSizeLabel.textContent = `${this.fontSize}px`;
         StorageManager.saveFontSize(this.fontSize);
+    }
+
+    // Directly set font size (used by settings panel) ensuring immediate fullscreen update
+    setFontSize(newSize) {
+        const clamped = Math.max(CONSTANTS.UI.MIN_FONT_SIZE, Math.min(CONSTANTS.UI.MAX_FONT_SIZE, parseInt(newSize, 10)));
+        if (isNaN(clamped)) return;
+        this.fontSize = clamped;
+        if (this.fullscreenMode) {
+            this.applyModeStyles(true);
+        } else if (this.lyricsContent) {
+            this.lyricsContent.style.fontSize = `${this.fontSize}px`;
+        }
+        this.applyGlobalFontSize();
+        if (this.fontSizeLabel) this.fontSizeLabel.textContent = `${this.fontSize}px`;
+        StorageManager.saveFontSize(this.fontSize);
+    }
+
+    // Uniform font size propagation for normal & fullscreen
+    applyGlobalFontSize() {
+        const sizePx = `${this.fontSize}px`;
+        if (this.lyricsContent) this.lyricsContent.style.fontSize = sizePx;
+        // Remove previously injected inline sizes on lines/title/artist so they inherit
+        this.lyricsContent.querySelectorAll('.lyrics-line, #lyrics-title-display, #lyrics-artist-display').forEach(el => {
+            el.style.fontSize = '';
+        });
     }
     
     // Edit font size directly by typing
