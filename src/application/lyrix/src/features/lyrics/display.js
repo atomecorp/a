@@ -975,7 +975,7 @@ export class LyricsDisplay {
                 type: 'text',
                 value: this.currentLyrics.metadata.title || '',
                 css: {
-                    color: this.originalStyles.formElements.color,
+                    color: '#ffffff',
             // Fixed pixel font size (independent from global lyrics font size)
             fontSize: '12px',
             fontWeight: '600',
