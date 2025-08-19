@@ -1817,6 +1817,12 @@ function loadAndDisplaySong(songKey) {
             // If no audio, also reset the slider
             resetAudioSlider(true); // Force reset when no audio
         }
+
+        // Always reset play button visual state on song change (audio is paused at top of function)
+        const playBtn = document.getElementById('audio-play-button');
+        if (playBtn) {
+            playBtn.style.backgroundColor = 'transparent';
+        }
         
         return true;
     }
@@ -1899,6 +1905,11 @@ function navigateToPreviousSong() {
     
     if (previousSong) {
         loadAndDisplaySong(previousSong.key || previousSong.songId);
+        // Ensure play button reflects stopped state after navigation
+        const playBtn = document.getElementById('audio-play-button');
+        if (playBtn) {
+            playBtn.style.backgroundColor = 'transparent';
+        }
     }
 }
 
@@ -1927,6 +1938,11 @@ function navigateToNextSong() {
     
     if (nextSong) {
         loadAndDisplaySong(nextSong.key || nextSong.songId);
+        // Ensure play button reflects stopped state after navigation
+        const playBtn = document.getElementById('audio-play-button');
+        if (playBtn) {
+            playBtn.style.backgroundColor = 'transparent';
+        }
     }
 }
 
@@ -2181,6 +2197,10 @@ function createMainInterface() {
                     audioController.setCurrentTime(0);
                     // Reset slider UI but don't force lyrics to reset
                     resetAudioSlider(false); // Don't force lyrics reset on stop
+                    const playBtn = document.getElementById('audio-play-button');
+                    if (playBtn) {
+                        playBtn.style.backgroundColor = 'transparent';
+                    }
                 } catch (error) {
                     console.error('❌ ERREUR Stop:', error);
                 }
@@ -2207,6 +2227,29 @@ function createMainInterface() {
                 alignItems: 'center'
             }
         });
+
+        // Attach audioController event listeners once controls exist to keep UI sync robust
+        try {
+            if (!audioController._uiSyncBound) {
+                audioController.on && audioController.on('play', () => {
+                    const btn = document.getElementById('audio-play-button');
+                    if (btn) btn.style.backgroundColor = 'white';
+                });
+                audioController.on && audioController.on('pause', () => {
+                    const btn = document.getElementById('audio-play-button');
+                    if (btn && !audioController.isPlaying()) {
+                        btn.style.backgroundColor = 'transparent';
+                    }
+                });
+                audioController.on && audioController.on('ended', () => {
+                    const btn = document.getElementById('audio-play-button');
+                    if (btn) btn.style.backgroundColor = 'transparent';
+                });
+                audioController._uiSyncBound = true;
+            }
+        } catch (e) {
+            console.warn('⚠️ Failed to bind audioController UI sync listeners', e);
+        }
         
         // Add data attribute for identification
         audioControls.setAttribute('data-element', 'audio-controls');

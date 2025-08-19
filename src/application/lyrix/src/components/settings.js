@@ -231,6 +231,12 @@ export function openSettingsPanel() {
         if (songLibraryGrip) {
             songLibraryGrip.remove();
         }
+        // Ensure the song list button visual state is reset when its panel is force-closed
+        const songListButton = document.getElementById('song_list_button');
+        if (songListButton) {
+            songListButton.style.backgroundColor = 'transparent';
+            songListButton.style.color = '';
+        }
     }
 
     isSettingsOpen = true;

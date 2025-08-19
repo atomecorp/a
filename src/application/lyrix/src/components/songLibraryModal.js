@@ -62,6 +62,12 @@ export function showSongLibrary() {
             window.settingsState.isSettingsOpen = false;
             window.settingsState.settingsPanel = null;
         }
+        // Reset the settings button visual state (ensure it doesn't look active)
+        const settingsButton = document.getElementById('settings_button');
+        if (settingsButton) {
+            settingsButton.style.backgroundColor = 'transparent';
+            settingsButton.style.color = '';
+        }
     }
 
     const songs = window.lyricsLibrary.getAllSongs();
