@@ -2275,7 +2275,7 @@ function createMainInterface() {
             id: 'audio-scrub-slider-container',
             css: {
                 display: initialDisplay,
-                padding: '0 10px', // Add horizontal padding to prevent handle overflow
+                padding: '0 8px', // Slightly reduced horizontal + no extra vertical height
                 boxSizing: 'border-box'
             }
         });
@@ -2293,14 +2293,14 @@ function createMainInterface() {
             id: 'audio_scrub_slider',
             skin: {
                 container: {
-                    width: 'calc(100% - 20px)',
-                    height: '20px',
-                    marginBottom: '10px',
-                    marginLeft: '10px',
-                    marginRight: '10px'
+                    width: 'calc(100% - 16px)',
+                    height: '11px', // further reduced by 3px
+                    marginBottom: '3px',
+                    marginLeft: '8px',
+                    marginRight: '8px'
                 },
                 track: {
-                    height: '6px',
+                    height: '3px', // further reduced
                     backgroundColor: '#ddd',
                     borderRadius: '3px'
                 },
@@ -2309,11 +2309,13 @@ function createMainInterface() {
                     borderRadius: '3px'
                 },
                 handle: {
-                    width: '14px',
-                    height: '14px',
-                    backgroundColor: '#007bff',
-                    border: '2px solid #fff',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    width: '9px', // further reduced by 3px
+                    height: '9px',
+                    backgroundColor: '#fff',
+                    border: '2px solid #007bff',
+                    borderRadius: '50%',
+                    boxShadow: '0 0 2px rgba(0,0,0,0.3)',
+                    top: '-3px' // recenter for reduced size
                 }
             },
             onInput: (value) => {

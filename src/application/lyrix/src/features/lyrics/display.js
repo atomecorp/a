@@ -386,9 +386,9 @@ export class LyricsDisplay {
             css: {
                 display: shouldShowAudioTools ? 'block' : 'none', // Visible only if both audio and experimental are enabled
                 flexDirection: 'column',
-                gap: '4px',
+                gap: '2px',
                 width: '100%',
-                padding: '3px 3px 3px 3px', // Extra left padding to align with main toolbar row
+                padding: '0 3px 2px 3px', // Reduced vertical padding to save ~10px
                 // backgroundColor: UIManager.THEME.colors.surface
             }
         });
