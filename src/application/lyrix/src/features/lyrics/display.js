@@ -1003,7 +1003,7 @@ export class LyricsDisplay {
             const offsetContainer = $('div', { id: 'time-offset-container', css: { display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 8px', backgroundColor: this.originalStyles.formElements.backgroundColor, border: `2px solid ${this.originalStyles.formElements.color}`, borderRadius: '4px', minWidth: '160px', width: '100%', boxSizing: 'border-box' } });
             
             const offsetLabel = $('span', {
-                text: 't.offset:',
+                text: 'time offset:',
                 css: {
                     // Fixed small pixel font size (independent from global font size)
                     fontSize: '10px',
