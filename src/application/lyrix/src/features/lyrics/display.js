@@ -1295,7 +1295,7 @@ export class LyricsDisplay {
                 cursor: this.editMode ? 'pointer' : 'default',
                 transition: 'all 0.3s ease',
                 backgroundColor: index === this.currentLineIndex ? 'rgb(37, 48, 64)' : 'transparent',
-                border: index === this.currentLineIndex ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
+                border: '1px solid transparent',
                 transform: index === this.currentLineIndex ? 'scale(1.03)' : 'scale(1)',
                 fontWeight: index === this.currentLineIndex ? '600' : '400',
                 color: index === this.currentLineIndex ? '#ffffff' : (this.fullscreenMode ? '#4a5563' : '#666')
@@ -1836,6 +1836,7 @@ export class LyricsDisplay {
                 // Highlight the new active line (harmonized subdued highlight)
                 const highlightBg = this.fullscreenMode ? 'rgb(37, 48, 64)' : 'rgba(0, 150, 255, 0.15)';
                 element.style.backgroundColor = highlightBg;
+                element.style.border = '1px solid transparent';
                 element.style.color = '#ffffff';
                 element.style.transform = 'scale(1.03)';
                 element.style.fontWeight = '600';
