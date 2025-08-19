@@ -1182,7 +1182,8 @@ export class LyricsDisplay {
                 text: this.currentLyrics.metadata.title,
                 css: {
                     margin: '0 0 5px 0',
-                    color: this.originalStyles.formElements.color,
+                    // Light gray title color instead of previous blue
+                    color: '#d9dfe5',
                     fontSize: '1.3em',
                     cursor: 'pointer'
                 }
@@ -1296,7 +1297,8 @@ export class LyricsDisplay {
                 backgroundColor: index === this.currentLineIndex ? 'rgb(37, 48, 64)' : 'transparent',
                 border: index === this.currentLineIndex ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
                 transform: index === this.currentLineIndex ? 'scale(1.03)' : 'scale(1)',
-                fontWeight: index === this.currentLineIndex ? '600' : '400'
+                fontWeight: index === this.currentLineIndex ? '600' : '400',
+                color: index === this.currentLineIndex ? '#ffffff' : (this.fullscreenMode ? '#4a5563' : '#666')
             }
         });
         
@@ -1814,7 +1816,7 @@ export class LyricsDisplay {
                 prevElement.style.border = '1px solid transparent';
                 prevElement.style.transform = 'scale(1)';
                 prevElement.style.fontWeight = 'normal';
-                prevElement.style.color = '#666';
+                prevElement.style.color = this.fullscreenMode ? '#4a5563' : '#666';
             }
         }
         
