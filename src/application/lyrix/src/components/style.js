@@ -67,7 +67,7 @@ const default_theme = {
     backgroundColor: '#253040',
         top: '0px',
     color: '#f5f7fa',
-    border: '1px solid rgba(255,255,255,0.12)', // Bordure uniforme
+    border: 'none', // Border removed for cleaner toolbar buttons
         borderRadius: '3px',
         cursor: 'pointer',
         fontSize: '14px',

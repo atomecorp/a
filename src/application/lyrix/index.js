@@ -2354,7 +2354,7 @@ function createMainInterface() {
                     width: '9px', // further reduced by 3px
                     height: '9px',
                     backgroundColor: '#fff',
-                    border: '2px solid #4a6a85',
+                    border: 'none',
                     borderRadius: '50%',
                     boxShadow: '0 0 2px rgba(0,0,0,0.3)',
                     top: '-3px' // recenter for reduced size
@@ -2439,7 +2439,7 @@ function createMainInterface() {
                 handle.style.top = '50%';
                 handle.style.transform = 'translate(-50%, -50%)';
                 handle.style.backgroundColor = '#4a6a85';
-                handle.style.border = '1px solid rgba(255,255,255,0.28)';
+                handle.style.border = 'none';
                 handle.style.borderRadius = '50%';
                 handle.style.boxShadow = '0 3px 6px rgba(0,0,0,0.5), 0 6px 12px rgba(0,0,0,0.35), inset 0 1px 3px rgba(255,255,255,0.20), inset 0 -1px 3px rgba(0,0,0,0.55)';
             }
