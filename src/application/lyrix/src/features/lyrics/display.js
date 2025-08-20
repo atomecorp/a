@@ -1116,6 +1116,13 @@ export class LyricsDisplay {
             color: C.white
                 }
             });
+            // Capture baseline times (before applying any further offset edits). If an offset already exists, remove it from baseline.
+            try {
+                const existingOffset = this.currentLyrics.metadata.timeOffset || 0; // valeur affichée
+                this._baselineOffsetSeconds = existingOffset; // base pour calcul delta
+                // Baseline = temps actuels (pas de retrait) – on appliquera seulement le delta
+                this._offsetBaseTimes = this.currentLyrics.lines.map(l => l.time);
+            } catch(e){ console.warn('Offset baseline capture failed', e); }
 
             // Inject global persistent style once
             if (!document.getElementById('time-offset-style-lock')) {
@@ -1182,8 +1189,7 @@ export class LyricsDisplay {
                 if (!this.isDragging) {
                     const value = parseFloat(e.target.value) || 0;
                     // Just update the current offset, don't save yet (save on Enter or blur)
-                    this.currentTimeOffset = value;
-                    console.log('🎯 Input changed:', value);
+                    this.updateTimeOffset(value, { preview:true });
                 }
             });
             
@@ -1197,10 +1203,13 @@ export class LyricsDisplay {
             
             offsetInput.addEventListener('blur', (e) => {
                 this.isInputFocused = false;
-                // Save the current value when losing focus
+                // Finaliser et ré-initialiser la baseline pour éditions futures
                 const value = parseFloat(e.target.value) || 0;
                 this.currentLyrics.metadata.timeOffset = value;
                 this.currentTimeOffset = value;
+                this._baselineOffsetSeconds = value;
+                this._offsetBaseTimes = this.currentLyrics.lines.map(l => l.time);
+                // Persist baseline (don't change original base so offset remains absolute)
                 
                 // Save the song with both methods to ensure persistence
                 if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
@@ -1228,6 +1237,8 @@ export class LyricsDisplay {
                     // Simply store the value
                     this.currentLyrics.metadata.timeOffset = value;
                     this.currentTimeOffset = value;
+                    this._baselineOffsetSeconds = value;
+                    this._offsetBaseTimes = this.currentLyrics.lines.map(l => l.time);
                     
                     // Save the song with both methods to ensure persistence
                     if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
@@ -1246,7 +1257,7 @@ export class LyricsDisplay {
                     // Reset to stored value on escape
                     const storedValue = this.currentLyrics.metadata.timeOffset || 0;
                     e.target.value = storedValue.toFixed(2);
-                    this.currentTimeOffset = storedValue;
+                    // Revenir simplement à baseline actuelle (pas de recalcul car on n'a pas altéré baseline sur escape)
                     e.target.blur();
                 }
             });
@@ -2065,6 +2076,10 @@ export class LyricsDisplay {
         // Flip state first
         this.editMode = !this.editMode;
         if (!this.editMode && wasInEdit) {
+            // Finalise offset value when leaving edit mode
+            if (typeof this.currentTimeOffset === 'number' && this.currentLyrics && this.currentLyrics.metadata) {
+                this.currentLyrics.metadata.timeOffset = this.currentTimeOffset;
+            }
             // Just exited edit mode -> revert active state
             if (this.editButton && this.editButton._setActive) {
                 this.editButton._setActive(false);
@@ -2075,6 +2090,8 @@ export class LyricsDisplay {
                 this.applyBulkEditChanges();
             }
         } else if (this.editMode && !wasInEdit) {
+            // Store original offset baseline for later comparison
+            this._editModeOriginalOffset = (this.currentLyrics && this.currentLyrics.metadata && this.currentLyrics.metadata.timeOffset) || 0;
             // Just entered edit mode -> activate persistent state
             if (this.editButton && this.editButton._setActive) {
                 this.editButton._setActive(true);
@@ -2119,7 +2136,9 @@ export class LyricsDisplay {
         if (!textarea || !this.originalLinesBackup) return;
         
         const newLinesText = textarea.value.split('\n');
-        const originalLines = this.originalLinesBackup;
+    const originalLines = this.originalLinesBackup; // used only for fallback
+    // Use current (possibly offset-adjusted / edited) times as authoritative
+    const currentTimes = (this.currentLyrics && this.currentLyrics.lines) ? this.currentLyrics.lines.map(l => l.time) : [];
 
         // 1. Preserve internal blank lines: we keep empty lines that occur between non-empty lines.
         // 2. Trim trailing empty lines at end to max one.
@@ -2137,12 +2156,17 @@ export class LyricsDisplay {
         const newLines = [];
         trimmed.forEach((text, index) => {
             const originalLine = originalLines[index];
-            // Keep text exactly (no .trim()) to preserve intentional blanks inside lines, but remove trailing spaces only
+            const currentTime = currentTimes[index];
             const cleaned = text.replace(/\s+$/,'');
-            newLines.push({
-                text: cleaned, // can be '' for intentional blank line
-                time: originalLine ? originalLine.time : -1
-            });
+            let timeValue = (typeof currentTime === 'number') ? currentTime : (originalLine ? originalLine.time : -1);
+            // If line becomes intentionally blank, drop its time unless user explicitly kept a base time (avoid orphan timestamps)
+            if (cleaned === '') {
+                // Keep time only if original line had a time and user didn't remove the line content deliberately across edit (heuristic)
+                if (!(originalLine && originalLine.text.trim() !== '' && originalLine.time >= 0)) {
+                    timeValue = -1;
+                }
+            }
+            newLines.push({ text: cleaned, time: timeValue });
         });
 
         this.currentLyrics.lines = newLines;
@@ -4126,7 +4150,7 @@ export class LyricsDisplay {
                 const newValue = startValue + (deltaY * sensitivity);
                 
                 offsetInput.value = newValue.toFixed(2);
-                this.updateTimeOffset(newValue);
+                this.updateTimeOffset(newValue, { preview:true });
                 e.preventDefault();
             }
         });
@@ -4139,10 +4163,12 @@ export class LyricsDisplay {
                 offsetInput.style.cursor = 'text';
                 offsetInput.style.backgroundColor = '#fff';
                 
-                // Simply store the final value - NO timecode modification
                 const finalValue = parseFloat(offsetInput.value) || 0;
                 this.currentLyrics.metadata.timeOffset = finalValue;
                 this.currentTimeOffset = finalValue;
+                // Re-baseline pour prochaine interaction
+                this._baselineOffsetSeconds = finalValue;
+                this._offsetBaseTimes = this.currentLyrics.lines.map(l => l.time);
                 
                 // Save the song with both methods to ensure persistence
                 if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
@@ -4178,7 +4204,7 @@ export class LyricsDisplay {
                 const newValue = startValue + (deltaY * sensitivity);
                 
                 offsetInput.value = newValue.toFixed(2);
-                this.updateTimeOffset(newValue);
+                this.updateTimeOffset(newValue, { preview:true });
                 e.preventDefault();
             }
         });
@@ -4189,10 +4215,11 @@ export class LyricsDisplay {
                 this.isDragging = false;
                 offsetInput.style.backgroundColor = '#fff';
                 
-                // Simply store the final value - NO timecode modification
                 const finalValue = parseFloat(offsetInput.value) || 0;
                 this.currentLyrics.metadata.timeOffset = finalValue;
                 this.currentTimeOffset = finalValue;
+                this._baselineOffsetSeconds = finalValue;
+                this._offsetBaseTimes = this.currentLyrics.lines.map(l => l.time);
                 
                 // Save the song with both methods to ensure persistence
                 if (this.lyricsLibrary && this.lyricsLibrary.saveSong) {
@@ -4210,10 +4237,34 @@ export class LyricsDisplay {
     }
     
     // Update time offset preview (visual feedback during drag)
-    updateTimeOffset(offsetSeconds) {
+    updateTimeOffset(offsetSeconds, { preview=false } = {}) {
+        if (!this.currentLyrics || !this.currentLyrics.lines) return;
+        if (!this._offsetBaseTimes || this._offsetBaseTimes.length !== this.currentLyrics.lines.length) {
+            this._offsetBaseTimes = this.currentLyrics.lines.map(l => l.time);
+            this._baselineOffsetSeconds = this.currentLyrics.metadata.timeOffset || 0;
+        }
         this.currentTimeOffset = offsetSeconds;
-        // Just store the value, no visual changes to timecodes needed for now
-        console.log('🎯 UpdateTimeOffset called with:', offsetSeconds);
+        const deltaSec = offsetSeconds - (this._baselineOffsetSeconds || 0);
+        // Apply delta relative to baseline (non destructive on successive previews)
+        this.currentLyrics.lines.forEach((line, i) => {
+            const base = this._offsetBaseTimes[i];
+            if (typeof base === 'number' && base >= 0) {
+                line.time = Math.max(0, base + deltaSec * 1000);
+            }
+        });
+        if (!preview) {
+            this.currentLyrics.metadata.timeOffset = offsetSeconds;
+        }
+        // Update displayed timecodes without re-rendering entire lyrics (preserve visibility state)
+        const spans = this.lyricsContent?.querySelectorAll('.timecode-span');
+        if (spans && spans.length) {
+            spans.forEach((span, idx) => {
+                const line = this.currentLyrics.lines[idx];
+                if (line && line.time >= 0) {
+                    span.textContent = this.formatTimeDisplay(line.time);
+                }
+            });
+        }
     }
     
     // Apply time offset to all timecodes permanently
