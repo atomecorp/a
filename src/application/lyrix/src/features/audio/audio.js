@@ -1,6 +1,7 @@
 // Audio management for Lyrix application
 import { CONSTANTS } from '../../core/constants.js';
 import { isIOS } from '../../core/platform.js';
+import { default_theme } from '../../components/style.js';
 
 // iOS-compatible logging function with clear prefix for filtering
 function iosLog(message) {
@@ -489,11 +490,12 @@ export class AudioController {
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         `;
 
+        const C = default_theme.colors;
         content.innerHTML = `
-            <h3 style="color: #e74c3c; margin-top: 0;">🎵 Audio File Missing</h3>
+            <h3 style="color: ${C.danger}; margin-top: 0;">🎵 Audio File Missing</h3>
             <p><strong>File:</strong> ${fileName}</p>
-            <p style="color: #666;">This audio file is not available in the iOS app.</p>
-            <div style="text-align: left; margin: 20px 0; background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            <p style="color: ${C.gray600};">This audio file is not available in the iOS app.</p>
+            <div style="text-align: left; margin: 20px 0; background: ${C.gray100}; padding: 15px; border-radius: 8px;">
                 <strong>📱 iPhone/iOS limitations:</strong>
                 <ul style="margin: 10px 0; padding-left: 20px;">
                     <li>Audio files must be in the app bundle</li>
@@ -510,8 +512,8 @@ export class AudioController {
                 </ul>
             </div>
             <button id="dismissAudioError" style="
-                background: #3498db;
-                color: white;
+                background: ${C.accentLegacy};
+                color: ${C.white};
                 border: none;
                 padding: 12px 24px;
                 border-radius: 6px;

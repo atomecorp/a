@@ -2,6 +2,7 @@
 // Skinnable modal component compatible with Tauri
 import { UIManager } from './ui.js';
 import { default_theme } from './style.js';
+const C = default_theme.colors;
 
 export function Modal(options = {}) {
     const {
@@ -54,7 +55,7 @@ export function Modal(options = {}) {
     // Create modal container
     const modalContainer = $('div', {
         css: {
-            backgroundColor: '#ffffff',
+            backgroundColor: C.white,
             borderRadius: '8px',
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
             maxWidth: '90vw',
@@ -78,11 +79,11 @@ export function Modal(options = {}) {
     const modalHeader = $('div', {
         css: {
             padding: '20px 20px 10px 20px',
-            borderBottom: '1px solid #e0e0e0',
+            borderBottom: `1px solid ${C.gray250}`,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            backgroundColor: '#f8f9fa',
+            backgroundColor: C.gray100,
             userSelect: 'none',
             webkitUserSelect: 'none',
             mozUserSelect: 'none',
@@ -96,7 +97,7 @@ export function Modal(options = {}) {
         css: {
             margin: '0',
             fontSize: '1.2em',
-            color: '#333',
+            color: C.gray800,
             fontWeight: '600'
         }
     });
@@ -114,7 +115,7 @@ export function Modal(options = {}) {
                 backgroundColor: 'transparent',
                 border: 'none',
                 fontSize: '18px',
-                color: '#666',
+                color: C.gray600,
                 cursor: 'pointer',
                 padding: '5px',
                 borderRadius: '50%',
@@ -127,7 +128,7 @@ export function Modal(options = {}) {
         });
 
         closeButton.addEventListener('mouseenter', () => {
-            closeButton.style.backgroundColor = '#f0f0f0';
+            closeButton.style.backgroundColor = C.gray150;
         });
 
         closeButton.addEventListener('mouseleave', () => {
@@ -162,11 +163,11 @@ export function Modal(options = {}) {
     const modalFooter = $('div', {
         css: {
             padding: '10px 20px 20px 20px',
-            borderTop: '1px solid #e0e0e0',
+            borderTop: `1px solid ${C.gray250}`,
             display: 'flex',
             justifyContent: 'flex-end',
             gap: '10px',
-            backgroundColor: '#f8f9fa',
+            backgroundColor: C.gray100,
             userSelect: 'none',
             webkitUserSelect: 'none',
             mozUserSelect: 'none',
@@ -193,7 +194,7 @@ export function Modal(options = {}) {
                 border: 'none',
                 cursor: 'pointer',
                 fontSize: '14px',
-                backgroundColor: index === buttons.length - 1 ? '#007bff' : '#6c757d',
+                backgroundColor: index === buttons.length - 1 ? C.infoAlt : C.gray600,
                 color: 'white',
                 ...buttonOptions.css
             }
@@ -296,12 +297,12 @@ export function ConfirmModal(options = {}) {
             {
                 text: cancelText,
                 onClick: onCancel,
-                css: { backgroundColor: '#6c757d' }
+                css: { backgroundColor: C.gray600 }
             },
             {
                 text: confirmText,
                 onClick: onConfirm,
-                css: { backgroundColor: '#dc3545' }
+                css: { backgroundColor: C.dangerStrong }
             }
         ],
         size: 'small',
@@ -338,7 +339,7 @@ export function InputModal(options = {}) {
             marginBottom: '8px',
             fontSize: '14px',
             fontWeight: '500',
-            color: '#333'
+            color: C.gray800
         }
     });
 
@@ -359,7 +360,7 @@ export function InputModal(options = {}) {
             msUserSelect: 'text',
             webkitTouchCallout: 'default',
             backgroundColor: 'rgb(48, 60, 78)',
-            color: '#fff'
+            color: C.white
         }
     });
     
@@ -376,20 +377,20 @@ export function InputModal(options = {}) {
             {
                 text: cancelText,
                 onClick: onCancel,
-                css: { backgroundColor: '#6c757d' }
+                css: { backgroundColor: C.gray600 }
             },
             {
                 text: submitText,
                 onClick: () => {
                     const value = inputElement.value.trim();
                     if (required && !value) {
-                        inputElement.style.borderColor = '#dc3545';
+                        inputElement.style.borderColor = C.dangerStrong;
                         inputElement.focus();
                         return;
                     }
                     onSubmit(value);
                 },
-                css: { backgroundColor: '#28a745' }
+                css: { backgroundColor: C.successStrong }
             }
         ],
         size: 'small',
@@ -407,7 +408,7 @@ export function InputModal(options = {}) {
         if (e.key === 'Enter') {
             const value = inputElement.value.trim();
             if (required && !value) {
-                inputElement.style.borderColor = '#dc3545';
+                inputElement.style.borderColor = C.dangerStrong;
                 return;
             }
             onSubmit(value);
@@ -450,7 +451,7 @@ export function FormModal(options = {}) {
                 marginBottom: '5px',
                 fontSize: '14px',
                 fontWeight: '500',
-                color: '#333'
+                color: C.gray800
             }
         });
 
@@ -473,7 +474,7 @@ export function FormModal(options = {}) {
                 msUserSelect: 'text',
         webkitTouchCallout: 'default',
         backgroundColor: 'rgb(48, 60, 78)',
-        color: '#fff'
+            color: C.white
             }
         });
         
@@ -494,7 +495,7 @@ export function FormModal(options = {}) {
             {
                 text: cancelText,
                 onClick: onCancel,
-                css: { backgroundColor: '#6c757d' }
+                css: { backgroundColor: C.gray600 }
             },
             {
                 text: submitText,
@@ -508,10 +509,10 @@ export function FormModal(options = {}) {
                         const field = fields.find(f => f.name === name);
 
                         if (field.required && !value) {
-                            input.style.borderColor = '#dc3545';
+                            input.style.borderColor = C.dangerStrong;
                             isValid = false;
                         } else {
-                            input.style.borderColor = '#ddd';
+                            input.style.borderColor = C.gray300;
                         }
 
                         values[name] = value;
@@ -521,7 +522,7 @@ export function FormModal(options = {}) {
                         onSubmit(values);
                     }
                 },
-                css: { backgroundColor: '#28a745' }
+                css: { backgroundColor: C.successStrong }
             }
         ],
         onClose: onCancel,
@@ -576,7 +577,7 @@ export function SelectModal(options = {}) {
                 msUserSelect: 'text',
         webkitTouchCallout: 'default',
         backgroundColor: 'rgb(48, 60, 78)',
-        color: '#fff'
+            color: C.white
             }
         });
         
@@ -599,7 +600,7 @@ export function SelectModal(options = {}) {
         css: {
             maxHeight: '100%',
             overflowY: 'auto',
-            border: '1px solid #ddd',
+            border: `1px solid ${C.gray300}`,
             borderRadius: '4px'
         }
     });
@@ -614,7 +615,7 @@ export function SelectModal(options = {}) {
             const itemElement = $('div', {
                 css: {
                     padding: '12px 15px',
-                    borderBottom: index < filteredItems.length - 1 ? '1px solid #e0e0e0' : 'none',
+                    borderBottom: index < filteredItems.length - 1 ? `1px solid ${C.gray250}` : 'none',
                     cursor: 'pointer',
                     transition: 'background-color 0.2s',
                     display: 'flex',
@@ -654,7 +655,7 @@ export function SelectModal(options = {}) {
                         height: '20px',
                         fontSize: '11px',
                         textAlign: 'center',
-                        border: '1px solid #ccc',
+                        border: `1px solid ${C.gray400}`,
                         borderRadius: '3px',
                         padding: '2px'
                     }
@@ -684,13 +685,13 @@ export function SelectModal(options = {}) {
                     if (isLearning) {
                         // Cancel learning
                         isLearning = false;
-                        midiLearnButton.style.backgroundColor = '#007bff';
+                        midiLearnButton.style.backgroundColor = C.infoAlt;
                         midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                         window.Lyrix?.midiUtilities?.stopMidiLearn?.();
                     } else {
                         // Start learning
                         isLearning = true;
-                        midiLearnButton.style.backgroundColor = '#ff4757';
+                        midiLearnButton.style.backgroundColor = C.danger;
                         midiLearnButton.textContent = '⏹';
                         
                         // Start MIDI learn mode
@@ -699,7 +700,7 @@ export function SelectModal(options = {}) {
                                 // MIDI note learned
                                 midiNoteInput.value = midiNote;
                                 isLearning = false;
-                                midiLearnButton.style.backgroundColor = '#007bff';
+                                midiLearnButton.style.backgroundColor = C.infoAlt;
                                 midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                                 
                                 // Save the assignment
@@ -731,7 +732,7 @@ export function SelectModal(options = {}) {
                     css: {
                         width: `${parseInt(default_theme.button.height) * 1.3}px`,  // 1.3x la hauteur pour les modales
                         height: `${parseInt(default_theme.button.height) * 0.7}px`, // 70% de la hauteur normale
-                        backgroundColor: '#f44336',  // Red color for delete
+                        backgroundColor: C.danger,  // Red color for delete
                         fontSize: '14px'
                     }
                 });
@@ -748,7 +749,7 @@ export function SelectModal(options = {}) {
                 } catch(e) { /* silent */ }
 
                 deleteButton.addEventListener('mouseenter', () => {
-                    deleteButton.style.backgroundColor = '#ff4757';
+                    deleteButton.style.backgroundColor = C.danger;
                 });
 
                 deleteButton.addEventListener('mouseleave', () => {
@@ -765,7 +766,7 @@ export function SelectModal(options = {}) {
 
             // Add hover effects for the entire item
             itemElement.addEventListener('mouseenter', () => {
-                itemElement.style.backgroundColor = '#f8f9fa';
+                itemElement.style.backgroundColor = C.gray100;
             });
 
             itemElement.addEventListener('mouseleave', () => {
@@ -787,7 +788,7 @@ export function SelectModal(options = {}) {
                 css: {
                     padding: '20px',
                     textAlign: 'center',
-                    color: '#666',
+                    color: C.gray600,
                     fontStyle: 'italic'
                 }
             });
@@ -805,7 +806,7 @@ export function SelectModal(options = {}) {
             {
                 text: cancelText,
                 onClick: onCancel,
-                css: { backgroundColor: '#6c757d' }
+                css: { backgroundColor: C.gray600 }
             }
         ],
         onClose: onCancel,

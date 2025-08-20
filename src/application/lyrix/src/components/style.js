@@ -26,7 +26,24 @@ const default_theme = {
     panelDeep: '#2c3e50',
     panelDeepAlt: '#34495e',
     grayMid: '#444',
-    successLegacy: '#27ae60'
+    successLegacy: '#27ae60',
+    // Extended neutral / semantic palette
+    white: '#ffffff',
+    black: '#000000',
+    gray100: '#f8f9fa',
+    gray150: '#f0f0f0',
+    gray200: '#e9ecef',
+    gray250: '#e0e0e0',
+    gray300: '#ddd',
+    gray400: '#ccc',
+    gray500: '#999',
+    gray600: '#666',
+    gray700: '#444',
+    gray800: '#333',
+    info: '#007acc',
+    infoAlt: '#007bff',
+    dangerStrong: '#dc3545',
+    successStrong: '#28a745'
     },
     spacing: {
         xs: '4px',

@@ -4,6 +4,7 @@
 import { CONSTANTS } from '../core/constants.js';
 import { StorageManager } from '../services/storage.js';
 import default_theme from './style.js';
+const C = default_theme.colors;
 
 // Settings panel state management
 let isSettingsOpen = false;
@@ -143,12 +144,12 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
     buttonElement.style.backgroundColor = 'transparent';
     // Force aussi important pour écraser tout style résiduel
     buttonElement.style.setProperty('background-color', 'transparent', 'important');
-    buttonElement.style.color = '#007acc';
+    buttonElement.style.color = C.info;
     buttonElement.innerHTML='';
     try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
     } else {
         // Start learning
-        buttonElement.style.backgroundColor = '#ff6b6b';
+    buttonElement.style.backgroundColor = C.danger;
         buttonElement.style.color = 'white';
         buttonElement.textContent = '⏹️';
         
@@ -162,7 +163,7 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
             // Reset button appearance
             buttonElement.style.backgroundColor = 'transparent';
             buttonElement.style.setProperty('background-color', 'transparent', 'important');
-            buttonElement.style.color = '#007acc';
+            buttonElement.style.color = C.info;
             buttonElement.innerHTML='';
             try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
         });
@@ -185,7 +186,7 @@ export function toggleSettingsPanel(id_passed) {
         // Changer la couleur de fond du bouton pour indiquer qu'il est actif
         const button = document.getElementById(id_passed);
         if (button) {
-            if (button._setActive) { button._setActive(true); } else { button.style.backgroundColor = '#ffffffff'; }
+            if (button._setActive) { button._setActive(true); } else { button.style.backgroundColor = C.white; }
         }
     }
 }
