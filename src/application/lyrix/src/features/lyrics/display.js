@@ -1103,7 +1103,9 @@ export class LyricsDisplay {
                 type: 'text',
                 value: storedOffset.toFixed(2), // Format to 2 decimal places for better display
                 css: {
-                    width: '60px',
+                    width: '90px',
+                    minWidth: '90px',
+                    maxWidth: '110px',
                     textAlign: 'center',
             // Increased fixed pixel font size for legibility
             fontSize: '24px',
@@ -1156,18 +1158,7 @@ export class LyricsDisplay {
                 }
             }, 10);
             
-            const offsetUnit = $('span', {
-                text: 's',
-                css: {
-                    fontSize: '10px',
-                    color: this.originalStyles.formElements.textColor,
-                    userSelect: 'none',
-                    webkitUserSelect: 'none',
-                    mozUserSelect: 'none',
-                    msUserSelect: 'none',
-                    webkitTouchCallout: 'none'
-                }
-            });
+            // Removed unit span 's' to declutter UI
             
             // Store current offset value (start with stored value)
             this.currentTimeOffset = storedOffset; // Start with actual stored value
@@ -1251,7 +1242,7 @@ export class LyricsDisplay {
                 }
             });
             
-            offsetContainer.append(offsetLabel, offsetInput, offsetUnit);
+            offsetContainer.append(offsetLabel, offsetInput);
             titleContainer.append(title, offsetContainer);
             title = titleContainer; // Replace title with container
         } else {
@@ -1862,14 +1853,13 @@ export class LyricsDisplay {
         return lineDiv;
     }
     
-    // Format time for display
+    // Format time for display (single canonical version) -> [mm:ss.mmm]
     formatTimeDisplay(ms) {
-        if (ms < 0) return '[--:--]';
-        
+        if (ms < 0 || isNaN(ms)) return '--:--.---';
         const minutes = Math.floor(ms / 60000);
         const seconds = Math.floor((ms % 60000) / 1000);
-        const centiseconds = Math.floor((ms % 1000) / 10);
-        return `[${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}]`;
+        const millis = Math.floor(ms % 1000);
+        return `${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}.${millis.toString().padStart(3,'0')}`;
     }
     
     // Set active line index - unified function for all line changes
@@ -2074,6 +2064,18 @@ export class LyricsDisplay {
             if (this.originalLinesBackup) {
                 this.applyBulkEditChanges();
             }
+            // Auto-apply time offset if user changed it (baseline captured)
+            if (typeof this.currentTimeOffset === 'number' && this.currentTimeOffset !== 0 && this._baselineLineTimes) {
+                this.applyTimeOffset(this.currentTimeOffset);
+                // Persist offset value in metadata
+                if (this.currentLyrics && this.currentLyrics.metadata) {
+                    this.currentLyrics.metadata.timeOffset = this.currentTimeOffset;
+                    if (this.currentLyrics.songId) {
+                        StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
+                    }
+                }
+                this.showOffsetAppliedFeedback(this.currentTimeOffset);
+            }
         } else if (this.editMode && !wasInEdit) {
             // Just entered edit mode -> activate persistent state
             if (this.editButton && this.editButton._setActive) {
@@ -2096,6 +2098,9 @@ export class LyricsDisplay {
         //     }
         // }
         this.renderLyrics();
+
+    // Ensure user preference for timecode visibility is applied after re-render
+    this.updateTimecodeVisibility && this.updateTimecodeVisibility();
         
         // Update content area height after toggle
         setTimeout(() => {
@@ -2112,42 +2117,44 @@ export class LyricsDisplay {
             }, 0);
         }
     }
+
+    // Sync visibility of existing timecode elements with stored preference (used after mode toggles)
+    updateTimecodeVisibility() {
+        // Read latest preference (in case changed via settings panel while in edit mode)
+        const saved = localStorage.getItem('lyrix_show_timecodes');
+        if (saved !== null) {
+            this.showTimecodes = (saved === 'true');
+        }
+        // Update existing spans without full re-render (lightweight)
+        const spans = this.lyricsContent ? this.lyricsContent.querySelectorAll('.timecode-span, [data-role="timecode"]') : [];
+        spans.forEach(span => {
+            span.style.display = this.showTimecodes ? 'inline-block' : 'none';
+        });
+        // Also refresh button state
+        this.updateTimecodeButtonAppearance && this.updateTimecodeButtonAppearance();
+    }
     
     // Apply bulk edit changes
     applyBulkEditChanges() {
         const textarea = document.getElementById('bulk-edit-textarea');
         if (!textarea || !this.originalLinesBackup) return;
         
-        const newLinesText = textarea.value.split('\n');
+        const rawLines = textarea.value.split('\n');
         const originalLines = this.originalLinesBackup;
-        
-        // Create new lines array
-        const newLines = [];
-        
-        // Process each new line
-        newLinesText.forEach((text, index) => {
-            if (text.trim()) { // Only add non-empty lines
-                // Try to match with original line to preserve timecode
-                const originalLine = originalLines[index];
-                newLines.push({
-                    text: text.trim(),
-                    time: originalLine ? originalLine.time : -1 // Keep original timecode or -1 for new lines
-                });
-            }
+        // 1. Remove trailing empty lines but keep one if any existed
+        let end = rawLines.length;
+        while (end > 0 && rawLines[end-1].trim() === '') end--;
+        const trailingEmpty = rawLines.length - end;
+        const trimmed = rawLines.slice(0, end);
+        if (trailingEmpty > 0) trimmed.push(''); // keep exactly one trailing blank if there were any
+        // 2. Preserve internal empty lines (don't filter them out)
+        const newLines = trimmed.map((text, idx) => {
+            const originalLine = originalLines[idx];
+            return {
+                text: text.trim() === '' ? '' : text.trim(),
+                time: originalLine ? originalLine.time : -1
+            };
         });
-        
-        // Handle case where we have fewer lines than before
-        if (newLines.length < originalLines.length) {
-            // If we have more original lines with timecodes, keep them but mark as empty
-            for (let i = newLines.length; i < originalLines.length; i++) {
-                if (originalLines[i].time >= 0) {
-                    newLines.push({
-                        text: '',
-                        time: originalLines[i].time
-                    });
-                }
-            }
-        }
         
         // Update the lyrics object
         this.currentLyrics.lines = newLines;
@@ -2608,10 +2615,7 @@ export class LyricsDisplay {
         input.addEventListener('blur', saveEdit);
     }
     
-    // Format time for display using UIManager
-    formatTimeDisplay(timeMs) {
-        return UIManager.formatTimeDisplay(timeMs / 1000); // Convert ms to seconds
-    }
+    // Duplicate earlier removed; keep single definition above
     
     // Edit timecode via double-click
     editTimecode(lineIndex, timeSpan) {
@@ -2625,8 +2629,8 @@ export class LyricsDisplay {
         // Get the currently displayed timecode text from the span (similar to editLineText approach)
         const currentDisplayedTime = timeSpan.textContent || timeSpan.innerText || '';
         
-        // Clean up the displayed time by removing brackets if present: [02:30.50] -> 02:30.50
-        const currentTimeFormatted = currentDisplayedTime.replace(/[\[\]]/g, '').trim();
+    // Current display already without brackets (formatTimeDisplay) so just trim
+    const currentTimeFormatted = currentDisplayedTime.trim();
         
         // Get the computed font size from the original timeSpan to match it exactly
         const computedStyle = window.getComputedStyle(timeSpan);
@@ -2642,7 +2646,7 @@ export class LyricsDisplay {
             padding: 2px 6px;
             border: 2px solid #007bff;
             border-radius: 3px;
-            min-width: 60px;
+            min-width: 80px;
             text-align: center;
             background-color: rgb(48,60,78);
             color: #fff;
@@ -2652,7 +2656,20 @@ export class LyricsDisplay {
             -moz-user-select: text;
             -ms-user-select: text;
             pointer-events: auto;
+            outline: none;
+            box-shadow: none;
+            -webkit-appearance: none;
         `;
+        const lockTCStyles = () => {
+            input.style.backgroundColor = 'rgb(48,60,78)';
+            input.style.color = '#fff';
+            input.style.outline = 'none';
+            input.style.boxShadow = 'none';
+        };
+        ['focus','blur','keydown','mousedown','mousemove','mouseup','touchstart','touchmove','touchend','input'].forEach(ev => {
+            input.addEventListener(ev, () => { lockTCStyles(); setTimeout(lockTCStyles,0); });
+        });
+        lockTCStyles();
         
         // Add a hint tooltip
         input.title = "Type to edit or drag up/down to adjust timecode\nHold Shift for fine adjustment, Ctrl/Cmd for coarse adjustment";
@@ -2695,8 +2712,9 @@ export class LyricsDisplay {
                 dragStarted = true;
                 isDragging = true;
                 input.style.cursor = 'ns-resize';
-                input.style.borderColor = '#28a745'; // Green border when dragging
-                input.style.backgroundColor = '#f8fff8'; // Light green background
+                input.style.borderColor = '#28a745'; // Highlight border when dragging
+                // Keep stable dark background (user requested no white/green flash)
+                input.style.backgroundColor = 'rgb(48,60,78)';
                 // Don't blur - keep the input focused for continued editing
             }
             
@@ -2735,10 +2753,12 @@ export class LyricsDisplay {
                 // End drag operation but STAY in edit mode
                 isDragging = false;
                 dragStarted = false;
+                input.style.backgroundColor = 'rgb(48,60,78)';
+                input.style.color = '#fff';
                 
                 input.style.cursor = 'text';
-                input.style.borderColor = '#007bff'; // Back to blue
-                input.style.backgroundColor = 'white'; // Back to white
+                input.style.borderColor = '#007bff'; // Back to standard blue border
+                // Preserve dark background after drag end
                 
                 // Update lyrics and save to localStorage
                 this.currentLyrics.updateLastModified();
@@ -2797,6 +2817,8 @@ export class LyricsDisplay {
                 const saveSuccess = StorageManager.saveSong(this.currentLyrics.songId, this.currentLyrics);
                 
                 timeSpan.textContent = this.formatTimeDisplay(finalTime);
+                    timeSpan.style.backgroundColor = 'rgb(48,60,78)';
+                    input.style.backgroundColor = 'rgb(48,60,78)';
             }
             
             // Clean up event listeners
@@ -4216,28 +4238,38 @@ export class LyricsDisplay {
     
     // Update time offset preview (visual feedback during drag)
     updateTimeOffset(offsetSeconds) {
+        if (!this.currentLyrics || !Array.isArray(this.currentLyrics.lines)) return;
+        // Initialize baseline if not present
+        if (!this._baselineLineTimes) {
+            this._baselineLineTimes = this.currentLyrics.lines.map(l => l.time);
+        }
         this.currentTimeOffset = offsetSeconds;
-        // Just store the value, no visual changes to timecodes needed for now
-        console.log('🎯 UpdateTimeOffset called with:', offsetSeconds);
+        const offsetMs = Math.round(offsetSeconds * 1000);
+        // Live update DOM spans only (non destructive to data until apply)
+        const timecodeSpans = document.querySelectorAll('.timecode-span');
+        timecodeSpans.forEach((span, idx) => {
+            const base = this._baselineLineTimes[idx];
+            if (typeof base === 'number' && base >= 0) {
+                const adjusted = Math.max(0, base + offsetMs);
+                // Use same formatter as initial render to avoid display disappearance
+                span.textContent = this.formatTimeDisplay(adjusted);
+            }
+        });
     }
     
     // Apply time offset to all timecodes permanently
     applyTimeOffset(offsetSeconds) {
-        if (!this.currentLyrics || !this.currentLyrics.lines || offsetSeconds === 0) {
-            return;
-        }
-        
-        const offsetMs = offsetSeconds * 1000;
+        if (!this.currentLyrics || !Array.isArray(this.currentLyrics.lines) || !this._baselineLineTimes) return;
+        const offsetMs = Math.round(offsetSeconds * 1000);
         let appliedCount = 0;
-        
-        // Apply offset to all lines with timecodes
-        this.currentLyrics.lines.forEach((line, index) => {
-            if (line.time >= 0) {
-                const newTime = Math.max(0, line.time + offsetMs);
-                line.time = newTime;
+        this.currentLyrics.lines.forEach((line, idx) => {
+            const base = this._baselineLineTimes[idx];
+            if (typeof base === 'number' && base >= 0) {
+                line.time = Math.max(0, base + offsetMs);
                 appliedCount++;
             }
         });
+        delete this._baselineLineTimes;
         
         if (appliedCount > 0) {
             // Update last modified timestamp
@@ -4258,6 +4290,16 @@ export class LyricsDisplay {
             
             // Re-render to show final values
             this.renderLyrics();
+            // Ensure timecode spans use consistent formatting post-apply
+            requestAnimationFrame(() => {
+                const spans = document.querySelectorAll('.timecode-span');
+                spans.forEach((span, idx) => {
+                    const line = this.currentLyrics.lines[idx];
+                    if (line && typeof line.time === 'number' && line.time >= 0) {
+                        span.textContent = this.formatTimeDisplay(line.time);
+                    }
+                });
+            });
             
             console.log(`Applied time offset of ${offsetSeconds}s to ${appliedCount} lines`);
         }

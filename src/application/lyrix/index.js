@@ -2458,8 +2458,7 @@ function createMainInterface() {
                 progression.style.height = '100%';
                 progression.style.top = '0';
                 progression.style.left = '0';
-                // Darker greyer blue gradient
-                progression.style.background = 'linear-gradient(90deg,#223447,#4a6a85)';
+                progression.style.background = '#4a6a85';
                 progression.style.borderRadius = '18px';
                 progression.style.boxShadow = 'inset 0 0 4px rgba(0,0,0,0.35)';
             }
