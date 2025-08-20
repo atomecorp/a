@@ -2120,36 +2120,31 @@ export class LyricsDisplay {
         
         const newLinesText = textarea.value.split('\n');
         const originalLines = this.originalLinesBackup;
-        
-        // Create new lines array
-        const newLines = [];
-        
-        // Process each new line
-        newLinesText.forEach((text, index) => {
-            if (text.trim()) { // Only add non-empty lines
-                // Try to match with original line to preserve timecode
-                const originalLine = originalLines[index];
-                newLines.push({
-                    text: text.trim(),
-                    time: originalLine ? originalLine.time : -1 // Keep original timecode or -1 for new lines
-                });
-            }
-        });
-        
-        // Handle case where we have fewer lines than before
-        if (newLines.length < originalLines.length) {
-            // If we have more original lines with timecodes, keep them but mark as empty
-            for (let i = newLines.length; i < originalLines.length; i++) {
-                if (originalLines[i].time >= 0) {
-                    newLines.push({
-                        text: '',
-                        time: originalLines[i].time
-                    });
-                }
-            }
+
+        // 1. Preserve internal blank lines: we keep empty lines that occur between non-empty lines.
+        // 2. Trim trailing empty lines at end to max one.
+
+        // Remove trailing empty lines, but keep one if there were any
+        let end = newLinesText.length - 1;
+        let emptyCount = 0;
+        while (end >= 0 && newLinesText[end].trim() === '') {
+            emptyCount++;
+            end--;
         }
-        
-        // Update the lyrics object
+        const trimmed = newLinesText.slice(0, end + 1);
+        if (emptyCount > 0) trimmed.push(''); // keep exactly one final blank if user ended with blanks
+
+        const newLines = [];
+        trimmed.forEach((text, index) => {
+            const originalLine = originalLines[index];
+            // Keep text exactly (no .trim()) to preserve intentional blanks inside lines, but remove trailing spaces only
+            const cleaned = text.replace(/\s+$/,'');
+            newLines.push({
+                text: cleaned, // can be '' for intentional blank line
+                time: originalLine ? originalLine.time : -1
+            });
+        });
+
         this.currentLyrics.lines = newLines;
         
         // Update the lastModified timestamp
