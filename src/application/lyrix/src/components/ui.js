@@ -1,5 +1,6 @@
 // UI management for Lyrix application using Squirrel components
 import { default_theme } from './style.js';
+const C = default_theme.colors; // alias couleurs centralisées
 
 export class UIManager {
     // Expose theme for legacy references (e.g., UIManager.THEME...)
@@ -38,7 +39,7 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: default_theme.primaryColor || default_theme.button.backgroundColor || '#27ae60',
+                backgroundColor: default_theme.primaryColor || default_theme.button.backgroundColor || C.successLegacy,
                 color: 'white',
                 ...config.css
             }
@@ -50,7 +51,7 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: default_theme.secondaryColor || default_theme.button.backgroundColor || '#3498db',
+                backgroundColor: default_theme.secondaryColor || default_theme.button.backgroundColor || C.accentLegacy,
                 color: 'white',
                 ...config.css
             }
@@ -213,7 +214,7 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: default_theme.dangerColor || default_theme.button.backgroundColor || '#e74c3c',
+                backgroundColor: default_theme.dangerColor || default_theme.button.backgroundColor || C.danger,
                 color: 'white',
                 ...config.css
             }
@@ -225,7 +226,7 @@ export class UIManager {
         return this.createButton({
             ...config,
             css: {
-                backgroundColor: default_theme.warningColor || default_theme.button.backgroundColor || '#f39c12',
+                backgroundColor: default_theme.warningColor || default_theme.button.backgroundColor || C.warningAlt,
                 color: 'white',
                 ...config.css
             }
@@ -306,7 +307,7 @@ export class UIManager {
             id: containerId + '-header',
             css: {
                 padding: '10px',
-                background: '#333',
+                background: C.panelDeepAlt,
                 color: 'white',
                 borderRadius: '4px 4px 0 0'
             }
@@ -319,7 +320,7 @@ export class UIManager {
             id: containerId + '-controls',
             css: {
                 padding: '10px',
-                background: '#444',
+                background: C.grayMid,
                 color: 'white',
                 display: 'flex',
                 gap: '10px',
@@ -349,7 +350,7 @@ export class UIManager {
         
         const modal = $('div', {
             css: {
-                background: '#2c3e50',
+                background: C.panelDeep,
                 borderRadius: '10px',
                 boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
                 maxWidth: '400px',
@@ -357,13 +358,13 @@ export class UIManager {
                 padding: '0',
                 color: 'white',
                 textAlign: 'center',
-                border: '1px solid #34495e'
+                border: `1px solid ${C.panelDeepAlt}`
             }
         });
         
         const header = $('div', {
             css: {
-                background: '#34495e',
+                background: C.panelDeepAlt,
                 padding: '15px',
                 borderRadius: '10px 10px 0 0',
                 borderBottom: '1px solid #1a252f'
@@ -464,7 +465,7 @@ export class UIManager {
         
         const modal = $('div', {
             css: {
-                background: '#2c3e50',
+                background: C.panelDeep,
                 borderRadius: '10px',
                 boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
                 maxWidth: '400px',
@@ -472,13 +473,13 @@ export class UIManager {
                 padding: '0',
                 color: 'white',
                 textAlign: 'center',
-                border: '1px solid #34495e'
+                border: `1px solid ${C.panelDeepAlt}`
             }
         });
         
         const header = $('div', {
             css: {
-                background: '#e74c3c',
+                background: C.danger,
                 padding: '15px',
                 borderRadius: '10px 10px 0 0',
                 borderBottom: '1px solid #c0392b'

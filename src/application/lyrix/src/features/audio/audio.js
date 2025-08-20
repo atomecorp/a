@@ -1,14 +1,15 @@
 // Audio management for Lyrix application
 import { CONSTANTS } from '../../core/constants.js';
+import { isIOS } from '../../core/platform.js';
 
 // iOS-compatible logging function with clear prefix for filtering
 function iosLog(message) {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIos = isIOS();
     
     // Add distinctive prefix to filter app logs from iOS system errors
     const prefixedMessage = `⚛️ ATOME-APP: ${message}`;
     
-    if (isIOS) {
+    if (isIos) {
         // For iOS AUv3 apps - send to Xcode console via WebKit message handler
         try {
             if (window.webkit?.messageHandlers?.console) {
@@ -101,7 +102,7 @@ export class AudioManager {
         debugLog('NORMALIZE', 'fileName includes .m4a?', fileName.includes('.m4a'));
         
         // Debug logging for iOS audio paths
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIos = isIOS();
         if (isIOS) {
             debugLog('iOS-AUDIO', 'Original fileName', fileName);
             debugLog('iOS-AUDIO', 'Has spaces', fileName.includes(' '));
@@ -795,7 +796,7 @@ export class AudioController {
     
     // Load from URL with enhanced iOS support
     loadFromUrl(audioUrl) {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIos = isIOS();
         
         try {
             
@@ -935,7 +936,7 @@ export class AudioController {
 
     // iOS-specific memory cleanup
     forceMemoryCleanup() {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIos = isIOS();
         
         if (isIOS) {
             
@@ -974,7 +975,7 @@ export class AudioController {
 
     // Check iOS memory status
     checkIOSMemory() {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIos = isIOS();
         
         if (isIOS) {
             // Basic memory check for iOS

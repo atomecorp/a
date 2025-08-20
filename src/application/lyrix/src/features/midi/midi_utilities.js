@@ -1,5 +1,6 @@
 // MIDI Utilities for Lyrix Application
-// Handles MIDI data received from AUv3 host and displays it in a formatted way
+// Centralised styling via default_theme.midiColors
+import { default_theme } from '../../components/style.js';
 
 export class MidiUtilities {
     constructor() {
@@ -23,18 +24,18 @@ export class MidiUtilities {
         const initialDisplay = isMidiInspectorEnabled ? 'block' : 'none'; // Show/hide based on MIDI inspector setting
         
         // Create MIDI display container
-        this.midiContainer = $('div', {
+    this.midiContainer = $('div', {
             id: 'midi-logger-container',
             css: {
-                padding: '8px',
-                backgroundColor: '#1a1a1a',
-                color: '#00ff00',
-                borderRadius: '4px',
+        padding: '8px',
+        backgroundColor: default_theme.midiColors.background,
+        color: default_theme.midiColors.text,
+        borderRadius: '4px',
                 textAlign: 'left',
                 fontFamily: 'monospace',
                 fontSize: '12px',
-                marginBottom: '10px',
-                border: '2px solid #333',
+        marginBottom: '10px',
+        border: `2px solid ${default_theme.midiColors.border}`,
                 maxHeight: '150px',
                 overflow: 'auto',
                 minHeight: '50px',
@@ -59,13 +60,13 @@ export class MidiUtilities {
         });
 
         // Add clear button
-        const clearButton = $('div', {
+    const clearButton = $('div', {
             id: 'midi_clear_log',
             text: 'Clear',
             css: {
-                padding: '2px 6px',
-                backgroundColor: '#444',
-                color: 'white',
+        padding: '2px 6px',
+        backgroundColor: default_theme.midiColors.buttonBg,
+        color: 'white',
                 border: 'none',
                 borderRadius: '2px',
                 cursor: 'pointer',
@@ -79,13 +80,13 @@ export class MidiUtilities {
         clearButton.addEventListener('click', () => this.clearMidiLog());
 
         // Add test button
-        const testButton = $('div', {
+    const testButton = $('div', {
             id: 'midi_test_data',
             text: 'Test',
             css: {
-                padding: '2px 6px',
-                backgroundColor: '#006600',
-                color: 'white',
+        padding: '2px 6px',
+        backgroundColor: default_theme.midiColors.testButtonBg,
+        color: 'white',
                 border: 'none',
                 borderRadius: '2px',
                 cursor: 'pointer',
@@ -98,20 +99,20 @@ export class MidiUtilities {
         testButton.addEventListener('click', () => this.testMidiData());
 
         // Add status line
-        this.statusLine = $('div', {
+    this.statusLine = $('div', {
             text: 'Waiting for MIDI data...',
             css: {
-                color: '#666',
+        color: default_theme.midiColors.status,
                 fontSize: '11px',
                 marginBottom: '5px'
             }
         });
 
         // Add log content area
-        this.logContent = $('div', {
+    this.logContent = $('div', {
             id: 'midi_log_content',
             css: {
-                color: '#00ff00',
+        color: default_theme.midiColors.text,
                 fontSize: '11px',
                 lineHeight: '1.2'
             }
@@ -151,65 +152,66 @@ export class MidiUtilities {
         const channel = (status & 0x0F) + 1; // MIDI channels are 1-16
         const messageType = status & 0xF0;
         
-        let messageText = '';
-        let messageColor = '#00ff00';
+    const C = default_theme.midiColors; // alias
+    let messageText = '';
+    let messageColor = C.text;
 
         switch (messageType) {
             case 0x80: // Note Off
                 messageText = `Note OFF  Ch:${channel.toString().padStart(2)} Note:${data1Byte.toString().padStart(3)} Vel:${data2Byte.toString().padStart(3)}`;
-                messageColor = '#ff6666';
+                messageColor = C.noteOff;
                 break;
             case 0x90: // Note On
                 if (data2Byte === 0) {
                     messageText = `Note OFF  Ch:${channel.toString().padStart(2)} Note:${data1Byte.toString().padStart(3)} Vel:000`;
-                    messageColor = '#ff6666';
+                    messageColor = C.noteOff;
                 } else {
                     messageText = `Note ON   Ch:${channel.toString().padStart(2)} Note:${data1Byte.toString().padStart(3)} Vel:${data2Byte.toString().padStart(3)}`;
-                    messageColor = '#66ff66';
+                    messageColor = C.noteOn;
                 }
                 break;
             case 0xA0: // Aftertouch
                 messageText = `Aftertouch Ch:${channel.toString().padStart(2)} Note:${data1Byte.toString().padStart(3)} Pressure:${data2Byte.toString().padStart(3)}`;
-                messageColor = '#ffff66';
+                messageColor = C.aftertouch;
                 break;
             case 0xB0: // Control Change
                 messageText = `CC        Ch:${channel.toString().padStart(2)} CC:${data1Byte.toString().padStart(3)} Val:${data2Byte.toString().padStart(3)}`;
-                messageColor = '#66ffff';
+                messageColor = C.controlChange;
                 break;
             case 0xC0: // Program Change
                 messageText = `ProgramChg Ch:${channel.toString().padStart(2)} Program:${data1Byte.toString().padStart(3)}`;
-                messageColor = '#ff66ff';
+                messageColor = C.programChange;
                 break;
             case 0xD0: // Channel Pressure
                 messageText = `ChanPress Ch:${channel.toString().padStart(2)} Pressure:${data1Byte.toString().padStart(3)}`;
-                messageColor = '#ffaa66';
+                messageColor = C.channelPressure;
                 break;
             case 0xE0: // Pitch Bend
                 const pitchValue = (data2Byte << 7) | data1Byte;
                 messageText = `PitchBend Ch:${channel.toString().padStart(2)} Value:${pitchValue.toString().padStart(5)}`;
-                messageColor = '#aa66ff';
+                messageColor = C.pitchBend;
                 break;
             case 0xF0: // System messages
                 if (status === 0xF8) {
                     messageText = 'Clock';
-                    messageColor = '#888888';
+                    messageColor = C.clock;
                 } else if (status === 0xFA) {
                     messageText = 'Start';
-                    messageColor = '#66ff66';
+                    messageColor = C.start;
                 } else if (status === 0xFB) {
                     messageText = 'Continue';
-                    messageColor = '#66ff66';
+                    messageColor = C.continue;
                 } else if (status === 0xFC) {
                     messageText = 'Stop';
-                    messageColor = '#ff6666';
+                    messageColor = C.stop;
                 } else {
                     messageText = `System    Status:0x${status.toString(16).toUpperCase().padStart(2, '0')} Data:${data1Byte} ${data2Byte}`;
-                    messageColor = '#ffffff';
+                    messageColor = C.system;
                 }
                 break;
             default:
                 messageText = `Unknown   Status:0x${status.toString(16).toUpperCase().padStart(2, '0')} Data:${data1Byte} ${data2Byte}`;
-                messageColor = '#ff9999';
+                messageColor = C.unknown;
         }
 
         return {
@@ -268,7 +270,7 @@ export class MidiUtilities {
             const timeSpan = $('span', {
                 text: `${timeString} `,
                 css: {
-                    color: '#666',
+                    color: default_theme.midiColors.status,
                     fontSize: '10px'
                 }
             });
@@ -283,7 +285,7 @@ export class MidiUtilities {
             const rawSpan = $('span', {
                 text: ` [${message.raw}]`,
                 css: {
-                    color: '#888',
+                    color: default_theme.midiColors.raw,
                     fontSize: '10px'
                 }
             });
@@ -385,7 +387,7 @@ export class MidiUtilities {
         // Update status
         if (this.statusLine) {
             this.statusLine.textContent = 'MIDI Learning: Press a key on your MIDI device...';
-            this.statusLine.style.color = '#ff4757';
+            this.statusLine.style.color = default_theme.midiColors.noteOff;
         }
     }
 
@@ -396,7 +398,7 @@ export class MidiUtilities {
         // Update status
         if (this.statusLine) {
             this.statusLine.textContent = 'Waiting for MIDI data...';
-            this.statusLine.style.color = '#666';
+            this.statusLine.style.color = default_theme.midiColors.status;
         }
     }
 

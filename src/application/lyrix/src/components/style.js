@@ -18,7 +18,15 @@ const default_theme = {
         warning: '#f59e0b',
         success: '#10b981',
         focus: '#2563eb',
-        overlay: 'rgba(0,0,0,0.55)'
+    overlay: 'rgba(0,0,0,0.55)',
+    // Legacy / scattered UI colors centralised
+    accentLegacy: '#3498db', // ancien bleu utilisé dans certains écrans
+    warningAlt: '#e67e22',   // orange spécifique (import .lrx)
+    hintBlue: '#2980b9',     // texte d'aide
+    panelDeep: '#2c3e50',
+    panelDeepAlt: '#34495e',
+    grayMid: '#444',
+    successLegacy: '#27ae60'
     },
     spacing: {
         xs: '4px',
@@ -90,6 +98,29 @@ const default_theme = {
         backgroundColor: '#lightgray',
         color: '#333',
         border: '1px solid #ccc'
+    },
+    // Centralisation des couleurs MIDI et badges (évite hex en dur ailleurs)
+    midiColors: {
+        background: '#1a1a1a',
+        border: '#333',
+        text: '#00ff00',
+        noteOn: '#66ff66',
+        noteOff: '#ff6666',
+        aftertouch: '#ffff66',
+        controlChange: '#66ffff',
+        programChange: '#ff66ff',
+        channelPressure: '#ffaa66',
+        pitchBend: '#aa66ff',
+        system: '#ffffff',
+        clock: '#888888',
+        start: '#66ff66',
+        continue: '#66ff66',
+        stop: '#ff6666',
+        unknown: '#ff9999',
+        raw: '#888',
+        status: '#666',
+        buttonBg: '#444',
+        testButtonBg: '#006600'
     }
 };
 

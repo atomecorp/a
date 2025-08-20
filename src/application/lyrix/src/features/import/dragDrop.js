@@ -7,13 +7,15 @@ import { Modal } from '../../components/modal.js';
 import { CONSTANTS } from '../../core/constants.js';
 import { createSyncedLyricsFromData } from '../lyrics/library.js';
 import { debugLog, extractCleanFileName } from '../audio/audio.js';
+import { default_theme } from '../../components/style.js';
+import { isIOS } from '../../core/platform.js';
 
 // iOS-compatible logging function
 function dragLog(message) {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIos = isIOS();
     const prefixedMessage = `⚛️ ATOME-APP: [DRAG-DROP] ${message}`;
     
-    if (isIOS) {
+    if (isIos) {
         try {
             if (window.webkit?.messageHandlers?.console) {
             } else {
@@ -106,13 +108,13 @@ export class DragDropManager {
                 left: '0',
                 right: '0',
                 bottom: '0',
-                background: 'rgba(52, 152, 219, 0.1)',
-                border: '2px dashed #3498db',
+                background: 'rgba(52, 152, 219, 0.1)', // TODO: derive alpha from accentLegacy
+                border: `2px dashed ${default_theme.colors.accentLegacy}`,
                 display: 'none',
                 justifyContent: 'center',
                 alignItems: 'center',
                 fontSize: '18px',
-                color: '#3498db',
+                color: default_theme.colors.accentLegacy,
                 zIndex: '10',
                 pointerEvents: 'none',
                 flexDirection: 'column',
@@ -464,7 +466,7 @@ export class DragDropManager {
             css: {
                 fontSize: '16px',
                 marginBottom: '10px',
-                color: '#e67e22'
+                color: default_theme.colors.warningAlt
             }
         });
 
@@ -473,7 +475,7 @@ export class DragDropManager {
             css: {
                 fontSize: '14px',
                 fontStyle: 'italic',
-                color: '#2980b9'
+                color: default_theme.colors.hintBlue
             }
         });
 
