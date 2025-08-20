@@ -267,27 +267,83 @@ export function showSongLibrary() {
             closeSongLibraryPanel();
             const btn = document.getElementById('song_list_button');
             if (btn && btn._setActive) btn._setActive(false);
-            const input = document.createElement('input');
-            input.type = 'file'; input.multiple = true; input.style.display = 'none';
-            input.addEventListener('change', async (e) => {
-                const files = Array.from(e.target.files || []);
-                if (files.length) {
-                    try {
-                        const mgr = (window.Lyrix && window.Lyrix.dragDropManager) ? window.Lyrix.dragDropManager : window.dragDropManager;
-                        if (mgr) {
-                            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-                            if (isIOS) {
-                                for (let i=0;i<files.length;i++) { if (i>0) await new Promise(r=>setTimeout(r,120)); await mgr.processFile(files[i]); }
-                            } else { for (const f of files) { await mgr.processFile(f); } }
+
+            const processImportedFiles = async (files) => {
+                if (!files || !files.length) return;
+                try {
+                    const mgr = (window.Lyrix && window.Lyrix.dragDropManager) ? window.Lyrix.dragDropManager : window.dragDropManager;
+                    if (mgr) {
+                        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                        if (isIOS) {
+                            for (let i=0;i<files.length;i++) { if (i>0) await new Promise(r=>setTimeout(r,120)); await mgr.processFile(files[i]); }
+                        } else {
+                            for (const f of files) { await mgr.processFile(f); }
                         }
-                        window.showSongLibrary && window.showSongLibrary();
-                    } catch (error) {
-                        window.Modal && window.Modal({ title: '❌ File Import Error', content: `<p>Failed to import: ${error.message}</p>`, buttons: [{ text: 'OK' }], size: 'small' });
                     }
+                    window.showSongLibrary && window.showSongLibrary();
+                } catch (error) {
+                    window.Modal && window.Modal({ title: '❌ File Import Error', content: `<p>Failed to import: ${error.message}</p>`, buttons: [{ text: 'OK' }], size: 'small' });
                 }
-                input.parentNode && input.parentNode.removeChild(input);
-            });
-            document.body.appendChild(input); input.click();
+            };
+
+            const hasAUv3Multi = !!(window.AUv3API && AUv3API.fileSystem && AUv3API.fileSystem.loadFilesWithDocumentPicker);
+            if (hasAUv3Multi) {
+                try {
+                    AUv3API.fileSystem.loadFilesWithDocumentPicker(['txt','lrc','lrx','json','mp3','m4a','wav'], async (resp) => {
+                        if (!resp || !resp.success || !resp.data || !resp.data.files) { fallbackChain(); return; }
+                        const out = [];
+                        for (const entry of resp.data.files) {
+                            try {
+                                const b64 = entry.base64; const byteStr = atob(b64); const len = byteStr.length; const bytes = new Uint8Array(len);
+                                for (let i=0;i<len;i++) bytes[i] = byteStr.charCodeAt(i);
+                                const ext = (entry.name||'').split('.').pop().toLowerCase();
+                                let mime='application/octet-stream';
+                                if (['txt','lrc','lrx','json'].includes(ext)) mime='text/plain'; else if (ext==='mp3') mime='audio/mpeg'; else if (['m4a','aac'].includes(ext)) mime='audio/mp4'; else if (ext==='wav') mime='audio/wav';
+                                out.push(new File([bytes], entry.name || 'import', { type: mime }));
+                            } catch {}
+                        }
+                        await processImportedFiles(out);
+                    });
+                    return;
+                } catch (e) { /* continue */ }
+            }
+
+            const hasRawBridge = !hasAUv3Multi && !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fileSystem);
+            if (hasRawBridge) {
+                try {
+                    window.fileSystemCallback = async (resp) => {
+                        if (resp && resp.success && resp.data && resp.data.files) {
+                            const out=[]; for (const entry of resp.data.files){ try { const b64=entry.base64; const bs=atob(b64); const len=bs.length; const bytes=new Uint8Array(len); for(let i=0;i<len;i++) bytes[i]=bs.charCodeAt(i); const ext=(entry.name||'').split('.').pop().toLowerCase(); let mime='application/octet-stream'; if(['txt','lrc','lrx','json'].includes(ext)) mime='text/plain'; else if(ext==='mp3') mime='audio/mpeg'; else if(['m4a','aac'].includes(ext)) mime='audio/mp4'; else if(ext==='wav') mime='audio/wav'; out.push(new File([bytes], entry.name||'import',{type:mime})); } catch{} }
+                            await processImportedFiles(out);
+                        } else { fallbackChain(); }
+                    };
+                    window.webkit.messageHandlers.fileSystem.postMessage({ action:'loadFilesWithDocumentPicker', fileTypes:['txt','lrc','lrx','json','mp3','m4a','wav'] });
+                    return;
+                } catch (e) { /* continue */ }
+            }
+
+            function fallbackChain() {
+                const fsAccess = typeof window.showOpenFilePicker === 'function';
+                if (fsAccess) {
+                    (async () => {
+                        try {
+                            const handles = await window.showOpenFilePicker({ multiple:true, types:[ { description:'Lyrics & Text', accept:{'text/plain':['.txt','.lrc','.lrx']}}, { description:'JSON', accept:{'application/json':['.json']}}, { description:'Audio', accept:{'audio/*':['.mp3','.m4a','.wav']}} ] });
+                            const files=[]; for (const h of handles){ try { files.push(await h.getFile()); } catch{} }
+                            await processImportedFiles(files); return;
+                        } catch (err) { legacyInput(); }
+                    })();
+                } else { legacyInput(); }
+            }
+
+            function legacyInput(){
+                const input = document.createElement('input');
+                input.type='file'; input.multiple=true; input.accept='.txt,.lrc,.lrx,.json,.mp3,.m4a,.wav'; input.style.display='none';
+                input.addEventListener('change', async (e)=>{ const files = Array.from(e.target.files||[]); await processImportedFiles(files); input.remove(); });
+                document.body.appendChild(input); setTimeout(()=>input.click(),0);
+            }
+
+            // Start fallback chain if native not used
+            fallbackChain();
         }
     });
     try { importFileButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/folder.svg'; img.alt='import'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Import'; span.style.fontSize=UNIFIED_FONT_SIZE; importFileButton.append(img, span);} catch(e) {}
