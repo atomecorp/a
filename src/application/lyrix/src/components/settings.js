@@ -424,7 +424,7 @@ function updateSettingsButtonAria(isOpen) {
         // Simple visual state change
         if (isOpen) {
             settingsButton.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
-            settingsButton.style.color = '#007bff';
+            settingsButton.style.color = C.infoAlt;
         } else {
             settingsButton.style.backgroundColor = '';
             settingsButton.style.color = '';
@@ -517,7 +517,7 @@ function createSettingsContent() {
             text: description,
             css: {
                 fontSize: '12px',
-                color: '#cbd5e1',
+                color: C.textMuted,
                 fontStyle: 'italic'
             }
         });
@@ -806,7 +806,7 @@ function createSettingsContent() {
             text: 'Adjust lyrics text size',
             css: {
                 fontSize: '12px',
-                color: '#cbd5e1',
+                color: C.textMuted,
                 fontStyle: 'italic'
             }
         });
@@ -1073,7 +1073,7 @@ export function showSettingsModal() {
                 justifyContent: 'space-between',
                 marginBottom: '15px',
                 padding: '10px',
-                backgroundColor: '#fafafa',
+                backgroundColor: C.gray100,
                 borderRadius: '5px',
                 border: '1px solid #eee'
             }
@@ -1151,10 +1151,10 @@ export function showSettingsModal() {
             css: {
                 width: '30px',
                 height: '30px',
-                border: '1px solid #007acc',
+                border: `1px solid ${C.info}`,
                 borderRadius: '3px',
-                backgroundColor: '#f0f8ff',
-                color: '#007acc',
+                backgroundColor: C.gray100,
+                color: C.info,
                 cursor: 'pointer',
                 fontSize: '14px',
                 display: 'flex',
@@ -1191,7 +1191,7 @@ export function showSettingsModal() {
                 height: '25px',
                 border: '1px solid #dc3545',
                 borderRadius: '3px',
-                backgroundColor: '#fff5f5',
+                backgroundColor: 'rgba(220,53,69,0.08)',
                 color: '#dc3545',
                 cursor: 'pointer',
                 fontSize: '12px',
@@ -1225,7 +1225,7 @@ export function showSettingsModal() {
                 justifyContent: 'space-between',
                 marginBottom: '15px',
                 padding: '10px',
-                backgroundColor: '#fafafa',
+                backgroundColor: C.gray100,
                 borderRadius: '5px',
                 border: '1px solid #eee'
             }
@@ -1267,7 +1267,7 @@ export function showSettingsModal() {
                 height: '30px',
                 border: 'none',
                 borderRadius: '15px',
-                backgroundColor: isEnabled ? '#28a745' : '#6c757d',
+                backgroundColor: isEnabled ? C.successStrong : C.gray600,
                 color: 'white',
                 cursor: 'pointer',
                 fontSize: '12px',
@@ -1288,7 +1288,7 @@ export function showSettingsModal() {
             
             // Update button appearance
             toggleButton.textContent = newState ? 'ON' : 'OFF';
-            toggleButton.style.backgroundColor = newState ? '#28a745' : '#6c757d';
+            toggleButton.style.backgroundColor = newState ? C.successStrong : C.gray600;
             toggleButton.title = `${newState ? 'Disable' : 'Enable'} ${label}`;
             
             // Call the toggle function
@@ -1300,12 +1300,12 @@ export function showSettingsModal() {
         // Hover effects
         toggleButton.addEventListener('mouseenter', () => {
             const isCurrentlyEnabled = getToggleState(storageKey);
-            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#218838' : '#5a6268';
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? C.success : C.gray600;
         });
 
         toggleButton.addEventListener('mouseleave', () => {
             const isCurrentlyEnabled = getToggleState(storageKey);
-            toggleButton.style.backgroundColor = isCurrentlyEnabled ? '#28a745' : '#6c757d';
+            toggleButton.style.backgroundColor = isCurrentlyEnabled ? C.successStrong : C.gray600;
         });
 
         row.append(leftColumn, toggleButton);
@@ -1349,7 +1349,7 @@ export function showSettingsModal() {
             justifyContent: 'space-between',
             marginBottom: '15px',
             padding: '10px',
-            backgroundColor: '#fafafa',
+            backgroundColor: C.gray100,
             borderRadius: '5px',
             border: '1px solid #eee'
         }
@@ -1403,9 +1403,9 @@ export function showSettingsModal() {
         css: {
             marginBottom: '15px',
             padding: '10px',
-            backgroundColor: '#f0f8ff',
+            backgroundColor: C.gray100,
             borderRadius: '5px',
-            border: '1px solid #b0d4ff'
+            border: `1px solid ${C.infoAlt}`
         }
     });
 
@@ -1423,7 +1423,7 @@ export function showSettingsModal() {
         css: {
             fontSize: '18px',
             fontFamily: 'monospace',
-            color: '#007acc',
+            color: C.info,
             fontWeight: 'bold'
         }
     });

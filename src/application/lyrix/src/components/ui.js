@@ -197,7 +197,7 @@ export class UIManager {
             const svg = button.querySelector('svg');
             if (svg) {
                 if (isActive) {
-                    svg.setAttribute('fill', config.activeColor || '#007bff');
+                    svg.setAttribute('fill', config.activeColor || default_theme.colors.infoAlt);
                     button.style.backgroundColor = config.activeBgColor || 'rgba(0, 123, 255, 0.1)';
                 } else {
                     svg.setAttribute('fill', config.iconColor || 'currentColor');

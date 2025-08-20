@@ -2420,8 +2420,9 @@ function createMainInterface() {
                     trackEl.style.boxShadow = 'none';
                 }
                 if (progEl) {
-                    // Slight contrast for progression
-                    progEl.style.backgroundColor = 'rgb(74,106,133)';
+                    // Progression bar unified color (same as handle)
+                    progEl.style.backgroundColor = '#4a6a85';
+                    progEl.style.backgroundImage = 'none';
                     progEl.style.border = 'none';
                 }
             } catch (e) {
@@ -2433,7 +2434,7 @@ function createMainInterface() {
         if (!document.getElementById('scrub-slider-global-style')) {
             const styleTag = document.createElement('style');
             styleTag.id = 'scrub-slider-global-style';
-            styleTag.textContent = `#audio-scrub-slider-container .hs-slider-track, #audio_scrub_slider_track {\n  background-color: rgb(48,60,78) !important;\n  border: none !important;\n  box-shadow: none !important;\n}\n#audio-scrub-slider-container .hs-slider-progression, #audio_scrub_slider_progression {\n  background-color: rgb(74,106,133) !important;\n  border: none !important;\n}`;
+            styleTag.textContent = `#audio-scrub-slider-container .hs-slider-track, #audio_scrub_slider_track {\n  background-color: rgb(48,60,78) !important;\n  border: none !important;\n  box-shadow: none !important;\n}\n#audio-scrub-slider-container .hs-slider-progression, #audio_scrub_slider_progression {\n  background: #4a6a85 !important;\n  background-image: none !important;\n  border: none !important;\n}`;
             document.head.appendChild(styleTag);
         }
 
@@ -2458,8 +2459,8 @@ function createMainInterface() {
                 progression.style.height = '100%';
                 progression.style.top = '0';
                 progression.style.left = '0';
-                // Darker greyer blue gradient
-                progression.style.background = 'linear-gradient(90deg,#223447,#4a6a85)';
+                // Unified solid color (removed gradient)
+                progression.style.background = '#4a6a85';
                 progression.style.borderRadius = '18px';
                 progression.style.boxShadow = 'inset 0 0 4px rgba(0,0,0,0.35)';
             }

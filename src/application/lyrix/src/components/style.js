@@ -8,6 +8,8 @@ const default_theme = {
         background: '#111827', // main background
         surface: '#1e2530', // panels body
         surfaceAlt: '#253040',
+        // Accent surface used for active / highlighted zones inside lyrics display
+        surfaceAccent: '#303c4e',
         border: 'rgba(255,255,255,0.08)',
         borderStrong: 'rgba(255,255,255,0.18)',
         text: '#f5f7fa',
@@ -32,18 +34,30 @@ const default_theme = {
     black: '#000000',
     gray100: '#f8f9fa',
     gray150: '#f0f0f0',
+    gray180: '#d9dfe5',      // titre lyrics (ancien #d9dfe5)
     gray200: '#e9ecef',
+    gray210: '#dee2e6',      // bordures légères supplémentaires
     gray250: '#e0e0e0',
     gray300: '#ddd',
     gray400: '#ccc',
     gray500: '#999',
+    gray550: '#515151',
     gray600: '#666',
     gray700: '#444',
     gray800: '#333',
     info: '#007acc',
     infoAlt: '#007bff',
+    infoTint: '#e3f2fd',     // fond clair info / swipe area
+    blueTint: '#f5faff',     // fond input bleu très pâle
+    blueAction: '#1976D2',   // bleu action (ancien #1976D2)
     dangerStrong: '#dc3545',
-    successStrong: '#28a745'
+    dangerStrongDark: '#c82333', // hover delete
+    successStrong: '#28a745',
+    successTint: '#f8fff8',  // fond vert pâle pendant drag
+    secondary: '#6c757d',    // bouton neutre secondaire
+    slate600: '#4a5563',     // texte mode fullscreen alt
+    highlightBlue: '#8fbde8', // texte bleu clair normal mode
+    panelTextAlt: '#ecf0f1'  // texte clair panel legacy
     },
     spacing: {
         xs: '4px',

@@ -3,6 +3,8 @@ import { CONSTANTS } from '../../core/constants.js';
 import { StorageManager } from '../../services/storage.js';
 import { UIManager } from '../../components/ui.js';
 import { default_theme } from '../../components/style.js';
+// Shorthand alias for theme colors
+const C = default_theme.colors;
 
 export class LyricsDisplay {
     constructor(container, audioController = null) {
@@ -16,38 +18,36 @@ export class LyricsDisplay {
         // Style state management for fullscreen mode
         this.originalStyles = {
             normal: {
-                // Unified normal mode background
-                backgroundColor: 'rgb(37, 48, 64)',
-                // Harmonized light blue text color replacing green
-                color: '#8fbde8'
+                backgroundColor: C.surfaceAlt, // rgb(37,48,64)
+                color: C.highlightBlue
             },
             fullscreen: {
-                backgroundColor: '#000',
-                color: '#fff'
+                backgroundColor: C.black,
+                color: C.white
             },
             sidebar: {
-                backgroundColor: '#2c3e50',
-                color: '#ecf0f1'
+                backgroundColor: C.panelDeep,
+                color: C.panelTextAlt
             },
             hamburgerButton: {
-                normal: '#2c3e50',
-                hover: '#34495e'
+                normal: C.panelDeep,
+                hover: C.panelDeepAlt
             },
             editPanel: {
-                backgroundColor: '#f0f0f0'
+                backgroundColor: C.gray150
             },
             buttons: {
-                save: '#4CAF50',
-                cancel: '#f44336',
+                save: default_theme.editModeActiveColor,
+                cancel: default_theme.recordModeActiveColor,
                 transparent: 'transparent'
             },
             timecodeEdit: {
-                backgroundColor: '#515151ff'
+                backgroundColor: C.gray550
             },
             formElements: {
-                color: '#1976D2',
-                backgroundColor: '#f5faff',
-                textColor: '#666'
+                color: C.blueAction,
+                backgroundColor: C.blueTint,
+                textColor: C.gray600
             }
         };
         
@@ -86,7 +86,7 @@ export class LyricsDisplay {
     createDisplayElements() {
         // ===== CREATE MAIN DISPLAY STRUCTURE (AUCUN SCROLL SUR BODY OU VIEW) =====
         // Create the main display container - FIXED to prevent any external scroll
-        this.displayContainer = $('div', {
+    this.displayContainer = $('div', {
             id: 'display-container',
             css: {
                 position: 'fixed',
@@ -96,7 +96,7 @@ export class LyricsDisplay {
                 height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
-                backgroundColor: UIManager.THEME.colors.primary,
+                backgroundColor: C.primary,
                 // border: `1px solid ${UIManager.THEME.colors.border}`,
                 // borderRadius: UIManager.THEME.borderRadius.md,
                 overflow: 'hidden', // CRITICAL: prevents any scroll on the main container
@@ -112,7 +112,7 @@ export class LyricsDisplay {
                 display: 'flex',
                 flexDirection: 'column', // Colonnes pour main row + audio row
                 // Unified dark blue background requested (rgb(37,48,64))
-                backgroundColor: 'rgb(37, 48, 64)',
+                backgroundColor: C.surfaceAlt,
                 flexShrink: 0, // NEVER shrinks
                 zIndex: '100', // Au-dessus du contenu de scroll
                 top: '15px' // Décalage ajusté à 15px
@@ -120,13 +120,13 @@ export class LyricsDisplay {
         });
 
         // Create lyrics content area - ONLY zone allowed to scroll
-        this.lyricsContent = $('div', {
+    this.lyricsContent = $('div', {
             id: 'lyrics_content_area',
             css: {
                 flex: '1', // Takes all remaining space after toolbar
                 padding: UIManager.THEME.spacing.xl,
                 // Unified dark blue background in normal mode
-                backgroundColor: 'rgb(37, 48, 64)',
+                backgroundColor: C.surfaceAlt,
                 color: this.originalStyles.normal.color,
                 overflow: 'auto', // SEULE zone qui peut scroller
                 height: '0', // Forces flex to calculate available height
@@ -975,7 +975,7 @@ export class LyricsDisplay {
     // Render lyrics content
     renderLyrics() {
         if (!this.currentLyrics) {
-            this.lyricsContent.innerHTML = '<div style="text-align: center; color: #666; font-style: italic;">No lyrics loaded</div>';
+            this.lyricsContent.innerHTML = `<div style="text-align: center; color: ${C.gray600}; font-style: italic;">No lyrics loaded</div>`;
             return;
         }
         
@@ -1004,7 +1004,7 @@ export class LyricsDisplay {
             css: {
                 margin: this.editMode ? '0 0 10px 0' : '0 0 20px 0',
                 padding: '15px 20px',
-                backgroundColor: 'rgb(48, 60, 78)',
+                backgroundColor: C.surfaceAccent,
                 borderRadius: '8px',
                 width: '100%',
                 boxSizing: 'border-box'
@@ -1021,14 +1021,14 @@ export class LyricsDisplay {
                 type: 'text',
                 value: this.currentLyrics.metadata.title || '',
                 css: {
-                    color: '#ffffff',
+                    color: C.white,
             // Fixed pixel font size increased for readability
             fontSize: '24px',
             fontWeight: '600',
             padding: '4px 8px',
                     borderRadius: '4px',
                     border: 'none',
-                    backgroundColor: 'rgb(48, 60, 78)',
+                    backgroundColor: C.surfaceAccent,
             flex: '1', width: '100%', boxSizing: 'border-box', overflow: 'hidden'
                 }
             });
@@ -1049,7 +1049,7 @@ export class LyricsDisplay {
                 text: 'time offset:',
                 css: {
                     fontSize: '24px',
-                    color: '#ffffff',
+                    color: C.white,
                     fontWeight: '600',
                     letterSpacing: '0.5px',
                     lineHeight: '1',
@@ -1112,8 +1112,8 @@ export class LyricsDisplay {
                     border: 'none',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
-            backgroundColor: 'rgb(48, 60, 78)',
-            color: '#fff'
+            backgroundColor: C.surfaceAccent,
+            color: C.white
                 }
             });
 
@@ -1127,7 +1127,7 @@ export class LyricsDisplay {
 
             const lockStyles = () => {
                 offsetInput.style.backgroundColor = 'rgb(48, 60, 78)';
-                offsetInput.style.color = '#fff';
+                offsetInput.style.color = C.white;
                 offsetInput.style.border = 'none';
                 offsetInput.style.outline = 'none';
                 offsetInput.style.boxShadow = 'none';
@@ -1261,7 +1261,7 @@ export class LyricsDisplay {
                 css: {
                     margin: '0 0 5px 0',
                     // Light gray title color instead of previous blue
-                    color: '#d9dfe5',
+                    color: C.gray180,
                     fontSize: '1.3em',
                     cursor: 'pointer'
                 }
@@ -1363,7 +1363,7 @@ export class LyricsDisplay {
     
     // Create single line element
     createLineElement(line, index) {
-        const lineDiv = $('div', {
+    const lineDiv = $('div', {
             id: line.id, // Set the DOM element ID to match the line ID
             dataset: { lineIndex: index },
             css: {
@@ -1372,11 +1372,11 @@ export class LyricsDisplay {
                 borderRadius: '4px',
                 cursor: this.editMode ? 'pointer' : 'default',
                 transition: 'all 0.3s ease',
-                backgroundColor: index === this.currentLineIndex ? 'rgb(37, 48, 64)' : 'transparent',
+                backgroundColor: index === this.currentLineIndex ? C.surfaceAlt : 'transparent',
                 border: '1px solid transparent',
                 transform: index === this.currentLineIndex ? 'scale(1.03)' : 'scale(1)',
                 fontWeight: index === this.currentLineIndex ? '600' : '400',
-                color: index === this.currentLineIndex ? '#ffffff' : (this.fullscreenMode ? '#4a5563' : '#666')
+                color: index === this.currentLineIndex ? C.white : (this.fullscreenMode ? C.slate600 : C.gray600)
             }
         });
         
@@ -1403,8 +1403,8 @@ export class LyricsDisplay {
                 text: this.formatTimeDisplay(line.time),
                 css: {
                     fontSize: '0.8em',
-                    color: '#fff',
-                    backgroundColor: 'rgb(48,60,78)',
+                    color: C.white,
+                    backgroundColor: C.surfaceAccent,
                     padding: '2px 6px',
                     borderRadius: '3px',
                     fontFamily: 'monospace',
@@ -1430,7 +1430,7 @@ export class LyricsDisplay {
             if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
                 timeSpan.setAttribute('title', 'Double-tap to edit or drag up/down to adjust timecode');
                 // Add a subtle visual hint for touch devices
-                timeSpan.style.borderBottom = '1px dotted #999';
+                timeSpan.style.borderBottom = `1px dotted ${C.gray500}`;
                 timeSpan.style.position = 'relative';
             } else {
                 timeSpan.setAttribute('title', 'Double-click to edit timecode');
@@ -1438,13 +1438,13 @@ export class LyricsDisplay {
             
             // Add hover effects
             timeSpan.addEventListener('mouseenter', () => {
-                timeSpan.style.backgroundColor = 'rgb(48,60,78)';
-                timeSpan.style.color = '#fff';
+                timeSpan.style.backgroundColor = C.surfaceAccent;
+                timeSpan.style.color = C.white;
             });
 
             timeSpan.addEventListener('mouseleave', () => {
-                timeSpan.style.backgroundColor = 'rgb(48,60,78)';
-                timeSpan.style.color = '#fff';
+                timeSpan.style.backgroundColor = C.surfaceAccent;
+                timeSpan.style.color = C.white;
             });
             
             // Simple touch-friendly editing for timecode (like other buttons)
@@ -1487,7 +1487,7 @@ export class LyricsDisplay {
                     
                     // Update the display
                     timeSpan.textContent = this.formatTimeDisplay(newTime);
-                    timeSpan.style.backgroundColor = '#007bff';
+                    timeSpan.style.backgroundColor = C.infoAlt;
                     timeSpan.style.color = 'white';
                     
                     // Update the actual time in the lyrics object
@@ -1512,8 +1512,8 @@ export class LyricsDisplay {
                 
                 if (timeSpan._isDragging) {
                     // Finish drag operation
-                    timeSpan.style.backgroundColor = '#f0f0f0';
-                    timeSpan.style.color = '#666';
+                    timeSpan.style.backgroundColor = C.gray150;
+                    timeSpan.style.color = C.gray600;
                     
                     // Verify and correct timecode order after drag adjustment
                     this.verifyAndCorrectTimecodeOrder(index);
@@ -1626,8 +1626,8 @@ export class LyricsDisplay {
         
         // Edit mode controls
         if (this.editMode) {
-            lineDiv.style.backgroundColor = '#f8f9fa';
-            lineDiv.style.border = '1px solid #dee2e6';
+            lineDiv.style.backgroundColor = C.gray100;
+            lineDiv.style.border = `1px solid ${C.gray210}`;
             
             const controls = $('div', {
                 id: `line-controls-${index}`,

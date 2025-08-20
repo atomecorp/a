@@ -713,7 +713,7 @@ export function showSongLibrary() {
             border: 'none',
                     borderRadius: '3px',
             backgroundColor: 'transparent',
-                    color: '#007acc',
+                    color: default_theme.colors.info,
                     cursor: 'pointer',
                     fontSize: '12px',
                     display: 'flex',
@@ -747,7 +747,7 @@ export function showSongLibrary() {
                     window.midiUtilities.stopMidiLearn();
                     midiLearnButton.style.backgroundColor = 'transparent';
                     midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
-                    midiLearnButton.style.color = '#007acc';
+                    midiLearnButton.style.color = default_theme.colors.info;
                     setTimeout(() => {
                         midiLearnButton.style.backgroundColor = 'transparent';
                         midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
@@ -755,7 +755,7 @@ export function showSongLibrary() {
                     midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='12px'; img.style.height='12px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
                 } else {
                     // Start learning
-                    midiLearnButton.style.backgroundColor = '#ff6b6b';
+                    midiLearnButton.style.backgroundColor = default_theme.colors.danger;
                     midiLearnButton.style.color = 'white';
                     midiLearnButton.textContent = '⏹️';
                     
@@ -769,7 +769,7 @@ export function showSongLibrary() {
                         // Reset button appearance
                         midiLearnButton.style.backgroundColor = 'transparent';
                         midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
-                        midiLearnButton.style.color = '#007acc';
+                        midiLearnButton.style.color = default_theme.colors.info;
                         setTimeout(() => {
                             midiLearnButton.style.backgroundColor = 'transparent';
                             midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
@@ -847,7 +847,7 @@ export function showSongLibrary() {
 
             itemDiv.addEventListener('dragover', (e) => {
                 e.preventDefault();
-                itemDiv.style.borderTop = '2px solid #007acc';
+                itemDiv.style.borderTop = `2px solid ${default_theme.colors.info}`;
             });
 
             itemDiv.addEventListener('dragleave', (e) => {
@@ -980,13 +980,13 @@ function addResizeListeners(panel, grip, storageKey) {
 
     // Hover effects for the grip
     grip.addEventListener('mouseenter', () => {
-        grip.style.backgroundColor = '#d0d0d0';
+    grip.style.backgroundColor = default_theme.colors.gray250;
         grip.querySelector('div').style.backgroundColor = '#666';
     });
 
     grip.addEventListener('mouseleave', () => {
         if (!isResizing) {
-            grip.style.backgroundColor = '#e0e0e0';
+            grip.style.backgroundColor = default_theme.colors.gray250;
             grip.querySelector('div').style.backgroundColor = '#999';
         }
     });
@@ -997,7 +997,7 @@ function addResizeListeners(panel, grip, storageKey) {
         startY = e.clientY;
         startHeight = parseInt(window.getComputedStyle(panel).height, 10);
         
-        grip.style.backgroundColor = '#007acc';
+    grip.style.backgroundColor = default_theme.colors.info;
         grip.querySelector('div').style.backgroundColor = 'white';
         
         document.body.style.cursor = 'ns-resize';
@@ -1038,7 +1038,7 @@ function addResizeListeners(panel, grip, storageKey) {
             document.body.style.userSelect = '';
             
             // Reset grip appearance
-            grip.style.backgroundColor = '#e0e0e0';
+            grip.style.backgroundColor = default_theme.colors.gray250;
             grip.querySelector('div').style.backgroundColor = '#999';
         }
     });
