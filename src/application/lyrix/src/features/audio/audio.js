@@ -454,94 +454,9 @@ export class AudioController {
 
     // Show dialog for missing audio files on iOS
     showIOSAudioMissingDialog(fileName) {
-        iosLog(`⚠️ Showing missing audio dialog for: ${fileName}`);
-        
-        // Don't show multiple dialogs
-        if (document.getElementById('ios-audio-missing-dialog')) {
-            return;
-        }
-        
-        // Create modal explaining the issue
-        const modal = document.createElement('div');
-        modal.id = 'ios-audio-missing-dialog';
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-        `;
-
-        const content = document.createElement('div');
-        content.style.cssText = `
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 400px;
-            text-align: center;
-            margin: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        `;
-
-        content.innerHTML = `
-            <h3 style="color: #e74c3c; margin-top: 0;">🎵 Audio File Missing</h3>
-            <p><strong>File:</strong> ${fileName}</p>
-            <p style="color: #666;">This audio file is not available in the iOS app.</p>
-            <div style="text-align: left; margin: 20px 0; background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                <strong>📱 iPhone/iOS limitations:</strong>
-                <ul style="margin: 10px 0; padding-left: 20px;">
-                    <li>Audio files must be in the app bundle</li>
-                    <li>Network audio may be restricted</li>
-                    <li>File access is sandboxed</li>
-                </ul>
-            </div>
-            <div style="text-align: left; margin: 20px 0;">
-                <strong>✅ You can still:</strong>
-                <ul style="margin: 10px 0; padding-left: 20px;">
-                    <li>View and edit lyrics</li>
-                    <li>Use MIDI learn functions</li>
-                    <li>Export to other formats</li>
-                </ul>
-            </div>
-            <button id="dismissAudioError" style="
-                background: #3498db;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 6px;
-                cursor: pointer;
-                font-size: 16px;
-                font-weight: bold;
-                margin-top: 10px;
-            ">Continue without audio</button>
-        `;
-
-        modal.appendChild(content);
-        document.body.appendChild(modal);
-
-        // Handle dismiss
-        document.getElementById('dismissAudioError').onclick = () => {
-            document.body.removeChild(modal);
-        };
-
-        // Close on modal background click
-        modal.onclick = (e) => {
-            if (e.target === modal) {
-                document.body.removeChild(modal);
-            }
-        };
-
-        // Auto-dismiss after 15 seconds
-        setTimeout(() => {
-            if (document.body.contains(modal)) {
-                document.body.removeChild(modal);
-            }
-        }, 15000);
+    // Dialog intentionally disabled per user request
+    iosLog(`⚠️ Suppressed missing audio dialog for: ${fileName}`);
+    return; // no-op
     }
 
     // Standard audio event listeners (desktop)
