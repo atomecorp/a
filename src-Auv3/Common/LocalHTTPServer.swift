@@ -25,6 +25,7 @@ final class LocalHTTPServer {
     private var faststartCache: [String: URL] = [:] // original path -> optimized path
     private var faststartInFlight: Set<String> = []
     private var faststartFailed: Set<String> = []
+    private let faststartQueue = DispatchQueue(label: "local.http.server.faststart", qos: .utility)
     private let allowedAudioExtensions: Set<String> = ["m4a"]
 
     func start(preferredPort: UInt16? = nil) {
@@ -207,8 +208,36 @@ final class LocalHTTPServer {
             if let ftypRange = headData.range(of: Data("ftyp".utf8)) { print("🔍 ftyp at offset \(ftypRange.lowerBound)") } else { print("⚠️ ftyp not found in first bytes") }
             print("🧾 Header[0..63] hex=\(hex)")
         }
-        // Faststart (optimize moov) if needed (may block briefly for first request)
-        let optimizedURL = ensureFastStartIfNeeded(original: effectiveURL, force: name.lowercased() == "alive.m4a")
+        // Faststart async: serve original immediately; schedule optimization if needed
+        let optimizedURL: URL = {
+            if let cached = faststartCache[effectiveURL.path] { return cached }
+            if faststartInFlight.contains(effectiveURL.path) { return effectiveURL }
+            if faststartFailed.contains(effectiveURL.path) { return effectiveURL }
+            let force = name.lowercased() == "alive.m4a"
+            let needsOpt = force || !isLikelyFastStart(url: effectiveURL)
+            if needsOpt {
+                faststartInFlight.insert(effectiveURL.path)
+                faststartQueue.async { [weak self] in
+                    guard let self = self else { return }
+                    let remux = self.performFaststartRemux(original: effectiveURL)
+                    let finalURL = remux ?? self.reencodeM4A(original: effectiveURL)
+                    self.queue.async { [weak self] in
+                        guard let self = self else { return }
+                        if let final = finalURL {
+                            self.faststartCache[effectiveURL.path] = final
+                            print("✅ Faststart (async) ready: \(final.lastPathComponent)")
+                        } else {
+                            self.faststartFailed.insert(effectiveURL.path)
+                            print("⚠️ Faststart (async) failed: \(effectiveURL.lastPathComponent)")
+                        }
+                        self.faststartInFlight.remove(effectiveURL.path)
+                    }
+                }
+            } else {
+                faststartCache[effectiveURL.path] = effectiveURL
+            }
+            return effectiveURL
+        }()
         let servingOriginal = (optimizedURL.path == fileURL.path)
         if servingOriginal {
             print("🎧 Serving original file: \(fileURL.lastPathComponent)")
@@ -470,29 +499,7 @@ final class LocalHTTPServer {
     }
 
     // MARK: - Faststart helpers
-    private func ensureFastStartIfNeeded(original: URL, force: Bool = false) -> URL {
-        let path = original.path
-        if let cached = faststartCache[path] { return cached }
-        if faststartInFlight.contains(path) { return original }
-        // Modified: once failed, never retry even if force
-        if faststartFailed.contains(path) { return original }
-        if !force && isLikelyFastStart(url: original) {
-            faststartCache[path] = original
-            return original
-        }
-        faststartInFlight.insert(path)
-        defer { faststartInFlight.remove(path) }
-        if let optimized = performFaststartRemux(original: original) {
-            faststartCache[path] = optimized
-            return optimized
-        }
-        if let reencoded = reencodeM4A(original: original) {
-            faststartCache[path] = reencoded
-            return reencoded
-        }
-        faststartFailed.insert(path)
-        return original
-    }
+    // Synchronous ensureFastStartIfNeeded removed (now async to avoid QoS inversion)
 
     private func isLikelyFastStart(url: URL) -> Bool {
         // Heuristic: look for 'moov' atom before 'mdat' within first 128KB

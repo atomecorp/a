@@ -81,7 +81,7 @@ final class FileSyncCoordinator {
         var rootsPaths: [String] = []
         queue.sync {
             let beforeInventory = Set(inventory.keys)
-            let beforeFiles: [String: Date] = [:] // placeholder for future fine-grained diff
+           // let beforeFiles: [String: Date] = [:] // placeholder for future fine-grained diff
             let roots = availableRoots()
             rootsPaths = roots.map { $0.path }
             let prevInventory = inventory // copy
@@ -165,7 +165,7 @@ final class FileSyncCoordinator {
             guard !metas.isEmpty else { continue }
             let isDir = metas.first!.meta.isDir
             // Inventory record
-            var rec = inventory[rel]
+            let rec = inventory[rel]
             let newestMeta = metas.max { a, b in
                 if a.meta.modDate == b.meta.modDate { return a.meta.size < b.meta.size }
                 return a.meta.modDate < b.meta.modDate
@@ -177,7 +177,7 @@ final class FileSyncCoordinator {
                 // 1. mtime newer than deletion
                 // 2. File now present in visible user root (explicit user action)
                 // 3. Deletion older than a grace window (2s) -> treat reappearance as recreation
-                let nowTs = now
+               // let nowTs = now
                 let presentInVisible = (visibleRoot != nil) ? (inventories[visibleRoot!]?[rel] != nil) : false
                 // Resurrection désormais SEULEMENT si modification plus récente que la tombstone OU action explicite (visible)
                 let resurrect = (newestMTime > deletedAt) || presentInVisible
@@ -258,7 +258,7 @@ final class FileSyncCoordinator {
             }()
             // Si un cycle de suppression utilisateur est en cours (missingVisibleSince actif) on NE recopie PAS vers le visible root
             var skipVisibleCopy = false
-            if let vRoot = visibleRoot, var rec2 = inventory[rel], rec2.missingVisibleSince != nil, inventories[vRoot]?[rel] == nil, rec2.lastSeenVisibleRoot == vRoot.path {
+            if let vRoot = visibleRoot, let rec2 = inventory[rel], rec2.missingVisibleSince != nil, inventories[vRoot]?[rel] == nil, rec2.lastSeenVisibleRoot == vRoot.path {
                 let elapsed = now - (rec2.missingVisibleSince ?? now)
                 if elapsed < deletionObservationWindow {
                     skipVisibleCopy = true
