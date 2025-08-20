@@ -374,8 +374,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = auv3/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = application/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -411,8 +411,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = auv3/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = application/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
