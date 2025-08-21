@@ -996,9 +996,16 @@ export class LyricsDisplay {
                 backgroundColor: 'rgb(48, 60, 78)',
                 borderRadius: '8px',
                 width: '100%',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                // Block selection entirely in view mode (editMode false)
+                userSelect: this.editMode ? 'text' : 'none',
+                WebkitUserSelect: this.editMode ? 'text' : 'none'
             }
         });
+        if (!this.editMode) {
+            // Prevent long-press selection / context
+            ['selectstart','contextmenu'].forEach(ev=>metadata.addEventListener(ev,(e)=>{ if (e.cancelable) e.preventDefault(); },{passive:false}));
+        }
         
         let title;
         if (this.editMode) {
@@ -1243,7 +1250,9 @@ export class LyricsDisplay {
                     // Light gray title color instead of previous blue
                     color: '#d9dfe5',
                     fontSize: '1.3em',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none'
                 }
             });
             
