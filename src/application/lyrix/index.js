@@ -2458,10 +2458,15 @@ function createMainInterface() {
                 try {
                     audioController.pause();
                     audioController.setCurrentTime(0);
-                    // Reset slider UI but don't force lyrics to reset
-                    resetAudioSlider(false); // Don't force lyrics reset on stop
+                    resetAudioSlider(false); // don't force lyrics reset
                     const playBtn = document.getElementById('audio-play-button');
                     if (playBtn) {
+                        // Disarm AUv3 armed state explicitly
+                        const hostEnv = (window.__HOST_ENV||'').toString().toLowerCase();
+                        if (hostEnv === 'auv3') {
+                            playBtn.classList.remove('auv3-armed');
+                            playBtn.dataset.state = 'idle';
+                        }
                         if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
                     }
                 } catch (error) {
