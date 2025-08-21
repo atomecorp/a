@@ -1082,7 +1082,7 @@ function createSettingsContent() {
 
     // Add sections to content
     // Insert IAP section between audio/display and font settings for visibility
-    content.append(midiSection, audioSection, iapSection, fontSection);
+    content.append(midiSection, audioSection, fontSection, iapSection);
 
     return content;
 }
