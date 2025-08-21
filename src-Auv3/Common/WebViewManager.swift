@@ -52,8 +52,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
             return false
         }()
-        let execMode = isExtension ? "AUv3" : "APP"
-        print("exec mode: \(execMode)")
+    let execMode = isExtension ? "AUv3" : "APP"
+    // Include variable name used for JS environment flag
+    print("exec mode: \(execMode) (flag: __HOST_ENV)")
 
         // Start lightweight embedded HTTP server (once) to serve audio via standard stack
         if LocalHTTPServer.shared.port == nil {
