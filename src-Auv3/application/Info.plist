@@ -131,8 +131,11 @@
     <dict>
         <key>UIImageName</key><string></string>
         <key>UILaunchScreenBackgroundColor</key>
-        <string>Black</string>
+        <!-- Use sRGB hex form to guarantee pure black -->
+        <string>#000000</string>
     </dict>
+    <key>UIUserInterfaceStyle</key>
+    <string>Dark</string>
     <key>UIStatusBarHidden</key>
     <true/>
 </dict>

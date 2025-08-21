@@ -61,7 +61,16 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             LocalHTTPServer.shared.start()
         }
 
-    let scriptSource = """
+        // If running in main app (not extension), force black backgrounds to avoid white flash
+        if !isExtension {
+            webView.isOpaque = false
+            webView.backgroundColor = .black
+            webView.scrollView.backgroundColor = .black
+        }
+
+        let scriptSource = """
+                // Pre-paint background black ASAP to avoid white flash (especially on app launch)
+                (function(){try{document.documentElement.style.background='#000';}catch(e){}; try{if(document.body){document.body.style.background='#000';}}catch(e){}})();
                 // Ensure proper mobile viewport for full edge-to-edge content
                 (function(){
                     try {
@@ -138,9 +147,25 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         webView.configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         
+        // Pre-page HTML (black placeholder) to avoid any white flash before main content loads
+        let placeholderHTML = """
+        <!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>
+        <style>
+        html,body{margin:0;padding:0;height:100%;background:#000;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#777;}
+        .pulse{animation:pulse 1.6s ease-in-out infinite;opacity:.55;letter-spacing:.08em;font-size:11px;text-transform:uppercase}
+        @keyframes pulse{0%,100%{opacity:.25}50%{opacity:.75}}
+        </style></head><body><div class=pulse>Loading…</div></body></html>
+        """
+        webView.loadHTMLString(placeholderHTML, baseURL: nil)
+        // Load real app shortly after to ensure WKWebView is on-screen with black already painted
         let myProjectBundle: Bundle = Bundle.main
-        if let myUrl = myProjectBundle.url(forResource: "src/index", withExtension: "html") {
-            webView.loadFileURL(myUrl, allowingReadAccessTo: myUrl)
+        if let mainURL = myProjectBundle.url(forResource: "src/index", withExtension: "html") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                // Safety: only load if still showing placeholder / not already navigated
+                if webView.url == nil || webView.url?.lastPathComponent != "index.html" {
+                    webView.loadFileURL(mainURL, allowingReadAccessTo: mainURL)
+                }
+            }
         }
     }
 
@@ -457,6 +482,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - WKNavigationDelegate
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Only run full initialization on the real app page (ignore placeholder page)
+        guard let last = webView.url?.lastPathComponent, last == "index.html" else { return }
         // Silent page loading for performance
         WebViewManager.sendToJS("test", "creerDivRouge")
         // Simplified initialization
@@ -467,12 +494,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         } else {
             print("⚠️ LocalHTTPServer port not ready at navigation finish")
         }
-    // Inject notch information & class
-    let topInset = webView.safeAreaInsets.top
-    let hasNotch = UIDevice.current.userInterfaceIdiom == .phone && topInset >= 44
-    let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
-    webView.evaluateJavaScript(notchJS, completionHandler: nil)
-    print("notch info: hasNotch=\(hasNotch) topInset=\(topInset)")
+        // Inject notch information & class
+        let topInset = webView.safeAreaInsets.top
+        let hasNotch = UIDevice.current.userInterfaceIdiom == .phone && topInset >= 44
+        let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
+        webView.evaluateJavaScript(notchJS, completionHandler: nil)
+        print("notch info: hasNotch=\(hasNotch) topInset=\(topInset)")
         // Auto-restore entitlements to sync JS UI after load
         if #available(iOS 15.0, *) {
             Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }

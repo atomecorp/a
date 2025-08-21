@@ -10,33 +10,55 @@ import WebKit
 
 final class FullscreenWebViewController: UIViewController {
     private(set) var webView: WKWebView!
+
+    // Build the entire hierarchy as early as possible to avoid any interim white frame
+    override func loadView() {
+        // Root view explicit black
+        let root = UIView(frame: UIScreen.main.bounds)
+        root.backgroundColor = .black
+        root.isOpaque = true
+        self.view = root
+
+        // Configure WKWebView with earliest possible black styling
+        let config = WKWebViewConfiguration()
+        let ucc = config.userContentController
+        // Ultra-early user script painting html/body black BEFORE any content
+        let paintBlack = "(function(){try{var d=document; if(d.documentElement){d.documentElement.style.background='#000';d.documentElement.style.color='#ccc';} if(d.body){d.body.style.background='#000';d.body.style.color='#ccc';}}catch(e){}})();"
+        let preScript = WKUserScript(source: paintBlack, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+        ucc.addUserScript(preScript)
+        // Avoid background flashes (private-ish key, safe usage)
+        config.setValue(false, forKey: "drawsBackground")
+        webView = WKWebView(frame: root.bounds, configuration: config)
+        webView.isOpaque = false
+        if #available(iOS 15.0, *) { webView.underPageBackgroundColor = .black }
+        webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: root.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: root.trailingAnchor)
+        ])
+
+        // Immediate placeholder (matches one added later in WebViewManager but ensures something black exists NOW)
+        let placeholder = "<!doctype html><html style='background:#000;height:100%'><head><meta name=viewport content='initial-scale=1,viewport-fit=cover'></head><body style='margin:0;background:#000;display:flex;align-items:center;justify-content:center;font-family:-apple-system;color:#555;font-size:12px;letter-spacing:.08em'>Loading…</body></html>"
+        webView.loadHTMLString(placeholder, baseURL: nil)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
-    view.insetsLayoutMarginsFromSafeArea = false
-    edgesForExtendedLayout = [.top, .bottom, .left, .right]
-    extendedLayoutIncludesOpaqueBars = true
-        let config = WKWebViewConfiguration()
-        webView = WKWebView(frame: .zero, configuration: config)
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(webView)
-        // Use layout guides + a fallback manual sizing pass to guarantee fill
-        let constraints = [
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        ]
-        constraints.forEach { $0.priority = .required; $0.isActive = true }
+        view.insetsLayoutMarginsFromSafeArea = false
+        edgesForExtendedLayout = [.top, .bottom, .left, .right]
+        extendedLayoutIncludesOpaqueBars = true
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.contentInset = .zero
         webView.scrollView.verticalScrollIndicatorInsets = .zero
         webView.scrollView.horizontalScrollIndicatorInsets = .zero
-        webView.scrollView.contentInset = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
-        webView.isOpaque = false
-        webView.backgroundColor = .black
-        view.backgroundColor = .black
-        WebViewManager.setupWebView(for: webView)
+        // Delay setup to next runloop so placeholder paint is committed first
+        DispatchQueue.main.async { WebViewManager.setupWebView(for: self.webView) }
         injectFullscreenFixJS()
         logWindowMetrics(stage: "viewDidLoad")
     }
