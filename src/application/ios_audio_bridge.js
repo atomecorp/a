@@ -11,18 +11,22 @@ if (!window.__iosAudioBridgeDemoSimple){
 		const state={files:[], audio:null, playing:null};
 
 		function ui(){
-			if(document.getElementById('iab-mini')) return;
-			const box=$('div',{id:'iab-mini',css:{position:'absolute',top:'60px',right:'20px',width:'260px',background:'#1f2630',color:'#eee',fontSize:'12px',fontFamily:'monospace',padding:'10px',border:'1px solid #344',borderRadius:'8px',zIndex:9999}});
-			$('div',{text:'Audio',css:{fontWeight:'bold',marginBottom:'4px'}},box);
-			const stat=$('div',{id:'iab-mini-status',text:'...' },box);
-			const row=$('div',{css:{display:'flex',gap:'6px',margin:'6px 0'}},box);
-			const b=(t,cb,style={})=>$('button',{text:t,css:Object.assign({flex:'1',fontSize:'13px',padding:'6px 4px',background:'#334',color:'#fff',border:'1px solid #445',borderRadius:'4px',cursor:'pointer'},style),onClick:cb},row);
+			// Éviter création multiple / doublon vide (#iab-mini apparaissait vide car déplacé après construction)
+			const ghost=document.getElementById('iab-mini');
+			if(ghost && !ghost.firstChild) ghost.remove();
+			if(document.getElementById('iab-mini')) return; // panel déjà plein
+			// Construction panel (tous les enfants utilisent parent:) pour éviter orphelins
+			const box=$('div',{ id:'iab-mini', parent: document.body, css:{position:'absolute',top:'60px',right:'20px',width:'260px',background:'#1f2630',color:'#eee',fontSize:'12px',fontFamily:'monospace',padding:'10px',border:'1px solid #344',borderRadius:'8px',zIndex:9999} });
+			$('div',{ parent: box, text:'Audio', css:{fontWeight:'bold',marginBottom:'4px'} });
+			const stat=$('div',{ parent: box, id:'iab-mini-status', text:'...' });
+			const row=$('div',{ parent: box, css:{display:'flex',gap:'6px',margin:'6px 0'} });
+			const b=(t,cb,style={})=>$('button',{ parent: row, text:t, css:Object.assign({flex:'1',fontSize:'13px',padding:'6px 4px',background:'#334',color:'#fff',border:'1px solid #445',borderRadius:'4px',cursor:'pointer'},style), onClick:cb });
 			b('⟳',refresh); b('⏹',stop,{background:'#633'}); b('⬆',upload,{background:'#365'});
-			const list=$('div',{id:'iab-mini-list',css:{display:'flex',flexDirection:'column',gap:'4px',marginTop:'4px',maxHeight:'150px',overflow:'auto'}},box);
+			const list=$('div',{ parent: box, id:'iab-mini-list', css:{display:'flex',flexDirection:'column',gap:'4px',marginTop:'4px',maxHeight:'150px',overflow:'auto'} });
 			// slider container
-					const seekWrap=$('div',{css:{marginTop:'8px'}},box);
-					const seekLabel=$('div',{id:'iab-seek-label',text:'0:00 / 0:00',css:{marginBottom:'2px',fontSize:'11px',opacity:.8}},seekWrap);
-					const sliderContainer=$('div',{css:{width:'100%',display:'flex',justifyContent:'center'}},seekWrap);
+					const seekWrap=$('div',{ parent: box, css:{marginTop:'8px'} });
+					const seekLabel=$('div',{ parent: seekWrap, id:'iab-seek-label', text:'0:00 / 0:00', css:{marginBottom:'2px',fontSize:'11px',opacity:.8} });
+					const sliderContainer=$('div',{ parent: seekWrap, css:{width:'100%',display:'flex',justifyContent:'center'} });
 					const seekSlider = Slider({
 						parent: sliderContainer,
 						id: 'iab-seek-slider',
@@ -34,7 +38,7 @@ if (!window.__iosAudioBridgeDemoSimple){
 						skin: { container:{ width:'100%', height:'28px' }, track:{ height:'6px', backgroundColor:'#2d3a46', borderRadius:'3px' }, progression:{ backgroundColor:'#4aa3ff', borderRadius:'3px' }, handle:{ width:'16px', height:'16px', top:'-5px', backgroundColor:'#fff', border:'2px solid #4aa3ff' } },
 						onInput: (val)=>{ if(state.audio && state.audio.duration){ const ratio=val/1000; state.audio.currentTime=ratio*state.audio.duration; updateSeek(); } }
 					});
-			document.body.appendChild(box);
+			// plus de append manuelle (déjà inséré via parent passé au helper)
 			state.box=box; state.stat=stat; state.list=list; state.seekSlider=seekSlider; state.seekLabel=seekLabel;
 			state.audio=document.createElement('audio');
 			state.audio.addEventListener('timeupdate',()=>updateSeek());
