@@ -120,6 +120,20 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         }
                         return
                     }
+                    if action == "purchaseProduct" || action == "restorePurchases" {
+                        let requestId = body["requestId"] as? Int ?? Int(Date().timeIntervalSince1970)
+                        if action == "purchaseProduct" {
+                            let productId = body["productId"] as? String ?? ""
+                            if #available(iOS 15.0, *) {
+                                Task { await PurchaseManager.shared.purchase(id: productId, requestId: requestId) }
+                            } else { LegacyPurchaseBridge.shared.purchase(productId: productId, requestId: requestId) }
+                        } else {
+                            if #available(iOS 15.0, *) {
+                                Task { await PurchaseManager.shared.restore(requestId: requestId) }
+                            } else { LegacyPurchaseBridge.shared.restore(requestId: requestId) }
+                        }
+                        return
+                    }
                     if action == "sendMidi" {
                         if let bytes = body["bytes"] as? [Int] {
                             let u8 = bytes.compactMap { UInt8(exactly: $0 & 0xFF) }
@@ -411,6 +425,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         } else {
             print("⚠️ LocalHTTPServer port not ready at navigation finish")
         }
+        // Auto-restore entitlements to sync JS UI after load
+        if #available(iOS 15.0, *) {
+            Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }
+        }
     }
     
     private func performCalculation(_ numbers: [Int]) {
@@ -428,7 +446,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     // MARK: - Bridge JSON helper
-    private static func sendBridgeJSON(_ dict: [String: Any]) {
+    public static func sendBridgeJSON(_ dict: [String: Any]) {
         guard let webView = webView else { return }
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return }
