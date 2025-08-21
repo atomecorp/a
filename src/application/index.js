@@ -36,7 +36,7 @@
 // import('./examples/leaflet.js');
 // import('./examples/audio.js');
 
-//  import('./examples/audio_swift.js');
+import('./examples/audio_swift.js'); // Active les boutons audio (routeButton Local/Auto/Host + C4/A4/E5/Chord)
 // import('./examples/console_to_swift.js');
 
 
@@ -48,7 +48,7 @@
 // import('./ios_file_reader.js');
 // import('./ios_file_writer.js');
 // import('./ios_web_view_filereader.js');
-import('./ios_audio_bridge.js');
+// import('./ios_audio_bridge.js');
 // import('./auv3_file_lister.js');
 // import('./auv3_file_writer.js');
 // import('./test_and_rd.js');

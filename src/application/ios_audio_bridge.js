@@ -1,71 +1,56 @@
-// iOS Audio Bridge Demo
-// Exemple complet: liste les fichiers audio locaux (sandbox/AppGroup) et permet lecture / arrêt.
-// Requiert les APIs déjà exposées: auv3_file_list (ou AtomeFileSystem) + serveur local (ATOME_LOCAL_HTTP_PORT) pour servir les fichiers.
+// Ultra simplifié: uniquement des boutons (aucun texte hors boutons)
+// Boutons: Route (Local/Auto/Host), C4, A4, E5, Chord, Stop
 
-// Version simplifiée avec slider de navigation (Squirrel Slider)
-import Slider from '../squirrel/components/slider_builder.js';
-if (!window.__iosAudioBridgeDemoSimple){
-	window.__iosAudioBridgeDemoSimple = true;
-	(function(){
-		const EXT=/\.(m4a|mp3|wav|aac|caf|aif|aiff|flac|ogg|m4r)$/i;
-		const state={files:[], audio:null, playing:null};
+// Etat de routage
+const ROUTE = ['Local','Auto','Host'];
+let routeIdx = 1; // Auto par défaut
+window.forceAUv3Mode = undefined; // AUTO
+window.forceHostRouting = false;
 
-		function ui(){
-			// Éviter création multiple / doublon vide (#iab-mini apparaissait vide car déplacé après construction)
-			const ghost=document.getElementById('iab-mini');
-			if(ghost && !ghost.firstChild) ghost.remove();
-			if(document.getElementById('iab-mini')) return; // panel déjà plein
-			// Construction panel (tous les enfants utilisent parent:) pour éviter orphelins
-			const box=$('div',{ id:'iab-mini', parent: document.body, css:{position:'absolute',top:'60px',right:'20px',width:'260px',background:'#1f2630',color:'#eee',fontSize:'12px',fontFamily:'monospace',padding:'10px',border:'1px solid #344',borderRadius:'8px',zIndex:9999} });
-			$('div',{ parent: box, text:'Audio', css:{fontWeight:'bold',marginBottom:'4px'} });
-			const stat=$('div',{ parent: box, id:'iab-mini-status', text:'...' });
-			const row=$('div',{ parent: box, css:{display:'flex',gap:'6px',margin:'6px 0'} });
-			const b=(t,cb,style={})=>$('button',{ parent: row, text:t, css:Object.assign({flex:'1',fontSize:'13px',padding:'6px 4px',background:'#334',color:'#fff',border:'1px solid #445',borderRadius:'4px',cursor:'pointer'},style), onClick:cb });
-			b('⟳',refresh); b('⏹',stop,{background:'#633'}); b('⬆',upload,{background:'#365'});
-			const list=$('div',{ parent: box, id:'iab-mini-list', css:{display:'flex',flexDirection:'column',gap:'4px',marginTop:'4px',maxHeight:'150px',overflow:'auto'} });
-			// slider container
-					const seekWrap=$('div',{ parent: box, css:{marginTop:'8px'} });
-					const seekLabel=$('div',{ parent: seekWrap, id:'iab-seek-label', text:'0:00 / 0:00', css:{marginBottom:'2px',fontSize:'11px',opacity:.8} });
-					const sliderContainer=$('div',{ parent: seekWrap, css:{width:'100%',display:'flex',justifyContent:'center'} });
-					const seekSlider = Slider({
-						parent: sliderContainer,
-						id: 'iab-seek-slider',
-						type: 'horizontal',
-						min: 0,
-						max: 1000, // résolution fine (0.1%)
-						value: 0,
-						showLabel: false,
-						skin: { container:{ width:'100%', height:'28px' }, track:{ height:'6px', backgroundColor:'#2d3a46', borderRadius:'3px' }, progression:{ backgroundColor:'#4aa3ff', borderRadius:'3px' }, handle:{ width:'16px', height:'16px', top:'-5px', backgroundColor:'#fff', border:'2px solid #4aa3ff' } },
-						onInput: (val)=>{ if(state.audio && state.audio.duration){ const ratio=val/1000; state.audio.currentTime=ratio*state.audio.duration; updateSeek(); } }
-					});
-			// plus de append manuelle (déjà inséré via parent passé au helper)
-			state.box=box; state.stat=stat; state.list=list; state.seekSlider=seekSlider; state.seekLabel=seekLabel;
-			state.audio=document.createElement('audio');
-			state.audio.addEventListener('timeupdate',()=>updateSeek());
-			state.audio.addEventListener('ended',()=>{ playing(null); msg('fin'); });
-			state.audio.addEventListener('loadedmetadata',()=>updateSeek());
-		}
-
-		function msg(t){ if(state.stat) state.stat.textContent=t; }
-		function fmt(s){ if(!isFinite(s)) s=0; const m=Math.floor(s/60); const sec=Math.floor(s%60).toString().padStart(2,'0'); return m+':'+sec; }
-		function updateSeek(){
-			if(!state.audio||!state.seekSlider) return; const a=state.audio; if(a.duration){ const v=Math.floor((a.currentTime/a.duration)*1000); state.seekSlider.setValue(v,false); }
-			if(state.seekLabel) state.seekLabel.textContent=fmt(a.currentTime)+' / '+fmt(a.duration||0);
-		}
-		function playing(name){
-			state.playing=name; if(!state.list) return; Array.from(state.list.children).forEach(ch=>{ ch.style.background=(ch.getAttribute('data-f')===name)?'#35516f':'#28323d'; ch.style.color=(ch.getAttribute('data-f')===name)?'#fff':'#ccd'; });
-		}
-		function build(){ if(!state.list) return; state.list.innerHTML=''; if(!state.files.length){ $('div',{text:'(aucun)',css:{opacity:.6}},state.list); return; } state.files.forEach(f=>{ const it=$('div',{text:f,css:{padding:'4px 6px',background:'#28323d',border:'1px solid #384451',borderRadius:'4px',cursor:'pointer',fontSize:'11px',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},state.list); it.setAttribute('data-f',f); it.addEventListener('click',()=>play(f)); }); playing(state.playing); }
-		function url(f){ const p=window.ATOME_LOCAL_HTTP_PORT||window.__ATOME_LOCAL_HTTP_PORT__; return p? 'http://127.0.0.1:'+p+'/audio/'+encodeURIComponent(f):'audio/'+encodeURIComponent(f); }
-		function play(f){ if(state.playing===f){ stop(); return; } state.audio.src=url(f); state.audio.currentTime=0; state.audio.play().catch(()=>msg('lecture bloquée')); playing(f); msg('▶ '+f); }
-		function stop(){ if(state.audio) try{ state.audio.pause(); }catch(_){} const prev=state.playing; playing(null); msg(prev?'⏹ '+prev:'⏹'); }
-		async function refresh(){ msg('scan...'); const dirs=['','Projects','audio','Audio']; const all=new Set(); for(const d of dirs){ let arr=[]; if(window.auv3_file_list){ try{ arr = d? await window.auv3_file_list(d): await window.auv3_file_list(); }catch(e){} } else if(window.AtomeFileSystem && window.AtomeFileSystem.listFiles){ window.AtomeFileSystem.listFiles(d,(r)=>{ if(r.success) arr=r.data.files; }); }
-				(arr||[]).forEach(n=>{ if(EXT.test(n)) all.add(n); }); }
-			state.files=Array.from(all).sort(); build(); msg(state.files.length? state.files.length+' fichier(s)':'aucun fichier'); }
-		function upload(){ const input=document.createElement('input'); input.type='file'; input.accept='audio/*,.m4a,.mp3,.wav,.aac,.aif,.aiff,.caf,.flac,.ogg,.m4r'; input.multiple=true; input.style.display='none'; input.onchange=async()=>{ const files=Array.from(input.files||[]); if(!files.length){ input.remove(); return; } msg('import...'); for(const f of files){ await save(f); } msg('ok'); refresh(); input.remove(); }; document.body.appendChild(input); input.click(); }
-		async function save(file){ try{ const buf=new Uint8Array(await file.arrayBuffer()); let bin=''; const chunk=0x8000; for(let i=0;i<buf.length;i+=chunk){ bin+=String.fromCharCode.apply(null, buf.subarray(i,i+chunk)); } const b64=btoa(bin); if(window.AUv3API&&window.AUv3API.auv3_file_saver){ await window.AUv3API.auv3_file_saver(file.name,b64);} else if(window.AtomeFileSystem&&window.AtomeFileSystem.saveFile){ window.AtomeFileSystem.saveFile(file.name,b64,()=>{});} if(EXT.test(file.name)&&!state.files.includes(file.name)){ state.files.push(file.name); state.files.sort(); build(); } }catch(e){ msg('err '+file.name); }
-		}
-		window.iOSAudioBridgeDemo={ refresh, play, stop, upload, state };
-		if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>{ ui(); refresh(); }); else { ui(); refresh(); }
-	})();
+function applyRoute(){
+    const mode = ROUTE[routeIdx];
+    if(mode==='Local'){ window.forceHostRouting=false; window.forceAUv3Mode=false; }
+    else if(mode==='Auto'){ window.forceHostRouting=false; window.forceAUv3Mode=undefined; }
+    else { window.forceHostRouting=true; window.forceAUv3Mode=true; }
+    const b=grab('routeBtn'); if(b){ b.textContent=mode; b.style.background= mode==='Local'? '#2d6cdf': (mode==='Auto'? '#6a5acd':'#27986a'); }
 }
+
+// Helpers
+function hostAvailable(){ return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge); }
+function sendHost(obj){ try{ window.webkit.messageHandlers.swiftBridge.postMessage(obj); }catch(e){} }
+let AC=null; function ensureAC(){ if(!AC){ AC=new (window.AudioContext||window.webkitAudioContext)(); } if(AC.state==='suspended') AC.resume().catch(()=>{}); return AC; }
+let currentLocal=[];
+function playLocal(freq,dur=0.8){ const ctx=ensureAC(); const osc=ctx.createOscillator(); const g=ctx.createGain(); osc.type='sine'; osc.frequency.value=freq; osc.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(0,ctx.currentTime); g.gain.linearRampToValueAtTime(0.3,ctx.currentTime+0.01); g.gain.exponentialRampToValueAtTime(0.0008,ctx.currentTime+dur); osc.start(); osc.stop(ctx.currentTime+dur); currentLocal.push(osc); osc.onended = ()=>{ currentLocal=currentLocal.filter(o=>o!==osc); }; }
+function genBuf(freq,lenSec=0.2,sr=44100){ const n=Math.floor(sr*lenSec); const a=new Float32Array(n); for(let i=0;i<n;i++){ a[i]=Math.sin(2*Math.PI*freq*i/sr)*0.5; } return {frequency:freq,sampleRate:sr,duration:lenSec,audioData:Array.from(a),channels:1}; }
+
+function routePlay(note,freq,dur=0.8){ const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ sendHost({type:'audioBuffer',data:genBuf(freq)}); sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:dur,amplitude:0.5}}); return; } if(forceLocal){ playLocal(freq,dur); return; } // AUTO
+ if(hostAvailable()){ sendHost({type:'audioBuffer',data:genBuf(freq)}); sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:dur,amplitude:0.5}}); } else { playLocal(freq,dur); } }
+function routeStop(note){ sendHost({type:'audioNote',data:{command:'stopNote',note}}); }
+function routeChord(freqs,dur=1.2){ const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ freqs.forEach(f=>sendHost({type:'audioBuffer',data:genBuf(f)})); sendHost({type:'audioChord',data:{command:'playChord',frequencies:freqs,duration:dur,amplitude:0.3}}); return;} if(forceLocal){ freqs.forEach(f=>playLocal(f,dur)); return;} if(hostAvailable()){ freqs.forEach(f=>sendHost({type:'audioBuffer',data:genBuf(f)})); sendHost({type:'audioChord',data:{command:'playChord',frequencies:freqs,duration:dur,amplitude:0.3}});} else { freqs.forEach(f=>playLocal(f,dur)); } }
+function stopAll(){ currentLocal.forEach(o=>{ try{o.stop();}catch(_){}}); currentLocal=[]; sendHost({type:'audioNote',data:{command:'stopAll'}}); sendHost({type:'audioChord',data:{command:'stopChord'}}); }
+
+// API minimale exposée (compat)
+window.audioSwiftBridge = {
+    playNote:(note,freq,dur)=>routePlay(note,freq,dur),
+    stopNote:(note)=>routeStop(note),
+    playChord:(freqs,dur)=>routeChord(freqs,dur),
+    stopChord:()=>sendHost({type:'audioChord',data:{command:'stopChord'}}),
+    stopAll:()=>stopAll()
+};
+
+// Bouton route (cycle)
+Button({ id:'routeBtn', onText:'', offText:'', onAction:()=>{ routeIdx=(routeIdx+1)%ROUTE.length; applyRoute(); }, offAction:()=>{ routeIdx=(routeIdx+1)%ROUTE.length; applyRoute(); }, parent:'body', css:{position:'absolute',left:'14px',top:'14px',width:'90px',height:'34px',background:'#6a5acd',color:'#fff',border:'none',borderRadius:'6px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
+applyRoute();
+
+// Notes (toggle)
+const c4 = Button({ onText:'C4 ●', offText:'C4', parent:'body', onAction:()=>routePlay('C4',261.63), offAction:()=>routeStop('C4'), onStyle:{background:'#ff6b35',color:'#fff'}, offStyle:{background:'#3b9157',color:'#fff'}, css:{position:'absolute',left:'120px',top:'14px',width:'70px',height:'34px',border:'none',borderRadius:'5px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
+const a4 = Button({ onText:'A4 ●', offText:'A4', parent:'body', onAction:()=>routePlay('A4',440), offAction:()=>routeStop('A4'), onStyle:{background:'#ff6b35',color:'#fff'}, offStyle:{background:'#5a4fb3',color:'#fff'}, css:{position:'absolute',left:'195px',top:'14px',width:'70px',height:'34px',border:'none',borderRadius:'5px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
+const e5 = Button({ onText:'E5 ●', offText:'E5', parent:'body', onAction:()=>routePlay('E5',659.25), offAction:()=>routeStop('E5'), onStyle:{background:'#ff6b35',color:'#fff'}, offStyle:{background:'#914d91',color:'#fff'}, css:{position:'absolute',left:'270px',top:'14px',width:'70px',height:'34px',border:'none',borderRadius:'5px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
+
+// Accord (toggle)
+const chord = Button({ onText:'Chord ●', offText:'Chord', parent:'body', onAction:()=>routeChord([261.63,329.63,392.00]), offAction:()=>sendHost({type:'audioChord',data:{command:'stopChord'}}), onStyle:{background:'#ff6b35',color:'#fff'}, offStyle:{background:'#2d6cdf',color:'#fff'}, css:{position:'absolute',left:'345px',top:'14px',width:'80px',height:'34px',border:'none',borderRadius:'5px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
+
+// Stop (simple)
+$('button',{ id:'stopAllBtn', parent:document.body, text:'Stop', css:{position:'absolute',left:'430px',top:'14px',width:'70px',height:'34px',background:'#cc3333',color:'#fff',border:'none',borderRadius:'5px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} , onClick:()=>{ stopAll(); c4.setState(false); a4.setState(false); e5.setState(false); chord.setState(false); }});
+
+console.log('ios_audio_bridge simplifié chargé');
