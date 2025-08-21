@@ -64,3 +64,4 @@ struct ContentView: View {
 -   Toujours vérifier les transactions (`VerificationResult`).
 -   Isoler la logique d'achat dans PurchaseKit.
 -   Ne jamais accorder d'accès sans transaction vérifiée.
+
