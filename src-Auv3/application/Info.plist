@@ -120,10 +120,20 @@
 
     <key>UIRequiredDeviceCapabilities</key>
     <array>
-        <string>armv7</string>
+    <string>arm64</string>
     </array>
 
     <key>UIRequiresFullScreen</key>
+    <true/>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <true/>
+    <key>UILaunchScreen</key>
+    <dict>
+        <key>UIImageName</key><string></string>
+        <key>UILaunchScreenBackgroundColor</key>
+        <string>Black</string>
+    </dict>
+    <key>UIStatusBarHidden</key>
     <true/>
 </dict>
 </plist>

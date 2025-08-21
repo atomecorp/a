@@ -50,7 +50,23 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         }
 
         let scriptSource = """
-        window.onerror = function(m, s, l, c, e) {
+                // Ensure proper mobile viewport for full edge-to-edge content
+                (function(){
+                    try {
+                        if(!document.querySelector('meta[name=viewport]')) {
+                            var m=document.createElement('meta');
+                            m.name='viewport';
+                            m.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
+                            document.head.appendChild(m);
+                        } else if(!/viewport-fit=cover/.test(document.querySelector('meta[name=viewport]').content)) {
+                            document.querySelector('meta[name=viewport]').content += ',viewport-fit=cover';
+                        }
+                        var de=document.documentElement, b=document.body; if(de){de.style.margin='0';de.style.padding='0';de.style.height='100%';de.style.width='100%';}
+                        if(b){b.style.margin='0';b.style.padding='0';b.style.height='100%';b.style.width='100%';b.style.position='relative';b.style.overflow='hidden';}
+                    } catch(e){ console.log('viewport inject fail', e); }
+                })();
+
+                window.onerror = function(m, s, l, c, e) {
             var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
             try {
                 window.webkit.messageHandlers.console.postMessage(msg);
@@ -79,6 +95,18 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             } catch(e){ console.warn('atome http helper error', e); }
             return false;
         };
+                // Resize observer to keep body matched to visualViewport height (handles rotation & dynamic bars)
+                (function(){
+                    function applyVH(){
+                        if(!document.body) return;
+                        var h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+                        document.body.style.minHeight = h + 'px';
+                        document.documentElement.style.minHeight = h + 'px';
+                    }
+                    ['resize','orientationchange'].forEach(ev=>window.addEventListener(ev, applyVH));
+                    if(window.visualViewport) window.visualViewport.addEventListener('resize', applyVH);
+                    setTimeout(applyVH,0); setTimeout(applyVH,150); setTimeout(applyVH,600);
+                })();
         """
 
         let contentController = webView.configuration.userContentController

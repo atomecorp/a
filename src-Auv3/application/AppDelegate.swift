@@ -32,6 +32,6 @@ struct atomeApp: App {
 struct ContentView: View {
     var body: some View {
         WebViewContainer()
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea() // modern API
     }
 }
