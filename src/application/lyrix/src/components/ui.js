@@ -2020,30 +2020,7 @@ export class UIManager {
         });
     }
 
-    // ===== DRAG & DROP COMPONENTS =====
-
-    // Drop zone container
-    static createDropZone(config = {}) {
-        return $('div', {
-            id: 'drop-zone',
-            ...config,
-            css: {
-                position: 'fixed',
-                top: '0',
-                left: '0',
-                width: '100%',
-                height: '100%',
-                backgroundColor: 'rgba(74, 111, 165, 0.9)',
-                display: 'none',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: '1000',
-                flexDirection: 'column',
-                gap: this.THEME.spacing.lg,
-                ...config.css
-            }
-        });
-    }
+    // ===== DRAG & DROP COMPONENTS (legacy full-screen drop zone removed) =====
 
     // Drop text
     static createDropText(config = {}) {
