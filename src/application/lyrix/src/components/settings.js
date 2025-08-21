@@ -781,7 +781,8 @@ function createSettingsContent() {
         const label = 'MIDI Console';
         // Reuse toggle row layout but override behavior
         const row = createToggleRow(label, storageKey, 'Unlock advanced MIDI inspection console', () => {});
-        const toggleBtn = row.querySelector('div:last-child');
+        // Grab the actual button we created in createToggleRow
+        const toggleBtn = row.querySelector('button');
         const applyOwnedUI = () => {
             const owned = purchaseManager.isOwned();
             toggleBtn.textContent = owned ? 'ON' : 'OFF';
@@ -1080,7 +1081,8 @@ function createSettingsContent() {
     const fontSection = createSettingSection('🔤 Font Settings', [createFontSizeControl()]);
 
     // Add sections to content
-    content.append(midiSection, audioSection, fontSection);
+    // Insert IAP section between audio/display and font settings for visibility
+    content.append(midiSection, audioSection, iapSection, fontSection);
 
     return content;
 }
