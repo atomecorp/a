@@ -86,7 +86,8 @@ export class LyricsDisplay {
     createDisplayElements() {
         // ===== CREATE MAIN DISPLAY STRUCTURE (AUCUN SCROLL SUR BODY OU VIEW) =====
         // Create the main display container - FIXED to prevent any external scroll
-        const notch = typeof window.__HAS_NOTCH__ !== 'undefined' ? window.__HAS_NOTCH__ : false;
+    const notch = typeof window.__HAS_NOTCH__ !== 'undefined' ? window.__HAS_NOTCH__ : false;
+    const basePrimary = UIManager.THEME.colors.primary;
         this.displayContainer = $('div', {
             id: 'display-container',
             css: {
@@ -97,7 +98,8 @@ export class LyricsDisplay {
                 height: '100vh',
                 display: 'flex',
                 flexDirection: 'column',
-                backgroundColor: UIManager.THEME.colors.primary,
+        // If notch, paint container black so the safe-area padding zone is pure black; inner elements keep their own bg
+        backgroundColor: notch ? '#000' : basePrimary,
                 overflow: 'hidden',
                 zIndex: '50',
                 // Leave room for notch instead of hiding under it
@@ -106,12 +108,13 @@ export class LyricsDisplay {
         });
 
         // Provide a reusable updater (Swift calls it after injecting __HAS_NOTCH__ if needed)
-        window.updateSafeAreaLayout = () => {
+    window.updateSafeAreaLayout = () => {
             try {
                 const hasNotch = !!window.__HAS_NOTCH__;
                 const dc = document.getElementById('display-container');
                 if (dc) {
                     dc.style.paddingTop = hasNotch ? 'env(safe-area-inset-top)' : '0';
+            dc.style.backgroundColor = hasNotch ? '#000' : basePrimary;
                 }
             } catch(e) { /* silent */ }
         };
