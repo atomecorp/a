@@ -105,17 +105,18 @@ export class LyricsDisplay {
         });
         
         // Create toolbar - SOLIDAIRE et FIXE en haut (ne scroll jamais)
-    this.toolbar = $('div', {
+    // Force toolbar at absolute top for all environments
+    const toolbarTop = '0px';
+        this.toolbar = $('div', {
             id: 'lyrics-toolbar',
             css: {
-                position: 'relative', // Relatif dans le flex container
+                position: 'relative',
                 display: 'flex',
-                flexDirection: 'column', // Colonnes pour main row + audio row
-                // Unified dark blue background requested (rgb(37,48,64))
+                flexDirection: 'column',
                 backgroundColor: 'rgb(37, 48, 64)',
-                flexShrink: 0, // NEVER shrinks
-                zIndex: '100', // Au-dessus du contenu de scroll
-                top: '15px' // Décalage ajusté à 15px
+                flexShrink: 0,
+                zIndex: '100',
+                top: toolbarTop
             }
         });
 

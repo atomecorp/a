@@ -44,12 +44,23 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
         webView.navigationDelegate = WebViewManager.shared
 
+        // Detect execution environment (App vs AUv3 extension) and log explicitly
+        let isExtension: Bool = {
+            let path = Bundle.main.bundlePath
+            if path.hasSuffix(".appex") { return true }
+            // Fallback: presence of NSExtension dictionary in Info.plist
+            if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
+            return false
+        }()
+        let execMode = isExtension ? "AUv3" : "APP"
+        print("exec mode: \(execMode)")
+
         // Start lightweight embedded HTTP server (once) to serve audio via standard stack
         if LocalHTTPServer.shared.port == nil {
             LocalHTTPServer.shared.start()
         }
 
-        let scriptSource = """
+    let scriptSource = """
                 // Ensure proper mobile viewport for full edge-to-edge content
                 (function(){
                     try {
@@ -65,6 +76,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         if(b){b.style.margin='0';b.style.padding='0';b.style.height='100%';b.style.width='100%';b.style.position='relative';b.style.overflow='hidden';}
                     } catch(e){ console.log('viewport inject fail', e); }
                 })();
+                // Inject host environment flag early for UI logic
+                try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
 
                 window.onerror = function(m, s, l, c, e) {
             var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
