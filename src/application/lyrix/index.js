@@ -100,85 +100,47 @@ function updateAudioTitle() {
 
 // Function to inject global CSS for text selection control
 function injectTextSelectionStyles() {
-    const styleId = 'lyrix-text-selection-styles';
-    
-    // Remove existing styles if any
-    const existingStyle = document.getElementById(styleId);
-    if (existingStyle) {
-        existingStyle.remove();
-    }
-    
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = `
-        /* Disable text selection for all panels and UI elements */
-        #settings-panel,
-        #song-library-panel,
-        #settings-resize-grip,
-        #song-library-resize-grip,
-        .toolbar,
-        .lyrics-toolbar,
-        #lyrics-toolbar,
-        .modal-overlay,
-        .modal-header,
-        .modal-footer,
-        .button,
-        button,
-        .ui-button,
-        .grip,
-        .panel-header,
-        .panel-content:not(.lyrics-content):not(.editable-content),
-        .settings-section,
-        .midi-section,
-        .export-modal,
-        .save-text-modal,
-        .fullscreen-lyrics {
-            -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
-            user-select: none !important;
-            -webkit-touch-callout: none !important;
-        }
-        
-        /* Allow text selection only for specific input elements */
-        input,
-        textarea,
-        [contenteditable="true"],
-        .editable-content,
-        .lyrics-line.editing,
-        .search-input,
-        .midi-input,
-        .filename-input,
-        .text-input {
-            -webkit-user-select: text !important;
-            -moz-user-select: text !important;
-            -ms-user-select: text !important;
-            user-select: text !important;
-            -webkit-touch-callout: default !important;
-        }
-        
-        /* Special case for lyrics content - disable selection unless editing */
-        #lyrics_lines_container,
-        .lyrics-line:not(.editing) {
-            -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
-            user-select: none !important;
-            -webkit-touch-callout: none !important;
-        }
-        
-        /* Disable text selection on grip handles */
-        .resize-grip,
-        [id*="resize-grip"] {
-            -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
-            user-select: none !important;
-            -webkit-touch-callout: none !important;
-        }
-    `;
-    
-    document.head.appendChild(style);
+        const styleId = 'lyrix-text-selection-styles';
+        // Remove any previous (for hot reload / re-init cases)
+        const existing = document.getElementById(styleId);
+        if (existing) existing.remove();
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `/* Text selection policy */
+/* Disable selection for most UI chrome */
+#settings-panel,
+#song-library-panel,
+#settings-resize-grip,
+#song-library-resize-grip,
+.toolbar,
+.resize-grip,
+[id*="resize-grip"],
+#lyrics_lines_container,
+.lyrics-line:not(.editing) {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+}
+
+/* Allow selection inside editable / input zones */
+input,
+textarea,
+[contenteditable="true"],
+.editable-content,
+.lyrics-line.editing,
+.search-input,
+.midi-input,
+.filename-input,
+.text-input {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default !important;
+}`;
+        document.head.appendChild(style);
 }
 
 // Apply initial settings from localStorage
@@ -360,6 +322,51 @@ function initializeLyrix() {
         }
         // Apply saved settings on startup
         applyInitialSettings();
+
+        // --- AUv3 Host Stop Watchdog -------------------------------------------------
+        // Some host stop scenarios may not trigger our heuristics fast enough (e.g. host freezes
+        // playhead without rewinding). This watchdog enforces a rapid pause & re-arm if no
+        // host advance is observed for a short window while we still think we're in playingHost.
+        (function initAuv3HostWatchdog(){
+            try {
+                const env = (window.__HOST_ENV || '').toString().toLowerCase();
+                if (env !== 'auv3') return; // only inside AUv3
+                if (window.__lyrixHostWatchdog) return; // already installed
+                const POLL_MS = 120;          // watchdog poll frequency
+                const IDLE_THRESHOLD = 220;   // ms without host advance -> treat as stop
+                window.__lyrixHostWatchdog = setInterval(function(){
+                    try {
+                        const btn = document.getElementById('audio-play-button');
+                        if (!btn) return;
+                        const state = btn.dataset.state;
+                        if (state !== 'playingHost') return; // only care about host-synced playback
+                        const lastAdvanceTs = window.__lyrixHostSync && window.__lyrixHostSync.lastAdvanceTs || 0;
+                        if (!lastAdvanceTs) return; // haven't started yet
+                        const idleFor = performance.now() - lastAdvanceTs;
+                        if (idleFor > IDLE_THRESHOLD) {
+                            if (audioController && audioController.isPlaying && audioController.isPlaying()) {
+                                try { audioController.pause && audioController.pause(); } catch(e){}
+                                if (typeof window.__lyrixArmButton === 'function') {
+                                    window.__lyrixArmButton(btn);
+                                } else {
+                                    btn.dataset.state = 'armed';
+                                    btn.classList.add('auv3-armed');
+                                    if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor='';
+                                }
+                                if (!window.__lyrixHostSync) window.__lyrixHostSync = { lastTime:0, started:false, lastAdvanceTs:0 };
+                                window.__lyrixHostSync.started = false;
+                                console.log('🧵 AUv3 host watchdog idle '+ idleFor.toFixed(0) +'ms -> force pause & re-arm');
+                            }
+                        }
+                    } catch(err) {
+                        // Silent to avoid flooding
+                    }
+                }, POLL_MS);
+            } catch(e) {
+                console.warn('⚠️ AUv3 host watchdog init failed', e);
+            }
+        })();
+        // -----------------------------------------------------------------------------
         
         // Inject text selection control styles
         injectTextSelectionStyles();
@@ -2040,19 +2047,21 @@ function updateTimecode(timeMs) {
     const __hostEnv = (window.__HOST_ENV || '').toString().toLowerCase();
     if (__hostEnv === 'auv3') {
         if (!window.__lyrixHostSync) {
-            window.__lyrixHostSync = { lastTime: 0, started: false };
+            window.__lyrixHostSync = { lastTime: 0, started: false, lastAdvanceTs: 0 };
         }
         const btn = document.getElementById('audio-play-button');
         if (btn) {
-            // While armed and host scrubs (time changes but playback not started) reflect position on slider/labels
-            if (btn.dataset.state === 'armed' && typeof updateScrubSliderDisplay === 'function') {
+            const state = btn.dataset.state;
+            // Reflect host position on slider when either armed or playingHost (and user not manually scrubbing)
+            if ((state === 'armed' || state === 'playingHost') && typeof updateScrubSliderDisplay === 'function' && !window.isUserScrubbing) {
                 try { updateScrubSliderDisplay(timeMs / 1000); } catch(e) {}
             }
-            // Detect host running (time advancing)
-            if (timeMs > window.__lyrixHostSync.lastTime + 5) { // >5ms advance considered movement
+            // Detect host running (any forward advance >1ms)
+            if (timeMs >= window.__lyrixHostSync.lastTime + 1) {
                 if (!window.__lyrixHostSync.started) {
                     window.__lyrixHostSync.started = true;
                 }
+                window.__lyrixHostSync.lastAdvanceTs = performance.now();
                 // If armed and not yet playing, start synced
                 if (btn.dataset.state === 'armed' && audioController && !audioController.isPlaying()) {
                     try {
@@ -2065,11 +2074,36 @@ function updateTimecode(timeMs) {
                     console.log('▶️ AUv3 host-synced playback started at', (timeMs/1000).toFixed(3),'s');
                 }
             }
-            // Optional: if host stopped (returned to 0) you could pause host-synced playback
-            if (timeMs === 0 && window.__lyrixHostSync.lastTime > 0) {
+            // Host stop detection: conditions
+            const nowTs = performance.now();
+            const hostStoppedByZero = (timeMs === 0 && window.__lyrixHostSync.lastTime > 0);
+            const hostWentBackwards = timeMs < window.__lyrixHostSync.lastTime - 2; // rewind / jump back
+            const hostInactive = (window.__lyrixHostSync.lastAdvanceTs && (nowTs - window.__lyrixHostSync.lastAdvanceTs) > 250); // >250ms no forward advance
+            const btnState = btn.dataset.state;
+            if ((hostStoppedByZero || hostWentBackwards || hostInactive) && (btnState === 'playingHost' || btnState === 'forced')) {
+                // Pause local playback and re-arm without changing position unless host at zero
+                try { audioController && audioController.pause && audioController.pause(); } catch(e){}
+                if (hostStoppedByZero) {
+                    try { audioController && audioController.setCurrentTime && audioController.setCurrentTime(0); } catch(e){}
+                    try { updateScrubSliderDisplay && updateScrubSliderDisplay(0); } catch(e){}
+                }
                 window.__lyrixHostSync.started = false;
-                if (btn.dataset.state === 'playingHost') {
-                    // Keep playing unless desired to pause with host; requirement only specified start
+                if (typeof window.__lyrixArmButton === 'function') {
+                    window.__lyrixArmButton(btn);
+                } else {
+                    btn.dataset.state = 'armed';
+                    btn.classList.add('auv3-armed');
+                    if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor='';
+                }
+                console.log(`🔁 AUv3 host stop detected (${hostStoppedByZero?'zero':''}${hostWentBackwards?' rewind':''}${hostInactive?' idle':''}) -> re-armed`);
+            }
+            // Safety fallback: if host time not advancing (idle) for >750ms and audio still playing in host mode, force pause & re-arm
+            if (btnState === 'playingHost' && audioController && audioController.isPlaying && audioController.isPlaying()) {
+                const idleFor = performance.now() - (window.__lyrixHostSync.lastAdvanceTs || 0);
+                if (idleFor > 750) {
+                    try { audioController.pause(); } catch(e){}
+                    if (typeof window.__lyrixArmButton === 'function') window.__lyrixArmButton(btn); else { btn.dataset.state='armed'; btn.classList.add('auv3-armed'); }
+                    console.log('🛑 AUv3 host idle fallback (>750ms) -> force pause & re-arm');
                 }
             }
         }
@@ -2281,7 +2315,7 @@ function createMainInterface() {
             }
         });
         // AUv3 arming helpers (defined inline to avoid polluting global scope)
-        function ensureAuv3ArmStyles(){
+    function ensureAuv3ArmStyles(){
             if (document.getElementById('lyrix-auv3-arm-style')) return;
             const st = document.createElement('style');
             st.id = 'lyrix-auv3-arm-style';
@@ -2305,6 +2339,9 @@ function createMainInterface() {
             try { audioController.play(); } catch(e) { console.warn('⚠️ force play failed', e); }
             if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white';
         }
+    // Expose arming helper globally so updateTimecode can reuse
+    window.__lyrixArmButton = armAuv3Playback;
+    window.__lyrixEnsureArmStyles = ensureAuv3ArmStyles;
         // Long press detection (AUv3 only)
     if ((window.__HOST_ENV||'').toString().toLowerCase() === 'auv3') {
             let pressTimer = null;
