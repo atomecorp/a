@@ -112,6 +112,8 @@ function injectTextSelectionStyles() {
 #song-library-panel,
 #settings-resize-grip,
 #song-library-resize-grip,
+.toolbar, .toolbar *,
+#main-toolbar-row, #main-toolbar-row *,
 .toolbar,
 .resize-grip,
 [id*="resize-grip"],
@@ -370,6 +372,47 @@ function initializeLyrix() {
         
         // Inject text selection control styles
         injectTextSelectionStyles();
+        // Generic toolbar long-press suppression (prevents iOS selection anywhere in toolbar)
+        (function initToolbarLongPressSuppression(){
+            try {
+                const toolbar = document.getElementById('main-toolbar-row') || document.querySelector('.toolbar');
+                if(!toolbar) return;
+                if(toolbar.__lyrixLongPressNoSelectInstalled) return;
+                toolbar.__lyrixLongPressNoSelectInstalled = true;
+                let lpTimer=null;
+                const LONG_PRESS_MS=420; // delay before activating shield
+                const ACTIVATE_CLASS='lyrix-block-select';
+                function activateShield(){
+                    if(document.body.classList.contains(ACTIVATE_CLASS)) return;
+                    document.body.classList.add(ACTIVATE_CLASS);
+                    if(!document.getElementById('lyrix-longpress-shield')){
+                        const shield=document.createElement('div');
+                        shield.id='lyrix-longpress-shield';
+                        shield.style.cssText='position:fixed;inset:0;z-index:2147483646;background:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;';
+                        const swallow=(ev)=>{ if (ev.cancelable) ev.preventDefault(); ev.stopPropagation(); };
+                        ['contextmenu','selectionchange'].forEach(tp=>document.addEventListener(tp,swallow,{capture:true,passive:false}));
+                        // shield only swallows move/longpress events after activation, not initial tap
+                        ['touchmove','touchcancel'].forEach(tp=>shield.addEventListener(tp,swallow,{passive:false}));
+                        document.body.appendChild(shield);
+                    }
+                    if(!window.__lyrixSelectionClearInterval){
+                        window.__lyrixSelectionClearInterval=setInterval(()=>{ if(!document.body.classList.contains(ACTIVATE_CLASS)){clearInterval(window.__lyrixSelectionClearInterval);window.__lyrixSelectionClearInterval=null;return;} try{const sel=window.getSelection(); if(sel) sel.removeAllRanges();}catch(_){}} ,140);
+                    }
+                }
+                function start(e){
+                    // Do NOT preventDefault here; allow normal click
+                    if(lpTimer) clearTimeout(lpTimer);
+                    lpTimer=setTimeout(()=>{ activateShield(); }, LONG_PRESS_MS);
+                }
+                function end(){
+                    if(lpTimer) { clearTimeout(lpTimer); lpTimer=null; }
+                    if(!document.body.classList.contains(ACTIVATE_CLASS)) return; // nothing to clean if not activated
+                    setTimeout(()=>{ document.body.classList.remove(ACTIVATE_CLASS); const shield=document.getElementById('lyrix-longpress-shield'); if(shield) shield.remove(); try{const sel=window.getSelection(); if(sel) sel.removeAllRanges();}catch(_){ } },110);
+                }
+                ['touchstart','mousedown'].forEach(ev=>toolbar.addEventListener(ev,start,{passive:true}));
+                ['touchend','touchcancel','mouseup','mouseleave','pointerleave','pointerup'].forEach(ev=>toolbar.addEventListener(ev,end,{passive:true}));
+            } catch(e) { /* silent */ }
+        })();
 
         // Debug: Force MIDI inspector visible if enabled
         setTimeout(() => {
@@ -2349,16 +2392,47 @@ function createMainInterface() {
             const startPress = () => {
                 if (pressTimer) clearTimeout(pressTimer);
                 pressTimer = setTimeout(() => {
+                    // Activate shield & selection block only when long press threshold reached
+                    try {
+                        document.body.classList.add('lyrix-block-select');
+                        if(!document.getElementById('lyrix-longpress-shield')){
+                            const shield=document.createElement('div');
+                            shield.id='lyrix-longpress-shield';
+                            shield.style.cssText='position:fixed;inset:0;z-index:2147483646;background:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;';
+                            const swallow=(ev)=>{ if (ev.cancelable) ev.preventDefault(); ev.stopPropagation(); };
+                            ['touchmove','touchcancel','contextmenu'].forEach(tp=>shield.addEventListener(tp,swallow,{passive:false}));
+                            document.body.appendChild(shield);
+                        }
+                        if(!window.__lyrixSelectionClearInterval){
+                            window.__lyrixSelectionClearInterval=setInterval(()=>{ if(!document.body.classList.contains('lyrix-block-select')){clearInterval(window.__lyrixSelectionClearInterval);window.__lyrixSelectionClearInterval=null;return;} try{const sel=window.getSelection(); if(sel) sel.removeAllRanges();}catch(_){}} ,150);
+                        }
+                    } catch(_){ }
                     if (playButton.dataset.state === 'armed' || playButton.dataset.state === 'idle') {
-            forceImmediatePlayback(playButton);
-            playButton._longPressTriggered = true; // mark to ignore ensuing click
-            console.log('⚡️ AUv3 long press forced playback');
+                        forceImmediatePlayback(playButton);
+                        playButton._longPressTriggered = true; // guard
+                        console.log('⚡️ AUv3 long press forced playback');
                     }
                 }, longPressMs);
             };
-            const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
-            ['mousedown','touchstart'].forEach(ev=>playButton.addEventListener(ev,startPress,{passive:true}));
+            const cancelPress = () => {
+                if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+                // Remove selection blocking class at end of interaction (slightly longer delay to avoid iOS post-longpress selection)
+                setTimeout(()=>document.body.classList.remove('lyrix-block-select'),160);
+                // Remove shield
+                const shield = document.getElementById('lyrix-longpress-shield');
+                if (shield) shield.remove();
+                // Final selection clear
+                try { const sel=window.getSelection(); if(sel && sel.removeAllRanges) sel.removeAllRanges(); } catch(_){ }
+            };
+            ['mousedown','touchstart'].forEach(ev=>playButton.addEventListener(ev,startPress,{passive:false}));
             ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>playButton.addEventListener(ev,cancelPress,{passive:true}));
+            // Ensure global CSS for blocking selection on demand exists
+            if(!document.getElementById('lyrix-block-select-style')){
+                const st=document.createElement('style');
+                st.id='lyrix-block-select-style';
+                st.textContent='.lyrix-block-select, .lyrix-block-select * { -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }';
+                document.head.appendChild(st);
+            }
         }
         // Inject SVG icon for play
         (function attachPlayIcon(){
