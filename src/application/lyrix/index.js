@@ -106,12 +106,14 @@ function injectTextSelectionStyles() {
         if (existing) existing.remove();
         const style = document.createElement('style');
         style.id = styleId;
-        style.textContent = `/* Text selection policy */
+    style.textContent = `/* Text selection policy */
 /* Disable selection for most UI chrome */
 #settings-panel,
 #song-library-panel,
 #settings-resize-grip,
 #song-library-resize-grip,
+.audio-tools-row, .audio-tools-row *,
+#audio-scrub-slider-container, #audio-scrub-slider-container *:not(#audio_scrub_slider_handle),
 .toolbar, .toolbar *,
 #main-toolbar-row, #main-toolbar-row *,
 .toolbar,
@@ -2552,6 +2554,14 @@ function createMainInterface() {
                 boxSizing: 'border-box'
             }
         });
+        scrubContainer.classList.add('audio-tools-row');
+        // Prevent text selection inside the scrub row except handle drag
+        const suppressSelection = (e)=>{
+            const handle = document.getElementById('audio_scrub_slider_handle');
+            if (handle && (e.target===handle || handle.contains(e.target))) return; // allow drag
+            if (e.type==='selectstart' && e.cancelable) e.preventDefault();
+        };
+        scrubContainer.addEventListener('selectstart', suppressSelection, {passive:false});
         
         // Add data attribute for identification
         scrubContainer.setAttribute('data-element', 'scrub-slider');
