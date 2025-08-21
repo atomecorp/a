@@ -86,6 +86,7 @@ export class LyricsDisplay {
     createDisplayElements() {
         // ===== CREATE MAIN DISPLAY STRUCTURE (AUCUN SCROLL SUR BODY OU VIEW) =====
         // Create the main display container - FIXED to prevent any external scroll
+        const notch = typeof window.__HAS_NOTCH__ !== 'undefined' ? window.__HAS_NOTCH__ : false;
         this.displayContainer = $('div', {
             id: 'display-container',
             css: {
@@ -97,12 +98,26 @@ export class LyricsDisplay {
                 display: 'flex',
                 flexDirection: 'column',
                 backgroundColor: UIManager.THEME.colors.primary,
-                // border: `1px solid ${UIManager.THEME.colors.border}`,
-                // borderRadius: UIManager.THEME.borderRadius.md,
-                overflow: 'hidden', // CRITICAL: prevents any scroll on the main container
-                zIndex: '50' // Au-dessus du contenu normal mais sous les modales
+                overflow: 'hidden',
+                zIndex: '50',
+                // Leave room for notch instead of hiding under it
+                paddingTop: notch ? 'env(safe-area-inset-top)' : '0'
             }
         });
+
+        // Provide a reusable updater (Swift calls it after injecting __HAS_NOTCH__ if needed)
+        window.updateSafeAreaLayout = () => {
+            try {
+                const hasNotch = !!window.__HAS_NOTCH__;
+                const dc = document.getElementById('display-container');
+                if (dc) {
+                    dc.style.paddingTop = hasNotch ? 'env(safe-area-inset-top)' : '0';
+                }
+            } catch(e) { /* silent */ }
+        };
+        // Re-run after a short delay in case flag arrives slightly later
+        setTimeout(window.updateSafeAreaLayout, 50);
+        setTimeout(window.updateSafeAreaLayout, 300);
         
         // Create toolbar - SOLIDAIRE et FIXE en haut (ne scroll jamais)
     // Force toolbar at absolute top for all environments
