@@ -1199,25 +1199,7 @@ export class UIManager {
         });
     }
 
-    // Audio controls container
-    static createAudioControlsContainer(config = {}) {
-        return $('div', {
-            id: 'audio-controls-container',
-            ...config,
-            css: {
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: this.THEME.spacing.lg,
-                padding: this.THEME.spacing.lg,
-                backgroundColor: this.THEME.colors.surface,
-                border: `1px solid ${this.THEME.colors.border}`,
-                borderRadius: this.THEME.borderRadius.md,
-                marginBottom: this.THEME.spacing.lg,
-                ...config.css
-            }
-        });
-    }
+    // createAudioControlsContainer removed (legacy audio-controls-container deprecated)
 
     // Scrub container for audio timeline
     static createScrubContainer(config = {}) {

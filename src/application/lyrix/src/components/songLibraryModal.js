@@ -119,10 +119,8 @@ export function showSongLibrary() {
     // Always show the song library, even if empty, so users can create or import songs
     
     // Create inline panel instead of modal - insert between toolbar and lyrics
-    const toolbar = document.querySelector('#lyrics-toolbar, .lyrics-toolbar, [id*="toolbar"]') || 
-                   document.querySelector('#lyrix_app > div:first-child');
-    const lyricsContainer = document.querySelector('#lyrics-content, #lyrics_lines_container, .lyrics-container') || 
-                           document.querySelector('#lyrix_app > div:last-child');
+    const toolbar = document.querySelector('#lyrics-toolbar, .lyrics-toolbar, [id*="toolbar"]') || document.getElementById('view') || document.body;
+    const lyricsContainer = document.querySelector('#lyrics-content, #lyrics_lines_container, .lyrics-container') || document.getElementById('view') || document.body;
     
     // Remove existing song library panel if it exists
     const existingPanel = document.getElementById('song-library-panel');

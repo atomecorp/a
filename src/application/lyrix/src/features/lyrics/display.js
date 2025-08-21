@@ -192,15 +192,8 @@ export class LyricsDisplay {
         });
         this.nextSongButton.title = 'Next Song';
         
-        // Font size controls
-        this.fontSizeContainer = $('div', {
-            id: 'font-size-controls-container',
-            css: {
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px'
-            }
-        });
+    // font-size-controls-container removed. Use a simple in-memory fragment instead.
+    this.fontSizeContainer = document.createDocumentFragment();
         
         const fontMinusButton = UIManager.createInterfaceButton('A-', {
             id: 'font_size_decrease',
@@ -424,21 +417,14 @@ export class LyricsDisplay {
         // Update lyrics content positioning based on audio tools visibility
         this.updateLyricsContentPosition();
         
-        // ===== PREVENT ALL SCROLL ON BODY AND LYRIX_APP =====
+    // ===== PREVENT ALL SCROLL ON BODY (lyrix_app removed) =====
         // Prevent scroll on body
         document.body.style.overflow = 'hidden';
         document.body.style.height = '100vh';
         document.body.style.margin = '0';
         document.body.style.padding = '0';
         
-        // Prevent scroll on lyrix_app if it exists
-        const lyrixApp = document.getElementById('lyrix_app');
-        if (lyrixApp) {
-            lyrixApp.style.overflow = 'hidden';
-            lyrixApp.style.height = '100vh';
-            lyrixApp.style.width = '100vw';
-            lyrixApp.style.position = 'relative';
-        }
+    // (Former lyrix_app container removal: no extra handling needed)
         
         // Add display container directly to body for total control
         document.body.append(this.displayContainer);
@@ -629,15 +615,7 @@ export class LyricsDisplay {
         if (window.leftPanelAudioTools) {
             const { playButton, stopButton } = window.leftPanelAudioTools;
             
-            // Fix the audio controls container first
-            const audioContainer = document.getElementById('audio-controls-container');
-            if (audioContainer) {
-                audioContainer.style.display = 'flex';
-                audioContainer.style.flexDirection = 'row';
-                audioContainer.style.gap = '5px';
-                audioContainer.style.alignItems = 'center';
-                audioContainer.style.marginBottom = '15px';
-            }
+            // Legacy audio-controls-container removed; buttons handled directly
             
             if (stopButton) {
                 // Fix positioning and display for stop button
@@ -783,15 +761,7 @@ export class LyricsDisplay {
                     tool.style.margin = '0 5px';
                 }
                 
-                if (tool.id === 'audio-controls-container') {
-                    tool.style.marginBottom = '0';
-                    tool.style.display = 'flex'; // Ensure buttons are side by side
-                    tool.style.flexDirection = 'row'; // Force horizontal layout
-                    tool.style.gap = '5px'; // Add space between buttons
-                    tool.style.alignItems = 'center'; // Vertically center buttons
-                    // Force override any other display setting
-                    tool.style.setProperty('display', 'flex', 'important');
-                }
+                // (audio-controls-container removed)
                 
                 if (tool.id === 'midi-logger-container') {
                     tool.style.width = '150px';

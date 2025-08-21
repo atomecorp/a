@@ -270,7 +270,7 @@ function initializeLyrix() {
         // Create main UI
         createMainInterface();
         
-        // Initialize display (no longer needs a container, will append to lyrix_app)
+    // Initialize display (container removed; we append directly to body/#view)
         lyricsDisplay = new LyricsDisplay(null, audioController);
         // Re-sync font size immediately after display creation
         const storedFontImmediate = localStorage.getItem('lyrix_font_size');
@@ -350,7 +350,7 @@ function initializeLyrix() {
         window.toggleMidiInspector = toggleMidiInspector;
         window.toggleTimecodeVisibility = toggleTimecodeVisibility;
         // Ensure MIDI inspector is in the toolbar
-        const appContainer = document.getElementById('lyrix_app');
+    const appContainer = document.getElementById('view') || document.body;
         const toolbarRow = document.getElementById('main-toolbar-row');
         if (toolbarRow && midiUtilities && midiUtilities.midiContainer) {
             toolbarRow.appendChild(midiUtilities.midiContainer);
@@ -428,7 +428,7 @@ function initializeLyrix() {
             });
         }
         
-        // Make drag-and-drop work for the entire window, not just #lyrix_app
+    // Make drag-and-drop work for the entire window (former #lyrix_app removed)
         window.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2108,36 +2108,11 @@ window.help = function() {
 
 // Create main interface
 function createMainInterface() {
+    // lyrix_app container removed: we use body (or #view) directly now
     const container = document.getElementById('view') || document.body;
-    
-    // Create main application container (full screen, no rounded corners)
-    const app = $('div', {
-        id: 'lyrix_app',
-        css: {
-            padding: '20px',
-            fontFamily: 'Arial, sans-serif',
-            width: '100vw',
-            height: '100vh',
-            margin: '0',
-            backgroundColor: '#fff',
-            borderRadius: '0',
-            minHeight: '100vh',
-            boxSizing: 'border-box',
-            overflow: 'auto'
-        }
-    });
-    
-    // Create main layout (single column now that left panel is removed)
-    const mainLayout = $('div', {
-        css: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '20px',
-            marginBottom: '20px'
-        }
-    });
-    
-    // Note: Left panel has been removed - all tools moved to lyrics toolbar
+    const app = container; // alias to preserve downstream variable logic
+
+    // (mainLayout removed: tools injected directly by feature modules)
     
     // Add some basic content to left panel
     const settingsButton = UIManager.createInterfaceButton('⚙️', {
@@ -2155,15 +2130,15 @@ function createMainInterface() {
     });
     settingsButton.dataset.forceHidden = 'true';
     
-    const importButton = UIManager.createInterfaceButton('📁', {
-        id: 'import_file_button',
-        onClick: () => {
-            showFileImportDialog();
-        },
-        css: {
-            marginBottom: '10px'
-        }
-    });
+    // Legacy import_file_button removed (direct multi-file import now handled elsewhere)
+    // If any legacy code tries to reference #import_file_button, keep a harmless stub for safety
+    if (!document.getElementById('import_file_button')) {
+        const stub = document.createElement('div');
+        stub.id = 'import_file_button';
+        stub.style.display = 'none';
+        // We do NOT append it to DOM to avoid accidental layout impact
+        window.__removedImportButton = true;
+    }
     
     // Song list button (SVG icon)
     const songListButton = UIManager.createInterfaceButton('', {
@@ -2190,7 +2165,7 @@ function createMainInterface() {
     window.leftPanelTools = {
         settingsButton,
         songListButton
-        // importButton moved to song library panel
+        // import_file_button fully removed
         // createSongButton, // Moved to song library panel
     };
     
@@ -2289,16 +2264,14 @@ function createMainInterface() {
         // // Add ID for identification
         // stopButton.id = 'audio-stop-button';
         
-        const audioControls = $('div', {
-            id: 'audio-controls-container',
-            css: {
-                marginBottom: '15px',
-                display: initialDisplay,
-                flexDirection: 'row', // Buttons side by side
-                gap: '5px',
-                alignItems: 'center'
-            }
-        });
+    // audio-controls-container removed (legacy). We still build buttons (play/stop) but not grouped in a container.
+    // Use a lightweight div wrapper instead of DocumentFragment so attribute APIs still work
+    const audioControls = document.createElement('div');
+    audioControls.id = 'audio-controls-inline';
+    audioControls.style.display = 'flex';
+    audioControls.style.flexDirection = 'row';
+    audioControls.style.gap = '5px';
+    audioControls.style.alignItems = 'center';
 
         // Attach audioController event listeners once controls exist to keep UI sync robust
         try {
@@ -2321,8 +2294,8 @@ function createMainInterface() {
             console.warn('⚠️ Failed to bind audioController UI sync listeners', e);
         }
         
-        // Add data attribute for identification
-        audioControls.setAttribute('data-element', 'audio-controls');
+    // Add data attribute for identification
+    audioControls.setAttribute('data-element', 'audio-controls');
         
         audioControls.append(stopButton, playButton);
         
@@ -2659,14 +2632,12 @@ function createMainInterface() {
         }
     }
     
-    // Note: No longer using right panel - lyrics display elements append directly to lyrix_app
+    // Note: No longer using right panel - lyrics display elements append directly to body
     // Remove: const rightPanel = $('div', { id: 'lyrics_display_area', ... });
     
     // Note: Left panel removed - using single column layout now
-    // No longer appending rightPanel to mainLayout since LyricsDisplay handles its own layout
-    app.append(mainLayout);
-    
-    container.append(app);
+    // No longer appending rightPanel (lyrics display manages its own layout)
+    // Removed container.append(app) because app is now the container (lyrix_app wrapper removed)
 }
 
 // Load last opened song

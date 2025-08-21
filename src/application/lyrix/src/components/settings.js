@@ -202,7 +202,7 @@ export function openSettingsPanel(triggerId) {
     isSettingsOpen = true;
 
     // Find the main app container and lyrics content
-    const appContainer = document.getElementById('lyrix_app');
+    const appContainer = document.getElementById('lyrix_app') || document.getElementById('view') || document.body;
     const displayContainer = document.getElementById('display-container');
     const lyricsContent = document.querySelector('#lyrics_content_area') || 
                          document.querySelector('#lyrics-content') || 
