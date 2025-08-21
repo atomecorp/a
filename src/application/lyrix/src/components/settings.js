@@ -4,6 +4,7 @@
 import { CONSTANTS } from '../core/constants.js';
 import { StorageManager } from '../services/storage.js';
 import default_theme from './style.js';
+import { getPurchaseManager } from '../features/purchase/purchase_manager.js';
 
 // Settings panel state management
 let isSettingsOpen = false;
@@ -772,6 +773,70 @@ function createSettingsContent() {
     ];
 
     const audioSection = createSettingSection('Audio & Display', audioControls);
+
+    // In-App Purchases section
+    const purchaseManager = getPurchaseManager();
+    function createInAppPurchaseRow() {
+        const storageKey = 'lyrix_purchase_midi_console';
+        const label = 'MIDI Console';
+        // Reuse toggle row layout but override behavior
+        const row = createToggleRow(label, storageKey, 'Unlock advanced MIDI inspection console', () => {});
+        const toggleBtn = row.querySelector('div:last-child');
+        const applyOwnedUI = () => {
+            const owned = purchaseManager.isOwned();
+            toggleBtn.textContent = owned ? 'ON' : 'OFF';
+            toggleBtn.style.backgroundColor = owned ? 'rgb(44, 56, 72)' : 'rgb(58, 74, 96)';
+            if (owned) localStorage.setItem(storageKey, 'owned');
+        };
+        applyOwnedUI();
+        toggleBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (purchaseManager.isOwned()) {
+                // Allow user to temporarily hide console (acts like off)
+                const currentlyEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
+                const newState = !currentlyEnabled;
+                localStorage.setItem('lyrix_midi_inspector_enabled', newState.toString());
+                if (window.midiUtilities && window.midiUtilities.midiContainer) {
+                    window.midiUtilities.midiContainer.style.display = newState ? 'block' : 'none';
+                }
+                toggleBtn.textContent = newState ? 'ON' : 'OFF';
+                toggleBtn.style.backgroundColor = newState ? 'rgb(44,56,72)' : 'rgb(58,74,96)';
+            } else {
+                toggleBtn.textContent = 'Buying...';
+                toggleBtn.style.opacity = '0.6';
+                const ok = await purchaseManager.requestPurchase();
+                toggleBtn.style.opacity = '1';
+                if (ok) {
+                    // Auto-enable inspector after purchase
+                    localStorage.setItem('lyrix_midi_inspector_enabled', 'true');
+                    if (window.midiUtilities && window.midiUtilities.midiContainer) {
+                        window.midiUtilities.midiContainer.style.display = 'block';
+                    }
+                }
+                applyOwnedUI();
+            }
+        }, { capture: true });
+        window.addEventListener('lyrix-purchase-updated', applyOwnedUI);
+        return row;
+    }
+    function createRestoreRow(){
+        const row = window.$('div', { css:{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px', backgroundColor:'rgb(52, 66, 86)', borderRadius:'5px', marginBottom:'10px' } });
+        const left = window.$('div');
+        left.append(
+            window.$('div',{ text:'Restore Purchases', css:{ fontWeight:'500', color:'#fff', marginBottom:'3px' }}),
+            window.$('div',{ text:'Re-activate previous purchases', css:{ fontSize:'12px', color:'#cbd5e1', fontStyle:'italic' }})
+        );
+        const btn = window.$('div', { text:'Restore', css:{ padding:'6px 14px', backgroundColor:'rgb(58,74,96)', color:'#fff', borderRadius:'4px', cursor:'pointer', userSelect:'none', boxShadow:'0 2px 4px rgba(0,0,0,0.5)' } });
+        btn.addEventListener('click', async ()=>{
+            btn.textContent='Restoring...'; btn.style.opacity='0.6';
+            const ok = await purchaseManager.restorePurchases();
+            btn.style.opacity='1'; btn.textContent = ok ? 'Restored' : 'Retry';
+            setTimeout(()=>{ if(ok) btn.textContent='Restore'; }, 2000);
+        });
+        row.append(left, btn);
+        return row;
+    }
+    const iapSection = createSettingSection('In-App Purchases', [ createInAppPurchaseRow(), createRestoreRow() ]);
 
     // Font size control
     function createFontSizeControl() {

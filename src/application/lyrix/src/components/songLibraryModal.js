@@ -658,7 +658,7 @@ export function showSongLibrary() {
             });
             
             const emptyIcon = window.$('div', {
-                text: '🎵',
+                text: '',
                 css: {
                     fontSize: '48px',
                     marginBottom: '15px'

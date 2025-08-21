@@ -4,6 +4,7 @@
 // Import modal modules from new organized structure
 import { showSongLibrary, toggleSongLibrary } from './src/components/songLibraryModal.js';
 import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
+import { getPurchaseManager } from './src/features/purchase/purchase_manager.js';
 
 
 
@@ -302,6 +303,30 @@ function initializeLyrix() {
         // Initialize MIDI utilities
         midiUtilities = new MidiUtilities();
         window.midiUtilities = midiUtilities;  // Expose globally
+
+        // Initialize Purchase Manager for MIDI console unlock
+        const purchaseManager = getPurchaseManager();
+        window.purchaseManager = purchaseManager;
+
+        function ensureMidiConsoleUI(){
+            const toolbarRow = document.getElementById('main-toolbar-row');
+            if (!toolbarRow) return;
+            let consoleBtn = document.getElementById('show_midi_console_button');
+            if (purchaseManager.isOwned()) {
+                if (!consoleBtn){
+                    consoleBtn = $('div', { id:'show_midi_console_button', text:'MIDI', css:{ padding:'4px 10px', backgroundColor:'rgb(48,60,78)', color:'#fff', borderRadius:'4px', cursor:'pointer', userSelect:'none' } });
+                    consoleBtn.addEventListener('click', ()=>{
+                        const el = midiUtilities && midiUtilities.midiContainer;
+                        if (el){ el.style.display = (el.style.display==='none'||!el.style.display)?'block':'none'; }
+                    });
+                    toolbarRow.appendChild(consoleBtn);
+                }
+            } else {
+                if (consoleBtn) consoleBtn.remove();
+            }
+        }
+        window.addEventListener('lyrix-purchase-updated', ensureMidiConsoleUI);
+        setTimeout(ensureMidiConsoleUI, 0);
         
         // Export managers and modal functions to global scope
         window.UIManager = UIManager; // Export the class for static methods
