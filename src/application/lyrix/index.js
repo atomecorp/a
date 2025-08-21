@@ -2035,6 +2035,46 @@ function updateTimecode(timeMs) {
     if (lyricsDisplay) {
         lyricsDisplay.updateTime(timeMs, 'host'); // Mark as host source for prioritization
     }
+
+    // AUv3 host-synced playback arming logic
+    const __hostEnv = (window.__HOST_ENV || '').toString().toLowerCase();
+    if (__hostEnv === 'auv3') {
+        if (!window.__lyrixHostSync) {
+            window.__lyrixHostSync = { lastTime: 0, started: false };
+        }
+        const btn = document.getElementById('audio-play-button');
+        if (btn) {
+            // While armed and host scrubs (time changes but playback not started) reflect position on slider/labels
+            if (btn.dataset.state === 'armed' && typeof updateScrubSliderDisplay === 'function') {
+                try { updateScrubSliderDisplay(timeMs / 1000); } catch(e) {}
+            }
+            // Detect host running (time advancing)
+            if (timeMs > window.__lyrixHostSync.lastTime + 5) { // >5ms advance considered movement
+                if (!window.__lyrixHostSync.started) {
+                    window.__lyrixHostSync.started = true;
+                }
+                // If armed and not yet playing, start synced
+                if (btn.dataset.state === 'armed' && audioController && !audioController.isPlaying()) {
+                    try {
+                        audioController.setCurrentTime(timeMs / 1000);
+                    } catch(e) { /* ignore */ }
+                    try { audioController.play(); } catch(e) { console.warn('⚠️ host sync play failed', e); }
+                    if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white';
+                    btn.classList.remove('auv3-armed');
+                    btn.dataset.state = 'playingHost';
+                    console.log('▶️ AUv3 host-synced playback started at', (timeMs/1000).toFixed(3),'s');
+                }
+            }
+            // Optional: if host stopped (returned to 0) you could pause host-synced playback
+            if (timeMs === 0 && window.__lyrixHostSync.lastTime > 0) {
+                window.__lyrixHostSync.started = false;
+                if (btn.dataset.state === 'playingHost') {
+                    // Keep playing unless desired to pause with host; requirement only specified start
+                }
+            }
+        }
+        window.__lyrixHostSync.lastTime = timeMs;
+    }
 }
 
 // Diagnostic function for parasitic resets (available in console)
@@ -2187,14 +2227,49 @@ function createMainInterface() {
             id: 'audio-play-button',
             onClick: () => {
                 try {
-                    if (audioController.isPlaying()) {
-                        audioController.pause();
-                        if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
-
+                    const hostEnv = (window.__HOST_ENV||'').toString().toLowerCase();
+                    if (hostEnv === 'auv3') {
+                        if (playButton._longPressTriggered) { // guard: ignore base click after long press
+                            playButton._longPressTriggered = false;
+                            return;
+                        }
+                        const state = playButton.dataset.state || 'idle';
+                        // If currently playing locally, toggle pause
+                        if (audioController.isPlaying() && state !== 'armed') {
+                            audioController.pause();
+                            if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
+                            playButton.dataset.state = 'idle';
+                            return;
+                        }
+                        if (state === 'idle') {
+                            // Arm playback (wait for host start)
+                            armAuv3Playback(playButton);
+                            console.log('🟡 AUv3 playback armed (waiting host start)');
+                        } else if (state === 'armed') {
+                            // Disarm
+                            disarmAuv3Playback(playButton);
+                            console.log('⚪️ AUv3 playback disarmed');
+                        } else if (state === 'playingHost' || state === 'forced') {
+                            // Pause current playback
+                            audioController.pause();
+                            if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
+                            playButton.dataset.state = 'idle';
+                            console.log('⏸️ AUv3 playback paused');
+                        } else {
+                            // Fallback toggle
+                            audioController.play();
+                            playButton.dataset.state = 'playingHost';
+                            console.log('▶️ AUv3 fallback play');
+                        }
                     } else {
-                        if (playButton._setActive) playButton._setActive(true); else playButton.style.backgroundColor = 'white';
-
-                        audioController.play();
+                        // Application mode: original behavior
+                        if (audioController.isPlaying()) {
+                            audioController.pause();
+                            if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
+                        } else {
+                            if (playButton._setActive) playButton._setActive(true); else playButton.style.backgroundColor = 'white';
+                            audioController.play();
+                        }
                     }
                 } catch (error) {
                     console.error('❌ ERREUR Play/Pause:', error);
@@ -2205,6 +2280,49 @@ function createMainInterface() {
                 display: initialDisplay
             }
         });
+        // AUv3 arming helpers (defined inline to avoid polluting global scope)
+        function ensureAuv3ArmStyles(){
+            if (document.getElementById('lyrix-auv3-arm-style')) return;
+            const st = document.createElement('style');
+            st.id = 'lyrix-auv3-arm-style';
+            st.textContent = `@keyframes lyrixArmBlink{0%,100%{background:#444;}50%{background:#888;}} .auv3-armed{animation:lyrixArmBlink 0.9s linear infinite; box-shadow:0 0 0 1px #666 inset;}`;
+            document.head.appendChild(st);
+        }
+        function armAuv3Playback(btn){
+            ensureAuv3ArmStyles();
+            btn.dataset.state = 'armed';
+            btn.classList.add('auv3-armed');
+            if (btn._setActive) btn._setActive(false); // keep icon neutral
+        }
+        function disarmAuv3Playback(btn){
+            btn.dataset.state = 'idle';
+            btn.classList.remove('auv3-armed');
+            if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor = 'transparent';
+        }
+        function forceImmediatePlayback(btn){
+            btn.classList.remove('auv3-armed');
+            btn.dataset.state = 'forced';
+            try { audioController.play(); } catch(e) { console.warn('⚠️ force play failed', e); }
+            if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white';
+        }
+        // Long press detection (AUv3 only)
+    if ((window.__HOST_ENV||'').toString().toLowerCase() === 'auv3') {
+            let pressTimer = null;
+            const longPressMs = 600;
+            const startPress = () => {
+                if (pressTimer) clearTimeout(pressTimer);
+                pressTimer = setTimeout(() => {
+                    if (playButton.dataset.state === 'armed' || playButton.dataset.state === 'idle') {
+            forceImmediatePlayback(playButton);
+            playButton._longPressTriggered = true; // mark to ignore ensuing click
+            console.log('⚡️ AUv3 long press forced playback');
+                    }
+                }, longPressMs);
+            };
+            const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+            ['mousedown','touchstart'].forEach(ev=>playButton.addEventListener(ev,startPress,{passive:true}));
+            ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>playButton.addEventListener(ev,cancelPress,{passive:true}));
+        }
         // Inject SVG icon for play
         (function attachPlayIcon(){
             try {
