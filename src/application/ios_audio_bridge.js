@@ -38,7 +38,9 @@ let sampleTapActive = false;
 let sampleTapQueue = []; // Array<Float32Array>
 let sampleTapSR = STREAM_SR;
 let sampleTapEnded = false;
-let sampleTapNodes = null; // { source, processor }
+let sampleTapNodes = null; // { processor }
+let sampleTapSource = null; // persistent MediaElementSource for the <audio>
+let sampleTapSink = null;   // persistent zero-gain sink to keep graph running on some iOS builds
 
 // AudioWorklet-based media tap (lower latency/CPU) — loaded via Blob URL to avoid path issues
 const MEDIA_TAP_WORKLET_SOURCE = `class MediaTapProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    const sec = options?.processorOptions?.chunkDurationSec ?? 0.12;\n    this.setChunkSamples(sec);\n    this.buf = new Float32Array(this.chunkSamples);\n    this.write = 0;\n    this.port.onmessage = (e) => {\n      const msg = e.data || {};\n      if (msg.cmd === 'setChunkSec') {\n        this.setChunkSamples(msg.sec);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n    };\n  }\n  setChunkSamples(sec) {\n    const clamped = Math.min(0.5, Math.max(0.02, Number(sec) || 0.12));\n    this.chunkSamples = Math.max(128, Math.round(clamped * sampleRate));\n  }\n  process(inputs) {\n    const input = inputs[0];\n    if (!input || input.length === 0) return true;\n    const L = input[0] || new Float32Array(128);\n    const R = input[1] || L;\n    const n = L.length;\n    for (let i = 0; i < n; i++) {\n      const mono = (L[i] + R[i]) * 0.5;\n      if (this.write >= this.chunkSamples) {\n        this.port.postMessage({ sr: sampleRate, pcm: this.buf }, [this.buf.buffer]);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n      this.buf[this.write++] = mono;\n    }\n    return true;\n  }\n}\nregisterProcessor('media-tap-processor', MediaTapProcessor);`;
@@ -215,8 +217,10 @@ function stopSample(){
                 // Stop tap
                 if(sampleTapActive){
                     try{
-                        if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){}}
-                        if(sampleTapNodes && sampleTapNodes.source){ try{ sampleTapNodes.source.disconnect(); }catch(_){}}
+                        if(sampleTapSource && sampleTapNodes && sampleTapNodes.processor){
+                            try{ sampleTapSource.disconnect(sampleTapNodes.processor); }catch(_){ }
+                        }
+                        if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
                     }catch(_){ }
                     sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
                 }
@@ -251,7 +255,8 @@ async function playSampleHost(relPath){
         const port = window.__ATOME_LOCAL_HTTP_PORT__;
         el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath)) : ('atome:///audio/'+encodeURI(relPath));
         // Build nodes
-        const source = ctx.createMediaElementSource(el);
+    // Reuse a single MediaElementSource for this element across plays (spec: only one per element)
+    if(!sampleTapSource){ sampleTapSource = ctx.createMediaElementSource(el); }
         let tapGotData = false;
         // Try AudioWorklet tap first for lower latency/CPU
         try{
@@ -264,8 +269,8 @@ async function playSampleHost(relPath){
                         if(pcm && pcm.length){ sampleTapQueue.push(pcm); sampleTapSR = sr; tapGotData = true; }
                     }catch(_){ }
                 };
-                source.connect(workletNode);
-                sampleTapNodes = { source, processor: workletNode };
+                sampleTapSource.connect(workletNode);
+                sampleTapNodes = { processor: workletNode };
             }
         }catch(err){ console.warn('[tap] worklet failed, fallback to ScriptProcessor', err); sampleTapNodes = null; }
         // If worklet unavailable or failed, fallback to ScriptProcessor
@@ -284,12 +289,12 @@ async function playSampleHost(relPath){
                     if((sampleTapQueue.length % 8)===0){ console.log('[tap] queued chunks=', sampleTapQueue.length, 'sr=', sampleTapSR); }
                 }catch(_){ }
             };
-            try{ source.connect(proc); }catch(_){ }
+            try{ sampleTapSource.connect(proc); }catch(_){ }
             try{ proc.connect(ctx.destination); }catch(_){ }
-            sampleTapNodes = { source, processor: proc };
+            sampleTapNodes = { processor: proc };
         }
         // Some iOS builds require nodes to be connected to destination to run (keep element clock running)
-        try{ const sink = ctx.createGain(); sink.gain.value = 0.0; source.connect(sink); sink.connect(ctx.destination); }catch(_){ }
+        try{ if(!sampleTapSink){ sampleTapSink = ctx.createGain(); sampleTapSink.gain.value = 0.0; sampleTapSource.connect(sampleTapSink); sampleTapSink.connect(ctx.destination); } }catch(_){ }
         sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true;
         el.onended = ()=>{ sampleTapEnded = true; };
         try{ await el.play(); }catch(e){ console.warn('audio element play failed', e); }
@@ -301,8 +306,8 @@ async function playSampleHost(relPath){
             try{
                 if(!tapGotData && sampleTapActive){
                     // Tear down tap and fallback to pre-decode streaming
+                    if(sampleTapSource && sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapSource.disconnect(sampleTapNodes.processor); }catch(_){ }}
                     if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
-                    if(sampleTapNodes && sampleTapNodes.source){ try{ sampleTapNodes.source.disconnect(); }catch(_){ }}
                     sampleTapActive=false; sampleTapQueue=[]; sampleTapEnded=false; sampleTapNodes=null;
                     playSampleHostFallbackDecode(relPath);
                 }
