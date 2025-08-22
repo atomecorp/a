@@ -27,7 +27,7 @@ const HOST_SUSTAIN_SEC = 3600; // sustain long côté host
 // Streaming continu binaire: envoie des chunks 200ms (ArrayBuffer) pendant que des notes Host ou un sample sont actifs
 const STREAM_SR = 44100;
 const STREAM_CHUNK_SEC = 0.2; // 200ms recommandés (doc)
-const STREAM_CHUNK_BG_MAX_SEC = 1.0; // when page hidden, allow up to 1s per send to survive timer throttling
+const STREAM_CHUNK_BG_MAX_SEC = 1.2; // when page hidden, allow up to ~1.2s per send to survive timer throttling
 const hostActive = new Set(); // labels actifs côté host
 const hostFreq = new Map(); // label -> freq
 const hostPhase = new Map(); // label -> phase
@@ -44,12 +44,13 @@ let sampleTapEnded = false;
 let sampleTapNodes = null; // { processor }
 let sampleTapSource = null; // persistent MediaElementSource for the <audio>
 let sampleTapSink = null;   // persistent zero-gain sink to keep graph running on some iOS builds
+let __bgBridgeTimers = [];  // scheduled timers to reinforce prebuffer while hidden
 
 // AudioWorklet-based media tap (lower latency/CPU) — loaded via Blob URL to avoid path issues
-const MEDIA_TAP_WORKLET_SOURCE = `class MediaTapProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    const sec = options?.processorOptions?.chunkDurationSec ?? 0.12;\n    this.setChunkSamples(sec);\n    this.buf = new Float32Array(this.chunkSamples);\n    this.write = 0;\n    this.port.onmessage = (e) => {\n      const msg = e.data || {};\n      if (msg.cmd === 'setChunkSec') {\n        this.setChunkSamples(msg.sec);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n    };\n  }\n  setChunkSamples(sec) {\n    const clamped = Math.min(0.5, Math.max(0.02, Number(sec) || 0.12));\n    this.chunkSamples = Math.max(128, Math.round(clamped * sampleRate));\n  }\n  process(inputs) {\n    const input = inputs[0];\n    if (!input || input.length === 0) return true;\n    const L = input[0] || new Float32Array(128);\n    const R = input[1] || L;\n    const n = L.length;\n    for (let i = 0; i < n; i++) {\n      const mono = (L[i] + R[i]) * 0.5;\n      if (this.write >= this.chunkSamples) {\n        this.port.postMessage({ sr: sampleRate, pcm: this.buf }, [this.buf.buffer]);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n      this.buf[this.write++] = mono;\n    }\n    return true;\n  }\n}\nregisterProcessor('media-tap-processor', MediaTapProcessor);`;
+const MEDIA_TAP_WORKLET_SOURCE = `class MediaTapProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    const sec = options?.processorOptions?.chunkDurationSec ?? 0.12;\n    this.setChunkSamples(sec);\n    this.buf = new Float32Array(this.chunkSamples);\n    this.write = 0;\n    this.port.onmessage = (e) => {\n      const msg = e.data || {};\n      if (msg.cmd === 'setChunkSec') {\n        this.setChunkSamples(msg.sec);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n    };\n  }\n  setChunkSamples(sec) {\n    const clamped = Math.min(0.5, Math.max(0.02, Number(sec) || 0.12));\n    this.chunkSamples = Math.max(128, Math.round(clamped * sampleRate));\n  }\n  process(inputs, outputs) {\n    const input = inputs[0];\n    const out = outputs && outputs[0] ? outputs[0][0] : null;\n    if (!input || input.length === 0) { if(out){ out.fill(0); } return true; }\n    const L = input[0] || new Float32Array(128);\n    const R = input[1] || L;\n    const n = L.length;\n    for (let i = 0; i < n; i++) {\n      const mono = (L[i] + R[i]) * 0.5;\n      if (this.write >= this.chunkSamples) {\n        this.port.postMessage({ sr: sampleRate, pcm: this.buf }, [this.buf.buffer]);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n      this.buf[this.write++] = mono;\n      if(out){ out[i] = 0.0; }\n    }\n    return true;\n  }\n}\nregisterProcessor('media-tap-processor', MediaTapProcessor);`;
 let __tapWorkletURL=null; function getTapWorkletURL(){ if(__tapWorkletURL) return __tapWorkletURL; try{ const blob=new Blob([MEDIA_TAP_WORKLET_SOURCE],{type:'application/javascript'}); __tapWorkletURL=URL.createObjectURL(blob); }catch(_){ __tapWorkletURL=null; } return __tapWorkletURL; }
 let tapWorkletReady=null; async function ensureTapWorkletLoaded(ctx){ if(!ctx || !ctx.audioWorklet) throw new Error('no-audioWorklet'); if(!tapWorkletReady){ const url=getTapWorkletURL(); if(!url) throw new Error('worklet-url'); tapWorkletReady = ctx.audioWorklet.addModule(url).catch(e=>{ tapWorkletReady=null; throw e; }); } return tapWorkletReady; }
-async function createTapWorkletNode(ctx, chunkSec){ await ensureTapWorkletLoaded(ctx); const node = new AudioWorkletNode(ctx, 'media-tap-processor', { numberOfInputs:1, numberOfOutputs:0, channelCount:2, processorOptions:{ chunkDurationSec: chunkSec } }); return node; }
+async function createTapWorkletNode(ctx, chunkSec){ await ensureTapWorkletLoaded(ctx); const node = new AudioWorkletNode(ctx, 'media-tap-processor', { numberOfInputs:1, numberOfOutputs:1, outputChannelCount:[1], channelCount:2, processorOptions:{ chunkDurationSec: chunkSec } }); return node; }
 
 // Page visibility handling for AUv3 UI close/minimize cases (timers may throttle)
 function onVisibilityChange(){
@@ -57,13 +58,66 @@ function onVisibilityChange(){
     try{
         // If worklet is active, ask it to increase chunk size a bit when hidden
         if(PAGE_HIDDEN && sampleTapNodes && sampleTapNodes.processor && sampleTapNodes.processor.port){
-            sampleTapNodes.processor.port.postMessage({ cmd:'setChunkSec', sec: 0.2 });
+            sampleTapNodes.processor.port.postMessage({ cmd:'setChunkSec', sec: 0.24 });
         } else if(sampleTapNodes && sampleTapNodes.processor && sampleTapNodes.processor.port) {
             sampleTapNodes.processor.port.postMessage({ cmd:'setChunkSec', sec: 0.12 });
+        }
+        // Reset drain timing
+        try{ streamLastTs = performance.now(); }catch(_){ }
+        if(PAGE_HIDDEN){ prebufferOnHide(); }
+        // Arm 2 short follow-up prebuffers to cover deeper throttling
+        clearBackgroundBridgeTimers();
+        if(PAGE_HIDDEN){
+            __bgBridgeTimers.push(setTimeout(()=>{ try{ if(PAGE_HIDDEN) prebufferOnHide(); }catch(_){ } }, 550));
+            __bgBridgeTimers.push(setTimeout(()=>{ try{ if(PAGE_HIDDEN) prebufferOnHide(); }catch(_){ } }, 1100));
+        } else {
+            clearBackgroundBridgeTimers();
         }
     }catch(_){ }
 }
 try{ document.addEventListener('visibilitychange', onVisibilityChange, false); }catch(_){ }
+
+// On UI close/minimize, proactively push ~1.2s of real audio to the host to bridge timer throttling
+function prebufferOnHide(){
+    const coverSec = Math.min(1.2, STREAM_CHUNK_BG_MAX_SEC);
+    // 1) Prefer draining from tap queue if active
+    if(sampleTapActive && sampleTapQueue && sampleTapQueue.length){
+        const sr = sampleTapSR || STREAM_SR;
+        let need = Math.max(1, Math.floor(sr * coverSec));
+        const parts = [];
+        while(need > 0 && sampleTapQueue.length){
+            const head = sampleTapQueue[0];
+            if(head.length <= need){ parts.push(head); sampleTapQueue.shift(); need -= head.length; }
+            else { parts.push(head.subarray(0, need)); sampleTapQueue[0] = head.subarray(need); need = 0; }
+        }
+        if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); const out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; }
+            try{ sendHostJSONChunk(out, sr); }catch(_){ }
+            return;
+        }
+    }
+    // 2) If we have a pre-decoded buffer, send next slice now
+    if(samplePlaybackHost && samplePlaybackHost.pcm){
+        const sr = samplePlaybackHost.sr || STREAM_SR;
+        const need = Math.max(1, Math.floor(sr * coverSec));
+        const start = samplePlaybackHost.pos;
+        const end = Math.min(samplePlaybackHost.pcm.length, start + need);
+        if(end > start){ const slice = samplePlaybackHost.pcm.subarray(start, end); samplePlaybackHost.pos = end; try{ sendHostJSONChunk(slice, sr); }catch(_){ } return; }
+    }
+    // 3) If notes are active, pre-send a few binary chunks to cover coverSec
+    if(hostActive && hostActive.size > 0){
+        const count = Math.max(1, Math.ceil(coverSec / STREAM_CHUNK_SEC));
+        for(let i=0;i<count;i++){ const ab = genBinChunk(); if(ab){ try{ sendHostBin(ab); }catch(_){ } } }
+        return;
+    }
+    // 4) Last resort: a tiny silence buffer to keep host from underrun
+    const sr = STREAM_SR; const frames = Math.floor(sr * Math.min(0.2, coverSec));
+    if(frames > 0){ try{ sendHostJSONChunk(new Float32Array(frames), sr); }catch(_){ } }
+}
+
+function clearBackgroundBridgeTimers(){
+    try{ __bgBridgeTimers.forEach(id=>clearTimeout(id)); }catch(_){ }
+    __bgBridgeTimers = [];
+}
 // Send JSON audio buffer to host (Swift expects a frequency field)
 function sendHostJSONChunk(f32, sr=STREAM_SR){
     try{
@@ -73,66 +127,72 @@ function sendHostJSONChunk(f32, sr=STREAM_SR){
         });
     }catch(_){ }
 }
+
 function genBinChunk(){
- const hasNotes = hostActive.size>0; const hasSample = false; // don't mix sample JSON stream into binary note chunk
- if(!hasNotes && !hasSample) return null;
- const n=Math.max(1,Math.floor(STREAM_SR*STREAM_CHUNK_SEC)); const buf=new Float32Array(n);
- const labels=[...hostActive]; const ampBase = hasNotes? (0.35/Math.max(labels.length,1)) : 0;
- for(let i=0;i<n;i++){
-  let s=0; const t=i/STREAM_SR;
-  // mix notes
-  for(const l of labels){ const f=hostFreq.get(l)||0; if(f<=0) continue; const p0=hostPhase.get(l)||0; const w=2*Math.PI*f; s += Math.sin(p0 + w*t); }
-  buf[i] = s*ampBase;
- }
- // advance phases
- for(const l of labels){ const f=hostFreq.get(l)||0; const p0=hostPhase.get(l)||0; const adv = 2*Math.PI*f*(n/STREAM_SR); let ph = p0+adv; ph = ((ph + Math.PI) % (2*Math.PI)) - Math.PI; hostPhase.set(l, ph); }
- return buf.buffer; }
+    const hasNotes = hostActive.size>0;
+    if(!hasNotes) return null;
+    const n = Math.max(1, Math.floor(STREAM_SR * STREAM_CHUNK_SEC));
+    const buf = new Float32Array(n);
+    const labels = [...hostActive];
+    const ampBase = 0.35 / Math.max(labels.length, 1);
+    for(let i=0;i<n;i++){
+        let s=0; const t=i/STREAM_SR;
+        for(const l of labels){ const f=hostFreq.get(l)||0; if(f<=0) continue; const p0=hostPhase.get(l)||0; const w=2*Math.PI*f; s += Math.sin(p0 + w*t); }
+        buf[i] = s * ampBase;
+    }
+    for(const l of labels){ const f=hostFreq.get(l)||0; const p0=hostPhase.get(l)||0; const adv = 2*Math.PI*f*(n/STREAM_SR); let ph = p0+adv; ph = ((ph + Math.PI) % (2*Math.PI)) - Math.PI; hostPhase.set(l, ph); }
+    return buf.buffer;
+}
 function sendHostBin(ab){ try{ window.webkit.messageHandlers.swiftBridge.postMessage({ type:'audioBuffer_bin', data: ab }); }catch(e){} }
 function ensureStreaming(){
- if(streamTimer) return;
- if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive) return;
- const ms = Math.floor(STREAM_CHUNK_SEC*1000);
+    if(streamTimer) return;
+    if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive) return;
+    const ms = Math.floor(STREAM_CHUNK_SEC*1000);
     streamLastTs = performance.now();
     streamTimer = setInterval(()=>{
         const now = performance.now();
         let dtSec = (now - streamLastTs) / 1000;
         if(!isFinite(dtSec) || dtSec <= 0) dtSec = STREAM_CHUNK_SEC;
-        // When hidden, timers are throttled; permit larger drains but cap to 1.0s
         const drainSec = PAGE_HIDDEN ? Math.min(STREAM_CHUNK_BG_MAX_SEC, Math.max(STREAM_CHUNK_SEC, dtSec))
-                                                                 : Math.max(STREAM_CHUNK_SEC, Math.min(dtSec, STREAM_CHUNK_BG_MAX_SEC));
+                                     : Math.max(STREAM_CHUNK_SEC, Math.min(dtSec, STREAM_CHUNK_BG_MAX_SEC));
         streamLastTs = now;
-    // Stop condition
-    if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive){ clearInterval(streamTimer); streamTimer=null; return; }
-    // 1) Send sample tap chunk if active
+        // Stop condition
+        if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive){ clearInterval(streamTimer); streamTimer=null; return; }
+        // 1) Send sample tap chunk if active
     if(sampleTapActive){
-                const need = Math.max(1, Math.floor(sampleTapSR * drainSec));
-        let out = null; let remaining = need;
-        if(sampleTapQueue.length){
-            const parts = [];
-            while(remaining > 0 && sampleTapQueue.length){
-                const head = sampleTapQueue[0];
-                if(head.length <= remaining){ parts.push(head); sampleTapQueue.shift(); remaining -= head.length; }
-                else { parts.push(head.subarray(0, remaining)); sampleTapQueue[0] = head.subarray(remaining); remaining = 0; }
+            const need = Math.max(1, Math.floor(sampleTapSR * drainSec));
+            let out = null; let remaining = need;
+            if(sampleTapQueue.length){
+                const parts = [];
+                while(remaining > 0 && sampleTapQueue.length){
+                    const head = sampleTapQueue[0];
+                    if(head.length <= remaining){ parts.push(head); sampleTapQueue.shift(); remaining -= head.length; }
+                    else { parts.push(head.subarray(0, remaining)); sampleTapQueue[0] = head.subarray(remaining); remaining = 0; }
+                }
+                if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; } }
             }
-            if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; } }
+            if(out && out.length){ sendHostJSONChunk(out, sampleTapSR); }
+            else if(PAGE_HIDDEN){
+                // If hidden and no tap data, feed a tiny zero-fill to avoid crackles
+                const filler = Math.floor(sampleTapSR * 0.06);
+                if(filler > 0) try{ sendHostJSONChunk(new Float32Array(filler), sampleTapSR); }catch(_){ }
+            }
+            if(sampleTapEnded && sampleTapQueue.length===0 && (!out || out.length===0)){
+                sampleTapActive = false; sampleTapSR = STREAM_SR; sampleTapEnded = false; sampleTapNodes = null;
+            }
         }
-        if(out && out.length){ sendHostJSONChunk(out, sampleTapSR); }
-        if(sampleTapEnded && sampleTapQueue.length===0 && (!out || out.length===0)){
-            sampleTapActive = false; sampleTapSR = STREAM_SR; sampleTapEnded = false; sampleTapNodes = null;
+        // 2) Send pre-decoded sample chunk (JSON) if present (legacy path)
+        if(samplePlaybackHost && samplePlaybackHost.pcm){
+            const sr = samplePlaybackHost.sr || STREAM_SR;
+            const need = Math.max(1, Math.floor(sr * drainSec));
+            const start = samplePlaybackHost.pos;
+            const end = Math.min(samplePlaybackHost.pcm.length, start + need);
+            if(end > start){ const slice = samplePlaybackHost.pcm.subarray(start, end); samplePlaybackHost.pos = end; sendHostJSONChunk(slice, sr); }
+            if(samplePlaybackHost.pos >= samplePlaybackHost.pcm.length){ samplePlaybackHost = null; }
         }
-    }
-    // 2) Send pre-decoded sample chunk (JSON) if present (legacy path)
-    if(samplePlaybackHost && samplePlaybackHost.pcm){
-    const sr = samplePlaybackHost.sr || STREAM_SR;
-    const need = Math.max(1, Math.floor(sr * drainSec));
-        const start = samplePlaybackHost.pos;
-    const end = Math.min(samplePlaybackHost.pcm.length, start + need);
-    if(end > start){ const slice = samplePlaybackHost.pcm.subarray(start, end); samplePlaybackHost.pos = end; sendHostJSONChunk(slice, sr); }
-        if(samplePlaybackHost.pos >= samplePlaybackHost.pcm.length){ samplePlaybackHost = null; }
-    }
-    // 3) Send note-generated sine chunk (binary) if any notes active
-    if(hostActive.size>0){ const ab = genBinChunk(); if(ab){ sendHostBin(ab); } }
- }, ms);
+        // 3) Send note-generated sine chunk (binary) if any notes active
+        if(hostActive.size>0){ const ab = genBinChunk(); if(ab){ sendHostBin(ab); } }
+    }, ms);
 }
 function maybeStopStreaming(){ if(hostActive.size===0 && !samplePlaybackHost && streamTimer){ clearInterval(streamTimer); streamTimer=null; } }
 
@@ -161,6 +221,7 @@ function stopAll(){ // stop locaux
     // stop sample (local + host)
     stopSample();
     hostActive.clear(); hostFreq.clear(); hostPhase.clear(); maybeStopStreaming();
+    FIRST_HIDE_PRIMED = false;
 }
 
 // API minimale exposée (compat)
@@ -175,6 +236,22 @@ window.audioSwiftBridge = {
 // Bouton route (cycle)
 Button({ id:'routeBtn', onText:'', offText:'', onAction:()=>{ routeIdx=(routeIdx+1)%ROUTE.length; applyRoute(); }, offAction:()=>{ routeIdx=(routeIdx+1)%ROUTE.length; applyRoute(); }, parent:'body', css:{position:'absolute',left:'14px',top:'14px',width:'90px',height:'34px',background:'#6a5acd',color:'#fff',border:'none',borderRadius:'6px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
 applyRoute();
+
+// Default: in AUv3, force decode fallback for file playback unless explicitly overridden
+if(IN_AUV3 && typeof window.forceSampleDecodeFallback === 'undefined'){
+    window.forceSampleDecodeFallback = true;
+}
+
+// Quick toggle for Tap vs Decode fallback
+const modeBtn = Button({
+    id:'modeBtn', parent:'body',
+    onText:'Mode: Decode', offText:'Mode: Tap',
+    onAction:()=>{ window.forceSampleDecodeFallback = true; },
+    offAction:()=>{ window.forceSampleDecodeFallback = false; },
+    css:{position:'absolute',left:'705px',top:'14px',width:'110px',height:'34px',background:'#455063',color:'#fff',border:'none',borderRadius:'6px',fontFamily:'Arial, sans-serif',fontSize:'12px',cursor:'pointer'}
+});
+// Initialize button state to reflect current mode
+try{ modeBtn.setState(!!window.forceSampleDecodeFallback); }catch(_){ }
 
 // Notes (toggle)
 const c4 = Button({ onText:'C4 ●', offText:'C4', parent:'body', onAction:()=>routePlay('C4',261.63), offAction:()=>routeStop('C4'), onStyle:{background:'#ff6b35',color:'#fff'}, offStyle:{background:'#3b9157',color:'#fff'}, css:{position:'absolute',left:'120px',top:'14px',width:'70px',height:'34px',border:'none',borderRadius:'5px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
@@ -249,6 +326,7 @@ function stopSample(){
                     }catch(_){ }
                     sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
                 }
+                FIRST_HIDE_PRIMED = false; // reset for next playback
                 maybeStopStreaming();
     }catch(_){ }
 }
@@ -269,6 +347,11 @@ function playSample(relPath){
 
 async function playSampleHost(relPath){
     try{
+        if(window.forceSampleDecodeFallback===true){
+            console.warn('[sample] forceSampleDecodeFallback enabled, bypassing tap');
+            await playSampleHostFallbackDecode(relPath);
+            return;
+        }
         // Setup Web Audio tap from the hidden <audio>
         const ctx = ensureAC(); sampleTapSR = ctx.sampleRate|0;
         const el = document.getElementById('samplePlayer');
@@ -283,7 +366,7 @@ async function playSampleHost(relPath){
     // Reuse a single MediaElementSource for this element across plays (spec: only one per element)
     if(!sampleTapSource){ sampleTapSource = ctx.createMediaElementSource(el); }
         let tapGotData = false;
-        // Try AudioWorklet tap first for lower latency/CPU
+    // Try AudioWorklet tap first for lower latency/CPU
         try{
             if(ctx.audioWorklet && window.AudioWorkletNode){
                 const workletNode = await createTapWorkletNode(ctx, 0.12);
@@ -294,7 +377,11 @@ async function playSampleHost(relPath){
                         if(pcm && pcm.length){ sampleTapQueue.push(pcm); sampleTapSR = sr; tapGotData = true; }
                     }catch(_){ }
                 };
-                sampleTapSource.connect(workletNode);
+        // Ensure a persistent zero-gain sink exists
+        if(!sampleTapSink){ sampleTapSink = ctx.createGain(); sampleTapSink.gain.value = 0.0; sampleTapSink.connect(ctx.destination); }
+        sampleTapSource.connect(workletNode);
+        // Connect worklet output to the sink so the processor is actively pulled
+        try{ workletNode.connect(sampleTapSink); }catch(_){ }
                 sampleTapNodes = { processor: workletNode };
             }
         }catch(err){ console.warn('[tap] worklet failed, fallback to ScriptProcessor', err); sampleTapNodes = null; }
@@ -318,17 +405,17 @@ async function playSampleHost(relPath){
             try{ proc.connect(ctx.destination); }catch(_){ }
             sampleTapNodes = { processor: proc };
         }
-        // Some iOS builds require nodes to be connected to destination to run (keep element clock running)
-        try{ if(!sampleTapSink){ sampleTapSink = ctx.createGain(); sampleTapSink.gain.value = 0.0; sampleTapSource.connect(sampleTapSink); sampleTapSink.connect(ctx.destination); } }catch(_){ }
-        sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true;
+    // Some iOS builds require media element to be connected to destination to run; feed it into zero-gain sink as well
+    try{ if(sampleTapSink){ sampleTapSource.connect(sampleTapSink); } }catch(_){ }
+    sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true; firstHideHandled = false;
         el.onended = ()=>{ sampleTapEnded = true; };
         try{ await el.play(); }catch(e){ console.warn('audio element play failed', e); }
     // Primer silence to avoid underrun while tap warms up; larger if page hidden
-    const primerSec = PAGE_HIDDEN ? 0.8 : 0.3;
+    const primerSec = PAGE_HIDDEN ? 1.0 : 0.3;
     const zeros = new Float32Array(Math.floor(sampleTapSR * primerSec)); if(zeros.length) sendHostJSONChunk(zeros, sampleTapSR);
         ensureStreaming();
         // Fallback if tap produces no data in time (e.g., scheme not tappable)
-        setTimeout(()=>{
+    setTimeout(()=>{
             try{
                 if(!tapGotData && sampleTapActive){
                     // Tear down tap and fallback to pre-decode streaming
@@ -338,7 +425,7 @@ async function playSampleHost(relPath){
                     playSampleHostFallbackDecode(relPath);
                 }
             }catch(_){ }
-        }, 1200);
+    }, 700);
     } catch(e){ console.warn('playSampleHost error, fallback local', e); playSampleLocal(relPath); }
 }
 
@@ -362,7 +449,7 @@ async function playSampleHostFallbackDecode(relPath){
         const mono = rendered.numberOfChannels>0 ? rendered.getChannelData(0) : new Float32Array(rendered.length);
         const copy = new Float32Array(mono.length); copy.set(mono);
     const primer = Math.min(copy.length, Math.floor(targetSR * 0.5)); if(primer>0){ sendHostJSONChunk(copy.subarray(0, primer), targetSR); }
-    samplePlaybackHost = { pcm: copy, pos: primer };
+    samplePlaybackHost = { pcm: copy, pos: primer, sr: targetSR };
         ensureStreaming();
     }catch(e){ console.warn('host decode fallback failed, use local', e); playSampleLocal(relPath); }
 }
