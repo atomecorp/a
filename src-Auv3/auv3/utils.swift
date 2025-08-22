@@ -365,13 +365,11 @@ public class auv3Utils: AUAudioUnit {
         jsAudioLock.lock()
         defer { jsAudioLock.unlock() }
 
-    // print("🎵 AUv3: Injecting JS audio - \(audioData.count) samples at \(sampleRate)Hz")
-
-        // 1. Detect host sample rate
+        // 1) Detect host sample rate
         let hostSampleRate = getSampleRate() ?? 44100.0
         var processedBuffer: [Float] = audioData
 
-        // 2. Resample if needed (linear interpolation)
+        // 2) Resample if needed (linear interpolation)
         if abs(sampleRate - hostSampleRate) > 1.0 {
             let ratio = hostSampleRate / sampleRate
             let newLength = Int(Double(audioData.count) * ratio)
@@ -386,17 +384,24 @@ public class auv3Utils: AUAudioUnit {
                     processedBuffer[i] = audioData.last ?? 0
                 }
             }
-            // print("🔄 AUv3: Resampled JS audio from \(sampleRate)Hz to \(hostSampleRate)Hz (\(newLength) samples)")
         }
 
-
-        // 4. Store the processed buffer
-        jsAudioBuffer = processedBuffer
-        jsAudioPlaybackIndex = 0
+        // 3) Append incoming chunk instead of replacing the whole buffer
+        //    Drop already-played samples to keep buffer small
+        if jsAudioActive && !jsAudioBuffer.isEmpty {
+            if jsAudioPlaybackIndex > 0 && jsAudioPlaybackIndex < jsAudioBuffer.count {
+                jsAudioBuffer.removeFirst(jsAudioPlaybackIndex)
+            } else if jsAudioPlaybackIndex >= jsAudioBuffer.count {
+                jsAudioBuffer.removeAll()
+            }
+            jsAudioPlaybackIndex = 0
+            jsAudioBuffer.append(contentsOf: processedBuffer)
+        } else {
+            jsAudioBuffer = processedBuffer
+            jsAudioPlaybackIndex = 0
+            jsAudioActive = true
+        }
         jsAudioSampleRate = hostSampleRate
-        jsAudioActive = true
-
-    // print("🔊 AUv3: JS audio injection ready - \(processedBuffer.count) samples")
     }
     
     /// Stop JavaScript audio playback
