@@ -19,7 +19,7 @@ function applyRoute(){
 const IN_AUV3 = !!(window && window.__HOST_ENV); // In AUv3 extension UI, WebView audio isn't audible; route to host instead
 function hostAvailable(){ return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge); }
 function sendHost(obj){ try{ window.webkit.messageHandlers.swiftBridge.postMessage(obj); }catch(e){} }
-let AC=null; function ensureAC(){ if(!AC){ AC=new (window.AudioContext||window.webkitAudioContext)(); } if(AC.state==='suspended') AC.resume().catch(()=>{}); return AC; }
+let AC=null; let __toneCtxSet=false; function ensureAC(){ if(!AC){ AC=new (window.AudioContext||window.webkitAudioContext)(); try{ if(window.Tone && typeof window.Tone.setContext==='function'){ window.Tone.setContext(AC); __toneCtxSet=true; } }catch(_){} } if(AC.state==='suspended') AC.resume().catch(()=>{}); return AC; }
 // Suivi des oscillateurs locaux par note/accord
 let localNotes = new Map(); // key: note label => Array<{osc:OscillatorNode,gain:GainNode}>
 const FADE_TIME = 0.2; // seconds
@@ -39,6 +39,12 @@ let sampleTapQueue = []; // Array<Float32Array>
 let sampleTapSR = STREAM_SR;
 let sampleTapEnded = false;
 let sampleTapNodes = null; // { source, processor }
+
+// AudioWorklet-based media tap (lower latency/CPU) — loaded via Blob URL to avoid path issues
+const MEDIA_TAP_WORKLET_SOURCE = `class MediaTapProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    const sec = options?.processorOptions?.chunkDurationSec ?? 0.12;\n    this.setChunkSamples(sec);\n    this.buf = new Float32Array(this.chunkSamples);\n    this.write = 0;\n    this.port.onmessage = (e) => {\n      const msg = e.data || {};\n      if (msg.cmd === 'setChunkSec') {\n        this.setChunkSamples(msg.sec);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n    };\n  }\n  setChunkSamples(sec) {\n    const clamped = Math.min(0.5, Math.max(0.02, Number(sec) || 0.12));\n    this.chunkSamples = Math.max(128, Math.round(clamped * sampleRate));\n  }\n  process(inputs) {\n    const input = inputs[0];\n    if (!input || input.length === 0) return true;\n    const L = input[0] || new Float32Array(128);\n    const R = input[1] || L;\n    const n = L.length;\n    for (let i = 0; i < n; i++) {\n      const mono = (L[i] + R[i]) * 0.5;\n      if (this.write >= this.chunkSamples) {\n        this.port.postMessage({ sr: sampleRate, pcm: this.buf }, [this.buf.buffer]);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n      this.buf[this.write++] = mono;\n    }\n    return true;\n  }\n}\nregisterProcessor('media-tap-processor', MediaTapProcessor);`;
+let __tapWorkletURL=null; function getTapWorkletURL(){ if(__tapWorkletURL) return __tapWorkletURL; try{ const blob=new Blob([MEDIA_TAP_WORKLET_SOURCE],{type:'application/javascript'}); __tapWorkletURL=URL.createObjectURL(blob); }catch(_){ __tapWorkletURL=null; } return __tapWorkletURL; }
+let tapWorkletReady=null; async function ensureTapWorkletLoaded(ctx){ if(!ctx || !ctx.audioWorklet) throw new Error('no-audioWorklet'); if(!tapWorkletReady){ const url=getTapWorkletURL(); if(!url) throw new Error('worklet-url'); tapWorkletReady = ctx.audioWorklet.addModule(url).catch(e=>{ tapWorkletReady=null; throw e; }); } return tapWorkletReady; }
+async function createTapWorkletNode(ctx, chunkSec){ await ensureTapWorkletLoaded(ctx); const node = new AudioWorkletNode(ctx, 'media-tap-processor', { numberOfInputs:1, numberOfOutputs:0, channelCount:2, processorOptions:{ chunkDurationSec: chunkSec } }); return node; }
 // Send JSON audio buffer to host (Swift expects a frequency field)
 function sendHostJSONChunk(f32, sr=STREAM_SR){
     try{
@@ -246,26 +252,44 @@ async function playSampleHost(relPath){
         el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath)) : ('atome:///audio/'+encodeURI(relPath));
         // Build nodes
         const source = ctx.createMediaElementSource(el);
-        const proc = ctx.createScriptProcessor ? ctx.createScriptProcessor(2048, 2, 1) : null;
-        if(!proc){ console.warn('ScriptProcessor not available, falling back'); throw new Error('no-processor'); }
         let tapGotData = false;
-        proc.onaudioprocess = (ev)=>{
-            try{
-                const ib = ev.inputBuffer; const ch0 = ib.getChannelData(0);
-                const ch1 = ib.numberOfChannels>1 ? ib.getChannelData(1) : null;
-                const n = ib.length; const mono = new Float32Array(n);
-                if(ch1){ for(let i=0;i<n;i++){ mono[i] = (ch0[i] + ch1[i]) * 0.5; } }
-                else { mono.set(ch0); }
-                sampleTapQueue.push(mono);
-                tapGotData = true;
-                if((sampleTapQueue.length % 8)===0){ console.log('[tap] queued chunks=', sampleTapQueue.length, 'sr=', sampleTapSR); }
-            }catch(_){ }
-        };
-        // Some iOS builds require nodes to be connected to destination to run
-        try{ source.connect(proc); }catch(_){ }
+        // Try AudioWorklet tap first for lower latency/CPU
+        try{
+            if(ctx.audioWorklet && window.AudioWorkletNode){
+                const workletNode = await createTapWorkletNode(ctx, 0.12);
+                workletNode.port.onmessage = (e)=>{
+                    try{
+                        const msg = e.data || {};
+                        const pcm = msg.pcm; const sr = msg.sr|0 || sampleTapSR;
+                        if(pcm && pcm.length){ sampleTapQueue.push(pcm); sampleTapSR = sr; tapGotData = true; }
+                    }catch(_){ }
+                };
+                source.connect(workletNode);
+                sampleTapNodes = { source, processor: workletNode };
+            }
+        }catch(err){ console.warn('[tap] worklet failed, fallback to ScriptProcessor', err); sampleTapNodes = null; }
+        // If worklet unavailable or failed, fallback to ScriptProcessor
+        if(!sampleTapNodes){
+            const proc = ctx.createScriptProcessor ? ctx.createScriptProcessor(2048, 2, 1) : null;
+            if(!proc){ console.warn('ScriptProcessor not available, aborting tap'); throw new Error('no-processor'); }
+            proc.onaudioprocess = (ev)=>{
+                try{
+                    const ib = ev.inputBuffer; const ch0 = ib.getChannelData(0);
+                    const ch1 = ib.numberOfChannels>1 ? ib.getChannelData(1) : null;
+                    const n = ib.length; const mono = new Float32Array(n);
+                    if(ch1){ for(let i=0;i<n;i++){ mono[i] = (ch0[i] + ch1[i]) * 0.5; } }
+                    else { mono.set(ch0); }
+                    sampleTapQueue.push(mono);
+                    tapGotData = true;
+                    if((sampleTapQueue.length % 8)===0){ console.log('[tap] queued chunks=', sampleTapQueue.length, 'sr=', sampleTapSR); }
+                }catch(_){ }
+            };
+            try{ source.connect(proc); }catch(_){ }
+            try{ proc.connect(ctx.destination); }catch(_){ }
+            sampleTapNodes = { source, processor: proc };
+        }
+        // Some iOS builds require nodes to be connected to destination to run (keep element clock running)
         try{ const sink = ctx.createGain(); sink.gain.value = 0.0; source.connect(sink); sink.connect(ctx.destination); }catch(_){ }
-        try{ proc.connect(ctx.destination); }catch(_){ }
-        sampleTapNodes = { source, processor: proc };
         sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true;
         el.onended = ()=>{ sampleTapEnded = true; };
         try{ await el.play(); }catch(e){ console.warn('audio element play failed', e); }
