@@ -27,10 +27,13 @@ const HOST_SUSTAIN_SEC = 3600; // sustain long côté host
 // Streaming continu binaire: envoie des chunks 200ms (ArrayBuffer) pendant que des notes Host ou un sample sont actifs
 const STREAM_SR = 44100;
 const STREAM_CHUNK_SEC = 0.2; // 200ms recommandés (doc)
+const STREAM_CHUNK_BG_MAX_SEC = 1.0; // when page hidden, allow up to 1s per send to survive timer throttling
 const hostActive = new Set(); // labels actifs côté host
 const hostFreq = new Map(); // label -> freq
 const hostPhase = new Map(); // label -> phase
 let streamTimer = null;
+let streamLastTs = 0;
+let PAGE_HIDDEN = false;
 // Optional sample playback mixed into host stream (pre-decoded fallback)
 let samplePlaybackHost = null; // { pcm: Float32Array, pos: number }
 // Direct-from-disk host streaming via Web Audio tap
@@ -47,6 +50,20 @@ const MEDIA_TAP_WORKLET_SOURCE = `class MediaTapProcessor extends AudioWorkletPr
 let __tapWorkletURL=null; function getTapWorkletURL(){ if(__tapWorkletURL) return __tapWorkletURL; try{ const blob=new Blob([MEDIA_TAP_WORKLET_SOURCE],{type:'application/javascript'}); __tapWorkletURL=URL.createObjectURL(blob); }catch(_){ __tapWorkletURL=null; } return __tapWorkletURL; }
 let tapWorkletReady=null; async function ensureTapWorkletLoaded(ctx){ if(!ctx || !ctx.audioWorklet) throw new Error('no-audioWorklet'); if(!tapWorkletReady){ const url=getTapWorkletURL(); if(!url) throw new Error('worklet-url'); tapWorkletReady = ctx.audioWorklet.addModule(url).catch(e=>{ tapWorkletReady=null; throw e; }); } return tapWorkletReady; }
 async function createTapWorkletNode(ctx, chunkSec){ await ensureTapWorkletLoaded(ctx); const node = new AudioWorkletNode(ctx, 'media-tap-processor', { numberOfInputs:1, numberOfOutputs:0, channelCount:2, processorOptions:{ chunkDurationSec: chunkSec } }); return node; }
+
+// Page visibility handling for AUv3 UI close/minimize cases (timers may throttle)
+function onVisibilityChange(){
+    PAGE_HIDDEN = (document.visibilityState === 'hidden');
+    try{
+        // If worklet is active, ask it to increase chunk size a bit when hidden
+        if(PAGE_HIDDEN && sampleTapNodes && sampleTapNodes.processor && sampleTapNodes.processor.port){
+            sampleTapNodes.processor.port.postMessage({ cmd:'setChunkSec', sec: 0.2 });
+        } else if(sampleTapNodes && sampleTapNodes.processor && sampleTapNodes.processor.port) {
+            sampleTapNodes.processor.port.postMessage({ cmd:'setChunkSec', sec: 0.12 });
+        }
+    }catch(_){ }
+}
+try{ document.addEventListener('visibilitychange', onVisibilityChange, false); }catch(_){ }
 // Send JSON audio buffer to host (Swift expects a frequency field)
 function sendHostJSONChunk(f32, sr=STREAM_SR){
     try{
@@ -75,12 +92,20 @@ function ensureStreaming(){
  if(streamTimer) return;
  if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive) return;
  const ms = Math.floor(STREAM_CHUNK_SEC*1000);
- streamTimer = setInterval(()=>{
+    streamLastTs = performance.now();
+    streamTimer = setInterval(()=>{
+        const now = performance.now();
+        let dtSec = (now - streamLastTs) / 1000;
+        if(!isFinite(dtSec) || dtSec <= 0) dtSec = STREAM_CHUNK_SEC;
+        // When hidden, timers are throttled; permit larger drains but cap to 1.0s
+        const drainSec = PAGE_HIDDEN ? Math.min(STREAM_CHUNK_BG_MAX_SEC, Math.max(STREAM_CHUNK_SEC, dtSec))
+                                                                 : Math.max(STREAM_CHUNK_SEC, Math.min(dtSec, STREAM_CHUNK_BG_MAX_SEC));
+        streamLastTs = now;
     // Stop condition
     if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive){ clearInterval(streamTimer); streamTimer=null; return; }
     // 1) Send sample tap chunk if active
     if(sampleTapActive){
-        const need = Math.max(1, Math.floor(sampleTapSR * STREAM_CHUNK_SEC));
+                const need = Math.max(1, Math.floor(sampleTapSR * drainSec));
         let out = null; let remaining = need;
         if(sampleTapQueue.length){
             const parts = [];
@@ -99,7 +124,7 @@ function ensureStreaming(){
     // 2) Send pre-decoded sample chunk (JSON) if present (legacy path)
     if(samplePlaybackHost && samplePlaybackHost.pcm){
     const sr = samplePlaybackHost.sr || STREAM_SR;
-    const need = Math.max(1, Math.floor(sr * STREAM_CHUNK_SEC));
+    const need = Math.max(1, Math.floor(sr * drainSec));
         const start = samplePlaybackHost.pos;
     const end = Math.min(samplePlaybackHost.pcm.length, start + need);
     if(end > start){ const slice = samplePlaybackHost.pcm.subarray(start, end); samplePlaybackHost.pos = end; sendHostJSONChunk(slice, sr); }
@@ -298,8 +323,9 @@ async function playSampleHost(relPath){
         sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true;
         el.onended = ()=>{ sampleTapEnded = true; };
         try{ await el.play(); }catch(e){ console.warn('audio element play failed', e); }
-        // Primer silence (~0.3s) to avoid underrun while tap warms up
-        const zeros = new Float32Array(Math.floor(sampleTapSR * 0.3)); if(zeros.length) sendHostJSONChunk(zeros, sampleTapSR);
+    // Primer silence to avoid underrun while tap warms up; larger if page hidden
+    const primerSec = PAGE_HIDDEN ? 0.8 : 0.3;
+    const zeros = new Float32Array(Math.floor(sampleTapSR * primerSec)); if(zeros.length) sendHostJSONChunk(zeros, sampleTapSR);
         ensureStreaming();
         // Fallback if tap produces no data in time (e.g., scheme not tappable)
         setTimeout(()=>{
