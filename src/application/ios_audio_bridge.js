@@ -32,6 +32,15 @@ const hostPhase = new Map(); // label -> phase
 let streamTimer = null;
 // Optional sample playback mixed into host stream
 let samplePlaybackHost = null; // { pcm: Float32Array, pos: number }
+// Send JSON audio buffer to host (Swift expects a frequency field)
+function sendHostJSONChunk(f32, sr=STREAM_SR){
+    try{
+        window.webkit.messageHandlers.swiftBridge.postMessage({
+            type:'audioBuffer',
+            data:{ frequency: 0.0, sampleRate: sr, duration: f32.length / sr, audioData: Array.from(f32) }
+        });
+    }catch(_){ }
+}
 function genBinChunk(){
  const hasNotes = hostActive.size>0; const hasSample = !!(samplePlaybackHost && samplePlaybackHost.pcm);
  if(!hasNotes && !hasSample) return null;
@@ -57,8 +66,14 @@ function ensureStreaming(){
  if(hostActive.size===0 && !samplePlaybackHost) return;
  const ms = Math.floor(STREAM_CHUNK_SEC*1000);
  streamTimer = setInterval(()=>{
-  if(hostActive.size===0 && !samplePlaybackHost){ clearInterval(streamTimer); streamTimer=null; return; }
-  const ab = genBinChunk(); if(ab){ sendHostBin(ab); }
+    if(hostActive.size===0 && !samplePlaybackHost){ clearInterval(streamTimer); streamTimer=null; return; }
+    const ab = genBinChunk(); if(!ab) return;
+    // If a sample is active, prefer JSON chunks to match Swift 'audioBuffer' schema
+    if(samplePlaybackHost){
+        try { const f32 = new Float32Array(ab); sendHostJSONChunk(f32, STREAM_SR); } catch(_){ }
+    } else {
+        sendHostBin(ab);
+    }
  }, ms);
 }
 function maybeStopStreaming(){ if(hostActive.size===0 && !samplePlaybackHost && streamTimer){ clearInterval(streamTimer); streamTimer=null; } }
@@ -208,7 +223,10 @@ async function playSampleHost(relPath){
         const rendered = await off.startRendering();
         const mono = rendered.numberOfChannels>0 ? rendered.getChannelData(0) : new Float32Array(rendered.length);
         const copy = new Float32Array(mono.length); copy.set(mono);
-        samplePlaybackHost = { pcm: copy, pos: 0 };
+    // Send a JSON primer (~0.5s) to match host expectations
+    const primer = Math.min(copy.length, Math.floor(STREAM_SR * 0.5));
+    if(primer > 0){ sendHostJSONChunk(copy.subarray(0, primer), STREAM_SR); }
+    samplePlaybackHost = { pcm: copy, pos: primer };
         ensureStreaming();
     } catch(e){ console.warn('playSampleHost error, fallback local', e); playSampleLocal(relPath); }
 }
