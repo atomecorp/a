@@ -8,35 +8,6 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="App">
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background: #1f2833; /* fallback app background */
-    }
-    /* Use dynamic viewport height to avoid iOS 100vh issues */
-    :root {
-      --safe-top: env(safe-area-inset-top);
-      --safe-right: env(safe-area-inset-right);
-      --safe-bottom: env(safe-area-inset-bottom);
-      --safe-left: env(safe-area-inset-left);
-      --app-vh: 100vh; /* fallback */
-    }
-    .app-root, #app, #lyrixApp, body > div:first-child {
-      position: relative;
-      box-sizing: border-box;
-      padding-top: calc(var(--safe-top));
-      padding-bottom: calc(var(--safe-bottom));
-      padding-left: calc(var(--safe-left));
-      padding-right: calc(var(--safe-right));
-      min-height: calc(var(--app-vh));
-      width: 100%;
-    }
-    /* JS will set --app-vh to correct innerHeight on load & resize */
-  </style>
-  <script>
     // Fix iOS 100vh & update custom property
     function setAppVH(){
       const vh = window.innerHeight * 0.01;
@@ -45,9 +16,8 @@
     window.addEventListener('resize', setAppVH);
     window.addEventListener('orientationchange', () => setTimeout(setAppVH, 60));
     document.addEventListener('DOMContentLoaded', setAppVH);
-  </script>
-  <title>Squirrel - Slider Demo</title>
-  <link rel="icon" type="image/svg+xml" href="assets/images/icons/audio.svg">
+  </script>  
+  <title>atome</title>
   <link rel="stylesheet" href="js/leaflet.min.css">
   <script src="js/gsap.min.js"></script>
  <script src="js/tone.min.js"></script>

@@ -43,12 +43,13 @@
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-// import('./lyrix/index.js');
+import('./lyrix/index.js');
+// import('./ios_audio_bridge.js');
 // import('./ios_file_lister.js');
 // import('./ios_file_reader.js');
 // import('./ios_file_writer.js');
 // import('./ios_web_view_filereader.js');
-import('./ios_audio_bridge.js');
+
 // import('./auv3_file_lister.js');
 // import('./auv3_file_writer.js');
 // import('./test_and_rd.js');
