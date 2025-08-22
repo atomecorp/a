@@ -16,6 +16,7 @@ function applyRoute(){
 }
 
 // Helpers
+const IN_AUV3 = !!(window && window.__HOST_ENV); // In AUv3 extension UI, WebView audio isn't audible; route to host instead
 function hostAvailable(){ return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge); }
 function sendHost(obj){ try{ window.webkit.messageHandlers.swiftBridge.postMessage(obj); }catch(e){} }
 let AC=null; function ensureAC(){ if(!AC){ AC=new (window.AudioContext||window.webkitAudioContext)(); } if(AC.state==='suspended') AC.resume().catch(()=>{}); return AC; }
@@ -30,8 +31,14 @@ const hostActive = new Set(); // labels actifs côté host
 const hostFreq = new Map(); // label -> freq
 const hostPhase = new Map(); // label -> phase
 let streamTimer = null;
-// Optional sample playback mixed into host stream
+// Optional sample playback mixed into host stream (pre-decoded fallback)
 let samplePlaybackHost = null; // { pcm: Float32Array, pos: number }
+// Direct-from-disk host streaming via Web Audio tap
+let sampleTapActive = false;
+let sampleTapQueue = []; // Array<Float32Array>
+let sampleTapSR = STREAM_SR;
+let sampleTapEnded = false;
+let sampleTapNodes = null; // { source, processor }
 // Send JSON audio buffer to host (Swift expects a frequency field)
 function sendHostJSONChunk(f32, sr=STREAM_SR){
     try{
@@ -42,7 +49,7 @@ function sendHostJSONChunk(f32, sr=STREAM_SR){
     }catch(_){ }
 }
 function genBinChunk(){
- const hasNotes = hostActive.size>0; const hasSample = !!(samplePlaybackHost && samplePlaybackHost.pcm);
+ const hasNotes = hostActive.size>0; const hasSample = false; // don't mix sample JSON stream into binary note chunk
  if(!hasNotes && !hasSample) return null;
  const n=Math.max(1,Math.floor(STREAM_SR*STREAM_CHUNK_SEC)); const buf=new Float32Array(n);
  const labels=[...hostActive]; const ampBase = hasNotes? (0.35/Math.max(labels.length,1)) : 0;
@@ -50,30 +57,48 @@ function genBinChunk(){
   let s=0; const t=i/STREAM_SR;
   // mix notes
   for(const l of labels){ const f=hostFreq.get(l)||0; if(f<=0) continue; const p0=hostPhase.get(l)||0; const w=2*Math.PI*f; s += Math.sin(p0 + w*t); }
-  let mix = s*ampBase;
-  // mix sample if any
-  if(hasSample){ const sp = samplePlaybackHost; if(sp.pos < sp.pcm.length){ mix += sp.pcm[sp.pos++] * 0.8; } }
-  buf[i] = mix;
+  buf[i] = s*ampBase;
  }
  // advance phases
  for(const l of labels){ const f=hostFreq.get(l)||0; const p0=hostPhase.get(l)||0; const adv = 2*Math.PI*f*(n/STREAM_SR); let ph = p0+adv; ph = ((ph + Math.PI) % (2*Math.PI)) - Math.PI; hostPhase.set(l, ph); }
- // sample end check
- if(hasSample && samplePlaybackHost.pos >= samplePlaybackHost.pcm.length){ samplePlaybackHost = null; }
  return buf.buffer; }
 function sendHostBin(ab){ try{ window.webkit.messageHandlers.swiftBridge.postMessage({ type:'audioBuffer_bin', data: ab }); }catch(e){} }
 function ensureStreaming(){
  if(streamTimer) return;
- if(hostActive.size===0 && !samplePlaybackHost) return;
+ if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive) return;
  const ms = Math.floor(STREAM_CHUNK_SEC*1000);
  streamTimer = setInterval(()=>{
-    if(hostActive.size===0 && !samplePlaybackHost){ clearInterval(streamTimer); streamTimer=null; return; }
-    const ab = genBinChunk(); if(!ab) return;
-    // If a sample is active, prefer JSON chunks to match Swift 'audioBuffer' schema
-    if(samplePlaybackHost){
-        try { const f32 = new Float32Array(ab); sendHostJSONChunk(f32, STREAM_SR); } catch(_){ }
-    } else {
-        sendHostBin(ab);
+    // Stop condition
+    if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive){ clearInterval(streamTimer); streamTimer=null; return; }
+    // 1) Send sample tap chunk if active
+    if(sampleTapActive){
+        const need = Math.max(1, Math.floor(sampleTapSR * STREAM_CHUNK_SEC));
+        let out = null; let remaining = need;
+        if(sampleTapQueue.length){
+            const parts = [];
+            while(remaining > 0 && sampleTapQueue.length){
+                const head = sampleTapQueue[0];
+                if(head.length <= remaining){ parts.push(head); sampleTapQueue.shift(); remaining -= head.length; }
+                else { parts.push(head.subarray(0, remaining)); sampleTapQueue[0] = head.subarray(remaining); remaining = 0; }
+            }
+            if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; } }
+        }
+        if(out && out.length){ sendHostJSONChunk(out, sampleTapSR); }
+        if(sampleTapEnded && sampleTapQueue.length===0 && (!out || out.length===0)){
+            sampleTapActive = false; sampleTapSR = STREAM_SR; sampleTapEnded = false; sampleTapNodes = null;
+        }
     }
+    // 2) Send pre-decoded sample chunk (JSON) if present (legacy path)
+    if(samplePlaybackHost && samplePlaybackHost.pcm){
+    const sr = samplePlaybackHost.sr || STREAM_SR;
+    const need = Math.max(1, Math.floor(sr * STREAM_CHUNK_SEC));
+        const start = samplePlaybackHost.pos;
+    const end = Math.min(samplePlaybackHost.pcm.length, start + need);
+    if(end > start){ const slice = samplePlaybackHost.pcm.subarray(start, end); samplePlaybackHost.pos = end; sendHostJSONChunk(slice, sr); }
+        if(samplePlaybackHost.pos >= samplePlaybackHost.pcm.length){ samplePlaybackHost = null; }
+    }
+    // 3) Send note-generated sine chunk (binary) if any notes active
+    if(hostActive.size>0){ const ab = genBinChunk(); if(ab){ sendHostBin(ab); } }
  }, ms);
 }
 function maybeStopStreaming(){ if(hostActive.size===0 && !samplePlaybackHost && streamTimer){ clearInterval(streamTimer); streamTimer=null; } }
@@ -87,11 +112,13 @@ function routePlay(note,freq){ const forceHost= window.forceHostRouting|| window
  sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)});
  hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0);
  ensureStreaming();
- sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); return; } if(forceLocal){ if(!localNotes.has(note)) playLocalSustain(note,freq); return; } // AUTO
+ sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); return; }
+ // In AUv3 UI, local WebAudio is not audible -> route to host
+ if(forceLocal){ if(IN_AUV3 && hostAvailable()){ sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)}); hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0); ensureStreaming(); sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); } else { if(!localNotes.has(note)) playLocalSustain(note,freq); } return; } // AUTO
  if(hostAvailable()){ sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)}); hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0); ensureStreaming(); sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); } else { if(!localNotes.has(note)) playLocalSustain(note,freq); } }
 function routeStop(note){ stopLocalNote(note); sendHost({type:'audioNote',data:{command:'stopNote',note}}); hostActive.delete(note); hostFreq.delete(note); hostPhase.delete(note); maybeStopStreaming(); }
 let hostChordActive = [];
-function routeChord(freqs){ const key='CHORD'; const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); return;} if(forceLocal){ if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } return;} if(hostAvailable()){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); } else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } }
+function routeChord(freqs){ const key='CHORD'; const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); return;} if(forceLocal){ if(IN_AUV3 && hostAvailable()){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); } else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } return;} if(hostAvailable()){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); } else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } }
 function stopChord(){ stopLocalNote('CHORD'); hostChordActive.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioNote',data:{command:'stopNote',note:label,gate:0}}); hostActive.delete(label); hostFreq.delete(label); hostPhase.delete(label); }); hostChordActive=[]; maybeStopStreaming(); }
 function stopAll(){ // stop locaux
     Array.from(localNotes.keys()).forEach(k=>stopLocalNote(k));
@@ -178,57 +205,111 @@ function stopSample(){
         // Local
         const el = document.getElementById('samplePlayer'); if(el){ try{ el.pause(); el.currentTime = 0; }catch(_){}}
         // Host stream
-        samplePlaybackHost = null; maybeStopStreaming();
+                samplePlaybackHost = null;
+                // Stop tap
+                if(sampleTapActive){
+                    try{
+                        if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){}}
+                        if(sampleTapNodes && sampleTapNodes.source){ try{ sampleTapNodes.source.disconnect(); }catch(_){}}
+                    }catch(_){ }
+                    sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
+                }
+                maybeStopStreaming();
     }catch(_){ }
 }
 
 function playSample(relPath){
     stopSample();
     const mode = ROUTE[routeIdx];
-    const forceHost = (window.forceHostRouting|| window.forceAUv3Mode===true) || (mode!=='Local' && hostAvailable());
+    // In AUv3 UI, even when Local is selected, route to host for audibility
+    const forceHost = IN_AUV3 ? hostAvailable() : ((window.forceHostRouting|| window.forceAUv3Mode===true) || (mode!=='Local' && hostAvailable()));
     if(forceHost && hostAvailable()){
+        console.log('[sample] route=Host (IN_AUV3='+IN_AUV3+')', relPath);
         playSampleHost(relPath);
     } else {
+        console.log('[sample] route=Local', relPath);
         playSampleLocal(relPath);
     }
 }
 
-function playSampleLocal(relPath){
-    try{
-        const id='samplePlayer';
-        // Try local HTTP server for range support, else fallback to custom scheme
-        const used = (typeof window.__atomePreferHTTP==='function') ? window.__atomePreferHTTP(id, relPath) : false;
-        if(!used){ const el = document.getElementById(id); if(el){ el.src = 'atome:///audio/'+encodeURI(relPath); } }
-        const el = document.getElementById(id); if(el){ el.play().catch(()=>{}); }
-    }catch(e){ console.warn('playSampleLocal error', e); }
-}
-
 async function playSampleHost(relPath){
     try{
-        // Fetch via local HTTP server
+        // Setup Web Audio tap from the hidden <audio>
+        const ctx = ensureAC(); sampleTapSR = ctx.sampleRate|0;
+        const el = document.getElementById('samplePlayer');
+        if(!el){ console.warn('no samplePlayer element'); return; }
+        try{ el.crossOrigin = 'anonymous'; }catch(_){ }
+        // Do NOT mute element: muting can cause silence in MediaElementSource
+        try{ el.muted = false; el.volume = 1.0; }catch(_){ }
+        // Prefer local HTTP (range-supported) if available; fallback to custom scheme
         const port = window.__ATOME_LOCAL_HTTP_PORT__;
-        if(!port){ console.warn('HTTP server not ready, fallback local playback'); playSampleLocal(relPath); return; }
+        el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath)) : ('atome:///audio/'+encodeURI(relPath));
+        // Build nodes
+        const source = ctx.createMediaElementSource(el);
+        const proc = ctx.createScriptProcessor ? ctx.createScriptProcessor(2048, 2, 1) : null;
+        if(!proc){ console.warn('ScriptProcessor not available, falling back'); throw new Error('no-processor'); }
+        let tapGotData = false;
+        proc.onaudioprocess = (ev)=>{
+            try{
+                const ib = ev.inputBuffer; const ch0 = ib.getChannelData(0);
+                const ch1 = ib.numberOfChannels>1 ? ib.getChannelData(1) : null;
+                const n = ib.length; const mono = new Float32Array(n);
+                if(ch1){ for(let i=0;i<n;i++){ mono[i] = (ch0[i] + ch1[i]) * 0.5; } }
+                else { mono.set(ch0); }
+                sampleTapQueue.push(mono);
+                tapGotData = true;
+                if((sampleTapQueue.length % 8)===0){ console.log('[tap] queued chunks=', sampleTapQueue.length, 'sr=', sampleTapSR); }
+            }catch(_){ }
+        };
+        // Some iOS builds require nodes to be connected to destination to run
+        try{ source.connect(proc); }catch(_){ }
+        try{ const sink = ctx.createGain(); sink.gain.value = 0.0; source.connect(sink); sink.connect(ctx.destination); }catch(_){ }
+        try{ proc.connect(ctx.destination); }catch(_){ }
+        sampleTapNodes = { source, processor: proc };
+        sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true;
+        el.onended = ()=>{ sampleTapEnded = true; };
+        try{ await el.play(); }catch(e){ console.warn('audio element play failed', e); }
+        // Primer silence (~0.3s) to avoid underrun while tap warms up
+        const zeros = new Float32Array(Math.floor(sampleTapSR * 0.3)); if(zeros.length) sendHostJSONChunk(zeros, sampleTapSR);
+        ensureStreaming();
+        // Fallback if tap produces no data in time (e.g., scheme not tappable)
+        setTimeout(()=>{
+            try{
+                if(!tapGotData && sampleTapActive){
+                    // Tear down tap and fallback to pre-decode streaming
+                    if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
+                    if(sampleTapNodes && sampleTapNodes.source){ try{ sampleTapNodes.source.disconnect(); }catch(_){ }}
+                    sampleTapActive=false; sampleTapQueue=[]; sampleTapEnded=false; sampleTapNodes=null;
+                    playSampleHostFallbackDecode(relPath);
+                }
+            }catch(_){ }
+        }, 1200);
+    } catch(e){ console.warn('playSampleHost error, fallback local', e); playSampleLocal(relPath); }
+}
+
+// Fallback: fetch + decode + offline resample, then stream JSON from memory
+async function playSampleHostFallbackDecode(relPath){
+    try{
+    const port = window.__ATOME_LOCAL_HTTP_PORT__;
+        if(!port){ console.warn('HTTP server not ready, fallback local'); playSampleLocal(relPath); return; }
         const url = 'http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath);
         const resp = await fetch(url);
         if(!resp.ok){ console.warn('HTTP fetch failed', resp.status); playSampleLocal(relPath); return; }
         const ab = await resp.arrayBuffer();
-        // Decode using a temporary AudioContext
-        const ctx = ensureAC();
-        const decoded = await ctx.decodeAudioData(ab.slice(0));
-        // Resample to 44.1k mono using OfflineAudioContext
-        const length = Math.ceil(decoded.duration * STREAM_SR);
-        const off = new OfflineAudioContext(1, length, STREAM_SR);
-        const src = off.createBufferSource();
-        src.buffer = decoded; src.connect(off.destination); src.start();
+    const ctx = ensureAC();
+    const decoded = await ctx.decodeAudioData(ab.slice(0));
+    // Resample to the AudioContext sampleRate for consistency with Host
+    const targetSR = (ctx && ctx.sampleRate) ? (ctx.sampleRate|0) : STREAM_SR;
+    const length = Math.ceil(decoded.duration * targetSR);
+    const off = new OfflineAudioContext(1, length, targetSR);
+        const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
         const rendered = await off.startRendering();
         const mono = rendered.numberOfChannels>0 ? rendered.getChannelData(0) : new Float32Array(rendered.length);
         const copy = new Float32Array(mono.length); copy.set(mono);
-    // Send a JSON primer (~0.5s) to match host expectations
-    const primer = Math.min(copy.length, Math.floor(STREAM_SR * 0.5));
-    if(primer > 0){ sendHostJSONChunk(copy.subarray(0, primer), STREAM_SR); }
+    const primer = Math.min(copy.length, Math.floor(targetSR * 0.5)); if(primer>0){ sendHostJSONChunk(copy.subarray(0, primer), targetSR); }
     samplePlaybackHost = { pcm: copy, pos: primer };
         ensureStreaming();
-    } catch(e){ console.warn('playSampleHost error, fallback local', e); playSampleLocal(relPath); }
+    }catch(e){ console.warn('host decode fallback failed, use local', e); playSampleLocal(relPath); }
 }
 
 // Initial populate
