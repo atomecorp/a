@@ -8,6 +8,7 @@
 import WebKit
 import QuartzCore
 import AudioToolbox
+import UIKit
 
 public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     static let shared = WebViewManager()
@@ -208,6 +209,75 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         }
                         return
                     }
+                    if action == "open_link" {
+                        if let data = body["data"] as? [String: Any], let addr = data["address"] as? String, let url = URL(string: addr) {
+                            DispatchQueue.main.async {
+                                if Self.isRunningInExtension() {
+                                    guard let vc = Self.findViewController(from: Self.webView) else { Self.sendBridgeJSON(["action":"open_result","ok": false]); return }
+                                    if url.isFileURL {
+                                        // For file:// URLs in an extension, prefer Document Interaction (preview/open-in) over open(_:)
+                                        let dic = UIDocumentInteractionController(url: url)
+                                        dic.uti = nil // let the system infer
+                                        dic.name = url.lastPathComponent
+                                        dic.delegate = DocumentOpener.shared
+                                        // Retain while presented
+                                        DocumentOpener.shared.current = dic
+                                        let ok = dic.presentPreview(animated: true)
+                                        if !ok {
+                                            // Fallback: offer Options/Open In menu
+                                            let rect = vc.view.bounds
+                                            let presented = dic.presentOptionsMenu(from: rect, in: vc.view, animated: true)
+                                            Self.sendBridgeJSON(["action":"open_result","ok": presented])
+                                        } else {
+                                            Self.sendBridgeJSON(["action":"open_result","ok": true])
+                                        }
+                                    } else {
+                                        vc.extensionContext?.open(url) { ok in
+                                            Self.sendBridgeJSON(["action":"open_result","ok": ok])
+                                        }
+                                    }
+                                } else {
+                                    Self.openURLInHostApp(url)
+                                    Self.sendBridgeJSON(["action":"open_result","ok": true])
+                                }
+                            }
+                        } else {
+                            Self.sendBridgeJSON(["action":"open_result","ok": false])
+                        }
+                        return
+                    }
+                    if action == "present_picker_file" {
+                        DispatchQueue.main.async {
+                            guard let vc = Self.findViewController(from: Self.webView) else { Self.sendBridgeJSON(["action":"picker_result"]) ; return }
+                            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: false)
+                            class Box: NSObject, UIDocumentPickerDelegate {
+                                let done: (URL?) -> Void
+                                init(_ done: @escaping (URL?) -> Void) { self.done = done }
+                                func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { done(urls.first) }
+                                func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { done(nil) }
+                            }
+                            var box: Box?
+                            box = Box { url in defer { box = nil }
+                                if let u = url { Self.sendBridgeJSON(["action":"picker_result","address": u.absoluteString]) }
+                                else { Self.sendBridgeJSON(["action":"picker_result"]) }
+                            }
+                            picker.delegate = box
+                            vc.present(picker, animated: true)
+                        }
+                        return
+                    }
+                    if action == "log_address" {
+                        if let data = body["data"] as? [String: Any], let addr = data["address"] as? String {
+                            print("[AUv3Launcher] address=\(addr)")
+                        }
+                        return
+                    }
+                    if action == "append_address" {
+                        if let data = body["data"] as? [String: Any], let addr = data["address"] as? String {
+                            _ = LinkStore.add(urlStrings: [addr])
+                        }
+                        return
+                    }
                     if action == "requestHostTempo" {
                         var bpm: Double = 120.0
                         var source = "fallback"
@@ -265,6 +335,79 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     
     private func handleSwiftBridgeMessage(type: String, data: Any) {
         switch type {
+        case "openExternalURL":
+            // Ouvrir une URL externe depuis l'UI Web (user-initiated)
+            guard let dict = data as? [String: Any],
+                  let urlStr = (dict["url"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  let url = URL(string: urlStr) else {
+                print("Message non géré - Type: openExternalURL (invalid URL), Data: \(data)")
+                return
+            }
+            DispatchQueue.main.async {
+                if Self.isRunningInExtension() {
+                    if let vc = Self.findViewController(from: Self.webView) {
+                        vc.extensionContext?.open(url, completionHandler: { ok in
+                            print("🔗 openExternalURL (extension) => \(ok ? "OK" : "FAIL") for \(urlStr)")
+                        })
+                    } else {
+                        print("❌ No VC to open URL in extension context")
+                    }
+                } else {
+                    Self.openURLInHostApp(url)
+                }
+            }
+            return
+
+        case "presentDocumentPicker":
+            // Présenter un Document Picker pour charger des fichiers (types UTI/UTType)
+            guard let dict = data as? [String: Any] else { return }
+            let types = (dict["allowedTypes"] as? [String]) ?? ["public.data"]
+            // allowsMultiple est ignoré pour l'instant (impl côté iCloudFileManager gère 1 fichier)
+            DispatchQueue.main.async {
+                guard let vc = Self.findViewController(from: Self.webView) else {
+                    print("❌ presentDocumentPicker: cannot find VC")
+                    return
+                }
+                iCloudFileManager.shared.loadFileWithDocumentPicker(fileTypes: types, from: vc) { success, data, fileName, error in
+                    var payload: [String: Any] = [
+                        "action": "presentDocumentPickerResult",
+                        "success": success
+                    ]
+                    if let name = fileName { payload["fileName"] = name }
+                    if let err = error { payload["error"] = err.localizedDescription }
+                    if let d = data {
+                        if let text = String(data: d, encoding: .utf8) {
+                            payload["encoding"] = "utf8"
+                            payload["data"] = text
+                        } else {
+                            payload["encoding"] = "base64"
+                            payload["data"] = d.base64EncodedString()
+                        }
+                    }
+                    Self.sendBridgeJSON(payload)
+                }
+            }
+            return
+
+        case "import_links_json":
+            // Importer une liste de liens (persistance simplifiée: ack côté JS)
+            if let dict = data as? [String: Any], let links = dict["links"] as? [Any] {
+                let count = links.count
+                let payload: [String: Any] = [
+                    "action": "import_links_json_result",
+                    "success": true,
+                    "count": count
+                ]
+                Self.sendBridgeJSON(payload)
+            } else {
+                let payload: [String: Any] = [
+                    "action": "import_links_json_result",
+                    "success": false,
+                    "error": "invalid_payload"
+                ]
+                Self.sendBridgeJSON(payload)
+            }
+            return
         case "audioBuffer_bin":
             // Optimisation : réception ArrayBuffer natif (binaire)
             if let data = data as? Data {
@@ -322,6 +465,56 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         default:
             print("Message non géré - Type: \(type), Data: \(data)")
         }
+    }
+
+    // MARK: - Helpers
+    private static func isRunningInExtension() -> Bool {
+        let path = Bundle.main.bundlePath
+        if path.hasSuffix(".appex") { return true }
+        if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
+        return false
+    }
+
+    // Internal visibility so helpers in this file (e.g., DocumentOpener) can use it
+    static func findViewController(from webView: WKWebView?) -> UIViewController? {
+        guard let view = webView else { return nil }
+        var responder: UIResponder? = view
+        while responder != nil {
+            if let vc = responder as? UIViewController { return vc }
+            responder = responder?.next
+        }
+        return nil
+    }
+
+    // Attempt to open a URL in the host app without referencing UIApplication.shared directly,
+    // to remain application-extension safe at compile time.
+    private static func openURLInHostApp(_ url: URL) {
+        // Prefer modern open(_:options:completionHandler:) when available, else fall back to openURL:
+        guard let cls: AnyObject = NSClassFromString("UIApplication"),
+              let sharedUnmanaged = (cls as AnyObject).perform(NSSelectorFromString("sharedApplication")) else {
+            print("❌ Unable to access UIApplication.shared via reflection")
+            return
+        }
+        let app = sharedUnmanaged.takeUnretainedValue()
+        let openURLSel = NSSelectorFromString("openURL:")
+        if (app as AnyObject).responds(to: openURLSel) {
+            _ = (app as AnyObject).perform(openURLSel, with: url)
+            print("🔗 openExternalURL (app via openURL:) attempted for \(url.absoluteString)")
+            return
+        }
+        // Try newer API signature dynamically if present
+        let openOptionsSel = NSSelectorFromString("openURL:options:completionHandler:")
+        if (app as AnyObject).responds(to: openOptionsSel) {
+            // Build empty options dictionary and nil completion
+            let options = [:] as NSDictionary
+            typealias OpenTyped = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, AnyObject?) -> Void
+            let imp = (app as AnyObject).method(for: openOptionsSel)
+            let fn = unsafeBitCast(imp, to: OpenTyped.self)
+            fn(app as AnyObject, openOptionsSel, url as NSURL, options, nil)
+            print("🔗 openExternalURL (app via openURL:options:completionHandler:) attempted for \(url.absoluteString)")
+            return
+        }
+        print("❌ UIApplication.openURL APIs not available")
     }
     
     // MARK: - Audio Command Handlers
@@ -590,5 +783,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static func stopHostStateStream() {
         hostStateTimer?.invalidate(); hostStateTimer = nil
         hostStateStreamActiveFlag = false
+    }
+}
+
+// Retainer for UIDocumentInteractionController to keep it alive while presenting
+private final class DocumentOpener: NSObject, UIDocumentInteractionControllerDelegate {
+    static let shared = DocumentOpener()
+    var current: UIDocumentInteractionController?
+    func documentInteractionControllerViewControllerForPreview(_ controller: UIDocumentInteractionController) -> UIViewController {
+        return WebViewManager.findViewController(from: WebViewManager.webView) ?? UIViewController()
+    }
+    func documentInteractionControllerDidEndPreview(_ controller: UIDocumentInteractionController) {
+        current = nil
     }
 }
