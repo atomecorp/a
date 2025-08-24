@@ -734,23 +734,41 @@ const createConsole = (config = {}) => {
     let xOffset = position.x;
     let yOffset = position.y;
 
+    // Support souris ET touch pour iOS
     header.addEventListener('mousedown', dragStart);
+    header.addEventListener('touchstart', dragStart, { passive: false });
     document.addEventListener('mousemove', dragMove);
+    document.addEventListener('touchmove', dragMove, { passive: false });
     document.addEventListener('mouseup', dragEnd);
+    document.addEventListener('touchend', dragEnd);
 
     function dragStart(e) {
-      initialX = e.clientX - xOffset;
-      initialY = e.clientY - yOffset;
+      // Gérer à la fois mouse et touch events
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+      
+      initialX = clientX - xOffset;
+      initialY = clientY - yOffset;
       isDragging = true;
       header.style.cursor = 'grabbing';
+      
+      // Empêcher le scroll sur mobile
+      if (e.type === 'touchstart') {
+        e.preventDefault();
+      }
     }
 
     function dragMove(e) {
       if (!isDragging) return;
       
       e.preventDefault();
-      currentX = e.clientX - initialX;
-      currentY = e.clientY - initialY;
+      
+      // Gérer à la fois mouse et touch events
+      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+      
+      currentX = clientX - initialX;
+      currentY = clientY - initialY;
       
       // Empêcher que la console sorte par le haut (garder au moins la barre de titre visible)
       const minY = 0;

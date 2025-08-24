@@ -44,8 +44,52 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
         webView.navigationDelegate = WebViewManager.shared
 
+        // Detect execution environment (App vs AUv3 extension) and log explicitly
+        let isExtension: Bool = {
+            let path = Bundle.main.bundlePath
+            if path.hasSuffix(".appex") { return true }
+            // Fallback: presence of NSExtension dictionary in Info.plist
+            if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
+            return false
+        }()
+    let execMode = isExtension ? "AUv3" : "APP"
+    // Include variable name used for JS environment flag
+    print("exec mode: \(execMode) (flag: __HOST_ENV)")
+
+        // Start lightweight embedded HTTP server (once) to serve audio via standard stack
+        if LocalHTTPServer.shared.port == nil {
+            LocalHTTPServer.shared.start()
+        }
+
+        // If running in main app (not extension), force black backgrounds to avoid white flash
+        if !isExtension {
+            webView.isOpaque = false
+            webView.backgroundColor = .black
+            webView.scrollView.backgroundColor = .black
+        }
+
         let scriptSource = """
-        window.onerror = function(m, s, l, c, e) {
+                // Pre-paint background black ASAP to avoid white flash (especially on app launch)
+                (function(){try{document.documentElement.style.background='#000';}catch(e){}; try{if(document.body){document.body.style.background='#000';}}catch(e){}})();
+                // Ensure proper mobile viewport for full edge-to-edge content
+                (function(){
+                    try {
+                        if(!document.querySelector('meta[name=viewport]')) {
+                            var m=document.createElement('meta');
+                            m.name='viewport';
+                            m.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
+                            document.head.appendChild(m);
+                        } else if(!/viewport-fit=cover/.test(document.querySelector('meta[name=viewport]').content)) {
+                            document.querySelector('meta[name=viewport]').content += ',viewport-fit=cover';
+                        }
+                        var de=document.documentElement, b=document.body; if(de){de.style.margin='0';de.style.padding='0';de.style.height='100%';de.style.width='100%';}
+                        if(b){b.style.margin='0';b.style.padding='0';b.style.height='100%';b.style.width='100%';b.style.position='relative';b.style.overflow='hidden';}
+                    } catch(e){ console.log('viewport inject fail', e); }
+                })();
+                // Inject host environment flag early for UI logic
+                try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
+
+                window.onerror = function(m, s, l, c, e) {
             var msg = "Error: " + m + " at " + s + ":" + l + ":" + c + (e && e.stack ? " stack: " + e.stack : "");
             try {
                 window.webkit.messageHandlers.console.postMessage(msg);
@@ -61,6 +105,31 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 console.warn("Error sending to Swift:", x);
             }
         });
+        // Early helper: prefer local HTTP server if port present
+        window.__atomePreferHTTP = function(id, filename){
+            try {
+                if(!window.__ATOME_LOCAL_HTTP_PORT__) return false;
+                var el = document.getElementById(id);
+                if(!el) return false;
+                var url = 'http://127.0.0.1:'+window.__ATOME_LOCAL_HTTP_PORT__+'/audio/'+filename;
+                console.log('[atome http] trying', url);
+                el.src = url;
+                return true;
+            } catch(e){ console.warn('atome http helper error', e); }
+            return false;
+        };
+                // Resize observer to keep body matched to visualViewport height (handles rotation & dynamic bars)
+                (function(){
+                    function applyVH(){
+                        if(!document.body) return;
+                        var h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+                        document.body.style.minHeight = h + 'px';
+                        document.documentElement.style.minHeight = h + 'px';
+                    }
+                    ['resize','orientationchange'].forEach(ev=>window.addEventListener(ev, applyVH));
+                    if(window.visualViewport) window.visualViewport.addEventListener('resize', applyVH);
+                    setTimeout(applyVH,0); setTimeout(applyVH,150); setTimeout(applyVH,600);
+                })();
         """
 
         let contentController = webView.configuration.userContentController
@@ -78,9 +147,25 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         webView.configuration.setValue(true, forKey: "allowUniversalAccessFromFileURLs")
         
+        // Pre-page HTML (black placeholder) to avoid any white flash before main content loads
+        let placeholderHTML = """
+        <!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>
+        <style>
+        html,body{margin:0;padding:0;height:100%;background:#000;display:flex;align-items:center;justify-content:center;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#777;}
+        .pulse{animation:pulse 1.6s ease-in-out infinite;opacity:.55;letter-spacing:.08em;font-size:11px;text-transform:uppercase}
+        @keyframes pulse{0%,100%{opacity:.25}50%{opacity:.75}}
+        </style></head><body><div class=pulse>Loading…</div></body></html>
+        """
+        webView.loadHTMLString(placeholderHTML, baseURL: nil)
+        // Load real app shortly after to ensure WKWebView is on-screen with black already painted
         let myProjectBundle: Bundle = Bundle.main
-        if let myUrl = myProjectBundle.url(forResource: "src/index", withExtension: "html") {
-            webView.loadFileURL(myUrl, allowingReadAccessTo: myUrl)
+        if let mainURL = myProjectBundle.url(forResource: "src/index", withExtension: "html") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                // Safety: only load if still showing placeholder / not already navigated
+                if webView.url == nil || webView.url?.lastPathComponent != "index.html" {
+                    webView.loadFileURL(mainURL, allowingReadAccessTo: mainURL)
+                }
+            }
         }
     }
 
@@ -99,6 +184,20 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                     if fileSystemActions.contains(action) {
                         if let bridge = WebViewManager.fileSystemBridge {
                             bridge.userContentController(userContentController, didReceive: message)
+                        }
+                        return
+                    }
+                    if action == "purchaseProduct" || action == "restorePurchases" {
+                        let requestId = body["requestId"] as? Int ?? Int(Date().timeIntervalSince1970)
+                        if action == "purchaseProduct" {
+                            let productId = body["productId"] as? String ?? ""
+                            if #available(iOS 15.0, *) {
+                                Task { await PurchaseManager.shared.purchase(id: productId, requestId: requestId) }
+                            } else { LegacyPurchaseBridge.shared.purchase(productId: productId, requestId: requestId) }
+                        } else {
+                            if #available(iOS 15.0, *) {
+                                Task { await PurchaseManager.shared.restore(requestId: requestId) }
+                            } else { LegacyPurchaseBridge.shared.restore(requestId: requestId) }
                         }
                         return
                     }
@@ -211,7 +310,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         case "audioChord":
             if let data = data as? [String: Any] {
                 handleAudioChord(data: data)
-            }        case "getSampleRate":
+            }
+        case "getSampleRate":
             sendSampleRateToJS()
             
         case "performCalculation":
@@ -234,6 +334,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                let amplitude = data["amplitude"] as? Double {
                 print("🎵 JS->Swift: playNote \(note) at \(frequency)Hz")
                 WebViewManager.audioController?.playNote(frequency: frequency, note: note, amplitude: Float(amplitude))
+           
             }
             
         case "stopNote":
@@ -252,8 +353,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     private func handleAudioBuffer(data: [String: Any]) {
-        guard let frequency = data["frequency"] as? Double,
-              let sampleRate = data["sampleRate"] as? Double,
+      guard let _ = data["frequency"] as? Double,
+          let sampleRate = data["sampleRate"] as? Double,
               let duration = data["duration"] as? Double,
               let audioDataArray = data["audioData"] as? [Double] else {
             return
@@ -381,9 +482,28 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - WKNavigationDelegate
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Only run full initialization on the real app page (ignore placeholder page)
+        guard let last = webView.url?.lastPathComponent, last == "index.html" else { return }
         // Silent page loading for performance
         WebViewManager.sendToJS("test", "creerDivRouge")
         // Simplified initialization
+        if let p = LocalHTTPServer.shared.port {
+            let js = "window.__ATOME_LOCAL_HTTP_PORT__=" + String(p) + ";"
+            webView.evaluateJavaScript(js, completionHandler: nil)
+            print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")
+        } else {
+            print("⚠️ LocalHTTPServer port not ready at navigation finish")
+        }
+        // Inject notch information & class
+        let topInset = webView.safeAreaInsets.top
+        let hasNotch = UIDevice.current.userInterfaceIdiom == .phone && topInset >= 44
+        let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
+        webView.evaluateJavaScript(notchJS, completionHandler: nil)
+        print("notch info: hasNotch=\(hasNotch) topInset=\(topInset)")
+        // Auto-restore entitlements to sync JS UI after load
+        if #available(iOS 15.0, *) {
+            Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }
+        }
     }
     
     private func performCalculation(_ numbers: [Int]) {
@@ -401,7 +521,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
     
     // MARK: - Bridge JSON helper
-    private static func sendBridgeJSON(_ dict: [String: Any]) {
+    public static func sendBridgeJSON(_ dict: [String: Any]) {
         guard let webView = webView else { return }
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return }

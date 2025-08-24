@@ -637,7 +637,7 @@ function showDeleteConfirmation(userId, userName) {
   $('button', {
     text: '🗑️ Supprimer',
     css: {
-      backgroundColor: '#e74c3c',
+      backgroundColor: 'transparent',
       color: 'white',
       border: 'none',
       padding: '12px 24px',
@@ -770,7 +770,7 @@ function displayUsers(users) {
     $('button', {
       text: '🗑️ Delete',
       css: {
-        backgroundColor: '#dc3545',
+        backgroundColor: 'transparent',
         color: 'white',
         border: 'none',
         padding: '6px 12px',

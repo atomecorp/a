@@ -238,7 +238,7 @@ function loadProjectsList() {
           projectItem.add($('button', {
             text: '🗑️',
             css: {
-              backgroundColor: '#f44336',
+            backgroundColor: 'transparent',
               color: 'white',
               padding: '5px 8px',
               border: 'none',

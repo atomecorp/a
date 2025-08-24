@@ -1,74 +1,38 @@
 // Lyrix Application - New Entry Point
 // This is the new modular entry point for the Lyrix application
 
-// iOS-compatible logging function (duplicate from audio.js for startup logging)
-function startupLog(message) {
-    const prefixedMessage = `⚛️ ATOME-APP: ${message}`;
-    console.log(prefixedMessage);
-}
+// Import modal modules from new organized structure
+import { showSongLibrary, toggleSongLibrary } from './src/components/songLibraryModal.js';
+import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
+import { getPurchaseManager } from './src/features/purchase/purchase_manager.js';
 
-// Utility function to check if volume control is supported on the current platform
-function isVolumeControlSupported() {
-    return true; // Always allow volume control on all platforms
-}
 
-// Utility function to safely apply volume with platform detection
-function safeApplyVolume(audioPlayer, volumePercent, context = '') {
-    try {
-        const volumeValue = volumePercent / 100;
-        
-        // Check that we can actually set the volume property
-        if (audioPlayer && typeof audioPlayer.volume !== 'undefined') {
-            audioPlayer.volume = volumeValue;
-            console.log(`🔊 Volume applied${context ? ' (' + context + ')' : ''}: ${volumePercent}%`);
-            return true;
-        } else {
-            console.log(`🔊 Audio player does not support volume control${context ? ' (' + context + ')' : ''}`);
-            return false;
-        }
-    } catch (error) {
-        console.log(`🔊 Volume application failed${context ? ' (' + context + ')' : ''}:`, error.message);
-        return false;
-    }
-}
+
+
 
 // Application startup message
-startupLog('===============================================');
-startupLog('🚀 ATOME APPLICATION STARTING...');
-startupLog('📱 Platform: ' + ((/iPad|iPhone|iPod/.test(navigator.userAgent)) ? 'iOS' : 'Desktop'));
-startupLog('🕐 Time: ' + new Date().toISOString());
-startupLog('===============================================');
 
-// Force immediate test log for debugging
-if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    // Multiple attempts to ensure logging works
-    setTimeout(() => startupLog('🔥 TEST 1: Atome app loaded successfully!'), 100);
-    setTimeout(() => startupLog('🔥 TEST 2: iOS logging system working!'), 500);
-    setTimeout(() => startupLog('🔥 TEST 3: Ready for .lrx import!'), 1000);
-    
-    // Also try direct console.log fallback
-    setTimeout(() => console.log('⚛️ ATOME-APP: 🔥 FALLBACK TEST: Direct console log'), 200);
-}
 
 // Import all modules
-import { CONSTANTS } from './src/constants.js';
-import { StorageManager } from './src/storage.js';
-import { AudioManager, AudioController } from './src/audio.js';
-import { UIManager } from './src/ui.js';
-import { SongManager } from './src/songs.js';
-import { SyncedLyrics } from './src/syncedLyrics.js';
-import { LyricsLibrary } from './src/library.js';
-import { LyricsDisplay } from './src/display.js';
-import { DragDropManager } from './src/dragDrop.js';
+import { CONSTANTS } from './src/core/constants.js';
+import { StorageManager } from './src/services/storage.js';
+import { AudioManager, AudioController, extractCleanFileName } from './src/features/audio/audio.js';
+import { UIManager } from './src/components/ui.js';
+import { SongManager } from './src/features/lyrics/songs.js';
+import { SyncedLyrics } from './src/core/syncedLyrics.js';
+import { LyricsLibrary } from './src/features/lyrics/library.js';
+import { LyricsDisplay } from './src/features/lyrics/display.js';
+import { DragDropManager } from './src/features/import/dragDrop.js';
+import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/components/modal.js';
+import { MidiUtilities } from './src/features/midi/midi_utilities.js';
+import { exportSongsToLRX } from './src/features/lyrics/SongUtils.js';
+
+// Initialize global objects
 window.dragDropManager = new DragDropManager();
-import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/modal.js';
-import { MidiUtilities } from '././src/midi_utilities.js';
-import { exportSongsToLRX } from './src/SongUtils.js';
 
 // iOS Error Handling Setup
 // Handle iOS thumbnail and view service termination errors globally
 if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-   // console.log('🍎 iOS detected - Setting up global error handling for thumbnail/view service issues');
     
     // Function to check if error is related to iOS thumbnail/view service issues
     const isIOSSystemError = (error) => {
@@ -113,6 +77,10 @@ let isProgrammaticUpdate = false; // Prevent slider callback during programmatic
 let lastSeekTime = 0; // Track when we last seeked to prevent immediate timeupdate conflicts
 let pendingSeekTime = null; // Store the time to seek to when user releases slider
 
+// Parasitic reset tracking
+window.parasiticResetCount = 0;
+window.lastParasiticResetLog = 0;
+
 // Function to update display title with current song information
 function updateAudioTitle() {
     if (currentSong) {
@@ -130,6 +98,100 @@ function updateAudioTitle() {
     }
 }
 
+// Function to inject global CSS for text selection control
+function injectTextSelectionStyles() {
+        const styleId = 'lyrix-text-selection-styles';
+        // Remove any previous (for hot reload / re-init cases)
+        const existing = document.getElementById(styleId);
+        if (existing) existing.remove();
+        const style = document.createElement('style');
+        style.id = styleId;
+    style.textContent = `/* Text selection policy */
+/* Disable selection for most UI chrome */
+#settings-panel,
+#song-library-panel,
+#settings-resize-grip,
+#song-library-resize-grip,
+.audio-tools-row, .audio-tools-row *,
+#audio-scrub-slider-container, #audio-scrub-slider-container *:not(#audio_scrub_slider_handle),
+.toolbar, .toolbar *,
+#main-toolbar-row, #main-toolbar-row *,
+.toolbar,
+.resize-grip,
+[id*="resize-grip"],
+#lyrics_lines_container,
+.lyrics-line:not(.editing) {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+}
+
+/* Allow selection inside editable / input zones */
+input,
+textarea,
+[contenteditable="true"],
+.editable-content,
+.lyrics-line.editing,
+.search-input,
+.midi-input,
+.filename-input,
+.text-input {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default !important;
+}`;
+        document.head.appendChild(style);
+}
+
+// Apply initial settings from localStorage
+function applyInitialSettings() {
+    try {
+        // Apply audio player visibility
+        const showAudioControls = localStorage.getItem('lyrix_show_audio_controls') === 'true';
+        if (typeof toggleAudioPlayerControls === 'function') {
+            toggleAudioPlayerControls();
+        }
+        
+        // Apply audio sync setting
+        const enableAudioSync = localStorage.getItem('lyrix_enable_audio_sync') === 'true';
+        if (typeof toggleAudioSync === 'function') {
+            toggleAudioSync();
+        }
+        
+        // Apply MIDI inspector visibility
+        const showMidiInspector = localStorage.getItem('lyrix_show_midi_inspector') === 'true';
+        if (typeof toggleMidiInspector === 'function') {
+            toggleMidiInspector();
+        }
+        
+        // Experimental controls removed; ensure audio controls visible on first launch
+        if (localStorage.getItem('lyrix_audio_player_enabled') === null) {
+            localStorage.setItem('lyrix_audio_player_enabled', 'true');
+        }
+        
+        // Apply font size (use storage fallback consistent with display)
+        const storedFont = localStorage.getItem('lyrix_font_size');
+        if (storedFont) {
+            // Delay in case display not yet built
+            setTimeout(() => {
+                const area = document.getElementById('lyrics_content_area');
+                if (area) area.style.fontSize = `${storedFont}px`;
+                if (window.lyricsDisplay) {
+                    window.lyricsDisplay.fontSize = parseInt(storedFont, 10);
+                    window.lyricsDisplay.applyGlobalFontSize && window.lyricsDisplay.applyGlobalFontSize();
+                }
+            }, 0);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error applying initial settings:', error);
+    }
+}
+
 // Initialize the application
 function initializeLyrix() {
     try {
@@ -137,33 +199,124 @@ function initializeLyrix() {
         audioController = new AudioController();
         uiManager = new UIManager();
         lyricsLibrary = new LyricsLibrary();
+
+        // One-time migration of legacy audioPath values (assets/audios or hardcoded HTTP) -> clean filename
+        (function migrateLegacyAudioPaths(){
+            const MIGRATION_KEY = 'lyrix_audio_migrated_v1';
+            if (localStorage.getItem(MIGRATION_KEY) === 'done') return; // already migrated
+            try {
+                const all = lyricsLibrary.getAllSongs();
+                let changed = 0;
+                all.forEach(summary => {
+                    if (!summary.audioPath) return;
+                    const ap = summary.audioPath;
+                    // Detect legacy patterns
+                    if (/\/assets\/audios\//.test(ap) || /http:\/\/127\.0\.0\.1:3000\/assets\/audios\//.test(ap)) {
+                        const clean = extractCleanFileName(ap);
+                        if (clean && clean !== ap) {
+                            const song = lyricsLibrary.getSong(summary.key);
+                            if (song && song.metadata) {
+                                song.metadata.audioPath = clean; // store only filename
+                                song.saveToStorage();
+                                changed++;
+                            }
+                        }
+                    }
+                });
+                localStorage.setItem(MIGRATION_KEY, 'done');
+                console.log(`🎵 Migration audio paths v1: ${changed} entrées mises à jour`);
+            } catch(e) {
+                console.error('Migration audio paths v1 failed', e);
+            }
+        })();
         
-        // Apply saved volume to audio controller
-        const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-        if (audioController && audioController.audioPlayer) {
-            safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'startup');
-        }
+        // Initialize Audio Controller without volume
+        audioController = new AudioController();
         
         // Create main UI
         createMainInterface();
         
-        // Initialize display (no longer needs a container, will append to lyrix_app)
+    // Initialize display (container removed; we append directly to body/#view)
         lyricsDisplay = new LyricsDisplay(null, audioController);
+        // Re-sync font size immediately after display creation
+        const storedFontImmediate = localStorage.getItem('lyrix_font_size');
+        if (storedFontImmediate) {
+            lyricsDisplay.fontSize = parseInt(storedFontImmediate, 10);
+            lyricsDisplay.applyGlobalFontSize && lyricsDisplay.applyGlobalFontSize();
+        }
             
         // Connect audio time updates to lyrics display
         if (audioController && audioController.on) {
             audioController.on('timeupdate', (currentTime) => {
                 // Convert seconds to milliseconds for lyrics synchronization
                 const timeMs = currentTime * 1000;
-                lyricsDisplay.updateTime(timeMs);
+                
+                // Check if host has been active recently (within last 500ms)
+                const now = Date.now();
+                const hostRecentlyActive = lyricsDisplay && lyricsDisplay.lastUpdateTimes && 
+                                         lyricsDisplay.lastUpdateTimes.host && 
+                                         (now - lyricsDisplay.lastUpdateTimes.host) < 500;
+                
+                if (hostRecentlyActive) {
+                    console.log('🎯 Local audio defers to active host timecode');
+                    // Still send the update but mark it as local - the display will handle priority
+                }
+                
+                lyricsDisplay.updateTime(timeMs, 'local'); // Mark as local audio source
             });
         }
         
         // Initialize MIDI utilities
         midiUtilities = new MidiUtilities();
         window.midiUtilities = midiUtilities;  // Expose globally
+
+        // Initialize Purchase Manager for MIDI console unlock
+        const purchaseManager = getPurchaseManager();
+        window.purchaseManager = purchaseManager;
+
+        function ensureMidiConsoleUI(){
+            const toolbarRow = document.getElementById('main-toolbar-row');
+            if (!toolbarRow) return;
+            let consoleBtn = document.getElementById('show_midi_console_button');
+            if (purchaseManager.isOwned()) {
+                if (!consoleBtn){
+                    consoleBtn = $('div', { id:'show_midi_console_button', text:'MIDI', css:{ padding:'4px 10px', backgroundColor:'rgb(48,60,78)', color:'#fff', borderRadius:'4px', cursor:'pointer', userSelect:'none' } });
+                    consoleBtn.addEventListener('click', ()=>{
+                        const el = midiUtilities && midiUtilities.midiContainer;
+                        if (el){ el.style.display = (el.style.display==='none'||!el.style.display)?'block':'none'; }
+                    });
+                    toolbarRow.appendChild(consoleBtn);
+                }
+            } else {
+                if (consoleBtn) consoleBtn.remove();
+            }
+        }
+        window.addEventListener('lyrix-purchase-updated', ensureMidiConsoleUI);
+        setTimeout(ensureMidiConsoleUI, 0);
+        
+        // Export managers and modal functions to global scope
+        window.UIManager = UIManager; // Export the class for static methods
+        window.uiManager = uiManager; // Export the instance for instance methods
+        window.lyricsLibrary = lyricsLibrary;
+        window.audioController = audioController;
+        window.lyricsDisplay = lyricsDisplay;
+        window.currentSong = currentSong;
+        window.Modal = Modal;
+        window.ConfirmModal = ConfirmModal;
+        window.InputModal = InputModal;
+        window.FormModal = FormModal;
+        window.$ = $;
+        
+        // Export imported modal functions to global scope
+        window.showSongLibrary = showSongLibrary;
+        window.showSettingsModal = showSettingsModal;
+        window.toggleSettingsPanel = toggleSettingsPanel;
+        window.toggleAudioPlayerControls = toggleAudioPlayerControls;
+        window.toggleAudioSync = toggleAudioSync;
+        window.toggleMidiInspector = toggleMidiInspector;
+        window.toggleTimecodeVisibility = toggleTimecodeVisibility;
         // Ensure MIDI inspector is in the toolbar
-        const appContainer = document.getElementById('lyrix_app');
+    const appContainer = document.getElementById('view') || document.body;
         const toolbarRow = document.getElementById('main-toolbar-row');
         if (toolbarRow && midiUtilities && midiUtilities.midiContainer) {
             toolbarRow.appendChild(midiUtilities.midiContainer);
@@ -173,6 +326,95 @@ function initializeLyrix() {
         }
         // Apply saved settings on startup
         applyInitialSettings();
+
+        // --- AUv3 Host Stop Watchdog -------------------------------------------------
+        // Some host stop scenarios may not trigger our heuristics fast enough (e.g. host freezes
+        // playhead without rewinding). This watchdog enforces a rapid pause & re-arm if no
+        // host advance is observed for a short window while we still think we're in playingHost.
+        (function initAuv3HostWatchdog(){
+            try {
+                const env = (window.__HOST_ENV || '').toString().toLowerCase();
+                if (env !== 'auv3') return; // only inside AUv3
+                if (window.__lyrixHostWatchdog) return; // already installed
+                const POLL_MS = 120;          // watchdog poll frequency
+                const IDLE_THRESHOLD = 220;   // ms without host advance -> treat as stop
+                window.__lyrixHostWatchdog = setInterval(function(){
+                    try {
+                        const btn = document.getElementById('audio-play-button');
+                        if (!btn) return;
+                        const state = btn.dataset.state;
+                        if (state !== 'playingHost') return; // only care about host-synced playback
+                        const lastAdvanceTs = window.__lyrixHostSync && window.__lyrixHostSync.lastAdvanceTs || 0;
+                        if (!lastAdvanceTs) return; // haven't started yet
+                        const idleFor = performance.now() - lastAdvanceTs;
+                        if (idleFor > IDLE_THRESHOLD) {
+                            if (audioController && audioController.isPlaying && audioController.isPlaying()) {
+                                try { audioController.pause && audioController.pause(); } catch(e){}
+                                if (typeof window.__lyrixArmButton === 'function') {
+                                    window.__lyrixArmButton(btn);
+                                } else {
+                                    btn.dataset.state = 'armed';
+                                    btn.classList.add('auv3-armed');
+                                    if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor='';
+                                }
+                                if (!window.__lyrixHostSync) window.__lyrixHostSync = { lastTime:0, started:false, lastAdvanceTs:0 };
+                                window.__lyrixHostSync.started = false;
+                                console.log('🧵 AUv3 host watchdog idle '+ idleFor.toFixed(0) +'ms -> force pause & re-arm');
+                            }
+                        }
+                    } catch(err) {
+                        // Silent to avoid flooding
+                    }
+                }, POLL_MS);
+            } catch(e) {
+                console.warn('⚠️ AUv3 host watchdog init failed', e);
+            }
+        })();
+        // -----------------------------------------------------------------------------
+        
+        // Inject text selection control styles
+        injectTextSelectionStyles();
+        // Generic toolbar long-press suppression (prevents iOS selection anywhere in toolbar)
+        (function initToolbarLongPressSuppression(){
+            try {
+                const toolbar = document.getElementById('main-toolbar-row') || document.querySelector('.toolbar');
+                if(!toolbar) return;
+                if(toolbar.__lyrixLongPressNoSelectInstalled) return;
+                toolbar.__lyrixLongPressNoSelectInstalled = true;
+                let lpTimer=null;
+                const LONG_PRESS_MS=420; // delay before activating shield
+                const ACTIVATE_CLASS='lyrix-block-select';
+                function activateShield(){
+                    if(document.body.classList.contains(ACTIVATE_CLASS)) return;
+                    document.body.classList.add(ACTIVATE_CLASS);
+                    if(!document.getElementById('lyrix-longpress-shield')){
+                        const shield=document.createElement('div');
+                        shield.id='lyrix-longpress-shield';
+                        shield.style.cssText='position:fixed;inset:0;z-index:2147483646;background:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;';
+                        const swallow=(ev)=>{ if (ev.cancelable) ev.preventDefault(); ev.stopPropagation(); };
+                        ['contextmenu','selectionchange'].forEach(tp=>document.addEventListener(tp,swallow,{capture:true,passive:false}));
+                        // shield only swallows move/longpress events after activation, not initial tap
+                        ['touchmove','touchcancel'].forEach(tp=>shield.addEventListener(tp,swallow,{passive:false}));
+                        document.body.appendChild(shield);
+                    }
+                    if(!window.__lyrixSelectionClearInterval){
+                        window.__lyrixSelectionClearInterval=setInterval(()=>{ if(!document.body.classList.contains(ACTIVATE_CLASS)){clearInterval(window.__lyrixSelectionClearInterval);window.__lyrixSelectionClearInterval=null;return;} try{const sel=window.getSelection(); if(sel) sel.removeAllRanges();}catch(_){}} ,140);
+                    }
+                }
+                function start(e){
+                    // Do NOT preventDefault here; allow normal click
+                    if(lpTimer) clearTimeout(lpTimer);
+                    lpTimer=setTimeout(()=>{ activateShield(); }, LONG_PRESS_MS);
+                }
+                function end(){
+                    if(lpTimer) { clearTimeout(lpTimer); lpTimer=null; }
+                    if(!document.body.classList.contains(ACTIVATE_CLASS)) return; // nothing to clean if not activated
+                    setTimeout(()=>{ document.body.classList.remove(ACTIVATE_CLASS); const shield=document.getElementById('lyrix-longpress-shield'); if(shield) shield.remove(); try{const sel=window.getSelection(); if(sel) sel.removeAllRanges();}catch(_){ } },110);
+                }
+                ['touchstart','mousedown'].forEach(ev=>toolbar.addEventListener(ev,start,{passive:true}));
+                ['touchend','touchcancel','mouseup','mouseleave','pointerleave','pointerup'].forEach(ev=>toolbar.addEventListener(ev,end,{passive:true}));
+            } catch(e) { /* silent */ }
+        })();
 
         // Debug: Force MIDI inspector visible if enabled
         setTimeout(() => {
@@ -187,8 +429,6 @@ function initializeLyrix() {
                     midiElement.style.border = '3px solid #f00'; // Red border for visibility
                     midiElement.style.color = '#000'; // Black text for contrast
                 }
-            } else {
-                console.warn('⚠️ MIDI Inspector not found in DOM');
             }
         }, 500);
         
@@ -196,8 +436,25 @@ function initializeLyrix() {
         if (appContainer) {
             dragDropManager = new DragDropManager(audioController, lyricsLibrary, lyricsDisplay);
             dragDropManager.onSongLoaded = (song) => {
+                // Rafraîchir titre audio & slider
                 updateAudioTitle();
-                resetAudioSlider();
+                resetAudioSlider(true);
+                try {
+                    // Si lyricsDisplay existe, re-render pour refléter audioPath mis à jour
+                    if (lyricsDisplay && lyricsDisplay.displayLyrics) {
+                        lyricsDisplay.displayLyrics(song);
+                    }
+                    // Mettre à jour la sélection dans la liste si ouverte
+                    const listContainer = document.getElementById('song-library-list');
+                    if (listContainer) {
+                        const selected = listContainer.querySelector('[data-song-id="'+song.songId+'"]');
+                        if (selected) {
+                            // Ajouter un petit flash visuel pour signaler maj
+                            selected.style.outline = '2px solid #27ae60';
+                            setTimeout(()=>{ selected.style.outline=''; }, 800);
+                        }
+                    }
+                } catch(e){ /* silent */ }
             };
             dragDropManager.initialize(appContainer);
 
@@ -223,7 +480,7 @@ function initializeLyrix() {
             });
         }
         
-        // Make drag-and-drop work for the entire window, not just #lyrix_app
+    // Make drag-and-drop work for the entire window (former #lyrix_app removed)
         window.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -246,6 +503,8 @@ function initializeLyrix() {
         
         // Load any existing song
         loadLastSong();
+    // Assure re-liaison audio quand le port local HTTP arrive après l'initialisation
+    setupDeferredAudioRebind();
         
         // Remove loading message
         const loadingDiv = document.getElementById('loading');
@@ -256,64 +515,6 @@ function initializeLyrix() {
     } catch (error) {
         console.error('❌ Error initializing Lyrix:', error);
     }
-}
-
-// Create a new song
-function createNewSong() {
-    // Use FormModal instead of prompts
-    FormModal({
-        title: '🎵 Create New Song',
-        fields: [
-            {
-                name: 'title',
-                label: 'Song Title',
-                placeholder: 'Enter song title...',
-                required: true
-            },
-            {
-                name: 'artist',
-                label: 'Artist Name',
-                placeholder: 'Enter artist name...',
-                defaultValue: 'Unknown Artist'
-            },
-            {
-                name: 'album',
-                label: 'Album (optional)',
-                placeholder: 'Enter album name...'
-            }
-        ],
-        onSubmit: (values) => {
-            try {
-                // Crée la chanson avec metadata uniquement
-                const metadata = {
-                    title: values.title || '',
-                    artist: values.artist || 'Unknown Artist',
-                    album: values.album || '',
-                    duration: 0
-                };
-                const songId = lyricsLibrary.generateSongId(metadata.title, metadata.artist);
-                const song = new SyncedLyrics(metadata.title, metadata.artist, metadata.album, metadata.duration, songId);
-                song.metadata = metadata;
-                song.songId = songId;
-                song.lines = [];
-                lyricsLibrary.saveSong(song);
-                if (song) {
-                    loadAndDisplaySong(song.songId);
-                }
-            } catch (error) {
-                console.error('❌ ERREUR lors de la création:', error);
-                Modal({
-                    title: '❌ Error',
-                    content: `<p>Error creating song: ${error.message}</p>`,
-                    buttons: [{ text: 'OK' }],
-                    size: 'small'
-                });
-            }
-        },
-        onCancel: () => {
-            // User cancelled
-        }
-    });
 }
 
 // Export songs to LRX format
@@ -362,7 +563,14 @@ function exportAllSongsToLRX() {
 function showMobileExportModal(dataString, filename, fileType) {
     const modalContainer = UIManager.createEnhancedModalOverlay();
     const modal = UIManager.createEnhancedModalContainer({
-        css: { maxWidth: '500px', width: '90%' }
+        css: { 
+            maxWidth: '500px', 
+            width: '90%',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
+        }
     });
 
     // Header
@@ -370,8 +578,12 @@ function showMobileExportModal(dataString, filename, fileType) {
         css: {
             padding: UIManager.THEME.spacing.lg,
             backgroundColor: UIManager.THEME.colors.primary,
-            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
-            color: 'white'
+            // borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
+            color: 'white',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -394,7 +606,11 @@ function showMobileExportModal(dataString, filename, fileType) {
     // Content
     const content = $('div', {
         css: {
-            padding: UIManager.THEME.spacing.lg
+            padding: UIManager.THEME.spacing.lg,
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -571,8 +787,12 @@ function showMobileExportModal(dataString, filename, fileType) {
             padding: UIManager.THEME.spacing.lg,
             backgroundColor: UIManager.THEME.colors.background,
             borderTop: `1px solid ${UIManager.THEME.colors.border}`,
-            borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
-            textAlign: 'center'
+            // borderRadius: `0 0 ${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg}`,
+            textAlign: 'center',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -584,7 +804,11 @@ function showMobileExportModal(dataString, filename, fileType) {
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -613,7 +837,15 @@ function showMobileExportModal(dataString, filename, fileType) {
 function showContentViewModal(dataString, filename, fileType) {
     const modalContainer = UIManager.createEnhancedModalOverlay();
     const modal = UIManager.createEnhancedModalContainer({
-        css: { maxWidth: '800px', width: '95%', maxHeight: '90vh' }
+        css: { 
+            maxWidth: '800px', 
+            width: '95%', 
+            maxHeight: '90vh',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
+        }
     });
 
     // Header
@@ -621,11 +853,15 @@ function showContentViewModal(dataString, filename, fileType) {
         css: {
             padding: UIManager.THEME.spacing.md,
             backgroundColor: UIManager.THEME.colors.primary,
-            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
+            // borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
             color: 'white',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -643,7 +879,11 @@ function showContentViewModal(dataString, filename, fileType) {
             border: '1px solid rgba(255,255,255,0.3)',
             borderRadius: '4px',
             cursor: 'pointer',
-            fontSize: '12px'
+            fontSize: '12px',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -654,7 +894,11 @@ function showContentViewModal(dataString, filename, fileType) {
         css: {
             padding: UIManager.THEME.spacing.md,
             maxHeight: '60vh',
-            overflow: 'auto'
+            overflow: 'auto',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
         }
     });
 
@@ -669,7 +913,11 @@ function showContentViewModal(dataString, filename, fileType) {
             fontFamily: 'monospace',
             fontSize: '12px',
             resize: 'vertical',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            userSelect: 'text', // Explicitly allow selection in textarea
+            webkitUserSelect: 'text',
+            mozUserSelect: 'text',
+            msUserSelect: 'text'
         }
     });
 
@@ -767,13 +1015,11 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
     }
 
     const songs = lyricsLibrary.getAllSongs();
-   // console.log('🔍 Found songs:', songs.length);
     if (songs.length === 0) {
         console.warn('❌ No songs available to export');
         return;
     }
 
-   // ('🔍 Creating export data...');
     // Create export data structure
     const exportData = {
         version: '1.0',
@@ -782,7 +1028,7 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         songs: songs.map(song => {
             // Log the audioPath format for debugging
             if (song.audioPath) {
-                console.log(`📤 Exporting song "${song.metadata?.title || 'Unknown'}" with audioPath: "${song.audioPath}"`);
+                (`📤 Exporting song "${song.metadata?.title || 'Unknown'}" with audioPath: "${song.audioPath}"`);
                 
                 // Verify that audioPath is just a filename (not a full URL)
                 if (song.audioPath.startsWith('http://') || song.audioPath.startsWith('https://') || song.audioPath.includes('assets/audios/')) {
@@ -809,7 +1055,7 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
     const isWebKit = /webkit/i.test(navigator.userAgent) && !/chrome/i.test(navigator.userAgent);
     
     if (isSafari || isWebKit) {
-        // Safari-specific method - utilise la fenêtre passée depuis le handler
+        // Safari-specific method - uses the window passed from the handler
         try {
             const newWindow = safariWin || window.open('', '_blank');
             if (newWindow) {
@@ -913,33 +1159,26 @@ function exportAllSongsToLRXWithFolderDialog(safariWin = null) {
         
         // Add to document, click, and remove
         document.body.appendChild(saveLink);
-      //  console.log('🔍 Link added to document, triggering click...');
         
         try {
             saveLink.click();
-            console.log('🔍 Click triggered');
         } catch (e) {
-            console.log('🔍 Click failed, trying dispatchEvent:', e);
             const clickEvent = new MouseEvent('click', {
                 view: window,
                 bubbles: true,
                 cancelable: false
             });
             saveLink.dispatchEvent(clickEvent);
-            console.log('🔍 DispatchEvent triggered');
         }
         
         document.body.removeChild(saveLink);
-        console.log('🔍 Link removed from document');
         
         // Clean up the object URL
         setTimeout(() => {
             URL.revokeObjectURL(url);
-            console.log('🔍 Object URL revoked');
         }, 100);
     }
     
-    console.log(`✅ Successfully exported ${songs.length} songs to LRX format`);
 }
 
 // Direct download fallback for LRX export without modal
@@ -972,7 +1211,6 @@ function exportAllSongsToLRXDirectDownload(songs) {
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
 
-    console.log(`✅ Direct download initiated for ${songs.length} songs`);
 }
 
 // Import songs from LRX format
@@ -993,8 +1231,8 @@ function importFromLRX(file) {
             // Import each song
             importData.songs.forEach((songData, index) => {
                 try {
-                    // Crée une instance SyncedLyrics pour chaque chanson importée
-                    // Utilise uniquement les champs racine du format exporté
+                    // Create a SyncedLyrics instance for each imported song
+                    // Use only root fields from the exported format
                     const syncedLyrics = new SyncedLyrics(
                        songData.title || `Imported ${index + 1}`,
                         songData.artist || 'Unknown',
@@ -1023,26 +1261,19 @@ function importFromLRX(file) {
                     });
                     syncedLyrics.audioPath = songData.audioPath;
                     syncedLyrics.syncData = songData.syncData;
-                    // Merge any extra metadata, mais NE PAS écraser title/artist/album
+                    // Merge any extra metadata, but DO NOT overwrite title/artist/album
                     syncedLyrics.metadata = Object.assign({}, syncedLyrics.metadata, songData.metadata || {}, {
                         audioPath: songData.audioPath,
                         title: syncedLyrics.title,
                         artist: syncedLyrics.artist,
                         album: syncedLyrics.album
                     });
-                    // Les champs racine sont déjà corrects
-                    // Log avant sauvegarde pour debug
-                    console.log('[IMPORT DEBUG] Before save:', {
-                        title: syncedLyrics.title,
-                        artist: syncedLyrics.artist,
-                        album: syncedLyrics.album,
-                        metadata: syncedLyrics.metadata
-                    });
+                    // Root fields are already correct
+                   
                     // Add to library
                     const success = lyricsLibrary.saveSong(syncedLyrics);
                     if (success) {
                         importedCount++;
-                        console.log(`✅ Imported song: ${syncedLyrics.metadata.title || syncedLyrics.title || 'Unknown'} | Artist: ${syncedLyrics.metadata.artist || syncedLyrics.artist || 'Unknown Artist'}`);
                     } else {
                         errors.push(`Failed to import song: ${syncedLyrics.metadata.title || syncedLyrics.title || 'Unknown'}`);
                     }
@@ -1101,53 +1332,6 @@ function exportSelectedSongsAsText() {
         song: song,
         selected: false
     }));
-
-    // // Create custom modal with checkboxes
-    // const modalContainer = UIManager.createEnhancedModalOverlay();
-    // const modal = UIManager.createEnhancedModalContainer({
-    //     css: { maxWidth: '600px', width: '90%' }
-    // });
-
-    // // Header
-    // const header = UIManager.createModalHeader({});
-    // const headerTitle = $('h3', {
-    //     id: 'export-songs-header1',
-    //     text: '📄 Select Songs to Export as Text',
-    //     css: { margin: '0', color: 'white' }
-    // });
-    // header.appendChild(headerTitle);
-
-    // // Content
-    // const content = UIManager.createModalContent({});
-    
-    // const selectAllContainer = $('div', {
-    //     css: {
-    //         marginBottom: '15px',
-    //         padding: '10px',
-    //         backgroundColor: UIManager.THEME.colors.background,
-    //         borderRadius: '4px'
-    //     }
-    // });
-
-    // const selectAllCheckbox = $('input', {
-    //     type: 'checkbox',
-    //     id: 'select-all-songs'
-    // });
-
-    // const selectAllLabel = $('label', {
-    //     text: ' Select/Deselect All',
-    //     css: { marginLeft: '8px', cursor: 'pointer' }
-    // });
-
-    // selectAllLabel.addEventListener('click', () => {
-    //     const checkboxes = modal.querySelectorAll('input[type="checkbox"]:not(#select-all-songs)');
-    //     const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-    //     checkboxes.forEach(cb => cb.checked = !allChecked);
-    //     selectAllCheckbox.checked = !allChecked;
-    // });
-
-    // selectAllContainer.append(selectAllCheckbox, selectAllLabel);
-    // content.appendChild(selectAllContainer);
 
     // Song list
     const listContainer = UIManager.createListContainer({});
@@ -1314,17 +1498,24 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     // Create custom modal with checkboxes
     const modalContainer = UIManager.createEnhancedModalOverlay();
     const modal = UIManager.createEnhancedModalContainer({
-        css: { maxWidth: '600px', width: '90%' }
+        css: { 
+            maxWidth: '600px', 
+            width: '90%',
+            userSelect: 'none',
+            webkitUserSelect: 'none',
+            mozUserSelect: 'none',
+            msUserSelect: 'none'
+        }
     });
 
-    // Header
-    const header = UIManager.createModalHeader({});
-    const headerTitle = $('h3', {
-            id: 'export-songs-header',
-        text: '📄 Select Songs to Export as Text',
-        css: { margin: '0', color: 'white' }
-    });
-    header.appendChild(headerTitle);
+    // // Header
+    // const header = UIManager.createModalHeader({});
+    // const headerTitle = $('h3', {
+    //         id: 'export-songs-header',
+    //     text: '📄 Select Songs to Export as Text',
+    //     css: { margin: '0', color: 'white' }
+    // });
+    // header.appendChild(headerTitle);
 
     // Content
     const content = UIManager.createModalContent({});
@@ -1352,6 +1543,10 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     selectAllBtn.style.fontWeight = 'bold';
     selectAllBtn.style.fontSize = '15px';
     selectAllBtn.style.transition = 'background 0.2s';
+    selectAllBtn.style.userSelect = 'none';
+    selectAllBtn.style.webkitUserSelect = 'none';
+    selectAllBtn.style.mozUserSelect = 'none';
+    selectAllBtn.style.msUserSelect = 'none';
 
     function updateSelectAllBtn() {
         if (allSelected) {
@@ -1378,81 +1573,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     selectAllContainer.appendChild(selectAllBtn);
     content.appendChild(selectAllContainer);
 
-    // Export format option
-    const formatContainer = $('div', {
-        css: {
-            marginBottom: '15px',
-            padding: '10px',
-            backgroundColor: UIManager.THEME.colors.background,
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '15px'
-        }
-    });
 
-    const formatLabel = $('span', {
-        text: 'Export format:',
-        css: {
-            fontWeight: 'bold',
-            color: '#333'
-        }
-    });
-
-    let exportSeparateFiles = false;
-
-    const singleFileBtn = $('button', {
-        text: '📄 Single File',
-        css: {
-            padding: '6px 12px',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            backgroundColor: '#27ae60',
-            color: 'white',
-            fontWeight: 'bold'
-        }
-    });
-
-    const separateFilesBtn = $('button', {
-        text: '📁 Separate Files',
-        css: {
-            padding: '6px 12px',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            backgroundColor: '#eee',
-            color: '#333'
-        }
-    });
-
-    function updateFormatButtons() {
-        if (exportSeparateFiles) {
-            singleFileBtn.style.backgroundColor = '#eee';
-            singleFileBtn.style.color = '#333';
-            separateFilesBtn.style.backgroundColor = '#27ae60';
-            separateFilesBtn.style.color = 'white';
-        } else {
-            singleFileBtn.style.backgroundColor = '#27ae60';
-            singleFileBtn.style.color = 'white';
-            separateFilesBtn.style.backgroundColor = '#eee';
-            separateFilesBtn.style.color = '#333';
-        }
-    }
-
-    singleFileBtn.addEventListener('click', () => {
-        exportSeparateFiles = false;
-        updateFormatButtons();
-    });
-
-    separateFilesBtn.addEventListener('click', () => {
-        exportSeparateFiles = true;
-        updateFormatButtons();
-    });
-
-    formatContainer.append(formatLabel, singleFileBtn, separateFilesBtn);
-    content.appendChild(formatContainer);
 
     // Song list
     const listContainer = UIManager.createListContainer({});
@@ -1472,11 +1593,19 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         selectBtn.style.cursor = 'pointer';
         selectBtn.style.padding = '4px 10px';
         selectBtn.style.transition = 'background 0.2s';
+        selectBtn.style.userSelect = 'none';
+        selectBtn.style.webkitUserSelect = 'none';
+        selectBtn.style.mozUserSelect = 'none';
+        selectBtn.style.msUserSelect = 'none';
 
         const label = document.createElement('span');
         label.textContent = item.text;
         label.style.flex = '1';
         label.style.cursor = 'pointer';
+        label.style.userSelect = 'none';
+        label.style.webkitUserSelect = 'none';
+        label.style.mozUserSelect = 'none';
+        label.style.msUserSelect = 'none';
 
         function updateBtn() {
             if (selected) {
@@ -1538,68 +1667,112 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
             document.body.removeChild(modalContainer);
 
-            if (exportSeparateFiles) {
-                // Export each song as a separate file
-                exportSongsAsSeparateFiles(selectedSongIds);
-            } else {
-                // Export all songs in a single file
-                exportSongsAsSingleFile(selectedSongIds);
-            }
+            // Export all songs in a single file
+            exportSongsAsSingleFile(selectedSongIds);
         }
     });
 
     footer.append(cancelButton, exportButton);
-    modal.append(header, content, footer);
+    modal.append(content, footer);
     modalContainer.appendChild(modal);
     document.body.appendChild(modalContainer);
 }
 
 // Function to export songs as separate files
 function exportSongsAsSeparateFiles(selectedSongIds) {
-    let downloadCount = 0;
+    console.log('🔧 Exporting songs as separate files');
     
-    selectedSongIds.forEach((songId, index) => {
-        const song = lyricsLibrary.getSongById(songId);
-        if (song) {
-            let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
-            
-            if (song.lines && song.lines.length > 0) {
-                song.lines.forEach(line => {
-                    exportText += `${line.text}\n`;
-                });
-            } else {
-                exportText += '(No lyrics available)\n';
-            }
-            
-            // Create safe filename
-            const safeTitle = (song.metadata.title || 'Untitled')
-                .replace(/[^a-z0-9]/gi, '_')
-                .replace(/_+/g, '_')
-                .replace(/^_|_$/g, '');
-            
-            // Use download method with delay to avoid browser blocking
-            setTimeout(() => {
-                const blob = new Blob([exportText], { type: 'text/plain' });
-                const saveLink = document.createElement('a');
-                saveLink.href = URL.createObjectURL(blob);
-                saveLink.download = `${safeTitle}.txt`;
-                saveLink.style.display = 'none';
+    // Check if we're on iOS/AUv3
+    const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
+    
+    if (isAUv3) {
+        console.log('🔧 iOS/AUv3 detected - using iOS save dialogs for separate files');
+        
+        // For iOS, export each file using the native save dialog
+        selectedSongIds.forEach((songId, index) => {
+            const song = lyricsLibrary.getSongById(songId);
+            if (song) {
+                let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
                 
-                document.body.appendChild(saveLink);
-                saveLink.click();
-                document.body.removeChild(saveLink);
-                
-                setTimeout(() => {
-                    URL.revokeObjectURL(saveLink.href);
-                }, 100);
-                
-                downloadCount++;
-                if (downloadCount === selectedSongIds.length) {
-                    console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
+                if (song.lines && song.lines.length > 0) {
+                    song.lines.forEach(line => {
+                        exportText += `${line.text}\n`;
+                    });
+                } else {
+                    exportText += '(No lyrics available)\n';
                 }
-            }, index * 500); // 500ms delay between downloads
-        }
-    });
+                
+                // Create safe filename
+                const safeTitle = (song.metadata.title || 'Untitled')
+                    .replace(/[^a-z0-9]/gi, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_|_$/g, '');
+                
+                // Use iOS native save dialog with delay between calls
+                setTimeout(() => {
+                    const payload = {
+                        action: 'saveFileWithDocumentPicker',
+                        requestId: `${Date.now()}_${index}`,
+                        fileName: `${safeTitle}.txt`,
+                        data: exportText,
+                        encoding: 'utf8'
+                    };
+                    
+                    console.log(`🔧 Sending file ${index + 1}/${selectedSongIds.length} to Swift bridge: ${safeTitle}.txt`);
+                    window.webkit.messageHandlers.swiftBridge.postMessage(payload);
+                }, index * 1000); // 1 second delay between iOS save dialogs
+            }
+        });
+        
+    } else {
+        console.log('🔧 Desktop/Web detected - using HTML5 downloads for separate files');
+        
+        // Desktop/Web: Original logic with HTML5 downloads
+        let downloadCount = 0;
+        
+        selectedSongIds.forEach((songId, index) => {
+            const song = lyricsLibrary.getSongById(songId);
+            if (song) {
+                let exportText = `${song.metadata.title || 'Untitled'}\n\n`;
+                
+                if (song.lines && song.lines.length > 0) {
+                    song.lines.forEach(line => {
+                        exportText += `${line.text}\n`;
+                    });
+                } else {
+                    exportText += '(No lyrics available)\n';
+                }
+                
+                // Create safe filename
+                const safeTitle = (song.metadata.title || 'Untitled')
+                    .replace(/[^a-z0-9]/gi, '_')
+                    .replace(/_+/g, '_')
+                    .replace(/^_|_$/g, '');
+                
+                // Use download method with delay to avoid browser blocking
+                setTimeout(() => {
+                    const blob = new Blob([exportText], { type: 'text/plain' });
+                    const saveLink = document.createElement('a');
+                    saveLink.href = URL.createObjectURL(blob);
+                    saveLink.download = `${safeTitle}.txt`;
+                    saveLink.style.display = 'none';
+                    
+                    document.body.appendChild(saveLink);
+                    saveLink.click();
+                    document.body.removeChild(saveLink);
+                    
+                    setTimeout(() => {
+                        URL.revokeObjectURL(saveLink.href);
+                    }, 100);
+                    
+                    downloadCount++;
+                    if (downloadCount === selectedSongIds.length) {
+                        console.log(`✅ Successfully exported ${downloadCount} songs as separate files`);
+                    }
+                }, index * 500); // 500ms delay between downloads
+            }
+        });
+    }
 }
 
 // Function to export songs as a single file
@@ -1630,2424 +1803,50 @@ function exportSongsAsSingleFile(selectedSongIds) {
         }
     });
 
-    // Use download method that works on all browsers including Safari
-    const blob = new Blob([exportText], { type: 'text/plain' });
-    const saveLink = document.createElement('a');
-    saveLink.href = URL.createObjectURL(blob);
-    saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
-    saveLink.style.display = 'none';
+    // Check if we're on iOS/AUv3
+    const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
     
-    // Add to document, click, and remove
-    document.body.appendChild(saveLink);
-    saveLink.click();
-    document.body.removeChild(saveLink);
-    
-    // Clean up the object URL
-    setTimeout(() => {
-        URL.revokeObjectURL(saveLink.href);
-    }, 100);
-    
-    console.log(`✅ Successfully exported ${selectedSongIds.length} songs as single text file`);
-}
-
-// Show song library
-function showSongLibrary() {
-    console.log('📚 Opening song library...');
-    console.log('🎹 MIDI utilities available:', !!window.midiUtilities);
-    if (window.midiUtilities) {
-        console.log('🎹 Current MIDI assignments:', window.midiUtilities.getAllAssignments());
-    }
-    
-    if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary non disponible');
-        Modal({
-            title: '❌ Error',
-            content: '<p>Library not initialized</p>',
-            buttons: [{ text: 'OK' }],
-            size: 'small'
-        });
-        return;
-    }
-
-    const songs = lyricsLibrary.getAllSongs();
-    
-    // Always show the song library, even if empty, so users can create or import songs
-    
-    // Create custom modal with export/import buttons
-    const modalContainer = UIManager.createEnhancedModalOverlay();
-    const modal = UIManager.createEnhancedModalContainer({
-        id: 'song-library-modal',
-        css: { maxWidth: '700px', width: '90%' }
-    });
-
-    // Header with title and action buttons
-    const header = $('div', {
-        css: {
-            padding: UIManager.THEME.spacing.lg,
-            backgroundColor: UIManager.THEME.colors.primary,
-            borderRadius: `${UIManager.THEME.borderRadius.lg} ${UIManager.THEME.borderRadius.lg} 0 0`,
-            borderBottom: `1px solid ${UIManager.THEME.colors.border}`,
-            color: 'white'
-        }
-    });
-
-    const headerTop = $('div', {
-        css: {
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '10px'
-        }
-    });
-
-    const headerTitle = $('h3', {
-        id: 'song-library-header',
-        // text: '📚 Song Library',
-        css: { margin: '0', color: 'white' }
-    });
-
-    // Action buttons container
-    const actionButtons = $('div', {
-        css: {
-            display: 'flex',
-            gap: '8px'
-        }
-    });
-
-    // Create new song button
-    const createNewSongButton = $('button', {
-        id: 'create_new_song_button',
-        text: '➕ New',
-        css: {
-            backgroundColor: '#2ecc71',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            document.body.removeChild(modalContainer);
-            createNewSong();
-        }
-    });
-
-    // Export all to LRX button
-    const exportLRXButton = $('button', {
-          id: 'export-lrx-format',
-        text: '💾 Save',
-        css: {
-            backgroundColor: '#27ae60',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            document.body.removeChild(modalContainer);
-            exportAllSongsToLRX(); // Direct download, no dialog
-        }
-    });
-
-    // Export selected as text button
-    const exportTextButton = $('button', {
-        id: 'export-songs-as-text',
-        text: 'save txt',
-        css: {
-            backgroundColor: '#3498db',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            document.body.removeChild(modalContainer);
-            exportSelectedSongsAsTextWithFolderDialog();
-        }
-    });
-
-    // Import file button - moved from toolbar to song library panel
-    const importFileButton = $('button', {
-        id: 'import_file_button_library',
-        text: '📁 Import',
-        css: {
-            backgroundColor: '#f39c12',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            document.body.removeChild(modalContainer);
-            showFileImportDialog();
-        }
-    });
-
-    // Auto Fill MIDI container
-    const autoFillContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px',
-            backgroundColor: '#f8f9fa',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            border: '1px solid #ddd'
-        }
-    });
-
-    const autoFillLabel = $('span', {
-        //text: '',
-        css: {
-            fontSize: '11px',
-            color: '#666',
-            fontWeight: '500'
-        }
-    });
-
-    const autoFillInput = $('input', {
-        type: 'number',
-        min: '0',
-        max: '127',
-        placeholder: 'Root',
-        value: '60', // Default to middle C
-        css: {
-            width: '50px',
-            padding: '2px 4px',
-            border: '1px solid #ccc',
-            borderRadius: '3px',
-            fontSize: '11px',
-            textAlign: 'center'
-        }
-    });
-
-    const autoFillButton = $('button', {
-        text: '🎹 Fill',
-        css: {
-            backgroundColor: '#4caf50',
-            color: 'white',
-            border: 'none',
-            padding: '4px 8px',
-            borderRadius: '3px',
-            fontSize: '11px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            autoFillMidiNotes();
-        }
-    });
-
-    autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
-
-    // Sort alphabetically button
-    const sortAlphabeticallyButton = $('button', {
-        text: '🔤 Sort A-Z',
-        css: {
-            backgroundColor: '#9c27b0',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            sortSongsAlphabetically();
-        }
-    });
-
-    // Bouton supprimer toutes les chansons
-    const deleteAllButton = $('button', {
-        text: '🗑️',
-        css: {
-            backgroundColor: '#e74c3c',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-        },
-        onClick: () => {
-            Modal({
-                title: 'Confirmation',
-                content: '<p>Voulez-vous vraiment supprimer toutes les chansons ? Cette action est irréversible.</p>',
-                buttons: [
-                    { text: 'Annuler' },
-                    { text: 'Supprimer', onClick: () => {
-                        lyricsLibrary.deleteAllSongs();
-                        document.body.removeChild(modalContainer);
-                        // No need for additional confirmation modal - user can see the empty library
-                        showSongLibrary(); // Reopen the library to show it's now empty
-                    }, css: { backgroundColor: '#e74c3c', color: 'white' } }
-                ],
-                size: 'small'
-            });
-        }
-    });
-    actionButtons.append(createNewSongButton, importFileButton, exportLRXButton, exportTextButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
-    headerTop.append(headerTitle, actionButtons);
-
-    // Instructions
-    const instructions = $('div', {
-        text: 'Select a song to load, or use the action buttons above',
-        css: {
-            fontSize: '14px',
-            opacity: '0.9',
-            fontStyle: 'italic'
-        }
-    });
-
-    header.append(headerTop, instructions);
-
-    // Content with search and song list
-    const content = UIManager.createModalContent({});
-    
-    // Search input
-    const searchInput = $('input', {
-        type: 'text',
-        placeholder: 'Search songs...',
-        css: {
-            width: '100%',
-            padding: '10px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            marginBottom: '15px',
-            fontSize: '14px',
-            boxSizing: 'border-box'
-        }
-    });
-
-    // Song list container
-    const listContainer = UIManager.createListContainer({});
-    
-    // Prepare items for display
-    const songItems = songs.map(song => ({
-        text: `${(song.metadata?.title || song.title || 'Untitled')} - ${(song.metadata?.artist || song.artist || 'Unknown Artist')}${(song.metadata?.album || song.album) ? ` (${song.metadata?.album || song.album})` : ''}`,
-        value: song.key,
-        song: song
-    }));
-
-    let filteredItems = [...songItems];
-
-    // Functions to manage custom song order persistence
-    function saveCustomSongOrder() {
-        const orderData = filteredItems.map((item, index) => ({
-            songKey: item.value,
-            order: index
-        }));
-        localStorage.setItem('lyrix_custom_song_order', JSON.stringify(orderData));
-        console.log('💾 Custom song order saved to localStorage');
-    }
-
-    function loadCustomSongOrder() {
-        try {
-            const savedOrder = localStorage.getItem('lyrix_custom_song_order');
-            if (!savedOrder) {
-                console.log('📋 No custom song order found, using default');
-                return;
-            }
-
-            const orderData = JSON.parse(savedOrder);
-            const orderMap = new Map();
-            orderData.forEach(item => {
-                orderMap.set(item.songKey, item.order);
-            });
-
-            // Separate songs with saved order from new songs
-            const songsWithOrder = [];
-            const newSongs = [];
-            
-            filteredItems.forEach(item => {
-                if (orderMap.has(item.value)) {
-                    songsWithOrder.push({
-                        ...item,
-                        savedOrder: orderMap.get(item.value)
-                    });
-                } else {
-                    newSongs.push(item);
-                }
-            });
-
-            // Sort songs with saved order
-            songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
-            
-            // Combine: ordered songs first, then new songs at the end
-            filteredItems = [
-                ...songsWithOrder.map(item => ({ ...item, savedOrder: undefined })),
-                ...newSongs
-            ];
-
-            console.log(`📋 Custom song order loaded: ${songsWithOrder.length} ordered songs, ${newSongs.length} new songs`);
-        } catch (error) {
-            console.error('❌ Error loading custom song order:', error);
-        }
-    }
-
-    // Load custom order on initialization
-    loadCustomSongOrder();
-
-    // Function to refresh all MIDI input values
-    function refreshMidiInputs() {
-        if (!window.midiUtilities) return;
+    if (isAUv3) {
+        console.log('🔧 iOS/AUv3 detected - using iOS save dialog for single file');
         
-        const midiInputs = listContainer.querySelectorAll('input[data-song-key]');
-        midiInputs.forEach(input => {
-            const songKey = input.getAttribute('data-song-key');
-            const midiNote = window.midiUtilities.getMidiAssignment(songKey);
-            input.value = midiNote || '';
-        });
-    }
-
-    // Function to sort songs alphabetically
-    function sortSongsAlphabetically() {
-        filteredItems.sort((a, b) => {
-            const titleA = (a.song.metadata?.title || a.song.title || 'Untitled').toLowerCase();
-            const titleB = (b.song.metadata?.title || b.song.title || 'Untitled').toLowerCase();
-            return titleA.localeCompare(titleB);
-        });
-        updateSongList();
-        setTimeout(() => refreshMidiInputs(), 50);
-        saveCustomSongOrder(); // Save the new order
-        console.log('🔤 Songs sorted alphabetically and order saved');
-    }
-
-    // Function to auto-fill MIDI notes starting from root note
-    function autoFillMidiNotes() {
-        if (!window.midiUtilities) {
-            console.error('❌ MIDI utilities not available');
-            Modal({
-                title: '❌ Error',
-                content: '<p>MIDI utilities not available</p>',
-                buttons: [{ text: 'OK' }],
-                size: 'small'
-            });
-            return;
-        }
-
-        const rootNoteStr = autoFillInput.value.trim();
-        if (!rootNoteStr) {
-            console.error('❌ Root note not specified');
-            Modal({
-                title: '❌ Error',
-                content: '<p>Please enter a root note (0-127)</p>',
-                buttons: [{ text: 'OK' }],
-                size: 'small'
-            });
-            return;
-        }
-
-        const rootNote = parseInt(rootNoteStr);
-        if (isNaN(rootNote) || rootNote < 0 || rootNote > 127) {
-            console.error('❌ Invalid root note');
-            Modal({
-                title: '❌ Error',
-                content: '<p>Root note must be between 0 and 127</p>',
-                buttons: [{ text: 'OK' }],
-                size: 'small'
-            });
-            return;
-        }
-
-        // Perform auto-fill directly
-        performAutoFill(rootNote);
-    }
-
-    // Function to perform the actual auto-fill
-    function performAutoFill(rootNote) {
-        let assignedCount = 0;
-        let skippedCount = 0;
-
-        filteredItems.forEach((item, index) => {
-            const midiNote = rootNote + index;
-            
-            // Check if MIDI note is in valid range
-            if (midiNote > 127) {
-                console.warn(`⚠️ Skipping ${item.song.title}: MIDI note ${midiNote} exceeds 127`);
-                skippedCount++;
-                return;
-            }
-
-            try {
-                // Remove any existing assignment for this song
-                window.midiUtilities.removeMidiAssignment(item.value);
-                
-                // Set new assignment
-                window.midiUtilities.setMidiAssignment(item.value, midiNote);
-                assignedCount++;
-                
-                console.log(`🎹 Auto-assigned: ${item.song.title} -> Note ${midiNote}`);
-            } catch (error) {
-                console.error(`❌ Error assigning MIDI note to ${item.song.title}:`, error);
-                skippedCount++;
-            }
-        });
-
-        // Refresh MIDI inputs in the UI
-        setTimeout(() => refreshMidiInputs(), 100);
-
-        console.log(`🎹 Auto-fill complete: ${assignedCount} assigned, ${skippedCount} skipped`);
-    }
-
-    function updateSongList() {
-        listContainer.innerHTML = '';
+        // Use iOS native save dialog
+        const currentDate = new Date().toISOString().split('T')[0];
+        const fileName = `lyrix_songs_${currentDate}.txt`;
         
-        // Check if there are no songs to display
-        if (filteredItems.length === 0) {
-            const emptyMessage = $('div', {
-                css: {
-                    textAlign: 'center',
-                    padding: '40px 20px',
-                    color: '#666',
-                    fontSize: '16px'
-                }
-            });
-            
-            const emptyIcon = $('div', {
-                text: '🎵',
-                css: {
-                    fontSize: '48px',
-                    marginBottom: '15px'
-                }
-            });
-            
-            const emptyText = $('div', {
-                text: songs.length === 0 ? 
-                    'No songs in your library yet.\nUse the buttons above to create a new song or import existing ones.' : 
-                    'No songs match your search.',
-                css: {
-                    lineHeight: '1.6',
-                    whiteSpace: 'pre-line'
-                }
-            });
-            
-            emptyMessage.append(emptyIcon, emptyText);
-            listContainer.appendChild(emptyMessage);
-            return;
-        }
+        const payload = {
+            action: 'saveFileWithDocumentPicker',
+            requestId: Date.now().toString(),
+            fileName: fileName,
+            data: exportText,
+            encoding: 'utf8'
+        };
         
-        filteredItems.forEach((item, index) => {
-            const itemDiv = UIManager.createListItem({});
-            
-            // Add drag and drop functionality
-            itemDiv.draggable = true;
-            itemDiv.dataset.songIndex = index;
-            itemDiv.style.cursor = 'grab';
-            
-            // Add drag handle visual indicator
-            const dragHandle = $('span', {
-                text: '⋮⋮',
-                css: {
-                    marginRight: '8px',
-                    color: '#999',
-                    fontSize: '14px',
-                    cursor: 'grab',
-                    userSelect: 'none'
-                }
-            });
-            
-            const textSpan = UIManager.createListItemText({
-                text: item.text
-            });
-
-            // MIDI controls container
-            const midiControls = $('div', {
-                css: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    marginLeft: '10px'
-                }
-            });
-
-            // MIDI note input box - get fresh value each time the list is updated
-            let currentMidiNote = null;
-            if (window.midiUtilities) {
-                currentMidiNote = window.midiUtilities.getMidiAssignment(item.value);
-            }
-            
-            const midiInput = $('input', {
-                type: 'number',
-                min: '0',
-                max: '127',
-                placeholder: 'Note',
-                value: currentMidiNote || '',
-                css: {
-                    width: '50px',
-                    padding: '2px 4px',
-                    border: '1px solid #ccc',
-                    borderRadius: '3px',
-                    fontSize: '11px',
-                    textAlign: 'center'
-                }
-            });
-            
-            // Store reference to input for updating
-            midiInput.setAttribute('data-song-key', item.value);
-
-            // Update MIDI assignment when input changes
-            midiInput.addEventListener('change', (e) => {
-                e.stopPropagation();
-                const midiNote = parseInt(e.target.value);
-                if (window.midiUtilities && !isNaN(midiNote) && midiNote >= 0 && midiNote <= 127) {
-                    // Remove any existing assignment for this song
-                    window.midiUtilities.removeMidiAssignment(item.value);
-                    // Set new assignment
-                    window.midiUtilities.setMidiAssignment(item.value, midiNote);
-                    console.log(`🎹 Manual MIDI assignment: Note ${midiNote} -> ${item.song.title}`);
-                } else if (window.midiUtilities && e.target.value === '') {
-                    // Remove assignment if input is cleared
-                    window.midiUtilities.removeMidiAssignment(item.value);
-                    console.log(`🎹 MIDI assignment removed for: ${item.song.title}`);
-                }
-            });
-
-            // MIDI learn button
-            const midiLearnButton = $('button', {
-                text: '🎹',
-                css: {
-                    width: '25px',
-                    height: '25px',
-                    border: '1px solid #007acc',
-                    borderRadius: '3px',
-                    backgroundColor: '#f0f8ff',
-                    color: '#007acc',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '0'
-                },
-                title: `Learn MIDI note for ${item.song.title}`
-            });
-
-            // MIDI learn functionality
-            midiLearnButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (!window.midiUtilities) {
-                    console.error('❌ MIDI utilities not available');
-                    return;
-                }
-
-                if (window.midiUtilities.isLearning) {
-                    // Stop learning
-                    window.midiUtilities.stopMidiLearn();
-                    midiLearnButton.style.backgroundColor = '#f0f8ff';
-                    midiLearnButton.style.color = '#007acc';
-                    midiLearnButton.textContent = '🎹';
-                    console.log('🎹 MIDI learn stopped');
-                } else {
-                    // Start learning
-                    midiLearnButton.style.backgroundColor = '#ff6b6b';
-                    midiLearnButton.style.color = 'white';
-                    midiLearnButton.textContent = '⏹️';
-                    console.log(`🎹 MIDI learn started for: ${item.song.title}`);
-                    
-                    window.midiUtilities.startMidiLearn((midiNote) => {
-                        console.log(`🎹 MIDI learn callback triggered with note: ${midiNote}`);
-                        // Remove any existing assignment for this song
-                        window.midiUtilities.removeMidiAssignment(item.value);
-                        // Set new assignment
-                        window.midiUtilities.setMidiAssignment(item.value, midiNote);
-                        // Update input field
-                        midiInput.value = midiNote;
-                        // Reset button appearance
-                        midiLearnButton.style.backgroundColor = '#f0f8ff';
-                        midiLearnButton.style.color = '#007acc';
-                        midiLearnButton.textContent = '🎹';
-                        console.log(`🎹 MIDI learn completed: Note ${midiNote} -> ${item.song.title}`);
-                    });
-                }
-            });
-
-            midiControls.append(midiInput, midiLearnButton);
-
-            // Delete button
-            const deleteButton = UIManager.createDeleteButton({
-                onClick: (e) => {
-                    e.stopPropagation();
-                    
-                    ConfirmModal({
-                        title: '🗑️ Delete Song',
-                        message: `Are you sure you want to delete "${item.song.title}" by ${item.song.artist}?`,
-                        confirmText: 'Delete',
-                        cancelText: 'Cancel',
-                        onConfirm: () => {
-                            try {
-                                // Remove MIDI assignment when deleting song
-                                if (window.midiUtilities) {
-                                    window.midiUtilities.removeMidiAssignment(item.value);
-                                }
-                                const success = lyricsLibrary.deleteSong(item.value);
-                                if (success) {
-                                    document.body.removeChild(modalContainer);
-                                    showSongLibrary();
-                                } else {
-                                    console.error('❌ Failed to delete song');
-                                }
-                            } catch (error) {
-                                console.error('❌ Error deleting song:', error);
-                            }
-                        }
-                    });
-                }
-            });
-
-            // Controls container for MIDI and delete buttons
-            const controlsContainer = $('div', {
-                css: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px'
-                }
-            });
-
-            controlsContainer.append(midiControls, deleteButton);
-
-            // Click handler for song selection
-            itemDiv.addEventListener('click', (e) => {
-                if (e.target !== deleteButton && 
-                    e.target !== midiLearnButton && 
-                    e.target !== midiInput && 
-                    e.target !== dragHandle &&
-                    !midiControls.contains(e.target)) {
-                    document.body.removeChild(modalContainer);
-                    loadAndDisplaySong(item.value);
-                }
-            });
-
-            // Drag and drop event handlers
-            itemDiv.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/plain', index);
-                itemDiv.style.opacity = '0.5';
-                itemDiv.style.cursor = 'grabbing';
-            });
-
-            itemDiv.addEventListener('dragend', (e) => {
-                itemDiv.style.opacity = '1';
-                itemDiv.style.cursor = 'grab';
-            });
-
-            itemDiv.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                itemDiv.style.borderTop = '2px solid #007acc';
-            });
-
-            itemDiv.addEventListener('dragleave', (e) => {
-                itemDiv.style.borderTop = '';
-            });
-
-            itemDiv.addEventListener('drop', (e) => {
-                e.preventDefault();
-                itemDiv.style.borderTop = '';
-                const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
-                const targetIndex = index;
-                
-                if (draggedIndex !== targetIndex) {
-                    // Reorder the filteredItems array
-                    const draggedItem = filteredItems[draggedIndex];
-                    filteredItems.splice(draggedIndex, 1);
-                    filteredItems.splice(targetIndex, 0, draggedItem);
-                    
-                    // Update the display
-                    updateSongList();
-                    setTimeout(() => refreshMidiInputs(), 50);
-                    saveCustomSongOrder(); // Save the new order
-                    console.log(`🔄 Moved song from position ${draggedIndex} to ${targetIndex} and saved order`);
-                }
-            });
-
-            itemDiv.append(dragHandle, textSpan, controlsContainer);
-            listContainer.appendChild(itemDiv);
-        });
-    }
-
-    // Search functionality
-    searchInput.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        filteredItems = songItems.filter(item => 
-            item.text.toLowerCase().includes(searchTerm)
-        );
-        updateSongList();
-        // Refresh MIDI inputs after search
-        setTimeout(() => refreshMidiInputs(), 50);
-    });
-
-    content.append(searchInput, listContainer);
-    updateSongList();
-    
-    // Refresh MIDI inputs after DOM is ready
-    setTimeout(() => {
-        refreshMidiInputs();
-        console.log('🎹 MIDI inputs refreshed in song library');
-    }, 100);
-
-    // Footer
-    const footer = UIManager.createModalFooter({});
-    
-    const cancelButton = UIManager.createCancelButton({
-        text: 'Close',
-        onClick: () => document.body.removeChild(modalContainer)
-    });
-
-    footer.appendChild(cancelButton);
-
-    // Assemble modal
-    modal.append(header, content, footer);
-    modalContainer.appendChild(modal);
-    
-    // Add to DOM
-    document.body.appendChild(modalContainer);
-
-    // Close on overlay click
-    modalContainer.addEventListener('click', (e) => {
-        if (e.target === modalContainer) {
-            document.body.removeChild(modalContainer);
-        }
-    });
-
-    // Focus search input
-    setTimeout(() => searchInput.focus(), 100);
-}
-
-// Show settings modal with MIDI fullscreen assignments
-function showSettingsModal() {
-    console.log('🔧 Opening settings modal...');
-    
-    // Create settings content
-    const settingsContent = $('div', {
-        css: {
-            padding: '20px',
-            maxWidth: '400px'
-        }
-    });
-
-    // Title
-    const title = $('h3', {
-        text: 'Settings - MIDI Control, UI Visibility & Timecode Options',
-        css: {
-            margin: '0 0 20px 0',
-            color: '#333',
-            textAlign: 'center'
-        }
-    });
-
-    // Fullscreen activation section
-    const activateSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '5px',
-            border: '1px solid #e9ecef'
-        }
-    });
-
-    const activateTitle = $('div', {
-        text: 'Activate Fullscreen',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#495057'
-        }
-    });
-
-    const activateContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    const activateInput = $('input', {
-        type: 'text',
-        placeholder: 'MIDI Note',
-        css: {
-            flex: '1',
-            height: '30px',
-            fontSize: '14px',
-            textAlign: 'center',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            padding: '5px'
-        }
-    });
-
-    // Load existing assignment
-    const savedActivateNote = window.Lyrix?.midiUtilities?.getMidiSpecialAssignment?.('fullscreen_activate');
-    if (savedActivateNote) {
-        activateInput.value = savedActivateNote;
-    }
-
-    const activateLearnButton = Button({
-        text: '🎹 Learn',
-        onClick: () => {
-            startMidiLearnForSetting(activateInput, 'fullscreen_activate', activateLearnButton);
-        },
-        css: {
-            padding: '5px 10px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '12px'
-        }
-    });
-
-    activateContainer.append(activateInput, activateLearnButton);
-    activateSection.append(activateTitle, activateContainer);
-
-    // Fullscreen deactivation section
-    const deactivateSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '5px',
-            border: '1px solid #e9ecef'
-        }
-    });
-
-    const deactivateTitle = $('div', {
-        text: 'Deactivate Fullscreen',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#495057'
-        }
-    });
-
-    const deactivateContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    const deactivateInput = $('input', {
-        type: 'text',
-        placeholder: 'MIDI Note',
-        css: {
-            flex: '1',
-            height: '30px',
-            fontSize: '14px',
-            textAlign: 'center',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            padding: '5px'
-        }
-    });
-
-    // Load existing assignment
-    const savedDeactivateNote = window.Lyrix?.midiUtilities?.getMidiSpecialAssignment?.('fullscreen_deactivate');
-    if (savedDeactivateNote) {
-        deactivateInput.value = savedDeactivateNote;
-    }
-
-    const deactivateLearnButton = Button({
-        text: '🎹 Learn',
-        onClick: () => {
-            startMidiLearnForSetting(deactivateInput, 'fullscreen_deactivate', deactivateLearnButton);
-        },
-        css: {
-            padding: '5px 10px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '12px'
-        }
-    });
-
-    deactivateContainer.append(deactivateInput, deactivateLearnButton);
-    deactivateSection.append(deactivateTitle, deactivateContainer);
-
-    // Save input changes
-    activateInput.addEventListener('input', (e) => {
-        const midiNote = e.target.value.trim();
-        if (midiNote) {
-            window.Lyrix?.midiUtilities?.setMidiSpecialAssignment?.('fullscreen_activate', midiNote);
-        } else {
-            window.Lyrix?.midiUtilities?.removeMidiSpecialAssignment?.('fullscreen_activate');
-        }
-    });
-
-    deactivateInput.addEventListener('input', (e) => {
-        const midiNote = e.target.value.trim();
-        if (midiNote) {
-            window.Lyrix?.midiUtilities?.setMidiSpecialAssignment?.('fullscreen_deactivate', midiNote);
-        } else {
-            window.Lyrix?.midiUtilities?.removeMidiSpecialAssignment?.('fullscreen_deactivate');
-        }
-    });
-
-    // Audio Player Controls section
-    const audioSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#e3f2fd',
-            borderRadius: '5px',
-            border: '1px solid #2196F3'
-        }
-    });
-
-    const audioTitle = $('div', {
-        text: '🎵 Audio Player Controls',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '5px',
-            color: '#1976D2'
-        }
-    });
-
-    // Experimental warning
-    const audioWarning = $('div', {
-        text: '⚠️ EXPERIMENTAL FEATURE - NOT RECOMMENDED FOR USE',
-        css: {
-            fontSize: '11px',
-            color: '#ff5722',
-            fontWeight: '600',
-            marginBottom: '10px',
-            padding: '4px 8px',
-            backgroundColor: '#fff3e0',
-            borderRadius: '3px',
-            border: '1px solid #ff9800',
-            textAlign: 'center'
-        }
-    });
-
-    const audioDisclaimer = $('div', {
-        text: 'This feature is unstable and may cause interface issues. Use at your own risk.',
-        css: {
-            fontSize: '10px',
-            color: '#666',
-            fontStyle: 'italic',
-            marginBottom: '10px',
-            textAlign: 'center'
-        }
-    });
-
-    const audioContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    // Load current state from localStorage
-    const isAudioEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true'; // Default to false
-
-    const audioButton = UIManager.createInterfaceButton(
-        isAudioEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleAudioPlayerControls(audioButton, audioLabel)
-        }
-    );
-
-    const audioLabel = $('span', {
-        text: isAudioEnabled ? 'Audio Controls Visible' : 'Audio Controls Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#1976D2',
-            fontWeight: '500'
-        }
-    });
-
-    audioContainer.append(audioButton, audioLabel);
-    audioSection.append(audioTitle, audioWarning, audioDisclaimer, audioContainer);
-
-    // Audio Sync section
-    const syncSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#fff3e0',
-            borderRadius: '5px',
-            border: '1px solid #ff9800'
-        }
-    });
-
-    const syncTitle = $('h4', {
-        text: '⚠️ EXPERIMENTAL FEATURES',
-        css: {
-            fontSize: '16px',
-            marginBottom: '5px',
-            color: '#e65100'
-        }
-    });
-
-    // Subtitle for sync section
-    const syncSubtitle = $('div', {
-        text: '🔄 Audio Sync with Host Timecode',
-        css: {
-            fontSize: '14px',
-            marginBottom: '10px',
-            color: '#e65100',
-            fontWeight: '500'
-        }
-    });
-
-    // Experimental warning for sync
-    const syncWarning = $('div', {
-        text: '⚠️ EXPERIMENTAL FEATURE - REQUIRES HOST APPLICATION SUPPORT',
-        css: {
-            fontSize: '11px',
-            color: '#d84315',
-            fontWeight: '600',
-            marginBottom: '10px',
-            padding: '4px 8px',
-            backgroundColor: '#fbe9e7',
-            borderRadius: '3px',
-            border: '1px solid #f44336',
-            textAlign: 'center'
-        }
-    });
-
-    const syncDisclaimer = $('div', {
-        text: 'This feature attempts to sync audio playback with host application timecode. May not work in all environments.',
-        css: {
-            fontSize: '10px',
-            color: '#666',
-            fontStyle: 'italic',
-            marginBottom: '10px',
-            textAlign: 'center'
-        }
-    });
-
-    const syncContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            marginBottom: '10px'
-        }
-    });
-
-    // Load current sync state from localStorage
-    const isSyncEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
-
-    const syncButton = UIManager.createInterfaceButton(
-        isSyncEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleAudioSync(syncButton, syncLabel)
-        }
-    );
-
-    const syncLabel = $('span', {
-        text: isSyncEnabled ? 'Host Sync Enabled' : 'Host Sync Disabled',
-        css: {
-            fontSize: '14px',
-            color: '#e65100',
-            fontWeight: '500'
-        }
-    });
-
-    syncContainer.append(syncButton, syncLabel);
-
-    // Test sync container
-    const testSyncContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            marginTop: '10px'
-        }
-    });
-
-    const testPlayButton = UIManager.createInterfaceButton('▶️', {
-        onClick: () => {
-            console.log('🔄 Testing host sync - simulating timecode progression');
-            const timecodeDisplay = document.getElementById('timecode-display');
-            if (timecodeDisplay) {
-                // Simulate timecode progression
-                let time = 0;
-                const interval = setInterval(() => {
-                    time += 0.1;
-                    timecodeDisplay.textContent = `${time.toFixed(3)}s`;
-                    if (time >= 2) {
-                        clearInterval(interval);
-                    }
-                }, 100);
-            } else {
-                console.warn('⚠️ Host timecode display not found for test');
-            }
-        }
-    });
-
-    const testStopButton = UIManager.createInterfaceButton('⏹️', {
-        onClick: () => {
-            console.log('🔄 Testing host sync - simulating timecode stop');
-            const timecodeDisplay = document.getElementById('timecode-display');
-            if (timecodeDisplay) {
-                // Keep timecode static to simulate stop
-                const currentTime = timecodeDisplay.textContent;
-                setTimeout(() => {
-                    timecodeDisplay.textContent = currentTime; // Keep same time
-                }, 1000);
-            } else {
-                console.warn('⚠️ Host timecode display not found for test');
-            }
-        }
-    });
-
-    const testLabel = $('span', {
-        text: 'Test sync manually',
-        css: {
-            fontSize: '12px',
-            color: '#666',
-            fontStyle: 'italic'
-        }
-    });
-
-    testSyncContainer.append(testPlayButton, testStopButton, testLabel);
-
-    syncSection.append(syncTitle, syncSubtitle, syncWarning, syncDisclaimer, syncContainer, testSyncContainer);
-
-    // MIDI Inspector section
-    const midiSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#f3e5f5',
-            borderRadius: '5px',
-            border: '1px solid #9c27b0'
-        }
-    });
-
-    const midiTitle = $('div', {
-        text: '🎹 MIDI Inspector',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#7b1fa2'
-        }
-    });
-
-    const midiContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    // Load current state from localStorage
-    const isMidiEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true'; // Default to false
-
-    const midiButton = UIManager.createInterfaceButton(
-        isMidiEnabled ? '✅' : '❌', 
-        {
-            onClick: () => toggleMidiInspector(midiButton, midiLabel)
-        }
-    );
-
-    const midiLabel = $('span', {
-        text: isMidiEnabled ? 'MIDI Inspector Visible' : 'MIDI Inspector Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#7b1fa2',
-            fontWeight: '500'
-        }
-    });
-
-    midiContainer.append(midiButton, midiLabel);
-    midiSection.append(midiTitle, midiContainer);
-
-    // Timecode Display section
-    const timecodeDisplaySection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#e8f5e8',
-            borderRadius: '5px',
-            border: '1px solid #4caf50'
-        }
-    });
-
-    const timecodeDisplayTitle = $('div', {
-        text: '🕐 Timecode Display',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#2e7d32'
-        }
-    });
-
-    const timecodeDisplayContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            marginBottom: '10px'
-        }
-    });
-
-    // Load current state from localStorage
-    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true'; // Default to false (hidden)
-
-    const timecodeDisplayButton = UIManager.createInterfaceButton(
-        isTimecodeDisplayVisible ? '✅' : '❌', 
-        {
-            onClick: () => toggleTimecodeDisplayVisibility(timecodeDisplayButton, timecodeDisplayLabel)
-        }
-    );
-
-    const timecodeDisplayLabel = $('span', {
-        text: isTimecodeDisplayVisible ? 'Timecode Display Visible' : 'Timecode Display Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#2e7d32',
-            fontWeight: '500'
-        }
-    });
-
-    timecodeDisplayContainer.append(timecodeDisplayButton, timecodeDisplayLabel);
-
-    timecodeDisplaySection.append(timecodeDisplayTitle, timecodeDisplayContainer);
-
-    // Timecode Options section
-    const timecodeOptionsSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#e3f2fd',
-            borderRadius: '5px',
-            border: '1px solid #2196f3'
-        }
-    });
-
-    const timecodeOptionsTitle = $('div', {
-        text: '⏱️ Timecode Options',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#1976d2'
-        }
-    });
-
-    const timecodeOptionsContainer = $('div', {
-        css: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px'
-        }
-    });
-
-    // Show/Hide Timecodes toggle
-    const showTimecodesContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    const showTimecodesButton = UIManager.createInterfaceButton(
-        lyricsDisplay?.showTimecodes ? '✅' : '❌',
-        {
-            onClick: () => {
-                if (lyricsDisplay) {
-                    lyricsDisplay.toggleTimecodes();
-                    showTimecodesButton.textContent = lyricsDisplay.showTimecodes ? '✅' : '❌';
-                    showTimecodesLabel.textContent = lyricsDisplay.showTimecodes ? 'Timecodes Visible' : 'Timecodes Hidden';
-                }
-            }
-        }
-    );
-
-    const showTimecodesLabel = $('span', {
-        text: lyricsDisplay?.showTimecodes ? 'Timecodes Visible' : 'Timecodes Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#1976d2',
-            fontWeight: '500'
-        }
-    });
-
-    showTimecodesContainer.append(showTimecodesButton, showTimecodesLabel);
-
-    // Clear All Timecodes button
-    const clearTimecodesContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    const clearAllTimecodesButton = UIManager.createInterfaceButton('🗑️', {
-        onClick: () => {
-            console.log('🗑️ Clear all timecodes button clicked');
-            console.log('🔍 Debug info:', {
-                lyricsDisplay: !!lyricsDisplay,
-                currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
-                songId: lyricsDisplay?.currentLyrics?.songId,
-                linesCount: lyricsDisplay?.currentLyrics?.lines?.length
-            });
-            
-            if (lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes) {
-                // Show confirmation modal instead of system confirm
-                ConfirmModal({
-                    title: '🗑️ Clear All Timecodes',
-                    message: `Are you sure you want to remove all timecodes from "${lyricsDisplay.currentLyrics.title || 'current song'}"?\n\nThis action cannot be undone.`,
-                    confirmText: 'Clear All',
-                    cancelText: 'Cancel',
-                    confirmStyle: 'danger',
-                    onConfirm: () => {
-                    console.log('🗑️ User confirmed, clearing timecodes...');
-                    lyricsDisplay.currentLyrics.clearAllTimecodes();
-                    
-                    // Save to localStorage
-                    const saveSuccess = StorageManager.saveSong(lyricsDisplay.currentLyrics.songId, lyricsDisplay.currentLyrics);
-                    if (saveSuccess) {
-                        console.log('✅ Cleared all timecodes saved to localStorage successfully');
-                    } else {
-                        console.error('❌ Failed to save cleared timecodes to localStorage');
-                    }
-                    
-                    // Force re-render of lyrics to show the changes
-                    if (lyricsDisplay.renderLyrics) {
-                        lyricsDisplay.renderLyrics();
-                        console.log('� Lyrics re-rendered after clearing timecodes');
-                    } else {
-                        console.error('❌ renderLyrics method not found');
-                    }
-                    
-                    console.log('�🗑️ All timecodes cleared from settings');
-                    },
-                    onCancel: () => {
-                        console.log('❌ User cancelled clearing timecodes');
-                    }
-                });
-            } else {
-                console.error('❌ Debug info:', {
-                    lyricsDisplay: !!lyricsDisplay,
-                    currentLyrics: !!(lyricsDisplay && lyricsDisplay.currentLyrics),
-                    clearAllTimecodes: !!(lyricsDisplay && lyricsDisplay.currentLyrics && lyricsDisplay.currentLyrics.clearAllTimecodes)
-                });
-                // Use custom modal instead of system alert for Tauri compatibility
-                Modal({
-                    title: '⚠️ No Lyrics Available',
-                    content: $('div', {
-                        text: 'No lyrics loaded to clear timecodes from, or method not available.',
-                        css: { padding: '10px', textAlign: 'center' }
-                    }),
-                    buttons: [
-                        {
-                            text: 'OK',
-                            style: 'primary',
-                            action: () => {} // Just close modal
-                        }
-                    ]
-                });
-            }
-        }
-    });
-
-    const clearTimecodesLabel = $('span', {
-        text: 'Remove all timecodes from current song',
-        css: {
-            fontSize: '12px',
-            color: '#666',
-            fontStyle: 'italic'
-        }
-    });
-
-    clearTimecodesContainer.append(clearAllTimecodesButton, clearTimecodesLabel);
-
-    timecodeOptionsContainer.append(showTimecodesContainer, clearTimecodesContainer);
-    timecodeOptionsSection.append(timecodeOptionsTitle, timecodeOptionsContainer);
-
-    // Metadata Display Options section
-    const metadataOptionsSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#f8f4ff',
-            borderRadius: '5px',
-            border: '1px solid #e0d4f7'
-        }
-    });
-
-    const metadataOptionsTitle = $('div', {
-        text: 'Metadata Display Options',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '15px',
-            color: '#6a1b9a',
-            fontSize: '16px'
-        }
-    });
-
-    const metadataOptionsContainer = $('div', {
-        css: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px'
-        }
-    });
-
-    // Show/Hide Title toggle
-    const showTitleContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    const showTitleButton = UIManager.createInterfaceButton(
-        lyricsDisplay?.showTitle ? '✅' : '❌',
-        {
-            onClick: () => {
-                if (lyricsDisplay) {
-                    lyricsDisplay.toggleTitle();
-                    showTitleButton.textContent = lyricsDisplay.showTitle ? '✅' : '❌';
-                    showTitleLabel.textContent = lyricsDisplay.showTitle ? 'Title Visible' : 'Title Hidden';
-                }
-            }
-        }
-    );
-
-    const showTitleLabel = $('span', {
-        text: lyricsDisplay?.showTitle ? 'Title Visible' : 'Title Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#6a1b9a',
-            fontWeight: '500'
-        }
-    });
-
-    showTitleContainer.append(showTitleLabel, showTitleButton);
-
-    // Show/Hide Artist toggle
-    const showArtistContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-        }
-    });
-
-    const showArtistButton = UIManager.createInterfaceButton(
-        lyricsDisplay?.showArtist ? '✅' : '❌',
-        {
-            onClick: () => {
-                if (lyricsDisplay) {
-                    lyricsDisplay.toggleArtist();
-                    showArtistButton.textContent = lyricsDisplay.showArtist ? '✅' : '❌';
-                    showArtistLabel.textContent = lyricsDisplay.showArtist ? 'Artist Visible' : 'Artist Hidden';
-                }
-            }
-        }
-    );
-
-    const showArtistLabel = $('span', {
-        text: lyricsDisplay?.showArtist ? 'Artist Visible' : 'Artist Hidden',
-        css: {
-            fontSize: '14px',
-            color: '#6a1b9a',
-            fontWeight: '500'
-        }
-    });
-
-    showArtistContainer.append(showArtistLabel, showArtistButton);
-
-    metadataOptionsContainer.append(showTitleContainer, showArtistContainer);
-    metadataOptionsSection.append(metadataOptionsTitle, metadataOptionsContainer);
-
-    // Font Size Controls section
-    const fontSizeSection = $('div', {
-        css: {
-            marginBottom: '20px',
-            padding: '15px',
-            backgroundColor: '#f0f8ff',
-            borderRadius: '5px',
-            border: '1px solid #87ceeb'
-        }
-    });
-
-    const fontSizeTitle = $('div', {
-        text: '📝 Font Size Controls',
-        css: {
-            fontWeight: 'bold',
-            marginBottom: '10px',
-            color: '#4682b4'
-        }
-    });
-
-    const fontSizeContainer = $('div', {
-        css: {
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            justifyContent: 'center'
-        }
-    });
-
-    // Get current font size
-    const currentFontSize = lyricsDisplay ? lyricsDisplay.fontSize : 24;
-
-    const fontMinusButton = UIManager.createInterfaceButton('A-', {
-        onClick: () => {
-            if (lyricsDisplay) {
-                lyricsDisplay.adjustFontSize(-2);
-                fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
-            }
-        }
-    });
-
-    const fontSizeLabel = $('span', {
-        text: `${currentFontSize}px`,
-        css: {
-            padding: '5px 10px',
-            backgroundColor: '#f0f0f0',
-            borderRadius: '4px',
-            fontSize: '14px',
-            fontWeight: '500',
-            minWidth: '50px',
-            textAlign: 'center',
-            border: '1px solid #ccc'
-        }
-    });
-
-    const fontPlusButton = UIManager.createInterfaceButton('A+', {
-        onClick: () => {
-            if (lyricsDisplay) {
-                lyricsDisplay.adjustFontSize(2);
-                fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
-            }
-        }
-    });
-
-    // Add double-click handler for direct font size editing
-    fontSizeLabel.addEventListener('dblclick', (e) => {
-        e.preventDefault();
-        if (lyricsDisplay) {
-            lyricsDisplay.editFontSizeDirectly();
-            // Update label after editing
-            setTimeout(() => {
-                fontSizeLabel.textContent = `${lyricsDisplay.fontSize}px`;
-            }, 100);
-        }
-    });
-
-    const fontSizeHint = $('div', {
-        text: 'Click A- / A+ or double-click size to adjust',
-        css: {
-            fontSize: '11px',
-            color: '#666',
-            fontStyle: 'italic',
-            textAlign: 'center',
-            marginTop: '5px'
-        }
-    });
-
-    fontSizeContainer.append(fontMinusButton, fontSizeLabel, fontPlusButton);
-    fontSizeSection.append(fontSizeTitle, fontSizeContainer, fontSizeHint);
-
-    // Assemble the content - move experimental features to the bottom
-    settingsContent.append(title, activateSection, deactivateSection, timecodeDisplaySection, timecodeOptionsSection, metadataOptionsSection, fontSizeSection, midiSection, audioSection, syncSection);
-
-    // Show modal
-    Modal({
-        title: '⚙️ Settings',
-        content: settingsContent,
-        buttons: [
-            {
-                text: 'Close',
-                style: 'primary',
-                action: () => {
-                    console.log('🔧 Settings modal closed');
-                }
-            }
-        ]
-    });
-}
-
-// Toggle audio player controls visibility
-function toggleAudioPlayerControls(buttonElement, labelElement) {
-    const isCurrentlyEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-    const newState = !isCurrentlyEnabled;
-    
-    // Save new state
-    localStorage.setItem('lyrix_audio_player_enabled', newState.toString());
-    
-    // Update button and label
-    buttonElement.textContent = newState ? '✅' : '❌';
-    labelElement.textContent = newState ? 'Audio Controls Visible' : 'Audio Controls Hidden';
-    
-    // Get audio elements to toggle using their IDs
-    const audioElementsToToggle = [
-        document.getElementById('audio-player-title'),
-        document.getElementById('audio-play-button'),
-        document.getElementById('audio-stop-button'),
-        document.getElementById('audio-controls-container'),
-        document.getElementById('audio-scrub-slider-container'),
-        document.getElementById('audio-volume-slider-container'),
-        document.getElementById('volume-value-display'),
-        document.getElementById('volume-wrapper-toolbar')
-    ];
-    
-    // Also toggle the audio tools row
-    const audioToolRow = document.getElementById('audio-tools-row');
-    
-    // Use 'flex' for the container, 'inline-block' for buttons
-    audioElementsToToggle.forEach(element => {
-        if (!element) return;
-        if (element.id === 'audio-controls-container') {
-            element.style.display = newState ? 'flex' : 'none';
-        } else if (element.id === 'audio-play-button' || element.id === 'audio-stop-button') {
-            element.style.display = newState ? 'inline-block' : 'none';
-        } else {
-            element.style.display = newState ? 'block' : 'none';
-        }
-    });
-    // Toggle the audio tools row
-    if (audioToolRow) {
-        audioToolRow.style.display = newState ? 'flex' : 'none';
-    }
-    // Ajout : si audioControls existe et audio activé, on l'ajoute au toolbarRow
-    const toolbarRow = document.getElementById('main-toolbar-row');
-    const audioControls = window.leftPanelAudioTools && window.leftPanelAudioTools.audioControls;
-    const playButton = window.leftPanelAudioTools && window.leftPanelAudioTools.playButton;
-    const stopButton = window.leftPanelAudioTools && window.leftPanelAudioTools.stopButton;
-    const volumeContainer = window.leftPanelAudioTools && window.leftPanelAudioTools.volumeContainer;
-    if (newState && toolbarRow) {
-        if (audioControls && !toolbarRow.contains(audioControls)) {
-            toolbarRow.appendChild(audioControls);
-        }
-        if (volumeContainer && !toolbarRow.contains(volumeContainer)) {
-            toolbarRow.appendChild(volumeContainer);
-        }
-        if (stopButton && !toolbarRow.contains(stopButton)) {
-            toolbarRow.appendChild(stopButton);
-        }
-        if (playButton && !toolbarRow.contains(playButton)) {
-            toolbarRow.appendChild(playButton);
-        }
-    }
-    
-    // Notify the lyrics display to refresh audio tools visibility
-    if (window.lyricsDisplay && window.lyricsDisplay.refreshAudioToolsVisibility) {
-        window.lyricsDisplay.refreshAudioToolsVisibility();
-    }
-    
-    console.log(`🎵 Audio Player Controls: ${newState ? 'ENABLED' : 'DISABLED'} - Audio controls ${newState ? 'shown' : 'hidden'}`);
-}
-
-// Toggle audio sync with host timecode
-function toggleAudioSync(buttonElement, labelElement) {
-    const isCurrentlyEnabled = localStorage.getItem('lyrix_audio_sync_enabled') === 'true';
-    const newState = !isCurrentlyEnabled;
-    
-    // Save new state
-    localStorage.setItem('lyrix_audio_sync_enabled', newState.toString());
-    
-    // Update button and label
-    buttonElement.textContent = newState ? '✅' : '❌';
-    labelElement.textContent = newState ? 'Host Sync Enabled' : 'Host Sync Disabled';
-    
-    if (newState) {
-        // Enable host sync - monitor timecode display
-        try {
-            // Start monitoring host timecode
-            startHostTimecodeMonitoring();
-            
-            // Also try host-specific interfaces as backup
-            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.audioSync) {
-                window.webkit.messageHandlers.audioSync.postMessage({
-                    action: 'enableSync',
-                    enabled: true
-                });
-                window.addEventListener('message', handleHostTransportMessage);
-                console.log('🔄 Host timeline sync enabled via webkit + timecode monitoring');
-            } else if (window.electronAPI && window.electronAPI.audioSync) {
-                window.electronAPI.audioSync.enable();
-                window.electronAPI.audioSync.onTransportChange(handleHostTransportChange);
-                console.log('🔄 Host timeline sync enabled via electron + timecode monitoring');
-            } else {
-                window.addEventListener('message', handleHostTransportMessage);
-                if (window.external && window.external.OnPlaybackChanged) {
-                    window.external.OnPlaybackChanged = handleHostPlaybackChange;
-                }
-                console.log('🔄 Audio sync enabled via timecode monitoring');
-            }
-        } catch (error) {
-            console.error('❌ Failed to enable host timeline sync:', error);
-        }
+        console.log(`🔧 Sending single file to Swift bridge: ${fileName}`);
+        window.webkit.messageHandlers.swiftBridge.postMessage(payload);
+        
     } else {
-        // Disable host sync
-        try {
-            // Stop monitoring timecode
-            stopHostTimecodeMonitoring();
-            hostPlaybackActive = false;
-            
-            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.audioSync) {
-                window.webkit.messageHandlers.audioSync.postMessage({
-                    action: 'enableSync',
-                    enabled: false
-                });
-                window.removeEventListener('message', handleHostTransportMessage);
-                console.log('🔄 Host timeline sync disabled via webkit');
-            } else if (window.electronAPI && window.electronAPI.audioSync) {
-                window.electronAPI.audioSync.disable();
-                console.log('🔄 Host timeline sync disabled via electron');
-            } else {
-                window.removeEventListener('message', handleHostTransportMessage);
-                if (window.external && window.external.OnPlaybackChanged) {
-                    window.external.OnPlaybackChanged = null;
-                }
-                console.log('🔄 Audio sync disabled');
-            }
-        } catch (error) {
-            console.error('❌ Failed to disable host timeline sync:', error);
-        }
-    }
-    
-    console.log(`🔄 Audio Host Sync: ${newState ? 'ENABLED' : 'DISABLED'} - Timeline sync ${newState ? 'active' : 'inactive'}`);
-}
-
-// Handle host transport messages (for webkit/generic hosts)
-function handleHostTransportMessage(event) {
-    if (!localStorage.getItem('lyrix_audio_sync_enabled') === 'true') return;
-    
-    console.log('🔄 Received host transport message:', event.data);
-    
-    try {
-        let transportData = event.data;
+        console.log('🔧 Desktop/Web detected - using HTML5 download for single file');
         
-        // Parse if it's a string
-        if (typeof transportData === 'string') {
-            transportData = JSON.parse(transportData);
-        }
+        // Desktop/Web: Use download method that works on all browsers including Safari
+        const blob = new Blob([exportText], { type: 'text/plain' });
+        const saveLink = document.createElement('a');
+        saveLink.href = URL.createObjectURL(blob);
+        saveLink.download = `lyrix_songs_${new Date().toISOString().split('T')[0]}.txt`;
+        saveLink.style.display = 'none';
         
-        // Handle different message formats
-        if (transportData.type === 'transport' || transportData.action === 'transport') {
-            const state = transportData.state || transportData.playing;
-            const position = transportData.position || transportData.time;
-            
-            if (state === 'playing' || state === true) {
-                console.log('🔄 Host started playback - starting audio sync');
-                if (audioController && audioController.play) {
-                    audioController.play();
-                }
-            } else if (state === 'stopped' || state === false) {
-                console.log('🔄 Host stopped playback - stopping audio sync');
-                if (audioController && audioController.stop) {
-                    audioController.stop();
-                }
-            }
-            
-            // Sync position if provided
-            if (position !== undefined && audioController && audioController.audioPlayer) {
-                audioController.audioPlayer.currentTime = position;
-                console.log(`🔄 Synced position to: ${position}s`);
-            }
-        }
-    } catch (error) {
-        console.warn('⚠️ Failed to parse host transport message:', error);
-    }
-}
-
-// Variables for timecode monitoring
-let lastHostTimecode = '0.000s';
-let hostTimecodeObserver = null;
-let hostPlaybackActive = false;
-let lastSyncTime = 0;
-
-// Monitor host timecode display for changes
-function startHostTimecodeMonitoring() {
-    const timecodeDisplay = document.getElementById('timecode-display');
-    
-    if (!timecodeDisplay) {
-        console.warn('⚠️ Host timecode display not found');
-        return;
-    }
-    
-    console.log('🔄 Starting host timecode monitoring');
-    console.log('🔄 Initial timecode:', timecodeDisplay.textContent || timecodeDisplay.innerText);
-    console.log('🔄 AudioController available:', !!audioController);
-    if (audioController) {
-        console.log('🔄 AudioController.play available:', !!audioController.play);
-        console.log('🔄 AudioController.stop available:', !!audioController.stop);
-        console.log('🔄 AudioController.audioPlayer available:', !!audioController.audioPlayer);
-    }
-    
-    // Reset state
-    hostPlaybackActive = false;
-    lastHostTimecode = timecodeDisplay.textContent || timecodeDisplay.innerText || '0.000s';
-    lastSyncTime = Date.now();
-    
-    // Use MutationObserver to detect timecode changes
-    if (hostTimecodeObserver) {
-        hostTimecodeObserver.disconnect();
-    }
-    
-    hostTimecodeObserver = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                const currentTimecode = timecodeDisplay.textContent || timecodeDisplay.innerText;
-                handleHostTimecodeChange(currentTimecode);
-            }
-        });
-    });
-    
-    // Observe text content changes
-    hostTimecodeObserver.observe(timecodeDisplay, {
-        childList: true,
-        subtree: true,
-        characterData: true
-    });
-    
-    // Also poll every 50ms as backup for faster detection
-    setInterval(() => {
-        if (localStorage.getItem('lyrix_audio_sync_enabled') === 'true') {
-            const currentTimecode = timecodeDisplay.textContent || timecodeDisplay.innerText;
-            handleHostTimecodeChange(currentTimecode);
-        }
-    }, 50);
-}
-
-// Stop host timecode monitoring
-function stopHostTimecodeMonitoring() {
-    if (hostTimecodeObserver) {
-        hostTimecodeObserver.disconnect();
-        hostTimecodeObserver = null;
-    }
-    console.log('🔄 Stopped host timecode monitoring');
-}
-
-// Handle host timecode changes
-function handleHostTimecodeChange(currentTimecode) {
-    if (localStorage.getItem('lyrix_audio_sync_enabled') !== 'true') {
-        console.log('🔄 Audio sync disabled in settings');
-        return;
-    }
-    
-    if (currentTimecode === lastHostTimecode) {
-        console.log('🔄 Timecode unchanged:', currentTimecode);
-        return;
-    }
-    
-    console.log('🔄 AudioController status:', {
-        exists: !!audioController,
-        hasPlay: !!(audioController && audioController.play),
-        hasStop: !!(audioController && audioController.stop),
-        hasAudioPlayer: !!(audioController && audioController.audioPlayer),
-        audioPlayerHasPlay: !!(audioController && audioController.audioPlayer && audioController.audioPlayer.play),
-        audioPlayerHasPause: !!(audioController && audioController.audioPlayer && audioController.audioPlayer.pause)
-    });
-    
-    // Parse timecode (format: "X.XXXs")
-    const timeMatch = currentTimecode.match(/(\d+\.?\d*)s?/);
-    if (!timeMatch) {
-        console.log('❌ Could not parse timecode:', currentTimecode);
-        return;
-    }
-    
-    const currentTime = parseFloat(timeMatch[1]);
-    const lastTime = parseFloat(lastHostTimecode.match(/(\d+\.?\d*)s?/)?.[1] || '0');
-    
-    console.log(`🔄 Host timecode changed: ${lastHostTimecode} -> ${currentTimecode} (${lastTime} -> ${currentTime})`);
-    
-    // Calculate time difference
-    const timeDiff = currentTime - lastTime;
-    const now = Date.now();
-    const realTimeDiff = (now - lastSyncTime) / 1000; // Convert to seconds
-    
-    console.log(`🔄 Time analysis: timeDiff=${timeDiff}s, realTimeDiff=${realTimeDiff}s, hostPlaybackActive=${hostPlaybackActive}`);
-    
-    // If timecode is advancing (even slightly), host is playing
-    if (timeDiff > 0.001) { // Very sensitive threshold
-        console.log('🔄 Timecode progressing - host is playing');
+        // Add to document, click, and remove
+        document.body.appendChild(saveLink);
+        saveLink.click();
+        document.body.removeChild(saveLink);
         
-        if (!hostPlaybackActive) {
-            console.log('🔄 HOST PLAYBACK DETECTED - Starting audio sync');
-            hostPlaybackActive = true;
-            
-            // Start audio playback
-            if (audioController && audioController.play) {
-                try {
-                    console.log('🎵 Calling audioController.play()');
-                    audioController.play();
-                    console.log('✅ Audio playback started successfully');
-                } catch (error) {
-                    console.error('❌ Failed to start audio playback:', error);
-                }
-            } else if (audioController && audioController.audioPlayer && audioController.audioPlayer.play) {
-                try {
-                    console.log('🎵 Calling audioController.audioPlayer.play()');
-                    audioController.audioPlayer.play();
-                    console.log('✅ Audio playback started successfully via audioPlayer');
-                } catch (error) {
-                    console.error('❌ Failed to start audio playback via audioPlayer:', error);
-                }
-            } else {
-                console.warn('⚠️ AudioController or play method not available');
-            }
-        } else {
-            console.log('🔄 Already playing - continuing sync');
-        }
+        // Clean up the object URL
+        setTimeout(() => {
+            URL.revokeObjectURL(saveLink.href);
+        }, 100);
         
-        // Always sync audio position when timecode changes
-        if (audioController && audioController.audioPlayer) {
-            const audioTime = audioController.audioPlayer.currentTime;
-            const timeDifference = Math.abs(audioTime - currentTime);
-            
-            console.log(`🔄 Audio sync check: audioTime=${audioTime}s, hostTime=${currentTime}s, diff=${timeDifference}s`);
-            
-            // Sync if difference is more than 100ms (more sensitive)
-            if (timeDifference > 0.1) {
-                audioController.audioPlayer.currentTime = currentTime;
-                console.log(`✅ Synced audio position: ${audioTime}s -> ${currentTime}s`);
-            }
-        }
-    } 
-    // If timecode stopped changing for more than 300ms, host likely stopped
-    else if (timeDiff === 0 && realTimeDiff > 0.3) {
-        if (hostPlaybackActive) {
-            console.log('🔄 HOST PLAYBACK STOPPED - Stopping audio sync');
-            hostPlaybackActive = false;
-            
-            if (audioController && audioController.stop) {
-                try {
-                    audioController.stop();
-                    console.log('✅ Audio playback stopped successfully');
-                } catch (error) {
-                    console.error('❌ Failed to stop audio playback:', error);
-                }
-            }
-        }
-    }
-    // If timecode jumped backwards (rewind/reset), also sync
-    else if (timeDiff < -0.1) {
-        console.log('🔄 HOST TIMECODE REWIND DETECTED');
-        if (audioController && audioController.audioPlayer) {
-            audioController.audioPlayer.currentTime = currentTime;
-            console.log(`✅ Rewound audio position to: ${currentTime}s`);
-        }
+        console.log(`✅ Single file download initiated`);
     }
     
-    lastHostTimecode = currentTimecode;
-    lastSyncTime = now;
-}
-
-// Handle host transport changes (for Electron)
-function handleHostTransportChange(transportInfo) {
-    if (!localStorage.getItem('lyrix_audio_sync_enabled') === 'true') return;
-    
-    console.log('🔄 Host transport changed:', transportInfo);
-    
-    try {
-        if (transportInfo.playing) {
-            console.log('🔄 Host started playback via Electron - starting audio sync');
-            if (audioController && audioController.play) {
-                audioController.play();
-            }
-        } else {
-            console.log('🔄 Host stopped playback via Electron - stopping audio sync');
-            if (audioController && audioController.stop) {
-                audioController.stop();
-            }
-        }
-        
-        // Sync position
-        if (transportInfo.position !== undefined && audioController && audioController.audioPlayer) {
-            audioController.audioPlayer.currentTime = transportInfo.position;
-            console.log(`🔄 Synced position via Electron to: ${transportInfo.position}s`);
-        }
-    } catch (error) {
-        console.error('❌ Failed to handle Electron transport change:', error);
-    }
-}
-
-// Handle host playback changes (for external DAW interfaces)
-function handleHostPlaybackChange(isPlaying, position) {
-    if (!localStorage.getItem('lyrix_audio_sync_enabled') === 'true') return;
-    
-    console.log('🔄 Host playback changed via external interface:', { isPlaying, position });
-    
-    try {
-        if (isPlaying) {
-            console.log('🔄 Host started playback via external - starting audio sync');
-            if (audioController && audioController.play) {
-                audioController.play();
-            }
-        } else {
-            console.log('🔄 Host stopped playback via external - stopping audio sync');
-            if (audioController && audioController.stop) {
-                audioController.stop();
-            }
-        }
-        
-        // Sync position if provided
-        if (position !== undefined && audioController && audioController.audioPlayer) {
-            audioController.audioPlayer.currentTime = position;
-            console.log(`🔄 Synced position via external to: ${position}s`);
-        }
-    } catch (error) {
-        console.error('❌ Failed to handle external playback change:', error);
-    }
-}
-
-// Toggle MIDI inspector visibility
-function toggleMidiInspector(buttonElement, labelElement) {
-    const isCurrentlyEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
-    const newState = !isCurrentlyEnabled;
-    
-    // Save new state
-    localStorage.setItem('lyrix_midi_inspector_enabled', newState.toString());
-    
-    // Update button and label
-    buttonElement.textContent = newState ? '✅' : '❌';
-    labelElement.textContent = newState ? 'MIDI Inspector Visible' : 'MIDI Inspector Hidden';
-    
-    // Get MIDI element to toggle
-    const midiElement = document.getElementById('midi-logger-container');
-    
-    const displayValue = newState ? 'block' : 'none';
-    
-    // Toggle visibility for MIDI inspector
-    if (midiElement) {
-        midiElement.style.display = displayValue;
-    }
-    
-    console.log(`🎹 MIDI Inspector: ${newState ? 'ENABLED' : 'DISABLED'} - MIDI data logger ${newState ? 'shown' : 'hidden'}`);
-}
-
-// Toggle timecode display visibility
-function toggleTimecodeDisplayVisibility(buttonElement, labelElement) {
-    const isCurrentlyVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true'; // Default to false (hidden)
-    const newState = !isCurrentlyVisible;
-    
-    // Save new state
-    localStorage.setItem('lyrix_timecode_display_visible', newState.toString());
-    
-    // Update button and label
-    buttonElement.textContent = newState ? '✅' : '❌';
-    labelElement.textContent = newState ? 'Timecode Display Visible' : 'Timecode Display Hidden';
-    
-    // Get timecode display element to toggle
-    const timecodeElement = document.getElementById('timecode-display');
-    
-    // Toggle visibility for timecode display
-    if (timecodeElement) {
-        timecodeElement.style.display = newState ? 'block' : 'none';
-    }
-    
-    console.log(`🕐 Timecode Display: ${newState ? 'VISIBLE' : 'HIDDEN'} - Timecode display ${newState ? 'shown' : 'hidden'}`);
-}
-
-// Apply initial settings on application startup
-function applyInitialSettings() {
-    
-    // Set default values for new settings if they don't exist
-    if (localStorage.getItem('lyrix_audio_player_enabled') === null) {
-        localStorage.setItem('lyrix_audio_player_enabled', 'false'); // Default to hidden
-    }
-    
-    if (localStorage.getItem('lyrix_midi_inspector_enabled') === null) {
-        localStorage.setItem('lyrix_midi_inspector_enabled', 'false'); // Default to hidden
-    }
-    
-    if (localStorage.getItem('lyrix_timecode_display_visible') === null) {
-        localStorage.setItem('lyrix_timecode_display_visible', 'false'); // Default to hidden
-    }
-    
-    // Set default volume if it doesn't exist
-    if (localStorage.getItem('lyrix_audio_volume') === null) {
-        localStorage.setItem('lyrix_audio_volume', '70'); // Default to 70%
-    }
-    
-    // Apply timecode display visibility setting
-    const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true';
-    const timecodeElement = document.getElementById('timecode-display');
-    if (timecodeElement) {
-        timecodeElement.style.display = isTimecodeDisplayVisible ? 'block' : 'none';
-        console.log(`🕐 Applied timecode display visibility from applyInitialSettings: ${isTimecodeDisplayVisible ? 'visible' : 'hidden'}`);
-    } else {
-        console.log('🕐 Timecode display element not found in applyInitialSettings - will be applied later');
-    }
-  
-}
-
-// Show file import dialog
-function showFileImportDialog() {
-    // Create a hidden file input element
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    // Maximum permissive accept attribute to prevent files from appearing grayed out
-    // Use */* to accept ALL files, then filter manually in JavaScript
-    fileInput.accept = '*/*';
-    fileInput.multiple = true;
-    fileInput.style.display = 'none';
-    document.body.appendChild(fileInput);
-
-    // Enhanced iOS error handler
-    const handleIOSError = (error, context = 'file operation') => {
-        const errorMessage = error?.message || error?.toString() || 'Unknown error';
-        
-        // Check for known iOS thumbnail/view service errors
-        if (errorMessage.includes('thumbnail') ||
-            errorMessage.includes('view service') ||
-            errorMessage.includes('QLThumbnailErrorDomain') ||
-            errorMessage.includes('GSLibraryErrorDomain') ||
-            errorMessage.includes('_UIViewServiceErrorDomain') ||
-            errorMessage.includes('Generation not found') ||
-            errorMessage.includes('Terminated=disconnect method')) {
-            
-            console.log(`🍎 iOS ${context}: Expected thumbnail/view service error (can be ignored)`);
-            return true; // This is an expected iOS error
-        }
-        
-        console.warn(`⚠️ iOS ${context} error:`, error);
-        return false; // This is an unexpected error
-    };
-    
-    // Set up the change event with enhanced iOS error handling and permissive file selection
-    fileInput.addEventListener('change', async (event) => {
-        try {
-            const files = Array.from(event.target.files);
-            if (files.length > 0) {
-                // Filter files manually to ensure .lrx files are accepted even if they appear grayed out
-                const validFiles = files.filter(file => {
-                    const fileName = file.name.toLowerCase();
-                    // Check for valid extensions - be very permissive
-                    return fileName.endsWith('.lrx') || 
-                           fileName.endsWith('.txt') || 
-                           fileName.endsWith('.lrc') ||
-                           fileName.endsWith('.json') ||
-                           fileName.endsWith('.md') ||
-                           fileName.endsWith('.mp3') ||
-                           fileName.endsWith('.wav') ||
-                           fileName.endsWith('.m4a') ||
-                           fileName.endsWith('.flac') ||
-                           fileName.endsWith('.ogg') ||
-                           file.type.startsWith('audio/') ||
-                           file.type.startsWith('text/') ||
-                           file.type === 'application/json' ||
-                           file.type === '';
-                });
-                
-                if (validFiles.length > 0) {
-                    console.log(`✅ Accepting ${validFiles.length} valid files:`, validFiles.map(f => f.name));
-                    dragDropManager.handleDroppedFiles(validFiles);
-                } else {
-                    showCustomAlert('Invalid File Type', 'Please select text files (.lrx, .txt, .lrc, .json) or audio files (.mp3, .wav, .m4a, .flac, .ogg)');
-                }
-            } else {
-                showCustomAlert('File Picker', 'No files returned by the picker. Please try again.');
-            }
-        } catch (error) {
-            console.error('❌ File import error:', error);
-            showCustomAlert('Import Error', `Failed to import files: ${error.message}`);
-        } finally {
-            setTimeout(() => {
-                try {
-                    if (fileInput.parentNode) {
-                        document.body.removeChild(fileInput);
-                    }
-                } catch (cleanupError) {
-                    console.warn('⚠️ File input cleanup error:', cleanupError);
-                }
-            }, 100);
-        }
-    });
-
-    // Trigger the file picker with error handling
-    try {
-        fileInput.click();
-        
-        // Show helpful tip about file selection, especially for .lrx files
-        console.log('💡 Tip: If .lrx files appear grayed out, try changing the file type filter to "All Files" in the file picker.');
-    } catch (error) {
-        console.error('❌ File picker error:', error);
-        document.body.removeChild(fileInput);
-    }
-}
-
-// Helper function for MIDI learning in settings
-function startMidiLearnForSetting(inputElement, settingKey, buttonElement) {
-    if (window.Lyrix?.midiUtilities?.startMidiLearn) {
-        // Change button appearance
-        buttonElement.textContent = '⏹ Stop';
-        buttonElement.style.backgroundColor = '#ff4757';
-        
-        window.Lyrix.midiUtilities.startMidiLearn((midiNote) => {
-            // MIDI note learned
-            inputElement.value = midiNote;
-            
-            // Reset button appearance
-            buttonElement.textContent = '🎹 Learn';
-            buttonElement.style.backgroundColor = '#007bff';
-            
-            // Save the assignment
-            window.Lyrix.midiUtilities.setMidiSpecialAssignment(settingKey, midiNote);
-            
-            console.log(`🎵 MIDI note ${midiNote} assigned to ${settingKey}`);
-        });
-    }
-}
-
-// Function to get songs in custom order (respecting user's reordering)
-function getSongsInCustomOrder() {
-    const allSongs = lyricsLibrary.getAllSongs();
-    
-    try {
-        const savedOrder = localStorage.getItem('lyrix_custom_song_order');
-        if (!savedOrder) {
-            // No custom order, return songs in creation order
-            return allSongs;
-        }
-
-        const orderData = JSON.parse(savedOrder);
-        const orderMap = new Map();
-        orderData.forEach(item => {
-            orderMap.set(item.songKey, item.order);
-        });
-
-        // Separate songs with saved order from new songs
-        const songsWithOrder = [];
-        const newSongs = [];
-        
-        allSongs.forEach(song => {
-            if (orderMap.has(song.key)) {
-                songsWithOrder.push({
-                    ...song,
-                    savedOrder: orderMap.get(song.key)
-                });
-            } else {
-                newSongs.push(song);
-            }
-        });
-
-        // Sort songs with saved order
-        songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
-        
-        // Combine: ordered songs first, then new songs at the end
-        const orderedSongs = [
-            ...songsWithOrder.map(song => ({ ...song, savedOrder: undefined })),
-            ...newSongs
-        ];
-
-        console.log(`🎵 Retrieved ${orderedSongs.length} songs in custom order`);
-        return orderedSongs;
-    } catch (error) {
-        console.error('❌ Error getting songs in custom order:', error);
-        return allSongs; // Fallback to default order
-    }
-}
-
-// Song navigation functions
-function navigateToPreviousSong() {
-    if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary not initialized');
-        return false;
-    }
-    
-    const songs = getSongsInCustomOrder(); // Use custom order instead of getAllSongs()
-    console.log(`🎵 Total songs in library: ${songs.length}`);
-    if (songs.length === 0) {
-        console.log('📚 No songs in library');
-        return false;
-    }
-    
-    // Debug: Show all songs
-    console.log('📚 All songs in custom order:', songs.map(s => ({ key: s.key, title: s.title })));
-    
-    // Get current song key from display or global backup
-    const currentSongKey = window.lyricsDisplay?.currentSongKey || window.currentSongKey || null;
-    console.log(`🎵 Current song key: ${currentSongKey} (from ${window.lyricsDisplay?.currentSongKey ? 'lyricsDisplay' : window.currentSongKey ? 'global backup' : 'null'})`);
-    
-    if (!currentSongKey) {
-        // No current song, load the last song
-        const lastSong = songs[songs.length - 1];
-        console.log(`⏮️ No current song, loading last song: ${lastSong.title} (key: ${lastSong.key})`);
-        loadAndDisplaySong(lastSong.key);
-        return true;
-    }
-    
-    // Find current song index
-    const currentIndex = songs.findIndex(song => song.key === currentSongKey);
-    console.log(`🎵 Current song index: ${currentIndex}`);
-    
-    if (currentIndex === -1) {
-        // Current song not found, load first song
-        console.log(`⏮️ Current song not found in library, loading first song: ${songs[0].title}`);
-        loadAndDisplaySong(songs[0].key);
-        return true;
-    }
-    
-    // Navigate to previous song (wrap around to last if at beginning)
-    const previousIndex = currentIndex === 0 ? songs.length - 1 : currentIndex - 1;
-    const previousSong = songs[previousIndex];
-    
-    console.log(`⏮️ Navigating from index ${currentIndex} to ${previousIndex}: ${previousSong.title} (key: ${previousSong.key})`);
-    loadAndDisplaySong(previousSong.key);
-    return true;
-}
-
-function navigateToNextSong() {
-    if (!lyricsLibrary) {
-        console.error('❌ LyricsLibrary not initialized');
-        return false;
-    }
-    
-    const songs = getSongsInCustomOrder(); // Use custom order instead of getAllSongs()
-    console.log(`🎵 Total songs in library: ${songs.length}`);
-    if (songs.length === 0) {
-        console.log('📚 No songs in library');
-        return false;
-    }
-    
-    // Debug: Show all songs
-    console.log('📚 All songs in custom order:', songs.map(s => ({ key: s.key, title: s.title })));
-    
-    // Get current song key from display or global backup
-    const currentSongKey = window.lyricsDisplay?.currentSongKey || window.currentSongKey || null;
-    console.log(`🎵 Current song key: ${currentSongKey} (from ${window.lyricsDisplay?.currentSongKey ? 'lyricsDisplay' : window.currentSongKey ? 'global backup' : 'null'})`);
-    
-    if (!currentSongKey) {
-        // No current song, load the first song
-        const firstSong = songs[0];
-        console.log(`⏭️ No current song, loading first song: ${firstSong.title} (key: ${firstSong.key})`);
-        loadAndDisplaySong(firstSong.key);
-        return true;
-    }
-    
-    // Find current song index
-    const currentIndex = songs.findIndex(song => song.key === currentSongKey);
-    console.log(`🎵 Current song index: ${currentIndex}`);
-    
-    if (currentIndex === -1) {
-        // Current song not found, load first song
-        console.log(`⏭️ Current song not found in library, loading first song: ${songs[0].title}`);
-        loadAndDisplaySong(songs[0].key);
-        return true;
-    }
-    
-    // Navigate to next song (wrap around to first if at end)
-    const nextIndex = currentIndex === songs.length - 1 ? 0 : currentIndex + 1;
-    const nextSong = songs[nextIndex];
-    
-    console.log(`⏭️ Navigating from index ${currentIndex} to ${nextIndex}: ${nextSong.title} (key: ${nextSong.key})`);
-    loadAndDisplaySong(nextSong.key);
-    return true;
 }
 
 // Helper function to load and display a song
@@ -4078,17 +1877,14 @@ function loadAndDisplaySong(songKey) {
         }
         
         currentSong = song;
+        window.currentSong = song;
         lyricsDisplay.displayLyrics(song);
-        // Store current song key for navigation (both in lyricsDisplay and globally)
+        
+        // Store current song key for navigation
         if (lyricsDisplay) {
             lyricsDisplay.currentSongKey = songKey;
-            console.log(`🎵 Stored currentSongKey in lyricsDisplay: ${songKey}`);
-        } else {
-            console.warn('⚠️ lyricsDisplay not available when storing currentSongKey');
         }
-        // Also store globally as backup
         window.currentSongKey = songKey;
-        console.log(`🎵 Stored currentSongKey globally: ${songKey}`);
         StorageManager.setLastOpenedSong(songKey);
         
         // Update audio title with current song filename
@@ -4103,24 +1899,18 @@ function loadAndDisplaySong(songKey) {
         if (song.hasAudio() && audioController) {
             audioController.loadAudio(song.getAudioPath());
             
-            // Apply saved volume to newly loaded audio
-            const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-            setTimeout(() => {
-                if (audioController && audioController.audioPlayer) {
-                    safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'new audio');
-                }
-            }, 100);
-            
             // Reset slider to zero when loading new audio
-            resetAudioSlider();
-            
-            // Update slider duration after a short delay to ensure audio is loaded
-            // setTimeout(() => {
-                updateSliderDuration();
-            // }, 500);
+            resetAudioSlider(true); // Force reset when loading new audio
+            updateSliderDuration();
         } else {
             // If no audio, also reset the slider
-            resetAudioSlider();
+            resetAudioSlider(true); // Force reset when no audio
+        }
+
+        // Always reset play button visual state on song change (audio is paused at top of function)
+        const playBtn = document.getElementById('audio-play-button');
+        if (playBtn) {
+            if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
         }
         
         return true;
@@ -4129,83 +1919,373 @@ function loadAndDisplaySong(songKey) {
     return false;
 }
 
+// Get songs in custom display order (respects user reordering)
+function getSongsInCustomOrder() {
+    if (!lyricsLibrary) {
+        return [];
+    }
+    
+    const songs = lyricsLibrary.getAllSongs();
+    if (songs.length === 0) {
+        return [];
+    }
+    
+    try {
+        // Load custom order from localStorage
+        const savedOrder = localStorage.getItem('lyrix_custom_song_order');
+        if (!savedOrder) {
+            return songs; // Return original order if no custom order saved
+        }
+
+        const orderData = JSON.parse(savedOrder);
+        const orderMap = new Map();
+        orderData.forEach(item => {
+            orderMap.set(item.songKey, item.order);
+        });
+
+        // Separate songs into ordered and new ones
+        const songsWithOrder = [];
+        const newSongs = [];
+        
+        songs.forEach(song => {
+            const savedOrder = orderMap.get(song.key || song.songId);
+            if (savedOrder !== undefined) {
+                songsWithOrder.push({ ...song, savedOrder });
+            } else {
+                newSongs.push(song);
+            }
+        });
+
+        // Sort songs with saved order
+        songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
+        
+        // Combine: ordered songs first, then new songs at the end
+        return [
+            ...songsWithOrder.map(song => ({ ...song, savedOrder: undefined })),
+            ...newSongs
+        ];
+    } catch (error) {
+        return songs; // Return original order if parsing fails
+    }
+}
+
+// Navigate to previous song in library
+function navigateToPreviousSong() {
+    if (!lyricsLibrary) {
+        return;
+    }
+    
+    const songs = getSongsInCustomOrder();
+    if (songs.length === 0) {
+        return;
+    }
+    
+    // Find current song index
+    let currentIndex = -1;
+    const currentSongKey = window.currentSongKey || (currentSong && currentSong.songId);
+    
+    if (currentSongKey) {
+        currentIndex = songs.findIndex(song => song.key === currentSongKey || song.songId === currentSongKey);
+    }
+    
+    // Go to previous song (or last if at beginning)
+    const previousIndex = currentIndex <= 0 ? songs.length - 1 : currentIndex - 1;
+    const previousSong = songs[previousIndex];
+    
+    if (previousSong) {
+        loadAndDisplaySong(previousSong.key || previousSong.songId);
+        // Ensure play button reflects stopped state after navigation
+        const playBtn = document.getElementById('audio-play-button');
+        if (playBtn) {
+            if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
+        }
+    }
+}
+
+// Navigate to next song in library
+function navigateToNextSong() {
+    if (!lyricsLibrary) {
+        return;
+    }
+    
+    const songs = getSongsInCustomOrder();
+    if (songs.length === 0) {
+        return;
+    }
+    
+    // Find current song index
+    let currentIndex = -1;
+    const currentSongKey = window.currentSongKey || (currentSong && currentSong.songId);
+    
+    if (currentSongKey) {
+        currentIndex = songs.findIndex(song => song.key === currentSongKey || song.songId === currentSongKey);
+    }
+    
+    // Go to next song (or first if at end)
+    const nextIndex = currentIndex >= songs.length - 1 ? 0 : currentIndex + 1;
+    const nextSong = songs[nextIndex];
+    
+    if (nextSong) {
+        loadAndDisplaySong(nextSong.key || nextSong.songId);
+        // Ensure play button reflects stopped state after navigation
+        const playBtn = document.getElementById('audio-play-button');
+        if (playBtn) {
+            if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
+        }
+    }
+}
+
+// Update timecode display
+function updateTimecode(timeMs) {
+    // Emergency host blocking system
+    if (window.blockAllHostUpdates) {
+        console.log('🛑 Host update blocked by emergency blocking system');
+        return;
+    }
+    
+    // Enhanced conflict detection for host vs local audio
+    if (timeMs === 0) {
+        // Check if local audio is playing
+        const localAudioPlaying = audioController && audioController.isPlaying && audioController.isPlaying();
+        
+        // Check if we recently had a valid time (not a cold start)
+        const hadRecentValidTime = lyricsDisplay && lyricsDisplay.currentTime > 1000;
+        
+        if (localAudioPlaying || hadRecentValidTime) {
+            // Count parasitic resets
+            window.parasiticResetCount++;
+            
+            // Throttle parasitic reset logging to avoid spam (every 5 seconds)
+            const now = Date.now();
+            if (!window.lastParasiticResetLog || (now - window.lastParasiticResetLog) > 5000) {
+                console.log(`🚨 Blocking parasitic host resets (${window.parasiticResetCount} total blocked, logged every 5s)`);
+                window.lastParasiticResetLog = now;
+                
+                // Also log details to help identify the pattern
+                const localTime = audioController && audioController.getCurrentTime ? audioController.getCurrentTime() : 0;
+                console.log(`📊 Current state: Local audio playing=${localAudioPlaying}, Local time=${localTime.toFixed(3)}s, Host sending=0s`);
+                
+                // Auto-suggest host blocking if too many resets
+                if (window.parasiticResetCount > 100) {
+                    console.log('💡 Suggestion: Run toggleHostBlocking(true) to stop all host updates if this continues');
+                }
+            }
+            return;
+        }
+    }
+    
+    // Check for potential conflicts between host and local audio
+    const localAudioPlaying = audioController && audioController.isPlaying && audioController.isPlaying();
+    const localCurrentTime = audioController && audioController.getCurrentTime ? audioController.getCurrentTime() * 1000 : 0;
+    
+    // If local audio is playing and host time is significantly different, log the conflict
+    if (localAudioPlaying && timeMs > 0 && Math.abs(timeMs - localCurrentTime) > 200) {
+        console.log(`🎯 Host/Local conflict detected: Host=${(timeMs/1000).toFixed(3)}s, Local=${(localCurrentTime/1000).toFixed(3)}s - Host takes priority`);
+    }
+    
+    // This function can be used by external hosts to update timecode
+    if (lyricsDisplay) {
+        lyricsDisplay.updateTime(timeMs, 'host'); // Mark as host source for prioritization
+    }
+
+    // AUv3 host-synced playback arming logic
+    const __hostEnv = (window.__HOST_ENV || '').toString().toLowerCase();
+    if (__hostEnv === 'auv3') {
+        if (!window.__lyrixHostSync) {
+            window.__lyrixHostSync = { lastTime: 0, started: false, lastAdvanceTs: 0 };
+        }
+        const btn = document.getElementById('audio-play-button');
+        if (btn) {
+            const state = btn.dataset.state;
+            // Reflect host position on slider when either armed or playingHost (and user not manually scrubbing)
+            if ((state === 'armed' || state === 'playingHost') && typeof updateScrubSliderDisplay === 'function' && !window.isUserScrubbing) {
+                try { updateScrubSliderDisplay(timeMs / 1000); } catch(e) {}
+            }
+            // Detect host running (any forward advance >1ms)
+            if (timeMs >= window.__lyrixHostSync.lastTime + 1) {
+                if (!window.__lyrixHostSync.started) {
+                    window.__lyrixHostSync.started = true;
+                }
+                window.__lyrixHostSync.lastAdvanceTs = performance.now();
+                // If armed and not yet playing, start synced
+                if (btn.dataset.state === 'armed' && audioController && !audioController.isPlaying()) {
+                    try {
+                        audioController.setCurrentTime(timeMs / 1000);
+                    } catch(e) { /* ignore */ }
+                    try { audioController.play(); } catch(e) { console.warn('⚠️ host sync play failed', e); }
+                    if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white';
+                    btn.classList.remove('auv3-armed');
+                    btn.dataset.state = 'playingHost';
+                    console.log('▶️ AUv3 host-synced playback started at', (timeMs/1000).toFixed(3),'s');
+                }
+            }
+            // Host stop detection: conditions
+            const nowTs = performance.now();
+            const hostStoppedByZero = (timeMs === 0 && window.__lyrixHostSync.lastTime > 0);
+            const hostWentBackwards = timeMs < window.__lyrixHostSync.lastTime - 2; // rewind / jump back
+            const hostInactive = (window.__lyrixHostSync.lastAdvanceTs && (nowTs - window.__lyrixHostSync.lastAdvanceTs) > 250); // >250ms no forward advance
+            const btnState = btn.dataset.state;
+            if ((hostStoppedByZero || hostWentBackwards || hostInactive) && (btnState === 'playingHost' || btnState === 'forced')) {
+                // Pause local playback and re-arm without changing position unless host at zero
+                try { audioController && audioController.pause && audioController.pause(); } catch(e){}
+                if (hostStoppedByZero) {
+                    try { audioController && audioController.setCurrentTime && audioController.setCurrentTime(0); } catch(e){}
+                    try { updateScrubSliderDisplay && updateScrubSliderDisplay(0); } catch(e){}
+                }
+                window.__lyrixHostSync.started = false;
+                if (typeof window.__lyrixArmButton === 'function') {
+                    window.__lyrixArmButton(btn);
+                } else {
+                    btn.dataset.state = 'armed';
+                    btn.classList.add('auv3-armed');
+                    if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor='';
+                }
+                console.log(`🔁 AUv3 host stop detected (${hostStoppedByZero?'zero':''}${hostWentBackwards?' rewind':''}${hostInactive?' idle':''}) -> re-armed`);
+            }
+            // Safety fallback: if host time not advancing (idle) for >750ms and audio still playing in host mode, force pause & re-arm
+            if (btnState === 'playingHost' && audioController && audioController.isPlaying && audioController.isPlaying()) {
+                const idleFor = performance.now() - (window.__lyrixHostSync.lastAdvanceTs || 0);
+                if (idleFor > 750) {
+                    try { audioController.pause(); } catch(e){}
+                    if (typeof window.__lyrixArmButton === 'function') window.__lyrixArmButton(btn); else { btn.dataset.state='armed'; btn.classList.add('auv3-armed'); }
+                    console.log('🛑 AUv3 host idle fallback (>750ms) -> force pause & re-arm');
+                }
+            }
+        }
+        window.__lyrixHostSync.lastTime = timeMs;
+    }
+}
+
+// Diagnostic function for parasitic resets (available in console)
+window.getParasiticResetStats = function() {
+    const stats = {
+        totalBlocked: window.parasiticResetCount || 0,
+        lastLogTime: window.lastParasiticResetLog || 0,
+        timeSinceLastLog: window.lastParasiticResetLog ? Date.now() - window.lastParasiticResetLog : 0,
+        localAudioPlaying: audioController && audioController.isPlaying ? audioController.isPlaying() : false,
+        localCurrentTime: audioController && audioController.getCurrentTime ? audioController.getCurrentTime() : 0,
+        displayCurrentTime: lyricsDisplay ? lyricsDisplay.currentTime : 0,
+        hostBlockingActive: window.blockAllHostUpdates || false
+    };
+    console.log('📊 Parasitic Reset Statistics:', stats);
+    return stats;
+};
+
+// Reset the counter (available in console)
+window.resetParasiticResetCounter = function() {
+    window.parasiticResetCount = 0;
+    window.lastParasiticResetLog = 0;
+    console.log('🔄 Parasitic reset counter reset');
+};
+
+// Emergency function to block ALL host updates (available in console)
+window.blockAllHostUpdates = false;
+window.toggleHostBlocking = function(block = null) {
+    if (block === null) {
+        window.blockAllHostUpdates = !window.blockAllHostUpdates;
+    } else {
+        window.blockAllHostUpdates = !!block;
+    }
+    
+    const status = window.blockAllHostUpdates ? 'ENABLED' : 'DISABLED';
+    console.log(`🛑 Host update blocking ${status}`);
+    
+    if (window.blockAllHostUpdates) {
+        console.log('⚠️ ALL host timecode updates will be ignored until you run toggleHostBlocking(false)');
+    }
+    
+    return window.blockAllHostUpdates;
+};
+
+// Helper function to show available console commands
+window.help = function() {
+    console.log(`
+🆘 Lyrix Console Commands:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 DIAGNOSTICS:
+• getParasiticResetStats() - Show reset blocking statistics
+• resetParasiticResetCounter() - Reset the counter to zero
+
+🛑 HOST CONTROL:
+• toggleHostBlocking() - Toggle ALL host timecode blocking
+• toggleHostBlocking(true) - Block ALL host updates
+• toggleHostBlocking(false) - Allow host updates again
+
+🎵 AUDIO CONTROL:
+• audioController.play() - Start local audio
+• audioController.pause() - Pause local audio
+• audioController.getCurrentTime() - Get current time
+
+📝 LYRICS:
+• lyricsDisplay.currentTime - Current display time
+• lyricsDisplay.currentLineIndex - Current line index
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+};
+
 // Create main interface
 function createMainInterface() {
+    // lyrix_app container removed: we use body (or #view) directly now
     const container = document.getElementById('view') || document.body;
-    
-    // Create main application container (full screen, no rounded corners)
-    const app = $('div', {
-        id: 'lyrix_app',
-        css: {
-            padding: '20px',
-            fontFamily: 'Arial, sans-serif',
-            width: '100vw',
-            height: '100vh',
-            margin: '0',
-            backgroundColor: '#fff',
-            borderRadius: '0',
-            minHeight: '100vh',
-            boxSizing: 'border-box',
-            overflow: 'auto'
-        }
-    });
-    
-    // Create main layout (single column now that left panel is removed)
-    const mainLayout = $('div', {
-        css: {
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '20px',
-            marginBottom: '20px'
-        }
-    });
-    
-    // Note: Left panel has been removed - all tools moved to lyrics toolbar
+    const app = container; // alias to preserve downstream variable logic
+
+    // (mainLayout removed: tools injected directly by feature modules)
     
     // Add some basic content to left panel
     const settingsButton = UIManager.createInterfaceButton('⚙️', {
         id: 'settings_button',
         onClick: () => {
-            showSettingsModal();
+            toggleSettingsPanel('settings_button');
         },
         css: {
-            marginBottom: '15px'
-        }
-    });
-    
-    const importButton = UIManager.createInterfaceButton('📁', {
-        id: 'import_file_button',
-        onClick: () => {
-            showFileImportDialog();
+        marginBottom: '15px',
+        display: 'none' // permanently hidden placeholder
         },
-        css: {
-            marginBottom: '10px'
-        }
+        'aria-expanded': 'false',
+        'aria-controls': 'settings-panel',
+        'aria-label': 'Open settings panel'
     });
+    settingsButton.dataset.forceHidden = 'true';
     
-    // Create song button moved to song library panel
-    // const createSongButton = UIManager.createInterfaceButton('➕', {
-    //     id: 'create_new_song_button',
-    //     onClick: () => {
-    //         createNewSong();
-    //     },
-    //     css: {
-    //         marginBottom: '10px'
-    //     }
-    // });
+    // Legacy import_file_button removed (direct multi-file import now handled elsewhere)
+    // If any legacy code tries to reference #import_file_button, keep a harmless stub for safety
+    if (!document.getElementById('import_file_button')) {
+        const stub = document.createElement('div');
+        stub.id = 'import_file_button';
+        stub.style.display = 'none';
+        // We do NOT append it to DOM to avoid accidental layout impact
+        window.__removedImportButton = true;
+    }
     
-    const songListButton = UIManager.createInterfaceButton('☰', {
+    // Song list button (SVG icon)
+    const songListButton = UIManager.createInterfaceButton('', {
         id: 'song_list_button',
         onClick: () => {
-            showSongLibrary();
+            const isOpen = toggleSongLibrary();
+            if (songListButton._setActive) songListButton._setActive(isOpen);
         }
-    });    
+    });
+    (function attachSongListIcon(){
+        try {
+            songListButton.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = 'assets/images/icons/sequence.svg';
+            img.alt = 'song list';
+            img.style.width = '18px';
+            img.style.height = '18px';
+            img.style.pointerEvents = 'none';
+            songListButton.appendChild(img);
+        } catch(e) { /* silent */ }
+    })();
+    
     // Store tool elements for potential move to lyrics toolbar
     window.leftPanelTools = {
         settingsButton,
-        // importButton moved to song library panel
-        // createSongButton, // Moved to song library panel
         songListButton
+        // import_file_button fully removed
+        // createSongButton, // Moved to song library panel
     };
     
     // Note: These tools will be moved to lyrics toolbar by display.js
@@ -4214,23 +2294,61 @@ function createMainInterface() {
     // Add audio controls section
     if (audioController) {
         // Check audio player controls setting state
-        // Par défaut, les contrôles audio sont masqués sauf si activés dans les paramètres
-        const isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled') === 'true';
-        const initialDisplay = isAudioPlayerEnabled ? 'block' : 'none';
+        // By default, audio controls are hidden unless enabled in settings
+        let isAudioPlayerEnabled = localStorage.getItem('lyrix_audio_player_enabled');
+        if (isAudioPlayerEnabled === null) {
+            localStorage.setItem('lyrix_audio_player_enabled', 'true');
+            isAudioPlayerEnabled = 'true';
+        }
+        const initialDisplay = isAudioPlayerEnabled === 'true' ? 'block' : 'none';
         
-        const playButton = UIManager.createInterfaceButton('▶️', {
+        const playButton = UIManager.createInterfaceButton('', {
+            id: 'audio-play-button',
             onClick: () => {
                 try {
-                    if (audioController.isPlaying()) {
-                        audioController.pause();
-                    } else {
-                        // Log the audio file path before playing
-                        if (currentSong && currentSong.metadata && currentSong.metadata.audioPath) {
-                            console.log('▶️ Audio file path:', currentSong.metadata.audioPath);
-                        } else {
-                            console.log('▶️ Audio file path: [unknown or not set]');
+                    const hostEnv = (window.__HOST_ENV||'').toString().toLowerCase();
+                    if (hostEnv === 'auv3') {
+                        if (playButton._longPressTriggered) { // guard: ignore base click after long press
+                            playButton._longPressTriggered = false;
+                            return;
                         }
-                        audioController.play();
+                        const state = playButton.dataset.state || 'idle';
+                        // If currently playing locally, toggle pause
+                        if (audioController.isPlaying() && state !== 'armed') {
+                            audioController.pause();
+                            if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
+                            playButton.dataset.state = 'idle';
+                            return;
+                        }
+                        if (state === 'idle') {
+                            // Arm playback (wait for host start)
+                            armAuv3Playback(playButton);
+                            console.log('🟡 AUv3 playback armed (waiting host start)');
+                        } else if (state === 'armed') {
+                            // Disarm
+                            disarmAuv3Playback(playButton);
+                            console.log('⚪️ AUv3 playback disarmed');
+                        } else if (state === 'playingHost' || state === 'forced') {
+                            // Pause current playback
+                            audioController.pause();
+                            if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
+                            playButton.dataset.state = 'idle';
+                            console.log('⏸️ AUv3 playback paused');
+                        } else {
+                            // Fallback toggle
+                            audioController.play();
+                            playButton.dataset.state = 'playingHost';
+                            console.log('▶️ AUv3 fallback play');
+                        }
+                    } else {
+                        // Application mode: original behavior
+                        if (audioController.isPlaying()) {
+                            audioController.pause();
+                            if (playButton._setActive) playButton._setActive(false); else playButton.style.backgroundColor = 'transparent';
+                        } else {
+                            if (playButton._setActive) playButton._setActive(true); else playButton.style.backgroundColor = 'white';
+                            audioController.play();
+                        }
                     }
                 } catch (error) {
                     console.error('❌ ERREUR Play/Pause:', error);
@@ -4241,18 +2359,118 @@ function createMainInterface() {
                 display: initialDisplay
             }
         });
+        // AUv3 arming helpers (defined inline to avoid polluting global scope)
+    function ensureAuv3ArmStyles(){
+            if (document.getElementById('lyrix-auv3-arm-style')) return;
+            const st = document.createElement('style');
+            st.id = 'lyrix-auv3-arm-style';
+            st.textContent = `@keyframes lyrixArmBlink{0%,100%{background:#444;}50%{background:#888;}} .auv3-armed{animation:lyrixArmBlink 0.9s linear infinite; box-shadow:0 0 0 1px #666 inset;}`;
+            document.head.appendChild(st);
+        }
+        function armAuv3Playback(btn){
+            ensureAuv3ArmStyles();
+            btn.dataset.state = 'armed';
+            btn.classList.add('auv3-armed');
+            if (btn._setActive) btn._setActive(false); // keep icon neutral
+        }
+        function disarmAuv3Playback(btn){
+            btn.dataset.state = 'idle';
+            btn.classList.remove('auv3-armed');
+            if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor = 'transparent';
+        }
+        function forceImmediatePlayback(btn){
+            btn.classList.remove('auv3-armed');
+            btn.dataset.state = 'forced';
+            try { audioController.play(); } catch(e) { console.warn('⚠️ force play failed', e); }
+            if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white';
+        }
+    // Expose arming helper globally so updateTimecode can reuse
+    window.__lyrixArmButton = armAuv3Playback;
+    window.__lyrixEnsureArmStyles = ensureAuv3ArmStyles;
+        // Long press detection (AUv3 only)
+    if ((window.__HOST_ENV||'').toString().toLowerCase() === 'auv3') {
+            let pressTimer = null;
+            const longPressMs = 600;
+            const startPress = () => {
+                if (pressTimer) clearTimeout(pressTimer);
+                pressTimer = setTimeout(() => {
+                    // Activate shield & selection block only when long press threshold reached
+                    try {
+                        document.body.classList.add('lyrix-block-select');
+                        if(!document.getElementById('lyrix-longpress-shield')){
+                            const shield=document.createElement('div');
+                            shield.id='lyrix-longpress-shield';
+                            shield.style.cssText='position:fixed;inset:0;z-index:2147483646;background:transparent;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;';
+                            const swallow=(ev)=>{ if (ev.cancelable) ev.preventDefault(); ev.stopPropagation(); };
+                            ['touchmove','touchcancel','contextmenu'].forEach(tp=>shield.addEventListener(tp,swallow,{passive:false}));
+                            document.body.appendChild(shield);
+                        }
+                        if(!window.__lyrixSelectionClearInterval){
+                            window.__lyrixSelectionClearInterval=setInterval(()=>{ if(!document.body.classList.contains('lyrix-block-select')){clearInterval(window.__lyrixSelectionClearInterval);window.__lyrixSelectionClearInterval=null;return;} try{const sel=window.getSelection(); if(sel) sel.removeAllRanges();}catch(_){}} ,150);
+                        }
+                    } catch(_){ }
+                    if (playButton.dataset.state === 'armed' || playButton.dataset.state === 'idle') {
+                        forceImmediatePlayback(playButton);
+                        playButton._longPressTriggered = true; // guard
+                        console.log('⚡️ AUv3 long press forced playback');
+                    }
+                }, longPressMs);
+            };
+            const cancelPress = () => {
+                if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+                // Remove selection blocking class at end of interaction (slightly longer delay to avoid iOS post-longpress selection)
+                setTimeout(()=>document.body.classList.remove('lyrix-block-select'),160);
+                // Remove shield
+                const shield = document.getElementById('lyrix-longpress-shield');
+                if (shield) shield.remove();
+                // Final selection clear
+                try { const sel=window.getSelection(); if(sel && sel.removeAllRanges) sel.removeAllRanges(); } catch(_){ }
+            };
+            ['mousedown','touchstart'].forEach(ev=>playButton.addEventListener(ev,startPress,{passive:false}));
+            ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>playButton.addEventListener(ev,cancelPress,{passive:true}));
+            // Ensure global CSS for blocking selection on demand exists
+            if(!document.getElementById('lyrix-block-select-style')){
+                const st=document.createElement('style');
+                st.id='lyrix-block-select-style';
+                st.textContent='.lyrix-block-select, .lyrix-block-select * { -webkit-user-select:none !important; user-select:none !important; -webkit-touch-callout:none !important; }';
+                document.head.appendChild(st);
+            }
+        }
+        // Inject SVG icon for play
+        (function attachPlayIcon(){
+            try {
+                playButton.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = 'assets/images/icons/play.svg';
+                img.alt = 'play';
+                img.style.width = '18px';
+                img.style.height = '18px';
+                img.style.pointerEvents = 'none';
+                playButton.appendChild(img);
+            } catch(e) { /* silent */ }
+        })();
         
         // Add ID and data attribute for identification
-        playButton.id = 'audio-play-button';
+        // playButton.id = 'audio-play-button';
         playButton.setAttribute('data-element', 'play-button');
         
-        const stopButton = UIManager.createInterfaceButton('⏹️', {
+        const stopButton = UIManager.createInterfaceButton('', {
+              id: 'audio-stop-button',
             onClick: () => {
                 try {
                     audioController.pause();
                     audioController.setCurrentTime(0);
-                    // Reset slider to zero when stopping
-                    resetAudioSlider();
+                    resetAudioSlider(false); // don't force lyrics reset
+                    const playBtn = document.getElementById('audio-play-button');
+                    if (playBtn) {
+                        // Disarm AUv3 armed state explicitly
+                        const hostEnv = (window.__HOST_ENV||'').toString().toLowerCase();
+                        if (hostEnv === 'auv3') {
+                            playBtn.classList.remove('auv3-armed');
+                            playBtn.dataset.state = 'idle';
+                        }
+                        if (playBtn._setActive) playBtn._setActive(false); else playBtn.style.backgroundColor = 'transparent';
+                    }
                 } catch (error) {
                     console.error('❌ ERREUR Stop:', error);
                 }
@@ -4262,26 +2480,58 @@ function createMainInterface() {
                 display: initialDisplay
             }
         });
+        // Inject SVG icon for stop
+        (function attachStopIcon(){
+            try {
+                stopButton.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = 'assets/images/icons/stop.svg';
+                img.alt = 'stop';
+                img.style.width = '18px';
+                img.style.height = '18px';
+                img.style.pointerEvents = 'none';
+                stopButton.appendChild(img);
+            } catch(e) { /* silent */ }
+        })();
         
         // Add data attribute for identification
         stopButton.setAttribute('data-element', 'stop-button');
         
-        // Add ID for identification
-        stopButton.id = 'audio-stop-button';
+        // // Add ID for identification
+        // stopButton.id = 'audio-stop-button';
         
-        const audioControls = $('div', {
-            id: 'audio-controls-container',
-            css: {
-                marginBottom: '15px',
-                display: initialDisplay,
-                flexDirection: 'row', // Buttons side by side
-                gap: '5px',
-                alignItems: 'center'
+    // audio-controls-container removed (legacy). We still build buttons (play/stop) but not grouped in a container.
+    // Use a lightweight div wrapper instead of DocumentFragment so attribute APIs still work
+    const audioControls = document.createElement('div');
+    audioControls.id = 'audio-controls-inline';
+    audioControls.style.display = 'flex';
+    audioControls.style.flexDirection = 'row';
+    audioControls.style.gap = '5px';
+    audioControls.style.alignItems = 'center';
+
+        // Attach audioController event listeners once controls exist to keep UI sync robust
+        try {
+            if (!audioController._uiSyncBound) {
+                audioController.on && audioController.on('play', () => {
+                    const btn = document.getElementById('audio-play-button');
+                    if (btn) { if (btn._setActive) btn._setActive(true); else btn.style.backgroundColor = 'white'; }
+                });
+                audioController.on && audioController.on('pause', () => {
+                    const btn = document.getElementById('audio-play-button');
+                    if (btn && !audioController.isPlaying()) { if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor = 'transparent'; }
+                });
+                audioController.on && audioController.on('ended', () => {
+                    const btn = document.getElementById('audio-play-button');
+                    if (btn) { if (btn._setActive) btn._setActive(false); else btn.style.backgroundColor = 'transparent'; }
+                });
+                audioController._uiSyncBound = true;
             }
-        });
+        } catch (e) {
+            console.warn('⚠️ Failed to bind audioController UI sync listeners', e);
+        }
         
-        // Add data attribute for identification
-        audioControls.setAttribute('data-element', 'audio-controls');
+    // Add data attribute for identification
+    audioControls.setAttribute('data-element', 'audio-controls');
         
         audioControls.append(stopButton, playButton);
         
@@ -4300,16 +2550,24 @@ function createMainInterface() {
             id: 'audio-scrub-slider-container',
             css: {
                 display: initialDisplay,
-                padding: '0 10px', // Add horizontal padding to prevent handle overflow
+                padding: '0 8px', // Slightly reduced horizontal + no extra vertical height
                 boxSizing: 'border-box'
             }
         });
+        scrubContainer.classList.add('audio-tools-row');
+        // Prevent text selection inside the scrub row except handle drag
+        const suppressSelection = (e)=>{
+            const handle = document.getElementById('audio_scrub_slider_handle');
+            if (handle && (e.target===handle || handle.contains(e.target))) return; // allow drag
+            if (e.type==='selectstart' && e.cancelable) e.preventDefault();
+        };
+        scrubContainer.addEventListener('selectstart', suppressSelection, {passive:false});
         
         // Add data attribute for identification
         scrubContainer.setAttribute('data-element', 'scrub-slider');
         
-        // Create Squirrel slider for audio scrubbing
-        const scrubSlider = Slider({
+    // Create Squirrel slider for audio scrubbing
+    const scrubSlider = Slider({
             type: 'horizontal',
             min: 0,
             max: 100,
@@ -4318,27 +2576,33 @@ function createMainInterface() {
             id: 'audio_scrub_slider',
             skin: {
                 container: {
-                    width: 'calc(100% - 20px)', // Reduced width to account for handle size
-                    height: '20px',
-                    marginBottom: '10px',
-                    marginLeft: '10px', // Center the slider
-                    marginRight: '10px'
+                    width: 'calc(100% - 16px)',
+                    height: '11px', // further reduced by 3px
+                    marginBottom: '3px',
+                    marginLeft: '8px',
+                    marginRight: '8px'
                 },
                 track: {
-                    height: '6px',
-                    backgroundColor: '#ddd',
-                    borderRadius: '3px'
+            // THEME OVERRIDE: unified dark blue rail
+            height: '3px', // further reduced
+            backgroundColor: 'rgb(48,60,78)',
+            borderRadius: '3px',
+            border: 'none',
+            boxShadow: 'none'
                 },
                 progression: {
-                    backgroundColor: '#007bff',
+                    // Darker, greyer blue progression
+                    backgroundColor: '#4a6a85',
                     borderRadius: '3px'
                 },
                 handle: {
-                    width: '14px', // Slightly smaller handle
-                    height: '14px',
-                    backgroundColor: '#007bff',
-                    border: '2px solid #fff',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    width: '9px', // further reduced by 3px
+                    height: '9px',
+                    backgroundColor: '#fff',
+                    border: 'none',
+                    borderRadius: '50%',
+                    boxShadow: '0 0 2px rgba(0,0,0,0.3)',
+                    top: '-3px' // recenter for reduced size
                 }
             },
             onInput: (value) => {
@@ -4370,7 +2634,7 @@ function createMainInterface() {
                     
                     // Update lyrics display while scrubbing
                     if (lyricsDisplay) {
-                        lyricsDisplay.updateTime(timecodeMs);
+                        lyricsDisplay.updateTime(timecodeMs, 'scrub');
                     } 
                     
                     // Update time labels immediately
@@ -4387,9 +2651,71 @@ function createMainInterface() {
                 }
             }
         });
-        
+        // Force track / progression styles after creation (defensive override)
+        setTimeout(() => {
+            try {
+                const trackEl = document.getElementById('audio_scrub_slider_track');
+                const progEl = document.getElementById('audio_scrub_slider_progression');
+                if (trackEl) {
+                    trackEl.style.backgroundColor = 'rgb(48,60,78)';
+                    trackEl.style.border = 'none';
+                    trackEl.style.boxShadow = 'none';
+                }
+                if (progEl) {
+                    // Slight contrast for progression
+                    progEl.style.backgroundColor = 'rgb(74,106,133)';
+                    progEl.style.border = 'none';
+                }
+            } catch (e) {
+                console.warn('Scrub slider post-style failed', e);
+            }
+        }, 0);
+
+        // Global CSS (once) to override any default slider track style
+        if (!document.getElementById('scrub-slider-global-style')) {
+            const styleTag = document.createElement('style');
+            styleTag.id = 'scrub-slider-global-style';
+            styleTag.textContent = `#audio-scrub-slider-container .hs-slider-track, #audio_scrub_slider_track {\n  background-color: rgb(48,60,78) !important;\n  border: none !important;\n  box-shadow: none !important;\n}\n#audio-scrub-slider-container .hs-slider-progression, #audio_scrub_slider_progression {\n  background-color: rgb(74,106,133) !important;\n  border: none !important;\n}`;
+            document.head.appendChild(styleTag);
+        }
+
         // Store reference for direct updates
         scrubSliderRef = scrubSlider;
+
+        // Enhance slider appearance (design_slider-like) after DOM creation without breaking geometry
+        const enhanceAudioSliderDesign = () => {
+            const track = document.getElementById('audio_scrub_slider_track');
+            const handle = document.getElementById('audio_scrub_slider_handle');
+            const progression = document.getElementById('audio_scrub_slider_progression');
+            if (track) {
+                track.style.height = '18px';
+                track.style.top = '50%';
+                track.style.transform = 'translateY(-50%)';
+                track.style.backgroundColor = '#2a3038';
+                track.style.borderRadius = '18px';
+                track.style.border = '1px solid rgba(255,255,255,0.08)';
+                track.style.boxShadow = 'inset 0 4px 8px rgba(0,0,0,0.35), inset 0 -4px 8px rgba(255,255,255,0.06), inset 4px 0 6px rgba(0,0,0,0.25), inset -4px 0 6px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.25)';
+            }
+            if (progression) {
+                progression.style.height = '100%';
+                progression.style.top = '0';
+                progression.style.left = '0';
+                progression.style.background = '#4a6a85';
+                progression.style.borderRadius = '18px';
+                progression.style.boxShadow = 'inset 0 0 4px rgba(0,0,0,0.35)';
+            }
+            if (handle) {
+                handle.style.width = '22px';
+                handle.style.height = '22px';
+                handle.style.top = '50%';
+                handle.style.transform = 'translate(-50%, -50%)';
+                handle.style.backgroundColor = '#4a6a85';
+                handle.style.border = 'none';
+                handle.style.borderRadius = '50%';
+                handle.style.boxShadow = '0 3px 6px rgba(0,0,0,0.5), 0 6px 12px rgba(0,0,0,0.35), inset 0 1px 3px rgba(255,255,255,0.20), inset 0 -1px 3px rgba(0,0,0,0.55)';
+            }
+        };
+        setTimeout(enhanceAudioSliderDesign, 0);
         
         // Add event listeners to the actual DOM element after it's built
         // setTimeout(() => {
@@ -4483,168 +2809,24 @@ function createMainInterface() {
         
         const currentTimeLabel = $('span', {
             id: 'current_time_label',
+            css: {
+                textAlign: 'left',
+                display: 'none',
+            },
             text: '0:00'
         });
         
         const totalTimeLabel = $('span', {
             id: 'total_time_label',
+             css: {
+                textAlign: 'left',
+                display: 'none',
+            },
             text: '0:00'
         });
         
         timeLabels.append(currentTimeLabel, totalTimeLabel);
         scrubContainer.append(scrubSlider, timeLabels);
-
-        // Add volume control slider
-        const volumeContainer = $('div', {
-            id: 'audio-volume-slider-container',
-            css: {
-                // marginBottom: '15px',
-                width: '190px',
-                height: '13px',
-                // padding: '10px',
-                backgroundColor: 'transparent',
-                borderRadius: '4px',
-                // border: '1px solid #dee2e6',
-                display: initialDisplay
-            }
-        });
-
-        // Add data attribute for identification
-        volumeContainer.setAttribute('data-element', 'volume-slider');
-
-        const volumeLabel = $('div', {
-            // text: '🔊 Volume',
-            css: {
-                fontSize: '14px',
-                fontWeight: '600',
-                marginBottom: '8px',
-                color: '#495057'
-            }
-        });
-
-        // Load saved volume from localStorage (default: 70%)
-        const savedVolume = localStorage.getItem('lyrix_audio_volume') || '70';
-        
-        // Create Squirrel slider for volume control
-        const volumeSlider = Slider({
-            type: 'horizontal',
-            min: 0,
-            max: 100,
-            value: parseInt(savedVolume),
-            showLabel: false,
-            id: 'audio_volume_slider',
-            skin: {
-                container: {
-                    width: '100%',
-                    height: '20px',
-                    marginBottom: '5px'
-                },
-                track: {
-                    height: '6px',
-                    backgroundColor: '#ddd',
-                    borderRadius: '3px'
-                },
-                progression: {
-                    backgroundColor: '#28a745',
-                    borderRadius: '3px'
-                },
-                handle: {
-                    width: '16px',
-                    height: '16px',
-                    backgroundColor: '#28a745',
-                    border: '2px solid #fff',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                    cursor: 'pointer'
-                }
-            },
-            onInput: (value) => {
-                // Update audio volume immediately on all platforms
-                if (audioController && audioController.audioPlayer) {
-                    if (safeApplyVolume(audioController.audioPlayer, value, 'slider')) {
-                        // Save volume to localStorage only if successfully applied
-                        localStorage.setItem('lyrix_audio_volume', value.toString());
-                        
-                        // Update volume value display in toolbar
-                        const volumeValueDisplay = document.getElementById('volume-value-display');
-                        if (volumeValueDisplay) {
-                            volumeValueDisplay.textContent = `${Math.round(value)}%`;
-                        }
-                        
-                        // Update current volume label
-                        const volumeCurrentLabel = document.getElementById('volume_current_label');
-                        if (volumeCurrentLabel) {
-                            volumeCurrentLabel.textContent = `${Math.round(value)}%`;
-                        }
-                    }
-                } else {
-                    // Store volume for when audio player becomes available
-                    localStorage.setItem('lyrix_audio_volume', value.toString());
-                    
-                    // Update volume value display in toolbar
-                    const volumeValueDisplay = document.getElementById('volume-value-display');
-                    if (volumeValueDisplay) {
-                        volumeValueDisplay.textContent = `${Math.round(value)}%`;
-                    }
-                    
-                    // Update current volume label
-                    const volumeCurrentLabel = document.getElementById('volume_current_label');
-                    if (volumeCurrentLabel) {
-                        volumeCurrentLabel.textContent = `${Math.round(value)}%`;
-                    }
-                    
-                    console.log(`🔊 Volume stored for later: ${Math.round(value)}% (audioPlayer not ready)`);
-                }
-            }
-        });
-
-        // Volume value container
-        const volumeValueContainer = $('div', {
-            css: {
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontSize: '12px',
-                color: '#666',
-                fontFamily: 'monospace',
-                marginTop: '5px'
-            }
-        });
-
-        const volumeMinLabel = $('span', {
-            text: 'volume'
-        });
-
-        // Add current volume display
-        const volumeCurrentLabel = $('span', {
-            id: 'volume_current_label',
-            text: `${savedVolume}%`,
-            css: {
-                fontWeight: '600',
-                color: '#28a745'
-            }
-        });
-
-      
-
-        volumeValueContainer.append(volumeMinLabel, volumeCurrentLabel);
-        volumeContainer.append(volumeLabel, volumeSlider, volumeValueContainer);
-
-        // Add volume container to audio tools for display
-        if (window.leftPanelAudioTools) {
-            window.leftPanelAudioTools.volumeContainer = volumeContainer;
-        }
-
-        // Apply saved volume to audio player when it's loaded
-        if (audioController && audioController.audioPlayer) {
-            safeApplyVolume(audioController.audioPlayer, parseInt(savedVolume), 'initial volume');
-        }
-        
-        // Add function to apply saved volume when audio becomes available
-        window.applySavedVolume = function() {
-            const savedVol = localStorage.getItem('lyrix_audio_volume') || '70';
-            if (audioController && audioController.audioPlayer) {
-                safeApplyVolume(audioController.audioPlayer, parseInt(savedVol), 'delayed application');
-            }
-        };
         
         // Add timecode display for AUv3 host compatibility
         const timecodeDisplay = UIManager.createEnhancedTimecodeDisplay({
@@ -4654,7 +2836,6 @@ function createMainInterface() {
         // Apply timecode display visibility setting immediately
         const isTimecodeDisplayVisible = localStorage.getItem('lyrix_timecode_display_visible') === 'true';
         timecodeDisplay.style.display = isTimecodeDisplayVisible ? 'block' : 'none';
-        console.log(`🕐 Timecode display initial visibility: ${isTimecodeDisplayVisible ? 'visible' : 'hidden'}`);
         
         // Store scrub and timecode tools for potential move to lyrics toolbar
         window.leftPanelScrubTools = {
@@ -4665,12 +2846,6 @@ function createMainInterface() {
         // Note: These tools will be moved to lyrics toolbar by display.js
         // leftPanel.append(scrubContainer, timecodeDisplay);
         
-        // Note: MIDI utilities will also be moved to lyrics toolbar by display.js
-        // if (midiUtilities && midiUtilities.midiContainer) {
-        //     console.log('🎵 Adding MIDI logger to left panel...');
-        //     leftPanel.append(midiUtilities.midiContainer);
-        // }
-        
         // Setup audio event listeners
         if (audioController.on) {
             audioController.on('timeupdate', (currentTime) => {
@@ -4679,51 +2854,68 @@ function createMainInterface() {
             
             // Primary event - when audio metadata (including duration) is loaded
             audioController.on('loaded', (duration) => {
-                startupLog(`📏 Audio loaded event - duration: ${duration}s`);
+                console.log(`📏 Audio loaded event - duration: ${duration}s`);
                 updateSliderDuration();
-                // Apply saved volume when audio is loaded
-                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('loadedmetadata', () => {
-                startupLog('📏 Loadedmetadata event triggered');
+                console.log('📏 Loadedmetadata event triggered');
                 updateSliderDuration();
-                // Apply saved volume when metadata is loaded
-                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             // Also listen for loadeddata and canplay events as fallbacks
             audioController.on('loadeddata', () => {
-                startupLog('📏 Loadeddata event triggered');
+                console.log('📏 Loadeddata event triggered');
                 updateSliderDuration();
-                // Apply saved volume when data is loaded
-                if (window.applySavedVolume) window.applySavedVolume();
             });
             
             audioController.on('canplay', () => {
-                startupLog('📏 Canplay event triggered');
+                console.log('📏 Canplay event triggered');
                 updateSliderDuration();
-                // Apply saved volume when audio can play
-                if (window.applySavedVolume) window.applySavedVolume();
             });
         }
     }
     
-    // Note: No longer using right panel - lyrics display elements append directly to lyrix_app
+    // Note: No longer using right panel - lyrics display elements append directly to body
     // Remove: const rightPanel = $('div', { id: 'lyrics_display_area', ... });
     
     // Note: Left panel removed - using single column layout now
-    // No longer appending rightPanel to mainLayout since LyricsDisplay handles its own layout
-    app.append(mainLayout);
-    
-    container.append(app);
+    // No longer appending rightPanel (lyrics display manages its own layout)
+    // Removed container.append(app) because app is now the container (lyrix_app wrapper removed)
 }
 
 // Load last opened song
+function setupDeferredAudioRebind(){
+    let attempts = 0;
+    const maxAttempts = 15; // ~7.5s total
+    const intervalMs = 500;
+    function tryBind(){
+        attempts++;
+        // Besoin: port disponible + currentSong avec audioPath + audioController sans player chargé ou player src encore ancien
+        const port = window.ATOME_LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__;
+        if(port && currentSong && currentSong.getAudioPath && currentSong.getAudioPath()){
+            const fileName = currentSong.getAudioPath().split(/[/\\]/).pop();
+            if(audioController && audioController.loadAudio){
+                const ok = audioController.loadAudio(fileName);
+                if(ok){
+                    console.log('🔁 Rebind audio après dispo port local:', fileName);
+                    return; // stop retries
+                }
+            }
+        }
+        if(attempts < maxAttempts){
+            setTimeout(tryBind, intervalMs);
+        } else {
+            console.log('⏱️ Fin des tentatives de rebind audio (port ou fichier indisponible)');
+        }
+    }
+    setTimeout(tryBind, intervalMs);
+}
+
 function loadLastSong() {
     const lastSongKey = StorageManager.getLastOpenedSong();
+    
     if (lastSongKey && lyricsLibrary) {
-        
         // Try to get song directly by key first
         currentSong = lyricsLibrary.getSong(lastSongKey);
         
@@ -4738,17 +2930,38 @@ function loadLastSong() {
         }
         
         if (currentSong && lyricsDisplay) {
+            // Always load the song first (lyrics display)
             lyricsDisplay.displayLyrics(currentSong);
+            window.currentSong = currentSong;
             
             // Update audio title with current song filename
             updateAudioTitle();
             
             // ALWAYS reset slider when loading any song
-            resetAudioSlider();
+            resetAudioSlider(true); // Force reset when loading song
+            
+            // Charger l'audio réel via le contrôleur (et non plus un test invisible)
+            if (currentSong.getAudioPath && currentSong.getAudioPath()) {
+                const audioPath = currentSong.getAudioPath();
+                const fileName = audioPath.split(/[/\\]/).pop();
+                if (audioController && audioController.loadAudio) {
+                    const ok = audioController.loadAudio(fileName);
+                    if (!ok) {
+                        console.warn('⚠️ Impossible de charger audio au démarrage:', fileName);
+                    } else {
+                        console.log('🎵 Audio rechargé au démarrage:', fileName);
+                    }
+                }
+            } else {
+                console.log('ℹ️ Last song has no audio file, but loaded lyrics successfully');
+            }
+        } else {
+            console.warn('⚠️ Last song not found in library, clearing from storage');
+            StorageManager.clearLastOpenedSong();
         }
     } else {
         // Even if no last song, reset the slider to zero
-        resetAudioSlider();
+        resetAudioSlider(true); // Force reset at startup
     }
 }
 
@@ -4759,18 +2972,15 @@ function seekToPendingTime() {
             const currentTime = audioController.audioPlayer.currentTime;
             const isSeekingForward = pendingSeekTime > currentTime;
             
-            // console.log(`🎯 SEEKING ${isSeekingForward ? 'forward' : 'backward'} from ${currentTime.toFixed(2)}s to ${pendingSeekTime.toFixed(2)}s`);
             
             // Mark that we're seeking to prevent timeupdate conflicts
             lastSeekTime = Date.now();
-            // console.log ("=====> Seeking to pending time: "+pendingSeekTime);
             // Perform the actual seek
             audioController.audioPlayer.currentTime = pendingSeekTime;
             
             // Clear the pending seek time
             pendingSeekTime = null;
             
-            // console.log('✅ Audio seeked successfully');
             
         } catch (error) {
             console.error('❌ Error seeking audio:', error);
@@ -4780,8 +2990,7 @@ function seekToPendingTime() {
 }
 
 // Reset audio slider to zero
-function resetAudioSlider() {
-    // console.log('🔄 RESETTING SLIDER TO ZERO!');
+function resetAudioSlider(forceLyricsReset = false) {
     
     // Clear any pending seek operation
     pendingSeekTime = null;
@@ -4796,7 +3005,6 @@ function resetAudioSlider() {
         if (sliderHandle) {
             // Reset handle position to 0% (left side)
             sliderHandle.style.left = '0%';
-            // console.log('✅ Squirrel slider handle reset to 0%');
             
             // Also look for progression element and reset it
             const progressionElements = scrubSlider.querySelectorAll('.hs-slider-progression, [class*="progression"]');
@@ -4804,16 +3012,13 @@ function resetAudioSlider() {
                 progressionElements.forEach(prog => {
                     prog.style.width = '0%';
                 });
-                // console.log('✅ Slider progression reset to 0%');
             }
             
             // If the slider has an internal value property, reset it too
             if (scrubSliderRef && scrubSliderRef.setValue) {
                 try {
                     scrubSliderRef.setValue(0);
-                    // console.log('✅ Squirrel slider setValue(0) called');
                 } catch (e) {
-                    console.log('⚠️ setValue failed:', e);
                 }
             }
         } else {
@@ -4821,39 +3026,23 @@ function resetAudioSlider() {
             const sliderInput = scrubSlider.querySelector('input[type="range"]');
             if (sliderInput) {
                 sliderInput.value = 0;
-                console.log('✅ Standard slider INPUT reset to 0%');
-            } else {
-                console.log('❌ Neither Squirrel handle nor standard input found!');
-            }
+            } 
         }
-    } else {
-        console.log('❌ Slider container not found! Will try again in 100ms...');
-        // If slider not found, try again after a short delay
-        // setTimeout(() => {
-        //     const delayedSlider = document.getElementById('audio_scrub_slider');
-        //     if (delayedSlider) {
-        //         const delayedHandle = document.getElementById('audio_scrub_slider_handle');
-        //         if (delayedHandle) {
-        //             delayedHandle.style.left = '0%';
-        //             console.log('✅ Squirrel slider handle reset DELAYED to 0%');
-        //         }
-        //     }
-        // }, 100);
-    }
+    } 
+ 
     
     // Reset time labels
     if (currentTimeLabel) {
         currentTimeLabel.textContent = '0:00';
-        // console.log('✅ Current time label reset');
     }
     if (totalTimeLabel) {
         totalTimeLabel.textContent = '0:00';
-        // console.log('✅ Total time label reset');
     }
     
-    // Reset timecode display
-    updateTimecodeDisplay(0);
-    // console.log('✅ Timecode display reset');
+    // Reset timecode display only if explicitly requested or when loading new songs
+    if (forceLyricsReset) {
+        updateTimecodeDisplay(0);
+    }
 }
 
 // Update scrub slider display
@@ -4892,8 +3081,11 @@ function updateScrubSliderDisplay(currentTime) {
             const currentSec = Math.floor(currentTime % 60);
             currentTimeLabel.textContent = `${currentMin}:${currentSec.toString().padStart(2, '0')}`;
             
-            // Update timecode
-            updateTimecodeDisplay(currentTime * 1000);
+            // Update timecode - but don't reset to zero if audio is still loaded and was playing
+            const shouldUpdateTimecode = currentTime > 0 || !audioController || !audioController.audioPlayer || audioController.audioPlayer.readyState === 0;
+            if (shouldUpdateTimecode) {
+                updateTimecodeDisplay(currentTime * 1000);
+            }
         }
     }
 }
@@ -4902,14 +3094,14 @@ function updateScrubSliderDisplay(currentTime) {
 function updateSliderDuration() {
     const totalTimeLabel = document.getElementById('total_time_label');
     
-    startupLog('📏 updateSliderDuration() called');
+    console.log('📏 updateSliderDuration() called');
     
     if (totalTimeLabel && audioController && audioController.audioPlayer) {
         const duration = audioController.audioPlayer.duration || 0;
         
-        startupLog(`📏 Audio duration found: ${duration}s`);
-        startupLog(`📏 Audio player ready state: ${audioController.audioPlayer.readyState}`);
-        startupLog(`📏 Audio player src: ${audioController.audioPlayer.src ? audioController.audioPlayer.src.substring(0, 50) + '...' : 'empty'}`);
+        console.log(`📏 Audio duration found: ${duration}s`);
+        console.log(`📏 Audio player ready state: ${audioController.audioPlayer.readyState}`);
+        console.log(`📏 Audio player src: ${audioController.audioPlayer.src ? audioController.audioPlayer.src.substring(0, 50) + '...' : 'empty'}`);
         
         if (duration > 0 && isFinite(duration)) {
             const durationMin = Math.floor(duration / 60);
@@ -4917,27 +3109,26 @@ function updateSliderDuration() {
             const timeString = `${durationMin}:${durationSec.toString().padStart(2, '0')}`;
             totalTimeLabel.textContent = timeString;
             
-            startupLog(`📏 ✅ Updated total_time_label to: ${timeString}`);
-            console.log(`📏 Updated audio duration display: ${timeString}`);
+            console.log(`📏 ✅ Updated total_time_label to: ${timeString}`);
         } else {
-            startupLog(`📏 ⚠️ Duration is ${duration} (invalid), will retry...`);
+            console.log(`📏 ⚠️ Duration is ${duration} (invalid), will retry...`);
             // Try again after a short delay if duration isn't available yet
             setTimeout(() => {
                 if (audioController && audioController.audioPlayer) {
                     const retryDuration = audioController.audioPlayer.duration;
-                    startupLog(`📏 🔄 Retrying - new duration: ${retryDuration}s, readyState: ${audioController.audioPlayer.readyState}`);
+                    console.log(`📏 🔄 Retrying - new duration: ${retryDuration}s, readyState: ${audioController.audioPlayer.readyState}`);
                     if (retryDuration > 0) {
-                        startupLog('📏 🔄 Retrying updateSliderDuration...');
+                        console.log('📏 🔄 Retrying updateSliderDuration...');
                         updateSliderDuration();
                     }
                 }
             }, 250);
         }
     } else {
-        startupLog('📏 ❌ Missing elements - totalTimeLabel: ' + !!totalTimeLabel + ', audioController: ' + !!audioController + ', audioPlayer: ' + !!(audioController && audioController.audioPlayer));
+        console.log('📏 ❌ Missing elements - totalTimeLabel: ' + !!totalTimeLabel + ', audioController: ' + !!audioController + ', audioPlayer: ' + !!(audioController && audioController.audioPlayer));
         
         if (audioController && audioController.audioPlayer) {
-            startupLog(`📏 Audio player details - src: ${audioController.audioPlayer.src ? 'present' : 'empty'}, readyState: ${audioController.audioPlayer.readyState}`);
+            console.log(`📏 Audio player details - src: ${audioController.audioPlayer.src ? 'present' : 'empty'}, readyState: ${audioController.audioPlayer.readyState}`);
         }
     }
 }
@@ -4969,23 +3160,6 @@ if (document.readyState === 'loading') {
 }
 
 // AUv3 Host compatibility functions
-function updateTimecode(timecodeMs) {
-    // Convert to seconds for display
-    const seconds = (timecodeMs / 1000).toFixed(3);
-    
-    // Update timecode display element
-    const timecodeElement = document.getElementById('timecode-display');
-    if (timecodeElement) {
-        timecodeElement.textContent = `${seconds}s`;
-        // Ne plus modifier la couleur de fond pour garder le style du thème
-    }
-    
-    // Update lyrics display with the timecode
-    if (lyricsDisplay) {
-        lyricsDisplay.updateTime(timecodeMs);
-    }
-}
-
 function displayTransportInfo(isPlaying, playheadPosition, sampleRate) {
     // Convert position to milliseconds
     const positionMs = (playheadPosition / sampleRate) * 1000;
@@ -4998,16 +3172,60 @@ function displayTransportInfo(isPlaying, playheadPosition, sampleRate) {
     if (timecodeElement) {
         const seconds = (positionMs / 1000).toFixed(3);
         timecodeElement.textContent = `${seconds}s`; // Only show time, no icons
-        // Ne plus modifier la couleur de fond pour garder le style du thème
+        // No longer modify background color to keep theme style
     }
 }
 
 // Expose functions globally for AUv3 host access
 window.updateTimecode = updateTimecode;
+
+// File import dialog function
+function showFileImportDialog() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = false;
+    // Remove accept attribute to allow ALL file types, including .lrx
+    // input.accept = '.txt,.lrc,.json,.lrx,.md,.lyrics,.mp3,.m4a,.wav,.aac,.flac,.ogg,.webm,audio/*,text/*,application/json,application/octet-stream,*/*';
+    input.style.display = 'none';
+    
+    input.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            try {
+                // Use the drag drop manager to process the file
+                if (dragDropManager) {
+                    await dragDropManager.processFile(file);
+                } else {
+                    console.error('❌ DragDropManager not available');
+                }
+            } catch (error) {
+                console.error('❌ Error processing file:', error);
+                Modal({
+                    title: '❌ File Import Error',
+                    content: `<p>Failed to import file: ${error.message}</p>`,
+                    buttons: [{ text: 'OK' }],
+                    size: 'small'
+                });
+            }
+        }
+        // Clean up
+        if (input.parentNode) {
+            input.parentNode.removeChild(input);
+        }
+    });
+    
+    document.body.appendChild(input);
+    input.click();
+}
 window.displayTransportInfo = displayTransportInfo;
 window.loadAndDisplaySong = loadAndDisplaySong;
 window.navigateToPreviousSong = navigateToPreviousSong;
 window.navigateToNextSong = navigateToNextSong;
+window.exportAllSongsToLRX = exportAllSongsToLRX;
+window.exportSelectedSongsAsTextWithFolderDialog = exportSelectedSongsAsTextWithFolderDialog;
+window.showFileImportDialog = showFileImportDialog;
+window.resetAudioSlider = resetAudioSlider;
+window.updateSliderDuration = updateSliderDuration;
 
 // Export for global access
 window.Lyrix = {
@@ -5025,7 +3243,6 @@ window.Lyrix = {
     displayTransportInfo,
     testMidi: () => {
         if (midiUtilities) {
-            console.log('🧪 Testing MIDI from window.Lyrix...');
             midiUtilities.testMidiData();
         } else {
             console.error('❌ MIDI utilities not available');
@@ -5061,3 +3278,4 @@ export {
 };
 
 
+// grab('view').style.backgroundColor = 'black'; // patch for notch support

@@ -19,6 +19,8 @@ public class iCloudFileManager: ObservableObject {
     // Pour stocker le delegate du Document Picker
     private var documentPickerDelegate: DocumentPickerDelegate?
     private var documentPickerLoadDelegate: DocumentPickerLoadDelegate?
+    // Persisté pour ne pas redemander à chaque lancement
+    private var fileAccessGrantedOnce: Bool = UserDefaults.standard.bool(forKey: "AtomeFileAccessGranted")
     
     private init() {
         checkiCloudAvailability()
@@ -115,8 +117,23 @@ public class iCloudFileManager: ObservableObject {
         
         // Si c'est l'app principale, synchroniser les fichiers depuis App Groups
         let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-        if !bundleIdentifier.contains(".appex") {
+        let isApp = !bundleIdentifier.contains(".appex")
+        if isApp {
+            // Première passe : AppGroup -> Visible
             syncFromAppGroupsToVisibleDocuments()
+            // Deuxième passe : Visible -> AppGroup (pour récupérer les fichiers déjà présents côté app)
+            syncFromVisibleDocumentsToAppGroups()
+        }
+        // Lancer sync globale après init (newest-wins sur les 2-3 racines)
+        FileSyncCoordinator.shared.syncAll(force: true)
+        // Démarrer l'auto-sync:
+        // Avant: seulement côté app principale -> latence de propagation depuis l'extension.
+        // Maintenant: activer aussi dans l'extension AUv3 mais avec intervalle plus court pour réduire délai d'apparition.
+        if isApp {
+            FileSyncCoordinator.shared.startAutoSync(every: 8)
+        } else {
+            // Extension: intervalle un peu plus long pour limiter coût mais éviter longues attentes
+            FileSyncCoordinator.shared.startAutoSync(every: 12)
         }
     }
     
@@ -196,8 +213,11 @@ public class iCloudFileManager: ObservableObject {
             // Create welcome file directement dans Documents
             createWelcomeFile(at: baseURL, isLocal: isLocal)
             
-            isInitialized = true
-            syncEnabled = !isLocal
+            // Pour éviter l'avertissement SwiftUI publier pendant update de vue, poster sur le main thread
+            DispatchQueue.main.async {
+                self.isInitialized = true
+                self.syncEnabled = !isLocal
+            }
             print("✅ File structure initialization successful (\(isLocal ? "Local" : "iCloud"))")
             
         } catch {
@@ -471,31 +491,135 @@ public class iCloudFileManager: ObservableObject {
         print("🔥 SWIFT: bundleIdentifier = \(bundleIdentifier)")
         
         // ÉTAPE CRITIQUE : Demander l'autorisation d'accès aux fichiers
-        print("🔐 SWIFT: Demande d'autorisation d'accès aux fichiers...")
-        self.requestFileAccessPermission(from: viewController) { [weak self] granted in
-            guard granted else {
-                print("❌ SWIFT: Autorisation d'accès aux fichiers refusée")
-                completion(false, nil, nil, NSError(domain: "FileAccess", code: -1, userInfo: [NSLocalizedDescriptionKey: "L'autorisation d'accès aux fichiers est requise"]))
+        if fileAccessGrantedOnce {
+            print("🔐 SWIFT: Permission déjà accordée précédemment – skip alerte")
+            DispatchQueue.main.async {
+                self.proceedWithDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
+            }
+        } else {
+            print("🔐 SWIFT: Demande d'autorisation d'accès aux fichiers...")
+            self.requestFileAccessPermission(from: viewController) { [weak self] granted in
+                guard let self = self else { return }
+                guard granted else {
+                    print("❌ SWIFT: Autorisation d'accès aux fichiers refusée")
+                    completion(false, nil, nil, NSError(domain: "FileAccess", code: -1, userInfo: [NSLocalizedDescriptionKey: "L'autorisation d'accès aux fichiers est requise"]))
+                    return
+                }
+                self.fileAccessGrantedOnce = true
+                print("✅ SWIFT: Autorisation d'accès aux fichiers accordée (will present picker après petit délai)")
+                // Délai pour laisser l'alerte se dismiss proprement avant de présenter le picker
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    self.proceedWithDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
+                }
+            }
+        }
+    }
+
+    // MARK: - Multiple files loader
+    public func loadFilesWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
+        print("🔥 SWIFT: loadFilesWithDocumentPicker (multiple) appelé")
+        if fileAccessGrantedOnce {
+            DispatchQueue.main.async { self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion) }
+        } else {
+            self.requestFileAccessPermission(from: viewController) { [weak self] granted in
+                guard let self = self else { return }
+                guard granted else { completion(false, nil, NSError(domain: "FileAccess", code: -1, userInfo: [NSLocalizedDescriptionKey: "Permission requise"])) ; return }
+                self.fileAccessGrantedOnce = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
+                }
+            }
+        }
+    }
+
+    // MARK: - Import direct: picker -> stockage local (avec option renommage)
+    public func importFileToRelativePath(fileTypes: [String], requestedDestPath: String, from viewController: UIViewController, completion: @escaping (Bool, String?, Error?) -> Void) {
+        print("📥 SWIFT: importFileToRelativePath demandé dest='\(requestedDestPath)' types=\(fileTypes)")
+        self.loadFileWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, data, originalName, error in
+            guard let self = self else { return }
+            guard success, let data = data, let originalName = originalName else {
+                completion(false, nil, error ?? NSError(domain: "Import", code: -2, userInfo: [NSLocalizedDescriptionKey:"Selection échouée"]))
                 return
             }
-            
-            print("✅ SWIFT: Autorisation d'accès aux fichiers accordée")
-            self?.proceedWithDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
+            let finalRelPath = self.normalizeDestination(originalName: originalName, requested: requestedDestPath)
+            print("📥 SWIFT: Import -> sauvegarde sous relPath='\(finalRelPath)'")
+            self.saveFile(data: data, to: finalRelPath) { ok, saveErr in
+                completion(ok, ok ? finalRelPath : nil, saveErr)
+            }
         }
+    }
+
+    // MARK: - Import multiple vers un dossier
+    public func importFilesToRelativeFolder(fileTypes: [String], requestedDestPath: String, from viewController: UIViewController, completion: @escaping (Bool, [String]?, Error?) -> Void) {
+        print("📥 SWIFT: importFilesToRelativeFolder demandé dest='\(requestedDestPath)' types=\(fileTypes)")
+        self.loadFilesWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, results, error in
+            guard let self = self else { return }
+            guard success, let results = results, !results.isEmpty else {
+                completion(false, nil, error ?? NSError(domain: "ImportMultiple", code: -3, userInfo: [NSLocalizedDescriptionKey:"Aucun fichier sélectionné"]))
+                return
+            }
+            let folder = self.normalizeFolderDestination(requested: requestedDestPath)
+            print("📥 SWIFT: Dossier destination normalisé = '\(folder)' (vide -> racine)")
+            var saved: [String] = []
+            var lastError: Error?
+            let group = DispatchGroup()
+            for (name,data) in results {
+                let relPath = folder.isEmpty ? name : folder + "/" + name
+                group.enter()
+                self.saveFile(data: data, to: relPath) { ok, err in
+                    if ok { saved.append(relPath) } else { lastError = err }
+                    group.leave()
+                }
+            }
+            group.notify(queue: .main) {
+                if saved.isEmpty { completion(false, nil, lastError ?? NSError(domain: "ImportMultiple", code: -4, userInfo: [NSLocalizedDescriptionKey:"Echec copie"])) }
+                else { completion(true, saved, lastError) }
+            }
+        }
+    }
+
+    private func normalizeDestination(originalName: String, requested: String) -> String {
+        var req = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+        if req.hasPrefix("./") { req.removeFirst(2) }
+        if req == "." { req = "" }
+        if req.isEmpty { return originalName }
+        if req.hasSuffix("/") { return req + originalName }
+        // S'il y a un chemin complet, déterminer si dernier composant a une extension
+        let last = (req as NSString).lastPathComponent
+        if last.contains(".") { return req } // suppose que c'est un nom de fichier complet
+        // Sinon traiter comme dossier
+        return req + "/" + originalName
+    }
+
+    private func normalizeFolderDestination(requested: String) -> String {
+        var req = requested.trimmingCharacters(in: .whitespacesAndNewlines)
+        if req.hasPrefix("./") { req.removeFirst(2) }
+        if req == "." { return "" }
+        if req.isEmpty { return "" }
+        // Si fourni un chemin qui ressemble à un fichier (a une extension) on prend juste son dossier parent
+        let last = (req as NSString).lastPathComponent
+        if last.contains(".") { return ((req as NSString).deletingLastPathComponent) }
+        return req.hasSuffix("/") ? String(req.dropLast()) : req
     }
     
     // MARK: - Demande d'autorisation d'accès aux fichiers
     private func requestFileAccessPermission(from viewController: UIViewController, completion: @escaping (Bool) -> Void) {
+        if fileAccessGrantedOnce {
+            print("🔐 SWIFT: requestFileAccessPermission – déjà accordée")
+            completion(true)
+            return
+        }
         print("🔐 SWIFT: Présentation de la demande d'autorisation...")
-        
         let alert = UIAlertController(
             title: "Accès aux fichiers",
-            message: "Atome a besoin d'accéder à vos fichiers pour charger vos projets. Vous allez être redirigé vers le sélecteur de fichiers iOS.\n\n⚠️ Important : Vous devez d'abord naviguer vers le dossier 'Atome' dans 'Sur mon iPhone/iPad' et toucher 'Sélectionner' pour autoriser l'accès, puis choisir votre fichier.",
+            message: "Atome va ouvrir le sélecteur de fichiers iOS pour choisir un fichier audio ou projet. Cette étape ne sera demandée qu'une seule fois (réinitialisable).",
             preferredStyle: .alert
         )
         
-        alert.addAction(UIAlertAction(title: "Continuer", style: .default) { _ in
-            print("✅ SWIFT: Utilisateur a accepté - ouverture Document Picker")
+        alert.addAction(UIAlertAction(title: "Continuer", style: .default) { [weak self] _ in
+            print("✅ SWIFT: Utilisateur a accepté - ouverture Document Picker (après dismissal)")
+            self?.fileAccessGrantedOnce = true
+            UserDefaults.standard.set(true, forKey: "AtomeFileAccessGranted")
             completion(true)
         })
         
@@ -508,75 +632,105 @@ public class iCloudFileManager: ObservableObject {
             viewController.present(alert, animated: true)
         }
     }
+
+    // Réinitialiser l'autorisation personnalisée (pas une permission système, juste notre flag interne)
+    public func resetFileAccessPermission() {
+        print("🔄 SWIFT: resetFileAccessPermission appelé")
+        fileAccessGrantedOnce = false
+        UserDefaults.standard.removeObject(forKey: "AtomeFileAccessGranted")
+    }
     
     // MARK: - Procéder avec le Document Picker après autorisation
     private func proceedWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, Data?, String?, Error?) -> Void) {
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-        
-        if bundleIdentifier.contains(".appex") {
-            print("🔥 SWIFT: Extension AUv3 détectée - utilisation Document Picker pour import")
-            
-            // Stocker le delegate pour éviter qu'il soit libéré
-            self.documentPickerLoadDelegate = DocumentPickerLoadDelegate { [weak self] success, data, fileName, error in
-                print("🔥 SWIFT: DocumentPickerLoadDelegate callback - success: \(success), fileName: \(fileName ?? "nil"), error: \(String(describing: error))")
-                self?.documentPickerLoadDelegate = nil // Libérer après utilisation
-                completion(success, data, fileName, error)
+        print("🔥 SWIFT: proceedWithDocumentPicker (contexte unifié app/extension)")
+        // Stocker le delegate pour éviter qu'il soit libéré
+        self.documentPickerLoadDelegate = DocumentPickerLoadDelegate { [weak self] success, data, fileName, error in
+            print("🔥 SWIFT: DocumentPickerLoadDelegate callback - success: \(success), fileName: \(fileName ?? "nil"), error: \(String(describing: error))")
+            self?.documentPickerLoadDelegate = nil // Libérer après utilisation
+            completion(success, data, fileName, error)
+        }
+        print("🔥 SWIFT: DocumentPickerLoadDelegate créé")
+        // Créer UTTypes
+        var utTypes: [UTType] = []
+        for fileType in fileTypes {
+            switch fileType.lowercased() {
+            case "atome":
+                if let atomeType = UTType("one.atome.app.atome-project") { utTypes.append(atomeType); print("🔥 SWIFT: UTType personnalisé 'atome'") }
+                else if let genericAtome = UTType(filenameExtension: "atome") { utTypes.append(genericAtome); print("🔥 SWIFT: UTType générique 'atome'") }
+                else { utTypes.append(.data) }
+            case "json": utTypes.append(.json)
+            case "txt": utTypes.append(.text)
+            case "m4a": if let t = UTType(filenameExtension: "m4a") { utTypes.append(t) } else { utTypes.append(.mpeg4Audio) }
+            case "mp3": if #available(iOS 15.0, *) { utTypes.append(UTType.mp3) } else { utTypes.append(.audio) }
+            case "wav": if #available(iOS 15.0, *) { utTypes.append(UTType.wav) } else { utTypes.append(.audio) }
+            default: utTypes.append(.data)
             }
-            
-            print("🔥 SWIFT: DocumentPickerLoadDelegate créé")
-            
-            // Créer les types de documents supportés avec UTType personnalisé pour .atome
-            var utTypes: [UTType] = []
-            for fileType in fileTypes {
-                switch fileType.lowercased() {
-                case "atome":
-                    // Utiliser le UTType personnalisé déclaré dans Info.plist
-                    if let atomeType = UTType("one.atome.app.atome-project") {
-                        utTypes.append(atomeType)
-                        print("🔥 SWIFT: UTType personnalisé 'atome' ajouté")
-                    } else if let genericAtome = UTType(filenameExtension: "atome") {
-                        utTypes.append(genericAtome)
-                        print("🔥 SWIFT: UTType générique 'atome' ajouté")
-                    } else {
-                        utTypes.append(UTType.data)
-                        print("🔥 SWIFT: UTType fallback 'data' ajouté pour atome")
-                    }
-                case "json":
-                    utTypes.append(UTType.json)
-                case "txt":
-                    utTypes.append(UTType.text)
-                default:
-                    utTypes.append(UTType.data)
-                }
+        }
+        utTypes.append(.audio)
+        utTypes.append(.data)
+        utTypes.append(.item)
+        utTypes.append(.content)
+        print("🔥 SWIFT: Types UTType créés: \(utTypes)")
+        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
+        documentPicker.delegate = self.documentPickerLoadDelegate
+        documentPicker.modalPresentationStyle = .fullScreen
+        documentPicker.allowsMultipleSelection = false
+        documentPicker.shouldShowFileExtensions = true
+        print("🔥 SWIFT: DocumentPickerViewController prêt (unifié)")
+        DispatchQueue.main.async {
+            print("🔥 SWIFT: Présentation du Document Picker (unifié)")
+            viewController.present(documentPicker, animated: true) {
+                print("� SWIFT: Document Picker visible (app ou extension)")
             }
-            
-            // Ajouter des types supplémentaires pour être sûr que l'utilisateur voit tous les fichiers
-            utTypes.append(UTType.data)
-            utTypes.append(UTType.item)
-            utTypes.append(UTType.content)
-            
-            print("🔥 SWIFT: Types UTType créés: \(utTypes)")
-            
-            let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
-            documentPicker.delegate = self.documentPickerLoadDelegate
-            documentPicker.modalPresentationStyle = .formSheet
-            documentPicker.allowsMultipleSelection = false
-            documentPicker.shouldShowFileExtensions = true
-            
-            print("🔥 SWIFT: DocumentPickerViewController pour import créé")
-            print("🔥 SWIFT: Tentative de présentation du Document Picker pour import...")
-            
-            DispatchQueue.main.async {
-                print("🔥 SWIFT: Sur main thread - présentation du Document Picker pour import")
-                viewController.present(documentPicker, animated: true) {
-                    print("🔥 SWIFT: Document Picker pour import présenté avec succès")
-                    print("📱 SWIFT: L'utilisateur doit maintenant naviguer vers le dossier Atome et sélectionner un fichier")
-                }
+        }
+    }
+    private func proceedWithMultipleDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
+        print("🔥 SWIFT: proceedWithMultipleDocumentPicker")
+        let multipleDelegate = DocumentPickerLoadMultipleDelegate { success, results, error in
+            completion(success, results, error)
+        }
+        // Retenir via objc_setAssociatedObject sur viewController pour durée de vie
+        objc_setAssociatedObject(viewController, "DocumentPickerLoadMultipleDelegate", multipleDelegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        var utTypes: [UTType] = []
+        for fileType in fileTypes {
+            switch fileType.lowercased() {
+            case "atome": if let t = UTType("one.atome.app.atome-project") ?? UTType(filenameExtension: "atome") { utTypes.append(t) } else { utTypes.append(.data) }
+            case "json": utTypes.append(.json)
+            case "txt": utTypes.append(.text)
+            case "m4a": if let t = UTType(filenameExtension: "m4a") { utTypes.append(t) } else { utTypes.append(.mpeg4Audio) }
+            case "mp3": if #available(iOS 15.0, *) { utTypes.append(UTType.mp3) } else { utTypes.append(.audio) }
+            case "wav": if #available(iOS 15.0, *) { utTypes.append(UTType.wav) } else { utTypes.append(.audio) }
+            default: utTypes.append(.data)
             }
-            
-        } else {
-            print("🔥 SWIFT: App principale détectée - méthode alternative non implémentée")
-            completion(false, nil, nil, NSError(domain: "iCloudFileManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Load with Document Picker only available in AUv3 extension"]))
+        }
+        utTypes.append(contentsOf: [.audio, .data, .item, .content])
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
+        picker.delegate = multipleDelegate
+        picker.allowsMultipleSelection = true
+        picker.shouldShowFileExtensions = true
+        picker.modalPresentationStyle = .fullScreen
+        DispatchQueue.main.async { viewController.present(picker, animated: true) }
+    }
+    // MARK: - Helpers présentation picker
+    private func topViewController(from root: UIViewController?) -> UIViewController? {
+        guard let root = root else { return nil }
+        if let presented = root.presentedViewController { return topViewController(from: presented) }
+        if let nav = root as? UINavigationController { return topViewController(from: nav.visibleViewController) }
+        if let tab = root as? UITabBarController { return topViewController(from: tab.selectedViewController) }
+        return root
+    }
+    private func presentDocumentPickerSafely(_ picker: UIDocumentPickerViewController, from baseVC: UIViewController) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if baseVC.presentedViewController is UIDocumentPickerViewController { print("⚠️ SWIFT: Picker déjà présenté"); return }
+            let top = self.topViewController(from: baseVC) ?? baseVC
+            if let presented = top.presentedViewController, presented is UIAlertController {
+                print("⏳ SWIFT: Alerte encore affichée, retry dans 0.3s")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.presentDocumentPickerSafely(picker, from: baseVC) }
+                return
+            }
+            print("🔥 SWIFT: Présentation Document Picker depuis: \(type(of: top)))")
+            top.present(picker, animated: true) { print("📱 SWIFT: Document Picker visible (confirmé)") }
         }
     }
     
@@ -646,6 +800,51 @@ public class iCloudFileManager: ObservableObject {
             
         } catch {
             print("❌ Erreur lors de la synchronisation: \(error)")
+        }
+    }
+
+    // MARK: - Reverse Synchronisation (Visible -> App Groups)
+    private func syncFromVisibleDocumentsToAppGroups() {
+        print("🔄 Synchronisation depuis Documents visible vers App Groups...")
+        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
+            print("❌ App Groups non disponible pour reverse sync")
+            return
+        }
+        let appGroupDocuments = groupURL.appendingPathComponent("Documents")
+        let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+        do {
+            let fm = FileManager.default
+            let folders = ["Projects", "Exports", "Recordings", "Templates"]
+            // Créer racine Documents si nécessaire côté App Group
+            try fm.createDirectory(at: appGroupDocuments, withIntermediateDirectories: true)
+            for folder in folders {
+                let srcFolder = visibleDocuments.appendingPathComponent(folder)
+                let dstFolder = appGroupDocuments.appendingPathComponent(folder)
+                if fm.fileExists(atPath: srcFolder.path) {
+                    if !fm.fileExists(atPath: dstFolder.path) {
+                        try fm.createDirectory(at: dstFolder, withIntermediateDirectories: true)
+                    }
+                    let contents = try fm.contentsOfDirectory(at: srcFolder, includingPropertiesForKeys: [.contentModificationDateKey])
+                    for srcFile in contents {
+                        let dstFile = dstFolder.appendingPathComponent(srcFile.lastPathComponent)
+                        var shouldCopy = false
+                        if !fm.fileExists(atPath: dstFile.path) { shouldCopy = true }
+                        else {
+                            let srcDate = try srcFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                            let dstDate = try dstFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                            if let s = srcDate, let d = dstDate, s > d { try fm.removeItem(at: dstFile); shouldCopy = true }
+                        }
+                        if shouldCopy {
+                            try fm.copyItem(at: srcFile, to: dstFile)
+                            print("📄 Copié: \(srcFile.lastPathComponent) vers App Groups")
+                        }
+                    }
+                }
+            }
+            print("✅ Synchronisation Documents visible → App Groups terminée")
+        } catch {
+            print("❌ Erreur reverse sync: \(error)")
         }
     }
     
@@ -734,5 +933,23 @@ class DocumentPickerLoadDelegate: NSObject, UIDocumentPickerDelegate {
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
         print("🔥 SWIFT: documentPickerLoad was cancelled")
         completion(false, nil, nil, NSError(domain: "DocumentPickerLoad", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
+    }
+}
+
+// MARK: - Multiple selection delegate
+class DocumentPickerLoadMultipleDelegate: NSObject, UIDocumentPickerDelegate {
+    private let completion: (Bool, [(String, Data)]?, Error?) -> Void
+    init(completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) { self.completion = completion }
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        print("🔥 SWIFT: multiple didPickDocumentsAt count=\(urls.count)")
+        var results: [(String, Data)] = []
+        for url in urls {
+            let started = url.startAccessingSecurityScopedResource(); defer { if started { url.stopAccessingSecurityScopedResource() } }
+            if let data = try? Data(contentsOf: url) { results.append((url.lastPathComponent, data)) }
+        }
+        completion(!results.isEmpty, results.isEmpty ? nil : results, results.isEmpty ? NSError(domain: "DocumentPickerMultiple", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data"]) : nil)
+    }
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        completion(false, nil, NSError(domain: "DocumentPickerMultiple", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
     }
 }

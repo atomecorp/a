@@ -36,11 +36,37 @@
 // import('./examples/leaflet.js');
 // import('./examples/audio.js');
 
-//  import('./examples/audio_swift.js');
+// import('./examples/audio_swift.js'); // Active les boutons audio (routeButton Local/Auto/Host + C4/A4/E5/Chord)
 // import('./examples/console_to_swift.js');
 
+
+
+//  import('./examples/audio_basic.js');
+////////////////////
 import('./lyrix/index.js');
+// import('./ios_audio_bridge.js');
+// import('./ios_file_lister.js');
+// import('./ios_file_reader.js');
+// import('./ios_file_writer.js');
+// import('./ios_web_view_filereader.js');
+
+// import('./auv3_file_lister.js');
+// import('./auv3_file_writer.js');
+// import('./test_and_rd.js');
+
+////
+// import('./examples/web_swift_audio_test.js');
+// import('./examples/import_muliple_ios.js');
+// import('./examples/auv3file_browser.js');
+// import('./examples/swift_server.js');
+////
+
+
+
 // import('./examples/ios_apis.js');
+
+// import('./examples/localstorage_reader.js');
+
 
 // import('./examples/web_recorder.js');
 // import('./examples/web_navigation.js');
