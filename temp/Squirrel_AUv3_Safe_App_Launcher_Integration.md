@@ -1,5 +1,6 @@
-Important :  all the JS code must be written in the file : src/application/examples/app_launcher.js
-Important : iintegrate this solution into the framework without breaking any other facilities using  the Squirrel philisophy and Architecure avoiding any duplicated code 
+Important 1:  all the JS code must be written in the file : src/application/examples/app_launcher.js
+Important 2: iintegrate this solution into the framework without breaking any other facilities using  the Squirrel philisophy and Architecure avoiding any duplicated code 
+Important 3: add XCode log when launching an app to be able to debug incase it doesn't work
 
 # Squirrel AUv3 Safe App Launcher Integration (Swift/Objective‑C) — Copilot Task Brief
 
