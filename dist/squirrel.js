@@ -77,10 +77,16 @@
   })();
 
   // Add extensions to native JavaScript objects (similar to Ruby)
-  Object.prototype.define_method = function (name, fn) {
-      this[name] = fn;
-      return this;
-  };
+  // Use non-enumerable properties to avoid contaminating for...in loops
+  Object.defineProperty(Object.prototype, 'define_method', {
+      value: function (name, fn) {
+          this[name] = fn;
+          return this;
+      },
+      enumerable: false,    // Crucial: ne pas apparaître dans for...in
+      writable: false,
+      configurable: false
+  });
 
   // Add methods to Array to mimic Ruby behavior
   Array.prototype.each = function (callback) {
@@ -88,10 +94,16 @@
       return this;
   };
 
-  // Extend the Object class to allow inspection
-  Object.prototype.inspect = function () {
-      return AJS.inspect(this);
-  };
+  // Extend the Object class to allow inspection  
+  // Use non-enumerable property to avoid contaminating for...in loops
+  Object.defineProperty(Object.prototype, 'inspect', {
+      value: function () {
+          return AJS.inspect(this);
+      },
+      enumerable: false,    // Crucial: ne pas apparaître dans for...in
+      writable: false,
+      configurable: false
+  });
 
   // Add a wait function for delays (promisified version is more modern)
   const wait = (delay, callback) => {
@@ -120,6 +132,63 @@
       }
   };
 
+
+  // Function to completely clear the screen
+  window.clearScreen = function () {
+    const viewContainer = document.getElementById('view');
+    
+    if (viewContainer) {
+      // 1. Clean all events from children recursively
+      cleanupElementEvents(viewContainer);
+      
+      // 2. Empty the container
+      viewContainer.innerHTML = '';
+      
+      // 3. Clean global variables if needed
+      cleanupGlobalVariables();
+    }
+  };
+
+  // Recursive function to clean events
+  function cleanupElementEvents(element) {
+    // Clean events on the current element
+    if (element.removeAllEventListeners) {
+      element.removeAllEventListeners();
+    } else {
+      // Alternative method - clone the element to remove all events
+      element.cloneNode(false);
+      // Note: this method removes events but we'll rather use a manual approach
+    }
+    
+    // Recursively clean all children
+    Array.from(element.children).forEach(child => {
+      cleanupElementEvents(child);
+    });
+  }
+
+  // Function to clean global variables
+  function cleanupGlobalVariables() {
+    // Stop GSAP animations
+    if (window.gsap) {
+      gsap.killTweensOf("*");
+      gsap.globalTimeline.clear();
+    }
+    
+    // Clear timers
+    if (window.rotationAnimation) {
+      cancelAnimationFrame(window.rotationAnimation);
+      window.rotationAnimation = null;
+    }
+    
+    // Clear deformation variables
+    if (window.deformTweens) {
+      window.deformTweens.forEach(tween => {
+        if (tween && tween.kill) tween.kill();
+      });
+      window.deformTweens = [];
+    }
+  }
+
   var Apis = /*#__PURE__*/Object.freeze({
     __proto__: null
   });
@@ -127,7 +196,13 @@
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
 
   // Cache pour templates et conversions de styles
-  const createElement = (tag) => document.createElement(tag);
+  const createElement = (tag) => {
+    // Use createElementNS for SVG elements to ensure proper namespace
+    if (tag === 'svg') {
+      return document.createElementNS('http://www.w3.org/2000/svg', tag);
+    }
+    return document.createElement(tag);
+  };
   const templateRegistry = new Map();
   const cssCache = new Map();
 
@@ -205,6 +280,19 @@
     // Attributs basiques
     merged.id && (element.id = merged.id);
     merged.text && (element.textContent = merged.text);
+    merged.innerHTML && (element.innerHTML = merged.innerHTML);
+    
+    // Chargement SVG depuis fichier
+    if (merged.svgSrc) {
+      fetch(merged.svgSrc)
+        .then(response => response.text())
+        .then(svgContent => {
+          element.innerHTML = svgContent;
+        })
+        .catch(error => {
+          console.error(`Erreur lors du chargement du SVG ${merged.svgSrc}:`, error);
+        });
+    }
     
     // Classes via classList (optimisé)
     addClasses(element, merged.class);
@@ -261,6 +349,19 @@
     // Méthode de mise à jour
     element.$ = updateProps => {
       if ('text' in updateProps) element.textContent = updateProps.text;
+      if ('innerHTML' in updateProps) element.innerHTML = updateProps.innerHTML;
+      
+      // Mise à jour SVG depuis fichier
+      if ('svgSrc' in updateProps) {
+        fetch(updateProps.svgSrc)
+          .then(response => response.text())
+          .then(svgContent => {
+            element.innerHTML = svgContent;
+          })
+          .catch(error => {
+            console.error(`Erreur lors du chargement du SVG ${updateProps.svgSrc}:`, error);
+          });
+      }
       
       if (updateProps.class) {
         addClasses(element, updateProps.class);
@@ -1179,6 +1280,36 @@
 
   // Registre des templates globaux
   const buttonTemplates = {
+     'squirrel_design': {
+      name: 'Material Design Green',
+      description: 'Style Material Design avec couleurs vertes',
+      css: {
+        fontFamily: 'Roboto, sans-serif',
+        fontSize: '12px',
+        fontWeight: '300',
+        textTransform: 'uppercase',
+        letterSpacing: '0.3px',
+        borderRadius: '3px',
+        border: 'none',
+        padding: '8px 9px',
+       
+
+        cursor: 'pointer',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        minWidth: '30px',
+        height: '19px'
+      },
+      onStyle: {
+          backgroundColor: 'rgba(99,99,99,1)',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.6)',
+           color: 'yellow',
+      },
+      offStyle: {
+        backgroundColor: 'rgba(69,69,69,1)',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+              color: 'orange',
+      }
+    },
     // === MATERIAL DESIGN ===
     'material_design_blue': {
       name: 'Material Design Blue',
@@ -1194,8 +1325,8 @@
         padding: '8px 16px',
         cursor: 'pointer',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-        backgroundColor: '#2196F3',
+        // boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        // backgroundColor: '#2196F3',
         color: 'white',
         minWidth: '64px',
         height: '36px'
@@ -1217,6 +1348,7 @@
         boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
       }
     },
+    
 
     'material_design_green': {
       name: 'Material Design Green',
@@ -1232,8 +1364,8 @@
         padding: '8px 16px',
         cursor: 'pointer',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-        backgroundColor: '#4CAF50',
+        // boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        // backgroundColor: '#4CAF50',
         color: 'white',
         minWidth: '64px',
         height: '36px'
@@ -1261,8 +1393,10 @@
         padding: '6px 12px',
         cursor: 'pointer',
         transition: 'all 0.15s ease-in-out',
-        backgroundColor: '#007bff',
-        borderColor: '#007bff',
+        // backgroundColor: '#007bff',
+        //  border: '12px solid rgba(255,255,255,0.2)',
+
+        // borderColor: '#007bff',
         color: 'white',
         minWidth: 'auto',
         height: 'auto'
@@ -1274,6 +1408,7 @@
       offStyle: {
         backgroundColor: '#6c757d',
         borderColor: '#5a6268'
+        
       },
       hover: {
         backgroundColor: '#0056b3',
@@ -1294,7 +1429,7 @@
         padding: '10px 20px',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        backgroundColor: '#3498db',
+        // backgroundColor: '#3498db',
         color: 'white',
         boxShadow: 'none'
       },
@@ -1321,9 +1456,9 @@
         padding: '12px 24px',
         cursor: 'pointer',
         transition: 'all 0.3s ease',
-        backgroundColor: '#e0e5ec',
-        color: '#333',
-        boxShadow: '6px 6px 12px #c5cad1, -6px -6px 12px #ffffff'
+        // backgroundColor: '#e0e5ec',
+        // color: '#333',
+        // boxShadow: '6px 6px 12px #c5cad1, -6px -6px 12px #ffffff'
       },
       onStyle: {
         backgroundColor: '#d1d9e6',
@@ -1346,14 +1481,14 @@
         fontSize: '14px',
         fontWeight: '500',
         borderRadius: '15px',
-        border: '1px solid rgba(255,255,255,0.2)',
+        // border: '1px solid rgba(255,255,255,0.2)',
         padding: '10px 20px',
         cursor: 'pointer',
         transition: 'all 0.3s ease',
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        // backgroundColor: 'rgba(255,255,255,0.1)',
         backdropFilter: 'blur(10px)',
         color: 'white',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+        // boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
       },
       onStyle: {
         backgroundColor: 'rgba(46, 213, 115, 0.3)',
@@ -1382,9 +1517,9 @@
         padding: '8px 16px',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
-        backgroundColor: '#000',
-        color: '#ff006e',
-        boxShadow: '0 0 10px rgba(255, 0, 110, 0.5)'
+        // backgroundColor: '#000',
+        // color: '#ff006e',
+        // boxShadow: '0 0 10px rgba(255, 0, 110, 0.5)'
       },
       onStyle: {
         backgroundColor: '#ff006e',
@@ -1492,13 +1627,18 @@
       padding: '8px 16px',
       border: '1px solid #ccc',
       borderRadius: '4px',
-      backgroundColor: '#f8f9fa',
-      color: '#333',
+      // backgroundColor: '#f8f9fa', // ❌ Retiré pour éviter les conflits
+      // color: '#333', // ❌ Retiré pour éviter les conflits
       fontSize: '14px',
       fontFamily: 'system-ui, sans-serif',
       cursor: 'pointer',
       transition: 'all 0.2s ease',
-      outline: 'none'
+    outline: 'none',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    WebkitTapHighlightColor: 'transparent',
+    WebkitTouchCallout: 'none',
+    WebkitUserDrag: 'none'
     },
     attrs: {
       type: 'button'
@@ -1514,7 +1654,14 @@
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: '6px',
-      fontSize: '16px'
+      fontSize: '16px',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+    pointerEvents: 'none',
+    WebkitUserDrag: 'none'
+    },
+    attrs: {
+      draggable: 'false'
     }
   });
 
@@ -1525,7 +1672,14 @@
     css: {
       fontSize: 'inherit',
       fontWeight: '400',
-      lineHeight: '1'
+      lineHeight: '1',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+    pointerEvents: 'none',
+    WebkitUserDrag: 'none'
+    },
+    attrs: {
+      draggable: 'false'
     }
   });
 
@@ -1543,11 +1697,16 @@
       borderRadius: '9px',
       backgroundColor: '#dc3545',
       color: 'white',
-      fontSize: '11px',
-      fontWeight: 'bold',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    pointerEvents: 'none',
+    WebkitUserDrag: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    fontWeight: '600',
+    lineHeight: '1'
     }
   });
 
@@ -1690,10 +1849,9 @@
     let finalStyles = {};
 
     if (isToggleMode) {
-      // Mode toggle: utiliser l'état initial pour déterminer le texte et les styles
+      // Mode toggle: utiliser l'état initial pour déterminer le texte
       finalText = currentToggleState ? (onText || text) : (offText || text);
-      const toggleStyles = currentToggleState ? processedConfig.onStyle : processedConfig.offStyle;
-      finalStyles = { ...toggleStyles };
+      // Note: Les styles d'état seront appliqués plus tard dans containerStyles
     } else if (isMultiStateMode) {
       // Mode multi-états: utiliser le premier état
       const firstState = states[0];
@@ -1704,27 +1862,46 @@
     // Styles de base selon variant et size
     let containerStyles = { ...buttonStyles[variant] || {}, ...buttonSizes[size] || {} };
 
-    // Application des styles personnalisés dans l'ordre de priorité
+    // ✅ FUSION COMPLÈTE AVANT CRÉATION DU BOUTON
     // 1. Styles de base (variant + size)
-    // 2. Styles de template
-    // 3. Styles de skin.container
-    // 4. Styles de toggle/états (onStyle/offStyle ou states.css)
-    // 5. Styles de config.css (priorité absolue)
-    
-    if (templateName && buttonTemplates[templateName]) {
+    if (templateName && processedConfig.css) {
+      // 2. Ajouter les styles du template fusionnés avec config
+      containerStyles = { ...containerStyles, ...processedConfig.css };
+    } else if (templateName && buttonTemplates[templateName]) {
+      // Fallback si pas de processedConfig.css
       containerStyles = { ...containerStyles, ...buttonTemplates[templateName].css };
+    } else if (processedConfig.css) {
+      // Pas de template, juste les styles utilisateur
+      containerStyles = { ...containerStyles, ...processedConfig.css };
     }
     
+    // 3. Ajouter les styles skin
     if (skin.container) {
       containerStyles = { ...containerStyles, ...skin.container };
     }
     
-    if (Object.keys(finalStyles).length > 0) {
+    // 4. ✅ FUSION FINALE : Ajouter les styles d'état initial AVANT création
+    if (isToggleMode && templateName && buttonTemplates[templateName]) {
+      // Récupérer les styles d'état du template
+      const templateStateStyles = currentToggleState ? 
+        (buttonTemplates[templateName].onStyle || {}) : 
+        (buttonTemplates[templateName].offStyle || {});
+      
+      // Récupérer les styles d'état de l'utilisateur
+      const userStateStyles = currentToggleState ? 
+        (processedConfig.onStyle || {}) : 
+        (processedConfig.offStyle || {});
+      
+      // Appliquer les styles d'état par-dessus tout
+      if (templateStateStyles && Object.keys(templateStateStyles).length > 0) {
+        containerStyles = { ...containerStyles, ...templateStateStyles };
+      }
+      if (userStateStyles && Object.keys(userStateStyles).length > 0) {
+        containerStyles = { ...containerStyles, ...userStateStyles };
+      }
+    } else if (Object.keys(finalStyles).length > 0) {
+      // Pour les modes non-toggle, appliquer finalStyles
       containerStyles = { ...containerStyles, ...finalStyles };
-    }
-    
-    if (processedConfig.css) {
-      containerStyles = { ...containerStyles, ...processedConfig.css };
     }
 
     // Styles pour état disabled
@@ -1749,17 +1926,32 @@
         }
         
         // Mettre à jour les styles
-        const newStyles = currentToggleState ? processedConfig.onStyle : processedConfig.offStyle;
-        const baseStyles = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
-        if (Object.keys(newStyles).length > 0) {
-          button.$({ css: { ...baseStyles, ...newStyles, ...processedConfig.css } });
-        }
+        // ✅ Récupérer les styles du template pour le nouvel état
+        const templateStateStyles = currentToggleState ? 
+          (templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].onStyle || {} : {}) : 
+          (templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].offStyle || {} : {});
+        
+        // ✅ Récupérer les styles utilisateur pour le nouvel état
+        const userStateStyles = currentToggleState ? 
+          (processedConfig.onStyle || {}) : 
+          (processedConfig.offStyle || {});
+        
+        // ✅ Fusionner les styles: template base + template state + user state + user css
+        const templateBase = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
+        const finalStyles = {
+          ...templateBase,        // 1. Template base styles
+          ...templateStateStyles, // 2. Template state styles (onStyle/offStyle from template)
+          ...userStateStyles,     // 3. User state styles (onStyle/offStyle from config)
+          ...processedConfig.css  // 4. User CSS overrides (highest priority)
+        };
+        
+        button.$({ css: finalStyles });
         
         // Exécuter l'action appropriée
-        if (currentToggleState && onAction) {
-          onAction(currentToggleState, button);
-        } else if (!currentToggleState && offAction) {
-          offAction(currentToggleState, button);
+        if (currentToggleState && button._handlers.onAction) {
+          button._handlers.onAction(currentToggleState, button);
+        } else if (!currentToggleState && button._handlers.offAction) {
+          button._handlers.offAction(currentToggleState, button);
         }
         
         // Callback de changement d'état
@@ -1805,23 +1997,59 @@
         
       } else {
         // Mode bouton classique
-        if (onClick) {
-          onClick(event, button);
+        if (button._handlers.onClick) {
+          button._handlers.onClick(event, button);
         }
       }
     };
 
     // Création du conteneur principal
+    // console.log('🔍 CSS final avant création DOM:', { backgroundColor: containerStyles.backgroundColor, color: containerStyles.color });
+    
+    // ✅ Nettoyer les styles CSS pour éviter les propriétés parasites
+    const cleanStyles = {};
+    // Utiliser Object.keys() au lieu de for...in pour éviter les propriétés héritées
+    Object.keys(containerStyles).forEach(key => {
+      if (typeof containerStyles[key] !== 'function' && key !== 'define_method' && key !== 'inspect') {
+        cleanStyles[key] = containerStyles[key];
+      }
+    });
+    
+    // console.log('🔍 cleanStyles:', { backgroundColor: cleanStyles.backgroundColor, color: cleanStyles.color });
+    
     const button = $('button-container', {
       id: buttonId,
-      css: containerStyles,
+      css: cleanStyles,
       attrs: { disabled },
       onClick: handleClick,
       ...otherProps
     });
 
+    // Empêcher la sélection/drag native pour que tout le bouton soit la cible
+    button.addEventListener('dragstart', (e) => e.preventDefault());
+    button.addEventListener('selectstart', (e) => e.preventDefault());
+
+    // ✅ FORCER TOUS les styles critiques manuellement
+    Object.keys(cleanStyles).forEach(key => {
+      if (typeof cleanStyles[key] !== 'function' && key !== 'define_method' && key !== 'inspect') {
+        const kebabKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+        button.style.setProperty(kebabKey, cleanStyles[key]);
+      }
+    });
+
+    // ✅ Debug: vérifier les styles appliqués dans le DOM
+    // console.log('🔍 Styles appliqués au DOM:', button.style.cssText);
+
     // Stocker la config pour référence
     button._config = processedConfig;
+
+    // === CORRECTION: INITIALISER LES HANDLERS DANS L'OBJET BOUTON ===
+    // Stocker les handlers dans l'objet bouton pour permettre leur modification
+    button._handlers = {
+      onClick: onClick,
+      onAction: onAction,
+      offAction: offAction
+    };
 
     // Appliquer les effets du template si disponible
     if (templateName && buttonTemplates[templateName]) {
@@ -2066,6 +2294,47 @@
       button.getStates = () => states;
     }
 
+    // === CORRECTION: EXPOSER LES HANDLERS COMME PROPRIÉTÉS MODIFIABLES ===
+
+    // Exposer onClick comme propriété getter/setter
+    Object.defineProperty(button, 'onClick', {
+      get() {
+        return this._handlers.onClick;
+      },
+      set(newHandler) {
+        this._handlers.onClick = newHandler;
+        console.log('✅ onClick handler mis à jour');
+      },
+      enumerable: true,
+      configurable: true
+    });
+
+    // Exposer onAction comme propriété getter/setter
+    Object.defineProperty(button, 'onAction', {
+      get() {
+        return this._handlers.onAction;
+      },
+      set(newHandler) {
+        this._handlers.onAction = newHandler;
+        console.log('✅ onAction handler mis à jour');
+      },
+      enumerable: true,
+      configurable: true
+    });
+
+    // Exposer offAction comme propriété getter/setter
+    Object.defineProperty(button, 'offAction', {
+      get() {
+        return this._handlers.offAction;
+      },
+      set(newHandler) {
+        this._handlers.offAction = newHandler;
+        console.log('✅ offAction handler mis à jour');
+      },
+      enumerable: true,
+      configurable: true
+    });
+
     return button;
   };
 
@@ -2092,7 +2361,7 @@
   createButton.getTemplate = (name) => buttonTemplates[name];
   createButton.addTemplate = (name, template) => {
     buttonTemplates[name] = template;
-    console.log(`✅ Template "${name}" ajouté`);
+    // console.log(`✅ Template "${name}" ajouté`);
     return createButton;
   };
 
@@ -2110,7 +2379,7 @@
   createButton.removeTemplate = (name) => {
     if (buttonTemplates[name]) {
       delete buttonTemplates[name];
-      console.log(`✅ Template "${name}" supprimé`);
+      // console.log(`✅ Template "${name}" supprimé`);
     } else {
       console.warn(`⚠️ Template "${name}" introuvable`);
     }
