@@ -43,8 +43,8 @@
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-// import('./lyrix/index.js');
-import('./examples/iOS_app_launcher.js');
+import('./lyrix/index.js');
+// import('./examples/iOS_app_launcher.js');
 // import('./ios_audio_bridge.js');
 // import('./ios_file_lister.js');
 // import('./ios_file_reader.js');

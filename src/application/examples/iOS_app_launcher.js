@@ -1,109 +1,77 @@
 
 
 
-// // === EXEMPLE 2: Champ de saisie (Input) + bouton « Open » (Squirrel syntax) ===
-// let urlToLaunch = 'shortcuts://run-shortcut?name=MyFlow';
+// === EXEMPLE 2: Champ de saisie (Input) + bouton « Open » (Squirrel syntax) ===
+let urlToLaunch = 'shortcuts://run-shortcut?name=MyFlow';
 
-// const inputRow = $('div', {
-//   parent: '#view',
-//   css: {
-//     display: 'flex',
-//     gap: '8px',
-//     alignItems: 'center',
-//     marginTop: '14px',
-//     backgroundColor: 'rgba(255,255,255,0.06)',
-//     padding: '8px',
-//     borderRadius: '8px'
-//   }
-// });
+const inputRow = $('div', {
+  parent: '#view',
+  css: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    marginTop: '14px',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    padding: '8px',
+    borderRadius: '8px'
+  }
+});
 
-// $('div', {
-//   parent: inputRow,
-//   text: 'URL:',
-//   css: {
-//     color: '#eee',
-//     fontSize: '12px',
-//     minWidth: '34px'
-//   }
-// });
+$('div', {
+  parent: inputRow,
+  text: 'URL:',
+  css: {
+    color: '#eee',
+    fontSize: '12px',
+    minWidth: '34px'
+  }
+});
 
-// const urlInput = $('input', {
-//   parent: inputRow,
-//   attrs: { type: 'text', value: urlToLaunch, placeholder: 'Enter URL scheme (ex: shortcuts://...)' },
-//   css: {
-//     flex: '1',
-//     height: '28px',
-//     lineHeight: '28px',
-//     padding: '0 10px',
-//     borderRadius: '6px',
-//     border: '1px solid rgba(255,255,255,0.25)',
-//     backgroundColor: '#1e232a',
-//     color: '#fff',
-//     outline: 'none'
-//   },
-//   onInput: (e) => {
-//     urlToLaunch = e.target.value || '';
-//   }
-// });
+const urlInput = $('input', {
+  parent: inputRow,
+  attrs: { type: 'text', value: urlToLaunch, placeholder: 'Enter URL scheme (ex: shortcuts://...)' },
+  css: {
+    flex: '1',
+    height: '28px',
+    lineHeight: '28px',
+    padding: '0 10px',
+    borderRadius: '6px',
+    border: '1px solid rgba(255,255,255,0.25)',
+    backgroundColor: '#1e232a',
+    color: '#fff',
+    outline: 'none'
+  },
+  onInput: (e) => {
+    urlToLaunch = e.target.value || '';
+  }
+});
 
-// Button({
-//   text: 'Open',
-//   parent: inputRow,
-//   css: {
-//     height: '28px',
-//     padding: '0 12px',
-//     backgroundColor: '#27986a',
-//     color: '#fff',
-//     border: 'none',
-//     borderRadius: '6px',
-//     cursor: 'pointer'
-//   },
-//   onClick: () => {
-//     const value = (urlToLaunch || '').trim();
-//     if (!value) { console.warn('No URL provided'); return; }
-//     try {
-//       // If a native bridge exists, use it; otherwise log for demo purposes.
-//       if (window.iOS?.openExternalURL) {
-//         window.iOS.openExternalURL(value);
-//       } else if (window.webkit?.messageHandlers?.ios?.postMessage) {
-//         window.webkit.messageHandlers.ios.postMessage({ type: 'openURL', url: value });
-//       } else {
-//         console.log('Open URL (demo):', value);
-//       }
-//     } catch (err) {
-//       console.error('Open URL failed:', err);
-//     }
-//   }
-// });
-function fct_to_trig(state) {
-    console.log('trig: ' + state);
-}
-
-function fct_to_trig2(state) {
-    console.log('trigger 2 : ' + state);
-}
-
-// === EXEMPLE 1: Votre bouton existant ===
-const toggle = Button({
-    onText: 'ON',
-    offText: 'OFF',
-    onAction: fct_to_trig,
-    offAction: fct_to_trig2,
-    parent: '#view', // parent direct
-    onStyle: { backgroundColor: '#28a745', color: 'white' },
-    offStyle: { backgroundColor: '#dc3545', color: 'white' },
-    css: {
-        width: '50px',
-        height: '24px',
-        left: '120px',
-        top: '120px',
-        borderRadius: '6px',
-        backgroundColor: 'orange',
-        position: 'relative',
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-        border: '3px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 2px 4px rgba(255,255,1,1)',
+Button({
+  text: 'Open',
+  parent: inputRow,
+  css: {
+    height: '28px',
+    padding: '0 12px',
+    backgroundColor: '#27986a',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer'
+  },
+  onClick: () => {
+    const value = (urlToLaunch || '').trim();
+    if (!value) { console.warn('No URL provided'); return; }
+    try {
+      // If a native bridge exists, use it; otherwise log for demo purposes.
+      if (window.iOS?.openExternalURL) {
+        window.iOS.openExternalURL(value);
+      } else if (window.webkit?.messageHandlers?.ios?.postMessage) {
+        window.webkit.messageHandlers.ios.postMessage({ type: 'openURL', url: value });
+      } else {
+        console.log('Open URL (demo):', value);
+      }
+    } catch (err) {
+      console.error('Open URL failed:', err);
     }
+  }
 });
