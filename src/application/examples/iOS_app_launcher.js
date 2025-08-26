@@ -62,13 +62,16 @@ Button({
     const value = (urlToLaunch || '').trim();
     if (!value) { console.warn('No URL provided'); return; }
     try {
-      // If a native bridge exists, use it; otherwise log for demo purposes.
-      if (window.iOS?.openExternalURL) {
+      // Prefer Squirrel bridge shared by app and AUv3
+      if (window.squirrel?.openURL) {
+        window.squirrel.openURL(value);
+      } else if (window.webkit?.messageHandlers && window.webkit.messageHandlers['squirrel.openURL']) {
+        window.webkit.messageHandlers['squirrel.openURL'].postMessage({ url: value });
+      } else if (window.iOS?.openExternalURL) {
+        // Legacy fallback if present
         window.iOS.openExternalURL(value);
-      } else if (window.webkit?.messageHandlers?.ios?.postMessage) {
-        window.webkit.messageHandlers.ios.postMessage({ type: 'openURL', url: value });
       } else {
-        console.log('Open URL (demo):', value);
+        console.log('Open URL (no native bridge):', value);
       }
     } catch (err) {
       console.error('Open URL failed:', err);

@@ -21,6 +21,7 @@ public final class URLOpener {
         lastOpenTime = now
 
         if let ctx = viewController?.extensionContext {
+            // AUv3 path: try direct open via NSExtensionContext, then relay to app for guaranteed processing
             print("🔗 URLOpener(AUv3): NSExtensionContext.open -> \(url.absoluteString)")
             var ok = false
             let sem = DispatchSemaphore(value: 0)
@@ -31,12 +32,21 @@ public final class URLOpener {
             }
             _ = sem.wait(timeout: .now() + 2.0)
             if !ok { print("⚠️ URLOpener(AUv3): timeout/failure for \(url.absoluteString)") }
+            // Always relay to container so it can open when foregroundActive
+            if let key = SharedBus.writeNoncePayload(urlString: url.absoluteString) {
+                print("📣 URLOpener(AUv3): relayed with key=\(key)")
+            }
+            // Nudge the app to foreground using activation scheme
+            if let activation = URL(string: SharedBus.activationURLString) {
+                ctx.open(activation) { success in
+                    print("🪄 URLOpener(AUv3): activation nudge success=\(success) url=\(activation.absoluteString)")
+                }
+            }
             return ok
         }
 
-    // No UIApplication fallback in AUv3 extension build
-
-        print("⚠️ URLOpener: no context/scene to open \(url.absoluteString)")
-        return false
+    // App path is handled by AppURLOpener (only compiled into the app target).
+    print("⚠️ URLOpener: no extensionContext; app path should use AppURLOpener")
+    return false
     }
 }
