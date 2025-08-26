@@ -50,6 +50,10 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(webView)
         WebViewManager.setupWebView(for: webView, audioController: self)
+    // Register JS -> Swift handler for safe URL launching (idempotent)
+    let cc = webView.configuration.userContentController
+    cc.removeScriptMessageHandler(forName: "squirrel.openURL")
+    cc.add(self, name: "squirrel.openURL")
         // Load custom scheme index
         if let url = URL(string: "atome://index.html") {
             webView.load(URLRequest(url: url))
@@ -251,8 +255,25 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     // MARK: - Cleanup
     
     deinit {
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "squirrel.openURL")
         midiController?.stopMIDIMonitoring()
         midiController = nil
         print("🧹 AudioUnitViewController cleanup: MIDI monitoring stopped")
+    }
+}
+
+// MARK: - WKScriptMessageHandler for URL launching
+extension AudioUnitViewController: WKScriptMessageHandler {
+    public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "squirrel.openURL" else { return }
+        guard let dict = message.body as? [String: Any], let urlString = dict["url"] as? String else {
+            print("⚠️ squirrel.openURL invalid message body: \(message.body)")
+            return
+        }
+        Task { @MainActor in
+            print("🔗 AUv3: openURL request -> \(urlString)")
+            let ok = URLOpener.open(urlString, from: self)
+            print("🔗 AUv3: openURL result=\(ok) url=\(urlString)")
+        }
     }
 }

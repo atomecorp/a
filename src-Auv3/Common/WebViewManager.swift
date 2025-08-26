@@ -132,11 +132,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 })();
         """
 
-        let contentController = webView.configuration.userContentController
+    let contentController = webView.configuration.userContentController
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         contentController.addUserScript(userScript)
-        contentController.add(WebViewManager.shared, name: "console")
-        contentController.add(WebViewManager.shared, name: "swiftBridge")
+    contentController.add(WebViewManager.shared, name: "console")
+    contentController.add(WebViewManager.shared, name: "swiftBridge")
+    // Bridge for URL launching from Squirrel examples
+    contentController.add(WebViewManager.shared, name: "squirrel.openURL")
         
         // Activation de l'API du système de fichiers (local storage)
         addFileSystemAPI(to: webView)
@@ -175,6 +177,43 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         switch message.name {
         case "console":
             // logs désactivés
+            break
+        case "squirrel.openURL":
+            if let body = message.body as? [String: Any], let urlString = body["url"] as? String {
+                // Determine if we're in an extension. If yes, this handler is typically overridden by AUv3 VC.
+                let isExtension: Bool = {
+                    let path = Bundle.main.bundlePath
+                    if path.hasSuffix(".appex") { return true }
+                    if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
+                    return false
+                }()
+                if isExtension {
+                    // AUv3 path: leave handling to AudioUnitViewController which has the extensionContext.
+                    print("ℹ️ squirrel.openURL received in extension; handling is registered in AUv3 controller")
+                } else {
+                    // App path: call AppURLOpener via Objective-C runtime to avoid static dependency in the AUv3 target
+                    var runtimeClass: AnyObject? = NSClassFromString("AppURLOpener")
+                    if runtimeClass == nil {
+                        // Try with module prefix if needed (Swift sometimes mangles names under module)
+                        let module = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? ""
+                        if !module.isEmpty {
+                            runtimeClass = NSClassFromString("\(module).AppURLOpener")
+                        }
+                    }
+                    if let cls = runtimeClass {
+                        let sel = Selector(("openFromJS:"))
+                        if cls.responds(to: sel) {
+                            _ = cls.perform(sel, with: urlString as NSString)
+                        } else {
+                            print("⚠️ AppURLOpener found but selector missing")
+                        }
+                    } else {
+                        print("⚠️ AppURLOpener class not found (tried plain and module-qualified)")
+                    }
+                }
+            } else {
+                print("⚠️ squirrel.openURL invalid message body: \(message.body)")
+            }
             break
         case "swiftBridge":
             if let body = message.body as? [String: Any] {
