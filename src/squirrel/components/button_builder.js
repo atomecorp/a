@@ -362,7 +362,12 @@ define('button-container', {
     fontFamily: 'system-ui, sans-serif',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    outline: 'none'
+  outline: 'none',
+  userSelect: 'none',
+  WebkitUserSelect: 'none',
+  WebkitTapHighlightColor: 'transparent',
+  WebkitTouchCallout: 'none',
+  WebkitUserDrag: 'none'
   },
   attrs: {
     type: 'button'
@@ -378,7 +383,14 @@ define('button-icon', {
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: '6px',
-    fontSize: '16px'
+    fontSize: '16px',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+  pointerEvents: 'none',
+  WebkitUserDrag: 'none'
+  },
+  attrs: {
+    draggable: 'false'
   }
 });
 
@@ -389,7 +401,14 @@ define('button-text', {
   css: {
     fontSize: 'inherit',
     fontWeight: '400',
-    lineHeight: '1'
+    lineHeight: '1',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+  pointerEvents: 'none',
+  WebkitUserDrag: 'none'
+  },
+  attrs: {
+    draggable: 'false'
   }
 });
 
@@ -407,11 +426,16 @@ define('button-badge', {
     borderRadius: '9px',
     backgroundColor: '#dc3545',
     color: 'white',
-    fontSize: '11px',
-    fontWeight: 'bold',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
+  userSelect: 'none',
+  WebkitUserSelect: 'none',
+  pointerEvents: 'none',
+  WebkitUserDrag: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: '11px',
+  fontWeight: '600',
+  lineHeight: '1'
   }
 });
 
@@ -729,6 +753,10 @@ const createButton = (config = {}) => {
     onClick: handleClick,
     ...otherProps
   });
+
+  // Empêcher la sélection/drag native pour que tout le bouton soit la cible
+  button.addEventListener('dragstart', (e) => e.preventDefault());
+  button.addEventListener('selectstart', (e) => e.preventDefault());
 
   // ✅ FORCER TOUS les styles critiques manuellement
   Object.keys(cleanStyles).forEach(key => {

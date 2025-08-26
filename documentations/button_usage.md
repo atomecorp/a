@@ -293,3 +293,10 @@ const customButton = Button({
 ```
 
 Remember: **Always test with a simple button first before creating complex functionality!**
+
+Notes
+If you need selectable inner text for a specific button, we can add an opt-in flag (e.g., interactiveChildren: true) to re-enable pointer events/selection only for that instance.
+Quality gates
+
+Lint/Typecheck: No errors reported for button_builder.js.
+Requirements coverage: “Select the button rather than the text” — Done (events hit container; text selection disabled).
