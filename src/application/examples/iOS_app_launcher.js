@@ -191,3 +191,25 @@ Button({
     setStatus('Host apps can block activation from extensions. We queue the request and the Atome app completes it once foregrounded.', '#ffd54f');
   }
 });
+
+// Simple link to open the Atome app on demand (no auto-open)
+const atomeLinkRow = $('div', {
+  parent: '#view',
+  css: { marginTop: '6px' }
+});
+
+$('a', {
+  parent: atomeLinkRow,
+  attrs: { href: '#' },
+  text: 'Open Atome app',
+  css: {
+    color: '#64b5f6',
+    textDecoration: 'underline',
+    cursor: 'pointer',
+    fontSize: '12px'
+  },
+  onClick: (e) => {
+    e.preventDefault();
+    openViaSquirrel('atomeapp://activate');
+  }
+});
