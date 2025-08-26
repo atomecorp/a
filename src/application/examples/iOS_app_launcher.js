@@ -65,6 +65,35 @@ function setStatus(msg, color) {
   statusRow.style.color = color || '#cfd8dc';
 }
 
+// Shared open helper (used by the main button and quick presets)
+function openViaSquirrel(value) {
+  const v = (value || '').trim();
+  if (!v) { console.warn('No URL provided'); return; }
+  try {
+    if (window.squirrel?.openURL) {
+      window.squirrel.openURL(v);
+      const inAUv3 = typeof __HOST_ENV !== 'undefined';
+      if (inAUv3) {
+        setStatus('Request queued. Bring Atome to the foreground; it will open automatically (no popup).', '#ffd54f');
+      } else {
+        setStatus('Open request sent. It will open silently when the app is active.', '#c5e1a5');
+      }
+    } else if (window.webkit?.messageHandlers && window.webkit.messageHandlers['squirrel.openURL']) {
+      window.webkit.messageHandlers['squirrel.openURL'].postMessage({ url: v });
+      setStatus('Request sent via WebKit handler.', '#c5e1a5');
+    } else if (window.iOS?.openExternalURL) {
+      window.iOS.openExternalURL(v);
+      setStatus('Legacy bridge used to send request.', '#c5e1a5');
+    } else {
+      console.log('Open URL (no native bridge):', v);
+      setStatus('No native bridge available in this environment.', '#ef9a9a');
+    }
+  } catch (err) {
+    console.error('Open URL failed:', err);
+    setStatus('Open failed: ' + (err?.message || err), '#ef9a9a');
+  }
+}
+
 Button({
   text: 'Open',
   parent: inputRow,
@@ -78,34 +107,7 @@ Button({
     cursor: 'pointer'
   },
   onClick: () => {
-    const value = (urlToLaunch || '').trim();
-    if (!value) { console.warn('No URL provided'); return; }
-    try {
-      // Prefer Squirrel bridge shared by app and AUv3
-      if (window.squirrel?.openURL) {
-        window.squirrel.openURL(value);
-        // In AUv3, the host may block activation; the request is queued for the container app.
-        const inAUv3 = typeof __HOST_ENV !== 'undefined';
-        if (inAUv3) {
-          setStatus('Request queued. Switch to the Atome app to finish. You will see a confirmation to open the target app.', '#ffd54f');
-        } else {
-          setStatus('Open request sent. If the target needs confirmation, a prompt will appear.', '#c5e1a5');
-        }
-      } else if (window.webkit?.messageHandlers && window.webkit.messageHandlers['squirrel.openURL']) {
-        window.webkit.messageHandlers['squirrel.openURL'].postMessage({ url: value });
-        setStatus('Request sent via WebKit handler.', '#c5e1a5');
-      } else if (window.iOS?.openExternalURL) {
-        // Legacy fallback if present
-        window.iOS.openExternalURL(value);
-        setStatus('Legacy bridge used to send request.', '#c5e1a5');
-      } else {
-        console.log('Open URL (no native bridge):', value);
-        setStatus('No native bridge available in this environment.', '#ef9a9a');
-      }
-    } catch (err) {
-      console.error('Open URL failed:', err);
-      setStatus('Open failed: ' + (err?.message || err), '#ef9a9a');
-    }
+  openViaSquirrel(urlToLaunch);
   }
 });
 
@@ -144,6 +146,32 @@ Button({
       setStatus('Copy failed: ' + (e?.message || e), '#ef9a9a');
     }
   }
+});
+
+// Quick tests (match URL‑Beamer examples): try direct custom schemes from AUv3
+const quickRow = $('div', {
+  parent: '#view',
+  css: { display: 'flex', gap: '8px', marginTop: '6px' }
+});
+
+Button({
+  text: 'Open PdParty (pdparty://)',
+  parent: quickRow,
+  css: {
+    height: '26px', padding: '0 10px', backgroundColor: '#00897b', color: '#fff',
+    border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px'
+  },
+  onClick: () => { urlToLaunch = 'pdparty://'; urlInput.value = urlToLaunch; openViaSquirrel(urlToLaunch); }
+});
+
+Button({
+  text: 'Open Books (ibooks://)',
+  parent: quickRow,
+  css: {
+    height: '26px', padding: '0 10px', backgroundColor: '#00796b', color: '#fff',
+    border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px'
+  },
+  onClick: () => { urlToLaunch = 'ibooks://'; urlInput.value = urlToLaunch; openViaSquirrel(urlToLaunch); }
 });
 
 Button({

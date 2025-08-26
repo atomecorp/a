@@ -20,6 +20,18 @@ enum SharedBus {
     static let activationScheme: String = "atomeapp"
     static let activationURLString: String = "atomeapp://activate"
 
+    // Universal Link (Associated Domains) endpoint to foreground the app without popups.
+    // Configure the domain to one you control and serve an AASA file. Path is arbitrary; keep it simple.
+    // Note: The app entitlements must include: com.apple.developer.associated-domains = [ "applinks:atome.one" ]
+    static let universalLinkActivateBase: String = "https://atome.one/activate"
+    static func universalLinkActivateURL(withNonce key: String? = nil) -> URL? {
+        guard var comp = URLComponents(string: universalLinkActivateBase) else { return nil }
+        if let key = key, !key.isEmpty {
+            comp.queryItems = (comp.queryItems ?? []) + [URLQueryItem(name: "k", value: key)]
+        }
+        return comp.url
+    }
+
     // Codable payload stored in the App Group when relaying a request from the AUv3 to the app.
     struct RelayPayload: Codable {
         let url: String

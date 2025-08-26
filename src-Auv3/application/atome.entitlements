@@ -8,6 +8,10 @@
 	<array>
 		<string>group.atome.one</string>
 	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:atome.one</string>
+	</array>
 	<key>com.apple.security.assets.movies.read-write</key>
 	<true/>
 	<key>com.apple.security.assets.music.read-write</key>

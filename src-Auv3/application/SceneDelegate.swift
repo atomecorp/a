@@ -22,9 +22,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         for ctx in URLContexts {
             let url = ctx.url
             print("🔗 SceneDelegate.openURLContexts url=\(url.absoluteString)")
-            if url.scheme == SharedBus.activationScheme {
+        if url.scheme == SharedBus.activationScheme {
                 AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
                 AppGroupOpenURLInbox.shared.flushIfPossible()
+        } else if (url.scheme == "http" || url.scheme == "https") &&
+            (url.host?.lowercased().hasSuffix("atome.one") == true) &&
+            url.path.lowercased().hasPrefix("/activate") {
+        AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
+        AppGroupOpenURLInbox.shared.flushIfPossible()
             }
         }
     }

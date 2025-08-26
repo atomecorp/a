@@ -39,6 +39,13 @@ struct atomeApp: App {
                         print("🔗 SwiftUI.onOpenURL activation → drain + flush")
                         AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
                         AppGroupOpenURLInbox.shared.flushIfPossible()
+                    } else if url.scheme == "http" || url.scheme == "https" {
+                        // Universal Link activation: accept our activate path and drain/flush
+                        if url.host?.lowercased().hasSuffix("atome.one") == true && url.path.lowercased().hasPrefix("/activate") {
+                            print("🔗 SwiftUI.onOpenURL universal-link activation → drain + flush (")
+                            AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
+                            AppGroupOpenURLInbox.shared.flushIfPossible()
+                        }
                     }
                 }
                 // Handle NSUserActivity-based activation (fallback path)
@@ -46,6 +53,17 @@ struct atomeApp: App {
                     print("🧭 SwiftUI.onContinueUserActivity → drain + flush")
                     AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
                     AppGroupOpenURLInbox.shared.flushIfPossible()
+                }
+                // Also handle general web-browsing user activities (universal links)
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL,
+                       (url.scheme == "http" || url.scheme == "https"),
+                       url.host?.lowercased().hasSuffix("atome.one") == true,
+                       url.path.lowercased().hasPrefix("/activate") {
+                        print("🧭 SwiftUI.onContinueUserActivity(browsingWeb) universal-link activation → drain + flush")
+                        AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
+                        AppGroupOpenURLInbox.shared.flushIfPossible()
+                    }
                 }
         }
         // React to scene lifecycle to flush inbox only when foregroundActive
