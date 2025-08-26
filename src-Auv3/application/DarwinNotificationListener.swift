@@ -16,6 +16,8 @@ final class DarwinNotificationListener {
                 print("🔔 Darwin received: \(key) → enqueue + drain index")
                 AppGroupOpenURLInbox.shared.enqueueFromAppGroup(key: key)
                 AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
+                // If a foregroundActive scene exists, attempt immediate flush
+                AppGroupOpenURLInbox.shared.flushIfPossible()
             }
         }, nil, nil, .deliverImmediately)
         installed = true

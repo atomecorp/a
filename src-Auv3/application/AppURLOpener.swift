@@ -9,8 +9,13 @@ final class AppURLOpener: NSObject {
         // If we have a foregroundActive scene, open immediately via scene API
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         if let activeScene = scenes.first(where: { $0.activationState == .foregroundActive }) {
-            activeScene.open(url, options: nil) { success in
-                print("🔗 AppURLOpener: opened=\(success) url=\(url.absoluteString)")
+            // If the scheme likely needs trust, delay slightly after activation and open silently
+            if TrustedTapOpener.requiresTrustedTap(url) {
+                TrustedTapOpener.silentDelayAndOpen(url)
+            } else {
+                activeScene.open(url, options: nil) { success in
+                    print("🔗 AppURLOpener: opened=\(success) url=\(url.absoluteString)")
+                }
             }
             return true
         }

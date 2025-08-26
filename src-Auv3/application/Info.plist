@@ -135,6 +135,19 @@
     <key>UIStatusBarHidden</key>
     <true/>
     
+    <!-- Register custom activation scheme used by AUv3 to foreground the app -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>one.atome.app.activate</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>atomeapp</string>
+            </array>
+        </dict>
+    </array>
+
     <!-- Schemes the app may query/open from container when relayed by AUv3 -->
     <key>LSApplicationQueriesSchemes</key>
     <array>

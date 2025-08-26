@@ -73,12 +73,17 @@ enum SharedBus {
         let key = notificationPrefix + nonce
         let payload = RelayPayload(url: urlString, ts: CFAbsoluteTimeGetCurrent())
         guard let data = try? JSONEncoder().encode(payload) else { return nil }
-        ud.set(data, forKey: key)
+    ud.set(data, forKey: key)
         // Append key to persistent index so container can recover at launch
         var index = ud.stringArray(forKey: inboxIndexKey) ?? []
         if !index.contains(key) { index.append(key) }
-        ud.set(index, forKey: inboxIndexKey)
-        ud.synchronize()
+    ud.set(index, forKey: inboxIndexKey)
+    ud.synchronize()
+    // Mirror into CFPreferences (AnyHost) to improve visibility across processes and ByHost nuances
+    let domain = appGroupSuite as CFString
+    CFPreferencesSetValue(key as CFString, data as CFData, domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+    CFPreferencesSetValue(inboxIndexKey as CFString, index as CFArray, domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+    CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
         postDarwinNotification(named: key)
         return key
     }

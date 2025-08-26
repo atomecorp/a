@@ -42,6 +42,7 @@ public final class URLOpener {
                     print("🪄 URLOpener(AUv3): activation nudge success=\(success) url=\(activation.absoluteString)")
                 }
             }
+            // Notification nudge disabled to avoid extra popup; rely on app-side poller and recovery.
             return ok
         }
 

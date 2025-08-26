@@ -132,7 +132,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 })();
         """
 
-        let contentController = webView.configuration.userContentController
+    let contentController = webView.configuration.userContentController
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         contentController.addUserScript(userScript)
     contentController.add(WebViewManager.shared, name: "console")
