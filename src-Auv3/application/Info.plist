@@ -124,7 +124,7 @@
     </array>
 
     <key>UIRequiresFullScreen</key>
-    <true/>
+    <false/>
     <key>UIViewControllerBasedStatusBarAppearance</key>
     <true/>
     <!-- Use storyboard-based launch screen to allow logo -->
@@ -134,5 +134,44 @@
     <string>Dark</string>
     <key>UIStatusBarHidden</key>
     <true/>
+    
+    <!-- Schemes the app may query/open from container when relayed by AUv3 -->
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>shortcuts</string>
+        <string>pdparty</string>
+        <string>ibooks</string>
+    <string>https</string>
+    </array>
+    
+    <!-- Background audio to keep the container app eligible while hosted by AUM -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+
+    <!-- Enable single-scene support so we can request scene activation when needed -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>Default Configuration</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
+
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>group.atome.one.openurl.activate</string>
+    </array>
 </dict>
 </plist>
