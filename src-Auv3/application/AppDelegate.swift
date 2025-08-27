@@ -86,7 +86,6 @@ struct atomeApp: App {
 
 struct ContentView: View {
     var body: some View {
-        WebViewContainer()
-            .ignoresSafeArea()
+    WebViewContainer()
     }
 }

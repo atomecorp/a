@@ -35,11 +35,12 @@ final class FullscreenWebViewController: UIViewController {
         webView.scrollView.backgroundColor = .black
         webView.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(webView)
+        let guide = root.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: root.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: root.trailingAnchor)
+            webView.topAnchor.constraint(equalTo: guide.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: guide.trailingAnchor)
         ])
 
         // Immediate placeholder (matches one added later in WebViewManager but ensures something black exists NOW)
@@ -62,10 +63,8 @@ final class FullscreenWebViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.insetsLayoutMarginsFromSafeArea = false
-        edgesForExtendedLayout = [.top, .bottom, .left, .right]
-        extendedLayoutIncludesOpaqueBars = true
-        webView.scrollView.contentInsetAdjustmentBehavior = .never
+    view.insetsLayoutMarginsFromSafeArea = true
+    webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         webView.scrollView.contentInset = .zero
         webView.scrollView.verticalScrollIndicatorInsets = .zero
         webView.scrollView.horizontalScrollIndicatorInsets = .zero
@@ -80,23 +79,20 @@ final class FullscreenWebViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        // Reassert frame if SwiftUI re-wrapped with padding later
-        webView.frame = view.bounds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.webView.frame = self.view.bounds; self.logWindowMetrics(stage: "viewDidAppear+50ms") }
+    // AutoLayout drives sizing; no manual frame override
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.logWindowMetrics(stage: "viewDidAppear+50ms") }
         logWindowMetrics(stage: "viewDidAppear")
     }
 
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
-        // Force zero additional safe area
-        additionalSafeAreaInsets = .zero
+    // Use default safe area; no forced zeroing
         debugLogInsets(stage: "viewSafeAreaInsetsDidChange")
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // Fallback: ensure frame exactly matches bounds (in case AutoLayout or SwiftUI applied padding)
-        if webView.frame != view.bounds { webView.frame = view.bounds }
+    // AutoLayout manages frame; avoid manual overrides
     logWindowMetrics(stage: "viewDidLayoutSubviews")
     }
 
