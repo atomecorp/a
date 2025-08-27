@@ -45,6 +45,8 @@ let sampleTapNodes = null; // { processor }
 let sampleTapSource = null; // persistent MediaElementSource for the <audio>
 let sampleTapSink = null;   // persistent zero-gain sink to keep graph running on some iOS builds
 let __bgBridgeTimers = [];  // scheduled timers to reinforce prebuffer while hidden
+// Local decoded sample playback (WebAudio) state
+let localDecodedSample = null; // {ctx, src, gain}
 
 // AudioWorklet-based media tap (lower latency/CPU) — loaded via Blob URL to avoid path issues
 const MEDIA_TAP_WORKLET_SOURCE = `class MediaTapProcessor extends AudioWorkletProcessor {\n  constructor(options) {\n    super();\n    const sec = options?.processorOptions?.chunkDurationSec ?? 0.12;\n    this.setChunkSamples(sec);\n    this.buf = new Float32Array(this.chunkSamples);\n    this.write = 0;\n    this.port.onmessage = (e) => {\n      const msg = e.data || {};\n      if (msg.cmd === 'setChunkSec') {\n        this.setChunkSamples(msg.sec);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n    };\n  }\n  setChunkSamples(sec) {\n    const clamped = Math.min(0.5, Math.max(0.02, Number(sec) || 0.12));\n    this.chunkSamples = Math.max(128, Math.round(clamped * sampleRate));\n  }\n  process(inputs, outputs) {\n    const input = inputs[0];\n    const out = outputs && outputs[0] ? outputs[0][0] : null;\n    if (!input || input.length === 0) { if(out){ out.fill(0); } return true; }\n    const L = input[0] || new Float32Array(128);\n    const R = input[1] || L;\n    const n = L.length;\n    for (let i = 0; i < n; i++) {\n      const mono = (L[i] + R[i]) * 0.5;\n      if (this.write >= this.chunkSamples) {\n        this.port.postMessage({ sr: sampleRate, pcm: this.buf }, [this.buf.buffer]);\n        this.buf = new Float32Array(this.chunkSamples);\n        this.write = 0;\n      }\n      this.buf[this.write++] = mono;\n      if(out){ out[i] = 0.0; }\n    }\n    return true;\n  }\n}\nregisterProcessor('media-tap-processor', MediaTapProcessor);`;
@@ -206,12 +208,17 @@ function routePlay(note,freq){ const forceHost= window.forceHostRouting|| window
  hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0);
  ensureStreaming();
  sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); return; }
- // In AUv3 UI, local WebAudio is not audible -> route to host
- if(forceLocal){ if(IN_AUV3 && hostAvailable()){ sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)}); hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0); ensureStreaming(); sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); } else { if(!localNotes.has(note)) playLocalSustain(note,freq); } return; } // AUTO
+ if(forceLocal){ // Always play locally in Local mode
+  if(!localNotes.has(note)) playLocalSustain(note,freq);
+  return;
+ } // AUTO
  if(hostAvailable()){ sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)}); hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0); ensureStreaming(); sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); } else { if(!localNotes.has(note)) playLocalSustain(note,freq); } }
 function routeStop(note){ stopLocalNote(note); sendHost({type:'audioNote',data:{command:'stopNote',note}}); hostActive.delete(note); hostFreq.delete(note); hostPhase.delete(note); maybeStopStreaming(); }
 let hostChordActive = [];
-function routeChord(freqs){ const key='CHORD'; const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); return;} if(forceLocal){ if(IN_AUV3 && hostAvailable()){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); } else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } return;} if(hostAvailable()){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); } else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } }
+function routeChord(freqs){ const key='CHORD'; const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); return;} if(forceLocal){ // Always play locally in Local mode
+    if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); }
+    return;
+} if(hostAvailable()){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); } else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } }
 function stopChord(){ stopLocalNote('CHORD'); hostChordActive.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioNote',data:{command:'stopNote',note:label,gate:0}}); hostActive.delete(label); hostFreq.delete(label); hostPhase.delete(label); }); hostChordActive=[]; maybeStopStreaming(); }
 function stopAll(){ // stop locaux
     Array.from(localNotes.keys()).forEach(k=>stopLocalNote(k));
@@ -308,12 +315,73 @@ function listRecordings(){
 }
 
 // Local audio element for Local route playback
-const sampleAudioEl = $('audio', { id:'samplePlayer', parent:document.body, css:{ position:'absolute', left:'-9999px', width:'1px', height:'1px' }, controls:false, preload:'auto' });
+const sampleAudioEl = $('audio', {
+    id:'samplePlayer', parent:document.body,
+    css:{ position:'absolute', left:'-9999px', width:'1px', height:'1px' },
+    controls:false, preload:'auto',
+    attrs: { playsinline: '', 'webkit-playsinline': 'true' }
+});
+
+// Local playback through WebView audio element
+function playSampleLocal(relPath){
+    try{
+        const el = document.getElementById('samplePlayer');
+        if(!el){ console.warn('no samplePlayer element'); return; }
+        // Ensure WebAudio context is unlocked (some iOS builds require it once per user gesture)
+        try{ ensureAC(); }catch(_){ }
+        // Stop any previous decoded local playback
+        try{
+            if(localDecodedSample && localDecodedSample.src){
+                try{ localDecodedSample.src.stop(0); }catch(_){ }
+            }
+        }catch(_){ }
+        localDecodedSample = null;
+        // Prepare element
+        try{ el.pause(); el.currentTime = 0; }catch(_){ }
+        try{ el.muted = false; el.volume = 1.0; }catch(_){ }
+        // Prefer local HTTP server if available (range supported)
+        const port = window.__ATOME_LOCAL_HTTP_PORT__;
+        el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath))
+                      : ('atome:///audio/'+encodeURI(relPath));
+        // Play via HTML audio element
+        let played = false; let cancelled = false;
+        const onPlaying = ()=>{ played = true; };
+        try{ el.addEventListener('playing', onPlaying, { once:true }); }catch(_){ }
+        el.play().catch(e=>{ console.warn('local el.play failed', e); });
+        // Fallback: if HTML element doesn't start, decode via WebAudio from HTTP (requires port)
+        setTimeout(async ()=>{
+            if(cancelled || played) return;
+            if(!window.__ATOME_LOCAL_HTTP_PORT__) return; // no fetch path
+            try{
+                const url = 'http://127.0.0.1:'+window.__ATOME_LOCAL_HTTP_PORT__+'/audio/'+encodeURI(relPath);
+                const resp = await fetch(url);
+                if(!resp.ok){ console.warn('[local] HTTP fetch failed', resp.status); return; }
+                const ab = await resp.arrayBuffer();
+                const ctx = ensureAC();
+                const buf = await ctx.decodeAudioData(ab.slice(0));
+                const src = ctx.createBufferSource(); src.buffer = buf;
+                const g = ctx.createGain(); g.gain.value = 1.0;
+                src.connect(g); g.connect(ctx.destination);
+                localDecodedSample = { ctx, src, gain:g };
+                try{ src.start(0); }catch(_){ }
+            }catch(err){ console.warn('[local] decode fallback failed', err); }
+        }, 700);
+        // Cleanup listener when source changes
+        try{ el.onended = ()=>{}; }catch(_){ }
+    }catch(e){ console.warn('playSampleLocal error', e); }
+}
 
 function stopSample(){
     try{
         // Local
-        const el = document.getElementById('samplePlayer'); if(el){ try{ el.pause(); el.currentTime = 0; }catch(_){}}
+        const el = document.getElementById('samplePlayer'); if(el){ try{ el.pause(); el.currentTime = 0; }catch(_){ }}
+        // Local decoded (WebAudio)
+        try{
+            if(localDecodedSample && localDecodedSample.src){
+                try{ localDecodedSample.src.stop(0); }catch(_){ }
+            }
+        }catch(_){ }
+        localDecodedSample = null;
         // Host stream
                 samplePlaybackHost = null;
                 // Stop tap
@@ -334,13 +402,24 @@ function stopSample(){
 function playSample(relPath){
     stopSample();
     const mode = ROUTE[routeIdx];
-    // In AUv3 UI, even when Local is selected, route to host for audibility
-    const forceHost = IN_AUV3 ? hostAvailable() : ((window.forceHostRouting|| window.forceAUv3Mode===true) || (mode!=='Local' && hostAvailable()));
+    const forceHost = (window.forceHostRouting || window.forceAUv3Mode===true);
+    const forceLocal = (window.forceAUv3Mode===false);
     if(forceHost && hostAvailable()){
-        console.log('[sample] route=Host (IN_AUV3='+IN_AUV3+')', relPath);
+        console.log('[sample] route=Host', relPath);
+        playSampleHost(relPath);
+        return;
+    }
+    if(forceLocal){
+        console.log('[sample] route=Local (forced)', relPath);
+        playSampleLocal(relPath);
+        return;
+    }
+    // AUTO: prefer host when available, otherwise local
+    if(hostAvailable()){
+        console.log('[sample] route=Host (auto)', relPath);
         playSampleHost(relPath);
     } else {
-        console.log('[sample] route=Local', relPath);
+        console.log('[sample] route=Local (auto)', relPath);
         playSampleLocal(relPath);
     }
 }
