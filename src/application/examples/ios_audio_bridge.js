@@ -49,10 +49,35 @@ let sampleTapEnded = false;
 let sampleTapNodes = null; // { processor }
 let sampleTapSource = null; // persistent MediaElementSource for the <audio>
 let sampleTapSink = null;   // persistent zero-gain sink to keep graph running on some iOS builds
+let sampleTapEl = null;     // dedicated off-DOM, always-muted element used only for Tap
 let __bgBridgeTimers = [];  // scheduled timers to reinforce prebuffer while hidden
 let __tapDrainCount = 0;    // first drains are fully logged for debugging
 let __hostRenderWoke = false; // ensure we only wake host once per sample
 let __tapFirstDrainDone = false; // per-playback guard
+// Tap session + de-dup guard
+let __tapSessionId = 0;      // increments per play to invalidate stale callbacks
+let __tapLastSig = null;     // { len, sr, h1, h2 }
+let __tapLastSentAt = 0;     // ms since performance.now
+function tapNewSession(){ __tapSessionId++; __tapLastSig = null; __tapLastSentAt = 0; return __tapSessionId; }
+function tapSameSession(id){ return id === __tapSessionId; }
+function tapHash64(f32){
+    const n = f32.length; const k = Math.min(64, n);
+    let s1=0, s2=0;
+    for(let i=0;i<k;i++){ s1 += f32[i]; s2 += f32[n-1-i]; }
+    return [(s1*1e6|0), (s2*1e6|0)];
+}
+function sendTapChunk(f32, sr){
+    try{
+        const now = (typeof performance!=='undefined' && performance.now)? performance.now(): Date.now();
+        const [h1,h2] = tapHash64(f32);
+        const sig = { len: f32.length|0, sr: sr|0, h1, h2 };
+        const last = __tapLastSig;
+        const recent = (now - __tapLastSentAt) < 80; // 80ms window
+        if(last && recent && last.len===sig.len && last.sr===sig.sr && last.h1===sig.h1 && last.h2===sig.h2){ return; }
+        __tapLastSig = sig; __tapLastSentAt = now;
+        sendHostJSONChunk(f32, sr);
+    }catch(_){ }
+}
 // Local decoded sample playback (WebAudio) state
 let localDecodedSample = null; // {ctx, src, gain}
 
@@ -111,7 +136,7 @@ function ensureTone(){
     return ctx;
 }
 
-// Page visibility handling for AUv3 UI close/minimize cases (timers may throttle)
+                        const ctx = ensureAC(); sampleTapSR = ctx.sampleRate|0;
 function onVisibilityChange(){
     PAGE_HIDDEN = (document.visibilityState === 'hidden');
     try{
@@ -157,7 +182,7 @@ function prebufferOnHide(){
             else { parts.push(head.subarray(0, need)); sampleTapQueue[0] = head.subarray(need); need = 0; }
         }
         if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); const out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; }
-            try{ sendHostJSONChunk(out, sr); }catch(_){ }
+            try{ sendTapChunk(out, sr); }catch(_){ }
             return;
         }
     }
@@ -173,13 +198,13 @@ function prebufferOnHide(){
     if(toneActive && toneActive.size > 0){
         const sr = OUT_SR || STREAM_SR;
         const frames = Math.floor(sr * Math.min(0.12, coverSec));
-        if(frames > 0){ try{ sendHostJSONChunk(new Float32Array(frames), sr); }catch(_){ }
+    if(frames > 0){ try{ sendTapChunk(new Float32Array(frames), sr); }catch(_){ }
         }
         return;
     }
     // 4) Last resort: a tiny silence buffer to keep host from underrun
     const sr = STREAM_SR; const frames = Math.floor(sr * Math.min(0.2, coverSec));
-    if(frames > 0){ try{ sendHostJSONChunk(new Float32Array(frames), sr); }catch(_){ } }
+    if(frames > 0){ try{ sendTapChunk(new Float32Array(frames), sr); }catch(_){ } }
 }
 
 function clearBackgroundBridgeTimers(){
@@ -195,9 +220,8 @@ function wakeHostRender(){
         __hostRenderWoke = true;
         bridgeLog('[tap] host wake');
         const noteId = '__WAKE__';
-    // Use a very low frequency and tiny amplitude to avoid any audible artifact
-    sendHost({ type:'audioNote', data:{ command:'playNote', note: noteId, frequency: 30.0, duration: 0.06, amplitude: 0.02, sustain: false, gate: 1 } });
-    setTimeout(()=>{ try{ sendHost({ type:'audioNote', data:{ command:'stopNote', note: noteId, gate: 0 } }); }catch(_){ } }, 60);
+        sendHost({ type:'audioNote', data:{ command:'playNote', note: noteId, frequency: 30.0, duration: 0.06, amplitude: 0.02, sustain: false, gate: 1 } });
+        setTimeout(()=>{ try{ sendHost({ type:'audioNote', data:{ command:'stopNote', note: noteId, gate: 0 } }); }catch(_){ } }, 60);
     }catch(_){ }
 }
 
@@ -217,7 +241,7 @@ function drainTapOnce(maxSec){
             const total = parts.reduce((a,p)=>a+p.length,0);
             const out = new Float32Array(total);
             let off=0; for(const p of parts){ out.set(p, off); off+=p.length; }
-            try{ sendHostJSONChunk(out, sr); }catch(_){ }
+            try{ sendTapChunk(out, sr); }catch(_){ }
             try{ bridgeLog(`[tap] drain-once len=${out.length} sr=${sr}`); }catch(_){ }
         }
     }catch(_){ }
@@ -288,14 +312,14 @@ function ensureStreaming(){
                 if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; } }
             }
             if(out && out.length){
-                // Send JSON only to avoid duplicates
-                try{ sendHostJSONChunk(out, sampleTapSR); }catch(_){ }
+                // Send via Tap path with de-dup guard
+                try{ sendTapChunk(out, sampleTapSR); }catch(_){ }
                 try{ bridgeLog(`[tap] drain len=${out.length} sr=${sampleTapSR}`); }catch(_){ }
             }
             else if(PAGE_HIDDEN){
                 // If hidden and no tap data, feed a tiny zero-fill to avoid crackles
                 const filler = Math.floor(sampleTapSR * 0.06);
-                if(filler > 0) try{ sendHostJSONChunk(new Float32Array(filler), sampleTapSR); }catch(_){ }
+                if(filler > 0) try{ sendTapChunk(new Float32Array(filler), sampleTapSR); }catch(_){ }
             }
             if(sampleTapEnded && sampleTapQueue.length===0 && (!out || out.length===0)){
                 sampleTapActive = false; sampleTapSR = STREAM_SR; sampleTapEnded = false; sampleTapNodes = null;
@@ -584,6 +608,18 @@ function stopSample(){
     // Host stream
                 samplePlaybackHost = null;
                 // Stop tap
+                // Always clean up any WebAudio wiring to avoid audible residual paths
+                try{
+                    const ctx = AC;
+                    if(sampleTapSource){
+                        try{ sampleTapSource.disconnect(); }catch(_){ }
+                        try{ if(ctx){ sampleTapSource.disconnect(ctx.destination); } }catch(_){ }
+                        try{ if(sampleTapSink){ sampleTapSource.disconnect(sampleTapSink); } }catch(_){ }
+                        try{ if(sampleTapNodes && sampleTapNodes.processor){ sampleTapSource.disconnect(sampleTapNodes.processor); } }catch(_){ }
+                    }
+                    if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ } }
+                }catch(_){ }
+                try{ if(sampleTapEl){ try{ sampleTapEl.pause(); }catch(_){ } try{ sampleTapEl.src=''; }catch(_){ } } }catch(_){ }
                 if(sampleTapActive){
                     try{
                         if(sampleTapSource && sampleTapNodes && sampleTapNodes.processor){
@@ -596,11 +632,12 @@ function stopSample(){
             try{ const ctx = AC; if(ctx){ sampleTapSource && sampleTapSource.disconnect(ctx.destination); } }catch(_){ }
                         if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
                     }catch(_){ }
-                    sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
+                    sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null; sampleTapEl = null; sampleTapSource = null;
                 }
                 __hostRenderWoke = false;
                 __tapDrainCount = 0; __tapFirstDrainDone = false;
                 FIRST_HIDE_PRIMED = false; // reset for next playback
+                tapNewSession(); // invalidate any stale tap callbacks
         // No custom sine to stop; Tone capture remains persistent
                 maybeStopStreaming();
   }catch(_){ }
@@ -639,12 +676,13 @@ async function playSampleHost(relPath){
             return;
         }
         // Setup Web Audio tap from the hidden <audio>
-        const ctx = ensureAC(); sampleTapSR = ctx.sampleRate|0;
+    const ctx = ensureAC(); sampleTapSR = ctx.sampleRate|0;
+    const mySession = tapNewSession();
         const el = document.getElementById('samplePlayer');
         if(!el){ console.warn('no samplePlayer element'); return; }
     try{ el.crossOrigin = 'anonymous'; }catch(_){ }
-    // Avoid direct element playback in Tap to prevent doubling: mute element, keep volume at 1.0 for stable tap
-    try{ el.muted = true; el.volume = 1.0; }catch(_){ }
+    // Avoid direct element playback in Tap to prevent doubling: hard-mute and set volume to 0
+    try{ el.setAttribute('muted',''); el.defaultMuted = true; el.muted = true; el.volume = 0.0; el.setAttribute('disableRemotePlayback',''); }catch(_){ }
     // Reset element to a clean state before assigning a new src
     try{ el.pause(); }catch(_){ }
     try{ el.currentTime = 0; }catch(_){ }
@@ -652,11 +690,12 @@ async function playSampleHost(relPath){
     // Prefer local HTTP (range-supported) if available; fallback to custom scheme
         const port = window.__ATOME_LOCAL_HTTP_PORT__;
         el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath)) : ('atome:///audio/'+encodeURI(relPath));
-        // Build nodes
+    // Build nodes
     // Reuse a single MediaElementSource for this element across plays (spec: only one per element)
     if(!sampleTapSource){ sampleTapSource = ctx.createMediaElementSource(el); }
-        // Ensure no direct path to destination in Tap mode
-        try{ sampleTapSource.disconnect(ctx.destination); }catch(_){ }
+    // Ensure no previous connections before rewiring (prevents duplicate paths)
+    try{ sampleTapSource.disconnect(); }catch(_){ }
+    try{ if(sampleTapNodes && sampleTapNodes.processor){ sampleTapNodes.processor.disconnect(); } }catch(_){ }
         let tapGotData = false;
     // Try AudioWorklet tap first for lower latency/CPU
         try{
@@ -694,6 +733,7 @@ async function playSampleHost(relPath){
             if(!proc){ console.warn('ScriptProcessor not available, aborting tap'); throw new Error('no-processor'); }
         proc.onaudioprocess = (ev)=>{
                 try{
+            if(!tapSameSession(mySession) || !sampleTapActive) return;
                     const ib = ev.inputBuffer; const ch0 = ib.getChannelData(0);
                     const ch1 = ib.numberOfChannels>1 ? ib.getChannelData(1) : null;
                     const n = ib.length; const mono = new Float32Array(n);
@@ -713,18 +753,20 @@ async function playSampleHost(relPath){
             try{ proc.connect(sampleTapSink); }catch(_){ }
             sampleTapNodes = { processor: proc };
         }
-    // Some iOS builds require media element to be connected to destination to run; feed it into zero-gain sink as well
-    try{ if(sampleTapSink){ sampleTapSource.connect(sampleTapSink); } }catch(_){ }
-    sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true; firstHideHandled = false; __hostRenderWoke = false; __tapDrainCount = 0; __tapFirstDrainDone = false; window.__streamTickCount = 0;
+    // Keep only source -> processor -> sink (no direct source -> sink path)
+    sampleTapEl = tapEl; sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true; firstHideHandled = false; __hostRenderWoke = false; __tapDrainCount = 0; __tapFirstDrainDone = false; window.__streamTickCount = 0;
     // Restart streaming timer to ensure Tap starts draining immediately (handles stale interval from previous mode)
     try{ if(streamTimer){ clearInterval(streamTimer); streamTimer=null; } }catch(_){ }
-    el.onended = ()=>{ sampleTapEnded = true; bridgeLog('[tap] media ended'); };
-        el.onplaying = ()=>{ try{ bridgeLog('[tap] media playing'); }catch(_){ } };
-        el.ontimeupdate = ()=>{ if(!tapGotData){ try{ bridgeLog(`[tap] time=${el.currentTime.toFixed(2)}`); }catch(_){ } } };
-        try{ await el.play(); bridgeLog('[tap] el.play ok'); }catch(e){ console.warn('audio element play failed', e); bridgeLog(`[tap] el.play error: ${e && e.message}`); }
+    tapEl.onended = ()=>{ sampleTapEnded = true; bridgeLog('[tap] media ended'); };
+        tapEl.onplaying = ()=>{ try{ tapEl.defaultMuted = true; tapEl.muted = true; tapEl.volume = 0.0; bridgeLog('[tap] media playing'); }catch(_){ } };
+        try{ tapEl.onvolumechange = ()=>{ try{ if(sampleTapActive){ tapEl.defaultMuted = true; tapEl.muted = true; tapEl.volume = 0.0; } }catch(_){ } }; }catch(_){ }
+        tapEl.ontimeupdate = ()=>{ if(!tapGotData){ try{ bridgeLog(`[tap] time=${tapEl.currentTime.toFixed(2)}`); }catch(_){ } } };
+        try{ await tapEl.play(); bridgeLog('[tap] el.play ok'); }catch(e){ console.warn('audio element play failed', e); bridgeLog(`[tap] el.play error: ${e && e.message}`); }
+        // Short watchdog to re-assert mute while Tap starts
+        try{ let wd=0; const wdId = setInterval(()=>{ wd++; try{ if(sampleTapActive){ el.defaultMuted = true; el.muted = true; el.volume = 0.0; } }catch(_){ } if(wd>20 || !sampleTapActive){ clearInterval(wdId); } }, 80); }catch(_){ }
     // Primer silence to avoid underrun while tap warms up; keep small
     const primerSec = PAGE_HIDDEN ? 0.12 : 0.02;
-    const zeros = new Float32Array(Math.floor(sampleTapSR * primerSec)); if(zeros.length) sendHostJSONChunk(zeros, sampleTapSR);
+    const zeros = new Float32Array(Math.floor(sampleTapSR * primerSec)); if(zeros.length) sendTapChunk(zeros, sampleTapSR);
         // Wake the host render engine so it starts pulling the AU pipeline
         wakeHostRender();
         ensureStreaming();
