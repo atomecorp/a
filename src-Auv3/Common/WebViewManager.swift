@@ -33,6 +33,23 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static var hostTimeStreamActiveFlag: Bool = false
     public static func isHostTimeStreamActive() -> Bool { return hostTimeStreamActiveFlag }
 
+    // JS audio reception stats (for debugging Host+Tap)
+    private static var jsAudioChunkCount: Int = 0
+    private static var jsAudioTotalSamples: Int = 0
+    private static var jsAudioLastLogTS: CFTimeInterval = 0
+    private static func logJsAudioStatsIfNeeded(lastChunkSamples: Int, sr: Double) {
+        jsAudioChunkCount += 1
+        jsAudioTotalSamples += lastChunkSamples
+        let now = CACurrentMediaTime()
+        if now - jsAudioLastLogTS > 0.5 { // log roughly twice per second
+            let secs = sr > 0 ? Double(jsAudioTotalSamples) / sr : 0
+            print("🎧 SWIFT: JS audio recv chunks=\(jsAudioChunkCount) totalSamples=\(jsAudioTotalSamples) (~\(String(format: "%.3f", secs))s) sr=\(Int(sr)))")
+            jsAudioChunkCount = 0
+            jsAudioTotalSamples = 0
+            jsAudioLastLogTS = now
+        }
+    }
+
     // ULTRA AGGRESSIVE: Rate limiting for non-critical JS calls (preserving timecode functionality)
     private static var lastMuteStateUpdate: CFTimeInterval = 0
     private static var lastTestStateUpdate: CFTimeInterval = 0
@@ -306,14 +323,34 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         switch type {
         case "audioBuffer_bin":
             // Optimisation : réception ArrayBuffer natif (binaire)
-            if let data = data as? Data {
-                let sampleCount = data.count / 4
+            if let raw = data as? Data {
+                let sampleCount = raw.count / 4
                 var floatArray = [Float](repeating: 0, count: sampleCount)
-                _ = floatArray.withUnsafeMutableBytes { data.copyBytes(to: $0) }
+                _ = floatArray.withUnsafeMutableBytes { raw.copyBytes(to: $0) }
                 let sampleRate: Double = 44100
                 let duration: Double = Double(sampleCount) / sampleRate
+                print("🎧 SWIFT: audioBuffer_bin recv bytes=\(raw.count) samples=\(sampleCount) sr=\(Int(sampleRate)) dur=\(String(format: "%.3f", duration))")
+                WebViewManager.logJsAudioStatsIfNeeded(lastChunkSamples: sampleCount, sr: sampleRate)
                 DispatchQueue.global(qos: .userInitiated).async {
                     WebViewManager.audioController?.injectJavaScriptAudio(floatArray, sampleRate: sampleRate, duration: duration)
+                }
+            } else if let dict = data as? [String: Any], let pcm = dict["pcm"], let srAny = dict["sr"] {
+                // Envelope { pcm: ArrayBuffer, sr: number }
+                var sampleRate: Double = 44100
+                if let d = srAny as? Double { sampleRate = d }
+                else if let n = srAny as? NSNumber { sampleRate = n.doubleValue }
+                if let raw = pcm as? Data {
+                    let sampleCount = raw.count / 4
+                    var floatArray = [Float](repeating: 0, count: sampleCount)
+                    _ = floatArray.withUnsafeMutableBytes { raw.copyBytes(to: $0) }
+                    let duration: Double = Double(sampleCount) / sampleRate
+                    print("🎧 SWIFT: audioBuffer_bin+sr recv bytes=\(raw.count) samples=\(sampleCount) sr=\(Int(sampleRate)) dur=\(String(format: "%.3f", duration))")
+                    WebViewManager.logJsAudioStatsIfNeeded(lastChunkSamples: sampleCount, sr: sampleRate)
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        WebViewManager.audioController?.injectJavaScriptAudio(floatArray, sampleRate: sampleRate, duration: duration)
+                    }
+                } else {
+                    print("⚠️ audioBuffer_bin envelope missing/invalid pcm Data: \(dict)")
                 }
             }
             return
@@ -400,6 +437,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         }
         // Convert [Double] to [Float] pour audio processing
         let audioData = audioDataArray.map { Float($0) }
+    // Debug log + stats
+    print("🎧 SWIFT: audioBuffer (JSON) recv samples=\(audioData.count) sr=\(Int(sampleRate)) dur=\(String(format: "%.3f", duration))")
+    WebViewManager.logJsAudioStatsIfNeeded(lastChunkSamples: audioData.count, sr: sampleRate)
         // Injection asynchrone pour ne jamais bloquer le thread principal
         DispatchQueue.global(qos: .userInitiated).async {
             WebViewManager.audioController?.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)

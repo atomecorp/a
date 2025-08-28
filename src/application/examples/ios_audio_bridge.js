@@ -19,6 +19,7 @@ function applyRoute(){
 const IN_AUV3 = !!(window && window.__HOST_ENV); // In AUv3 extension UI, WebView audio isn't audible; route to host instead
 function hostAvailable(){ return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge); }
 function sendHost(obj){ try{ window.webkit.messageHandlers.swiftBridge.postMessage(obj); }catch(e){} }
+function bridgeLog(msg){ try{ window.webkit.messageHandlers.swiftBridge.postMessage({ type:'log', data: String(msg) }); }catch(_){ } }
 let AC=null; let __toneCtxSet=false; function ensureAC(){ if(!AC){ AC=new (window.AudioContext||window.webkitAudioContext)(); try{ if(window.Tone && typeof window.Tone.setContext==='function'){ window.Tone.setContext(AC); __toneCtxSet=true; } }catch(_){} } if(AC.state==='suspended') AC.resume().catch(()=>{}); return AC; }
 // Suivi des oscillateurs locaux par note/accord
 let localNotes = new Map(); // key: note label => Array<{osc:OscillatorNode,gain:GainNode}>
@@ -45,6 +46,9 @@ let sampleTapNodes = null; // { processor }
 let sampleTapSource = null; // persistent MediaElementSource for the <audio>
 let sampleTapSink = null;   // persistent zero-gain sink to keep graph running on some iOS builds
 let __bgBridgeTimers = [];  // scheduled timers to reinforce prebuffer while hidden
+let __tapDrainCount = 0;    // first drains are fully logged for debugging
+let __hostRenderWoke = false; // ensure we only wake host once per sample
+let __tapFirstDrainDone = false; // per-playback guard
 // Local decoded sample playback (WebAudio) state
 let localDecodedSample = null; // {ctx, src, gain}
 
@@ -120,6 +124,43 @@ function clearBackgroundBridgeTimers(){
     try{ __bgBridgeTimers.forEach(id=>clearTimeout(id)); }catch(_){ }
     __bgBridgeTimers = [];
 }
+
+// Kick the host's render engine with a tiny, silent note so it starts pulling the AU pipeline
+function wakeHostRender(){
+    try{
+        if(__hostRenderWoke) return;
+        if(!hostAvailable()) return;
+        __hostRenderWoke = true;
+        bridgeLog('[tap] host wake');
+        const noteId = '__WAKE__';
+    // Use a very low frequency and tiny amplitude to avoid any audible artifact
+    sendHost({ type:'audioNote', data:{ command:'playNote', note: noteId, frequency: 30.0, duration: 0.06, amplitude: 0.02, sustain: false, gate: 1 } });
+    setTimeout(()=>{ try{ sendHost({ type:'audioNote', data:{ command:'stopNote', note: noteId, gate: 0 } }); }catch(_){ } }, 60);
+    }catch(_){ }
+}
+
+// Force-send a short Tap slice immediately (helps when timers are throttled or to kick the pipe)
+function drainTapOnce(maxSec){
+    try{
+        if(!sampleTapActive) return;
+        const sr = sampleTapSR || STREAM_SR;
+        let remaining = Math.max(1, Math.floor(sr * Math.max(0.05, Math.min(0.25, maxSec || 0.12))));
+        const parts = [];
+        while(remaining > 0 && sampleTapQueue.length){
+            const head = sampleTapQueue[0];
+            if(head.length <= remaining){ parts.push(head); sampleTapQueue.shift(); remaining -= head.length; }
+            else { parts.push(head.subarray(0, remaining)); sampleTapQueue[0] = head.subarray(remaining); remaining = 0; }
+        }
+        if(parts.length){
+            const total = parts.reduce((a,p)=>a+p.length,0);
+            const out = new Float32Array(total);
+            let off=0; for(const p of parts){ out.set(p, off); off+=p.length; }
+            try{ sendHostBin(out.buffer, sr); }catch(_){ }
+            try{ if(__tapDrainCount < 8){ sendHostJSONChunk(out, sr); } }catch(_){ }
+            try{ if(__tapDrainCount < 6 || Math.random() < 0.15){ bridgeLog(`[tap] drain-once len=${out.length} sr=${sr}`); } __tapDrainCount++; }catch(_){ }
+        }
+    }catch(_){ }
+}
 // Send JSON audio buffer to host (Swift expects a frequency field)
 function sendHostJSONChunk(f32, sr=STREAM_SR){
     try{
@@ -145,7 +186,13 @@ function genBinChunk(){
     for(const l of labels){ const f=hostFreq.get(l)||0; const p0=hostPhase.get(l)||0; const adv = 2*Math.PI*f*(n/STREAM_SR); let ph = p0+adv; ph = ((ph + Math.PI) % (2*Math.PI)) - Math.PI; hostPhase.set(l, ph); }
     return buf.buffer;
 }
-function sendHostBin(ab){ try{ window.webkit.messageHandlers.swiftBridge.postMessage({ type:'audioBuffer_bin', data: ab }); }catch(e){} }
+function sendHostBin(ab, sr=STREAM_SR){
+    // Reliability-first: convert to Float32Array and use JSON path
+    try{
+        const f32 = (ab instanceof Float32Array) ? ab : new Float32Array(ab);
+        sendHostJSONChunk(f32, sr);
+    }catch(_){ }
+}
 function ensureStreaming(){
     if(streamTimer) return;
     if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive) return;
@@ -158,6 +205,7 @@ function ensureStreaming(){
         const drainSec = PAGE_HIDDEN ? Math.min(STREAM_CHUNK_BG_MAX_SEC, Math.max(STREAM_CHUNK_SEC, dtSec))
                                      : Math.max(STREAM_CHUNK_SEC, Math.min(dtSec, STREAM_CHUNK_BG_MAX_SEC));
         streamLastTs = now;
+        try{ if(typeof __streamTickCount === 'number' && __streamTickCount < 3){ bridgeLog(`[tap] tick dt=${dtSec.toFixed(3)} drain=${drainSec.toFixed(3)} q=${sampleTapQueue.length}`); __streamTickCount++; } }catch(_){ }
         // Stop condition
         if(hostActive.size===0 && !samplePlaybackHost && !sampleTapActive){ clearInterval(streamTimer); streamTimer=null; return; }
         // 1) Send sample tap chunk if active
@@ -173,7 +221,12 @@ function ensureStreaming(){
                 }
                 if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; } }
             }
-            if(out && out.length){ sendHostJSONChunk(out, sampleTapSR); }
+            if(out && out.length){
+                // Prefer binary; also send JSON for first few drains as safety
+                try{ sendHostBin(out.buffer, sampleTapSR); }catch(_){ }
+                try{ if(typeof __tapDrainCount==='number' && __tapDrainCount < 8){ sendHostJSONChunk(out, sampleTapSR); } }catch(_){ }
+                try{ if(typeof __tapDrainCount==='number'){ if(__tapDrainCount < 6 || Math.random() < 0.15){ bridgeLog(`[tap] drain len=${out.length} sr=${sampleTapSR}`); } __tapDrainCount++; } }catch(_){ }
+            }
             else if(PAGE_HIDDEN){
                 // If hidden and no tap data, feed a tiny zero-fill to avoid crackles
                 const filler = Math.floor(sampleTapSR * 0.06);
@@ -193,7 +246,11 @@ function ensureStreaming(){
             if(samplePlaybackHost.pos >= samplePlaybackHost.pcm.length){ samplePlaybackHost = null; }
         }
         // 3) Send note-generated sine chunk (binary) if any notes active
-        if(hostActive.size>0){ const ab = genBinChunk(); if(ab){ sendHostBin(ab); } }
+        //    Avoid mixing with sample streaming (Tap or Decode fallback)
+        if(hostActive.size>0 && !sampleTapActive && !samplePlaybackHost){
+            const ab = genBinChunk();
+            if(ab){ sendHostBin(ab); }
+        }
     }, ms);
 }
 function maybeStopStreaming(){ if(hostActive.size===0 && !samplePlaybackHost && streamTimer){ clearInterval(streamTimer); streamTimer=null; } }
@@ -203,7 +260,11 @@ function playLocalSustain(note,freq){ const ctx=ensureAC(); const osc=ctx.create
 function stopLocalNote(note){ const ctx=ensureAC(); const arr=localNotes.get(note); if(arr&&arr.length){ arr.forEach(({osc,gain})=>{ try{ const t=ctx.currentTime; gain.gain.cancelScheduledValues(t); gain.gain.setValueAtTime(gain.gain.value,t); gain.gain.exponentialRampToValueAtTime(0.0008, t+FADE_TIME); osc.stop(t+FADE_TIME+0.02);}catch(_){}}); localNotes.delete(note); } }
 function genBuf(freq,lenSec=0.2,sr=44100){ const n=Math.floor(sr*lenSec); const a=new Float32Array(n); for(let i=0;i<n;i++){ a[i]=Math.sin(2*Math.PI*freq*i/sr)*0.5; } return {frequency:freq,sampleRate:sr,duration:lenSec,audioData:Array.from(a),channels:1}; }
 
-function routePlay(note,freq){ const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ // Primer + activer streaming
+function routePlay(note,freq){ const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ // Host path
+ if(sampleTapActive || samplePlaybackHost){ // Avoid overlaying sine when sample streaming active
+  ensureStreaming(); try{ drainTapOnce(0.14); }catch(_){ }
+  return;
+ }
  sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)});
  hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0);
  ensureStreaming();
@@ -212,13 +273,25 @@ function routePlay(note,freq){ const forceHost= window.forceHostRouting|| window
   if(!localNotes.has(note)) playLocalSustain(note,freq);
   return;
  } // AUTO
- if(hostAvailable()){ sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)}); hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0); ensureStreaming(); sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}}); } else { if(!localNotes.has(note)) playLocalSustain(note,freq); } }
+ if(hostAvailable()){
+  // Gate AUTO mode as well while a sample streams
+  if(sampleTapActive || samplePlaybackHost){ ensureStreaming(); try{ drainTapOnce(0.14); }catch(_){ } return; }
+  sendHost({type:'audioBuffer',data:genBuf(freq,0.5,44100)});
+  hostActive.add(note); hostFreq.set(note,freq); if(!hostPhase.has(note)) hostPhase.set(note,0); ensureStreaming();
+  sendHost({type:'audioNote',data:{command:'playNote',note,frequency:freq,duration:HOST_SUSTAIN_SEC,amplitude:0.5,sustain:true,gate:1}});
+ } else { if(!localNotes.has(note)) playLocalSustain(note,freq); } }
 function routeStop(note){ stopLocalNote(note); sendHost({type:'audioNote',data:{command:'stopNote',note}}); hostActive.delete(note); hostFreq.delete(note); hostPhase.delete(note); maybeStopStreaming(); }
 let hostChordActive = [];
-function routeChord(freqs){ const key='CHORD'; const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); return;} if(forceLocal){ // Always play locally in Local mode
+function routeChord(freqs){ const key='CHORD'; const forceHost= window.forceHostRouting|| window.forceAUv3Mode===true; const forceLocal = window.forceAUv3Mode===false; if(forceHost){ if(sampleTapActive || samplePlaybackHost){ ensureStreaming(); try{ drainTapOnce(0.16); }catch(_){ } return; } hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); return;} if(forceLocal){ // Always play locally in Local mode
     if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); }
     return;
-} if(hostAvailable()){ hostChordActive = freqs.slice(); freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); }); ensureStreaming(); } else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } }
+} if(hostAvailable()){
+    // Gate AUTO mode as well during sample streaming
+    if(sampleTapActive || samplePlaybackHost){ ensureStreaming(); try{ drainTapOnce(0.16); }catch(_){ } return; }
+    hostChordActive = freqs.slice();
+    freqs.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioBuffer',data:genBuf(f,0.5,44100)}); hostActive.add(label); hostFreq.set(label,f); if(!hostPhase.has(label)) hostPhase.set(label,0); sendHost({type:'audioNote',data:{command:'playNote',note:label,frequency:f,duration:HOST_SUSTAIN_SEC,amplitude:0.3,sustain:true,gate:1}}); });
+    ensureStreaming();
+} else { if(!localNotes.has(key)){ freqs.forEach(f=>playLocalSustain(key,f)); } } }
 function stopChord(){ stopLocalNote('CHORD'); hostChordActive.forEach((f,i)=>{ const label=`CH_${i}`; sendHost({type:'audioNote',data:{command:'stopNote',note:label,gate:0}}); hostActive.delete(label); hostFreq.delete(label); hostPhase.delete(label); }); hostChordActive=[]; maybeStopStreaming(); }
 function stopAll(){ // stop locaux
     Array.from(localNotes.keys()).forEach(k=>stopLocalNote(k));
@@ -244,21 +317,47 @@ window.audioSwiftBridge = {
 Button({ id:'routeBtn', onText:'', offText:'', onAction:()=>{ routeIdx=(routeIdx+1)%ROUTE.length; applyRoute(); }, offAction:()=>{ routeIdx=(routeIdx+1)%ROUTE.length; applyRoute(); }, parent:'body', css:{position:'absolute',left:'14px',top:'14px',width:'90px',height:'34px',background:'#6a5acd',color:'#fff',border:'none',borderRadius:'6px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
 applyRoute();
 
-// Default: in AUv3, force decode fallback for file playback unless explicitly overridden
+// Default: in AUv3, prefer Tap (direct-from-disk) automatically if host+HTTP are ready; else Decode
 if(IN_AUV3 && typeof window.forceSampleDecodeFallback === 'undefined'){
-    window.forceSampleDecodeFallback = true;
+    // Tap desired when both the Swift bridge is available and the local HTTP server port is known
+    const canTap = !!(hostAvailable() && window.__ATOME_LOCAL_HTTP_PORT__);
+    // forceSampleDecodeFallback === true means Decode mode; false means Tap mode
+    window.forceSampleDecodeFallback = !canTap;
+    // Mark as auto-managed until user toggles manually
+    window.__tapAutoManaged = true;
 }
 
 // Quick toggle for Tap vs Decode fallback
 const modeBtn = Button({
     id:'modeBtn', parent:'body',
     onText:'Mode: Decode', offText:'Mode: Tap',
-    onAction:()=>{ window.forceSampleDecodeFallback = true; },
-    offAction:()=>{ window.forceSampleDecodeFallback = false; },
+    onAction:()=>{ window.forceSampleDecodeFallback = true; window.__tapAutoManaged = false; },
+    offAction:()=>{ window.forceSampleDecodeFallback = false; window.__tapAutoManaged = false; },
     css:{position:'absolute',left:'705px',top:'14px',width:'110px',height:'34px',background:'#455063',color:'#fff',border:'none',borderRadius:'6px',fontFamily:'Arial, sans-serif',fontSize:'12px',cursor:'pointer'}
 });
 // Initialize button state to reflect current mode
 try{ modeBtn.setState(!!window.forceSampleDecodeFallback); }catch(_){ }
+
+// Auto-switch to Tap when host bridge + local HTTP port become available (until user toggles manually)
+try{
+    (function(){
+        if(!IN_AUV3) return;
+        if(typeof window.__tapAutoManaged === 'undefined') window.__tapAutoManaged = true;
+        let tries = 0;
+        const maxTries = 20; // ~10s
+        const timer = setInterval(()=>{
+            tries++;
+            if(!window.__tapAutoManaged){ clearInterval(timer); return; }
+            const haveTap = !!(hostAvailable() && window.__ATOME_LOCAL_HTTP_PORT__);
+            const wantDecode = !haveTap;
+            if(window.forceSampleDecodeFallback !== wantDecode){
+                window.forceSampleDecodeFallback = wantDecode;
+                try{ modeBtn.setState(!!window.forceSampleDecodeFallback); }catch(_){ }
+            }
+            if(haveTap || tries >= maxTries){ clearInterval(timer); }
+        }, 500);
+    })();
+}catch(_){ }
 
 // Notes (toggle)
 const c4 = Button({ onText:'C4 ●', offText:'C4', parent:'body', onAction:()=>routePlay('C4',261.63), offAction:()=>routeStop('C4'), onStyle:{background:'#ff6b35',color:'#fff'}, offStyle:{background:'#3b9157',color:'#fff'}, css:{position:'absolute',left:'120px',top:'14px',width:'70px',height:'34px',border:'none',borderRadius:'5px',fontFamily:'Arial, sans-serif',fontSize:'13px',cursor:'pointer'} });
@@ -394,6 +493,8 @@ function stopSample(){
                     }catch(_){ }
                     sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
                 }
+                __hostRenderWoke = false;
+                __tapDrainCount = 0; __tapFirstDrainDone = false;
                 FIRST_HIDE_PRIMED = false; // reset for next playback
                 maybeStopStreaming();
     }catch(_){ }
@@ -452,9 +553,20 @@ async function playSampleHost(relPath){
                 workletNode.port.onmessage = (e)=>{
                     try{
                         const msg = e.data || {};
-                        const pcm = msg.pcm; const sr = msg.sr|0 || sampleTapSR;
-                        if(pcm && pcm.length){ sampleTapQueue.push(pcm); sampleTapSR = sr; tapGotData = true; }
-                    }catch(_){ }
+                        let pcm = msg.pcm; const sr = (msg.sr|0) || sampleTapSR;
+                        // If payload is an ArrayBuffer (due to transfer), reconstruct Float32Array
+                        if(pcm && !(pcm instanceof Float32Array) && pcm.byteLength !== undefined){
+                            try{ pcm = new Float32Array(pcm); }catch(_){ }
+                        }
+                        if(pcm && pcm.length){
+                            sampleTapQueue.push(pcm);
+                            sampleTapSR = sr; tapGotData = true;
+                            // Kick immediate drain on first received data
+                            if(typeof __streamTickCount === 'undefined'){ window.__streamTickCount = 0; }
+                            try{ if(__tapDrainCount===0){ drainTapOnce(0.12); } }catch(_){ }
+                            if((sampleTapQueue.length % 8)===0){ try{ bridgeLog(`[tap] queued=${sampleTapQueue.length} len=${pcm.length} sr=${sampleTapSR}`); }catch(_){ } }
+                        }
+                    }catch(err){ try{ bridgeLog(`[tap] onmessage error: ${err && err.message}`); }catch(_){ } }
                 };
         // Ensure a persistent zero-gain sink exists
         if(!sampleTapSink){ sampleTapSink = ctx.createGain(); sampleTapSink.gain.value = 0.0; sampleTapSink.connect(ctx.destination); }
@@ -468,7 +580,7 @@ async function playSampleHost(relPath){
         if(!sampleTapNodes){
             const proc = ctx.createScriptProcessor ? ctx.createScriptProcessor(2048, 2, 1) : null;
             if(!proc){ console.warn('ScriptProcessor not available, aborting tap'); throw new Error('no-processor'); }
-            proc.onaudioprocess = (ev)=>{
+        proc.onaudioprocess = (ev)=>{
                 try{
                     const ib = ev.inputBuffer; const ch0 = ib.getChannelData(0);
                     const ch1 = ib.numberOfChannels>1 ? ib.getChannelData(1) : null;
@@ -477,6 +589,9 @@ async function playSampleHost(relPath){
                     else { mono.set(ch0); }
                     sampleTapQueue.push(mono);
                     tapGotData = true;
+            // Kick immediate drain on first received data
+            if(typeof __streamTickCount === 'undefined'){ window.__streamTickCount = 0; }
+            try{ if(__tapDrainCount===0){ drainTapOnce(0.12); } }catch(_){ }
                     if((sampleTapQueue.length % 8)===0){ console.log('[tap] queued chunks=', sampleTapQueue.length, 'sr=', sampleTapSR); }
                 }catch(_){ }
             };
@@ -486,17 +601,29 @@ async function playSampleHost(relPath){
         }
     // Some iOS builds require media element to be connected to destination to run; feed it into zero-gain sink as well
     try{ if(sampleTapSink){ sampleTapSource.connect(sampleTapSink); } }catch(_){ }
-    sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true; firstHideHandled = false;
-        el.onended = ()=>{ sampleTapEnded = true; };
-        try{ await el.play(); }catch(e){ console.warn('audio element play failed', e); }
-    // Primer silence to avoid underrun while tap warms up; larger if page hidden
-    const primerSec = PAGE_HIDDEN ? 1.0 : 0.3;
+    sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true; firstHideHandled = false; __hostRenderWoke = false; __tapDrainCount = 0; __tapFirstDrainDone = false; window.__streamTickCount = 0;
+    // Restart streaming timer to ensure Tap starts draining immediately (handles stale interval from previous mode)
+    try{ if(streamTimer){ clearInterval(streamTimer); streamTimer=null; } }catch(_){ }
+    el.onended = ()=>{ sampleTapEnded = true; bridgeLog('[tap] media ended'); };
+        el.onplaying = ()=>{ try{ bridgeLog('[tap] media playing'); }catch(_){ } };
+        el.ontimeupdate = ()=>{ if(!tapGotData){ try{ bridgeLog(`[tap] time=${el.currentTime.toFixed(2)}`); }catch(_){ } } };
+        try{ await el.play(); bridgeLog('[tap] el.play ok'); }catch(e){ console.warn('audio element play failed', e); bridgeLog(`[tap] el.play error: ${e && e.message}`); }
+    // Primer silence to avoid underrun while tap warms up; keep small
+    const primerSec = PAGE_HIDDEN ? 0.12 : 0.02;
     const zeros = new Float32Array(Math.floor(sampleTapSR * primerSec)); if(zeros.length) sendHostJSONChunk(zeros, sampleTapSR);
+        // Wake the host render engine so it starts pulling the AU pipeline
+        wakeHostRender();
         ensureStreaming();
+        // Fire an immediate drain right now if we already have data
+        try{ drainTapOnce(0.12); }catch(_){ }
+            // Force early drains to kick the pipe even if timer is throttled
+            setTimeout(()=>{ try{ drainTapOnce(0.12); }catch(_){ } }, 60);
+            setTimeout(()=>{ try{ drainTapOnce(0.12); }catch(_){ } }, 180);
         // Fallback if tap produces no data in time (e.g., scheme not tappable)
     setTimeout(()=>{
             try{
                 if(!tapGotData && sampleTapActive){
+                    bridgeLog('[tap] timeout no data -> fallback Decode');
                     // Tear down tap and fallback to pre-decode streaming
                     if(sampleTapSource && sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapSource.disconnect(sampleTapNodes.processor); }catch(_){ }}
                     if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
@@ -504,7 +631,7 @@ async function playSampleHost(relPath){
                     playSampleHostFallbackDecode(relPath);
                 }
             }catch(_){ }
-    }, 700);
+    }, 900);
     } catch(e){ console.warn('playSampleHost error, fallback local', e); playSampleLocal(relPath); }
 }
 
