@@ -121,6 +121,13 @@ function onVisibilityChange(){
         } else if(sampleTapNodes && sampleTapNodes.processor && sampleTapNodes.processor.port) {
             sampleTapNodes.processor.port.postMessage({ cmd:'setChunkSec', sec: 0.12 });
         }
+        // Also adjust Tone capture chunk size to reduce message pressure when hidden
+        try{
+            if(toneState && toneState.capture && toneState.capture.port){
+                if(PAGE_HIDDEN){ toneState.capture.port.postMessage({ cmd:'setChunkFrames', frames: 512 }); }
+                else { toneState.capture.port.postMessage({ cmd:'setChunkFrames', frames: 256 }); }
+            }
+        }catch(_){ }
         // Reset drain timing
         try{ streamLastTs = performance.now(); }catch(_){ }
         if(PAGE_HIDDEN){ prebufferOnHide(); }
@@ -162,8 +169,12 @@ function prebufferOnHide(){
         const end = Math.min(samplePlaybackHost.pcm.length, start + need);
         if(end > start){ const slice = samplePlaybackHost.pcm.subarray(start, end); samplePlaybackHost.pos = end; try{ sendHostJSONChunk(slice, sr); }catch(_){ } return; }
     }
-    // 3) If notes are active, do not prebuffer Tone PCM (host will receive ongoing capture)
+    // 3) Tone path: when notes are active and the UI is hidden, WK may throttle messages; push a tiny zero-fill
     if(toneActive && toneActive.size > 0){
+        const sr = OUT_SR || STREAM_SR;
+        const frames = Math.floor(sr * Math.min(0.12, coverSec));
+        if(frames > 0){ try{ sendHostJSONChunk(new Float32Array(frames), sr); }catch(_){ }
+        }
         return;
     }
     // 4) Last resort: a tiny silence buffer to keep host from underrun
@@ -508,6 +519,7 @@ function playSampleLocal(relPath){
         if(!el){ console.warn('no samplePlayer element'); return; }
         // Ensure WebAudio context is unlocked (some iOS builds require it once per user gesture)
         try{ ensureAC(); }catch(_){ }
+        const ctx = AC;
         // Stop any previous decoded local playback
         try{
             if(localDecodedSample && localDecodedSample.src){
@@ -522,6 +534,14 @@ function playSampleLocal(relPath){
         const port = window.__ATOME_LOCAL_HTTP_PORT__;
         el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath))
                       : ('atome:///audio/'+encodeURI(relPath));
+        // If a MediaElementSource was created previously (Tap mode), route it to destination for Local playback
+        try{
+            if(sampleTapSource && ctx){
+                // Avoid duplicate connections by best-effort disconnect then connect
+                try{ sampleTapSource.disconnect(ctx.destination); }catch(_){ }
+                sampleTapSource.connect(ctx.destination);
+            }
+        }catch(_){ }
         // Play via HTML audio element
         let played = false; let cancelled = false;
         const onPlaying = ()=>{ played = true; };
@@ -572,6 +592,8 @@ function stopSample(){
                         if(sampleTapSource && sampleTapSink){
                             try{ sampleTapSource.disconnect(sampleTapSink); }catch(_){ }
                         }
+            // Also ensure Local route path is clean
+            try{ const ctx = AC; if(ctx){ sampleTapSource && sampleTapSource.disconnect(ctx.destination); } }catch(_){ }
                         if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
                     }catch(_){ }
                     sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
@@ -579,7 +601,7 @@ function stopSample(){
                 __hostRenderWoke = false;
                 __tapDrainCount = 0; __tapFirstDrainDone = false;
                 FIRST_HIDE_PRIMED = false; // reset for next playback
-                stopSineBridge();
+        // No custom sine to stop; Tone capture remains persistent
                 maybeStopStreaming();
   }catch(_){ }
 }
