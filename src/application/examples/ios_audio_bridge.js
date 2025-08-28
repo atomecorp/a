@@ -13,6 +13,7 @@ function applyRoute(){
     else if(mode==='Auto'){ window.forceHostRouting=false; window.forceAUv3Mode=undefined; }
     else { window.forceHostRouting=true; window.forceAUv3Mode=true; }
     const b=grab('routeBtn'); if(b){ b.textContent=mode; b.style.background= mode==='Local'? '#2d6cdf': (mode==='Auto'? '#6a5acd':'#27986a'); }
+    try{ updateSynthAudibleMute(); }catch(_){ }
 }
 
 // Helpers
@@ -87,12 +88,12 @@ let tapWorkletReady=null; async function ensureTapWorkletLoaded(ctx){ if(!ctx ||
 async function createTapWorkletNode(ctx, chunkSec){ await ensureTapWorkletLoaded(ctx); const node = new AudioWorkletNode(ctx, 'media-tap-processor', { numberOfInputs:1, numberOfOutputs:1, outputChannelCount:[1], channelCount:2, processorOptions:{ chunkDurationSec: chunkSec } }); return node; }
 
 // Tone.js persistent synth + capture worklet (replace custom sine generator)
-const CAPTURE_WORKLET_SOURCE = `class HostCaptureProcessor extends AudioWorkletProcessor {\n  constructor(options){\n    super();\n    const frames = options?.processorOptions?.chunkFrames || 256;\n    this.chunk = Math.max(128, Math.min(1024, frames|0));\n    this.buf = new Float32Array(this.chunk);\n    this.w = 0;\n  }\n  process(inputs, outputs){\n    const input = inputs[0];\n    const ch0 = input && input[0] ? input[0] : null;\n    const ch1 = input && input[1] ? input[1] : null;\n    const n = ch0 ? ch0.length : 128;\n    for(let i=0;i<n;i++){\n      const s = ch0 ? (ch1 ? ((ch0[i]+ch1[i])*0.5) : ch0[i]) : 0;\n      this.buf[this.w++] = s;\n      if(this.w >= this.chunk){ this.port.postMessage({ sr: sampleRate, pcm: this.buf }, [this.buf.buffer]); this.buf = new Float32Array(this.chunk); this.w = 0; }\n    }\n    // produce silence on output to keep graph pulled\n    if(outputs && outputs[0] && outputs[0][0]){ outputs[0][0].fill(0); if(outputs[0][1]) outputs[0][1].fill(0); }\n    return true;\n  }\n}\nregisterProcessor('host-capture-processor', HostCaptureProcessor);`;
+const CAPTURE_WORKLET_SOURCE = `class HostCaptureProcessor extends AudioWorkletProcessor {\n  constructor(options){\n    super();\n    const frames = options?.processorOptions?.chunkFrames || 256;\n    this.setChunk(frames);\n    this.buf = new Float32Array(this.chunk);\n    this.w = 0;\n    this.port.onmessage = (e)=>{\n      const msg = e.data || {};\n      if(msg && msg.cmd === 'setChunkFrames'){\n        const f = (msg.frames|0) || 256;\n        this.setChunk(f);\n        this.buf = new Float32Array(this.chunk);\n        this.w = 0;\n      }\n    };\n  }\n  setChunk(frames){\n    const clamped = Math.max(128, Math.min(1024, (frames|0)||256));\n    this.chunk = clamped;\n  }\n  process(inputs, outputs){\n    const input = inputs[0];\n    const ch0 = input && input[0] ? input[0] : null;\n    const ch1 = input && input[1] ? input[1] : null;\n    const n = ch0 ? ch0.length : 128;\n    for(let i=0;i<n;i++){\n      const s = ch0 ? (ch1 ? ((ch0[i]+ch1[i])*0.5) : ch0[i]) : 0;\n      this.buf[this.w++] = s;\n      if(this.w >= this.chunk){ this.port.postMessage({ sr: sampleRate, pcm: this.buf }, [this.buf.buffer]); this.buf = new Float32Array(this.chunk); this.w = 0; }\n    }\n    // produce silence on output to keep graph pulled\n    if(outputs && outputs[0] && outputs[0][0]){ outputs[0][0].fill(0); if(outputs[0][1]) outputs[0][1].fill(0); }\n    return true;\n  }\n}\nregisterProcessor('host-capture-processor', HostCaptureProcessor);`;
 let __captureWorkletURL = null; function getCaptureWorkletURL(){ if(__captureWorkletURL) return __captureWorkletURL; try{ const blob = new Blob([CAPTURE_WORKLET_SOURCE], { type:'application/javascript' }); __captureWorkletURL = URL.createObjectURL(blob); }catch(_){ __captureWorkletURL = null; } return __captureWorkletURL; }
 let captureWorkletReady = null; let __captureCtx = null;
 async function ensureCaptureWorkletLoaded(ctx){ if(!ctx || !ctx.audioWorklet) throw new Error('no-audioWorklet'); if(__captureCtx !== ctx){ captureWorkletReady = null; __captureCtx = ctx; } if(!captureWorkletReady){ const url = getCaptureWorkletURL(); if(!url) throw new Error('capture-worklet-url'); captureWorkletReady = ctx.audioWorklet.addModule(url).catch(e=>{ captureWorkletReady=null; throw e; }); } return captureWorkletReady; }
 
-const toneState = { ready:false, poly:null, gain:null, capture:null, sink:null };
+const toneState = { ready:false, poly:null, gain:null, capture:null, sink:null, audibleBus:null, lastPCMAt:0 };
 const toneActive = new Set();
 function ensureTone(){
     const ctx = ensureAC();
@@ -118,21 +119,46 @@ function ensureTone(){
                             let pcm = e.data?.pcm; const sr = (e.data?.sr|0)||ctx.sampleRate|0;
                             if(pcm && !(pcm instanceof Float32Array) && pcm.byteLength!==undefined){ try{ pcm = new Float32Array(pcm); }catch(_){ } }
                             if(pcm && pcm.length){ sendHostJSONChunk(pcm, sr); }
+                            try{ toneState.lastPCMAt = (typeof performance!== 'undefined' && performance.now)? performance.now(): Date.now(); }catch(_){ }
                         }catch(_){ }
                     };
                     // Build a zero-gain sink to ensure pulling in AUv3
                     if(!toneState.sink){ toneState.sink = ctx.createGain(); toneState.sink.gain.value = 0.0; toneState.sink.connect(ctx.destination); }
                     gain.connect(node);
                     try{ node.connect(toneState.sink); }catch(_){ }
-                    // Also route audible path (for Local route)
-                    try{ gain.connect(ctx.destination); }catch(_){ }
+                    // Also route audible path via a dedicated audible bus we can gate independently
+                    if(!toneState.audibleBus){ toneState.audibleBus = ctx.createGain(); }
+                    try{ gain.connect(toneState.audibleBus); toneState.audibleBus.connect(ctx.destination); }catch(_){ }
                     toneState.capture = node;
                 }catch(_){ }
             })();
             toneState.poly = poly; toneState.gain = gain; toneState.ready = true;
+            try{ updateSynthAudibleMute(); }catch(_){ }
         }catch(_){ toneState.ready = false; }
     }
     return ctx;
+}
+
+// Mute only the synth's audible path in Host/Decode; never touch samples
+function updateSynthAudibleMute(){
+    try{
+        const ctx = ensureAC();
+        if(!toneState || !toneState.ready || !toneState.audibleBus) return;
+        const forceLocal = (window.forceAUv3Mode===false);
+        const forceHost = (window.forceHostRouting || window.forceAUv3Mode===true);
+        const host = hostAvailable();
+        let g = 1.0;
+        if(forceLocal){
+            g = 1.0; // always audible locally
+        } else if(host && (forceHost || (!forceLocal && !forceHost))){
+            // In Host route, when sample mode is Decode, mute only the synth locally
+            g = (window.forceSampleDecodeFallback===true) ? 0.0 : 1.0;
+        } else {
+            g = 1.0;
+        }
+        try{ toneState.audibleBus.gain.cancelScheduledValues(ctx.currentTime); }catch(_){ }
+        toneState.audibleBus.gain.setValueAtTime(g, ctx.currentTime);
+    }catch(_){ }
 }
 
 // Page visibility handling for AUv3 UI close/minimize cases (timers may throttle)
@@ -446,12 +472,12 @@ if(IN_AUV3 && typeof window.forceSampleDecodeFallback === 'undefined'){
 const modeBtn = Button({
     id:'modeBtn', parent:'body',
     onText:'Mode: Decode', offText:'Mode: Tap',
-    onAction:()=>{ window.forceSampleDecodeFallback = true; window.__tapAutoManaged = false; },
-    offAction:()=>{ window.forceSampleDecodeFallback = false; window.__tapAutoManaged = false; },
+    onAction:()=>{ window.forceSampleDecodeFallback = true; window.__tapAutoManaged = false; try{ updateSynthAudibleMute(); }catch(_){ } },
+    offAction:()=>{ window.forceSampleDecodeFallback = false; window.__tapAutoManaged = false; try{ updateSynthAudibleMute(); }catch(_){ } },
     css:{position:'absolute',left:'705px',top:'14px',width:'110px',height:'34px',background:'#455063',color:'#fff',border:'none',borderRadius:'6px',fontFamily:'Arial, sans-serif',fontSize:'12px',cursor:'pointer'}
 });
 // Initialize button state to reflect current mode
-try{ modeBtn.setState(!!window.forceSampleDecodeFallback); }catch(_){ }
+try{ modeBtn.setState(!!window.forceSampleDecodeFallback); updateSynthAudibleMute(); }catch(_){ }
 
 // Auto-switch to Tap when host bridge + local HTTP port become available (until user toggles manually)
 try{
@@ -468,6 +494,7 @@ try{
             if(window.forceSampleDecodeFallback !== wantDecode){
                 window.forceSampleDecodeFallback = wantDecode;
                 try{ modeBtn.setState(!!window.forceSampleDecodeFallback); }catch(_){ }
+                try{ updateSynthAudibleMute(); }catch(_){ }
             }
             if(haveTap || tries >= maxTries){ clearInterval(timer); }
         }, 500);
