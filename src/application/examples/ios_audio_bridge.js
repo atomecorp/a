@@ -127,8 +127,9 @@ function ensureTone(){
                     gain.connect(node);
                     try{ node.connect(toneState.sink); }catch(_){ }
                     // Also route audible path via a dedicated audible bus we can gate independently
-                    if(!toneState.audibleBus){ toneState.audibleBus = ctx.createGain(); }
+                    if(!toneState.audibleBus){ toneState.audibleBus = ctx.createGain(); try{ toneState.audibleBus.gain.value = 0.0; }catch(_){ } }
                     try{ gain.connect(toneState.audibleBus); toneState.audibleBus.connect(ctx.destination); }catch(_){ }
+                    try{ updateSynthAudibleMute(); }catch(_){ }
                     toneState.capture = node;
                 }catch(_){ }
             })();
@@ -147,15 +148,9 @@ function updateSynthAudibleMute(){
         const forceLocal = (window.forceAUv3Mode===false);
         const forceHost = (window.forceHostRouting || window.forceAUv3Mode===true);
         const host = hostAvailable();
-        let g = 1.0;
-        if(forceLocal){
-            g = 1.0; // always audible locally
-        } else if(host && (forceHost || (!forceLocal && !forceHost))){
-            // In Host route, when sample mode is Decode, mute only the synth locally
-            g = (window.forceSampleDecodeFallback===true) ? 0.0 : 1.0;
-        } else {
-            g = 1.0;
-        }
+    // Host route = forced Host, or Auto with host available
+    const inHost = host && (forceHost || (typeof window.forceAUv3Mode === 'undefined'));
+    const g = inHost ? 0.0 : 1.0;
         try{ toneState.audibleBus.gain.cancelScheduledValues(ctx.currentTime); }catch(_){ }
         toneState.audibleBus.gain.setValueAtTime(g, ctx.currentTime);
     }catch(_){ }
