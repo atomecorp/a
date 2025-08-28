@@ -155,9 +155,8 @@ function drainTapOnce(maxSec){
             const total = parts.reduce((a,p)=>a+p.length,0);
             const out = new Float32Array(total);
             let off=0; for(const p of parts){ out.set(p, off); off+=p.length; }
-            try{ sendHostBin(out.buffer, sr); }catch(_){ }
-            try{ if(__tapDrainCount < 8){ sendHostJSONChunk(out, sr); } }catch(_){ }
-            try{ if(__tapDrainCount < 6 || Math.random() < 0.15){ bridgeLog(`[tap] drain-once len=${out.length} sr=${sr}`); } __tapDrainCount++; }catch(_){ }
+            try{ sendHostJSONChunk(out, sr); }catch(_){ }
+            try{ bridgeLog(`[tap] drain-once len=${out.length} sr=${sr}`); }catch(_){ }
         }
     }catch(_){ }
 }
@@ -222,10 +221,9 @@ function ensureStreaming(){
                 if(parts.length){ const total = parts.reduce((a,p)=>a+p.length,0); out = new Float32Array(total); let off=0; for(const p of parts){ out.set(p, off); off+=p.length; } }
             }
             if(out && out.length){
-                // Prefer binary; also send JSON for first few drains as safety
-                try{ sendHostBin(out.buffer, sampleTapSR); }catch(_){ }
-                try{ if(typeof __tapDrainCount==='number' && __tapDrainCount < 8){ sendHostJSONChunk(out, sampleTapSR); } }catch(_){ }
-                try{ if(typeof __tapDrainCount==='number'){ if(__tapDrainCount < 6 || Math.random() < 0.15){ bridgeLog(`[tap] drain len=${out.length} sr=${sampleTapSR}`); } __tapDrainCount++; } }catch(_){ }
+                // Send JSON only to avoid duplicates
+                try{ sendHostJSONChunk(out, sampleTapSR); }catch(_){ }
+                try{ bridgeLog(`[tap] drain len=${out.length} sr=${sampleTapSR}`); }catch(_){ }
             }
             else if(PAGE_HIDDEN){
                 // If hidden and no tap data, feed a tiny zero-fill to avoid crackles
@@ -489,6 +487,9 @@ function stopSample(){
                         if(sampleTapSource && sampleTapNodes && sampleTapNodes.processor){
                             try{ sampleTapSource.disconnect(sampleTapNodes.processor); }catch(_){ }
                         }
+                        if(sampleTapSource && sampleTapSink){
+                            try{ sampleTapSource.disconnect(sampleTapSink); }catch(_){ }
+                        }
                         if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
                     }catch(_){ }
                     sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
@@ -539,7 +540,11 @@ async function playSampleHost(relPath){
         try{ el.crossOrigin = 'anonymous'; }catch(_){ }
         // Do NOT mute element: muting can cause silence in MediaElementSource
         try{ el.muted = false; el.volume = 1.0; }catch(_){ }
-        // Prefer local HTTP (range-supported) if available; fallback to custom scheme
+    // Reset element to a clean state before assigning a new src
+    try{ el.pause(); }catch(_){ }
+    try{ el.currentTime = 0; }catch(_){ }
+    try{ if(typeof el.load === 'function'){ el.load(); } }catch(_){ }
+    // Prefer local HTTP (range-supported) if available; fallback to custom scheme
         const port = window.__ATOME_LOCAL_HTTP_PORT__;
         el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath)) : ('atome:///audio/'+encodeURI(relPath));
         // Build nodes
