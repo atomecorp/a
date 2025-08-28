@@ -529,7 +529,7 @@ function playSampleLocal(relPath){
         localDecodedSample = null;
         // Prepare element
         try{ el.pause(); el.currentTime = 0; }catch(_){ }
-        try{ el.muted = false; el.volume = 1.0; }catch(_){ }
+    try{ el.muted = false; el.volume = 1.0; }catch(_){ }
         // Prefer local HTTP server if available (range supported)
         const port = window.__ATOME_LOCAL_HTTP_PORT__;
         el.src = port ? ('http://127.0.0.1:'+port+'/audio/'+encodeURI(relPath))
@@ -642,9 +642,9 @@ async function playSampleHost(relPath){
         const ctx = ensureAC(); sampleTapSR = ctx.sampleRate|0;
         const el = document.getElementById('samplePlayer');
         if(!el){ console.warn('no samplePlayer element'); return; }
-        try{ el.crossOrigin = 'anonymous'; }catch(_){ }
-        // Do NOT mute element: muting can cause silence in MediaElementSource
-        try{ el.muted = false; el.volume = 1.0; }catch(_){ }
+    try{ el.crossOrigin = 'anonymous'; }catch(_){ }
+    // Avoid direct element playback in Tap to prevent doubling: mute element, keep volume at 1.0 for stable tap
+    try{ el.muted = true; el.volume = 1.0; }catch(_){ }
     // Reset element to a clean state before assigning a new src
     try{ el.pause(); }catch(_){ }
     try{ el.currentTime = 0; }catch(_){ }
@@ -655,6 +655,8 @@ async function playSampleHost(relPath){
         // Build nodes
     // Reuse a single MediaElementSource for this element across plays (spec: only one per element)
     if(!sampleTapSource){ sampleTapSource = ctx.createMediaElementSource(el); }
+        // Ensure no direct path to destination in Tap mode
+        try{ sampleTapSource.disconnect(ctx.destination); }catch(_){ }
         let tapGotData = false;
     // Try AudioWorklet tap first for lower latency/CPU
         try{
@@ -706,7 +708,9 @@ async function playSampleHost(relPath){
                 }catch(_){ }
             };
             try{ sampleTapSource.connect(proc); }catch(_){ }
-            try{ proc.connect(ctx.destination); }catch(_){ }
+            // Ensure a persistent zero-gain sink exists, then connect processor to it (not to audible destination)
+            if(!sampleTapSink){ sampleTapSink = ctx.createGain(); sampleTapSink.gain.value = 0.0; sampleTapSink.connect(ctx.destination); }
+            try{ proc.connect(sampleTapSink); }catch(_){ }
             sampleTapNodes = { processor: proc };
         }
     // Some iOS builds require media element to be connected to destination to run; feed it into zero-gain sink as well
