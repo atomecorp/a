@@ -49,7 +49,6 @@ let sampleTapEnded = false;
 let sampleTapNodes = null; // { processor }
 let sampleTapSource = null; // persistent MediaElementSource for the <audio>
 let sampleTapSink = null;   // persistent zero-gain sink to keep graph running on some iOS builds
-let sampleTapEl = null;     // dedicated off-DOM, always-muted element used only for Tap
 let __bgBridgeTimers = [];  // scheduled timers to reinforce prebuffer while hidden
 let __tapDrainCount = 0;    // first drains are fully logged for debugging
 let __hostRenderWoke = false; // ensure we only wake host once per sample
@@ -136,7 +135,7 @@ function ensureTone(){
     return ctx;
 }
 
-                        const ctx = ensureAC(); sampleTapSR = ctx.sampleRate|0;
+// Page visibility handling for AUv3 UI close/minimize cases (timers may throttle)
 function onVisibilityChange(){
     PAGE_HIDDEN = (document.visibilityState === 'hidden');
     try{
@@ -220,8 +219,9 @@ function wakeHostRender(){
         __hostRenderWoke = true;
         bridgeLog('[tap] host wake');
         const noteId = '__WAKE__';
-        sendHost({ type:'audioNote', data:{ command:'playNote', note: noteId, frequency: 30.0, duration: 0.06, amplitude: 0.02, sustain: false, gate: 1 } });
-        setTimeout(()=>{ try{ sendHost({ type:'audioNote', data:{ command:'stopNote', note: noteId, gate: 0 } }); }catch(_){ } }, 60);
+    // Use a very low frequency and tiny amplitude to avoid any audible artifact
+    sendHost({ type:'audioNote', data:{ command:'playNote', note: noteId, frequency: 30.0, duration: 0.06, amplitude: 0.02, sustain: false, gate: 1 } });
+    setTimeout(()=>{ try{ sendHost({ type:'audioNote', data:{ command:'stopNote', note: noteId, gate: 0 } }); }catch(_){ } }, 60);
     }catch(_){ }
 }
 
@@ -619,7 +619,6 @@ function stopSample(){
                     }
                     if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ } }
                 }catch(_){ }
-                try{ if(sampleTapEl){ try{ sampleTapEl.pause(); }catch(_){ } try{ sampleTapEl.src=''; }catch(_){ } } }catch(_){ }
                 if(sampleTapActive){
                     try{
                         if(sampleTapSource && sampleTapNodes && sampleTapNodes.processor){
@@ -632,7 +631,7 @@ function stopSample(){
             try{ const ctx = AC; if(ctx){ sampleTapSource && sampleTapSource.disconnect(ctx.destination); } }catch(_){ }
                         if(sampleTapNodes && sampleTapNodes.processor){ try{ sampleTapNodes.processor.disconnect(); }catch(_){ }}
                     }catch(_){ }
-                    sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null; sampleTapEl = null; sampleTapSource = null;
+                    sampleTapActive = false; sampleTapQueue = []; sampleTapEnded = false; sampleTapNodes = null;
                 }
                 __hostRenderWoke = false;
                 __tapDrainCount = 0; __tapFirstDrainDone = false;
@@ -754,14 +753,14 @@ async function playSampleHost(relPath){
             sampleTapNodes = { processor: proc };
         }
     // Keep only source -> processor -> sink (no direct source -> sink path)
-    sampleTapEl = tapEl; sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true; firstHideHandled = false; __hostRenderWoke = false; __tapDrainCount = 0; __tapFirstDrainDone = false; window.__streamTickCount = 0;
+    sampleTapQueue = []; sampleTapEnded = false; sampleTapActive = true; firstHideHandled = false; __hostRenderWoke = false; __tapDrainCount = 0; __tapFirstDrainDone = false; window.__streamTickCount = 0;
     // Restart streaming timer to ensure Tap starts draining immediately (handles stale interval from previous mode)
     try{ if(streamTimer){ clearInterval(streamTimer); streamTimer=null; } }catch(_){ }
-    tapEl.onended = ()=>{ sampleTapEnded = true; bridgeLog('[tap] media ended'); };
-        tapEl.onplaying = ()=>{ try{ tapEl.defaultMuted = true; tapEl.muted = true; tapEl.volume = 0.0; bridgeLog('[tap] media playing'); }catch(_){ } };
-        try{ tapEl.onvolumechange = ()=>{ try{ if(sampleTapActive){ tapEl.defaultMuted = true; tapEl.muted = true; tapEl.volume = 0.0; } }catch(_){ } }; }catch(_){ }
-        tapEl.ontimeupdate = ()=>{ if(!tapGotData){ try{ bridgeLog(`[tap] time=${tapEl.currentTime.toFixed(2)}`); }catch(_){ } } };
-        try{ await tapEl.play(); bridgeLog('[tap] el.play ok'); }catch(e){ console.warn('audio element play failed', e); bridgeLog(`[tap] el.play error: ${e && e.message}`); }
+    el.onended = ()=>{ sampleTapEnded = true; bridgeLog('[tap] media ended'); };
+        el.onplaying = ()=>{ try{ el.defaultMuted = true; el.muted = true; el.volume = 0.0; bridgeLog('[tap] media playing'); }catch(_){ } };
+        try{ el.onvolumechange = ()=>{ try{ if(sampleTapActive){ el.defaultMuted = true; el.muted = true; el.volume = 0.0; } }catch(_){ } }; }catch(_){ }
+        el.ontimeupdate = ()=>{ if(!tapGotData){ try{ bridgeLog(`[tap] time=${el.currentTime.toFixed(2)}`); }catch(_){ } } };
+        try{ await el.play(); bridgeLog('[tap] el.play ok'); }catch(e){ console.warn('audio element play failed', e); bridgeLog(`[tap] el.play error: ${e && e.message}`); }
         // Short watchdog to re-assert mute while Tap starts
         try{ let wd=0; const wdId = setInterval(()=>{ wd++; try{ if(sampleTapActive){ el.defaultMuted = true; el.muted = true; el.volume = 0.0; } }catch(_){ } if(wd>20 || !sampleTapActive){ clearInterval(wdId); } }, 80); }catch(_){ }
     // Primer silence to avoid underrun while tap warms up; keep small
