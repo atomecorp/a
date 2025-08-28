@@ -225,6 +225,12 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
         }
     }
     
+    public func stopJavaScriptAudio() {
+        if let au = audioUnit as? auv3Utils {
+            au.stopJavaScriptAudio()
+        }
+    }
+    
     // Helper function to convert frequency to MIDI note number
     private func frequencyToMidiNote(_ frequency: Double) -> UInt8 {
         // MIDI note formula: note = 69 + 12 * log2(frequency / 440)

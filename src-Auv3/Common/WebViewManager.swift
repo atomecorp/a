@@ -395,6 +395,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 performCalculation(numbers)
             }
             
+        case "audioJS":
+            if let dict = data as? [String: Any], let cmd = dict["command"] as? String {
+                if cmd == "stop" {
+                    WebViewManager.audioController?.stopJavaScriptAudio()
+                }
+            }
+            
         default:
             print("Message non géré - Type: \(type), Data: \(data)")
         }
@@ -438,7 +445,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         // Convert [Double] to [Float] pour audio processing
         let audioData = audioDataArray.map { Float($0) }
     // Debug log + stats
-    print("🎧 SWIFT: audioBuffer (JSON) recv samples=\(audioData.count) sr=\(Int(sampleRate)) dur=\(String(format: "%.3f", duration))")
+    // Rate-limit logging: only use aggregated stats to avoid console I/O overhead per chunk
     WebViewManager.logJsAudioStatsIfNeeded(lastChunkSamples: audioData.count, sr: sampleRate)
         // Injection asynchrone pour ne jamais bloquer le thread principal
         DispatchQueue.global(qos: .userInitiated).async {
@@ -670,4 +677,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         hostStateTimer?.invalidate(); hostStateTimer = nil
         hostStateStreamActiveFlag = false
     }
+}
+
+extension AudioControllerProtocol {
+    func stopJavaScriptAudio() { /* default no-op */ }
 }

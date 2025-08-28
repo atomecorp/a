@@ -55,11 +55,20 @@ public class auv3Utils: AUAudioUnit {
     private let frameSkipAmount: Int = 16 // Skip 15 out of 16 frames for visualization
     
     // NOUVEAU: JavaScript Audio Injection
-    private var jsAudioBuffer: [Float] = []
-    private var jsAudioPlaybackIndex: Int = 0
+    // Use a chunked queue to avoid large memmoves and reduce lock contention
+    private var jsChunks: [[Float]] = []
+    private var jsHeadOffset: Int = 0
+    private var jsTotalQueued: Int = 0
     private var jsAudioSampleRate: Double = 48000
     private var jsAudioActive: Bool = false
     private let jsAudioLock = NSLock() // Thread safety for JS audio injection
+    // Prebuffer threshold disabled by default to avoid added latency
+    private var jsPrebufferThresholdSamples: Int = 0
+    // Small scratch buffer to copy from shared JS buffer while holding the lock briefly
+    private var jsScratch: [Float] = [Float](repeating: 0, count: 8192)
+    // One-shot micro fade-in to prevent startup clicks on first frames after (re)start
+    private let jsStartupFadeTotal: Int = 256
+    private var jsFadeFramesRemaining: Int = 0
 
     // Custom AudioBufferList wrapper
     private struct AudioBufferListWrapper {
@@ -362,45 +371,42 @@ public class auv3Utils: AUAudioUnit {
     
     /// Inject JavaScript-generated audio into the AUv3 pipeline
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
-        jsAudioLock.lock()
-        defer { jsAudioLock.unlock() }
-
-        // 1) Detect host sample rate
+    // 1) Detect host sample rate
         let hostSampleRate = getSampleRate() ?? 44100.0
-        var processedBuffer: [Float] = audioData
 
-        // 2) Resample if needed (linear interpolation)
+        // 2) Resample if needed (linear interpolation) OUTSIDE the lock to minimize contention
+        var processedBuffer: [Float]
         if abs(sampleRate - hostSampleRate) > 1.0 {
             let ratio = hostSampleRate / sampleRate
             let newLength = Int(Double(audioData.count) * ratio)
-            processedBuffer = [Float](repeating: 0, count: newLength)
+            var tmp = [Float](repeating: 0, count: newLength)
             for i in 0..<newLength {
                 let srcIndex = Double(i) / ratio
                 let idx = Int(srcIndex)
                 let frac = Float(srcIndex - Double(idx))
                 if idx + 1 < audioData.count {
-                    processedBuffer[i] = audioData[idx] * (1 - frac) + audioData[idx + 1] * frac
+                    tmp[i] = audioData[idx] * (1 - frac) + audioData[idx + 1] * frac
                 } else {
-                    processedBuffer[i] = audioData.last ?? 0
+                    tmp[i] = audioData.last ?? 0
                 }
             }
+            processedBuffer = tmp
+        } else {
+            processedBuffer = audioData
         }
 
-        // 3) Append incoming chunk instead of replacing the whole buffer
-        //    Drop already-played samples to keep buffer small
-        if jsAudioActive && !jsAudioBuffer.isEmpty {
-            if jsAudioPlaybackIndex > 0 && jsAudioPlaybackIndex < jsAudioBuffer.count {
-                jsAudioBuffer.removeFirst(jsAudioPlaybackIndex)
-            } else if jsAudioPlaybackIndex >= jsAudioBuffer.count {
-                jsAudioBuffer.removeAll()
-            }
-            jsAudioPlaybackIndex = 0
-            jsAudioBuffer.append(contentsOf: processedBuffer)
-        } else {
-            jsAudioBuffer = processedBuffer
-            jsAudioPlaybackIndex = 0
-            jsAudioActive = true
+        // 3) Append incoming chunk; enable playback immediately (no added latency)
+        jsAudioLock.lock()
+        defer { jsAudioLock.unlock() }
+
+        // If we were idle, arm a tiny fade-in to avoid a click on the very first frames
+        if !jsAudioActive && jsChunks.isEmpty {
+            jsFadeFramesRemaining = jsStartupFadeTotal
         }
+
+        jsChunks.append(processedBuffer)
+        jsTotalQueued &+= processedBuffer.count
+        if !jsAudioActive { jsAudioActive = true }
         jsAudioSampleRate = hostSampleRate
     }
     
@@ -410,39 +416,99 @@ public class auv3Utils: AUAudioUnit {
         defer { jsAudioLock.unlock() }
         
         jsAudioActive = false
-        jsAudioBuffer.removeAll()
-        jsAudioPlaybackIndex = 0
+    jsChunks.removeAll()
+    jsHeadOffset = 0
+    jsTotalQueued = 0
+    jsFadeFramesRemaining = 0
         
         print("⏹️ AUv3: JS audio stopped")
     }
     
     /// Mix JavaScript audio into the output buffer (called from render thread)
     private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount) {
-        guard jsAudioActive, !jsAudioBuffer.isEmpty, jsAudioLock.try() else { return }
-        defer { jsAudioLock.unlock() }
+        // Quick check without taking the lock
+        guard jsAudioActive else { return }
 
         let gain: Float = 0.4 // Conservative mix gain
-        let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
-        for i in 0..<bufferList.numberOfBuffers {
-            let buffer = bufferList.buffer(at: i)
-            guard let outputData = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-            // Mix the same JS segment into all channels
-            for frame in 0..<framesToProcess {
-                if jsAudioPlaybackIndex + frame < jsAudioBuffer.count {
-                    outputData[frame] += jsAudioBuffer[jsAudioPlaybackIndex + frame] * gain
+        var framesRemaining = Int(frameCount)
+        var mixedOffset = 0
+
+        while framesRemaining > 0 {
+            var copied = 0
+            // Copy from chunk queue while holding the lock very briefly
+            jsAudioLock.lock()
+            if jsChunks.isEmpty {
+                jsAudioActive = false
+                jsHeadOffset = 0
+                jsTotalQueued = 0
+                jsAudioLock.unlock()
+                break
+            }
+            let head = jsChunks[0]
+            let availableInHead = head.count - jsHeadOffset
+            if availableInHead <= 0 {
+                // Defensive: advance to next chunk
+                jsChunks.removeFirst()
+                jsHeadOffset = 0
+                if jsChunks.isEmpty {
+                    jsAudioActive = false
+                    jsTotalQueued = 0
+                    jsAudioLock.unlock()
+                    break
                 }
             }
-        }
-        jsAudioPlaybackIndex += framesToProcess
-        // Stop when we've played all the JavaScript audio
-        if jsAudioPlaybackIndex >= jsAudioBuffer.count {
-            jsAudioActive = false
-            jsAudioBuffer.removeAll()
-            jsAudioPlaybackIndex = 0
-            // print("🎵 AUv3: JS audio playback completed")
-// File d'attente circulaire pour messages JS (évite blocage thread principal)
+            let toCopy = min(framesRemaining, min(jsScratch.count, jsChunks.isEmpty ? 0 : (jsChunks[0].count - jsHeadOffset)))
+            if toCopy > 0 {
+                let src = jsChunks[0]
+                for i in 0..<toCopy { jsScratch[i] = src[jsHeadOffset + i] }
+                jsHeadOffset += toCopy
+                jsTotalQueued &-= toCopy
+                if jsHeadOffset >= src.count {
+                    jsChunks.removeFirst()
+                    jsHeadOffset = 0
+                }
+                copied = toCopy
+            }
+            // If nothing was copied, no more data available
+            if copied == 0 { jsAudioActive = false }
+            let applyFade = jsFadeFramesRemaining
+            jsAudioLock.unlock()
 
-// File d'attente circulaire pour messages JS (évite blocage thread principal)
+            if copied == 0 { break }
+
+            // Mix the scratch chunk into all channels outside the lock
+            for i in 0..<bufferList.numberOfBuffers {
+                let buffer = bufferList.buffer(at: i)
+                guard let outputData = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                var outPtr = outputData.advanced(by: mixedOffset)
+
+                if applyFade > 0 {
+                    // One-shot micro fade-in over the first jsStartupFadeTotal frames after (re)start
+                    let fadeTotal = jsStartupFadeTotal
+                    // Compute how many fade frames have already been applied prior to this block
+                    var fadeRemainingLocal = applyFade
+                    var fadeIndexBase = fadeTotal - fadeRemainingLocal
+                    for f in 0..<copied {
+                        var factor: Float = 1.0
+                        if fadeRemainingLocal > 0 {
+                            let idx = min(fadeTotal - 1, fadeIndexBase)
+                            factor = Float(idx + 1) / Float(fadeTotal)
+                            fadeIndexBase += 1
+                            fadeRemainingLocal -= 1
+                        }
+                        outPtr[f] += jsScratch[f] * gain * factor
+                    }
+                    // Update remaining fade count (outside lock but based on local snapshot)
+                    jsAudioLock.lock()
+                    jsFadeFramesRemaining = max(0, jsFadeFramesRemaining - copied)
+                    jsAudioLock.unlock()
+                } else {
+                    for f in 0..<copied { outPtr[f] += jsScratch[f] * gain }
+                }
+            }
+
+            mixedOffset += copied
+            framesRemaining -= copied
         }
     }
 
