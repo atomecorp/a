@@ -37,6 +37,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static var jsAudioChunkCount: Int = 0
     private static var jsAudioTotalSamples: Int = 0
     private static var jsAudioLastLogTS: CFTimeInterval = 0
+    // Last timing metadata coming from JS chunks (for AUv3 logs)
+    public static var lastMediaTimeFromJS: Double? = nil
+    public static var lastLocalTimeFromJS: Double? = nil
     private static func logJsAudioStatsIfNeeded(lastChunkSamples: Int, sr: Double) {
         jsAudioChunkCount += 1
         jsAudioTotalSamples += lastChunkSamples
@@ -442,6 +445,11 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
               let audioDataArray = data["audioData"] as? [Double] else {
             return
         }
+    // Optional timing metadata from JS
+    let mediaTime = data["mediaTime"] as? Double
+    let localTime = data["localTime"] as? Double
+    WebViewManager.lastMediaTimeFromJS = mediaTime
+    WebViewManager.lastLocalTimeFromJS = localTime
         // Convert [Double] to [Float] pour audio processing
         let audioData = audioDataArray.map { Float($0) }
     // Debug log + stats

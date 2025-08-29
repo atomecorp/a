@@ -214,12 +214,16 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     // MARK: - JavaScript Audio Injection
     
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
-        print("🎵 AUv3: Received JS audio - \(audioData.count) samples at \(sampleRate)Hz for \(duration)s")
+        let mt = WebViewManager.lastMediaTimeFromJS
+        let lt = WebViewManager.lastLocalTimeFromJS
+        let mtStr = mt != nil ? String(format: "%.3f", mt!) : "-"
+        let ltStr = lt != nil ? String(format: "%.1f", lt!) : "-"
+        print("🎵 AUv3: Received JS audio - \(audioData.count) samples at \(sampleRate)Hz for \(String(format: "%.3f", duration))s | mediaTime=\(mtStr) | local=\(ltStr)")
         
         // Route JavaScript audio to our AUv3 for direct playback
         if let au = audioUnit as? auv3Utils {
             au.injectJavaScriptAudio(audioData, sampleRate: sampleRate, duration: duration)
-            print("🔊 AUv3: JavaScript audio injected into audio pipeline")
+            print("🔊 AUv3: JavaScript audio injected into audio pipeline | mediaTime=\(mtStr) | local=\(ltStr)")
         } else {
             print("❌ AUv3: Failed to inject JS audio - no audio unit available")
         }

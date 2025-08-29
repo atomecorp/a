@@ -39,6 +39,9 @@ let __mediaPlateauMs = 0;     // accumulated ms where media time barely advanced
 let __autoSeekTimer = null;
 let __autoSeekEnabled = false;
 let __autoSeekTick = 0;
+let __autoSeekLastTime = 0;
+let __autoSeekLastNow = 0;
+let __autoSeekMicroTimers = [];
 
 function startAutoSeekTest(){
     try{
@@ -50,22 +53,59 @@ function startAutoSeekTest(){
                 const el = document.getElementById('samplePlayer');
                 if(!el) return;
                 if(el.paused || el.ended) return;
+                // clear any running micro-bumps from previous tick
+                try{ if(__autoSeekMicroTimers && __autoSeekMicroTimers.length){ __autoSeekMicroTimers.forEach(id=>clearTimeout(id)); __autoSeekMicroTimers=[]; } }catch(_){ }
+                const now = (performance&&performance.now)?performance.now():Date.now();
                 const d = isFinite(el.duration)? el.duration : NaN;
                 const t = isFinite(el.currentTime)? el.currentTime : 0;
                 if(!isFinite(d) || d<=0) return;
-                const next = Math.min(Math.max(0, d-0.02), t + 2.0);
-                if(typeof el.fastSeek === 'function'){ el.fastSeek(next); }
-                else { el.currentTime = next; }
-                if(typeof el.play==='function'){ el.play().catch(()=>{}); }
+                // Only compensate the shortfall vs natural playback to target ~+0.5s every 0.5s
+                const dtMs = (__autoSeekLastNow>0)? (now - __autoSeekLastNow) : 500;
+                const desiredStep = 0.5 * Math.max(0.6, Math.min(1.5, dtMs/500)); // account for timer drift
+                const dct = (__autoSeekLastTime>0)? Math.max(0, t - __autoSeekLastTime) : 0;
+                const shortfall = Math.max(0, (desiredStep - dct));
+                const needData = el.readyState < 3; // HAVE_FUTURE_DATA
+                // Only act if shortfall meaningfully large
+                const MIN_SHORTFALL = 0.08;
+                if(shortfall > MIN_SHORTFALL && el.readyState >= 3){
+                    // smaller bump caps to reduce audible jumps
+                    const bumpMax = needData ? 0.20 : 0.12;
+                    let bump = Math.min(shortfall, bumpMax);
+                    // split into micro-bumps
+                    const targetStep = 0.06; // ~60 ms per micro-bump
+                    const maxMicro = needData ? 3 : 2;
+                    let n = Math.min(maxMicro, Math.max(1, Math.ceil(bump/targetStep)));
+                    const inc = Math.max(0.02, bump / n);
+                    for(let i=0;i<n;i++){
+                        const id = setTimeout(()=>{
+                            try{
+                                const dd = isFinite(el.duration)? el.duration : NaN;
+                                if(!isFinite(dd) || dd<=0) return;
+                                const cur = isFinite(el.currentTime)? el.currentTime : 0;
+                                const next = Math.min(Math.max(0, dd-0.02), cur + inc);
+                                if(typeof el.fastSeek === 'function'){ el.fastSeek(next); }
+                                else { el.currentTime = next; }
+                                if(typeof el.play==='function'){ el.play().catch(()=>{}); }
+                            }catch(_){ }
+                        }, i*80);
+                        __autoSeekMicroTimers.push(id);
+                    }
+                }
                 __autoSeekTick++;
-                if((__autoSeekTick % 5)===0){ bridgeLog('[test] auto-seek tick '+__autoSeekTick+' t='+next.toFixed(2)); }
+                __autoSeekLastTime = isFinite(el.currentTime)? el.currentTime : t;
+                __autoSeekLastNow = now;
+                if((__autoSeekTick % 10)===0){ bridgeLog('[test] auto-seek tick '+__autoSeekTick+' t='+(isFinite(el.currentTime)? el.currentTime.toFixed(2):'NaN')); }
             }catch(_){ }
-        }, 1000);
+    }, 500);
     }catch(_){ }
 }
 
 function stopAutoSeekTest(){
-    try{ if(__autoSeekTimer){ clearInterval(__autoSeekTimer); __autoSeekTimer=null; } __autoSeekEnabled=false; }catch(_){ }
+    try{
+        if(__autoSeekTimer){ clearInterval(__autoSeekTimer); __autoSeekTimer=null; }
+        if(__autoSeekMicroTimers && __autoSeekMicroTimers.length){ __autoSeekMicroTimers.forEach(id=>clearTimeout(id)); __autoSeekMicroTimers=[]; }
+        __autoSeekEnabled=false; __autoSeekLastTime=0; __autoSeekLastNow=0;
+    }catch(_){ }
 }
 
 // Scrub UI state (one slider per file)
@@ -77,7 +117,24 @@ let currentTrack = null;           // relPath currently playing
 function tapNewSession(){ __tapSessionId++; __tapLastSig=null; __tapLastSentAt=0; return __tapSessionId; }
 function tapSameSession(id){ return id===__tapSessionId; }
 function tapHash64(f32){ const n=f32.length, k=Math.min(64,n); let s1=0,s2=0; for(let i=0;i<k;i++){ s1+=f32[i]; s2+=f32[n-1-i]; } return [(s1*1e6|0),(s2*1e6|0)]; }
-function sendHostJSONChunk(f32, sr){ try{ window.webkit.messageHandlers.swiftBridge.postMessage({ type:'audioBuffer', data:{ frequency:0.0, sampleRate: sr|0, duration: f32.length/(sr|0), audioData: Array.from(f32) } }); }catch(_){ } }
+function sendHostJSONChunk(f32, sr){
+    try{
+        const el = document.getElementById('samplePlayer');
+        const mediaTime = (el && isFinite(el.currentTime)) ? el.currentTime : null;
+        const localTime = (performance && performance.now) ? performance.now() : Date.now();
+        window.webkit.messageHandlers.swiftBridge.postMessage({
+            type:'audioBuffer',
+            data:{
+                frequency:0.0,
+                sampleRate: sr|0,
+                duration: f32.length/(sr|0),
+                audioData: Array.from(f32),
+                mediaTime: mediaTime,
+                localTime: localTime
+            }
+        });
+    }catch(_){ }
+}
 function sendTapChunk(f32, sr){ try{ const now = (performance&&performance.now)?performance.now():Date.now(); const [h1,h2]=tapHash64(f32); const sig={len:f32.length|0,sr:sr|0,h1,h2}; const last=__tapLastSig; const recent=(now-__tapLastSentAt)<80; if(last&&recent&&last.len===sig.len&&last.sr===sig.sr&&last.h1===sig.h1&&last.h2===sig.h2){return;} __tapLastSig=sig; __tapLastSentAt=now; sendHostJSONChunk(f32,sr); }catch(_){ } }
 
 // Worklet source (inline)
@@ -129,17 +186,21 @@ function selfHealIfStalled(now){
         if(PAGE_HIDDEN || !sampleTapActive) return;
         const el=document.getElementById('samplePlayer');
         if(!el || el.paused || el.ended) return;
+        // don't interfere with manual AutoSeek test
+        if(__autoSeekTimer) return;
         const since = now - (__lastTapEnqueueAt||0);
         const needData = el.readyState < 3; // HAVE_FUTURE_DATA
         const sr = sampleTapSR || STREAM_SR;
         const minFrames = Math.floor(sr * 0.02);
         const queueLow = sampleTapQueue.length===0 || (sampleTapQueue.length===1 && sampleTapQueue[0]?.length < minFrames);
+        const smooth = (__mediaPlateauMs===0 && since < 300 && !queueLow);
+        if(smooth){ __selfHealAttempts = 0; return; }
         if((since > 500 && queueLow) || (__mediaPlateauMs > 600 && needData)){
             if(now - (__lastSelfHealAt||0) < 900) return; // rate-limit
             const d = isFinite(el.duration)? el.duration : NaN;
             const t = isFinite(el.currentTime)? el.currentTime : 0;
             if(isFinite(d) && d>0 && t >= d-0.05) return; // near end
-            const bump = (__selfHealAttempts>=2) ? 1.0 : (__selfHealAttempts===1 ? 0.5 : 0.25);
+            const bump = (__selfHealAttempts>=2) ? 0.5 : (__selfHealAttempts===1 ? 0.4 : 0.25);
             const target = (isFinite(d) && d>0) ? Math.min(d-0.02, t + bump) : (t + bump);
             try{
                 if(typeof el.fastSeek==='function') { el.fastSeek(target); }
