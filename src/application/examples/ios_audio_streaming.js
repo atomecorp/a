@@ -130,10 +130,10 @@ function listRecordings(){
                     showLabel: false,
                     parent: row,
                     skin: {
-                        container: { width:'100%', height:'14px', marginTop:'6px' },
-                        track: { height:'4px', backgroundColor:'#2b3a4a', border:'none' },
-                        progression: { backgroundColor:'#4a6a85' },
-                        handle: { width:'10px', height:'10px', backgroundColor:'#fff', border:'none', borderRadius:'50%', top:'-3px', boxShadow:'0 0 2px rgba(0,0,0,0.3)' }
+                    container: { width:'100%', height:'32px', marginTop:'6px' },
+                    track: { height:'6px', backgroundColor:'#2b3a4a', border:'none', borderRadius:'3px' },
+                    progression: { backgroundColor:'#4a6a85', borderRadius:'3px' },
+                    handle: { width:'18px', height:'18px', backgroundColor:'#fff', border:'none', borderRadius:'50%', top:'7px', boxShadow:'0 0 3px rgba(0,0,0,0.35)', cursor:'pointer' }
                     },
                     onInput: (v)=>{
                         try{
