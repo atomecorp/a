@@ -150,8 +150,11 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             if strongSelf.playActive && strongSelf.fileLoaded {
                 let channels = outChannels
                 let framesToWrite = Int(frameCount)
+                // Snapshot state once per render to avoid per-sample locking
                 strongSelf.fileLock.lock()
-                let totalFrames = min(strongSelf.fileAudioL.count, strongSelf.fileAudioR.count)
+                let localL = strongSelf.fileAudioL
+                let localR = strongSelf.fileAudioR
+                let totalFrames = min(localL.count, localR.count)
                 var idx = strongSelf.fileFrameIndex
                 strongSelf.fileLock.unlock()
                 // Write depending on buffer layout
@@ -162,14 +165,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             let framesAvailable = framesToWrite
                         var localIdx = idx
                         for f in 0..<framesAvailable {
-                            var sL: Float = 0
-                            var sR: Float = 0
-                            strongSelf.fileLock.lock()
-                            if localIdx < totalFrames {
-                                sL = strongSelf.fileAudioL[localIdx]
-                                sR = channels > 1 ? strongSelf.fileAudioR[localIdx] : strongSelf.fileAudioL[localIdx]
-                            }
-                            strongSelf.fileLock.unlock()
+                            var sL: Float = (localIdx < totalFrames ? localL[localIdx] : 0)
+                            var sR: Float = (channels > 1 ? (localIdx < totalFrames ? localR[localIdx] : 0) : (localIdx < totalFrames ? localL[localIdx] : 0))
                             sL *= strongSelf.masterGain
                             sR *= strongSelf.masterGain
                             if outIsFloat32 {
@@ -197,12 +194,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                         let dataCount = framesToWrite
                         var localIdx = idx
                         for f in 0..<dataCount {
-                            let s: Float
-                            strongSelf.fileLock.lock()
-                            if localIdx < totalFrames {
-                                s = (ch == 0 ? strongSelf.fileAudioL[localIdx] : strongSelf.fileAudioR[localIdx])
-                            } else { s = 0 }
-                            strongSelf.fileLock.unlock()
+                            let s: Float = (localIdx < totalFrames ? (ch == 0 ? localL[localIdx] : localR[localIdx]) : 0)
                             let v = s * strongSelf.masterGain
                             if outIsFloat32 {
                                 let out = mData.assumingMemoryBound(to: Float.self)
@@ -218,8 +210,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 // Advance shared index and handle end-of-file
                 strongSelf.fileLock.lock()
                 idx &+= framesToWrite
-                if idx >= totalFrames {
-                    idx = totalFrames // clamp
+                if idx >= min(localL.count, localR.count) {
+                    idx = min(localL.count, localR.count) // clamp
                     // Auto stop at end
                     strongSelf.playActive = false
                 }
@@ -748,6 +740,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             var determinedChannels: Int? = nil
             var chunkCount = 0
             var reachedEOF = false
+            // Prebuffer target ~200ms to start playback fast
+            let primeFrames = max(4096, min(Int(outSR * 0.2), 32768))
+            var primed = false
             while reader.status == .reading {
                 guard let sb = output.copyNextSampleBuffer() else { break }
                 if let block = CMSampleBufferGetDataBuffer(sb) {
@@ -787,17 +782,43 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     }
                 }
                 CMSampleBufferInvalidate(sb)
+                // Prime playback as soon as we have enough frames
+                if !primed && outL.count >= primeFrames {
+                    fileLock.lock()
+                    self.fileAudioL = outL
+                    self.fileAudioR = outR
+                    self.fileSampleRate = outSR
+                    self.fileFrameIndex = 0
+                    self.fileLoaded = true
+                    fileLock.unlock()
+                    primed = true
+                    DispatchQueue.main.async { print("🚀 AUv3: primed playback (\(outL.count) frames)") }
+                    self.isTestToneActive = false
+                } else if primed {
+                    // Stream-append more decoded data to shared buffers
+                    fileLock.lock()
+                    self.fileAudioL.append(contentsOf: outL)
+                    self.fileAudioR.append(contentsOf: outR)
+                    fileLock.unlock()
+                    outL.removeAll(keepingCapacity: true)
+                    outR.removeAll(keepingCapacity: true)
+                }
             }
             if reader.status == .reading { reachedEOF = true }
 
             if reachedEOF && (!outL.isEmpty) {
                 print("ℹ️ AUv3: asset reader reached EOF with status 'reading'; committing decoded data")
                 fileLock.lock()
-                self.fileAudioL = outL
-                self.fileAudioR = outR
+                if primed {
+                    self.fileAudioL.append(contentsOf: outL)
+                    self.fileAudioR.append(contentsOf: outR)
+                } else {
+                    self.fileAudioL = outL
+                    self.fileAudioR = outR
+                    self.fileLoaded = true
+                }
                 self.fileSampleRate = outSR
                 self.fileFrameIndex = 0
-                self.fileLoaded = true
                 fileLock.unlock()
                 DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader, EOF) frames=\(outL.count)") }
                 self.isTestToneActive = false
@@ -808,11 +829,16 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             switch reader.status {
             case .completed:
                 fileLock.lock()
-                self.fileAudioL = outL
-                self.fileAudioR = outR
+                if primed {
+                    self.fileAudioL.append(contentsOf: outL)
+                    self.fileAudioR.append(contentsOf: outR)
+                } else {
+                    self.fileAudioL = outL
+                    self.fileAudioR = outR
+                    self.fileLoaded = !outL.isEmpty
+                }
                 self.fileSampleRate = outSR
                 self.fileFrameIndex = 0
-                self.fileLoaded = !outL.isEmpty
                 fileLock.unlock()
                 DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader) frames=\(outL.count)") }
                 if outL.isEmpty {
