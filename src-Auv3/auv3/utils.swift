@@ -480,7 +480,7 @@ public class auv3Utils: AUAudioUnit {
             for i in 0..<bufferList.numberOfBuffers {
                 let buffer = bufferList.buffer(at: i)
                 guard let outputData = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
-                var outPtr = outputData.advanced(by: mixedOffset)
+                let outPtr = outputData.advanced(by: mixedOffset)
 
                 if applyFade > 0 {
                     // One-shot micro fade-in over the first jsStartupFadeTotal frames after (re)start
