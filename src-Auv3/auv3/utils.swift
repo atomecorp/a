@@ -78,6 +78,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var fileFrameIndex: Int = 0
     private var fileLoaded: Bool = false
     private let fileLock = NSLock()
+    // Short fade-in to avoid click at start/seek
+    private var fadeInSamplesRemaining: Int = 0
+    private var fadeInTotal: Int = 0
     // Decode state to avoid tone while decoding and allow instant play-once data arrives
     private var isDecodingFile: Bool = false
 
@@ -158,6 +161,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 let localR = strongSelf.fileAudioR
                 let totalFrames = min(localL.count, localR.count)
                 var idx = strongSelf.fileFrameIndex
+                var fadeRem = strongSelf.fadeInSamplesRemaining
+                let fadeTot = strongSelf.fadeInTotal
                 strongSelf.fileLock.unlock()
                 // Write depending on buffer layout
         if outInterleaved || bufferList.numberOfBuffers == 1 {
@@ -169,6 +174,11 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                         for f in 0..<framesAvailable {
                             var sL: Float = (localIdx < totalFrames ? localL[localIdx] : 0)
                             var sR: Float = (channels > 1 ? (localIdx < totalFrames ? localR[localIdx] : 0) : (localIdx < totalFrames ? localL[localIdx] : 0))
+                            if fadeRem > 0 && fadeTot > 0 {
+                                let fi = Float(fadeTot - fadeRem)
+                                let g = max(0.0, min(1.0, fi / Float(fadeTot)))
+                                sL *= g; sR *= g; fadeRem &-= 1
+                            }
                             sL *= strongSelf.masterGain
                             sR *= strongSelf.masterGain
                             if outIsFloat32 {
@@ -197,7 +207,13 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                         var localIdx = idx
                         for f in 0..<dataCount {
                             let s: Float = (localIdx < totalFrames ? (ch == 0 ? localL[localIdx] : localR[localIdx]) : 0)
-                            let v = s * strongSelf.masterGain
+                            var v = s
+                            if fadeRem > 0 && fadeTot > 0 {
+                                let fi = Float(fadeTot - fadeRem)
+                                let g = max(0.0, min(1.0, fi / Float(fadeTot)))
+                                v *= g; fadeRem &-= 1
+                            }
+                            v *= strongSelf.masterGain
                             if outIsFloat32 {
                                 let out = mData.assumingMemoryBound(to: Float.self)
                                 out[f] = v
@@ -218,6 +234,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     strongSelf.playActive = false
                 }
                 strongSelf.fileFrameIndex = idx
+                strongSelf.fadeInSamplesRemaining = max(0, fadeRem)
                 strongSelf.fileLock.unlock()
             }
             // Generate test tone if active (lightweight math)
@@ -363,6 +380,11 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         fileLock.lock(); let hasFile = fileLoaded; fileLock.unlock()
         // Do not enable tone while we are decoding a file (reduces perceived latency/beeps)
         self.isTestToneActive = on && !hasFile && !isDecodingFile
+        if on && hasFile {
+            let sr = Int(getSampleRate() ?? 44100.0)
+            fadeInTotal = max(128, min(sr / 100, 1024)) // ~10ms, clamped
+            fadeInSamplesRemaining = fadeInTotal
+        }
     }
     public func setTestToneActive(_ on: Bool) { self.isTestToneActive = on }
     public func setDebugCaptureEnabled(_ on: Bool) { self.dbgCaptureEnabled = on }
@@ -386,6 +408,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         let total = min(fileAudioL.count, fileAudioR.count)
         fileFrameIndex = Int(Double(total) * Double(p))
         fileLock.unlock()
+    // Apply a short fade-in after seek
+    let sr = Int(getSampleRate() ?? 44100.0)
+    fadeInTotal = max(128, min(sr / 100, 1024))
+    fadeInSamplesRemaining = fadeInTotal
     }
     
     private func checkHostTransport() {
