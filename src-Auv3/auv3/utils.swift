@@ -6,6 +6,7 @@
 //
 
 import AVFoundation
+import CoreMedia
 import Foundation
 import CoreAudio
 import WebKit
@@ -23,7 +24,7 @@ protocol TransportDataDelegate: AnyObject {
     func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double)
 }
 
-public class auv3Utils: AUAudioUnit {
+public class auv3Utils: AUAudioUnit, IPlugAUControl {
     // MARK: - Properties
     
     private var _outputBusArray: AUAudioUnitBusArray?
@@ -36,6 +37,9 @@ public class auv3Utils: AUAudioUnit {
     private var isTestToneActive: Bool = false
     private var testToneFrequency: Double = 440.0
     private var testTonePhase: Double = 0.0
+    // Minimal transport/mix controls
+    private var masterGain: Float = 1.0
+    private var playActive: Bool = false
     
     // Audio visualization properties
     weak var audioDataDelegate: AudioDataDelegate?
@@ -53,6 +57,11 @@ public class auv3Utils: AUAudioUnit {
     // ULTRA OPTIMIZATION: Skip frame counter for even more aggressive throttling
     private var frameSkipCounter: Int = 0
     private let frameSkipAmount: Int = 16 // Skip 15 out of 16 frames for visualization
+    private var didLogOutputFormat: Bool = false
+    // Debug capture (tiny ring buffer for quick inspection)
+    private var dbgCaptureEnabled: Bool = false
+    private var dbgBuffer: [Float] = [Float](repeating: 0, count: 48000) // ~1s stereo mixed
+    private var dbgIndex: Int = 0
     
     // NOUVEAU: JavaScript Audio Injection
     private var jsAudioBuffer: [Float] = []
@@ -60,6 +69,15 @@ public class auv3Utils: AUAudioUnit {
     private var jsAudioSampleRate: Double = 48000
     private var jsAudioActive: Bool = false
     private let jsAudioLock = NSLock() // Thread safety for JS audio injection
+    // File playback (placeholder for iPlug core integration)
+    private var loadedFilePath: String? = nil
+    // Decoded audio buffers (non-interleaved float32, stereo)
+    private var fileAudioL: [Float] = []
+    private var fileAudioR: [Float] = []
+    private var fileSampleRate: Double = 44100.0
+    private var fileFrameIndex: Int = 0
+    private var fileLoaded: Bool = false
+    private let fileLock = NSLock()
 
     // Custom AudioBufferList wrapper
     private struct AudioBufferListWrapper {
@@ -116,39 +134,146 @@ public class auv3Utils: AUAudioUnit {
             }
 
             let bufferList = AudioBufferListWrapper(ptr: outputData)
+            // Determine output layout
+            let outFormat = strongSelf._outputBusArray?[0].format
+            let outChannels = Int(outFormat?.channelCount ?? 2)
+            let outInterleaved = outFormat?.isInterleaved ?? false
+            let outIsFloat32 = (outFormat?.commonFormat == .pcmFormatFloat32)
+            if !strongSelf.didLogOutputFormat, let fmt = outFormat {
+                strongSelf.didLogOutputFormat = true
+                print("🔊 AUv3 out fmt: sr=\(fmt.sampleRate) ch=\(fmt.channelCount) interleaved=\(fmt.isInterleaved) common=\(fmt.commonFormat.rawValue) bytesPerFrame=\(fmt.streamDescription.pointee.mBytesPerFrame)")
+                let bl = AudioBufferListWrapper(ptr: outputData)
+                print("🔊 AUv3 out buffers: \(bl.numberOfBuffers)")
+            }
             
-            // Generate test tone if active (lightweight math)
-            if strongSelf.isTestToneActive {
-                let sampleRate = strongSelf.getSampleRate() ?? 44100.0
-                
-                for i in 0..<bufferList.numberOfBuffers {
-                    let buffer = bufferList.buffer(at: i)
+            // File playback path (render decoded PCM if available)
+            if strongSelf.playActive && strongSelf.fileLoaded {
+                let channels = outChannels
+                let framesToWrite = Int(frameCount)
+                strongSelf.fileLock.lock()
+                let totalFrames = min(strongSelf.fileAudioL.count, strongSelf.fileAudioR.count)
+                var idx = strongSelf.fileFrameIndex
+                strongSelf.fileLock.unlock()
+                // Write depending on buffer layout
+        if outInterleaved || bufferList.numberOfBuffers == 1 {
+                    // interleaved: single buffer with LRLR...
+                    let buffer = bufferList.buffer(at: 0)
                     if let mData = buffer.mData {
-                        let floatData = mData.assumingMemoryBound(to: Float.self)
-                        let dataCount = Int(buffer.mDataByteSize) / MemoryLayout<Float>.size
-                        
-                        for frame in 0..<dataCount {
-                            strongSelf.testTonePhase += 2.0 * Double.pi * strongSelf.testToneFrequency / sampleRate
-                            if strongSelf.testTonePhase >= 2.0 * Double.pi {
-                                strongSelf.testTonePhase -= 2.0 * Double.pi
+            let framesAvailable = framesToWrite
+                        var localIdx = idx
+                        for f in 0..<framesAvailable {
+                            var sL: Float = 0
+                            var sR: Float = 0
+                            strongSelf.fileLock.lock()
+                            if localIdx < totalFrames {
+                                sL = strongSelf.fileAudioL[localIdx]
+                                sR = channels > 1 ? strongSelf.fileAudioR[localIdx] : strongSelf.fileAudioL[localIdx]
                             }
-                            floatData[frame] = Float(sin(strongSelf.testTonePhase) * 0.5)
+                            strongSelf.fileLock.unlock()
+                            sL *= strongSelf.masterGain
+                            sR *= strongSelf.masterGain
+                            if outIsFloat32 {
+                                let out = mData.assumingMemoryBound(to: Float.self)
+                                if channels == 1 { out[f] = sL }
+                                else { out[f*channels + 0] = sL; out[f*channels + 1] = sR }
+                            } else {
+                                let outI16 = mData.assumingMemoryBound(to: Int16.self)
+                                let cl = Int16(max(-1.0, min(1.0, sL)) * 32767.0)
+                                if channels == 1 { outI16[f] = cl }
+                                else {
+                                    let cr = Int16(max(-1.0, min(1.0, sR)) * 32767.0)
+                                    outI16[f*channels + 0] = cl
+                                    outI16[f*channels + 1] = cr
+                                }
+                            }
+                            localIdx &+= 1
+                        }
+                    }
+                } else {
+                    // planar: one buffer per channel
+                    for ch in 0..<min(bufferList.numberOfBuffers, channels) {
+                        let buffer = bufferList.buffer(at: ch)
+                        guard let mData = buffer.mData else { continue }
+                        let dataCount = framesToWrite
+                        var localIdx = idx
+                        for f in 0..<dataCount {
+                            let s: Float
+                            strongSelf.fileLock.lock()
+                            if localIdx < totalFrames {
+                                s = (ch == 0 ? strongSelf.fileAudioL[localIdx] : strongSelf.fileAudioR[localIdx])
+                            } else { s = 0 }
+                            strongSelf.fileLock.unlock()
+                            let v = s * strongSelf.masterGain
+                            if outIsFloat32 {
+                                let out = mData.assumingMemoryBound(to: Float.self)
+                                out[f] = v
+                            } else {
+                                let outI16 = mData.assumingMemoryBound(to: Int16.self)
+                                outI16[f] = Int16(max(-1.0, min(1.0, v)) * 32767.0)
+                            }
+                            localIdx &+= 1
                         }
                     }
                 }
-            } else {
-                // Normal audio processing
-                guard let pullInputBlock = pullInputBlock else {
-                    return kAudioUnitErr_NoConnection
+                // Advance shared index and handle end-of-file
+                strongSelf.fileLock.lock()
+                idx &+= framesToWrite
+                if idx >= totalFrames {
+                    idx = totalFrames // clamp
+                    // Auto stop at end
+                    strongSelf.playActive = false
                 }
-
-                var inputTimestamp = AudioTimeStamp()
-                let inputBusNumber: Int = 0
-
-                let inputStatus = pullInputBlock(actionFlags, &inputTimestamp, frameCount, inputBusNumber, outputData)
-
-                if inputStatus != noErr {
-                    return inputStatus
+                strongSelf.fileFrameIndex = idx
+                strongSelf.fileLock.unlock()
+            }
+            // Generate test tone if active (lightweight math)
+                else if strongSelf.isTestToneActive {
+                    let sampleRate = strongSelf.getSampleRate() ?? 44100.0
+                    let ch = max(1, outChannels)
+                    if outInterleaved || bufferList.numberOfBuffers == 1 {
+                        let buffer = bufferList.buffer(at: 0)
+                        if let mData = buffer.mData {
+                            let frames = Int(frameCount)
+                            for f in 0..<frames {
+                                strongSelf.testTonePhase += 2.0 * Double.pi * strongSelf.testToneFrequency / sampleRate
+                                if strongSelf.testTonePhase >= 2.0 * Double.pi { strongSelf.testTonePhase -= 2.0 * Double.pi }
+                                let s = Float(sin(strongSelf.testTonePhase) * 0.25) * strongSelf.masterGain
+                                if outIsFloat32 {
+                                    let out = mData.assumingMemoryBound(to: Float.self)
+                                    if ch == 1 { out[f] = s } else { out[f*ch+0] = s; out[f*ch+1] = s }
+                                } else {
+                                    let outI16 = mData.assumingMemoryBound(to: Int16.self)
+                                    let si = Int16(max(-1.0, min(1.0, s)) * 32767.0)
+                                    if ch == 1 { outI16[f] = si } else { outI16[f*ch+0] = si; outI16[f*ch+1] = si }
+                                }
+                            }
+                        }
+                    } else {
+                        let buffers = min(bufferList.numberOfBuffers, ch)
+                        for i in 0..<buffers {
+                            let buffer = bufferList.buffer(at: i)
+                            if let mData = buffer.mData {
+                                let frames = Int(frameCount)
+                                for f in 0..<frames {
+                                    strongSelf.testTonePhase += 2.0 * Double.pi * strongSelf.testToneFrequency / sampleRate
+                                    if strongSelf.testTonePhase >= 2.0 * Double.pi { strongSelf.testTonePhase -= 2.0 * Double.pi }
+                                    let s = Float(sin(strongSelf.testTonePhase) * 0.25) * strongSelf.masterGain
+                                    if outIsFloat32 {
+                                        let out = mData.assumingMemoryBound(to: Float.self)
+                                        out[f] = s
+                                    } else {
+                                        let outI16 = mData.assumingMemoryBound(to: Int16.self)
+                                        outI16[f] = Int16(max(-1.0, min(1.0, s)) * 32767.0)
+                                    }
+                                }
+                            }
+                        }
+                    }
+            } else {
+                // Generator/silence path: zero-fill output instead of pulling input (prevents host garbage)
+                for i in 0..<bufferList.numberOfBuffers {
+                    let buffer = bufferList.buffer(at: i)
+                    if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
                 }
             }
 
@@ -190,6 +315,22 @@ public class auv3Utils: AUAudioUnit {
             // NOUVEAU: Mix JavaScript audio into the output
             strongSelf.mixJavaScriptAudio(bufferList: bufferList, frameCount: frameCount)
 
+            // Optional debug capture of ch0 (mix) at low cost
+            if strongSelf.dbgCaptureEnabled, bufferList.numberOfBuffers > 0 {
+                let buf = bufferList.buffer(at: 0)
+                if let mData = buf.mData {
+                    let inF = mData.assumingMemoryBound(to: Float.self)
+                    let count = Int(buf.mDataByteSize) / MemoryLayout<Float>.size
+                    var di = strongSelf.dbgIndex
+                    for i in 0..<count {
+                        strongSelf.dbgBuffer[di] = inF[i]
+                        di &+= 1
+                        if di >= strongSelf.dbgBuffer.count { di = 0 }
+                    }
+                    strongSelf.dbgIndex = di
+                }
+            }
+
             // Handle muting (lightweight operation)
             if strongSelf.isMuted {
                 for i in 0..<bufferList.numberOfBuffers {
@@ -219,6 +360,37 @@ public class auv3Utils: AUAudioUnit {
         set {
             super.musicalContextBlock = newValue
         }
+    }
+    // MARK: - Simple controls for WebView bridge
+    public func setMasterGain(_ g: Float) { self.masterGain = max(0.0, g) }
+    public func setPlayActive(_ on: Bool) {
+        self.playActive = on
+        // Prefer file playback when a file is loaded; fallback to test tone otherwise
+        fileLock.lock(); let hasFile = fileLoaded; fileLock.unlock()
+        self.isTestToneActive = on && !hasFile
+    }
+    public func setTestToneActive(_ on: Bool) { self.isTestToneActive = on }
+    public func setDebugCaptureEnabled(_ on: Bool) { self.dbgCaptureEnabled = on }
+    public func dumpDebugCapture() {
+        DispatchQueue.global(qos: .utility).async {
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let url = docs.appendingPathComponent("au_debug_capture.raw")
+            var data = Data(count: self.dbgBuffer.count * MemoryLayout<Float>.size)
+            data.withUnsafeMutableBytes { ptr in
+                _ = self.dbgBuffer.withUnsafeBytes { src in
+                    memcpy(ptr.baseAddress, src.baseAddress!, self.dbgBuffer.count * MemoryLayout<Float>.size)
+                }
+            }
+            try? data.write(to: url)
+            print("📝 AUv3: wrote debug capture to \(url.path)")
+        }
+    }
+    public func setPlaybackPositionNormalized(_ pos: Float) {
+        let p = max(0.0, min(1.0, pos))
+        fileLock.lock()
+        let total = min(fileAudioL.count, fileAudioR.count)
+        fileFrameIndex = Int(Double(total) * Double(p))
+        fileLock.unlock()
     }
     
     private func checkHostTransport() {
@@ -451,6 +623,218 @@ public class auv3Utils: AUAudioUnit {
     public var mute: Bool {
         get { return isMuted }
         set { isMuted = newValue }
+    }
+    // MARK: - File loading (decode to PCM for playback)
+    public func loadLocalFile(_ path: String) {
+        self.loadedFilePath = path
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.decodeFile(at: path)
+        }
+    }
+
+    private func decodeFile(at path: String) {
+    print("🔎 AUv3: decodeFile path=\(path) exists=\(FileManager.default.fileExists(atPath: path))")
+    let url = URL(fileURLWithPath: path)
+        do {
+            let srcFile = try AVAudioFile(forReading: url)
+            let outSR = self.getSampleRate() ?? 44100.0
+            guard let dstFormat = AVAudioFormat(standardFormatWithSampleRate: outSR, channels: 2) else {
+                print("❌ AUv3: Failed to create destination format")
+                return
+            }
+            let converter = AVAudioConverter(from: srcFile.processingFormat, to: dstFormat)
+            guard let converter = converter else {
+                print("❌ AUv3: AVAudioConverter init failed")
+                return
+            }
+
+            let chunkFrames: AVAudioFrameCount = 4096
+            let srcBuf = AVAudioPCMBuffer(pcmFormat: srcFile.processingFormat, frameCapacity: chunkFrames)!
+            let dstBuf = AVAudioPCMBuffer(pcmFormat: dstFormat, frameCapacity: chunkFrames)!
+
+            var outL: [Float] = []
+            var outR: [Float] = []
+
+            while true {
+                try srcFile.read(into: srcBuf, frameCount: chunkFrames)
+                if srcBuf.frameLength == 0 { break }
+                var providedOnce = false
+                dstBuf.frameLength = 0
+                let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+                    if providedOnce || srcBuf.frameLength == 0 {
+                        outStatus.pointee = .noDataNow
+                        return nil
+                    }
+                    providedOnce = true
+                    outStatus.pointee = .haveData
+                    return srcBuf
+                }
+                let status = converter.convert(to: dstBuf, error: nil, withInputFrom: inputBlock)
+                if status == .error || status == .endOfStream { break }
+                let frames = Int(dstBuf.frameLength)
+                if frames == 0 { continue }
+                if let ch0 = dstBuf.floatChannelData?[0] {
+                    outL.append(contentsOf: UnsafeBufferPointer(start: ch0, count: frames))
+                }
+                if dstFormat.channelCount > 1, let ch1 = dstBuf.floatChannelData?[1] {
+                    outR.append(contentsOf: UnsafeBufferPointer(start: ch1, count: frames))
+                } else {
+                    // mono -> duplicate to R
+                    outR.append(contentsOf: outL.suffix(frames))
+                }
+            }
+
+            fileLock.lock()
+            self.fileAudioL = outL
+            self.fileAudioR = outR
+            self.fileSampleRate = outSR
+            self.fileFrameIndex = 0
+            self.fileLoaded = !outL.isEmpty
+            fileLock.unlock()
+            DispatchQueue.main.async {
+                print("📥 AUv3: decoded file (frames=\(outL.count), sr=\(Int(outSR)))")
+            }
+        } catch {
+            print("❌ AUv3: decode error \(error.localizedDescription) — trying AVAssetReader fallback")
+            decodeWithAssetReader(url: url)
+        }
+    }
+
+    private func decodeWithAssetReader(url: URL) {
+        let outSR = self.getSampleRate() ?? 44100.0
+        let asset = AVURLAsset(url: url)
+        // Load audio track using modern API when available
+        var track: AVAssetTrack?
+        if #available(iOS 16.0, *) {
+            let sem = DispatchSemaphore(value: 0)
+        Task {
+                do {
+                    let tracks = try await asset.load(.tracks)
+            for t in tracks { if t.mediaType == .audio { track = t; break } }
+                } catch {
+                    // leave track as nil
+                }
+                sem.signal()
+            }
+            sem.wait()
+        } else {
+            track = asset.tracks(withMediaType: .audio).first
+        }
+        guard let track else {
+            print("❌ AUv3: no audio track in asset")
+            return
+        }
+
+        do {
+            let reader = try AVAssetReader(asset: asset)
+            // Request float32 PCM at host sample rate, stereo, interleaved
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVLinearPCMBitDepthKey: 32,
+                AVLinearPCMIsFloatKey: true,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false,
+                AVSampleRateKey: outSR,
+                AVNumberOfChannelsKey: 2
+            ]
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+            output.alwaysCopiesSampleData = false
+            guard reader.canAdd(output) else { print("❌ AUv3: cannot add asset reader output"); return }
+            reader.add(output)
+            guard reader.startReading() else { print("❌ AUv3: asset reader failed to start"); return }
+
+            var outL: [Float] = []
+            var outR: [Float] = []
+            var determinedChannels: Int? = nil
+            var chunkCount = 0
+            var reachedEOF = false
+            while reader.status == .reading {
+                guard let sb = output.copyNextSampleBuffer() else { break }
+                if let block = CMSampleBufferGetDataBuffer(sb) {
+                    // Determine channel count from sample buffer's format description (non-deprecated)
+                    if determinedChannels == nil, let fmt = CMSampleBufferGetFormatDescription(sb) {
+                        if let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(fmt)?.pointee {
+                            determinedChannels = Int(asbd.mChannelsPerFrame)
+                        }
+                    }
+                    let chCount = max(1, determinedChannels ?? 2)
+
+                    let length = CMBlockBufferGetDataLength(block)
+                    var data = Data(count: length)
+                    data.withUnsafeMutableBytes { ptr in
+                        _ = CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: length, destination: ptr.baseAddress!)
+                    }
+                    let floats = data.withUnsafeBytes { raw -> [Float] in
+                        let p = raw.bindMemory(to: Float.self)
+                        return Array(p)
+                    }
+                    if chunkCount < 3 {
+                        print("📦 AUv3: asset reader chunk floats=\(floats.count) ch=\(chCount) bytes=\(length)")
+                        chunkCount += 1
+                    }
+                    if chCount >= 2 {
+                        // Interleaved LRLR...
+                        let frames = floats.count / chCount
+                        outL.reserveCapacity(outL.count + frames)
+                        outR.reserveCapacity(outR.count + frames)
+                        for i in 0..<frames {
+                            outL.append(floats[i*chCount + 0])
+                            outR.append(floats[i*chCount + 1])
+                        }
+                    } else {
+                        outL.append(contentsOf: floats)
+                        outR.append(contentsOf: floats)
+                    }
+                }
+                CMSampleBufferInvalidate(sb)
+            }
+            if reader.status == .reading { reachedEOF = true }
+
+            if reachedEOF && (!outL.isEmpty) {
+                print("ℹ️ AUv3: asset reader reached EOF with status 'reading'; committing decoded data")
+                fileLock.lock()
+                self.fileAudioL = outL
+                self.fileAudioR = outR
+                self.fileSampleRate = outSR
+                self.fileFrameIndex = 0
+                self.fileLoaded = true
+                fileLock.unlock()
+                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader, EOF) frames=\(outL.count)") }
+                self.isTestToneActive = false
+                self.playActive = true
+                return
+            }
+
+            switch reader.status {
+            case .completed:
+                fileLock.lock()
+                self.fileAudioL = outL
+                self.fileAudioR = outR
+                self.fileSampleRate = outSR
+                self.fileFrameIndex = 0
+                self.fileLoaded = !outL.isEmpty
+                fileLock.unlock()
+                DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader) frames=\(outL.count)") }
+                if outL.isEmpty {
+                    // As a safety net, enable test tone so user hears something non-buzzy
+                    self.isTestToneActive = true
+                    self.playActive = true
+                    print("⚠️ AUv3: asset reader produced 0 frames; falling back to test tone")
+                } else {
+                    // Prefer file playback
+                    self.isTestToneActive = false
+                    self.playActive = true
+                }
+            case .failed:
+                print("❌ AUv3: asset reader failed: \(reader.error?.localizedDescription ?? "unknown error")")
+            case .cancelled:
+                print("⚠️ AUv3: asset reader cancelled")
+            default:
+                print("ℹ️ AUv3: asset reader finished with status=\(reader.status.rawValue)")
+            }
+        } catch {
+            print("❌ AUv3: asset reader error \(error.localizedDescription)")
+        }
     }
     
     public var logging: Bool {

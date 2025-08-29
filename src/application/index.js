@@ -45,7 +45,8 @@
 ////////////////////
 // import('./lyrix/index.js');
 // import('./examples/iOS_app_launcher.js');
-import('./examples/ios_audio_bridge.js');
+// import('./examples/ios_audio_bridge.js');
+import('./examples/iplug_ios.js');
 
 
 

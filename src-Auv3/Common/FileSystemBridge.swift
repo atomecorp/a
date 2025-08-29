@@ -558,10 +558,11 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         let requestedDestPath = (body["requestedDestPath"] as? String) ?? "./"
         let fileTypes = body["fileTypes"] as? [String] ?? ["m4a","mp3","wav","atome","json"]
         guard let vc = findViewController(from: webView) else { sendErrorResponse(to: webView, error: "No VC"); return }
-        iCloudFileManager.shared.importFileToRelativePath(fileTypes: fileTypes, requestedDestPath: requestedDestPath, from: vc) { [weak self] success, relPath, error in
+    iCloudFileManager.shared.importFileToRelativePath(fileTypes: fileTypes, requestedDestPath: requestedDestPath, from: vc) { [weak self] success, relPath, error in
             DispatchQueue.main.async {
                 if success, let relPath = relPath {
-                    self?.sendSuccessResponse(to: webView, data: ["path": relPath])
+            // Return both a single 'path' and an array 'paths' for compatibility
+            self?.sendSuccessResponse(to: webView, data: ["path": relPath, "paths": [relPath]])
                 } else {
                     self?.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Import failed")
                 }

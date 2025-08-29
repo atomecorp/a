@@ -7,6 +7,7 @@
 
 import CoreAudioKit
 import WebKit
+import AVFoundation
 
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, AudioDataDelegate, TransportDataDelegate {
     var audioUnit: AUAudioUnit?
@@ -63,13 +64,16 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
         audioUnit = try auv3Utils(componentDescription: componentDescription, options: [])
         
-        if let au = audioUnit as? auv3Utils {
+    if let au = audioUnit as? auv3Utils {
             au.mute = false  // CORRECTION: Démarrer NON muté pour entendre l'audio
             _isMuted = false
             au.audioDataDelegate = self
             au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
             print("🔊 AUv3 Audio Unit démarré NON MUTÉ")
         }
+
+    // Expose AU to WebViewManager so swiftBridge param messages can control it
+    WebViewManager.setHostAudioUnit(audioUnit)
 
         return audioUnit!
     }    // MARK: - Audio Control Methods

@@ -217,8 +217,47 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             break
         case "swiftBridge":
             if let body = message.body as? [String: Any] {
+                // Quick path: iPlug-style param messages { type:'param', id:'gain|play|position', value:Number }
+                if let t = body["type"] as? String, t == "param" {
+                    let id = (body["id"] as? String) ?? ""
+                    let value: Float = {
+                        if let n = body["value"] as? NSNumber { return n.floatValue }
+                        if let d = body["value"] as? Double { return Float(d) }
+                        if let f = body["value"] as? Float { return f }
+                        if let s = body["value"] as? String, let d = Double(s) { return Float(d) }
+                        return 0
+                    }()
+                    if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                        switch id {
+                        case "gain": au.setMasterGain(value)
+                        case "play": au.setPlayActive(value > 0.5)
+                        case "position": au.setPlaybackPositionNormalized(value)
+                        case "tone": au.setTestToneActive(value > 0.5)
+                        case "cap": au.setDebugCaptureEnabled(value > 0.5)
+                        default: break
+                        }
+                    }
+                    return
+                }
+                // Debug commands
+                if let cmd = body["debug"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                    if cmd == "dumpCapture" { au.dumpDebugCapture() }
+                    return
+                }
                 // Vérifier si c'est un message de système de fichiers
                 if let action = body["action"] as? String {
+                    if action == "loadLocalPath" || (body["type"] as? String) == "iplug" {
+                        // Accept either { action:'loadLocalPath', relativePath } or { type:'iplug', action:'loadLocalPath', relativePath }
+                        if let rel = body["relativePath"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                            if let base = iCloudFileManager.shared.getCurrentStorageURL() {
+                                let full = base.appendingPathComponent(rel)
+                                au.loadLocalFile(full.path)
+                            } else {
+                                au.loadLocalFile(rel) // try raw path
+                            }
+                        }
+                        return
+                    }
                     let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"];
                     if fileSystemActions.contains(action) {
                         if let bridge = WebViewManager.fileSystemBridge {

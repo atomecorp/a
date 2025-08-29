@@ -305,3 +305,27 @@ You can embed this file into an HTML file to test behavior directly in the brows
 ---
 
 This document serves as a guide for engineers or development teams to implement the full solution described.
+
+## iPlug2 Minimal Integration (AUv3 + WAM)
+
+- New CMake superbuild at project root to aggregate targets.
+- Dependency: iPlug2 via `cmake/deps/iplug2_fetch.cmake` or `tools/update_iplug2.sh` (submodule alternative).
+- Core DSP in `src/core`: `dsp_core`, `ring_buffer`, `disk_reader` (render-safe: no locks/allocs/I/O).
+- AUv3 glue in `src/au`: headless iPlug2 plugin exposing parameters gain/play/positionFrames.
+- Web glue in `src/web`: WAM entry stub + `app.js` Squirrel UI. No HTML/CSS modified.
+- Swift WKWebView bridge in `src-Auv3/iplug/AUViewController.swift` using `squirrel` message channel.
+
+Build notes
+
+- Desktop (skeleton): configure with CMake to build `dsp_core`, `atome_au` (Apple), `atome_wam` (with Emscripten when `-DATOME_BUILD_WAM=ON`).
+- iOS/macOS AUv3: integrate CMake targets into Xcode project or build an xcframework. AU view is provided by `AUViewController.swift`.
+- Web WAM: build with emsdk toolchain; UI is `src/web/app.js` (Squirrel-style JS) controlling parameters only.
+
+Limitations (Step 1)
+
+- DiskReader generates silence placeholder; replace with AVAudioFile/AVAssetReader on Apple.
+- No time-stretch yet; hook is in `DSPCore::processTimeStretch`.
+
+Next steps
+
+- Implement Apple disk decoding, WAM node glue, and Xcode wiring.

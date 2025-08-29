@@ -32,6 +32,9 @@ import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
 import Slice, { createSlice } from './components/slice_builder.js';
 
+// === OPTIONAL INTEGRATIONS ===
+import initIPlugWeb from './integrations/iplug_web.js';
+
 
 
 // === IMMEDIATE GLOBAL EXPOSURE ===
@@ -94,6 +97,8 @@ Unit.getAllUnits = getAllUnits;
 
 // === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
+  // Toggle iPlug Web integration here (enabled by default). Comment to disable.
+  try { initIPlugWeb(); } catch(e) { console.warn('iPlug init failed', e); }
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
 });
