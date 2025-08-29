@@ -11,7 +11,6 @@ function bridgeLog(msg){ try{ window.webkit.messageHandlers.swiftBridge.postMess
 let AC = null;
 function ensureAC(){ if(!AC){ AC = new (window.AudioContext||window.webkitAudioContext)(); } if(AC.state==='suspended') AC.resume().catch(()=>{}); return AC; }
 
-// Tap streaming state
 const STREAM_SR = 44100;
 const STREAM_CHUNK_SEC = 0.2;
 const STREAM_CHUNK_BG_MAX_SEC = 1.2;
@@ -29,6 +28,12 @@ let __tapSessionId = 0;
 let __tapLastSig = null; let __tapLastSentAt = 0;
 let __hostRenderWoke = false;
 let __tapDrainCount = 0;
+
+// Scrub UI state (one slider per file)
+let trackSliders = new Map();      // relPath -> sliderRef
+let trackDurations = new Map();    // relPath -> seconds
+let seekTimers = new Map();        // relPath -> timeout id
+let currentTrack = null;           // relPath currently playing
 
 function tapNewSession(){ __tapSessionId++; __tapLastSig=null; __tapLastSentAt=0; return __tapSessionId; }
 function tapSameSession(id){ return id===__tapSessionId; }
@@ -77,12 +82,13 @@ async function playSampleTap(relPath){ try{ const ctx=ensureAC(); sampleTapSR=ct
         }
     }catch(err){ console.warn('[tap] worklet failed, trying ScriptProcessor', err); sampleTapNodes=null; }
     if(!sampleTapNodes){ const proc = ctx.createScriptProcessor ? ctx.createScriptProcessor(2048,2,1) : null; if(!proc){ console.warn('no processor available'); return; } proc.onaudioprocess=(ev)=>{ try{ if(!tapSameSession(mySession) || !sampleTapActive) return; const ib=ev.inputBuffer; const ch0=ib.getChannelData(0); const ch1= ib.numberOfChannels>1? ib.getChannelData(1): null; const n=ib.length; const mono=new Float32Array(n); if(ch1){ for(let i=0;i<n;i++){ mono[i]=(ch0[i]+ch1[i])*0.5; } } else { mono.set(ch0); } sampleTapQueue.push(mono); tapGotData=true; if(__tapDrainCount===0){ drainTapOnce(0.12); } }catch(_){ } }; try{ sampleTapSource.connect(proc); }catch(_){ } if(!sampleTapSink){ sampleTapSink = ctx.createGain(); sampleTapSink.gain.value=0.0; sampleTapSink.connect(ctx.destination); } try{ proc.connect(sampleTapSink); }catch(_){ } sampleTapNodes={ processor: proc }; }
-    sampleTapQueue=[]; sampleTapEnded=false; sampleTapActive=true; __hostRenderWoke=false; __tapDrainCount=0; window.__streamTickCount=0;
+    sampleTapQueue=[]; sampleTapEnded=false; sampleTapActive=true; __hostRenderWoke=false; __tapDrainCount=0; window.__streamTickCount=0; currentTrack = relPath; try{ const s=trackSliders.get(relPath); if(s && typeof s.setValue==='function'){ s.setValue(0); } }catch(_){ }
     try{ if(streamTimer){ clearInterval(streamTimer); streamTimer=null; } }catch(_){ }
-    el.onended=()=>{ sampleTapEnded=true; bridgeLog('[tap] media ended'); };
+    el.onended=()=>{ sampleTapEnded=true; try{ if(currentTrack===relPath){ const s=trackSliders.get(relPath); if(s && typeof s.setValue==='function'){ s.setValue(100); } } }catch(_){ } bridgeLog('[tap] media ended'); };
     el.onplaying=()=>{ try{ el.defaultMuted=true; el.muted=true; el.volume=0.0; }catch(_){ } };
     el.onvolumechange=()=>{ try{ if(sampleTapActive){ el.defaultMuted=true; el.muted=true; el.volume=0.0; } }catch(_){ } };
-    el.ontimeupdate=()=>{ if(!tapGotData){ try{ bridgeLog(`[tap] time=${el.currentTime.toFixed(2)}`); }catch(_){ } } };
+    el.onloadedmetadata=()=>{ try{ const d=el.duration; if(isFinite(d)&&d>0){ trackDurations.set(relPath, d); } }catch(_){ } };
+    el.ontimeupdate=()=>{ try{ if(currentTrack!==relPath) return; const d= trackDurations.get(relPath) ?? el.duration; if(!isFinite(d)||d<=0) return; const p = Math.max(0, Math.min(100, (el.currentTime/d)*100)); const s = trackSliders.get(relPath); if(s && typeof s.setValue==='function'){ s.setValue(p); } }catch(_){ } };
     try{ await el.play(); bridgeLog('[tap] el.play ok'); }catch(e){ console.warn('audio element play failed', e); }
     const primer = new Float32Array(Math.floor(sampleTapSR*(PAGE_HIDDEN?0.12:0.02))); if(primer.length) sendTapChunk(primer, sampleTapSR);
     wakeHostRender(); ensureStreaming(); drainTapOnce(0.12); setTimeout(()=>{ drainTapOnce(0.12); }, 80); setTimeout(()=>{ drainTapOnce(0.12); }, 200);
@@ -98,7 +104,59 @@ const listWrap = $('div', { id:'auv3List', parent:document.body, css:{ position:
 const sampleAudioEl = $('audio', { id:'samplePlayer', parent:document.body, css:{ position:'absolute', left:'-9999px', width:'1px', height:'1px' }, controls:false, preload:'auto', attrs:{ playsinline:'', 'webkit-playsinline':'true' } });
 
 function importM4A(){ try{ if(!window.AtomeFileSystem){ console.warn('AtomeFileSystem indisponible'); return; } window.AtomeFileSystem.copy_to_ios_local('Recordings', ['m4a'], (res)=>{ if(res && res.success){ listRecordings(); } else { console.warn('Import échoué', res && res.error); } }); }catch(e){ console.warn('importM4A error', e); } }
-function listRecordings(){ try{ if(!window.AtomeFileSystem){ listWrap.textContent='API fichier indisponible'; return; } window.AtomeFileSystem.listFiles('Recordings', (res)=>{ if(!res||!res.success){ listWrap.textContent='Erreur de liste'; return; } const files=(res.data&&res.data.files)? res.data.files: []; const items=files.filter(f=>!f.isDirectory && /\.m4a$/i.test(f.name)); listWrap.innerHTML=''; $('div',{ id:'listTitle', parent:'#auv3List', css:{ marginBottom:'6px', color:'#9db2cc' }, text: items.length? 'Recordings (.m4a):' : 'Aucun fichier .m4a dans Recordings/' }); items.forEach((it, idx)=>{ const safeId = 'rec_'+idx+'_'+it.name.replace(/[^a-zA-Z0-9_\-]/g,'_'); Button({ id: safeId, onText: it.name, offText: it.name, parent:'#auv3List', onAction:()=>playSampleTap('Recordings/'+it.name), offAction:()=>playSampleTap('Recordings/'+it.name), css:{ display:'block', width:'100%', textAlign:'left', marginBottom:'6px', padding:'6px 8px', background:'#1a1f25', color:'#e6e6e6', border:'1px solid #2c343d', borderRadius:'4px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }, onStyle:{ background:'#25303a' }, offStyle:{ background:'#1a1f25' } }); }); }); }catch(e){ listWrap.textContent='Erreur'; console.warn('listRecordings error', e); } }
+function listRecordings(){
+    try{
+        if(!window.AtomeFileSystem){ listWrap.textContent='API fichier indisponible'; return; }
+        // reset slider refs to avoid leaking old ones
+        trackSliders = new Map();
+        window.AtomeFileSystem.listFiles('Recordings', (res)=>{
+            if(!res||!res.success){ listWrap.textContent='Erreur de liste'; return; }
+            const files=(res.data&&res.data.files)? res.data.files: [];
+            const items=files.filter(f=>!f.isDirectory && /\.m4a$/i.test(f.name));
+            listWrap.innerHTML='';
+            $('div',{ id:'listTitle', parent:'#auv3List', css:{ marginBottom:'6px', color:'#9db2cc' }, text: items.length? 'Recordings (.m4a):' : 'Aucun fichier .m4a dans Recordings/' });
+            items.forEach((it, idx)=>{
+                const rel = 'Recordings/'+it.name;
+                const safeId = 'rec_'+idx+'_'+it.name.replace(/[^a-zA-Z0-9_\-]/g,'_');
+                const row = $('div',{ id: safeId+'_row', parent:'#auv3List', css:{ display:'block', width:'100%', marginBottom:'10px', padding:'6px 8px', background:'#11161b', color:'#e6e6e6', border:'1px solid #2c343d', borderRadius:'4px', fontFamily:'monospace', fontSize:'12px' } });
+                Button({ id: safeId, onText: it.name, offText: it.name, parent: row, onAction:()=>playSampleTap(rel), offAction:()=>playSampleTap(rel), css:{ display:'block', width:'100%', textAlign:'left', padding:'6px 8px', background:'#1a1f25', color:'#e6e6e6', border:'1px solid #2c343d', borderRadius:'4px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' }, onStyle:{ background:'#25303a' }, offStyle:{ background:'#1a1f25' } });
+                const sliderId = safeId+'_scrub';
+                const slider = Slider({
+                    id: sliderId,
+                    type: 'horizontal',
+                    min: 0,
+                    max: 100,
+                    value: 0,
+                    showLabel: false,
+                    parent: row,
+                    skin: {
+                        container: { width:'100%', height:'14px', marginTop:'6px' },
+                        track: { height:'4px', backgroundColor:'#2b3a4a', border:'none' },
+                        progression: { backgroundColor:'#4a6a85' },
+                        handle: { width:'10px', height:'10px', backgroundColor:'#fff', border:'none', borderRadius:'50%', top:'-3px', boxShadow:'0 0 2px rgba(0,0,0,0.3)' }
+                    },
+                    onInput: (v)=>{
+                        try{
+                            const el = document.getElementById('samplePlayer');
+                            if(!el || currentTrack!==rel) return;
+                            const doSeek = ()=>{
+                                try{
+                                    const d = trackDurations.get(rel) ?? el.duration;
+                                    if(!isFinite(d)||d<=0) return;
+                                    const t = (v/100)*d;
+                                    if(isFinite(t) && t>=0){ el.currentTime = t; }
+                                }catch(_){ }
+                            };
+                            const prev = seekTimers.get(rel); if(prev) { clearTimeout(prev); }
+                            seekTimers.set(rel, setTimeout(doSeek, 80));
+                        }catch(_){ }
+                    }
+                });
+                trackSliders.set(rel, slider);
+            });
+        });
+    }catch(e){ listWrap.textContent='Erreur'; console.warn('listRecordings error', e); }
+}
 
 // Kick things off
 setTimeout(listRecordings, 300);
