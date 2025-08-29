@@ -78,6 +78,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var fileFrameIndex: Int = 0
     private var fileLoaded: Bool = false
     private let fileLock = NSLock()
+    // Decode state to avoid tone while decoding and allow instant play-once data arrives
+    private var isDecodingFile: Bool = false
 
     // Custom AudioBufferList wrapper
     private struct AudioBufferListWrapper {
@@ -359,7 +361,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         self.playActive = on
         // Prefer file playback when a file is loaded; fallback to test tone otherwise
         fileLock.lock(); let hasFile = fileLoaded; fileLock.unlock()
-        self.isTestToneActive = on && !hasFile
+        // Do not enable tone while we are decoding a file (reduces perceived latency/beeps)
+        self.isTestToneActive = on && !hasFile && !isDecodingFile
     }
     public func setTestToneActive(_ on: Bool) { self.isTestToneActive = on }
     public func setDebugCaptureEnabled(_ on: Bool) { self.dbgCaptureEnabled = on }
@@ -619,7 +622,15 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     // MARK: - File loading (decode to PCM for playback)
     public func loadLocalFile(_ path: String) {
         self.loadedFilePath = path
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        // Reset state for new decode
+        fileLock.lock()
+        self.fileLoaded = false
+        self.fileFrameIndex = 0
+        fileLock.unlock()
+        self.isDecodingFile = true
+        self.isTestToneActive = false
+        // Decode with highest priority to reduce latency
+        DispatchQueue.global(qos: .userInteractive).async { [weak self] in
             self?.decodeFile(at: path)
         }
     }
@@ -683,6 +694,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             self.fileFrameIndex = 0
             self.fileLoaded = !outL.isEmpty
             fileLock.unlock()
+            self.isDecodingFile = false
             DispatchQueue.main.async {
                 print("📥 AUv3: decoded file (frames=\(outL.count), sr=\(Int(outSR)))")
             }
@@ -741,7 +753,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             var chunkCount = 0
             var reachedEOF = false
             // Prebuffer target ~200ms to start playback fast
-            let primeFrames = max(4096, min(Int(outSR * 0.2), 32768))
+            // Target ~50-100ms, but never less than 1024 frames
+            let primeFrames = max(1024, min(Int(outSR * 0.05), 16384))
             var primed = false
             while reader.status == .reading {
                 guard let sb = output.copyNextSampleBuffer() else { break }
@@ -823,6 +836,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader, EOF) frames=\(outL.count)") }
                 self.isTestToneActive = false
                 self.playActive = true
+                self.isDecodingFile = false
                 return
             }
 
@@ -851,15 +865,20 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     self.isTestToneActive = false
                     self.playActive = true
                 }
+                self.isDecodingFile = false
             case .failed:
                 print("❌ AUv3: asset reader failed: \(reader.error?.localizedDescription ?? "unknown error")")
+                self.isDecodingFile = false
             case .cancelled:
                 print("⚠️ AUv3: asset reader cancelled")
+                self.isDecodingFile = false
             default:
                 print("ℹ️ AUv3: asset reader finished with status=\(reader.status.rawValue)")
+                self.isDecodingFile = false
             }
         } catch {
             print("❌ AUv3: asset reader error \(error.localizedDescription)")
+            self.isDecodingFile = false
         }
     }
     
