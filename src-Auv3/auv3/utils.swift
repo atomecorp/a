@@ -319,9 +319,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 os_unfair_lock_lock(&strongSelf.fileLock)
                 idx &+= framesToWrite
                 if idx >= min(localL.count, localR.count) {
-                    idx = min(localL.count, localR.count) // clamp
-                    // Auto stop at end
+                    idx = min(localL.count, localR.count) // clamp to EOF
+                    // Auto stop at end and prepare clean restart
                     strongSelf.playActive = false
+                    strongSelf.fadeInSamplesRemaining = 0
                 }
                 strongSelf.fileFrameIndex = idx
                 strongSelf.fadeInSamplesRemaining = max(0, fadeRem)
@@ -467,7 +468,14 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     public func setPlayActive(_ on: Bool) {
         self.playActive = on
         // Prefer file playback when a file is loaded; fallback to test tone otherwise
-    os_unfair_lock_lock(&fileLock); let hasFile = fileLoaded; os_unfair_lock_unlock(&fileLock)
+    os_unfair_lock_lock(&fileLock)
+        let hasFile = fileLoaded
+        if on && hasFile {
+            // If we reached EOF previously, reset to the start so replay works without needing a jump
+            let total = min(fileAudioL.count, fileAudioR.count)
+            if fileFrameIndex >= total { fileFrameIndex = 0 }
+        }
+    os_unfair_lock_unlock(&fileLock)
         // Do not enable tone while we are decoding a file (reduces perceived latency/beeps)
         self.isTestToneActive = on && !hasFile && !isDecodingFile
         if on && hasFile {

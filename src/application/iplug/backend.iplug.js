@@ -74,7 +74,15 @@
   function play(opts){ if(typeof window.__toDSP === 'function'){ send({ type:'play', payload: opts }); } else { swiftSend({ type:'param', id:'play', value: 1 }); } return true; }
   function stop(opts){ if(typeof window.__toDSP === 'function'){ send({ type:'stop', payload: opts }); } else { swiftSend({ type:'param', id:'play', value: 0 }); } return true; }
   function stop_clip(opts){ if(typeof window.__toDSP === 'function'){ send({ type:'stop_clip', payload: opts }); } else { swiftSend({ type:'param', id:'play', value: 0 }); } return true; }
-  function jump(opts){ if(typeof window.__toDSP === 'function'){ send({ type:'jump', payload: opts }); } else if(opts && typeof opts.to === 'number'){ const v=Math.max(0, Math.min(1000000, Math.floor(opts.to))); swiftSend({ type:'param', id:'position', value: v }); } return true; }
+  function jump(opts){
+    if(typeof window.__toDSP === 'function'){ send({ type:'jump', payload: opts }); }
+    else if(opts && typeof opts.to === 'number'){
+      // AUv3 bridge expects normalized [0..1]
+      const v = Math.max(0, Math.min(1, Number(opts.to)));
+      swiftSend({ type:'param', id:'position', value: v });
+    }
+    return true;
+  }
   function set_param(opts){ if(typeof window.__toDSP === 'function'){ send({ type:'set_param', payload: opts }); } else if(opts && (opts.name==='gain'||opts.id==='gain')){ swiftSend({ type:'param', id:'gain', value: Number(opts.value)||0 }); } return true; }
   function map_midi(mapping){ if(typeof window.__toDSP === 'function'){ send({ type:'map_midi', payload: mapping }); } return true; }
   function add_marker(arg){ if(typeof window.__toDSP === 'function'){ send({ type:'add_marker', payload: arg }); } return true; }

@@ -47,11 +47,11 @@
     // invalidate pending
     currentToken++;
     if(currentPlayTimer){ clearTimeout(currentPlayTimer); currentPlayTimer = null; }
-    // stop via facade
-    try{ createdClips.forEach((clipId)=>{ if(A && typeof A.stop_clip==='function') A.stop_clip({ clip_id: clipId, release_ms: 30 }); }); }catch(_){ }
-    // ensure transport stopped + position reset at native bridge
+  // Single global stop at native bridge to avoid message races
     swiftSend({ type:'param', id:'play', value:0 });
-    swiftSend({ type:'param', id:'position', value:0 });
+  swiftSend({ type:'param', id:'position', value:0 });
+  // clear any pendingPlay flags and retry timers for all clips
+  for (const [id, st] of clipState.entries()) { st.pendingPlay = false; if (st.retryTimer) { clearTimeout(st.retryTimer); st.retryTimer = null; } }
     currentClipId = null;
   }
 
