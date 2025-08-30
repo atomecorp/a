@@ -1,10 +1,10 @@
-'use strict';
+// 'use strict';
 
-// Example: iPlug AUv3 control + file loader for iOS (Squirrel UI only)
-// Creates controls to pick a file, play/stop, set gain and position.
-// Sends JSON over the 'squirrel' bridge consumed by AUViewController.swift.
+// // Example: iPlug AUv3 control + file loader for iOS (Squirrel UI only)
+// // Creates controls to pick a file, play/stop, set gain and position.
+// // Sends JSON over the 'squirrel' bridge consumed by AUViewController.swift.
 
-(function(){
+// (function(){
   const send = (msg) => {
     try {
       if (window.webkit && window.webkit.messageHandlers) {
@@ -140,4 +140,4 @@
 
   // initial list
   listRecordings();
-})();
+// })();

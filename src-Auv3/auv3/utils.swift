@@ -10,6 +10,7 @@ import CoreMedia
 import Foundation
 import CoreAudio
 import Accelerate
+import os.lock
 import WebKit
 
 
@@ -69,7 +70,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var jsAudioPlaybackIndex: Int = 0
     private var jsAudioSampleRate: Double = 48000
     private var jsAudioActive: Bool = false
-    private let jsAudioLock = NSLock() // Thread safety for JS audio injection
+    private var jsAudioLock = os_unfair_lock() // Low-overhead lock for JS audio injection
     // File playback (placeholder for iPlug core integration)
     private var loadedFilePath: String? = nil
     // Decoded audio buffers (non-interleaved float32, stereo)
@@ -78,7 +79,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     private var fileSampleRate: Double = 44100.0
     private var fileFrameIndex: Int = 0
     private var fileLoaded: Bool = false
-    private let fileLock = NSLock()
+    private var fileLock = os_unfair_lock() // Low-overhead lock for file state
     // Short fade-in to avoid click at start/seek
     private var fadeInSamplesRemaining: Int = 0
     private var fadeInTotal: Int = 0
@@ -157,14 +158,14 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 let channels = outChannels
                 let framesToWrite = Int(frameCount)
                 // Snapshot state once per render to avoid per-sample locking
-                strongSelf.fileLock.lock()
+                os_unfair_lock_lock(&strongSelf.fileLock)
                 let localL = strongSelf.fileAudioL
                 let localR = strongSelf.fileAudioR
                 let totalFrames = min(localL.count, localR.count)
                 var idx = strongSelf.fileFrameIndex
                 var fadeRem = strongSelf.fadeInSamplesRemaining
                 let fadeTot = strongSelf.fadeInTotal
-                strongSelf.fileLock.unlock()
+                os_unfair_lock_unlock(&strongSelf.fileLock)
                 // Write depending on buffer layout
         if outInterleaved || bufferList.numberOfBuffers == 1 {
                     // interleaved: single buffer with LRLR...
@@ -301,7 +302,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     }
                 }
                 // Advance shared index and handle end-of-file
-                strongSelf.fileLock.lock()
+                os_unfair_lock_lock(&strongSelf.fileLock)
                 idx &+= framesToWrite
                 if idx >= min(localL.count, localR.count) {
                     idx = min(localL.count, localR.count) // clamp
@@ -310,7 +311,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
                 strongSelf.fileFrameIndex = idx
                 strongSelf.fadeInSamplesRemaining = max(0, fadeRem)
-                strongSelf.fileLock.unlock()
+                os_unfair_lock_unlock(&strongSelf.fileLock)
             }
             // Generate test tone if active (lightweight math)
                 else if strongSelf.isTestToneActive {
@@ -452,7 +453,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     public func setPlayActive(_ on: Bool) {
         self.playActive = on
         // Prefer file playback when a file is loaded; fallback to test tone otherwise
-        fileLock.lock(); let hasFile = fileLoaded; fileLock.unlock()
+    os_unfair_lock_lock(&fileLock); let hasFile = fileLoaded; os_unfair_lock_unlock(&fileLock)
         // Do not enable tone while we are decoding a file (reduces perceived latency/beeps)
         self.isTestToneActive = on && !hasFile && !isDecodingFile
         if on && hasFile {
@@ -479,10 +480,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     }
     public func setPlaybackPositionNormalized(_ pos: Float) {
         let p = max(0.0, min(1.0, pos))
-        fileLock.lock()
+    os_unfair_lock_lock(&fileLock)
         let total = min(fileAudioL.count, fileAudioR.count)
         fileFrameIndex = Int(Double(total) * Double(p))
-        fileLock.unlock()
+    os_unfair_lock_unlock(&fileLock)
     // Apply a short fade-in after seek
     let sr = Int(getSampleRate() ?? 44100.0)
     fadeInTotal = max(128, min(sr / 100, 1024))
@@ -630,8 +631,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     
     /// Inject JavaScript-generated audio into the AUv3 pipeline
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
-        jsAudioLock.lock()
-        defer { jsAudioLock.unlock() }
+    os_unfair_lock_lock(&jsAudioLock)
+    defer { os_unfair_lock_unlock(&jsAudioLock) }
 
         // 1) Detect host sample rate
         let hostSampleRate = getSampleRate() ?? 44100.0
@@ -674,8 +675,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     
     /// Stop JavaScript audio playback
     public func stopJavaScriptAudio() {
-        jsAudioLock.lock()
-        defer { jsAudioLock.unlock() }
+    os_unfair_lock_lock(&jsAudioLock)
+    defer { os_unfair_lock_unlock(&jsAudioLock) }
         
         jsAudioActive = false
         jsAudioBuffer.removeAll()
@@ -686,8 +687,8 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     
     /// Mix JavaScript audio into the output buffer (called from render thread)
     private func mixJavaScriptAudio(bufferList: AudioBufferListWrapper, frameCount: AUAudioFrameCount) {
-        guard jsAudioActive, !jsAudioBuffer.isEmpty, jsAudioLock.try() else { return }
-        defer { jsAudioLock.unlock() }
+    guard jsAudioActive, !jsAudioBuffer.isEmpty, os_unfair_lock_trylock(&jsAudioLock) else { return }
+    defer { os_unfair_lock_unlock(&jsAudioLock) }
 
         let gain: Float = 0.4 // Conservative mix gain
         let framesToProcess = min(Int(frameCount), jsAudioBuffer.count - jsAudioPlaybackIndex)
@@ -724,10 +725,10 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
     public func loadLocalFile(_ path: String) {
         self.loadedFilePath = path
         // Reset state for new decode
-        fileLock.lock()
+    os_unfair_lock_lock(&fileLock)
         self.fileLoaded = false
         self.fileFrameIndex = 0
-        fileLock.unlock()
+    os_unfair_lock_unlock(&fileLock)
         self.isDecodingFile = true
         self.isTestToneActive = false
         // Decode with highest priority to reduce latency
@@ -788,13 +789,13 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
             }
 
-            fileLock.lock()
+            os_unfair_lock_lock(&fileLock)
             self.fileAudioL = outL
             self.fileAudioR = outR
             self.fileSampleRate = outSR
             self.fileFrameIndex = 0
             self.fileLoaded = !outL.isEmpty
-            fileLock.unlock()
+            os_unfair_lock_unlock(&fileLock)
             self.isDecodingFile = false
             DispatchQueue.main.async {
                 print("📥 AUv3: decoded file (frames=\(outL.count), sr=\(Int(outSR)))")
@@ -898,22 +899,22 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 CMSampleBufferInvalidate(sb)
                 // Prime playback as soon as we have enough frames
                 if !primed && outL.count >= primeFrames {
-                    fileLock.lock()
+                    os_unfair_lock_lock(&fileLock)
                     self.fileAudioL = outL
                     self.fileAudioR = outR
                     self.fileSampleRate = outSR
                     self.fileFrameIndex = 0
                     self.fileLoaded = true
-                    fileLock.unlock()
+                    os_unfair_lock_unlock(&fileLock)
                     primed = true
                     DispatchQueue.main.async { print("🚀 AUv3: primed playback (\(outL.count) frames)") }
                     self.isTestToneActive = false
                 } else if primed {
                     // Stream-append more decoded data to shared buffers
-                    fileLock.lock()
+                    os_unfair_lock_lock(&fileLock)
                     self.fileAudioL.append(contentsOf: outL)
                     self.fileAudioR.append(contentsOf: outR)
-                    fileLock.unlock()
+                    os_unfair_lock_unlock(&fileLock)
                     outL.removeAll(keepingCapacity: true)
                     outR.removeAll(keepingCapacity: true)
                 }
@@ -922,7 +923,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
             if reachedEOF && (!outL.isEmpty) {
                 print("ℹ️ AUv3: asset reader reached EOF with status 'reading'; committing decoded data")
-                fileLock.lock()
+                os_unfair_lock_lock(&fileLock)
                 if primed {
                     self.fileAudioL.append(contentsOf: outL)
                     self.fileAudioR.append(contentsOf: outR)
@@ -933,7 +934,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
                 self.fileSampleRate = outSR
                 self.fileFrameIndex = 0
-                fileLock.unlock()
+                os_unfair_lock_unlock(&fileLock)
                 DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader, EOF) frames=\(outL.count)") }
                 self.isTestToneActive = false
                 self.playActive = true
@@ -943,7 +944,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
 
             switch reader.status {
             case .completed:
-                fileLock.lock()
+                os_unfair_lock_lock(&fileLock)
                 if primed {
                     self.fileAudioL.append(contentsOf: outL)
                     self.fileAudioR.append(contentsOf: outR)
@@ -954,7 +955,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                 }
                 self.fileSampleRate = outSR
                 self.fileFrameIndex = 0
-                fileLock.unlock()
+                os_unfair_lock_unlock(&fileLock)
                 DispatchQueue.main.async { print("📥 AUv3: decoded (asset reader) frames=\(outL.count)") }
                 if outL.isEmpty {
                     // As a safety net, enable test tone so user hears something non-buzzy
