@@ -128,13 +128,25 @@
             id: 'rec-'+idx,
             parent: listWrap,
             text: '▶ '+it.name,
-            css:{ display:'block', width:'100%', textAlign:'left', marginBottom:'6px', padding:'6px 8px', background:'#1a1f25', color:'#e6e6e6', border:'1px solid #2c343d', borderRadius:'4px', cursor:'pointer', fontFamily:'monospace', fontSize:'12px' },
-            onclick: ()=>{
-              const rel = 'Recordings/'+it.name;
-              const clipId = it.name.replace(/\.[^.]+$/,'');
-              // Debounce rapid double-fires from touch + click
+            css:{
+              display:'block', width:'100%', textAlign:'left', marginBottom:'6px', padding:'6px 8px',
+              background:'#1a1f25', color:'#e6e6e6', border:'1px solid #2c343d', borderRadius:'4px', cursor:'pointer',
+              fontFamily:'monospace', fontSize:'12px',
+              // Better touch behavior
+              touchAction:'manipulation', WebkitTapHighlightColor:'rgba(0,0,0,0)', userSelect:'none', WebkitUserSelect:'none'
+            }
+          });
+
+          const rel = 'Recordings/'+it.name;
+          const clipId = it.name.replace(/\.[^.]+$/,'');
+
+          // Unified fast handler for mouse+touch on pointerdown
+          const handleActivate = (ev)=>{
+            try{
+              if (ev) { ev.preventDefault && ev.preventDefault(); ev.stopPropagation && ev.stopPropagation(); }
               const now = Date.now();
-              if (btn.__lastClick && (now - btn.__lastClick) < 200) return; btn.__lastClick = now;
+              // Debounce rapid double-fires from multiple event types
+              if (btn.__lastDown && (now - btn.__lastDown) < 160) return; btn.__lastDown = now;
 
               // Exclusivity: stop any current playback and clear other pendings
               stopAllPlayback();
@@ -160,13 +172,20 @@
                   A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
                 }, 1500);
               }
-            }
-          });
-          // Touch-start for minimal latency on mobile
-          try{ btn.addEventListener && btn.addEventListener('touchstart', (ev)=>{ ev.preventDefault(); btn.onclick && btn.onclick(); }, { passive:false }); }catch(_){ }
+            }catch(e){ console.warn('activate error', e); }
+          };
+
+          // Prefer pointerdown for immediate response on both mouse and touch
+          try{ btn.addEventListener && btn.addEventListener('pointerdown', handleActivate, { passive:false }); }catch(_){ }
+          // Fallbacks
+          try{ btn.addEventListener && btn.addEventListener('mousedown', handleActivate, { passive:false }); }catch(_){ }
+          try{ btn.addEventListener && btn.addEventListener('touchstart', handleActivate, { passive:false }); }catch(_){ }
+          // Swallow the subsequent click if pointerdown already handled
+          try{ btn.addEventListener && btn.addEventListener('click', (e)=>{ if (btn.__lastDown && (Date.now()-btn.__lastDown) < 500) { e.preventDefault(); e.stopPropagation(); } }, true); }catch(_){ }
+          // Keyboard accessibility
+          try{ btn.addEventListener && btn.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' ') handleActivate(e); }); }catch(_){ }
+
           // Don’t pre-create at render time to avoid parallel decodes; will create on first tap
-          const rel = 'Recordings/'+it.name;
-          const clipId = it.name.replace(/\.[^.]+$/,'');
           if(!clipState.has(clipId)) clipState.set(clipId, { path: rel, ready:false, pendingPlay:false });
         });
       });
