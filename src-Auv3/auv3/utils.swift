@@ -936,6 +936,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     self.isTestToneActive = false
                     // First chunk ready -> notify JS for zero-wait play
                     if gen == self.currentDecodeGen { self.emitClipReady(path: url.path) }
+                    // IMPORTANT: clear staging buffers so the next iteration only carries NEW data
+                    outL.removeAll(keepingCapacity: true)
+                    outR.removeAll(keepingCapacity: true)
                 } else if primed {
                     // Stream-append more decoded data to shared buffers
                     if gen == self.currentDecodeGen {

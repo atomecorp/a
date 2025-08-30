@@ -152,26 +152,33 @@
               stopAllPlayback();
               for (const [id, s] of clipState.entries()) { if (id !== clipId) { s.pendingPlay = false; if (s.retryTimer) { clearTimeout(s.retryTimer); s.retryTimer = null; } } }
 
-              // Always request (re)load for robustness; native will ignore stale generations
-              A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
-              createdClips.add(clipId);
-
-              const st = clipState.get(clipId) || { path: rel, ready:false, pendingPlay:false };
-              st.path = rel; st.pendingPlay = true; clipState.set(clipId, st);
-              currentClipId = clipId;
-
-              // If already ready (from a prior load), start immediately
-              if (st.ready) {
+              const prev = clipState.get(clipId);
+              const st = prev || { path: rel, ready:false, pendingPlay:false };
+              // If the path changed for same clipId, forget readiness from previous decode
+              if (prev && prev.path !== rel) { st.ready = false; }
+              st.path = rel;
+              // If already decoded for this path, start immediately and DON'T re-create (prevents duplicate ready -> double start)
+              if (st.ready && st.path === rel) {
+                st.pendingPlay = false; if (st.retryTimer) { clearTimeout(st.retryTimer); st.retryTimer = null; }
+                clipState.set(clipId, st);
+                currentClipId = clipId;
                 try { if (typeof A.jump==='function') A.jump({ to: 0 }); } catch(_){ }
                 if (typeof A.play === 'function') { A.play({ clip_id: clipId, when:{type:'now'}, start:0, end:'clip_end', loop:{mode:'off'} }); }
-              } else {
-                // Retry once if not ready within 1500ms (handles decode=0 edge case)
-                if (st.retryTimer) { clearTimeout(st.retryTimer); }
-                st.retryTimer = setTimeout(()=>{
-                  const cur = clipState.get(clipId); if (!cur || !cur.pendingPlay || cur.ready) return;
-                  A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
-                }, 1500);
+                return;
               }
+
+              // Not ready yet: request (re)load and arm pending play
+              A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
+              createdClips.add(clipId);
+              st.pendingPlay = true; clipState.set(clipId, st);
+              currentClipId = clipId;
+
+              // Retry once if not ready within 1500ms (handles decode=0 edge case)
+              if (st.retryTimer) { clearTimeout(st.retryTimer); }
+              st.retryTimer = setTimeout(()=>{
+                const cur = clipState.get(clipId); if (!cur || !cur.pendingPlay || cur.ready) return;
+                A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
+              }, 1500);
             }catch(e){ console.warn('activate error', e); }
           };
 
