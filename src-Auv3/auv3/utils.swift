@@ -9,6 +9,7 @@ import AVFoundation
 import CoreMedia
 import Foundation
 import CoreAudio
+import Accelerate
 import WebKit
 
 
@@ -200,28 +201,102 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                     }
                 } else {
                     // planar: one buffer per channel
-                    for ch in 0..<min(bufferList.numberOfBuffers, channels) {
-                        let buffer = bufferList.buffer(at: ch)
-                        guard let mData = buffer.mData else { continue }
-                        let dataCount = framesToWrite
-                        var localIdx = idx
-                        for f in 0..<dataCount {
-                            let s: Float = (localIdx < totalFrames ? (ch == 0 ? localL[localIdx] : localR[localIdx]) : 0)
-                            var v = s
-                            if fadeRem > 0 && fadeTot > 0 {
-                                let fi = Float(fadeTot - fadeRem)
-                                let g = max(0.0, min(1.0, fi / Float(fadeTot)))
-                                v *= g; fadeRem &-= 1
-                            }
-                            v *= strongSelf.masterGain
-                            if outIsFloat32 {
-                                let out = mData.assumingMemoryBound(to: Float.self)
-                                out[f] = v
+                    // Fast-path for Float32 planar: memcpy or vDSP scale when no fade
+                    if outIsFloat32 {
+                        let framesAvail = max(0, min(framesToWrite, totalFrames - idx))
+                        // ch 0
+                        if bufferList.numberOfBuffers > 0, let mData = bufferList.buffer(at: 0).mData {
+                            let dst = mData.assumingMemoryBound(to: Float.self)
+                            if fadeRem == 0 && abs(strongSelf.masterGain - 1.0) < 1e-4 {
+                                localL.withUnsafeBufferPointer { srcPtr in
+                                    let src = srcPtr.baseAddress!.advanced(by: idx)
+                                    memcpy(dst, src, framesAvail * MemoryLayout<Float>.size)
+                                }
                             } else {
+                                localL.withUnsafeBufferPointer { srcPtr in
+                                    let src = srcPtr.baseAddress!.advanced(by: idx)
+                                    if fadeRem == 0 {
+                                        var g = strongSelf.masterGain
+                                        vDSP_vsmul(src, 1, &g, dst, 1, vDSP_Length(framesAvail))
+                                    } else {
+                                        // Fallback per-sample when fade active
+                                        var localIdx = idx
+                                        for f in 0..<framesToWrite {
+                                            var v: Float = (localIdx < totalFrames ? srcPtr[localIdx] : 0)
+                                            if fadeRem > 0 && fadeTot > 0 {
+                                                let fi = Float(fadeTot - fadeRem)
+                                                let gg = max(0.0, min(1.0, fi / Float(fadeTot)))
+                                                v *= gg; fadeRem &-= 1
+                                            }
+                                            v *= strongSelf.masterGain
+                                            dst[f] = v
+                                            localIdx &+= 1
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // ch 1
+                        if channels > 1, bufferList.numberOfBuffers > 1, let mData1 = bufferList.buffer(at: 1).mData {
+                            let dst1 = mData1.assumingMemoryBound(to: Float.self)
+                            if fadeRem == 0 && abs(strongSelf.masterGain - 1.0) < 1e-4 {
+                                localR.withUnsafeBufferPointer { srcPtr in
+                                    let src = srcPtr.baseAddress!.advanced(by: idx)
+                                    memcpy(dst1, src, framesAvail * MemoryLayout<Float>.size)
+                                }
+                            } else {
+                                localR.withUnsafeBufferPointer { srcPtr in
+                                    let src = srcPtr.baseAddress!.advanced(by: idx)
+                                    if fadeRem == 0 {
+                                        var g = strongSelf.masterGain
+                                        vDSP_vsmul(src, 1, &g, dst1, 1, vDSP_Length(framesAvail))
+                                    } else {
+                                        var localIdx = idx
+                                        for f in 0..<framesToWrite {
+                                            var v: Float = (localIdx < totalFrames ? srcPtr[localIdx] : 0)
+                                            if fadeRem > 0 && fadeTot > 0 {
+                                                let fi = Float(fadeTot - fadeRem)
+                                                let gg = max(0.0, min(1.0, fi / Float(fadeTot)))
+                                                v *= gg; fadeRem &-= 1
+                                            }
+                                            v *= strongSelf.masterGain
+                                            dst1[f] = v
+                                            localIdx &+= 1
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // Zero-fill tail if request > available
+                        if framesAvail < framesToWrite {
+                            for ch in 0..<min(bufferList.numberOfBuffers, channels) {
+                                let buf = bufferList.buffer(at: ch)
+                                if let mData = buf.mData {
+                                    let dst = mData.assumingMemoryBound(to: Float.self)
+                                    memset(dst.advanced(by: framesAvail), 0, (framesToWrite - framesAvail) * MemoryLayout<Float>.size)
+                                }
+                            }
+                        }
+                    } else {
+                        // Fallback: original per-sample path (int16 or non-float)
+                        for ch in 0..<min(bufferList.numberOfBuffers, channels) {
+                            let buffer = bufferList.buffer(at: ch)
+                            guard let mData = buffer.mData else { continue }
+                            let dataCount = framesToWrite
+                            var localIdx = idx
+                            for f in 0..<dataCount {
+                                let s: Float = (localIdx < totalFrames ? (ch == 0 ? localL[localIdx] : localR[localIdx]) : 0)
+                                var v = s
+                                if fadeRem > 0 && fadeTot > 0 {
+                                    let fi = Float(fadeTot - fadeRem)
+                                    let g = max(0.0, min(1.0, fi / Float(fadeTot)))
+                                    v *= g; fadeRem &-= 1
+                                }
+                                v *= strongSelf.masterGain
                                 let outI16 = mData.assumingMemoryBound(to: Int16.self)
                                 outI16[f] = Int16(max(-1.0, min(1.0, v)) * 32767.0)
+                                localIdx &+= 1
                             }
-                            localIdx &+= 1
                         }
                     }
                 }
@@ -293,7 +368,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             
             // ULTRA AGGRESSIVE: Skip most frames for visualization (only 1 in 16 frames processed)
             strongSelf.frameSkipCounter += 1
-            if strongSelf.frameSkipCounter >= strongSelf.frameSkipAmount {
+            if strongSelf.audioDataDelegate != nil && strongSelf.frameSkipCounter >= strongSelf.frameSkipAmount {
                 strongSelf.frameSkipCounter = 0
                 
                 // PERFORMANCE: Ultra-throttled visualization (2 FPS max + frame skipping)
@@ -324,7 +399,7 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             }
 
             // NOUVEAU: Mix JavaScript audio into the output
-            strongSelf.mixJavaScriptAudio(bufferList: bufferList, frameCount: frameCount)
+            if strongSelf.jsAudioActive { strongSelf.mixJavaScriptAudio(bufferList: bufferList, frameCount: frameCount) }
 
             // Optional debug capture of ch0 (mix) at low cost
             if strongSelf.dbgCaptureEnabled, bufferList.numberOfBuffers > 0 {
