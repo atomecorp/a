@@ -43,11 +43,17 @@
   }
 
   // API facade: routes to active backend
+  const immediateNames = new Set(['play','jump','set_param']);
   const proxyCall = (name) => (arg)=>{
     if(!active || !backends[active] || typeof backends[active][name] !== 'function'){
       console.warn('No backend for', name); return false;
     }
-    // batch all UI->DSP calls
+    // low-latency calls go immediately
+    if (immediateNames.has(name)) {
+      try { backends[active][name](arg); } catch(e){ console.warn('immediate call failed', e); }
+      return true;
+    }
+    // batch others UI->DSP calls
     enqueue({ name, arg });
     // Return lightweight ack; results delivered via events
     return true;
@@ -60,7 +66,7 @@
 
   audio.detect_and_set_backend = (order=['iplug','html'])=>{
     const available = [];
-    if (window.__toDSP && window.__fromDSP) available.push('iplug');
+    if ((window.__toDSP && window.__fromDSP) || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge)) available.push('iplug');
     if (window.AudioContext || window.webkitAudioContext) available.push('html');
     for(const pref of order){ if(available.includes(pref)) { audio.set_backend(pref); return pref; } }
     return null;

@@ -1,9 +1,59 @@
+  // Console redefinition
+        window.console.log = (function(oldLog) {
+            return function(message) {
+                oldLog(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("LOG: " + message);
+                } catch(e) {
+                    oldLog();
+                }
+            }
+        })(window.console.log);
+
+        window.console.error = (function(oldErr) {
+            return function(message) {
+                oldErr(message);
+                try {
+                    window.webkit.messageHandlers.console.postMessage("ERROR: " + message);
+                } catch(e) {
+                    oldErr();
+                }
+            }
+        })(window.console.error);
+
+//tests
+
+        console.log("Console redefined for Swift communication");
+        console.error(" error redefined for Swift communication");
+
+
+
 // iPlug Sampler Demo (Squirrel UI)
 // Validates API: create clips, markers/sprites, play/stop, jump, follow, envelopes, MIDI map, backend swap
 
 (function(){
   const A = (window.Squirrel = window.Squirrel || {}, window.Squirrel.av = window.Squirrel.av || {}, window.Squirrel.av.audio = window.Squirrel.av.audio || window.Squirrel.av.audio);
   const createdClips = new Set();
+  const clipState = new Map(); // clipId -> { path, ready:boolean, pendingPlay:boolean, retryTimer?:any }
+  let currentClipId = null;
+  let currentPlayTimer = null;
+  let currentToken = 0;
+
+  function swiftSend(obj){
+    try{ if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge){ window.webkit.messageHandlers.swiftBridge.postMessage(obj); } }catch(_){ }
+  }
+
+  function stopAllPlayback(){
+    // invalidate pending
+    currentToken++;
+    if(currentPlayTimer){ clearTimeout(currentPlayTimer); currentPlayTimer = null; }
+    // stop via facade
+    try{ createdClips.forEach((clipId)=>{ if(A && typeof A.stop_clip==='function') A.stop_clip({ clip_id: clipId, release_ms: 30 }); }); }catch(_){ }
+    // ensure transport stopped + position reset at native bridge
+    swiftSend({ type:'param', id:'play', value:0 });
+    swiftSend({ type:'param', id:'position', value:0 });
+    currentClipId = null;
+  }
 
   // Root
   const root = $('div', { id:'iplug-sampler-demo', css:{ padding:'10px', color:'#eee', backgroundColor:'#222', display:'block' }, text:'iPlug Sampler Demo' });
@@ -60,6 +110,8 @@
     }catch(e){ console.warn('import error', e); }
   }});
   $('button', { id:'btn-refresh', parent:fileRow, text:'Rafraîchir la liste', css:{ padding:'4px 8px' }, onclick:()=>listRecordings() });
+  // Stop all playback
+  $('button', { id:'btn-stop-all', parent:fileRow, text:'Stop', css:{ padding:'4px 8px', marginLeft:'6px' }, onclick:()=>{ try{ stopAllPlayback(); }catch(e){ console.warn('stop all error', e); } }});
 
   function listRecordings(){
     try{
@@ -72,7 +124,7 @@
         listWrap.innerHTML = '';
         $('div',{ id:'list-title', parent:listWrap, css:{marginBottom:'6px',color:'#9db2cc'}, text: items.length? 'Recordings (.m4a):' : 'Aucun fichier .m4a dans Recordings/' });
         items.forEach((it, idx)=>{
-          $('button',{
+          const btn = $('button',{
             id: 'rec-'+idx,
             parent: listWrap,
             text: '▶ '+it.name,
@@ -80,13 +132,42 @@
             onclick: ()=>{
               const rel = 'Recordings/'+it.name;
               const clipId = it.name.replace(/\.[^.]+$/,'');
-              if(!createdClips.has(clipId)){
-                A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
-                createdClips.add(clipId);
+              // Debounce rapid double-fires from touch + click
+              const now = Date.now();
+              if (btn.__lastClick && (now - btn.__lastClick) < 200) return; btn.__lastClick = now;
+
+              // Exclusivity: stop any current playback and clear other pendings
+              stopAllPlayback();
+              for (const [id, s] of clipState.entries()) { if (id !== clipId) { s.pendingPlay = false; if (s.retryTimer) { clearTimeout(s.retryTimer); s.retryTimer = null; } } }
+
+              // Always request (re)load for robustness; native will ignore stale generations
+              A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
+              createdClips.add(clipId);
+
+              const st = clipState.get(clipId) || { path: rel, ready:false, pendingPlay:false };
+              st.path = rel; st.pendingPlay = true; clipState.set(clipId, st);
+              currentClipId = clipId;
+
+              // If already ready (from a prior load), start immediately
+              if (st.ready) {
+                try { if (typeof A.jump==='function') A.jump({ to: 0 }); } catch(_){ }
+                if (typeof A.play === 'function') { A.play({ clip_id: clipId, when:{type:'now'}, start:0, end:'clip_end', loop:{mode:'off'} }); }
+              } else {
+                // Retry once if not ready within 1500ms (handles decode=0 edge case)
+                if (st.retryTimer) { clearTimeout(st.retryTimer); }
+                st.retryTimer = setTimeout(()=>{
+                  const cur = clipState.get(clipId); if (!cur || !cur.pendingPlay || cur.ready) return;
+                  A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
+                }, 1500);
               }
-              A.play({ clip_id: clipId, when:{type:'now'}, start:0, end:'clip_end', loop:{mode:'off'} });
             }
           });
+          // Touch-start for minimal latency on mobile
+          try{ btn.addEventListener && btn.addEventListener('touchstart', (ev)=>{ ev.preventDefault(); btn.onclick && btn.onclick(); }, { passive:false }); }catch(_){ }
+          // Don’t pre-create at render time to avoid parallel decodes; will create on first tap
+          const rel = 'Recordings/'+it.name;
+          const clipId = it.name.replace(/\.[^.]+$/,'');
+          if(!clipState.has(clipId)) clipState.set(clipId, { path: rel, ready:false, pendingPlay:false });
         });
       });
     }catch(e){ listWrap.textContent = 'Erreur'; console.warn('listRecordings error', e); }
@@ -96,8 +177,30 @@
   const log = $('div', { id:'log', parent: root, css:{ marginTop:'10px', fontFamily:'monospace', fontSize:'12px', background:'#111', padding:'6px' } });
   function logLine(t, p){ const s = JSON.stringify(p||{}); const l = $('div', { parent: log, text: `${t}: ${s}`, css:{ color:'#8fd' } }); log.scrollTop = 1e9; return l; }
   ['voice_started','voice_ended','marker_hit','follow_action_fired','clip_stream_xrun','backend_changed'].forEach(t => A.on(t, (p)=>logLine(t,p)));
+  // Native will emit clip_ready as soon as first PCM chunk is available
+  A.on('clip_ready', (payload)=>{
+    try{
+      const clipId = payload && (payload.clip_id || (payload.path||'').split('/').pop().replace(/\.[^.]+$/,''));
+      if(!clipId) return;
+      const st = clipState.get(clipId) || { path: payload && payload.path, ready:false, pendingPlay:false };
+      st.ready = true; clipState.set(clipId, st);
+      logLine('clip_ready', { clip_id: clipId });
+      if(st.pendingPlay && currentClipId === clipId){
+        st.pendingPlay = false;
+        if (st.retryTimer) { clearTimeout(st.retryTimer); st.retryTimer = null; }
+        try { if (typeof A.jump==='function') A.jump({ to: 0 }); } catch(_){ }
+        if (typeof A.play === 'function') { A.play({ clip_id: clipId, when:{type:'now'}, start:0, end:'clip_end', loop:{mode:'off'} }); }
+      }
+    }catch(e){ console.warn('clip_ready handler error', e); }
+  });
 
   // Init
-  A.detect_and_set_backend(['iplug','html']);
+  try{
+    if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge && A && typeof A.set_backend==='function'){
+      A.set_backend('iplug');
+    } else {
+      A.detect_and_set_backend(['iplug','html']);
+    }
+  }catch(_){ A.detect_and_set_backend(['iplug','html']); }
   listRecordings();
 })();

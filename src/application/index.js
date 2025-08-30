@@ -47,6 +47,9 @@
 // import('./examples/iOS_app_launcher.js');
 // import('./examples/ios_audio_bridge.js');
 // import('./examples/iplug_ios.js');
+import('./iplug/audio.facade.js');
+import('./iplug/backend.iplug.js');
+import('./iplug/backend.html.js');
 import('./examples/iplug_sampler.js');
 
 

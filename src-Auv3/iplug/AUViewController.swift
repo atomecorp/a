@@ -5,6 +5,16 @@ import AVFoundation
 class AUViewController: UIViewController, WKScriptMessageHandler, UIDocumentPickerDelegate {
     var webView: WKWebView!
     var au: AUv3Interface? // Placeholder protocol to AU parameters
+    
+    // Emit an event into JS: both as DOM CustomEvent('clip_ready') and as __fromDSP({type:'clip_ready', payload}) if present
+    private func emitClipReady(path: String, clipId: String?) {
+        let id = clipId ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+        let js = """
+        try{ if(typeof window.__fromDSP==='function'){ window.__fromDSP({ type:'clip_ready', payload: { clip_id: '\(id)', path: '\(path)' } }); }
+             else { window.dispatchEvent(new CustomEvent('clip_ready', { detail: { clip_id: '\(id)', path: '\(path)' } })); } }catch(e){}
+        """
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -38,7 +48,7 @@ class AUViewController: UIViewController, WKScriptMessageHandler, UIDocumentPick
             }
         } else if (type == "loadFile") {
             presentFilePicker()
-        } else if (type == "iplug") {
+    } else if (type == "iplug") {
             let action = body["action"] as? String ?? ""
             if action == "loadLocalPath" {
                 if let rel = body["relativePath"] as? String, let base = appGroupURL() {
