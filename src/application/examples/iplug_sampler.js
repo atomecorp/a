@@ -1,25 +1,29 @@
-  // Console redefinition
-        window.console.log = (function(oldLog) {
-            return function(message) {
-                oldLog(message);
-                try {
-                    window.webkit.messageHandlers.console.postMessage("LOG: " + message);
-                } catch(e) {
-                    oldLog();
-                }
-            }
-        })(window.console.log);
+// Console redefinition (robust, forwards all args to Swift and original console)
+    window.console.log = (function(oldLog) {
+      return function() {
+        try { oldLog.apply(console, arguments); } catch(_) {}
+        try {
+          var parts = Array.prototype.slice.call(arguments).map(function(x){
+            if (x && typeof x === 'object') { try { return JSON.stringify(x); } catch(_) { return String(x); } }
+            return String(x);
+          });
+          window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console && window.webkit.messageHandlers.console.postMessage("LOG: " + parts.join(' '));
+        } catch(_) {}
+      }
+    })(window.console.log);
 
-        window.console.error = (function(oldErr) {
-            return function(message) {
-                oldErr(message);
-                try {
-                    window.webkit.messageHandlers.console.postMessage("ERROR: " + message);
-                } catch(e) {
-                    oldErr();
-                }
-            }
-        })(window.console.error);
+    window.console.error = (function(oldErr) {
+      return function() {
+        try { oldErr.apply(console, arguments); } catch(_) {}
+        try {
+          var parts = Array.prototype.slice.call(arguments).map(function(x){
+            if (x && typeof x === 'object') { try { return JSON.stringify(x); } catch(_) { return String(x); } }
+            return String(x);
+          });
+          window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console && window.webkit.messageHandlers.console.postMessage("ERROR: " + parts.join(' '));
+        } catch(_) {}
+      }
+    })(window.console.error);
 
 //tests
 
@@ -27,206 +31,305 @@
         console.error(" error redefined for Swift communication");
 
 
+function ios_file_chooser(multiple) {
+  try {
+    // Only proceed if the iOS file bridge is available
+    if (!window.AtomeFileSystem) { console.warn('AtomeFileSystem indisponible'); return; }
 
-// iPlug Sampler Demo (Squirrel UI)
-// Validates API: create clips, markers/sprites, play/stop, jump, follow, envelopes, MIDI map, backend swap
+    // Accept boolean true, string 'true', number 1, or an object with { multiple: true }
+    const allowMulti = (multiple === true) || (multiple === 'true') || (multiple === 1) || (!!multiple && multiple.multiple === true);
+    const dest = 'Recordings';
+    const types = ['m4a'];
 
-(function(){
-  const A = (window.Squirrel = window.Squirrel || {}, window.Squirrel.av = window.Squirrel.av || {}, window.Squirrel.av.audio = window.Squirrel.av.audio || window.Squirrel.av.audio);
-  const createdClips = new Set();
-  const clipState = new Map(); // clipId -> { path, ready:boolean, pendingPlay:boolean, retryTimer?:any }
-  let currentClipId = null;
-  let currentPlayTimer = null;
-  let currentToken = 0;
+    const onDone = (res) => {
+      if (res && res.success) {
+  try { if (typeof listRecordings === 'function') listRecordings(); } catch(_){ }
+  // If the browser panel is currently visible, refresh it, otherwise do nothing
+  try {
+    const st = window.__auv3_browser_state;
+    if (st && st.target) {
+      const host = document.querySelector(st.target);
+      if (host && host.querySelector('#auv3-file-list')) {
+        navigate_auv3(st.path || '.', st.target, st.opts);
+      }
+    }
+  } catch(_){ }
+      } else {
+        console.warn('Import échoué', res && res.error);
+      }
+    };
 
-  function swiftSend(obj){
-    try{ if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge){ window.webkit.messageHandlers.swiftBridge.postMessage(obj); } }catch(_){ }
+    if (allowMulti && typeof window.AtomeFileSystem.copy_multiple_to_ios_local === 'function') {
+      // iOS multiple selection (DocumentPicker with allowsMultipleSelection)
+      window.AtomeFileSystem.copy_multiple_to_ios_local(dest, types, onDone);
+    } else {
+      // Single file selection
+      window.AtomeFileSystem.copy_to_ios_local(dest, types, onDone);
+    }
+  } catch (e) {
+    console.warn('import error', e);
   }
+}
 
-  function stopAllPlayback(){
-    // invalidate pending
-    currentToken++;
-    if(currentPlayTimer){ clearTimeout(currentPlayTimer); currentPlayTimer = null; }
-  // Single global stop at native bridge to avoid message races
-    swiftSend({ type:'param', id:'play', value:0 });
-  swiftSend({ type:'param', id:'position', value:0 });
-  // clear any pendingPlay flags and retry timers for all clips
-  for (const [id, st] of clipState.entries()) { st.pendingPlay = false; if (st.retryTimer) { clearTimeout(st.retryTimer); st.retryTimer = null; } }
-    currentClipId = null;
+// Simple state for the AUv3 file browser (current path, last opts/target)
+window.__auv3_browser_state = { path: '.', target: '#view', opts: null, visible: false };
+
+function path_join(base, name){
+  if (!base || base === '.' || base === './') return name;
+  if (!name || name === '.' || name === './') return base;
+  return (base.replace(/\/$/, '')) + '/' + (name.replace(/^\//, ''));
+}
+function parent_of(path){
+  if (!path || path === '.' || path === './' || path === '/') return '.';
+  const parts = path.split('/').filter(Boolean);
+  parts.pop();
+  return parts.length ? parts.join('/') : '.';
+}
+
+async function navigate_auv3(path='.', target='#view', opts=null){
+  window.__auv3_browser_state = { path, target, opts, visible: true };
+  const listing = await get_auv3_files(path);
+  display_files(target, listing, opts);
+}
+
+function toggle_auv3_browser(target = '#view'){
+  try{
+    const st = window.__auv3_browser_state || { path: '.', target, opts: null, visible: false };
+    const host = (typeof target === 'string') ? document.querySelector(target) : target;
+    if (!host) { console.warn('toggle_auv3_browser: target introuvable', target); return; }
+    const panel = host.querySelector('#auv3-file-list');
+    if (panel) {
+      panel.remove();
+      window.__auv3_browser_state.visible = false;
+      return;
+    }
+    navigate_auv3(st.path || '.', target, st.opts || {});
+  }catch(e){ console.warn('toggle_auv3_browser error', e); }
+}
+
+
+
+// --- File type utilities and decision routing ---
+function detect_file_type(fileName = ''){
+  const ext = String(fileName).split('.').pop().toLowerCase();
+  if(!ext || ext === fileName.toLowerCase()) return 'unknown';
+  if(['m4a','mp3','wav','aif','aiff','caf','ogg','flac'].includes(ext)) return 'audio';
+  if(['atome','atomeproj'].includes(ext)) return 'project';
+  if(['txt','json','lrc','lrx','md','csv'].includes(ext)) return 'text';
+  if(['png','jpg','jpeg','gif','webp','svg'].includes(ext)) return 'image';
+  return 'unknown';
+}
+function strip_ext(fileName=''){ const i=fileName.lastIndexOf('.'); return i>0? fileName.slice(0,i) : fileName; }
+
+// Main router called when a file is clicked in our custom file browser
+// Signature keeps type as first param as requested; extra args provide context
+async function file_type_decision(type, fileEntry, fullPath){
+  try{
+    // Ensure we have some context objects
+    const audio = (window.Squirrel && Squirrel.av && Squirrel.av.audio) ? Squirrel.av.audio : null;
+    const AU = window.AUv3API || null;
+    const parent = (typeof parent_of === 'function') ? parent_of(fullPath||'') : '.';
+
+    switch(type){
+      case 'audio': {
+        if(!audio){ console.warn('Audio backend indisponible'); return; }
+        const id = 'file:'+ (fullPath||fileEntry?.name||Math.random().toString(36).slice(2));
+        audio.create_clip && audio.create_clip({ id, path_or_bookmark: fullPath||fileEntry?.name, mode: 'preload' });
+        audio.play && audio.play({ clip_id:id, when:{type:'now'}, start:0, end:'clip_end', loop:{mode:'off'} });
+        break;
+      }
+      case 'project': {
+        if(!AU || typeof AU.auv3_file_loader !== 'function'){ console.warn('Chargement projet indisponible'); return; }
+        const base = strip_ext(fileEntry?.name||'');
+        try { await AU.auv3_file_loader(parent || 'Projects', base); } catch(e){ console.warn('Echec chargement projet', e); }
+        break;
+      }
+      case 'text': {
+        // Optional: preview or process text later; for now log selection
+        console.log('Texte sélectionné:', fullPath || (fileEntry && fileEntry.name));
+        break;
+      }
+      case 'image': {
+        console.log('Image sélectionnée:', fullPath || (fileEntry && fileEntry.name));
+        break;
+      }
+      default: {
+        console.log('Fichier sélectionné (type inconnu):', fullPath || (fileEntry && fileEntry.name));
+      }
+    }
+  }catch(e){ console.warn('file_type_decision error', e); }
+}
+// expose globally for external use
+window.file_type_decision = window.file_type_decision || file_type_decision;
+
+// Returns an object { path, folders:[{name,size,modified}], files:[{name,size,modified}] }
+async function get_auv3_files(path = '.') {
+  if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.listFiles !== 'function') {
+    console.warn('AtomeFileSystem.listFiles indisponible');
+    return { path, folders: [], files: [] };
   }
+  const normalize = (arr) => {
+    const folders = [];
+    const files = [];
+    (arr || []).forEach((it) => {
+      const name = it && (it.name || it.fileName || it.path || '');
+      const isDir = !!(it && (it.isDirectory || it.directory));
+      const size = (it && it.size) || 0;
+      const modified = (it && it.modified) || 0;
+      const entry = { name, size, modified, isDirectory: isDir };
+      if (isDir) folders.push(entry); else files.push(entry);
+    });
+    return { folders, files };
+  };
 
-  // Root
-  const root = $('div', { id:'iplug-sampler-demo', css:{ padding:'10px', color:'#eee', backgroundColor:'#222', display:'block' }, text:'iPlug Sampler Demo' });
-  if (document && document.body && !root.parentNode) document.body.appendChild(root);
+  // Support both callback and promise styles
+  try {
+    const maybe = window.AtomeFileSystem.listFiles(path, (res) => {});
+    if (maybe && typeof maybe.then === 'function') {
+      const res = await maybe;
+      const items = (res && (res.files || res.items || res.data && res.data.files)) || [];
+      const { folders, files } = normalize(items);
+      return { path, folders, files };
+    }
+  } catch(_){ /* fall through to callback style */ }
 
-  const row1 = $('div', { id:'row1', parent: root, css:{ marginTop:'8px' } });
-  const row2 = $('div', { id:'row2', parent: root, css:{ marginTop:'8px' } });
-  const fileRow = $('div', { id:'row-files', parent: root, css:{ marginTop:'10px' } });
-  const listWrap = $('div', { id:'recordings-list', parent: root, css:{ marginTop:'8px', maxHeight:'160px', overflowY:'auto', background:'#111', border:'1px solid #2c343d', borderRadius:'6px', padding:'6px', color:'#e6e6e6', fontFamily:'monospace', fontSize:'12px' }, text:'Recordings (.m4a):' });
+  return new Promise((resolve) => {
+    try {
+      window.AtomeFileSystem.listFiles(path, (res) => {
+        const ok = res && (res.success === undefined ? true : !!res.success);
+        const items = ok ? (res.files || res.items || (res.data && res.data.files) || []) : [];
+        const { folders, files } = normalize(items);
+        resolve({ path, folders, files });
+      });
+    } catch (e) {
+      console.warn('listFiles error', e); resolve({ path, folders: [], files: [] });
+    }
+  });
+}
 
-  // Backend picker
-  $('span', { text:'Backend: ', parent: row1, css:{ marginRight:'6px' } });
-  const bI = $('button', { id:'b-iplug', parent: row1, text:'iPlug', css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>A.set_backend('iplug') });
-  const bH = $('button', { id:'b-html', parent: row1, text:'HTML', css:{ padding:'4px 8px' }, onclick:()=>A.set_backend('html') });
+// Render a skinnable, navigable list into target using Squirrel components
+function display_files(target, listing, opts = {}) {
+  try {
+    const host = (typeof target === 'string') ? document.querySelector(target) : target;
+    if (!host) { console.warn('display_files: target introuvable', target); return; }
 
-  // Gain slider
-  $('span', { text:'Gain', parent: row2, css:{ marginRight:'6px' } });
-  $('input', { id:'gain', type:'range', min:'0', max:'2', step:'0.01', value:'1', parent: row2, css:{ width:'200px', verticalAlign:'middle' }, oninput:(e)=>A.set_param({ target:'global', name:'gain', value:Number(e.target.value) }) });
+    // Remove previous container if any
+    const prev = host.querySelector('#auv3-file-list'); if (prev) prev.remove();
 
-  // Buttons
-  const row3 = $('div', { id:'row3', parent: root, css:{ marginTop:'8px' } });
-  $('button', { text:'Create clips', parent: row3, css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>{
-    A.create_clip({ id:'c1', path_or_bookmark:'Recordings/clip1.m4a', mode:'preload',
-      markers:[{name:'A', frame:48000},{name:'B', frame:96000}], sprites:[{name:'intro', start:0, end:24000}], envelope_default:{a:0.001,d:0.05,s:0.8,r:0.1} });
-    A.create_clip({ id:'c2', path_or_bookmark:'Recordings/clip2.m4a', mode:'stream', markers:[{name:'start', frame:0}] });
-  }});
-  $('button', { text:'Play c1@A', parent: row3, css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>{
-    A.play({ clip_id:'c1', when:{type:'now'}, start:{marker:'A'}, end:'clip_end', loop:{mode:'off'}, xfade_samples:64 });
-  }});
-  $('button', { text:'Jump to B', parent: row3, css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>{
-    A.jump({ voice_id:'v1', to:{marker:'B'}, xfade_samples:64 });
-  }});
-  $('button', { text:'Stop c1', parent: row3, css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>{
-    A.stop_clip({ clip_id:'c1', release_ms:50 });
-  }});
+    const defaults = {
+      container: { marginTop: '40px', backgroundColor: '#111', border: '1px solid #2c343d', borderRadius: '6px', padding: '8px', color: '#e6e6e6', fontFamily: 'monospace', fontSize: '12px' },
+      header: { marginBottom: '6px', color: '#9db2cc', display: 'flex', alignItems: 'center', gap: '8px' },
+      crumb: { color: '#8fd', cursor: 'pointer' },
+      sectionTitle: { margin: '6px 0 2px 0', color: '#8fd' },
+      list: { margin: '0', paddingLeft: '16px' },
+      item: { cursor: 'pointer' },
+      upButton: { width: '40px', height: '20px', color: 'black', backgroundColor: 'lightgray', borderRadius: '4px', position: 'relative', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)' }
+    };
+    const theme = opts.css || {};
 
-  // Follow-actions
-  const row4 = $('div', { id:'row4', parent: root, css:{ marginTop:'8px' } });
-  $('button', { text:'Follow A->B 70%', parent: row4, css:{ padding:'4px 8px' }, onclick:()=>{
-    A.set_marker_follow_actions({ clip_id:'c1', marker:'A', actions:[{ action:'jump', target_marker:'B', probability:0.7 }] });
-  }});
+    // Container
+    const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container } });
 
-  // MIDI map stub
-  const row5 = $('div', { id:'row5', parent: root, css:{ marginTop:'8px' } });
-  $('button', { text:'Map MIDI (stub)', parent: row5, css:{ padding:'4px 8px' }, onclick:()=>{
-    A.map_midi({ cc:[{cc:1, target:'env_attack', range:[0.001,0.5]}, {cc:2, target:'env_release', range:[0.01,1.0]}] });
-  }});
+    // Header with Up button and breadcrumbs
+    const header = $('div', { parent: wrap, css: { ...defaults.header, ...theme.header } });
 
-  // File import/list
-  $('button', { id:'btn-import', parent:fileRow, text:'Importer fichier (.m4a)', css:{ padding:'4px 8px', marginRight:'6px' }, onclick:()=>{
-    try{
-      if(!window.AtomeFileSystem){ console.warn('AtomeFileSystem indisponible'); return; }
-      window.AtomeFileSystem.copy_to_ios_local('Recordings', ['m4a'], (res)=>{ if(res && res.success){ listRecordings(); } else { console.warn('Import échoué', res && res.error); } });
-    }catch(e){ console.warn('import error', e); }
-  }});
-  $('button', { id:'btn-refresh', parent:fileRow, text:'Rafraîchir la liste', css:{ padding:'4px 8px' }, onclick:()=>listRecordings() });
-  // Stop all playback
-  $('button', { id:'btn-stop-all', parent:fileRow, text:'Stop', css:{ padding:'4px 8px', marginLeft:'6px' }, onclick:()=>{ try{ stopAllPlayback(); }catch(e){ console.warn('stop all error', e); } }});
+    // Up button
+    Button({
+      id: 'auv3-up', onText: '..', offText: '..',
+      onAction: ()=> navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts),
+      offAction: ()=> navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts),
+      parent: header,
+      css: { ...defaults.upButton, ...(theme.upButton||{}) }
+    });
 
-  function listRecordings(){
-    try{
-      const fs = window.AtomeFileSystem;
-      if(!fs || typeof fs.listFiles !== 'function'){ listWrap.textContent = 'API fichier indisponible'; return; }
-      fs.listFiles('Recordings', (res)=>{
-        if(!res || !res.success){ listWrap.textContent = 'Erreur de liste'; return; }
-        const files = (res.data && res.data.files) ? res.data.files : [];
-        const items = files.filter(f=>!f.isDirectory && /\.(m4a)$/i.test(f.name));
-        listWrap.innerHTML = '';
-        $('div',{ id:'list-title', parent:listWrap, css:{marginBottom:'6px',color:'#9db2cc'}, text: items.length? 'Recordings (.m4a):' : 'Aucun fichier .m4a dans Recordings/' });
-        items.forEach((it, idx)=>{
-          const btn = $('button',{
-            id: 'rec-'+idx,
-            parent: listWrap,
-            text: '▶ '+it.name,
-            css:{
-              display:'block', width:'100%', textAlign:'left', marginBottom:'6px', padding:'6px 8px',
-              background:'#1a1f25', color:'#e6e6e6', border:'1px solid #2c343d', borderRadius:'4px', cursor:'pointer',
-              fontFamily:'monospace', fontSize:'12px',
-              // Better touch behavior
-              touchAction:'manipulation', WebkitTapHighlightColor:'rgba(0,0,0,0)', userSelect:'none', WebkitUserSelect:'none'
+    // Breadcrumbs
+    const crumbs = listing.path && listing.path !== '.' ? listing.path.split('/').filter(Boolean) : [];
+    const bc = $('div', { parent: header });
+    // Root crumb
+    $('span', { parent: bc, text: '.', css: { ...defaults.crumb, ...(theme.crumb||{}) }, onclick: ()=> navigate_auv3('.', window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
+    let acc = '';
+    crumbs.forEach((seg) => {
+      $('span', { parent: bc, text: ' / ', css: { color: '#666' } });
+      acc = path_join(acc || '.', seg);
+      $('span', { parent: bc, text: seg, css: { ...defaults.crumb, ...(theme.crumb||{}) }, onclick: ()=> navigate_auv3(acc, window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
+    });
+
+    // Sections
+    const mkSection = (label, items, isDir) => {
+      const sec = $('div', { parent: wrap });
+      $('div', { parent: sec, text: label, css: { ...defaults.sectionTitle, ...(theme.sectionTitle||{}) } });
+      const ul = $('ul', { parent: sec, css: { ...defaults.list, ...(theme.list||{}) } });
+      (items || []).forEach((it) => {
+        const fullPath = path_join(listing.path, it.name);
+        $('li', {
+          parent: ul,
+          text: it.name,
+          css: { ...defaults.item, ...(theme.item||{}), ...(isDir ? (theme.folderItem||{}) : (theme.fileItem||{})) },
+          onclick: ()=>{
+            if (isDir) {
+              if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath);
+              else navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts);
+            } else if (opts && typeof opts.onFileClick === 'function') {
+              // Custom handler provided by caller
+              opts.onFileClick(it, fullPath);
+            } else {
+              // Default behavior: route by file type
+              try { const t = detect_file_type(it.name); file_type_decision(t, it, fullPath); } catch(e){ console.warn('onFileClick fallback error', e); }
             }
-          });
-
-          const rel = 'Recordings/'+it.name;
-          const clipId = it.name.replace(/\.[^.]+$/,'');
-
-          // Unified fast handler for mouse+touch on pointerdown
-          const handleActivate = (ev)=>{
-            try{
-              if (ev) { ev.preventDefault && ev.preventDefault(); ev.stopPropagation && ev.stopPropagation(); }
-              const now = Date.now();
-              // Debounce rapid double-fires from multiple event types
-              if (btn.__lastDown && (now - btn.__lastDown) < 160) return; btn.__lastDown = now;
-
-              // Exclusivity: stop any current playback and clear other pendings
-              stopAllPlayback();
-              for (const [id, s] of clipState.entries()) { if (id !== clipId) { s.pendingPlay = false; if (s.retryTimer) { clearTimeout(s.retryTimer); s.retryTimer = null; } } }
-
-              const prev = clipState.get(clipId);
-              const st = prev || { path: rel, ready:false, pendingPlay:false };
-              // If the path changed for same clipId, forget readiness from previous decode
-              if (prev && prev.path !== rel) { st.ready = false; }
-              st.path = rel;
-              // If already decoded for this path, start immediately and DON'T re-create (prevents duplicate ready -> double start)
-              if (st.ready && st.path === rel) {
-                st.pendingPlay = false; if (st.retryTimer) { clearTimeout(st.retryTimer); st.retryTimer = null; }
-                clipState.set(clipId, st);
-                currentClipId = clipId;
-                try { if (typeof A.jump==='function') A.jump({ to: 0 }); } catch(_){ }
-                if (typeof A.play === 'function') { A.play({ clip_id: clipId, when:{type:'now'}, start:0, end:'clip_end', loop:{mode:'off'} }); }
-                return;
-              }
-
-              // Not ready yet: request (re)load and arm pending play
-              A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
-              createdClips.add(clipId);
-              st.pendingPlay = true; clipState.set(clipId, st);
-              currentClipId = clipId;
-
-              // Retry once if not ready within 1500ms (handles decode=0 edge case)
-              if (st.retryTimer) { clearTimeout(st.retryTimer); }
-              st.retryTimer = setTimeout(()=>{
-                const cur = clipState.get(clipId); if (!cur || !cur.pendingPlay || cur.ready) return;
-                A.create_clip({ id: clipId, path_or_bookmark: rel, mode:'preload' });
-              }, 1500);
-            }catch(e){ console.warn('activate error', e); }
-          };
-
-          // Prefer pointerdown for immediate response on both mouse and touch
-          try{ btn.addEventListener && btn.addEventListener('pointerdown', handleActivate, { passive:false }); }catch(_){ }
-          // Fallbacks
-          try{ btn.addEventListener && btn.addEventListener('mousedown', handleActivate, { passive:false }); }catch(_){ }
-          try{ btn.addEventListener && btn.addEventListener('touchstart', handleActivate, { passive:false }); }catch(_){ }
-          // Swallow the subsequent click if pointerdown already handled
-          try{ btn.addEventListener && btn.addEventListener('click', (e)=>{ if (btn.__lastDown && (Date.now()-btn.__lastDown) < 500) { e.preventDefault(); e.stopPropagation(); } }, true); }catch(_){ }
-          // Keyboard accessibility
-          try{ btn.addEventListener && btn.addEventListener('keydown', (e)=>{ if (e.key==='Enter' || e.key===' ') handleActivate(e); }); }catch(_){ }
-
-          // Don’t pre-create at render time to avoid parallel decodes; will create on first tap
-          if(!clipState.has(clipId)) clipState.set(clipId, { path: rel, ready:false, pendingPlay:false });
+          }
         });
       });
-    }catch(e){ listWrap.textContent = 'Erreur'; console.warn('listRecordings error', e); }
-  }
+    };
 
-  // Events
-  const log = $('div', { id:'log', parent: root, css:{ marginTop:'10px', fontFamily:'monospace', fontSize:'12px', background:'#111', padding:'6px' } });
-  function logLine(t, p){ const s = JSON.stringify(p||{}); const l = $('div', { parent: log, text: `${t}: ${s}`, css:{ color:'#8fd' } }); log.scrollTop = 1e9; return l; }
-  ['voice_started','voice_ended','marker_hit','follow_action_fired','clip_stream_xrun','backend_changed'].forEach(t => A.on(t, (p)=>logLine(t,p)));
-  // Native will emit clip_ready as soon as first PCM chunk is available
-  A.on('clip_ready', (payload)=>{
-    try{
-      const clipId = payload && (payload.clip_id || (payload.path||'').split('/').pop().replace(/\.[^.]+$/,''));
-      if(!clipId) return;
-      const st = clipState.get(clipId) || { path: payload && payload.path, ready:false, pendingPlay:false };
-      st.ready = true; clipState.set(clipId, st);
-      logLine('clip_ready', { clip_id: clipId });
-      if(st.pendingPlay && currentClipId === clipId){
-        st.pendingPlay = false;
-        if (st.retryTimer) { clearTimeout(st.retryTimer); st.retryTimer = null; }
-        try { if (typeof A.jump==='function') A.jump({ to: 0 }); } catch(_){ }
-        if (typeof A.play === 'function') { A.play({ clip_id: clipId, when:{type:'now'}, start:0, end:'clip_end', loop:{mode:'off'} }); }
-      }
-    }catch(e){ console.warn('clip_ready handler error', e); }
-  });
+    mkSection('Dossiers', (listing && listing.folders) || [], true);
+    mkSection('Fichiers', (listing && listing.files) || [], false);
+  } catch (e) { console.warn('display_files error', e); }
+}
 
-  // Init
-  try{
-    if(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge && A && typeof A.set_backend==='function'){
-      A.set_backend('iplug');
-    } else {
-      A.detect_and_set_backend(['iplug','html']);
+
+  const import_button = Button({
+    id:'btn-import',
+    onText: 'import',
+    offText: 'import',
+    onAction: ()=> ios_file_chooser(true),
+    offAction: ()=> ios_file_chooser(true),
+    parent: '#view',
+    css: {
+        width: '50px',
+        height: '24px',
+        left: '12px',
+        top: '12px',
+        color: 'black',
+        borderRadius: '6px',
+        backgroundColor: 'lightgray',
+        position: 'relative',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        boxShadow: '0 2px 4px rgba(0,0,0,1)',
     }
-  }catch(_){ A.detect_and_set_backend(['iplug','html']); }
-  listRecordings();
-})();
+});
+
+  // Second button: list AUv3 local folders and files into #view
+  const listBtn = Button({
+    id:'btn-list',
+    onText: 'list',
+    offText: 'list',
+  onAction: ()=> { try{ toggle_auv3_browser('#view'); }catch(e){ console.warn('list error', e); } },
+  offAction: ()=> { try{ toggle_auv3_browser('#view'); }catch(e){ console.warn('list error', e); } },
+    parent: '#view',
+    css: {
+        width: '50px',
+        height: '24px',
+        left: '70px',
+        top: '12px',
+        color: 'black',
+        borderRadius: '6px',
+        backgroundColor: 'lightgray',
+        position: 'relative',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        boxShadow: '0 2px 4px rgba(0,0,0,1)',
+    }
+  });

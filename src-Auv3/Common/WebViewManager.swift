@@ -176,7 +176,14 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         switch message.name {
         case "console":
-            // logs désactivés
+            // Forward JS console messages to Xcode console
+            if let s = message.body as? String {
+                print(s)
+            } else if let dict = message.body as? [String: Any] {
+                print("[console]", dict)
+            } else {
+                print("[console] \(message.body)")
+            }
             break
         case "squirrel.openURL":
             if let body = message.body as? [String: Any], let urlString = body["url"] as? String {
