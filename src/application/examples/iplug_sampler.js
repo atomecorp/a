@@ -203,6 +203,95 @@ async function get_auv3_files(path = '.') {
   });
 }
 
+// --- Context menu helpers and delete action reuse ---
+function close_file_context_menu(){
+  try{
+    const menu = document.getElementById('auv3-file-menu');
+    if (menu) menu.remove();
+    if (window.__file_menu_doc_close) {
+      document.removeEventListener('mousedown', window.__file_menu_doc_close, true);
+      document.removeEventListener('touchstart', window.__file_menu_doc_close, true);
+      window.__file_menu_doc_close = null;
+    }
+  }catch(_){ }
+}
+
+function request_delete_file(fullPath, li, listing){
+  if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.deleteFile !== 'function') {
+    console.warn('AtomeFileSystem.deleteFile indisponible');
+    return;
+  }
+  try {
+    window.AtomeFileSystem.deleteFile(fullPath, (res)=>{
+      if (res && (res.success === undefined || res.success === true)) {
+        try { navigate_auv3(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }
+        catch(_){ try{ li && li.remove && li.remove(); }catch(__){} }
+      } else {
+        console.warn('Suppression échouée', res && res.error);
+      }
+    });
+  } catch(e){ console.warn('deleteFile error', e); }
+}
+
+function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
+  try{
+    close_file_context_menu();
+    const rect = anchorEl.getBoundingClientRect();
+    const left = Math.min(window.innerWidth - 160, Math.max(8, rect.left));
+    const top = Math.min(window.innerHeight - 60, rect.bottom + 6);
+    const menu = $('div', {
+      id: 'auv3-file-menu',
+      parent: document.body,
+      css: {
+        position: 'fixed',
+        left: left + 'px',
+        top: top + 'px',
+        zIndex: '9999',
+        backgroundColor: '#1b1f27',
+        color: '#eee',
+        border: '1px solid #2c343d',
+        borderRadius: '8px',
+        padding: '6px',
+        boxShadow: '0 6px 18px rgba(0,0,0,.6)'
+      }
+    });
+
+    // Title
+    $('div', { parent: menu, text: fileItem && fileItem.name ? fileItem.name : 'Fichier', css: { fontSize: '11px', color: '#9db2cc', marginBottom: '6px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } });
+
+    // Delete action
+    Button({
+      id: 'auv3-menu-delete',
+      onText: 'Delete',
+      offText: 'Delete',
+      onAction: ()=>{ request_delete_file(fullPath, anchorEl, listing); close_file_context_menu(); },
+      offAction: ()=>{ request_delete_file(fullPath, anchorEl, listing); close_file_context_menu(); },
+      parent: menu,
+      css: {
+        width: '96px',
+        height: '24px',
+        color: '#fff',
+        backgroundColor: '#e74c3c',
+        border: 'none',
+        borderRadius: '6px',
+        cursor: 'pointer',
+        boxShadow: '0 1px 2px rgba(0,0,0,.6)'
+      }
+    });
+
+    // Outside click to close
+    window.__file_menu_doc_close = function(ev){
+      try{
+        const m = document.getElementById('auv3-file-menu');
+        if (!m) return;
+        if (!m.contains(ev.target)) close_file_context_menu();
+      }catch(_){ }
+    };
+    document.addEventListener('mousedown', window.__file_menu_doc_close, true);
+    document.addEventListener('touchstart', window.__file_menu_doc_close, true);
+  }catch(e){ console.warn('show_file_context_menu error', e); }
+}
+
 // Render a skinnable, navigable list into target using Squirrel components
 function display_files(target, listing, opts = {}) {
   try {
@@ -257,11 +346,17 @@ function display_files(target, listing, opts = {}) {
       const ul = $('ul', { parent: sec, css: { ...defaults.list, ...(theme.list||{}) } });
       (items || []).forEach((it) => {
         const fullPath = path_join(listing.path, it.name);
-        $('li', {
+        let longPressFired = false;
+        const li = $('li', {
           parent: ul,
-          text: it.name,
-          css: { ...defaults.item, ...(theme.item||{}), ...(isDir ? (theme.folderItem||{}) : (theme.fileItem||{})) },
+          css: {
+            ...defaults.item,
+            ...(theme.item||{}),
+            ...(isDir ? (theme.folderItem||{}) : (theme.fileItem||{})),
+            ...(isDir ? {} : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' })
+          },
           onclick: ()=>{
+            if (longPressFired) { longPressFired = false; return; }
             if (isDir) {
               if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath);
               else navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts);
@@ -274,6 +369,57 @@ function display_files(target, listing, opts = {}) {
             }
           }
         });
+        // File name label (keeps whole-row click behavior)
+        $('span', { parent: li, text: it.name });
+        // Add delete icon for files only
+        if (!isDir) {
+          const delBtnCss = {
+            cursor: 'pointer',
+            border: 'none',
+            background: 'transparent',
+            color: '#f66',
+            padding: '0 4px',
+            fontSize: '14px',
+            lineHeight: '1',
+          };
+          $('button', {
+            parent: li,
+            text: '🗑',
+            title: 'Supprimer',
+            css: { ...delBtnCss, ...(theme.deleteButton||{}) },
+            onclick: (ev)=>{
+              try{ ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){ }
+              request_delete_file(fullPath, li, listing);
+            }
+          });
+
+          // Long-press to open menu
+          try{
+            let pressTimer = null; let startX=0, startY=0;
+            const start = (e)=>{
+              try{ close_file_context_menu(); }catch(_){ }
+              const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+              startX = pt.clientX||0; startY = pt.clientY||0;
+              if (pressTimer) { clearTimeout(pressTimer); }
+              pressTimer = setTimeout(()=>{ longPressFired = true; show_file_context_menu(li, it, fullPath, listing); }, 450);
+            };
+            const move = (e)=>{
+              if (!pressTimer) return;
+              const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+              const dx = Math.abs((pt.clientX||0) - startX), dy = Math.abs((pt.clientY||0) - startY);
+              if (dx > 8 || dy > 8) { clearTimeout(pressTimer); pressTimer=null; }
+            };
+            const cancel = ()=>{ if (pressTimer) { clearTimeout(pressTimer); pressTimer=null; } };
+            li.addEventListener('pointerdown', start);
+            li.addEventListener('pointermove', move);
+            li.addEventListener('pointerup', cancel);
+            li.addEventListener('pointerleave', cancel);
+            li.addEventListener('touchstart', start, { passive: true });
+            li.addEventListener('touchmove', move, { passive: true });
+            li.addEventListener('touchend', cancel);
+            li.addEventListener('touchcancel', cancel);
+          }catch(_){ }
+        }
       });
     };
 
