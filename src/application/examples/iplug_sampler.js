@@ -407,12 +407,12 @@ function display_files(target, listing, opts = {}) {
     const prev = host.querySelector('#auv3-file-list'); if (prev) prev.remove();
 
     const defaults = {
-  container: { marginTop: '40px', backgroundColor: '#111', border: '1px solid #2c343d', borderRadius: '6px', padding: '8px', color: '#e6e6e6', fontFamily: 'monospace', fontSize: '14px', userSelect: 'none' },
-      header: { marginBottom: '6px', color: '#9db2cc', display: 'flex', alignItems: 'center', gap: '8px' },
-      crumb: { color: '#8fd', cursor: 'pointer' },
-      sectionTitle: { margin: '6px 0 2px 0', color: '#8fd' },
-      list: { margin: '0', paddingLeft: '16px' },
-  item: { cursor: 'pointer', padding: '4px 8px', lineHeight: '22px', userSelect: 'none' },
+      container: { marginTop: '40px', backgroundColor: '#111', border: '1px solid #2c343d', borderRadius: '6px', padding: '8px', color: '#e6e6e6', fontFamily: 'monospace', fontSize: '14px', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' },
+      header: { marginBottom: '6px', color: '#9db2cc', display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', WebkitUserSelect: 'none' },
+      crumb: { color: '#8fd', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' },
+      sectionTitle: { margin: '6px 0 2px 0', color: '#8fd', userSelect: 'none', WebkitUserSelect: 'none' },
+      list: { margin: '0', paddingLeft: '16px', userSelect: 'none', WebkitUserSelect: 'none' },
+      item: { cursor: 'pointer', padding: '4px 8px', lineHeight: '22px', userSelect: 'none', WebkitUserSelect: 'none' },
       upButton: { width: '40px', height: '20px', color: 'black', backgroundColor: 'lightgray', borderRadius: '4px', position: 'relative', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)' }
     };
 
@@ -421,8 +421,13 @@ function display_files(target, listing, opts = {}) {
     const theme = opts.css || {};
 
     // Container
-  const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container } });
-  try { wrap.setAttribute('tabindex','0'); } catch(_){ }
+    const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container } });
+    try { wrap.setAttribute('tabindex','0'); } catch(_){ }
+    // Block browser text selection and drag in the file list area
+    try {
+      wrap.addEventListener('selectstart', function(e){ e.preventDefault(); }, true);
+      wrap.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
+    } catch(_){ }
 
     // Header with Up button and breadcrumbs
   const header = $('div', { parent: wrap, css: { ...defaults.header, ...theme.header } });
@@ -469,12 +474,12 @@ function display_files(target, listing, opts = {}) {
 
     // Breadcrumbs
     const crumbs = listing.path && listing.path !== '.' ? listing.path.split('/').filter(Boolean) : [];
-    const bc = $('div', { parent: header });
+  const bc = $('div', { parent: header, css: { userSelect: 'none', WebkitUserSelect: 'none' } });
     // Root crumb
-    $('span', { parent: bc, text: '.', css: { ...defaults.crumb, ...(theme.crumb||{}) }, onclick: ()=> navigate_auv3('.', window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
+  $('span', { parent: bc, text: '.', css: { ...defaults.crumb, ...(theme.crumb||{}) }, onclick: ()=> navigate_auv3('.', window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
     let acc = '';
     crumbs.forEach((seg) => {
-      $('span', { parent: bc, text: ' / ', css: { color: '#666' } });
+  $('span', { parent: bc, text: ' / ', css: { color: '#666', userSelect: 'none', WebkitUserSelect: 'none' } });
       acc = path_join(acc || '.', seg);
       $('span', { parent: bc, text: seg, css: { ...defaults.crumb, ...(theme.crumb||{}) }, onclick: ()=> navigate_auv3(acc, window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
     });
