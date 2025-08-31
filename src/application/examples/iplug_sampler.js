@@ -25,10 +25,7 @@
       }
     })(window.console.error);
 
-//tests
 
-        console.log("Console redefined for Swift communication");
-        console.error(" error redefined for Swift communication");
 
 
 function ios_file_chooser(multiple) {
@@ -38,7 +35,7 @@ function ios_file_chooser(multiple) {
 
     // Accept boolean true, string 'true', number 1, or an object with { multiple: true }
     const allowMulti = (multiple === true) || (multiple === 'true') || (multiple === 1) || (!!multiple && multiple.multiple === true);
-    const dest = 'Recordings';
+    const dest = './';
     const types = ['m4a'];
 
     const onDone = (res) => {
@@ -106,7 +103,6 @@ function toggle_auv3_browser(target = '#view'){
     navigate_auv3(st.path || '.', target, st.opts || {});
   }catch(e){ console.warn('toggle_auv3_browser error', e); }
 }
-
 
 
 // --- File type utilities and decision routing ---
