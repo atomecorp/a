@@ -28,14 +28,17 @@
 
 
 
-function ios_file_chooser(multiple) {
+function ios_file_chooser(multiple, destFolder) {
   try {
     // Only proceed if the iOS file bridge is available
     if (!window.AtomeFileSystem) { console.warn('AtomeFileSystem indisponible'); return; }
 
     // Accept boolean true, string 'true', number 1, or an object with { multiple: true }
     const allowMulti = (multiple === true) || (multiple === 'true') || (multiple === 1) || (!!multiple && multiple.multiple === true);
-    const dest = './';
+    // Destination folder: explicit param wins, else current browser path, else root
+    const dest = (typeof destFolder === 'string' && destFolder)
+      ? destFolder
+      : ((window.__auv3_browser_state && window.__auv3_browser_state.path) || './');
     const types = ['m4a'];
 
     const onDone = (res) => {
@@ -56,7 +59,7 @@ function ios_file_chooser(multiple) {
       }
     };
 
-    if (allowMulti && typeof window.AtomeFileSystem.copy_multiple_to_ios_local === 'function') {
+  if (allowMulti && typeof window.AtomeFileSystem.copy_multiple_to_ios_local === 'function') {
       // iOS multiple selection (DocumentPicker with allowsMultipleSelection)
       window.AtomeFileSystem.copy_multiple_to_ios_local(dest, types, onDone);
     } else {
@@ -70,6 +73,38 @@ function ios_file_chooser(multiple) {
 
 // Simple state for the AUv3 file browser (current path, last opts/target)
 window.__auv3_browser_state = { path: '.', target: '#view', opts: null, visible: false };
+
+// Selection state and helpers
+window.__auv3_selection = window.__auv3_selection || {
+  set: new Set(),
+  anchor: null,
+  focus: null,
+  shiftLock: false,
+  clipboard: []
+};
+
+function sel_clear(){ window.__auv3_selection.set.clear(); window.__auv3_selection.anchor = null; window.__auv3_selection.focus = null; }
+function sel_is_selected(path){ return window.__auv3_selection.set.has(path); }
+function sel_add(path){ window.__auv3_selection.set.add(path); }
+function sel_remove(path){ window.__auv3_selection.set.delete(path); }
+function sel_replace(paths){ window.__auv3_selection.set = new Set(paths); }
+function sel_list(){ return Array.from(window.__auv3_selection.set); }
+function is_shift_active(ev){ return (ev && !!ev.shiftKey) || !!window.__auv3_selection.shiftLock; }
+function update_selection_ui(container){
+  try{
+    const items = container.querySelectorAll('li[data-fullpath]');
+    items.forEach((li)=>{
+      const fp = li.getAttribute('data-fullpath')||'';
+      if (sel_is_selected(fp)) {
+        li.style.backgroundColor = '#2a3645';
+        li.style.color = '#e1f0ff';
+      } else {
+        li.style.backgroundColor = '';
+        li.style.color = '';
+      }
+    });
+  }catch(_){ }
+}
 
 function path_join(base, name){
   if (!base || base === '.' || base === './') return name;
@@ -216,6 +251,61 @@ function close_file_context_menu(){
   }catch(_){ }
 }
 
+// Confirmation dialog using Squirrel components
+function show_confirm_dialog(message, onConfirm, onCancel){
+  try{
+    // Remove existing overlay if any
+    try{ const prev = document.getElementById('auv3-confirm'); if (prev) prev.remove(); }catch(_){ }
+    const overlay = $('div', { id: 'auv3-confirm', parent: document.body, css: {
+      position: 'fixed', left: '0', top: '0', right: '0', bottom: '0',
+      backgroundColor: 'rgba(0,0,0,.5)', zIndex: '10000', display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }});
+    const box = $('div', { parent: overlay, css: {
+      backgroundColor: '#1b1f27', color: '#eee', border: '1px solid #2c343d', borderRadius: '8px', padding: '12px', width: '280px', boxShadow: '0 8px 24px rgba(0,0,0,.6)'
+    }});
+    $('div', { parent: box, text: message || 'Confirmer ?', css: { marginBottom: '10px', fontSize: '13px' } });
+    const row = $('div', { parent: box, css: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
+    Button({ id:'cnf-cancel', onText:'Cancel', offText:'Cancel', onAction: ()=>{ try{ overlay.remove(); }catch(_){ } onCancel && onCancel(false); }, offAction: ()=>{ try{ overlay.remove(); }catch(_){ } onCancel && onCancel(false); }, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#666', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
+    Button({ id:'cnf-ok', onText:'Delete', offText:'Delete', onAction: ()=>{ try{ overlay.remove(); }catch(_){ } onConfirm && onConfirm(true); }, offAction: ()=>{ try{ overlay.remove(); }catch(_){ } onConfirm && onConfirm(true); }, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#e74c3c', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
+  }catch(_){ }
+}
+
+// Clipboard + multi-delete helpers
+function copy_selection_or_item(fullPath){
+  try{
+    const sel = sel_list();
+    const payload = (sel && sel.length) ? sel : (fullPath ? [fullPath] : []);
+    window.__auv3_selection.clipboard = payload;
+  }catch(_){ }
+}
+
+function paste_into_current_folder(listing){
+  try{
+    const cb = window.__auv3_selection.clipboard || [];
+    if (!cb || !cb.length) return;
+    if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.copyFiles !== 'function') return;
+    const dest = (listing && listing.path) ? listing.path : './';
+    window.AtomeFileSystem.copyFiles(dest, cb, (res)=>{
+      try{ if (res && (res.success===undefined || res.success===true)) { navigate_auv3(dest, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); } }catch(_){ }
+    });
+  }catch(_){ }
+}
+
+function request_delete_selection_or_item(fullPath, listing){
+  const arr = (function(){ const s = sel_list(); return (s && s.length) ? s : (fullPath ? [fullPath] : []); })();
+  if (!arr.length) return;
+  if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.deleteFile !== 'function') { console.warn('deleteFile indisponible'); return; }
+  let i = 0;
+  const next = ()=>{
+    if (i >= arr.length) { try{ navigate_auv3(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
+    const p = arr[i++];
+    try{
+      window.AtomeFileSystem.deleteFile(p, ()=>{ next(); });
+    }catch(_){ next(); }
+  };
+  next();
+}
+
 function request_delete_file(fullPath, li, listing){
   if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.deleteFile !== 'function') {
     console.warn('AtomeFileSystem.deleteFile indisponible');
@@ -259,24 +349,39 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     // Title
     $('div', { parent: menu, text: fileItem && fileItem.name ? fileItem.name : 'Fichier', css: { fontSize: '11px', color: '#9db2cc', marginBottom: '6px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } });
 
+    // Copy action
+    Button({
+      id: 'auv3-menu-copy', onText: 'Copy', offText: 'Copy',
+      onAction: ()=>{ copy_selection_or_item(fullPath); close_file_context_menu(); },
+      offAction: ()=>{ copy_selection_or_item(fullPath); close_file_context_menu(); },
+      parent: menu,
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: '#3498db', border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.6)', marginBottom: '6px' }
+    });
+
+    // Paste action
+    Button({
+      id: 'auv3-menu-paste', onText: 'Paste', offText: 'Paste',
+      onAction: ()=>{ paste_into_current_folder(listing); close_file_context_menu(); },
+      offAction: ()=>{ paste_into_current_folder(listing); close_file_context_menu(); },
+      parent: menu,
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: '#2ecc71', border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.6)', marginBottom: '6px' }
+    });
+
     // Delete action
     Button({
-      id: 'auv3-menu-delete',
-      onText: 'Delete',
-      offText: 'Delete',
-      onAction: ()=>{ request_delete_file(fullPath, anchorEl, listing); close_file_context_menu(); },
-      offAction: ()=>{ request_delete_file(fullPath, anchorEl, listing); close_file_context_menu(); },
+      id: 'auv3-menu-delete', onText: 'Delete', offText: 'Delete',
+      onAction: ()=>{
+        const sel = sel_list();
+        const msg = (sel && sel.length>1) ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((fullPath||'').split('/').pop()||'cet élément') + ' » ?');
+        show_confirm_dialog(msg, ()=>{ request_delete_selection_or_item(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+      },
+      offAction: ()=>{
+        const sel = sel_list();
+        const msg = (sel && sel.length>1) ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((fullPath||'').split('/').pop()||'cet élément') + ' » ?');
+        show_confirm_dialog(msg, ()=>{ request_delete_selection_or_item(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+      },
       parent: menu,
-      css: {
-        width: '96px',
-        height: '24px',
-        color: '#fff',
-        backgroundColor: '#e74c3c',
-        border: 'none',
-        borderRadius: '6px',
-        cursor: 'pointer',
-        boxShadow: '0 1px 2px rgba(0,0,0,.6)'
-      }
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: '#e74c3c', border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.6)' }
     });
 
     // Outside click to close
@@ -302,22 +407,57 @@ function display_files(target, listing, opts = {}) {
     const prev = host.querySelector('#auv3-file-list'); if (prev) prev.remove();
 
     const defaults = {
-      container: { marginTop: '40px', backgroundColor: '#111', border: '1px solid #2c343d', borderRadius: '6px', padding: '8px', color: '#e6e6e6', fontFamily: 'monospace', fontSize: '12px' },
+  container: { marginTop: '40px', backgroundColor: '#111', border: '1px solid #2c343d', borderRadius: '6px', padding: '8px', color: '#e6e6e6', fontFamily: 'monospace', fontSize: '14px', userSelect: 'none' },
       header: { marginBottom: '6px', color: '#9db2cc', display: 'flex', alignItems: 'center', gap: '8px' },
       crumb: { color: '#8fd', cursor: 'pointer' },
       sectionTitle: { margin: '6px 0 2px 0', color: '#8fd' },
       list: { margin: '0', paddingLeft: '16px' },
-      item: { cursor: 'pointer' },
+  item: { cursor: 'pointer', padding: '4px 8px', lineHeight: '22px', userSelect: 'none' },
       upButton: { width: '40px', height: '20px', color: 'black', backgroundColor: 'lightgray', borderRadius: '4px', position: 'relative', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)' }
     };
+
+
+
     const theme = opts.css || {};
 
     // Container
-    const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container } });
+  const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container } });
+  try { wrap.setAttribute('tabindex','0'); } catch(_){ }
 
     // Header with Up button and breadcrumbs
-    const header = $('div', { parent: wrap, css: { ...defaults.header, ...theme.header } });
+  const header = $('div', { parent: wrap, css: { ...defaults.header, ...theme.header } });
 
+    // Shift-lock toggle
+    const shiftBtn = Button({
+      id:'btn-shift',
+      onText: 'multi on',
+      offText: 'multi off',
+      onAction: ()=>{ window.__auv3_selection.shiftLock = true; },
+      offAction: ()=>{ window.__auv3_selection.shiftLock = false; },
+      parent: header,
+      css: { width: '72px', height: '24px', color: 'black', borderRadius: '6px', backgroundColor: 'lightgray', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)' }
+    });
+
+    const import_button = Button({
+      id:'btn-import',
+      onText: 'import',
+      offText: 'import',
+      onAction: ()=> ios_file_chooser(true, listing.path),
+      offAction: ()=> ios_file_chooser(true, listing.path),
+      parent: header,
+      css: {
+        width: '60px',
+        height: '24px',
+        color: 'black',
+        borderRadius: '6px',
+        backgroundColor: 'lightgray',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'background-color 0.3s ease',
+        boxShadow: '0 2px 4px rgba(0,0,0,1)',
+        marginLeft: 'auto' // push to top-right within flex header
+      }
+    });
     // Up button
     Button({
       id: 'auv3-up', onText: '..', offText: '..',
@@ -340,6 +480,7 @@ function display_files(target, listing, opts = {}) {
     });
 
     // Sections
+    let __linearIndex = 0; const __indexToPath = [];
     const mkSection = (label, items, isDir) => {
       const sec = $('div', { parent: wrap });
       $('div', { parent: sec, text: label, css: { ...defaults.sectionTitle, ...(theme.sectionTitle||{}) } });
@@ -347,6 +488,10 @@ function display_files(target, listing, opts = {}) {
       (items || []).forEach((it) => {
         const fullPath = path_join(listing.path, it.name);
         let longPressFired = false;
+    // Shared state for pointer cycle
+    let shiftDownAtPointerDown = false;
+    let dragging = false;
+    let dragStarted = false;
         const li = $('li', {
           parent: ul,
           css: {
@@ -355,22 +500,38 @@ function display_files(target, listing, opts = {}) {
             ...(isDir ? (theme.folderItem||{}) : (theme.fileItem||{})),
             ...(isDir ? {} : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' })
           },
-          onclick: ()=>{
+          onclick: (ev)=>{
             if (longPressFired) { longPressFired = false; return; }
             if (isDir) {
               if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath);
               else navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts);
-            } else if (opts && typeof opts.onFileClick === 'function') {
-              // Custom handler provided by caller
-              opts.onFileClick(it, fullPath);
-            } else {
-              // Default behavior: route by file type
-              try { const t = detect_file_type(it.name); file_type_decision(t, it, fullPath); } catch(e){ console.warn('onFileClick fallback error', e); }
+              return;
             }
+            if (dragStarted) { dragStarted = false; return; }
+            // Selection logic for files
+      const shift = !!shiftDownAtPointerDown || is_shift_active(ev);
+            const idx = parseInt(li.getAttribute('data-index')||'0',10);
+            if (!shift) {
+              // Single selection mode
+              sel_replace([fullPath]);
+              window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+            } else {
+              // Multi-select toggle behavior
+              if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath);
+              window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+            }
+            update_selection_ui(wrap);
+          },
+          ondblclick: ()=>{
+            if (isDir) return;
+            try { const t = detect_file_type(it.name); file_type_decision(t, it, fullPath); } catch(e){ console.warn('open error', e); }
           }
         });
+        li.setAttribute('data-fullpath', fullPath);
+        li.setAttribute('data-index', String(__linearIndex));
+        __indexToPath[__linearIndex] = fullPath; __linearIndex++;
         // File name label (keeps whole-row click behavior)
-        $('span', { parent: li, text: it.name });
+  $('span', { parent: li, text: it.name, css: { userSelect: 'none' } });
         // Add delete icon for files only
         if (!isDir) {
           const delBtnCss = {
@@ -389,68 +550,95 @@ function display_files(target, listing, opts = {}) {
             css: { ...delBtnCss, ...(theme.deleteButton||{}) },
             onclick: (ev)=>{
               try{ ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){ }
-              request_delete_file(fullPath, li, listing);
+              const base = (fullPath||'').split('/').pop() || 'cet élément';
+              show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_file(fullPath, li, listing); }, ()=>{});
             }
           });
-
-          // Long-press to open menu
-          try{
-            let pressTimer = null; let startX=0, startY=0;
-            const start = (e)=>{
-              try{ close_file_context_menu(); }catch(_){ }
-              const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-              startX = pt.clientX||0; startY = pt.clientY||0;
-              if (pressTimer) { clearTimeout(pressTimer); }
-              pressTimer = setTimeout(()=>{ longPressFired = true; show_file_context_menu(li, it, fullPath, listing); }, 450);
-            };
-            const move = (e)=>{
-              if (!pressTimer) return;
-              const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-              const dx = Math.abs((pt.clientX||0) - startX), dy = Math.abs((pt.clientY||0) - startY);
-              if (dx > 8 || dy > 8) { clearTimeout(pressTimer); pressTimer=null; }
-            };
-            const cancel = ()=>{ if (pressTimer) { clearTimeout(pressTimer); pressTimer=null; } };
-            li.addEventListener('pointerdown', start);
-            li.addEventListener('pointermove', move);
-            li.addEventListener('pointerup', cancel);
-            li.addEventListener('pointerleave', cancel);
-            li.addEventListener('touchstart', start, { passive: true });
-            li.addEventListener('touchmove', move, { passive: true });
-            li.addEventListener('touchend', cancel);
-            li.addEventListener('touchcancel', cancel);
-          }catch(_){ }
         }
+
+        // Drag-to-select across items
+        try{
+          if (isDir) { /* no drag-to-select on directories */ throw new Error('skip-drag-setup'); }
+          const startDrag = (e)=>{ if (e && e.buttons===1) { dragging = true; dragStarted = false; shiftDownAtPointerDown = is_shift_active(e); } };
+          const ensureStartSelected = ()=>{
+            if (!dragging || dragStarted) return;
+            dragStarted = true;
+            if (!shiftDownAtPointerDown) sel_clear();
+            sel_add(fullPath); update_selection_ui(wrap);
+          };
+          const enter = ()=>{ if (!dragging) return; ensureStartSelected(); sel_add(fullPath); update_selection_ui(wrap); };
+          li.addEventListener('pointerenter', enter);
+          li.addEventListener('touchmove', enter, { passive: true });
+          li.addEventListener('pointerdown', startDrag);
+          li.addEventListener('pointermove', ensureStartSelected);
+          const stopDrag = ()=>{ dragging = false; };
+          li.addEventListener('pointerup', stopDrag);
+          li.addEventListener('pointerleave', ()=>{});
+        }catch(_){ }
+
+        // Long-press to open context menu (files and folders)
+        try{
+          let pressTimer = null; let startX=0, startY=0;
+          const start = (e)=>{
+            try{ close_file_context_menu(); }catch(_){ }
+            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+            startX = pt.clientX||0; startY = pt.clientY||0;
+            if (pressTimer) { clearTimeout(pressTimer); }
+            pressTimer = setTimeout(()=>{ longPressFired = true; show_file_context_menu(li, it, fullPath, listing); }, 450);
+          };
+          const move = (e)=>{
+            if (!pressTimer) return;
+            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+            const dx = Math.abs((pt.clientX||0) - startX), dy = Math.abs((pt.clientY||0) - startY);
+            if (dx > 8 || dy > 8) { clearTimeout(pressTimer); pressTimer=null; }
+          };
+          const cancel = ()=>{ if (pressTimer) { clearTimeout(pressTimer); pressTimer=null; } };
+          li.addEventListener('pointerdown', start);
+          li.addEventListener('pointermove', move);
+          li.addEventListener('pointerup', cancel);
+          li.addEventListener('pointerleave', cancel);
+          li.addEventListener('touchstart', start, { passive: true });
+          li.addEventListener('touchmove', move, { passive: true });
+          li.addEventListener('touchend', cancel);
+          li.addEventListener('touchcancel', cancel);
+        }catch(_){ }
       });
     };
 
     mkSection('Dossiers', (listing && listing.folders) || [], true);
     mkSection('Fichiers', (listing && listing.files) || [], false);
+
+    // Keyboard navigation with arrows; Shift extends selection
+    try{
+      wrap.addEventListener('keydown', (e)=>{
+        const key = e.key;
+        if (key !== 'ArrowDown' && key !== 'ArrowUp') return;
+        e.preventDefault(); e.stopPropagation();
+        const nodes = wrap.querySelectorAll('li[data-index]');
+        const total = nodes.length;
+        if (!total) return;
+        const extend = is_shift_active(e);
+        let focus = (window.__auv3_selection.focus==null) ? -1 : window.__auv3_selection.focus;
+        if (key === 'ArrowDown') focus = Math.min(total-1, focus+1); else focus = Math.max(0, focus-1);
+        if (focus < 0) return;
+        if (!extend) {
+          const li = wrap.querySelector(`li[data-index="${focus}"]`);
+          const fp = li ? li.getAttribute('data-fullpath') : null;
+          if (fp) { sel_replace([fp]); window.__auv3_selection.anchor = focus; window.__auv3_selection.focus = focus; }
+        } else {
+          const a = (window.__auv3_selection.anchor==null) ? focus : window.__auv3_selection.anchor;
+          window.__auv3_selection.focus = focus;
+          const [s,e2] = a<=focus ? [a,focus] : [focus,a];
+          const paths = []; for (let i=s;i<=e2;i++){ const li = wrap.querySelector(`li[data-index="${i}"]`); if (li) { const fp = li.getAttribute('data-fullpath'); if (fp) paths.push(fp); } }
+          sel_replace(paths);
+        }
+        update_selection_ui(wrap);
+        try{ const el = wrap.querySelector(`li[data-index="${focus}"]`); el && el.scrollIntoView && el.scrollIntoView({ block:'nearest' }); }catch(_){ }
+      });
+    }catch(_){ }
   } catch (e) { console.warn('display_files error', e); }
 }
 
-
-  const import_button = Button({
-    id:'btn-import',
-    onText: 'import',
-    offText: 'import',
-    onAction: ()=> ios_file_chooser(true),
-    offAction: ()=> ios_file_chooser(true),
-    parent: '#view',
-    css: {
-        width: '50px',
-        height: '24px',
-        left: '12px',
-        top: '12px',
-        color: 'black',
-        borderRadius: '6px',
-        backgroundColor: 'lightgray',
-        position: 'relative',
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-        boxShadow: '0 2px 4px rgba(0,0,0,1)',
-    }
-});
 
   // Second button: list AUv3 local folders and files into #view
   const listBtn = Button({
@@ -463,7 +651,7 @@ function display_files(target, listing, opts = {}) {
     css: {
         width: '50px',
         height: '24px',
-        left: '70px',
+        left: '12px',
         top: '12px',
         color: 'black',
         borderRadius: '6px',

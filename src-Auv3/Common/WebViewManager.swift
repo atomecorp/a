@@ -265,7 +265,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         }
                         return
                     }
-                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"];
+                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"];
                     if fileSystemActions.contains(action) {
                         if let bridge = WebViewManager.fileSystemBridge {
                             bridge.userContentController(userContentController, didReceive: message)

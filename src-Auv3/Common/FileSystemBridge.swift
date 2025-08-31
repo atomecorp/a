@@ -14,6 +14,46 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     
     private weak var currentWebView: WKWebView?
     
+    // Map iCloud downloading status to a concise string for JS/UI
+    private func simpleDownloadingStatus(_ status: URLUbiquitousItemDownloadingStatus?) -> String {
+        switch status {
+        case .some(.current): return "current"
+        case .some(.downloaded): return "downloaded"
+        case .some(.notDownloaded): return "notDownloaded"
+        case .none: return ""
+        @unknown default: return ""
+        }
+    }
+    
+    // Resolve a string path to a concrete URL, supporting a custom appgroup:/ scheme.
+    // Examples:
+    //  - "." => current storage root (Documents for local/iCloud choice)
+    //  - "Recordings" => <storage>/Recordings
+    //  - "appgroup:/Documents" => <AppGroup>/Documents
+    //  - "appgroup:/" => <AppGroup>
+    private func resolveURL(for path: String, isDirectory: Bool = false) -> URL? {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Handle appgroup: scheme explicitly
+        if trimmed.hasPrefix("appgroup:") {
+            guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
+                return nil
+            }
+            var rest = String(trimmed.dropFirst("appgroup:".count))
+            if rest.hasPrefix("/") { rest.removeFirst() }
+            let url = rest.isEmpty ? groupURL : groupURL.appendingPathComponent(rest, isDirectory: isDirectory)
+            return url
+        }
+        // Default: relative to current storage root
+        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
+            return nil
+        }
+        if trimmed.isEmpty || trimmed == "." || trimmed == "./" || trimmed == "/" {
+            return storageURL
+        }
+        let url = storageURL.appendingPathComponent(trimmed, isDirectory: isDirectory)
+        return url
+    }
+    
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         
         // Garde une référence faible à la WebView pour pouvoir trouver le view controller
@@ -42,8 +82,6 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleShowStorageSettings()
         case "saveFileWithDocumentPicker":
             handleSaveFileWithDocumentPicker(body: body, webView: message.webView)
-        case "loadFileWithDocumentPicker":
-            handleLoadFileWithDocumentPicker(body: body, webView: message.webView)
         case "loadFilesWithDocumentPicker":
             handleLoadFilesWithDocumentPicker(body: body, webView: message.webView)
         case "saveProjectInternal":
@@ -52,6 +90,10 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleCopyToIOSLocal(body: body, webView: message.webView)
         case "copyMultipleToIOSLocal":
             handleCopyMultipleToIOSLocal(body: body, webView: message.webView)
+        case "ensureLocal":
+            handleEnsureLocal(body: body, webView: message.webView)
+        case "copyFiles":
+            handleCopyFiles(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -63,15 +105,13 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             sendErrorResponse(to: webView, error: "Invalid parameters")
             return
         }
-        // Support binaire encodé base64 avec marqueur __BASE64__ (ajouté par hmlt_2_ios_local.js)
+    // Support binaire encodé base64 avec marqueur __BASE64__ (ajouté par hmlt_2_ios_local.js)
         let fileData: Data
         if data.hasPrefix("__BASE64__") {
             let b64 = String(data.dropFirst("__BASE64__".count))
             if let decoded = Data(base64Encoded: b64) {
                 fileData = decoded
-                print("💾 handleSaveFile: décodage base64 (")
             } else {
-                print("⚠️ handleSaveFile: échec décodage base64, sauvegarde en UTF-8 brut")
                 fileData = Data(b64.utf8)
             }
         } else {
@@ -111,25 +151,40 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         // Accept both 'folder' (legacy) and 'path' (AUv3API)
         let folder = (body["folder"] as? String) ?? (body["path"] as? String) ?? ""
         let requestId = body["requestId"] as? Int
-        print("📂 SWIFT:listFiles folder/path=\(folder) requestId=\(String(describing: requestId))")
         if folder.isEmpty { sendErrorResponse(to: webView, error: "Invalid folder/path parameter"); return }
-        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else { sendErrorResponse(to: webView, error: "Storage not available"); return }
-        let folderURL = storageURL.appendingPathComponent(folder, isDirectory: true)
-        print("📂 SWIFT:listFiles storageURL=\(storageURL.path) folderURL=\(folderURL.path)")
+        guard let folderURL = resolveURL(for: folder, isDirectory: true) else {
+            if let requestId = requestId { sendBridgeResult(to: webView, payload: ["action":"listFilesResult","requestId":requestId,"success":false,"error":"Invalid base URL"]) }
+            else { sendErrorResponse(to: webView, error: "Invalid base URL") }
+            return
+        }
         do {
-            let fileURLs = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey], options: .skipsHiddenFiles)
+            // If directory does not exist, return empty listing (success=true) for a smoother UX
+            var isDir: ObjCBool = false
+            if !FileManager.default.fileExists(atPath: folderURL.path, isDirectory: &isDir) || !isDir.boolValue {
+                let empty: [[String:Any]] = []
+                if let requestId = requestId {
+                    sendBridgeResult(to: webView, payload: ["action":"listFilesResult","requestId":requestId,"success":true,"files":empty])
+                } else {
+                    sendSuccessResponse(to: webView, data: ["files": empty])
+                }
+                return
+            }
+            let fileURLs = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey, .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey], options: .skipsHiddenFiles)
             let files = fileURLs.compactMap { url -> [String: Any]? in
-                guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey]) else { return nil }
+                guard let resourceValues = try? url.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey, .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]) else { return nil }
                 let isFile = resourceValues.isRegularFile ?? false
                 let isDirectory = resourceValues.isDirectory ?? false
+                let isCloud = resourceValues.isUbiquitousItem ?? false
+                let dlStatus: String = simpleDownloadingStatus(resourceValues.ubiquitousItemDownloadingStatus)
                 
                 if isFile || isDirectory {
-                    print("📄 SWIFT:listFiles found \(isDirectory ? "directory" : "file")=\(url.lastPathComponent)")
                     return [
                         "name": url.lastPathComponent,
                         "isDirectory": isDirectory,
                         "size": resourceValues.fileSize ?? 0,
-                        "modified": resourceValues.contentModificationDate?.timeIntervalSince1970 ?? 0
+                        "modified": resourceValues.contentModificationDate?.timeIntervalSince1970 ?? 0,
+                        "isCloud": isCloud,
+                        "downloadingStatus": dlStatus
                     ]
                 }
                 return nil
@@ -142,7 +197,6 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             // After listing (user likely expects freshness) schedule non-forced sync to pick external changes
             FileSyncCoordinator.shared.syncAll()
         } catch {
-            print("❌ SWIFT:listFiles error=\(error.localizedDescription)")
             if let requestId = requestId {
                 sendBridgeResult(to: webView, payload: ["action":"listFilesResult","requestId":requestId,"success":false,"error":error.localizedDescription])
             } else {
@@ -157,12 +211,10 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             return
         }
         
-        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
-            sendErrorResponse(to: webView, error: "Storage not available")
+        guard let fileURL = resolveURL(for: path, isDirectory: false) else {
+            sendErrorResponse(to: webView, error: "Invalid path")
             return
         }
-        
-        let fileURL = storageURL.appendingPathComponent(path)
         
         do {
             try FileManager.default.removeItem(at: fileURL)
@@ -192,9 +244,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             // Pour l'instant, on affiche une alerte simple en attendant que l'interface SwiftUI soit configurée
             // Dans une extension AUv3, on ne peut pas utiliser UIApplication.shared
             // Il faut passer le view controller depuis l'extérieur
-            guard let webView = self.currentWebView,
-                  let viewController = self.findViewController(from: webView) else {
-                print("❌ Impossible de trouver le view controller pour afficher les paramètres")
+        guard let webView = self.currentWebView,
+            let viewController = self.findViewController(from: webView) else {
                 return
             }
             
@@ -313,6 +364,23 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                     requestedDestPath: requestedDestFolder || './',
                     fileTypes: fileTypes || ['m4a','mp3','wav','atome','json']
                 });
+            },
+            ensureLocal: function(path, callback){
+                window.fileSystemCallback = callback;
+                try {
+                    webkit.messageHandlers.fileSystem.postMessage({ action: 'ensureLocal', path: path || '' });
+                } catch(_) {
+                    // Fallback immediate success if bridge not available
+                    try { callback && callback({ success: true }); } catch(__) {}
+                }
+            },
+            copyFiles: function(destFolder, sources, callback){
+                window.fileSystemCallback = callback;
+                try {
+                    webkit.messageHandlers.fileSystem.postMessage({ action: 'copyFiles', destFolder: destFolder || './', sources: Array.isArray(sources)? sources : [] });
+                } catch(_) {
+                    try { callback && callback({ success: false, error: 'bridge unavailable' }); } catch(__) {}
+                }
             }
         };
         
@@ -371,6 +439,85 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         let script = WKUserScript(source: jsAPI, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         webView.configuration.userContentController.addUserScript(script)
     }
+
+    // Copy one or many files/folders into a destination folder within the same storage
+    private func handleCopyFiles(body: [String: Any], webView: WKWebView?) {
+        guard let destFolder = body["destFolder"] as? String,
+              let sources = body["sources"] as? [String], !sources.isEmpty,
+              let destURL = resolveURL(for: destFolder, isDirectory: true) else {
+            sendErrorResponse(to: webView, error: "Invalid copy parameters")
+            return
+        }
+        do { try FileManager.default.createDirectory(at: destURL, withIntermediateDirectories: true) } catch { /* ignore */ }
+
+        func uniqueURL(for baseURL: URL) -> URL {
+            let fm = FileManager.default
+            if !fm.fileExists(atPath: baseURL.path) { return baseURL }
+            let name = baseURL.deletingPathExtension().lastPathComponent
+            let ext = baseURL.pathExtension
+            var idx = 2
+            while true {
+                let newName = "\(name) copy \(idx)"
+                let candidate = baseURL.deletingLastPathComponent().appendingPathComponent(ext.isEmpty ? newName : "\(newName).\(ext)")
+                if !fm.fileExists(atPath: candidate.path) { return candidate }
+                idx += 1
+                if idx > 500 { return baseURL } // fallback
+            }
+        }
+
+        var results: [String] = []
+        for rel in sources {
+            guard let srcURL = resolveURL(for: rel, isDirectory: false) else { continue }
+            let destBase = destURL.appendingPathComponent(srcURL.lastPathComponent)
+            let finalURL = uniqueURL(for: destBase)
+            do {
+                try FileManager.default.copyItem(at: srcURL, to: finalURL)
+                let relPath = (destFolder == "." || destFolder == "./") ? finalURL.lastPathComponent : destFolder.trimmingCharacters(in: CharacterSet(charactersIn: "/")).appending("/" + finalURL.lastPathComponent)
+                results.append(relPath)
+            } catch {
+                // Skip failing item; continue with others
+            }
+        }
+        FileSyncCoordinator.shared.syncAll(force: true)
+        if results.isEmpty {
+            sendErrorResponse(to: webView, error: "Copy failed for all sources")
+        } else {
+            sendSuccessResponse(to: webView, data: ["copied": results])
+        }
+    }
+
+    // Attempt to make a ubiquitous file local; no-op for local/App Group files
+    private func handleEnsureLocal(body: [String: Any], webView: WKWebView?) {
+        guard let relPath = body["path"] as? String, !relPath.isEmpty else {
+            sendErrorResponse(to: webView, error: "Invalid path for ensureLocal"); return
+        }
+        guard let fileURL = resolveURL(for: relPath, isDirectory: false) else {
+            sendSuccessResponse(to: webView, data: ["message":"Invalid path, assuming local"]) ; return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                let keys: Set<URLResourceKey> = [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
+                let values = try fileURL.resourceValues(forKeys: keys)
+                let isCloud = values.isUbiquitousItem ?? false
+                if !isCloud {
+                    DispatchQueue.main.async { self.sendSuccessResponse(to: webView, data: ["message":"Not ubiquitous"]) }
+                    return
+                }
+                // Try to start download
+                do { try FileManager.default.startDownloadingUbiquitousItem(at: fileURL) } catch { /* ignore */ }
+                // Poll a little for availability; exit quickly
+                let deadline = Date().addingTimeInterval(3.0)
+                while Date() < deadline {
+                    if let st = try? fileURL.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus,
+                       st == .current { break }
+                    Thread.sleep(forTimeInterval: 0.1)
+                }
+                DispatchQueue.main.async { self.sendSuccessResponse(to: webView, data: ["message":"ensureLocal attempted"]) }
+            } catch {
+                DispatchQueue.main.async { self.sendSuccessResponse(to: webView, data: ["message":"ensureLocal fallback", "error": error.localizedDescription]) }
+            }
+        }
+    }
     
     // Méthode helper pour trouver le view controller parent d'une WebView
     // Compatible avec les extensions AUv3
@@ -386,137 +533,47 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     }
     
     private func handleSaveFileWithDocumentPicker(body: [String: Any], webView: WKWebView?) {
-        print("🔥 SWIFT: handleSaveFileWithDocumentPicker appelé")
-        print("🔥 SWIFT: body = \(body)")
-        
         guard let fileName = body["fileName"] as? String,
               let dataString = body["data"] as? String,
               let data = dataString.data(using: .utf8),
               let webView = webView else {
-            print("❌ SWIFT: Paramètres invalides pour Document Picker")
             sendErrorResponse(to: webView, error: "Invalid parameters for Document Picker")
             return
         }
-        
-        print("🔥 SWIFT: Paramètres OK - fileName: \(fileName), data.count: \(data.count)")
-        
         // Trouver le view controller pour présenter le Document Picker
         guard let viewController = findViewController(from: webView) else {
-            print("❌ SWIFT: Cannot find view controller for Document Picker")
             sendErrorResponse(to: webView, error: "Cannot find view controller for Document Picker")
             return
         }
-        
-        print("� SWIFT: View controller trouvé: \(type(of: viewController))")
-        print("�📄 Sauvegarde avec Document Picker: \(fileName)")
-        
         iCloudFileManager.shared.saveFileWithDocumentPicker(
             data: data,
             fileName: fileName,
             from: viewController
         ) { [weak self] success, error in
             guard self != nil else { return }
-            print("🔥 SWIFT: Callback Document Picker reçu - success: \(success), error: \(String(describing: error))")
             DispatchQueue.main.async {
                 if success {
-                    print("✅ SWIFT: Notifying JavaScript of success")
                     // Notifier JavaScript du succès
                     let js = "if (window.documentPickerResult) window.documentPickerResult(true, null);"
                     webView.evaluateJavaScript(js) { (result, error) in
-                        if let error = error {
-                            print("❌ SWIFT: Erreur JavaScript success: \(error)")
-                        } else {
-                            print("✅ SWIFT: JavaScript success notifié")
-                        }
+                        _ = result; _ = error
                     }
                 } else {
                     let errorMessage = error?.localizedDescription ?? "Unknown error"
-                    print("❌ SWIFT: Notifying JavaScript of error: \(errorMessage)")
                     // Notifier JavaScript de l'erreur
                     let js = "if (window.documentPickerResult) window.documentPickerResult(false, '\(errorMessage)');"
                     webView.evaluateJavaScript(js) { (result, error) in
-                        if let error = error {
-                            print("❌ SWIFT: Erreur JavaScript error: \(error)")
-                        } else {
-                            print("✅ SWIFT: JavaScript error notifié")
-                        }
+                        _ = result; _ = error
                     }
                 }
             }
         }
-        print("🔥 SWIFT: Appel à saveFileWithDocumentPicker terminé")
-    }
-    
-    private func handleLoadFileWithDocumentPicker(body: [String: Any], webView: WKWebView?) {
-        print("🔥 SWIFT: handleLoadFileWithDocumentPicker appelé")
-        print("🔥 SWIFT: body = \(body)")
-        
-        guard let webView = webView else {
-            print("❌ SWIFT: WebView invalide pour Document Picker Load")
-            sendErrorResponse(to: webView, error: "Invalid webView for Document Picker Load")
-            return
-        }
-        
-        let fileTypes = body["fileTypes"] as? [String] ?? ["atome", "json"]
-        print("🔥 SWIFT: Types de fichiers acceptés: \(fileTypes)")
-        
-        // Trouver le view controller pour présenter le Document Picker
-        guard let viewController = findViewController(from: webView) else {
-            print("❌ SWIFT: Cannot find view controller for Document Picker Load")
-            sendErrorResponse(to: webView, error: "Cannot find view controller for Document Picker Load")
-            return
-        }
-        
-        print("📂 SWIFT: View controller trouvé: \(type(of: viewController))")
-        print("📂 Chargement avec Document Picker pour les types: \(fileTypes)")
-        
-        iCloudFileManager.shared.loadFileWithDocumentPicker(
-            fileTypes: fileTypes,
-            from: viewController
-        ) { [weak self] success, data, fileName, error in
-            guard self != nil else { return }
-            print("🔥 SWIFT: Callback Document Picker Load reçu - success: \(success), fileName: \(fileName ?? "nil"), error: \(String(describing: error))")
-            DispatchQueue.main.async {
-                if success, let data = data, let content = String(data: data, encoding: .utf8) {
-                    print("✅ SWIFT: Notifying JavaScript of load success")
-                    // Échapper les caractères spéciaux pour JavaScript
-                    let escapedContent = content.replacingOccurrences(of: "\\", with: "\\\\")
-                                              .replacingOccurrences(of: "'", with: "\\'")
-                                              .replacingOccurrences(of: "\n", with: "\\n")
-                                              .replacingOccurrences(of: "\r", with: "\\r")
-                    
-                    // Notifier JavaScript du succès avec les données
-                    let js = "if (window.documentPickerLoadResult) window.documentPickerLoadResult(true, '\(escapedContent)', null);"
-                    webView.evaluateJavaScript(js) { (result, error) in
-                        if let error = error {
-                            print("❌ SWIFT: Erreur JavaScript load success: \(error)")
-                        } else {
-                            print("✅ SWIFT: JavaScript load success notifié")
-                        }
-                    }
-                } else {
-                    let errorMessage = error?.localizedDescription ?? "Unknown error or no file selected"
-                    print("❌ SWIFT: Notifying JavaScript of load error: \(errorMessage)")
-                    // Notifier JavaScript de l'erreur
-                    let js = "if (window.documentPickerLoadResult) window.documentPickerLoadResult(false, null, '\(errorMessage)');"
-                    webView.evaluateJavaScript(js) { (result, error) in
-                        if let error = error {
-                            print("❌ SWIFT: Erreur JavaScript load error: \(error)")
-                        } else {
-                            print("✅ SWIFT: JavaScript load error notifié")
-                        }
-                    }
-                }
-            }
-        }
-        print("🔥 SWIFT: Appel à loadFileWithDocumentPicker terminé")
     }
 
     private func handleLoadFilesWithDocumentPicker(body: [String: Any], webView: WKWebView?) {
-        print("🔥 SWIFT: handleLoadFilesWithDocumentPicker (multiple) appelé")
-        guard let webView = webView else { sendErrorResponse(to: webView, error: "Invalid webView"); return }
+    guard let webView = webView else { sendErrorResponse(to: webView, error: "Invalid webView"); return }
         let fileTypes = body["fileTypes"] as? [String] ?? ["atome","json","m4a","mp3","wav"]
-        guard let viewController = findViewController(from: webView) else { sendErrorResponse(to: webView, error: "Cannot find view controller"); return }
+    guard let viewController = findViewController(from: webView) else { sendErrorResponse(to: webView, error: "Cannot find view controller"); return }
         iCloudFileManager.shared.loadFilesWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, results, error in
             guard self != nil else { return }
             DispatchQueue.main.async {
@@ -534,26 +591,21 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     private func handleSaveProjectInternal(body: [String: Any], webView: WKWebView?) {
         guard let fileName = body["fileName"] as? String, let dataString = body["data"] as? String, let requestId = body["requestId"] as? Int else { return }
         guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
-            print("❌ SWIFT:saveProjectInternal no storage URL")
             sendBridgeResult(to: webView, payload: ["action":"saveProjectInternalResult","requestId":requestId,"success":false,"error":"No storage URL"]) ; return }
         let projectsURL = storageURL.appendingPathComponent("Projects", isDirectory: true)
         try? FileManager.default.createDirectory(at: projectsURL, withIntermediateDirectories: true)
         let fileURL = projectsURL.appendingPathComponent(fileName)
-        print("💾 SWIFT:saveProjectInternal writing file=\(fileURL.path)")
         let data = Data(dataString.utf8)
         do {
             try data.write(to: fileURL, options: .atomic)
             let relPath = "Projects/" + fileName
-            print("✅ SWIFT:saveProjectInternal success relPath=\(relPath)")
             sendBridgeResult(to: webView, payload: ["action":"saveProjectInternalResult","requestId":requestId,"success":true,"fileName":fileName,"path":relPath])
         } catch {
-            print("❌ SWIFT:saveProjectInternal error=\(error.localizedDescription)")
             sendBridgeResult(to: webView, payload: ["action":"saveProjectInternalResult","requestId":requestId,"success":false,"error":error.localizedDescription])
         }
     }
 
     private func handleCopyToIOSLocal(body: [String: Any], webView: WKWebView?) {
-        print("📥 SWIFT: handleCopyToIOSLocal body=\(body)")
         guard let webView = webView else { return }
         let requestedDestPath = (body["requestedDestPath"] as? String) ?? "./"
         let fileTypes = body["fileTypes"] as? [String] ?? ["m4a","mp3","wav","atome","json"]
@@ -571,7 +623,6 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     }
 
     private func handleCopyMultipleToIOSLocal(body: [String: Any], webView: WKWebView?) {
-        print("📥 SWIFT: handleCopyMultipleToIOSLocal body=\(body)")
         guard let webView = webView else { return }
         let requestedDestPath = (body["requestedDestPath"] as? String) ?? "./"
         let fileTypes = body["fileTypes"] as? [String] ?? ["m4a","mp3","wav","atome","json"]
