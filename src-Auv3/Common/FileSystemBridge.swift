@@ -16,13 +16,13 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     
     // Map iCloud downloading status to a concise string for JS/UI
     private func simpleDownloadingStatus(_ status: URLUbiquitousItemDownloadingStatus?) -> String {
-        switch status {
-        case .some(.current): return "current"
-        case .some(.downloaded): return "downloaded"
-        case .some(.notDownloaded): return "notDownloaded"
-        case .none: return ""
-        @unknown default: return ""
-        }
+    switch status {
+    case .some(.current): return "current"
+    case .some(.downloaded): return "downloaded"
+    case .some(.notDownloaded): return "notDownloaded"
+    case .some(_): return ""
+    case .none: return ""
+    }
     }
     
     // Resolve a string path to a concrete URL, supporting a custom appgroup:/ scheme.

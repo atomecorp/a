@@ -9,6 +9,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
         AppGroupOpenURLInbox.shared.flushIfPossible()
         _ = scene as? UIWindowScene
+        // App-only: optionally observe external display events (no-op in AUv3)
+        if FeatureFlags.externalDisplayObservation {
+            ExternalDisplayGuards.shared.startObservingIfApp(observer: DummyExternalDisplayObserver.shared)
+        }
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
@@ -32,5 +36,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         AppGroupOpenURLInbox.shared.flushIfPossible()
             }
         }
+    }
+}
+
+// Lightweight observer to hook ExternalDisplayGuards without altering app architecture
+final class DummyExternalDisplayObserver: ExternalDisplayObserver {
+    static let shared = DummyExternalDisplayObserver()
+    private init() {}
+    func externalDisplayChanged(_ state: ExternalDisplayState) {
+        print("[ExternalDisplay] state=\(state.rawValue)")
     }
 }

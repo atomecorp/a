@@ -8,6 +8,7 @@
 import CoreAudioKit
 import WebKit
 import AVFoundation
+import OSLog
 
 public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, AudioDataDelegate, TransportDataDelegate {
     var audioUnit: AUAudioUnit?
@@ -29,25 +30,33 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     // ULTRA AGGRESSIVE: Rate limiting for WebView updates (for maximum performance)
     private var lastWebViewUpdate: TimeInterval = 0
     private var webViewUpdateInterval: TimeInterval = 1.0 / 2.0 // ULTRA: Reduced to 2 FPS for maximum performance (instead of 5)
+    private let log = Logger(subsystem: "atome", category: "AUv3View")
+    private var didAppearOnce = false
+    private var initialLoadScheduled = false
+    private var reloadAttempt = 0
+    private var nextBackoff: TimeInterval = 0.2
     
     public override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Initialize MIDI Controller
-        midiController = MIDIController()
-        midiController?.startMIDIMonitoring()
-        print("🎹 MIDI Controller initialized and monitoring started")
+    log.info("Startup AUv3 AudioUnitViewController")
+        assert(ExternalDisplayGuards.isRunningInExtension, "AudioUnitViewController must run inside extension")
+
+        // Initialize MIDI Controller once (AUv3 view may recreate with external display changes)
+        if midiController == nil {
+            midiController = MIDIController()
+            midiController?.startMIDIMonitoring()
+            print("🎹 MIDI Controller initialized and monitoring started")
+        }
         
         // Run MIDI system diagnostic after a short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.midiController?.checkMIDISystemStatus()
         }
       
-        let config = WKWebViewConfiguration()
-        config.setURLSchemeHandler(AudioSchemeHandler(), forURLScheme: "atome")
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = [.audio]
-        webView = WKWebView(frame: view.bounds, configuration: config)
+    // Create WKWebView via factory to guarantee shared process pool and config
+    if FeatureFlags.mainThreadPrecondition { dispatchPrecondition(condition: .onQueue(.main)) }
+    webView = WKWebViewFactory.shared.createWebView(frame: view.bounds, mode: .auv3)
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(webView)
         WebViewManager.setupWebView(for: webView, audioController: self)
@@ -55,10 +64,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     let cc = webView.configuration.userContentController
     cc.removeScriptMessageHandler(forName: "squirrel.openURL")
     cc.add(self, name: "squirrel.openURL")
-        // Load custom scheme index
-        if let url = URL(string: "atome://index.html") {
-            webView.load(URLRequest(url: url))
-        }
+    // Do not load a custom-scheme minimal index here; WebViewManager.setupWebView
+    // will load the real bundled 'src/index.html' after the placeholder.
     }
 
     public func createAudioUnit(with componentDescription: AudioComponentDescription) throws -> AUAudioUnit {
@@ -278,6 +285,53 @@ extension AudioUnitViewController: WKScriptMessageHandler {
             print("🔗 AUv3: openURL request -> \(urlString)")
             let ok = URLOpener.open(urlString, from: self)
             print("🔗 AUv3: openURL result=\(ok) url=\(urlString)")
+        }
+    }
+}
+
+// MARK: - Layout and navigation resilience
+extension AudioUnitViewController {
+    public override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let b = view.bounds
+        let zero = b.width <= 1 || b.height <= 1
+        if zero {
+            log.warning("AUv3 zero-sized bounds after layout: \(String(describing: b.debugDescription))")
+        } else {
+            log.debug("AUv3 view bounds: \(String(describing: b.debugDescription))")
+        }
+        webView.frame = b
+        maybeScheduleInitialLoad()
+    }
+
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        log.debug("Traits changed h=\(self.traitCollection.horizontalSizeClass.rawValue) v=\(self.traitCollection.verticalSizeClass.rawValue)")
+        view.setNeedsLayout()
+    }
+
+    public override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        didAppearOnce = true
+        log.info("viewDidAppear -> may trigger initial load if bounds ready")
+        maybeScheduleInitialLoad()
+    if FeatureFlags.deferMainLoad { WebViewManager.triggerMainLoadNow() }
+    }
+
+    private func maybeScheduleInitialLoad() {
+        guard didAppearOnce, !initialLoadScheduled else { return }
+        let b = view.bounds
+        guard b.width > 1, b.height > 1 else {
+            log.debug("Skip initial load: bounds not ready -> \(String(describing: b.debugDescription))")
+            return
+        }
+        initialLoadScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) { [weak self] in
+            guard let self = self else { return }
+            self.log.info("Triggering initial page load (AUv3)")
+            // WebViewManager has the logic to load placeholder then real content
+            // We just ensure webView is configured and visible with non-zero bounds before first load.
+            // No additional call needed; setupWebView already scheduled load.
         }
     }
 }
