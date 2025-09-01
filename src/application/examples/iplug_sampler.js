@@ -1494,21 +1494,33 @@ function display_files(target, listing, opts = {}) {
     // Global key handler so arrows immediately control the file list, and ESC/Enter work even when focus is outside
     try {
       if (window.__auv3_doc_key_handler) { document.removeEventListener('keydown', window.__auv3_doc_key_handler, true); }
-    window.__auv3_doc_key_handler = function(e){
+      window.__auv3_doc_key_handler = function(e){
         try{
           if (!window.__auv3_browser_state || !window.__auv3_browser_state.visible) return;
           const key = e.key;
-      if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape' && key !== 'Esc' && key !== 'Delete' && key !== 'Backspace') return;
+          // Include Space so physical keyboards can open the context menu globally
+          if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape' && key !== 'Esc' && key !== 'Delete' && key !== 'Backspace' && key !== ' ') return;
           const t = e.target;
           const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
           if (inEditable) return; // don't hijack typing
           if (!wrap || !document.body.contains(wrap)) return;
           // If a confirm dialog is open, pause all global handling so dialog owns keys
           if (document.getElementById('auv3-confirm')) return;
-      if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
+          if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
           if (key === 'Enter') { handleEnterKey(e); return; }
           if (key === 'Escape' || key === 'Esc') { handleEscapeKey(e); return; }
-      if (key === 'Delete' || key === 'Backspace') { handleDeleteKey(e); return; }
+          if (key === 'Delete' || key === 'Backspace') { handleDeleteKey(e); return; }
+          if (key === ' ') {
+            e.preventDefault(); e.stopPropagation();
+            // Open menu at focused item or near the list center
+            let targetLi = null;
+            if (window.__auv3_selection.focus!=null) targetLi = wrap.querySelector('li[data-index="' + String(window.__auv3_selection.focus) + '"]');
+            const rect = (targetLi ? targetLi.getBoundingClientRect() : wrap.getBoundingClientRect());
+            const cx = rect.left + Math.min(160, Math.max(8, rect.width/2));
+            const cy = rect.top + 24;
+            open_file_menu_at(cx, cy, null, targetLi ? targetLi.getAttribute('data-fullpath') : null, listing);
+            return;
+          }
         }catch(_){ }
       };
       document.addEventListener('keydown', window.__auv3_doc_key_handler, true);
