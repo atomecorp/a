@@ -32,7 +32,7 @@
 // ------------------------------
 const UI = {
   icons: {
-    delete: './assets/images/icons/delete.svg' // from src/assets/images/icons/delete.svg (relative to index)
+  delete: 'assets/images/icons/delete.svg' // from src/assets/images/icons/delete.svg (relative to index)
   },
   typography: {
     fontFamily: 'monospace',
@@ -99,7 +99,10 @@ function create_delete_button(parent, onClick, themeOverrides){
     css: { ...cssBase, ...(themeOverrides||{}) },
     onclick: (ev)=>{ try{ ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){ } try{ onClick && onClick(ev); }catch(_){ } }
   });
-  $('img', { parent: btn, src: UI.icons.delete, css: { width: '14px', height: '14px', display: 'block', filter: 'invert(57%) sepia(65%) saturate(3518%) hue-rotate(330deg) brightness(103%) contrast(89%)' }, alt: 'Delete' });
+  const img = $('img', { parent: btn, src: UI.icons.delete, css: { width: '14px', height: '14px', display: 'block', filter: 'invert(57%) sepia(65%) saturate(3518%) hue-rotate(330deg) brightness(103%) contrast(89%)' }, alt: 'Delete' });
+  try {
+    img.onerror = function(){ try { this.onerror = null; this.src = './' + UI.icons.delete; } catch(_) { } };
+  } catch(_) { }
   return btn;
 }
 
@@ -110,6 +113,49 @@ function create_delete_button(parent, onClick, themeOverrides){
 // ------------------------------
 // Navigator helpers (centralized facilities)
 // ------------------------------
+function edit_filer_element(listing, fullPath){
+  try{
+    const wrap = document.getElementById('auv3-file-list'); if (!wrap) return;
+    const li = wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
+    if (!li) {
+      const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: fullPath } });
+      navigate_auv3(listing.path, nav_context().target, opts);
+      return;
+    }
+    const nameSpan = li.querySelector('span[data-role="name"]');
+    if (!nameSpan) return;
+    const oldName = nameSpan.textContent || '';
+    try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; nameSpan.inputMode = 'text'; }catch(_){ }
+    nameSpan.style.outline = '1px dashed ' + UI.colors.accent;
+    nameSpan.style.backgroundColor = 'rgba(255,255,255,0.05)';
+    const selectAll = ()=>{
+      try{
+        const range = document.createRange();
+        range.selectNodeContents(nameSpan);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      }catch(_){ }
+    };
+    setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 0);
+    const commit = ()=>{
+      try{ nameSpan.contentEditable = 'false'; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; }catch(_){ }
+      const newName = (nameSpan.textContent||'').trim();
+      if (!newName || newName === oldName) { navigate_auv3(listing.path, nav_context().target, {}); return; }
+      const oldPath = fullPath; const newPath = path_join(listing.path, newName);
+      if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.renameItem !== 'function') { navigate_auv3(listing.path, nav_context().target, {}); return; }
+      try{ window.AtomeFileSystem.renameItem(oldPath, newPath, ()=>{ navigate_auv3(listing.path, nav_context().target, {}); }); }catch(_){ navigate_auv3(listing.path, nav_context().target, {}); }
+    };
+    const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; }catch(_){ } navigate_auv3(listing.path, nav_context().target, {}); };
+    const onKey = (e)=>{
+      const k = e.key;
+      if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
+      else if (k === 'Escape' || k === 'Esc') { e.preventDefault(); e.stopPropagation(); cancel(); }
+      else { e.stopPropagation(); }
+    };
+    nameSpan.addEventListener('keydown', onKey, true);
+    nameSpan.addEventListener('blur', ()=>{ commit(); }, { once: true });
+  }catch(_){ }
+}
+window.edit_filer_element = window.edit_filer_element || edit_filer_element;
 function nav_context(){ return { target: (window.__auv3_browser_state && window.__auv3_browser_state.target) || '#view', opts: (window.__auv3_browser_state && window.__auv3_browser_state.opts) || null }; }
 function nav_enter_folder(path){ try{ navigate_auv3(path, nav_context().target, nav_context().opts); }catch(_){ } }
 function nav_leave_folder(currentPath){ try{ navigate_auv3(parent_of(currentPath), nav_context().target, nav_context().opts); }catch(_){ } }
@@ -302,7 +348,11 @@ function parent_of(path){
 }
 
 async function navigate_auv3(path='.', target='#view', opts=null){
-  window.__auv3_browser_state = { path, target, opts, visible: true };
+  try{
+    const prevPath = (window.__auv3_browser_state && window.__auv3_browser_state.path) || null;
+    window.__auv3_browser_state = { path, target, opts, visible: true };
+    if (!prevPath || prevPath !== path) { try{ sel_clear(); }catch(_){ } }
+  }catch(_){ window.__auv3_browser_state = { path, target, opts, visible: true }; }
   const listing = await get_auv3_files(path);
   display_files(target, listing, opts);
 }
@@ -690,6 +740,15 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
       css: { width: '110px', height: '24px', color: '#fff', backgroundColor: UI.colors.buttonPrimary, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
     });
 
+    // Rename action
+    Button({
+      id: 'auv3-menu-rename', onText: 'Rename', offText: 'Rename',
+      onAction: ()=>{ try{ if (fullPath) edit_filer_element(listing, fullPath); }finally{ close_file_context_menu(); } },
+      offAction: ()=>{ try{ if (fullPath) edit_filer_element(listing, fullPath); }finally{ close_file_context_menu(); } },
+      parent: menu,
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.headerText, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
+    });
+
     // Delete action
     Button({
       id: 'auv3-menu-delete', onText: 'Delete', offText: 'Delete',
@@ -974,54 +1033,7 @@ function display_files(target, listing, opts = {}) {
     // If requested, start inline rename on a specific item (newly created)
     try{
       const plan = opts && opts.startInlineRename;
-      if (plan && plan.path) {
-        const li = wrap.querySelector('li[data-fullpath="' + plan.path.replace(/"/g,'\\"') + '"]');
-        if (li) {
-          const nameSpan = li.querySelector('span[data-role="name"]');
-          const isDir = li.getAttribute('data-isdir') === '1';
-          if (nameSpan) {
-            const oldName = nameSpan.textContent || '';
-            try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; }catch(_){ }
-            nameSpan.style.outline = '1px dashed ' + UI.colors.accent;
-            nameSpan.style.backgroundColor = 'rgba(255,255,255,0.05)';
-            // Focus and select text
-            const selectAll = ()=>{
-              try{
-                const range = document.createRange();
-                range.selectNodeContents(nameSpan);
-                const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-              }catch(_){ }
-            };
-            setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 0);
-            const commit = ()=>{
-              try{
-                nameSpan.contentEditable = 'false';
-                nameSpan.style.outline = '';
-                nameSpan.style.backgroundColor = '';
-              }catch(_){ }
-              const newName = (nameSpan.textContent||'').trim();
-              if (!newName || newName === oldName) { navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); return; }
-              const oldPath = plan.path;
-              const newPath = path_join(listing.path, newName);
-              if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.renameItem !== 'function') { navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); return; }
-              try{
-                window.AtomeFileSystem.renameItem(oldPath, newPath, (res)=>{
-                  navigate_auv3(listing.path, window.__auv3_browser_state.target, {});
-                });
-              }catch(_){ navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); }
-            };
-            const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; }catch(_){ } navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); };
-            const onKey = (e)=>{
-              const k = e.key;
-              if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
-              else if (k === 'Escape' || k === 'Esc') { e.preventDefault(); e.stopPropagation(); cancel(); }
-              else { e.stopPropagation(); }
-            };
-            nameSpan.addEventListener('keydown', onKey, true);
-            nameSpan.addEventListener('blur', ()=>{ commit(); }, { once: true });
-          }
-        }
-      }
+      if (plan && plan.path) { edit_filer_element(listing, plan.path); }
     }catch(_){ }
 
     // Long-press on empty area opens the menu (for paste/select all/new)
@@ -1030,7 +1042,8 @@ function display_files(target, listing, opts = {}) {
       const startEmpty = (e)=>{
         const target = e.target;
         const isListContent = target && (target.closest && target.closest('li[data-fullpath]'));
-        if (isListContent) return; // handled by item long-press
+        const onHeaderBtn = target && ((target.closest && target.closest('#btn-shift')) || (target.closest && target.closest('#btn-import')));
+        if (isListContent || onHeaderBtn) return; // handled by item long-press / ignore header buttons
         const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
         sx = pt.clientX||0; sy = pt.clientY||0;
         if (emptyPressTimer) clearTimeout(emptyPressTimer);
