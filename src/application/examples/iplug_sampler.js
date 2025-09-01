@@ -219,6 +219,18 @@ function create_delete_button(parent, onClick, themeOverrides){
 // ------------------------------
 // Navigator helpers (centralized facilities)
 // ------------------------------
+// Toggle global selection allowance in the file list while editing inline
+function set_edit_mode(enabled){
+  try{
+    const wrap = document.getElementById('auv3-file-list');
+    if (wrap && wrap.style) {
+      const val = enabled ? 'auto' : '';
+      // Prefer auto to let child contentEditable control selection; empty string reverts to CSS
+      wrap.style.userSelect = val;
+      try{ wrap.style.WebkitUserSelect = val; }catch(_){ }
+    }
+  }catch(_){ }
+}
 function edit_filer_element(listing, fullPath){
   try{
     const wrap = document.getElementById('auv3-file-list'); if (!wrap) return;
@@ -228,6 +240,8 @@ function edit_filer_element(listing, fullPath){
     if (!nameSpan) return;
     const oldName = nameSpan.textContent || '';
   try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; nameSpan.inputMode = 'text'; }catch(_){ }
+  // Allow selection globally while editing
+  try{ set_edit_mode(true); }catch(_){ }
   try{ nameSpan.style.userSelect = 'text'; nameSpan.style.WebkitUserSelect = 'text'; nameSpan.style.pointerEvents = 'auto'; nameSpan.style.webkitTouchCallout = 'default'; }catch(_){ }
   try{ window.__INLINE_EDITING = true; }catch(_){ }
     nameSpan.style.outline = '1px dashed ' + UI.colors.accent;
@@ -244,6 +258,7 @@ function edit_filer_element(listing, fullPath){
   setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 180);
     const commit = ()=>{
   try{ nameSpan.contentEditable = 'false'; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ }
+  try{ set_edit_mode(false); }catch(_){ }
   try{ window.__INLINE_EDITING = false; }catch(_){ }
       const newName = (nameSpan.textContent||'').trim();
       if (!newName || newName === oldName) { navigate_auv3_refresh(listing.path, nav_context().target, {}); return; }
@@ -254,7 +269,7 @@ function edit_filer_element(listing, fullPath){
         window.AtomeFileSystem.renameItem(oldPath, newPath, ()=>{ fs_end(300); navigate_auv3_refresh(listing.path, nav_context().target, {}); });
       }catch(_){ fs_end(200); navigate_auv3_refresh(listing.path, nav_context().target, {}); }
     };
-  const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ } try{ window.__INLINE_EDITING = false; }catch(_){ } navigate_auv3_refresh(listing.path, nav_context().target, {}); };
+  const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ } try{ set_edit_mode(false); }catch(_){ } try{ window.__INLINE_EDITING = false; }catch(_){ } navigate_auv3_refresh(listing.path, nav_context().target, {}); };
     const onKey = (e)=>{
       const k = e.key;
       if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
@@ -1186,11 +1201,8 @@ function display_files(target, listing, opts = {}) {
     try { hide_busy_overlay(); __FS_OP.active = false; __FS_OP.until = 0; } catch(_){ }
     try {
       wrap.addEventListener('selectstart', function(e){
-        try {
-          const t = e.target;
-          const inEditable = (t && (t.isContentEditable || (t.closest && t.closest('[contenteditable="true"]')))) || (document.activeElement && document.activeElement.isContentEditable) || (window.__INLINE_EDITING === true);
-          if (!inEditable) { e.preventDefault(); }
-        } catch(_) { e.preventDefault(); }
+        // Allow selection; only block while the window is being dragged
+        try { if (window.__AUV3_WIN_DRAG === true) { e.preventDefault(); } } catch(_) { }
       }, true);
       wrap.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
       // Prevent scroll chaining to the outer AUv3 view while preserving inner scroll
@@ -1353,7 +1365,16 @@ function display_files(target, listing, opts = {}) {
         if (isDir) {
           $('span', { parent: li, text: '●', css: { color: UI.colors.accent, fontSize:'10px', marginRight:'6px' }, 'data-role': 'dot' });
         }
-        $('span', { parent: li, text: it.name, css: { userSelect: 'none' }, 'data-role': 'name' });
+        const nameSpan = $('span', { parent: li, text: it.name, css: { userSelect: 'text' }, 'data-role': 'name' });
+        try{
+          nameSpan.addEventListener('click', (ev)=>{
+            ev.stopPropagation();
+            try{ window.__auv3_selection && sel_replace([fullPath]); }catch(_){ }
+            try{ window.__auv3_selection && (window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10)); }catch(_){ }
+            try{ update_selection_ui(wrap); }catch(_){ }
+            setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0);
+          });
+        }catch(_){ }
         // Add delete icon for files only
         if (!isDir) {
           create_delete_button(li, (ev)=>{
