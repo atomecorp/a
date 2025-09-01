@@ -447,15 +447,19 @@ function display_files(target, listing, opts = {}) {
     // Shift-lock toggle
     const shiftBtn = Button({
       id:'btn-shift',
-      onText: 'multi on',
-      offText: 'multi off',
+      onText: 'multi',
+      offText: 'single',
       onAction: ()=>{ window.__auv3_selection.shiftLock = true; },
       offAction: ()=>{ window.__auv3_selection.shiftLock = false; },
       parent: header,
-      css: { width: '72px', height: '24px', color: 'black', borderRadius: '6px', backgroundColor: 'lightgray', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)' }
+      css: { width: '72px', height: '24px', color: 'black',
+        borderRadius: '6px', backgroundColor: 'lightgray', 
+        border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)',
+        marginLeft: 'auto' // push this group to the right; import button stays immediately to the right
+      }
     });
 
-    const import_button = Button({
+  const import_button = Button({
       id:'btn-import',
       onText: 'import',
       offText: 'import',
@@ -471,8 +475,7 @@ function display_files(target, listing, opts = {}) {
         border: 'none',
         cursor: 'pointer',
         transition: 'background-color 0.3s ease',
-        boxShadow: '0 2px 4px rgba(0,0,0,1)',
-        marginLeft: 'auto' // push to top-right within flex header
+    boxShadow: '0 2px 4px rgba(0,0,0,1)'
       }
     });
   // Current folder header above the list (click to go up)
