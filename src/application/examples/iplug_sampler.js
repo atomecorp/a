@@ -280,8 +280,116 @@ function show_confirm_dialog(message, onConfirm, onCancel){
     }});
     $('div', { parent: box, text: message || 'Confirmer ?', css: { marginBottom: '10px', fontSize: '13px' } });
     const row = $('div', { parent: box, css: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
-    Button({ id:'cnf-cancel', onText:'Cancel', offText:'Cancel', onAction: ()=>{ try{ overlay.remove(); }catch(_){ } onCancel && onCancel(false); }, offAction: ()=>{ try{ overlay.remove(); }catch(_){ } onCancel && onCancel(false); }, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#666', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
-    Button({ id:'cnf-ok', onText:'Delete', offText:'Delete', onAction: ()=>{ try{ overlay.remove(); }catch(_){ } onConfirm && onConfirm(true); }, offAction: ()=>{ try{ overlay.remove(); }catch(_){ } onConfirm && onConfirm(true); }, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#e74c3c', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
+    Button({ id:'cnf-cancel', onText:'Cancel', offText:'Cancel', onAction: ()=>{}, offAction: ()=>{}, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#666', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
+    Button({ id:'cnf-ok', onText:'Delete', offText:'Delete', onAction: ()=>{}, offAction: ()=>{}, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#e74c3c', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
+
+    // Keyboard support: focus management and key handling
+    const cancelBtn = (function(){ try{ return document.getElementById('cnf-cancel'); }catch(_){ return null; } })();
+    const okBtn = (function(){ try{ return document.getElementById('cnf-ok'); }catch(_){ return null; } })();
+    try{ cancelBtn && cancelBtn.setAttribute('tabindex', '0'); okBtn && okBtn.setAttribute('tabindex', '0'); }catch(_){ }
+
+    // Visual focus indicator (make the chosen button color change clearly)
+    const baseCancelBg = '#666';
+    const baseOkBg = '#e74c3c';
+    function applyBaseStyles(){
+      try{
+        if (cancelBtn) { cancelBtn.style.backgroundColor = baseCancelBg; cancelBtn.style.boxShadow = '0 1px 2px rgba(0,0,0,.6)'; cancelBtn.style.outline = 'none'; }
+        if (okBtn) { okBtn.style.backgroundColor = baseOkBg; okBtn.style.boxShadow = '0 1px 2px rgba(0,0,0,.6)'; okBtn.style.outline = 'none'; }
+      }catch(_){ }
+    }
+    function applyFocusStyles(){
+      try{
+        applyBaseStyles();
+        const active = document.activeElement;
+        if (active === cancelBtn) {
+          cancelBtn.style.backgroundColor = '#888';
+          cancelBtn.style.boxShadow = '0 0 0 2px rgba(255,255,255,.22) inset, 0 1px 2px rgba(0,0,0,.6)';
+        } else if (active === okBtn) {
+          okBtn.style.backgroundColor = '#ff6b5a';
+          okBtn.style.boxShadow = '0 0 0 2px rgba(255,255,255,.25) inset, 0 1px 2px rgba(0,0,0,.6)';
+        }
+      }catch(_){ }
+    }
+
+    function cleanup(){
+      try{ document.removeEventListener('keydown', window.__auv3_confirm_key_handler, true); }catch(_){ }
+      try{ document.removeEventListener('focusin', window.__auv3_confirm_focus_handler, true); }catch(_){ }
+      try{ window.__auv3_confirm_key_handler = null; window.__auv3_confirm_focus_handler = null; }catch(_){ }
+    }
+
+    function closeAnd(cb){
+      try{ overlay && overlay.remove && overlay.remove(); }catch(_){ }
+      cleanup();
+      try{ cb && cb(); }catch(_){ }
+    }
+
+    // Wire buttons with cleanup
+    try {
+      if (cancelBtn) {
+        cancelBtn.onclick = ()=> closeAnd(()=> onCancel && onCancel(false));
+      }
+      if (okBtn) {
+        okBtn.onclick = ()=> closeAnd(()=> onConfirm && onConfirm(true));
+      }
+    } catch(_){ }
+
+    // Default focus to Cancel (safer) and apply highlight
+    try{ setTimeout(()=>{ if (cancelBtn && cancelBtn.focus) { cancelBtn.focus(); applyFocusStyles(); } }, 0); }catch(_){ }
+
+    // Keep highlight updated on focus/blur
+    try{
+      cancelBtn && cancelBtn.addEventListener('focus', applyFocusStyles, true);
+      okBtn && okBtn.addEventListener('focus', applyFocusStyles, true);
+      cancelBtn && cancelBtn.addEventListener('blur', applyFocusStyles, true);
+      okBtn && okBtn.addEventListener('blur', applyFocusStyles, true);
+    }catch(_){ }
+
+    // Trap focus inside dialog
+    window.__auv3_confirm_focus_handler = function(e){
+      try{
+        if (!overlay) return;
+        if (!overlay.contains(e.target)) {
+          e.stopPropagation();
+          try{ cancelBtn && cancelBtn.focus && cancelBtn.focus(); }catch(_){ }
+        }
+      }catch(_){ }
+    };
+    try{ document.addEventListener('focusin', window.__auv3_confirm_focus_handler, true); }catch(_){ }
+
+    // Keyboard navigation within dialog
+    window.__auv3_confirm_key_handler = function(e){
+      try{
+        const key = e.key;
+        if (!overlay) return;
+        // Move between buttons
+        if (key === 'Tab' || key === 'ArrowLeft' || key === 'ArrowRight'){
+          e.preventDefault(); e.stopPropagation();
+          const active = document.activeElement;
+          if (active === okBtn) { cancelBtn && cancelBtn.focus && cancelBtn.focus(); }
+          else { okBtn && okBtn.focus && okBtn.focus(); }
+          applyFocusStyles();
+          return;
+        }
+        // Prevent Backspace/Delete from leaking to global handlers (which would recreate the dialog)
+        if (key === 'Backspace' || key === 'Delete') {
+          e.preventDefault(); e.stopPropagation();
+          return;
+        }
+        if (key === 'Enter'){
+          e.preventDefault(); e.stopPropagation();
+          const active = document.activeElement;
+          if (active === okBtn) { okBtn && okBtn.click && okBtn.click(); }
+          else { cancelBtn && cancelBtn.click && cancelBtn.click(); }
+          return;
+        }
+        if (key === 'Escape' || key === 'Esc'){
+          e.preventDefault(); e.stopPropagation();
+          cancelBtn && cancelBtn.click && cancelBtn.click();
+          return;
+        }
+      }catch(_){ }
+    };
+    try{ document.addEventListener('keydown', window.__auv3_confirm_key_handler, true); }catch(_){ }
   }catch(_){ }
 }
 
@@ -701,33 +809,59 @@ function display_files(target, listing, opts = {}) {
       try { navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts); } catch(_){ }
     }
 
+    function handleDeleteKey(e){
+      try{
+        e.preventDefault(); e.stopPropagation();
+        close_file_context_menu();
+        const sel = sel_list();
+        let targetPath = null;
+        if (sel && sel.length) {
+          // Multi or single selection
+          const msg = sel.length > 1 ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((sel[0]||'').split('/').pop() || 'cet élément') + ' » ?');
+          show_confirm_dialog(msg, ()=>{ request_delete_selection_or_item(null, listing); }, ()=>{});
+          return;
+        }
+        // No selection: use focused item if any
+        const nodes = wrap.querySelectorAll('li[data-index]');
+        let focus = (window.__auv3_selection.focus==null) ? null : window.__auv3_selection.focus;
+        if (focus == null) return; // nothing to delete
+        const li = wrap.querySelector(`li[data-index="${focus}"]`);
+        if (!li) return;
+        targetPath = li.getAttribute('data-fullpath');
+        const base = (targetPath||'').split('/').pop() || 'cet élément';
+        show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_selection_or_item(targetPath, listing); }, ()=>{});
+      }catch(_){ }
+    }
+
     // Keyboard navigation with arrows; Shift extends selection. Enter opens folder or activates file. ESC navigates up.
     try{
       wrap.addEventListener('keydown', (e)=>{
         const key = e.key;
-        if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
+  if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
         if (key === 'Enter') { handleEnterKey(e); return; }
         if (key === 'Escape' || key === 'Esc') { handleEscapeKey(e); return; }
+  if (key === 'Delete' || key === 'Backspace') { handleDeleteKey(e); return; }
       });
     }catch(_){ }
 
     // Global key handler so arrows immediately control the file list, and ESC/Enter work even when focus is outside
     try {
       if (window.__auv3_doc_key_handler) { document.removeEventListener('keydown', window.__auv3_doc_key_handler, true); }
-      window.__auv3_doc_key_handler = function(e){
+    window.__auv3_doc_key_handler = function(e){
         try{
           if (!window.__auv3_browser_state || !window.__auv3_browser_state.visible) return;
           const key = e.key;
-          if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape' && key !== 'Esc') return;
+      if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape' && key !== 'Esc' && key !== 'Delete' && key !== 'Backspace') return;
           const t = e.target;
           const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
           if (inEditable) return; // don't hijack typing
           if (!wrap || !document.body.contains(wrap)) return;
-          // If a confirm dialog is open, don't navigate up on ESC automatically
-          if ((key === 'Escape' || key === 'Esc') && document.getElementById('auv3-confirm')) return;
-          if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
+          // If a confirm dialog is open, pause all global handling so dialog owns keys
+          if (document.getElementById('auv3-confirm')) return;
+      if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
           if (key === 'Enter') { handleEnterKey(e); return; }
           if (key === 'Escape' || key === 'Esc') { handleEscapeKey(e); return; }
+      if (key === 'Delete' || key === 'Backspace') { handleDeleteKey(e); return; }
         }catch(_){ }
       };
       document.addEventListener('keydown', window.__auv3_doc_key_handler, true);
