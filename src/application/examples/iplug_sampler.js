@@ -1252,14 +1252,17 @@ function display_files(target, listing, opts = {}) {
           },
           onclick: (ev)=>{
             if (longPressFired) { longPressFired = false; return; }
-            if (isDir) {
+            if (dragStarted) { dragStarted = false; return; }
+            const multiMode = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
+            // In multi mode, treat clicks as selection (do not enter folders)
+            const shift = multiMode || !!shiftDownAtPointerDown || is_shift_active(ev);
+            if (isDir && !shift) {
+              // Single-click folder open only when not in multi/shift mode
               if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath);
               else nav_enter_folder(fullPath);
               return;
             }
-            if (dragStarted) { dragStarted = false; return; }
-            // Selection logic for files
-            const shift = !!shiftDownAtPointerDown || is_shift_active(ev);
+            // Selection logic for both files and folders when shift/multi is active
             const idx = parseInt(li.getAttribute('data-index')||'0',10);
             if (!shift) {
               // Single selection mode
