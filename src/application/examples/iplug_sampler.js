@@ -292,7 +292,6 @@ function nav_open_focused_or_selected(wrap, listing, opts){
     } else { nav_preview_file_by_name(fullPath); }
   }catch(_){ }
 }
-function nav_delete_selection(listing){ try{ request_delete_selection_or_item(null, listing); }catch(_){ } }
 function nav_delete_item_path(fullPath, listing){ try{ request_delete_selection_or_item(fullPath, listing); }catch(_){ } }
 function nav_copy_selection_to_clipboard(fullPath){ try{ copy_selection_or_item(fullPath); }catch(_){ } }
 function nav_paste_clipboard_to_current(listing){ try{ paste_into_current_folder(listing); }catch(_){ } }
@@ -896,7 +895,7 @@ function request_delete_selection_or_item(fullPath, listing){
   const dirSet = new Set(((listing&&listing.folders)||[]).map(f=> path_join(listing.path, String(f.name||''))));
   let i = 0;
   const next = ()=>{
-    if (i >= arr.length) { try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
+  if (i >= arr.length) { try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
     const p = arr[i++];
     const isDir = dirSet.has(p);
     try{
@@ -911,6 +910,23 @@ function request_delete_selection_or_item(fullPath, listing){
     }catch(_){ next(); }
   };
   next();
+}
+
+// Use native batch delete when multiple are selected for atomic behavior
+function nav_delete_selection(listing){
+  try{
+    const sel = sel_list();
+    if (!sel || !sel.length) return;
+    if (window.AtomeFileSystem && typeof window.AtomeFileSystem.deleteMultiple==='function' && sel.length>1) {
+      try{ fs_begin(800); }catch(_){ }
+      window.AtomeFileSystem.deleteMultiple(sel, (res)=>{
+        try{ if (res && (res.success===undefined || res.success===true)) { fs_end(400); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); } else { fs_end(0); } }catch(_){ try{ fs_end(0); }catch(__){} }
+      });
+      return;
+    }
+  }catch(_){ }
+  // Fallback to previous per-item path
+  try{ request_delete_selection_or_item(null, listing); }catch(_){ }
 }
 
 // Force-delete a specific path, ignoring current selection. Useful for context menu on unselected items.
@@ -1040,9 +1056,9 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     Button({
       id: 'auv3-menu-delete', onText: 'Delete', offText: 'Delete',
       onAction: ()=>{
-        const sel = sel_list();
-        const targetIsMulti = sel && sel.length>1 && (!fullPath || sel.includes(fullPath));
-        if (targetIsMulti) {
+  const sel = sel_list();
+  const targetIsMulti = sel && sel.length>1; // always honor multi-selection
+  if (targetIsMulti) {
           const msg = 'Supprimer ' + sel.length + ' éléments ?';
           show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
         } else {
@@ -1051,9 +1067,9 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
         }
       },
       offAction: ()=>{
-        const sel = sel_list();
-        const targetIsMulti = sel && sel.length>1 && (!fullPath || sel.includes(fullPath));
-        if (targetIsMulti) {
+  const sel = sel_list();
+  const targetIsMulti = sel && sel.length>1; // always honor multi-selection
+  if (targetIsMulti) {
           const msg = 'Supprimer ' + sel.length + ' éléments ?';
           show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
         } else {
@@ -1327,13 +1343,13 @@ function display_files(target, listing, opts = {}) {
         if (!isDir) {
           create_delete_button(li, (ev)=>{
             const selected = sel_list();
-            const multi = selected && selected.length > 1 && selected.includes(fullPath);
+            const multi = selected && selected.length > 1; // always honor multi-selection
             if (multi) {
               const msg = 'Supprimer ' + selected.length + ' éléments ?';
               show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); }, ()=>{});
             } else {
               const base = (fullPath||'').split('/').pop() || 'cet élément';
-              show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_file(fullPath, li, listing); }, ()=>{});
+              show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_exact(fullPath, listing); }, ()=>{});
             }
           }, (theme.deleteButton||{}));
         }

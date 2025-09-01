@@ -33,6 +33,15 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     //  - "appgroup:/" => <AppGroup>
     private func resolveURL(for path: String, isDirectory: Bool = false) -> URL? {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        func normalize(_ s: String) -> String {
+            var out = s
+            while out.hasPrefix("./") { out.removeFirst(2) }
+            // Remove redundant current-dir markers in middle
+            out = out.replacingOccurrences(of: "/./", with: "/")
+            // Collapse duplicate slashes (except potential scheme part which we don't have here)
+            while out.contains("//") { out = out.replacingOccurrences(of: "//", with: "/") }
+            return out
+        }
         // Handle appgroup: scheme explicitly
         if trimmed.hasPrefix("appgroup:") {
             guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
@@ -40,6 +49,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             }
             var rest = String(trimmed.dropFirst("appgroup:".count))
             if rest.hasPrefix("/") { rest.removeFirst() }
+            rest = normalize(rest)
             let url = rest.isEmpty ? groupURL : groupURL.appendingPathComponent(rest, isDirectory: isDirectory)
             return url
         }
@@ -50,7 +60,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         if trimmed.isEmpty || trimmed == "." || trimmed == "./" || trimmed == "/" {
             return storageURL
         }
-        let url = storageURL.appendingPathComponent(trimmed, isDirectory: isDirectory)
+        let norm = normalize(trimmed)
+        let url = storageURL.appendingPathComponent(norm, isDirectory: isDirectory)
         return url
     }
     
@@ -100,6 +111,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleCreateDirectory(body: body, webView: message.webView)
         case "renameItem":
             handleRenameItem(body: body, webView: message.webView)
+        case "deleteMultiple":
+            handleDeleteMultiple(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -289,6 +302,48 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             sendErrorResponse(to: webView, error: "Failed to delete directory: \(error.localizedDescription)")
         }
     }
+
+    private func handleDeleteMultiple(body: [String: Any], webView: WKWebView?) {
+        guard let paths = body["paths"] as? [String], !paths.isEmpty else {
+            sendErrorResponse(to: webView, error: "Invalid paths parameter")
+            return
+        }
+        // Resolve and classify once
+        var items: [(url: URL, isDir: Bool)] = []
+        for p in paths {
+            // Try dir first; if it doesn't exist as dir, fallback to file
+            if let dirURL = resolveURL(for: p, isDirectory: true) {
+                var isDir: ObjCBool = false
+                if FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDir), isDir.boolValue {
+                    items.append((dirURL, true)); continue
+                }
+                // If dir not present, try file path resolution
+                if let fileURL = resolveURL(for: p, isDirectory: false) {
+                    items.append((fileURL, false))
+                }
+            }
+        }
+        if items.isEmpty {
+            sendSuccessResponse(to: webView, data: ["message": "Nothing to delete"])
+            return
+        }
+        FileSyncCoordinator.shared.stopAutoSync()
+        defer {
+            for it in items { FileSyncCoordinator.shared.markDeleted(url: it.url) }
+            FileSyncCoordinator.shared.syncAll(force: true)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) { FileSyncCoordinator.shared.startAutoSync() }
+        }
+        var failures: [String] = []
+        for it in items {
+            do { try deleteCoordinated(at: it.url, isDirectory: it.isDir) }
+            catch { failures.append(it.url.lastPathComponent) }
+        }
+        if failures.isEmpty {
+            sendSuccessResponse(to: webView, data: ["message": "Deleted \(items.count) item(s)"])
+        } else {
+            sendErrorResponse(to: webView, error: "Failed: \(failures.joined(separator: ", "))")
+        }
+    }
     
     private func handleGetStorageInfo(webView: WKWebView?) {
         let storageInfo: [String: Any] = [
@@ -392,6 +447,14 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                     action: 'deleteFile',
                     path: path
                 });
+            },
+            deleteMultiple: function(paths, callback) {
+                window.fileSystemCallback = callback;
+                try {
+                    webkit.messageHandlers.fileSystem.postMessage({ action: 'deleteMultiple', paths: Array.isArray(paths)? paths : [] });
+                } catch(_) {
+                    try { callback && callback({ success: false, error: 'bridge unavailable' }); } catch(__) {}
+                }
             },
             deleteDirectory: function(path, callback) {
                 window.fileSystemCallback = callback;
