@@ -219,18 +219,6 @@ function create_delete_button(parent, onClick, themeOverrides){
 // ------------------------------
 // Navigator helpers (centralized facilities)
 // ------------------------------
-// Toggle global selection allowance in the file list while editing inline
-function set_edit_mode(enabled){
-  try{
-    const wrap = document.getElementById('auv3-file-list');
-    if (wrap && wrap.style) {
-      const val = enabled ? 'auto' : '';
-      // Prefer auto to let child contentEditable control selection; empty string reverts to CSS
-      wrap.style.userSelect = val;
-      try{ wrap.style.WebkitUserSelect = val; }catch(_){ }
-    }
-  }catch(_){ }
-}
 function edit_filer_element(listing, fullPath){
   try{
     const wrap = document.getElementById('auv3-file-list'); if (!wrap) return;
@@ -240,8 +228,6 @@ function edit_filer_element(listing, fullPath){
     if (!nameSpan) return;
     const oldName = nameSpan.textContent || '';
   try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; nameSpan.inputMode = 'text'; }catch(_){ }
-  // Allow selection globally while editing
-  try{ set_edit_mode(true); }catch(_){ }
   try{ nameSpan.style.userSelect = 'text'; nameSpan.style.WebkitUserSelect = 'text'; nameSpan.style.pointerEvents = 'auto'; nameSpan.style.webkitTouchCallout = 'default'; }catch(_){ }
   try{ window.__INLINE_EDITING = true; }catch(_){ }
     nameSpan.style.outline = '1px dashed ' + UI.colors.accent;
@@ -258,7 +244,6 @@ function edit_filer_element(listing, fullPath){
   setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 180);
     const commit = ()=>{
   try{ nameSpan.contentEditable = 'false'; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ }
-  try{ set_edit_mode(false); }catch(_){ }
   try{ window.__INLINE_EDITING = false; }catch(_){ }
       const newName = (nameSpan.textContent||'').trim();
       if (!newName || newName === oldName) { navigate_auv3_refresh(listing.path, nav_context().target, {}); return; }
@@ -269,7 +254,7 @@ function edit_filer_element(listing, fullPath){
         window.AtomeFileSystem.renameItem(oldPath, newPath, ()=>{ fs_end(300); navigate_auv3_refresh(listing.path, nav_context().target, {}); });
       }catch(_){ fs_end(200); navigate_auv3_refresh(listing.path, nav_context().target, {}); }
     };
-  const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ } try{ set_edit_mode(false); }catch(_){ } try{ window.__INLINE_EDITING = false; }catch(_){ } navigate_auv3_refresh(listing.path, nav_context().target, {}); };
+  const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ } try{ window.__INLINE_EDITING = false; }catch(_){ } navigate_auv3_refresh(listing.path, nav_context().target, {}); };
     const onKey = (e)=>{
       const k = e.key;
       if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
@@ -1677,4 +1662,3 @@ function display_files(target, listing, opts = {}) {
     }
   });
 
-  // iPlug AUv3 sampler example initialized
