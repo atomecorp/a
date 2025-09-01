@@ -39,7 +39,7 @@
 // ------------------------------
 const UI = {
   icons: {
-  delete: 'assets/images/icons/delete.svg' // from src/assets/images/icons/delete.svg (relative to index)
+  delete: './assets/images/icons/delete.svg' // from src/assets/images/icons/delete.svg (relative to index)
   },
   typography: {
     fontFamily: 'monospace',
@@ -305,15 +305,11 @@ function nav_select_all(wrap){
 }
 function nav_create_folder(listing){
   try{
-    const FS = window.AtomeFileSystem || {};
-    const existing = new Set([...
-      ((listing && listing.folders) || []).map(f=>String(f.name||'')),
-      ((listing && listing.files) || []).map(f=>String(f.name||''))
-    ]);
-    const base = 'New folder';
-    let name = base; let n = 2;
-    while (existing.has(name)) { name = base + ' ' + n++; if (n>200) break; }
-    const path = path_join(listing.path, name);
+  const FS = window.AtomeFileSystem || {};
+  window.__recent_creations = window.__recent_creations || new Set();
+  const base = 'New folder';
+  const name = pick_unique_name(listing.path, base, true);
+  const path = path_join(listing.path, name);
     const cb = ()=>{
       try{
   const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path } });
@@ -321,6 +317,7 @@ function nav_create_folder(listing){
   navigate_auv3_refresh(listing.path, nav_context().target, opts);
       }catch(_){ }
     };
+  try{ window.__recent_creations.add(name); setTimeout(()=>{ try{ window.__recent_creations.delete(name); }catch(_){ } }, 5000); }catch(_){ }
   fs_begin(800);
   if (typeof FS.createDirectory === 'function') { FS.createDirectory(path, cb); return; }
   if (typeof FS.mkdir === 'function') { FS.mkdir(path, cb); return; }
@@ -332,15 +329,11 @@ function nav_create_folder(listing){
 }
 function nav_create_file(listing){
   try{
-    const FS = window.AtomeFileSystem || {};
-    const existing = new Set([...
-      ((listing && listing.folders) || []).map(f=>String(f.name||'')),
-      ((listing && listing.files) || []).map(f=>String(f.name||''))
-    ]);
-    const base = 'New file'; const ext = '.txt';
-    let name = base + ext; let n = 2;
-    while (existing.has(name)) { name = base + ' ' + n++ + ext; if (n>200) break; }
-    const full = path_join(listing.path, name);
+  const FS = window.AtomeFileSystem || {};
+  window.__recent_creations = window.__recent_creations || new Set();
+  const base = 'New file.txt';
+  const name = pick_unique_name(listing.path, base, false);
+  const full = path_join(listing.path, name);
     const cb = ()=>{
       try{
   const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: full } });
@@ -349,6 +342,7 @@ function nav_create_file(listing){
       }catch(_){ }
     };
     const empty = '';
+  try{ window.__recent_creations.add(name); setTimeout(()=>{ try{ window.__recent_creations.delete(name); }catch(_){ } }, 5000); }catch(_){ }
   fs_begin(800);
   if (typeof FS.saveFile === 'function') { FS.saveFile(full, empty, cb); return; }
   if (typeof FS.writeFile === 'function') { FS.writeFile(full, empty, cb); return; }
@@ -356,6 +350,85 @@ function nav_create_file(listing){
     console.warn('saveFile/writeFile indisponible');
   }catch(_){ }
 }
+
+// Generic document creation API (file or folder) with optional explicit name
+function create_apple_document(kind = 'file', name = null){
+  try{
+    const listing = window.__auv3_last_listing || { path: (window.__auv3_browser_state && window.__auv3_browser_state.path) || '.' };
+    const FS = window.AtomeFileSystem || {};
+    const isFolder = (String(kind).toLowerCase() === 'folder' || String(kind).toLowerCase() === 'dir' || String(kind).toLowerCase() === 'directory');
+    let baseName;
+    if (name && typeof name === 'string') { baseName = name.trim(); }
+    if (!baseName || !baseName.length) {
+      baseName = isFolder ? 'New folder' : 'New file.txt';
+    } else if (!isFolder && baseName.indexOf('.') < 0) {
+      baseName = baseName + '.txt';
+    }
+  window.__recent_creations = window.__recent_creations || new Set();
+  const candidate = pick_unique_name(listing.path, baseName, isFolder);
+    const dest = path_join(listing.path, candidate);
+    const once = (function(){ let called=false; return (fn)=>{ if (called) return; called=true; try{ fn&&fn(); }catch(_){ } }; })();
+    const post = ()=>{
+      try{
+        setTimeout(()=>{ try{ window.__recent_creations.delete(candidate); }catch(_){ } }, 3000);
+      }catch(_){ }
+      const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: dest } });
+      fs_end(350);
+      navigate_auv3_refresh(listing.path, nav_context().target, opts);
+    };
+  try{ window.__recent_creations.add(candidate); }catch(_){ }
+    fs_begin(800);
+    if (isFolder) {
+      if (typeof FS.createDirectory === 'function') return FS.createDirectory(dest, ()=>once(post));
+      if (typeof FS.mkdir === 'function') return FS.mkdir(dest, ()=>once(post));
+      if (typeof FS.createFolder === 'function') return FS.createFolder(dest, ()=>once(post));
+      if (typeof FS.makeDir === 'function') return FS.makeDir(dest, ()=>once(post));
+      fs_end(0); console.warn('createDirectory indisponible');
+      return;
+    }
+    const empty = '';
+    if (typeof FS.saveFile === 'function') return FS.saveFile(dest, empty, ()=>once(post));
+    if (typeof FS.writeFile === 'function') return FS.writeFile(dest, empty, ()=>once(post));
+    fs_end(0); console.warn('saveFile/writeFile indisponible');
+  }catch(e){ console.warn('create_apple_document error', e); }
+}
+
+// Programmatic inline rename of the current or specified item
+function rename_apple_document(pathOrName = null){
+  try{
+    const listing = window.__auv3_last_listing || { path: (window.__auv3_browser_state && window.__auv3_browser_state.path) || '.' };
+    let fullPath = null;
+    if (pathOrName && pathOrName.indexOf('/') >= 0) { fullPath = pathOrName; }
+    else if (pathOrName && typeof pathOrName === 'string') { fullPath = path_join(listing.path, pathOrName); }
+    else {
+      const wrap = document.getElementById('auv3-file-list');
+      const nodes = wrap ? wrap.querySelectorAll('li[data-index]') : [];
+      let focus = (window.__auv3_selection && window.__auv3_selection.focus!=null) ? window.__auv3_selection.focus : null;
+      if (focus==null && window.__auv3_selection) {
+        const sel = Array.from(window.__auv3_selection.set||[]);
+        if (sel && sel.length) fullPath = sel[0];
+      }
+      if (focus!=null && nodes && nodes.length) {
+        const li = wrap.querySelector('li[data-index="'+String(focus)+'"]');
+        if (li) fullPath = li.getAttribute('data-fullpath');
+      }
+      if (!fullPath && nodes && nodes.length) {
+        fullPath = nodes[0].getAttribute('data-fullpath');
+      }
+    }
+    if (!fullPath) return;
+    const wrap = document.getElementById('auv3-file-list');
+    const exists = wrap && wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
+    if (!exists) {
+      const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: fullPath } });
+      return navigate_auv3_refresh(listing.path, nav_context().target, opts);
+    }
+    edit_filer_element(listing, fullPath);
+  }catch(e){ console.warn('rename_apple_document error', e); }
+}
+// expose public APIs
+window.create_apple_document = window.create_apple_document || create_apple_document;
+window.rename_apple_document = window.rename_apple_document || rename_apple_document;
 // ------------------------------
 // End Navigator helpers
 // ------------------------------
@@ -456,6 +529,60 @@ function parent_of(path){
   return parts.length ? parts.join('/') : '.';
 }
 
+// Robust unique name picker that uses current listing, DOM, recent creations, and per-folder counters
+function pick_unique_name(dirPath, baseName, isFolder){
+  try{
+    // Normalize inputs
+    const path = dirPath || ((window.__auv3_browser_state && window.__auv3_browser_state.path) || '.');
+    const last = window.__auv3_last_listing;
+    const samePath = !!(last && last.path === path);
+    // Collect existing names from latest listing when available
+    const existing = new Set();
+    if (samePath) {
+      try { (last.folders||[]).forEach(f=> existing.add(String(f.name||''))); } catch(_){ }
+      try { (last.files||[]).forEach(f=> existing.add(String(f.name||''))); } catch(_){ }
+    }
+    // Also union names currently rendered in DOM
+    try{
+      const wrap = document.getElementById('auv3-file-list');
+      if (wrap) {
+        const lis = wrap.querySelectorAll('li[data-fullpath] > span[data-role="name"]');
+        lis && lis.forEach(span => { existing.add(String(span.textContent||'')); });
+      }
+    }catch(_){ }
+    // Reserve set to avoid collisions before refresh
+    try{ window.__recent_creations = window.__recent_creations || new Set(); }catch(_){ }
+    // Per-folder counters to ensure monotonic suffixes even if listing is stale
+    try{ window.__name_counters = window.__name_counters || {}; }catch(_){ }
+    const counters = window.__name_counters;
+    counters[path] = counters[path] || { roots: {} };
+    const parts = String(baseName||'').split('.');
+    let root = baseName;
+    let ext = '';
+    if (!isFolder) {
+      if (parts.length > 1) { ext = '.' + parts.pop(); root = parts.join('.'); } else { root = baseName; ext = '.txt'; }
+    }
+    const key = isFolder ? (root+'|dir') : (root+'|'+ext);
+    let idx = (counters[path].roots[key] || 2);
+    // If base available and not reserved, use it, else increment
+    let candidate = isFolder ? root : (root + ext);
+    const exists = (name)=> existing.has(name) || (window.__recent_creations && window.__recent_creations.has(name));
+    if (exists(candidate)) {
+      // Start from planned counter idx
+      while (exists(isFolder ? (root + ' ' + idx) : (root + ' ' + idx + ext))) { idx++; if (idx>999) break; }
+      candidate = isFolder ? (root + ' ' + idx) : (root + ' ' + idx + ext);
+      counters[path].roots[key] = idx + 1; // Next time continue from here
+    } else {
+      // Reserve base and set next idx to 3 (since base + ' 2' is next)
+      counters[path].roots[key] = Math.max(idx, 3);
+    }
+    return candidate;
+  }catch(e){
+    // Fallback to baseName on any error
+    return baseName;
+  }
+}
+
 async function navigate_auv3(path='.', target='#view', opts=null){
   try{
     // Defensive: ensure no overlay blocks and guard isn't stuck
@@ -466,6 +593,7 @@ async function navigate_auv3(path='.', target='#view', opts=null){
   }catch(_){ window.__auv3_browser_state = { path, target, opts, visible: true }; }
   const t0 = Date.now();
   const listing = await get_auv3_files(path);
+  try { window.__auv3_last_listing = listing; } catch(_){ }
   display_files(target, listing, opts);
   try { window.__auv3_last_display_ts = Date.now(); } catch(_){ }
 }
@@ -475,7 +603,7 @@ function toggle_auv3_browser(target = '#view'){
     const st = window.__auv3_browser_state || { path: '.', target, opts: null, visible: false };
     const host = (typeof target === 'string') ? document.querySelector(target) : target;
     if (!host) { console.warn('toggle_auv3_browser: target introuvable', target); return; }
-    const panel = host.querySelector('#auv3-file-list');
+  const panel = host.querySelector('#auv3-file-window') || host.querySelector('#auv3-file-list');
     if (panel) {
       panel.remove();
       window.__auv3_browser_state.visible = false;
@@ -541,10 +669,10 @@ async function file_type_decision(type, fileEntry, fullPath){
       default: {
         console.log('Fichier sélectionné (type inconnu):', fullPath || (fileEntry && fileEntry.name));
       }
+      break;
     }
-  }catch(e){ console.warn('file_type_decision error', e); }
+  } catch(_){ }
 }
-// expose globally for external use
 window.file_type_decision = window.file_type_decision || file_type_decision;
 
 // Returns an object { path, folders:[{name,size,modified}], files:[{name,size,modified}] }
@@ -597,16 +725,20 @@ async function get_auv3_files(path = '.') {
   }
 }
 
-// --- Context menu helpers and delete action reuse ---
+// --- Context menu helper (safe stub) ---
+// Ensures first invocation of show_file_context_menu can close any previous menu
+// without throwing when the specialized closer hasn't been installed yet.
 function close_file_context_menu(){
   try{
-    const menu = document.getElementById('auv3-file-menu');
-    if (menu) menu.remove();
     if (window.__file_menu_doc_close) {
       document.removeEventListener('mousedown', window.__file_menu_doc_close, true);
       document.removeEventListener('touchstart', window.__file_menu_doc_close, true);
       window.__file_menu_doc_close = null;
     }
+  }catch(_){ }
+  try{
+    const m = document.getElementById('auv3-file-menu');
+    if (m && m.remove) m.remove();
   }catch(_){ }
 }
 
@@ -707,23 +839,12 @@ function show_confirm_dialog(message, onConfirm, onCancel){
         if (!overlay) return;
         // Move between buttons
         if (key === 'Tab' || key === 'ArrowLeft' || key === 'ArrowRight'){
-          e.preventDefault(); e.stopPropagation();
-          const active = document.activeElement;
-          if (active === okBtn) { cancelBtn && cancelBtn.focus && cancelBtn.focus(); }
-          else { okBtn && okBtn.focus && okBtn.focus(); }
           applyFocusStyles();
           return;
         }
         // Prevent Backspace/Delete from leaking to global handlers (which would recreate the dialog)
         if (key === 'Backspace' || key === 'Delete') {
           e.preventDefault(); e.stopPropagation();
-          return;
-        }
-        if (key === 'Enter'){
-          e.preventDefault(); e.stopPropagation();
-          const active = document.activeElement;
-          if (active === okBtn) { okBtn && okBtn.click && okBtn.click(); }
-          else { cancelBtn && cancelBtn.click && cancelBtn.click(); }
           return;
         }
         if (key === 'Escape' || key === 'Esc'){
@@ -762,14 +883,31 @@ function paste_into_current_folder(listing){
 function request_delete_selection_or_item(fullPath, listing){
   const arr = (function(){ const s = sel_list(); return (s && s.length) ? s : (fullPath ? [fullPath] : []); })();
   if (!arr.length) return;
-  if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.deleteFile !== 'function') { console.warn('deleteFile indisponible'); return; }
+  const FS = window.AtomeFileSystem || {};
+  const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
+  const delDir = (FS.deleteDirectory && typeof FS.deleteDirectory==='function') ? FS.deleteDirectory.bind(FS)
+               : (FS.removeDirectory && typeof FS.removeDirectory==='function') ? FS.removeDirectory.bind(FS)
+               : (FS.rmdir && typeof FS.rmdir==='function') ? FS.rmdir.bind(FS)
+               : (FS.deleteFolder && typeof FS.deleteFolder==='function') ? FS.deleteFolder.bind(FS)
+               : (FS.removeFolder && typeof FS.removeFolder==='function') ? FS.removeFolder.bind(FS)
+               : null;
+  if (!delFile && !delDir) { console.warn('Aucune API de suppression disponible'); return; }
+  // Build quick lookup sets from listing to know which paths are directories
+  const dirSet = new Set(((listing&&listing.folders)||[]).map(f=> path_join(listing.path, String(f.name||''))));
   let i = 0;
   const next = ()=>{
     if (i >= arr.length) { try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
     const p = arr[i++];
+    const isDir = dirSet.has(p);
     try{
       fs_begin(700);
-      window.AtomeFileSystem.deleteFile(p, ()=>{ next(); });
+      if (isDir && delDir) {
+        try { delDir(p, ()=>{ next(); }); } catch(_){ next(); }
+      } else if (delFile) {
+        try { delFile(p, ()=>{ next(); }); } catch(_){ next(); }
+      } else {
+        next();
+      }
     }catch(_){ next(); }
   };
   next();
@@ -956,7 +1094,7 @@ function display_files(target, listing, opts = {}) {
     } catch(_) { }
 
   // Remove previous container if any
-  const prev = host.querySelector('#auv3-file-list'); if (prev) prev.remove();
+  const prevWin = host.querySelector('#auv3-file-window'); if (prevWin) prevWin.remove();
   // Ensure any busy overlay from previous FS operation is removed and guard is released
   try { hide_busy_overlay(); __FS_OP.active = false; __FS_OP.until = 0; } catch(_){ }
     const defaults = {
@@ -973,8 +1111,10 @@ function display_files(target, listing, opts = {}) {
 
     const theme = opts.css || {};
 
-    // Container
-  const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container, overscrollBehavior: 'contain', touchAction: 'pan-y' } });
+  // Floating window + inner container
+  const WSTATE = (window.__AUV3_WIN_STATE = window.__AUV3_WIN_STATE || { left: '10%', top: '10%', width: '80%', height: '70%' });
+  const win = $('div', { id: 'auv3-file-window', parent: host, css: { position: 'absolute', left: WSTATE.left, top: WSTATE.top, width: WSTATE.width, height: WSTATE.height, backgroundColor: 'transparent', zIndex: '9000' } });
+  const wrap = $('div', { id: 'auv3-file-list', parent: win, css: { ...defaults.container, ...theme.container, overscrollBehavior: 'contain', touchAction: 'pan-y', height: '100%' } });
     try { wrap.setAttribute('tabindex','0'); } catch(_){ }
     // Block browser text selection and drag in the file list area
     // Ensure any busy overlay from previous FS operation is removed and guard is released
@@ -1002,8 +1142,43 @@ function display_files(target, listing, opts = {}) {
       } catch(_){ }
     } catch(_){ }
 
-  // Header with controls and breadcrumbs
-  const header = $('div', { parent: wrap, css: { ...defaults.header, ...theme.header } });
+  // Header with controls and breadcrumbs (also acts as drag handle)
+  const header = $('div', { parent: wrap, css: { ...defaults.header, ...theme.header, cursor: 'move' } });
+  // Drag handling
+  try{
+    let dragging=false, sx=0, sy=0, startLeft=0, startTop=0;
+    const canStart = (ev)=>{ const t = ev.target; return !(t && t.closest && (t.closest('button')||t.closest('input')||t.closest('textarea')||t.closest('#auv3-file-menu'))); };
+    header.addEventListener('pointerdown', (ev)=>{
+      if (!canStart(ev)) return;
+      dragging = true; const r = win.getBoundingClientRect(); sx = ev.clientX||0; sy = ev.clientY||0; startLeft=r.left; startTop=r.top; ev.preventDefault();
+    });
+    window.addEventListener('pointermove', (ev)=>{
+      if (!dragging) return;
+      const dx=(ev.clientX||0)-sx, dy=(ev.clientY||0)-sy;
+      const hb=host.getBoundingClientRect(); const wb=win.getBoundingClientRect();
+      let left = startLeft + dx; let top = startTop + dy;
+      left = Math.max(hb.left, Math.min(left, hb.right - wb.width));
+      top = Math.max(hb.top, Math.min(top, hb.bottom - wb.height));
+      const pctL=((left-hb.left)/hb.width)*100, pctT=((top-hb.top)/hb.height)*100;
+      WSTATE.left=pctL.toFixed(2)+'%'; WSTATE.top=pctT.toFixed(2)+'%';
+      win.style.left=WSTATE.left; win.style.top=WSTATE.top;
+    });
+    window.addEventListener('pointerup', ()=>{ dragging=false; });
+  }catch(_){ }
+  // Resizer grip
+  try{
+    const grip = $('div', { parent: win, css: { position:'absolute', right:'2px', bottom:'2px', width:'14px', height:'14px', cursor:'nwse-resize' } });
+    let resizing=false, sx=0, sy=0, startW=0, startH=0;
+    grip.addEventListener('pointerdown', (ev)=>{ resizing=true; const r=win.getBoundingClientRect(); sx=ev.clientX||0; sy=ev.clientY||0; startW=r.width; startH=r.height; ev.stopPropagation(); });
+    window.addEventListener('pointermove', (ev)=>{
+      if (!resizing) return;
+      const dx=(ev.clientX||0)-sx, dy=(ev.clientY||0)-sy; const hb=host.getBoundingClientRect();
+      let w=startW+dx, h=startH+dy; w=Math.max(240, Math.min(w, hb.width)); h=Math.max(180, Math.min(h, hb.height));
+      const pctW=(w/hb.width)*100, pctH=(h/hb.height)*100; WSTATE.width=pctW.toFixed(2)+'%'; WSTATE.height=pctH.toFixed(2)+'%';
+      win.style.width=WSTATE.width; win.style.height=WSTATE.height;
+    });
+    window.addEventListener('pointerup', ()=>{ resizing=false; });
+  }catch(_){ }
 
     // Shift-lock toggle
     const shiftBtn = Button({
@@ -1100,8 +1275,15 @@ function display_files(target, listing, opts = {}) {
         // Add delete icon for files only
         if (!isDir) {
           create_delete_button(li, (ev)=>{
-            const base = (fullPath||'').split('/').pop() || 'cet élément';
-            show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_file(fullPath, li, listing); }, ()=>{});
+            const selected = sel_list();
+            const multi = selected && selected.length > 1 && selected.includes(fullPath);
+            if (multi) {
+              const msg = 'Supprimer ' + selected.length + ' éléments ?';
+              show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); }, ()=>{});
+            } else {
+              const base = (fullPath||'').split('/').pop() || 'cet élément';
+              show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_file(fullPath, li, listing); }, ()=>{});
+            }
           }, (theme.deleteButton||{}));
         }
 
