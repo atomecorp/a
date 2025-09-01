@@ -94,6 +94,10 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleEnsureLocal(body: body, webView: message.webView)
         case "copyFiles":
             handleCopyFiles(body: body, webView: message.webView)
+        case "createDirectory":
+            handleCreateDirectory(body: body, webView: message.webView)
+        case "renameItem":
+            handleRenameItem(body: body, webView: message.webView)
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
@@ -381,6 +385,22 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                 } catch(_) {
                     try { callback && callback({ success: false, error: 'bridge unavailable' }); } catch(__) {}
                 }
+            },
+            createDirectory: function(path, callback){
+                window.fileSystemCallback = callback;
+                try {
+                    webkit.messageHandlers.fileSystem.postMessage({ action: 'createDirectory', path: path || '' });
+                } catch(_) {
+                    try { callback && callback({ success: false, error: 'bridge unavailable' }); } catch(__) {}
+                }
+            },
+            renameItem: function(oldPath, newPath, callback){
+                window.fileSystemCallback = callback;
+                try {
+                    webkit.messageHandlers.fileSystem.postMessage({ action: 'renameItem', oldPath: oldPath || '', newPath: newPath || '' });
+                } catch(_) {
+                    try { callback && callback({ success: false, error: 'bridge unavailable' }); } catch(__) {}
+                }
             }
         };
         
@@ -438,6 +458,53 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         
         let script = WKUserScript(source: jsAPI, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         webView.configuration.userContentController.addUserScript(script)
+    }
+
+    private func handleCreateDirectory(body: [String: Any], webView: WKWebView?) {
+        guard let path = body["path"] as? String, !path.isEmpty,
+              let url = resolveURL(for: path, isDirectory: true) else {
+            sendErrorResponse(to: webView, error: "Invalid path for createDirectory")
+            return
+        }
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            sendSuccessResponse(to: webView, data: ["message": "Directory created"]) 
+            FileSyncCoordinator.shared.syncAll(force: true)
+        } catch {
+            sendErrorResponse(to: webView, error: "Failed to create directory: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleRenameItem(body: [String: Any], webView: WKWebView?) {
+        guard let oldRel = body["oldPath"] as? String, !oldRel.isEmpty,
+              let newRel = body["newPath"] as? String, !newRel.isEmpty,
+              let oldURL = resolveURL(for: oldRel, isDirectory: false),
+              let newURL = resolveURL(for: newRel, isDirectory: false) else {
+            sendErrorResponse(to: webView, error: "Invalid parameters for renameItem")
+            return
+        }
+        do {
+            let fm = FileManager.default
+            let parent = newURL.deletingLastPathComponent()
+            try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+            // If destination exists, try to find a unique name by appending copy (2)
+            var finalURL = newURL
+            if fm.fileExists(atPath: newURL.path) {
+                let name = newURL.deletingPathExtension().lastPathComponent
+                let ext = newURL.pathExtension
+                var idx = 2
+                while true {
+                    let candidate = parent.appendingPathComponent(ext.isEmpty ? "\(name) \(idx)" : "\(name) \(idx).\(ext)")
+                    if !fm.fileExists(atPath: candidate.path) { finalURL = candidate; break }
+                    idx += 1; if idx > 500 { break }
+                }
+            }
+            try fm.moveItem(at: oldURL, to: finalURL)
+            sendSuccessResponse(to: webView, data: ["message": "Renamed"]) 
+            FileSyncCoordinator.shared.syncAll(force: true)
+        } catch {
+            sendErrorResponse(to: webView, error: "Failed to rename: \(error.localizedDescription)")
+        }
     }
 
     // Copy one or many files/folders into a destination folder within the same storage

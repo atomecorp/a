@@ -27,6 +27,177 @@
 
 
 
+// ------------------------------
+// UI Theme and Assets (centralized)
+// ------------------------------
+const UI = {
+  icons: {
+    delete: './assets/images/icons/delete.svg' // from src/assets/images/icons/delete.svg (relative to index)
+  },
+  typography: {
+    fontFamily: 'monospace',
+    fontSize: '14px',
+    lineHeight: '22px'
+  },
+  colors: {
+    bgContainer: '#111',
+    border: '#2c343d',
+    text: '#e6e6e6',
+    headerText: '#9db2cc',
+    accent: '#8fd',
+    folderName: '#9bd6ff',
+    selectionBg: '#2a3645',
+    selectionText: '#e1f0ff',
+    danger: '#e74c3c',
+  buttonPrimary: '#3498db',
+  buttonSuccess: '#2ecc71',
+    buttonBg: 'lightgray',
+    buttonText: 'black',
+    dialogBg: '#1b1f27',
+    dialogText: '#eee',
+    confirmCancelBg: '#666',
+    confirmCancelBgFocus: '#888',
+    confirmOkBg: '#e74c3c',
+    confirmOkBgFocus: '#ff6b5a'
+  },
+  shadows: {
+    button: '0 2px 4px rgba(0,0,0,1)',
+    small: '0 1px 2px rgba(0,0,0,.6)',
+    dialog: '0 8px 24px rgba(0,0,0,.6)',
+    menu: '0 6px 18px rgba(0,0,0,.6)'
+  },
+  layout: {
+    containerMarginTop: '40px',
+    containerPadding: '8px',
+    headerGap: '8px',
+    sectionSpacing: '6px',
+    listPaddingLeft: '16px',
+    itemPadding: '4px 8px'
+  },
+  buttons: {
+    sizeSm: { width: '50px', height: '24px' },
+    sizeMd: { width: '60px', height: '24px' },
+    sizeWide: { width: '72px', height: '24px' },
+    radius: '6px'
+  }
+};
+
+// Small helper to build a delete icon button with the shared skin
+function create_delete_button(parent, onClick, themeOverrides){
+  const cssBase = {
+    cursor: 'pointer',
+    border: 'none',
+    background: 'transparent',
+    padding: '0 4px',
+    lineHeight: '1',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  };
+  const btn = $('button', {
+    parent,
+    css: { ...cssBase, ...(themeOverrides||{}) },
+    onclick: (ev)=>{ try{ ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){ } try{ onClick && onClick(ev); }catch(_){ } }
+  });
+  $('img', { parent: btn, src: UI.icons.delete, css: { width: '14px', height: '14px', display: 'block', filter: 'invert(57%) sepia(65%) saturate(3518%) hue-rotate(330deg) brightness(103%) contrast(89%)' }, alt: 'Delete' });
+  return btn;
+}
+
+// ------------------------------
+// End UI Theme and Assets
+// ------------------------------
+
+// ------------------------------
+// Navigator helpers (centralized facilities)
+// ------------------------------
+function nav_context(){ return { target: (window.__auv3_browser_state && window.__auv3_browser_state.target) || '#view', opts: (window.__auv3_browser_state && window.__auv3_browser_state.opts) || null }; }
+function nav_enter_folder(path){ try{ navigate_auv3(path, nav_context().target, nav_context().opts); }catch(_){ } }
+function nav_leave_folder(currentPath){ try{ navigate_auv3(parent_of(currentPath), nav_context().target, nav_context().opts); }catch(_){ } }
+function nav_open_import(destPath){ try{ ios_file_chooser(true, destPath); }catch(_){ } }
+function nav_preview_file_by_name(fullPath){ try{ const name = (fullPath||'').split('/').pop()||''; const type = detect_file_type(name); file_type_decision(type, { name }, fullPath); }catch(_){ } }
+function nav_open_focused_or_selected(wrap, listing, opts){
+  try{
+    const nodes = wrap.querySelectorAll('li[data-index]'); if (!nodes || !nodes.length) return;
+    let focus = (window.__auv3_selection.focus==null) ? null : window.__auv3_selection.focus;
+    if (focus == null) {
+      const selected = sel_list();
+      if (selected && selected.length) {
+        const first = selected[0];
+        for (let i = 0; i < nodes.length; i++) { if (nodes[i].getAttribute('data-fullpath') === first) { focus = i; break; } }
+      }
+    }
+    if (focus == null) return;
+    const li = wrap.querySelector(`li[data-index="${focus}"]`); if (!li) return;
+    const fullPath = li.getAttribute('data-fullpath'); const isDir = li.getAttribute('data-isdir') === '1';
+    if (isDir) {
+      const name = (fullPath||'').split('/').pop()||'';
+      if (opts && typeof opts.onFolderClick === 'function') { opts.onFolderClick({ name, isDirectory:true }, fullPath); }
+      else { nav_enter_folder(fullPath); }
+    } else { nav_preview_file_by_name(fullPath); }
+  }catch(_){ }
+}
+function nav_delete_selection(listing){ try{ request_delete_selection_or_item(null, listing); }catch(_){ } }
+function nav_delete_item_path(fullPath, listing){ try{ request_delete_selection_or_item(fullPath, listing); }catch(_){ } }
+function nav_copy_selection_to_clipboard(fullPath){ try{ copy_selection_or_item(fullPath); }catch(_){ } }
+function nav_paste_clipboard_to_current(listing){ try{ paste_into_current_folder(listing); }catch(_){ } }
+function nav_select_all(wrap){
+  try{
+    const nodes = wrap.querySelectorAll('li[data-fullpath]');
+    const all = []; nodes.forEach((li)=>{ const fp = li.getAttribute('data-fullpath'); if (fp) all.push(fp); });
+    sel_replace(all); update_selection_ui(wrap);
+  }catch(_){ }
+}
+function nav_create_folder(listing){
+  try{
+    const FS = window.AtomeFileSystem || {};
+    const existing = new Set([...
+      ((listing && listing.folders) || []).map(f=>String(f.name||'')),
+      ((listing && listing.files) || []).map(f=>String(f.name||''))
+    ]);
+    const base = 'New folder';
+    let name = base; let n = 2;
+    while (existing.has(name)) { name = base + ' ' + n++; if (n>200) break; }
+    const path = path_join(listing.path, name);
+    const cb = ()=>{
+      try{
+        const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path } });
+        navigate_auv3(listing.path, nav_context().target, opts);
+      }catch(_){ }
+    };
+    if (typeof FS.createDirectory === 'function') { FS.createDirectory(path, cb); return; }
+    if (typeof FS.mkdir === 'function') { FS.mkdir(path, cb); return; }
+    if (typeof FS.createFolder === 'function') { FS.createFolder(path, cb); return; }
+    if (typeof FS.makeDir === 'function') { FS.makeDir(path, cb); return; }
+    console.warn('createDirectory indisponible');
+  }catch(_){ }
+}
+function nav_create_file(listing){
+  try{
+    const FS = window.AtomeFileSystem || {};
+    const existing = new Set([...
+      ((listing && listing.folders) || []).map(f=>String(f.name||'')),
+      ((listing && listing.files) || []).map(f=>String(f.name||''))
+    ]);
+    const base = 'New file'; const ext = '.txt';
+    let name = base + ext; let n = 2;
+    while (existing.has(name)) { name = base + ' ' + n++ + ext; if (n>200) break; }
+    const full = path_join(listing.path, name);
+    const cb = ()=>{
+      try{
+        const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: full } });
+        navigate_auv3(listing.path, nav_context().target, opts);
+      }catch(_){ }
+    };
+    const empty = '';
+    if (typeof FS.saveFile === 'function') { FS.saveFile(full, empty, cb); return; }
+    if (typeof FS.writeFile === 'function') { FS.writeFile(full, empty, cb); return; }
+    console.warn('saveFile/writeFile indisponible');
+  }catch(_){ }
+}
+// ------------------------------
+// End Navigator helpers
+// ------------------------------
+
 
 function ios_file_chooser(multiple, destFolder) {
   try {
@@ -99,16 +270,16 @@ function update_selection_ui(container){
       const dot = li.querySelector('span[data-role="dot"]');
       const nameSpan = li.querySelector('span[data-role="name"]');
       if (sel_is_selected(fp)) {
-        li.style.backgroundColor = '#2a3645';
-        li.style.color = '#e1f0ff';
-        if (dot) dot.style.color = '#e1f0ff';
-        if (nameSpan) nameSpan.style.color = '#e1f0ff';
+        li.style.backgroundColor = UI.colors.selectionBg;
+        li.style.color = UI.colors.selectionText;
+        if (dot) dot.style.color = UI.colors.selectionText;
+        if (nameSpan) nameSpan.style.color = UI.colors.selectionText;
       } else {
         li.style.backgroundColor = '';
         li.style.color = '';
         if (isDir) {
-          if (dot) dot.style.color = '#8fd';
-          if (nameSpan) nameSpan.style.color = '#9bd6ff';
+          if (dot) dot.style.color = UI.colors.accent;
+          if (nameSpan) nameSpan.style.color = UI.colors.folderName;
         } else {
           if (dot) dot.style.color = '';
           if (nameSpan) nameSpan.style.color = '';
@@ -276,12 +447,12 @@ function show_confirm_dialog(message, onConfirm, onCancel){
       backgroundColor: 'rgba(0,0,0,.5)', zIndex: '10000', display: 'flex', alignItems: 'center', justifyContent: 'center'
     }});
     const box = $('div', { parent: overlay, css: {
-      backgroundColor: '#1b1f27', color: '#eee', border: '1px solid #2c343d', borderRadius: '8px', padding: '12px', width: '280px', boxShadow: '0 8px 24px rgba(0,0,0,.6)'
+      backgroundColor: UI.colors.dialogBg, color: UI.colors.dialogText, border: '1px solid ' + UI.colors.border, borderRadius: '8px', padding: '12px', width: '280px', boxShadow: UI.shadows.dialog
     }});
     $('div', { parent: box, text: message || 'Confirmer ?', css: { marginBottom: '10px', fontSize: '13px' } });
     const row = $('div', { parent: box, css: { display: 'flex', gap: '8px', justifyContent: 'flex-end' } });
-    Button({ id:'cnf-cancel', onText:'Cancel', offText:'Cancel', onAction: ()=>{}, offAction: ()=>{}, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#666', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
-    Button({ id:'cnf-ok', onText:'Delete', offText:'Delete', onAction: ()=>{}, offAction: ()=>{}, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor:'#e74c3c', color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow:'0 1px 2px rgba(0,0,0,.6)' } });
+  Button({ id:'cnf-cancel', onText:'Cancel', offText:'Cancel', onAction: ()=>{}, offAction: ()=>{}, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor: UI.colors.confirmCancelBg, color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow: UI.shadows.small } });
+  Button({ id:'cnf-ok', onText:'Delete', offText:'Delete', onAction: ()=>{}, offAction: ()=>{}, parent: row, css: { height:'26px', padding:'0 10px', backgroundColor: UI.colors.confirmOkBg, color:'#fff', border:'none', borderRadius:'6px', cursor:'pointer', boxShadow: UI.shadows.small } });
 
     // Keyboard support: focus management and key handling
     const cancelBtn = (function(){ try{ return document.getElementById('cnf-cancel'); }catch(_){ return null; } })();
@@ -289,8 +460,8 @@ function show_confirm_dialog(message, onConfirm, onCancel){
     try{ cancelBtn && cancelBtn.setAttribute('tabindex', '0'); okBtn && okBtn.setAttribute('tabindex', '0'); }catch(_){ }
 
     // Visual focus indicator (make the chosen button color change clearly)
-    const baseCancelBg = '#666';
-    const baseOkBg = '#e74c3c';
+  const baseCancelBg = UI.colors.confirmCancelBg;
+  const baseOkBg = UI.colors.confirmOkBg;
     function applyBaseStyles(){
       try{
         if (cancelBtn) { cancelBtn.style.backgroundColor = baseCancelBg; cancelBtn.style.boxShadow = '0 1px 2px rgba(0,0,0,.6)'; cancelBtn.style.outline = 'none'; }
@@ -302,11 +473,11 @@ function show_confirm_dialog(message, onConfirm, onCancel){
         applyBaseStyles();
         const active = document.activeElement;
         if (active === cancelBtn) {
-          cancelBtn.style.backgroundColor = '#888';
-          cancelBtn.style.boxShadow = '0 0 0 2px rgba(255,255,255,.22) inset, 0 1px 2px rgba(0,0,0,.6)';
+          cancelBtn.style.backgroundColor = UI.colors.confirmCancelBgFocus;
+          cancelBtn.style.boxShadow = '0 0 0 2px rgba(255,255,255,.22) inset, ' + UI.shadows.small;
         } else if (active === okBtn) {
-          okBtn.style.backgroundColor = '#ff6b5a';
-          okBtn.style.boxShadow = '0 0 0 2px rgba(255,255,255,.25) inset, 0 1px 2px rgba(0,0,0,.6)';
+          okBtn.style.backgroundColor = UI.colors.confirmOkBgFocus;
+          okBtn.style.boxShadow = '0 0 0 2px rgba(255,255,255,.25) inset, ' + UI.shadows.small;
         }
       }catch(_){ }
     }
@@ -452,42 +623,71 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     const rect = anchorEl.getBoundingClientRect();
     const left = Math.min(window.innerWidth - 160, Math.max(8, rect.left));
     const top = Math.min(window.innerHeight - 60, rect.bottom + 6);
-    const menu = $('div', {
+  const menu = $('div', {
       id: 'auv3-file-menu',
       parent: document.body,
       css: {
         position: 'fixed',
         left: left + 'px',
         top: top + 'px',
-        zIndex: '9999',
-        backgroundColor: '#1b1f27',
-        color: '#eee',
-        border: '1px solid #2c343d',
-        borderRadius: '8px',
-        padding: '6px',
-        boxShadow: '0 6px 18px rgba(0,0,0,.6)'
+    zIndex: '9999',
+    backgroundColor: UI.colors.dialogBg,
+    color: UI.colors.dialogText,
+    border: '1px solid ' + UI.colors.border,
+    borderRadius: '8px',
+    padding: '6px',
+    boxShadow: UI.shadows.menu
       }
     });
 
     // Title
     $('div', { parent: menu, text: fileItem && fileItem.name ? fileItem.name : 'Fichier', css: { fontSize: '11px', color: '#9db2cc', marginBottom: '6px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } });
 
-    // Copy action
+  // Copy action
     Button({
       id: 'auv3-menu-copy', onText: 'Copy', offText: 'Copy',
-      onAction: ()=>{ copy_selection_or_item(fullPath); close_file_context_menu(); },
-      offAction: ()=>{ copy_selection_or_item(fullPath); close_file_context_menu(); },
+      onAction: ()=>{ nav_copy_selection_to_clipboard(fullPath); close_file_context_menu(); },
+      offAction: ()=>{ nav_copy_selection_to_clipboard(fullPath); close_file_context_menu(); },
       parent: menu,
-      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: '#3498db', border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.6)', marginBottom: '6px' }
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.buttonPrimary, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
     });
 
     // Paste action
     Button({
       id: 'auv3-menu-paste', onText: 'Paste', offText: 'Paste',
-      onAction: ()=>{ paste_into_current_folder(listing); close_file_context_menu(); },
-      offAction: ()=>{ paste_into_current_folder(listing); close_file_context_menu(); },
+      onAction: ()=>{ nav_paste_clipboard_to_current(listing); close_file_context_menu(); },
+      offAction: ()=>{ nav_paste_clipboard_to_current(listing); close_file_context_menu(); },
       parent: menu,
-      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: '#2ecc71', border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.6)', marginBottom: '6px' }
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.buttonSuccess, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
+    });
+
+    // Paste action (already above)
+
+    // Select All
+    Button({
+      id: 'auv3-menu-selectall', onText: 'Select all', offText: 'Select all',
+      onAction: ()=>{ try{ const wrap = document.getElementById('auv3-file-list'); wrap && nav_select_all(wrap); }finally{ close_file_context_menu(); } },
+      offAction: ()=>{ try{ const wrap = document.getElementById('auv3-file-list'); wrap && nav_select_all(wrap); }finally{ close_file_context_menu(); } },
+      parent: menu,
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.headerText, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
+    });
+
+    // Create Folder
+    Button({
+      id: 'auv3-menu-mkdir', onText: 'New folder', offText: 'New folder',
+      onAction: ()=>{ nav_create_folder(listing); close_file_context_menu(); },
+      offAction: ()=>{ nav_create_folder(listing); close_file_context_menu(); },
+      parent: menu,
+      css: { width: '110px', height: '24px', color: '#fff', backgroundColor: UI.colors.buttonSuccess, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
+    });
+
+    // Create File
+    Button({
+      id: 'auv3-menu-touch', onText: 'New file', offText: 'New file',
+      onAction: ()=>{ nav_create_file(listing); close_file_context_menu(); },
+      offAction: ()=>{ nav_create_file(listing); close_file_context_menu(); },
+      parent: menu,
+      css: { width: '110px', height: '24px', color: '#fff', backgroundColor: UI.colors.buttonPrimary, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
     });
 
     // Delete action
@@ -496,18 +696,35 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
       onAction: ()=>{
         const sel = sel_list();
         const msg = (sel && sel.length>1) ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((fullPath||'').split('/').pop()||'cet élément') + ' » ?');
-        show_confirm_dialog(msg, ()=>{ request_delete_selection_or_item(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        show_confirm_dialog(msg, ()=>{ nav_delete_item_path(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
       },
       offAction: ()=>{
         const sel = sel_list();
         const msg = (sel && sel.length>1) ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((fullPath||'').split('/').pop()||'cet élément') + ' » ?');
-        show_confirm_dialog(msg, ()=>{ request_delete_selection_or_item(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        show_confirm_dialog(msg, ()=>{ nav_delete_item_path(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
       },
       parent: menu,
-      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: '#e74c3c', border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,.6)' }
+      css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.danger, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small }
     });
 
     // Outside click to close
+    // Keyboard navigation in menu (Left/Right/Tab to cycle, Enter to activate, Esc to close)
+    const focusables = function(){ return Array.prototype.slice.call(menu.querySelectorAll('button')); };
+    function menuFocus(idx){ const arr = focusables(); if (!arr.length) return; const i = (idx+arr.length)%arr.length; try{ arr[i].focus(); }catch(_){ } }
+    try{ setTimeout(()=>{ menuFocus(0); }, 0); }catch(_){ }
+
+    function onMenuKey(e){
+      try{
+        const key = e.key; const arr = focusables(); if (!arr.length) return;
+        if (key === 'Tab' || key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); const idx = arr.indexOf(document.activeElement); menuFocus((idx<0?0:idx+1)); return; }
+        if (key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); const idx = arr.indexOf(document.activeElement); menuFocus((idx<0?arr.length-1:idx-1)); return; }
+        if (key === 'Enter' || key === ' ') { e.preventDefault(); e.stopPropagation(); const a = document.activeElement; a && a.click && a.click(); return; }
+        if (key === 'Escape' || key === 'Esc') { e.preventDefault(); e.stopPropagation(); close_file_context_menu(); return; }
+        if (key === 'Backspace' || key === 'Delete') { e.preventDefault(); e.stopPropagation(); return; }
+      }catch(_){ }
+    }
+    document.addEventListener('keydown', onMenuKey, true);
+
     window.__file_menu_doc_close = function(ev){
       try{
         const m = document.getElementById('auv3-file-menu');
@@ -517,7 +734,24 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     };
     document.addEventListener('mousedown', window.__file_menu_doc_close, true);
     document.addEventListener('touchstart', window.__file_menu_doc_close, true);
+
+    // Ensure cleanup of the key handler when menu closes
+    const oldClose = close_file_context_menu;
+    close_file_context_menu = function(){ try{ document.removeEventListener('keydown', onMenuKey, true); }catch(_){ } try{ window.__file_menu_doc_close && document.removeEventListener('mousedown', window.__file_menu_doc_close, true); }catch(_){ } try{ window.__file_menu_doc_close && document.removeEventListener('touchstart', window.__file_menu_doc_close, true); }catch(_){ } window.__file_menu_doc_close = null; try{ const m = document.getElementById('auv3-file-menu'); m && m.remove(); }catch(_){ } };
   }catch(e){ console.warn('show_file_context_menu error', e); }
+}
+
+// Open menu at arbitrary position (for empty area or global triggers)
+function open_file_menu_at(x, y, fileItem, fullPath, listing){
+  try{
+    close_file_context_menu();
+    const left = Math.min(window.innerWidth - 160, Math.max(8, x));
+    const top = Math.min(window.innerHeight - 60, Math.max(8, y));
+    // Create a temporary anchor
+    const anchor = $('div', { parent: document.body, css: { position:'fixed', left: left+'px', top: top+'px', width:'1px', height:'1px', pointerEvents:'none', opacity:'0' } });
+    show_file_context_menu(anchor, fileItem, fullPath, listing);
+    try{ setTimeout(()=>{ anchor && anchor.remove && anchor.remove(); }, 0); }catch(_){ }
+  }catch(e){ console.warn('open_file_menu_at error', e); }
 }
 
 // Render a skinnable, navigable list into target using Squirrel components
@@ -530,13 +764,13 @@ function display_files(target, listing, opts = {}) {
     const prev = host.querySelector('#auv3-file-list'); if (prev) prev.remove();
 
     const defaults = {
-      container: { marginTop: '40px', backgroundColor: '#111', border: '1px solid #2c343d', borderRadius: '6px', padding: '8px', color: '#e6e6e6', fontFamily: 'monospace', fontSize: '14px', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' },
-      header: { marginBottom: '6px', color: '#9db2cc', display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', WebkitUserSelect: 'none' },
-      crumb: { color: '#8fd', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' },
-      sectionTitle: { margin: '6px 0 2px 0', color: '#8fd', userSelect: 'none', WebkitUserSelect: 'none' },
-  list: { margin: '0', paddingLeft: '16px', userSelect: 'none', WebkitUserSelect: 'none', listStyle: 'none' },
-      item: { cursor: 'pointer', padding: '4px 8px', lineHeight: '22px', userSelect: 'none', WebkitUserSelect: 'none' },
-      upButton: { width: '40px', height: '20px', color: 'black', backgroundColor: 'lightgray', borderRadius: '4px', position: 'relative', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)' }
+      container: { marginTop: UI.layout.containerMarginTop, backgroundColor: UI.colors.bgContainer, border: '1px solid ' + UI.colors.border, borderRadius: UI.buttons.radius, padding: UI.layout.containerPadding, color: UI.colors.text, fontFamily: UI.typography.fontFamily, fontSize: UI.typography.fontSize, userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' },
+      header: { marginBottom: '6px', color: UI.colors.headerText, display: 'flex', alignItems: 'center', gap: UI.layout.headerGap, userSelect: 'none', WebkitUserSelect: 'none' },
+      crumb: { color: UI.colors.accent, cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' },
+      sectionTitle: { margin: '6px 0 2px 0', color: UI.colors.accent, userSelect: 'none', WebkitUserSelect: 'none' },
+      list: { margin: '0', paddingLeft: UI.layout.listPaddingLeft, userSelect: 'none', WebkitUserSelect: 'none', listStyle: 'none' },
+      item: { cursor: 'pointer', padding: UI.layout.itemPadding, lineHeight: UI.typography.lineHeight, userSelect: 'none', WebkitUserSelect: 'none' },
+      upButton: { width: '40px', height: '20px', color: UI.colors.buttonText, backgroundColor: UI.colors.buttonBg, borderRadius: '4px', position: 'relative', border: 'none', cursor: 'pointer', boxShadow: UI.shadows.button }
     };
 
 
@@ -544,7 +778,7 @@ function display_files(target, listing, opts = {}) {
     const theme = opts.css || {};
 
     // Container
-    const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container, overscrollBehavior: 'contain', touchAction: 'pan-y' } });
+  const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container, overscrollBehavior: 'contain', touchAction: 'pan-y' } });
     try { wrap.setAttribute('tabindex','0'); } catch(_){ }
     // Block browser text selection and drag in the file list area
     try {
@@ -575,9 +809,9 @@ function display_files(target, listing, opts = {}) {
       onAction: ()=>{ window.__auv3_selection.shiftLock = true; },
       offAction: ()=>{ window.__auv3_selection.shiftLock = false; },
       parent: header,
-      css: { width: '72px', height: '24px', color: 'black',
-        borderRadius: '6px', backgroundColor: 'lightgray', 
-        border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)',
+      css: { width: UI.buttons.sizeWide.width, height: UI.buttons.sizeWide.height, color: UI.colors.buttonText,
+        borderRadius: UI.buttons.radius, backgroundColor: UI.colors.buttonBg, 
+        border: 'none', cursor: 'pointer', boxShadow: UI.shadows.button,
         marginLeft: 'auto' // push this group to the right; import button stays immediately to the right
       }
     });
@@ -586,26 +820,16 @@ function display_files(target, listing, opts = {}) {
       id:'btn-import',
       onText: 'import',
       offText: 'import',
-      onAction: ()=> ios_file_chooser(true, listing.path),
-      offAction: ()=> ios_file_chooser(true, listing.path),
+      onAction: ()=> nav_open_import(listing.path),
+      offAction: ()=> nav_open_import(listing.path),
       parent: header,
-      css: {
-        width: '60px',
-        height: '24px',
-        color: 'black',
-        borderRadius: '6px',
-        backgroundColor: 'lightgray',
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,1)'
-      }
+  css: { width: UI.buttons.sizeMd.width, height: UI.buttons.sizeMd.height, color: UI.colors.buttonText, borderRadius: UI.buttons.radius, backgroundColor: UI.colors.buttonBg, border: 'none', cursor: 'pointer', transition: 'background-color 0.3s ease', boxShadow: UI.shadows.button }
     });
   // Current folder header above the list (click to go up)
   const currName = (function(){ const p = listing.path||'.'; if (p==='.'||p==='./') return '.'; const parts = p.split('/').filter(Boolean); return parts[parts.length-1] || '.'; })();
   const folderHead = $('div', { parent: wrap, css: { display:'flex', alignItems:'center', gap:'8px', margin:'6px 0 6px 0', userSelect:'none', WebkitUserSelect:'none' } });
-  $('span', { parent: folderHead, text: '●', css: { color:'#8fd', fontSize:'10px' } });
-  $('span', { parent: folderHead, text: currName, css: { fontWeight:'bold', color:'#9bd6ff', cursor:'pointer' }, onclick: ()=> navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
+  $('span', { parent: folderHead, text: '●', css: { color: UI.colors.accent, fontSize:'10px' } });
+  $('span', { parent: folderHead, text: currName, css: { fontWeight:'bold', color: UI.colors.folderName, cursor:'pointer' }, onclick: ()=> nav_leave_folder(listing.path) });
 
   // Breadcrumbs removed: folder header now handles navigation up
 
@@ -615,13 +839,16 @@ function display_files(target, listing, opts = {}) {
       const sec = $('div', { parent: wrap });
       // Removed section title as requested
       const ul = $('ul', { parent: sec, css: { ...defaults.list, ...(theme.list||{}) } });
+      try{ ul.setAttribute('data-section', isDir ? 'folders' : 'files'); }catch(_){ }
       (items || []).forEach((it) => {
         const fullPath = path_join(listing.path, it.name);
         let longPressFired = false;
-    // Shared state for pointer cycle
-    let shiftDownAtPointerDown = false;
-    let dragging = false;
-    let dragStarted = false;
+        // Shared state for pointer cycle
+        let shiftDownAtPointerDown = false;
+        let dragging = false;
+        let dragStarted = false;
+        // Share long-press timer with drag handlers to avoid clearing selection during long-press
+        let pressTimer = null; let startX=0, startY=0;
   const li = $('li', {
           parent: ul,
           css: {
@@ -634,12 +861,12 @@ function display_files(target, listing, opts = {}) {
             if (longPressFired) { longPressFired = false; return; }
             if (isDir) {
               if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath);
-              else navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts);
+              else nav_enter_folder(fullPath);
               return;
             }
             if (dragStarted) { dragStarted = false; return; }
             // Selection logic for files
-      const shift = !!shiftDownAtPointerDown || is_shift_active(ev);
+            const shift = !!shiftDownAtPointerDown || is_shift_active(ev);
             const idx = parseInt(li.getAttribute('data-index')||'0',10);
             if (!shift) {
               // Single selection mode
@@ -663,31 +890,15 @@ function display_files(target, listing, opts = {}) {
         __indexToPath[__linearIndex] = fullPath; __linearIndex++;
         // File name label (keeps whole-row click behavior)
         if (isDir) {
-          $('span', { parent: li, text: '●', css: { color:'#8fd', fontSize:'10px', marginRight:'6px' }, 'data-role': 'dot' });
+          $('span', { parent: li, text: '●', css: { color: UI.colors.accent, fontSize:'10px', marginRight:'6px' }, 'data-role': 'dot' });
         }
         $('span', { parent: li, text: it.name, css: { userSelect: 'none' }, 'data-role': 'name' });
         // Add delete icon for files only
         if (!isDir) {
-          const delBtnCss = {
-            cursor: 'pointer',
-            border: 'none',
-            background: 'transparent',
-            color: '#f66',
-            padding: '0 4px',
-            fontSize: '14px',
-            lineHeight: '1',
-          };
-          $('button', {
-            parent: li,
-            text: '🗑',
-            title: 'Supprimer',
-            css: { ...delBtnCss, ...(theme.deleteButton||{}) },
-            onclick: (ev)=>{
-              try{ ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){ }
-              const base = (fullPath||'').split('/').pop() || 'cet élément';
-              show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_file(fullPath, li, listing); }, ()=>{});
-            }
-          });
+          create_delete_button(li, (ev)=>{
+            const base = (fullPath||'').split('/').pop() || 'cet élément';
+            show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_file(fullPath, li, listing); }, ()=>{});
+          }, (theme.deleteButton||{}));
         }
 
         // Drag-to-select across items
@@ -696,6 +907,8 @@ function display_files(target, listing, opts = {}) {
           const startDrag = (e)=>{ if (e && e.buttons===1) { dragging = true; dragStarted = false; shiftDownAtPointerDown = is_shift_active(e); } };
           const ensureStartSelected = ()=>{
             if (!dragging || dragStarted) return;
+            // If a long-press is pending, don't alter selection
+            if (pressTimer) return;
             dragStarted = true;
             if (!shiftDownAtPointerDown) sel_clear();
             sel_add(fullPath); update_selection_ui(wrap);
@@ -712,7 +925,6 @@ function display_files(target, listing, opts = {}) {
 
         // Long-press to open context menu (files and folders)
         try{
-          let pressTimer = null; let startX=0, startY=0;
           const start = (e)=>{
             try{ close_file_context_menu(); }catch(_){ }
             const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
@@ -741,6 +953,97 @@ function display_files(target, listing, opts = {}) {
 
     mkSection('Dossiers', (listing && listing.folders) || [], true);
     mkSection('Fichiers', (listing && listing.files) || [], false);
+
+    // Auto-select the first item when entering a folder if nothing is selected
+    try{
+      const nodes = wrap.querySelectorAll('li[data-index]');
+      if (nodes && nodes.length) {
+        const hasSel = sel_list().length > 0;
+        if (!hasSel) {
+          const first = nodes[0];
+          const fp = first.getAttribute('data-fullpath');
+          if (fp) {
+            sel_replace([fp]);
+            window.__auv3_selection.anchor = 0; window.__auv3_selection.focus = 0;
+            update_selection_ui(wrap);
+          }
+        }
+      }
+    }catch(_){ }
+
+    // If requested, start inline rename on a specific item (newly created)
+    try{
+      const plan = opts && opts.startInlineRename;
+      if (plan && plan.path) {
+        const li = wrap.querySelector('li[data-fullpath="' + plan.path.replace(/"/g,'\\"') + '"]');
+        if (li) {
+          const nameSpan = li.querySelector('span[data-role="name"]');
+          const isDir = li.getAttribute('data-isdir') === '1';
+          if (nameSpan) {
+            const oldName = nameSpan.textContent || '';
+            try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; }catch(_){ }
+            nameSpan.style.outline = '1px dashed ' + UI.colors.accent;
+            nameSpan.style.backgroundColor = 'rgba(255,255,255,0.05)';
+            // Focus and select text
+            const selectAll = ()=>{
+              try{
+                const range = document.createRange();
+                range.selectNodeContents(nameSpan);
+                const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+              }catch(_){ }
+            };
+            setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 0);
+            const commit = ()=>{
+              try{
+                nameSpan.contentEditable = 'false';
+                nameSpan.style.outline = '';
+                nameSpan.style.backgroundColor = '';
+              }catch(_){ }
+              const newName = (nameSpan.textContent||'').trim();
+              if (!newName || newName === oldName) { navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); return; }
+              const oldPath = plan.path;
+              const newPath = path_join(listing.path, newName);
+              if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.renameItem !== 'function') { navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); return; }
+              try{
+                window.AtomeFileSystem.renameItem(oldPath, newPath, (res)=>{
+                  navigate_auv3(listing.path, window.__auv3_browser_state.target, {});
+                });
+              }catch(_){ navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); }
+            };
+            const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; }catch(_){ } navigate_auv3(listing.path, window.__auv3_browser_state.target, {}); };
+            const onKey = (e)=>{
+              const k = e.key;
+              if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
+              else if (k === 'Escape' || k === 'Esc') { e.preventDefault(); e.stopPropagation(); cancel(); }
+              else { e.stopPropagation(); }
+            };
+            nameSpan.addEventListener('keydown', onKey, true);
+            nameSpan.addEventListener('blur', ()=>{ commit(); }, { once: true });
+          }
+        }
+      }
+    }catch(_){ }
+
+    // Long-press on empty area opens the menu (for paste/select all/new)
+    try{
+      let emptyPressTimer = null; let sx=0, sy=0;
+      const startEmpty = (e)=>{
+        const target = e.target;
+        const isListContent = target && (target.closest && target.closest('li[data-fullpath]'));
+        if (isListContent) return; // handled by item long-press
+        const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+        sx = pt.clientX||0; sy = pt.clientY||0;
+        if (emptyPressTimer) clearTimeout(emptyPressTimer);
+        emptyPressTimer = setTimeout(()=>{ open_file_menu_at(sx, sy, null, null, listing); }, 500);
+      };
+      const cancelEmpty = ()=>{ if (emptyPressTimer) { clearTimeout(emptyPressTimer); emptyPressTimer=null; } };
+      wrap.addEventListener('pointerdown', startEmpty);
+      wrap.addEventListener('pointerup', cancelEmpty);
+      wrap.addEventListener('pointerleave', cancelEmpty);
+      wrap.addEventListener('touchstart', startEmpty, { passive:true });
+      wrap.addEventListener('touchend', cancelEmpty);
+      wrap.addEventListener('touchcancel', cancelEmpty);
+    }catch(_){ }
 
     // Helpers for keyboard actions
     function handleArrowKey(e, key){
@@ -789,24 +1092,13 @@ function display_files(target, listing, opts = {}) {
       if (!li) return;
       const fullPath = li.getAttribute('data-fullpath');
       const isDir = li.getAttribute('data-isdir') === '1';
-      if (isDir) {
-        try {
-          const name = (fullPath||'').split('/').pop() || '';
-          if (opts && typeof opts.onFolderClick === 'function') { opts.onFolderClick({ name, isDirectory: true }, fullPath); }
-          else { navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }
-        } catch(_) { navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }
-      } else {
-        try {
-          const name = (fullPath||'').split('/').pop() || '';
-          const type = detect_file_type(name);
-          file_type_decision(type, { name }, fullPath);
-        } catch(e2) { console.warn('enter key open error', e2); }
-      }
+  if (isDir) { try { nav_enter_folder(fullPath); } catch(_) { nav_enter_folder(fullPath); } }
+  else { try { nav_preview_file_by_name(fullPath); } catch(e2) { console.warn('enter key open error', e2); } }
     }
 
     function handleEscapeKey(e){
       e.preventDefault(); e.stopPropagation();
-      try { navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts); } catch(_){ }
+  try { nav_leave_folder(listing.path); } catch(_){ }
     }
 
     function handleDeleteKey(e){
@@ -818,7 +1110,7 @@ function display_files(target, listing, opts = {}) {
         if (sel && sel.length) {
           // Multi or single selection
           const msg = sel.length > 1 ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((sel[0]||'').split('/').pop() || 'cet élément') + ' » ?');
-          show_confirm_dialog(msg, ()=>{ request_delete_selection_or_item(null, listing); }, ()=>{});
+          show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); }, ()=>{});
           return;
         }
         // No selection: use focused item if any
@@ -829,7 +1121,7 @@ function display_files(target, listing, opts = {}) {
         if (!li) return;
         targetPath = li.getAttribute('data-fullpath');
         const base = (targetPath||'').split('/').pop() || 'cet élément';
-        show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_selection_or_item(targetPath, listing); }, ()=>{});
+  show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ nav_delete_item_path(targetPath, listing); }, ()=>{});
       }catch(_){ }
     }
 
@@ -841,6 +1133,17 @@ function display_files(target, listing, opts = {}) {
         if (key === 'Enter') { handleEnterKey(e); return; }
         if (key === 'Escape' || key === 'Esc') { handleEscapeKey(e); return; }
   if (key === 'Delete' || key === 'Backspace') { handleDeleteKey(e); return; }
+        if (key === ' ') {
+          e.preventDefault(); e.stopPropagation();
+          // Open menu at focused item or at center of list
+          let targetLi = null;
+          if (window.__auv3_selection.focus!=null) targetLi = wrap.querySelector(`li[data-index="${window.__auv3_selection.focus}"]`);
+          const rect = (targetLi ? targetLi.getBoundingClientRect() : wrap.getBoundingClientRect());
+          const cx = rect.left + Math.min(160, Math.max(8, rect.width/2));
+          const cy = rect.top + 24; // below header or item
+          open_file_menu_at(cx, cy, null, targetLi ? targetLi.getAttribute('data-fullpath') : null, listing);
+          return;
+        }
       });
     }catch(_){ }
 
