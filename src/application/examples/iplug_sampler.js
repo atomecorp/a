@@ -426,7 +426,7 @@ function display_files(target, listing, opts = {}) {
       header: { marginBottom: '6px', color: '#9db2cc', display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', WebkitUserSelect: 'none' },
       crumb: { color: '#8fd', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' },
       sectionTitle: { margin: '6px 0 2px 0', color: '#8fd', userSelect: 'none', WebkitUserSelect: 'none' },
-      list: { margin: '0', paddingLeft: '16px', userSelect: 'none', WebkitUserSelect: 'none' },
+  list: { margin: '0', paddingLeft: '16px', userSelect: 'none', WebkitUserSelect: 'none', listStyle: 'none' },
       item: { cursor: 'pointer', padding: '4px 8px', lineHeight: '22px', userSelect: 'none', WebkitUserSelect: 'none' },
       upButton: { width: '40px', height: '20px', color: 'black', backgroundColor: 'lightgray', borderRadius: '4px', position: 'relative', border: 'none', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,1)' }
     };
