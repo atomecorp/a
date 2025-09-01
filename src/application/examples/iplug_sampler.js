@@ -1114,7 +1114,7 @@ function display_files(target, listing, opts = {}) {
   // Floating window + inner container
   const WSTATE = (window.__AUV3_WIN_STATE = window.__AUV3_WIN_STATE || { left: '10%', top: '10%', width: '80%', height: '70%' });
   const win = $('div', { id: 'auv3-file-window', parent: host, css: { position: 'absolute', left: WSTATE.left, top: WSTATE.top, width: WSTATE.width, height: WSTATE.height, backgroundColor: 'transparent', zIndex: '9000' } });
-  const wrap = $('div', { id: 'auv3-file-list', parent: win, css: { ...defaults.container, ...theme.container, overscrollBehavior: 'contain', touchAction: 'pan-y', height: '100%' } });
+  const wrap = $('div', { id: 'auv3-file-list', parent: win, css: { ...defaults.container, ...theme.container, position: 'relative', overscrollBehavior: 'contain', touchAction: 'pan-y', height: '100%', boxSizing: 'border-box', overflowX: 'hidden', overflowY: 'auto', paddingBottom: '24px' } });
     try { wrap.setAttribute('tabindex','0'); } catch(_){ }
     // Block browser text selection and drag in the file list area
     // Ensure any busy overlay from previous FS operation is removed and guard is released
@@ -1150,7 +1150,8 @@ function display_files(target, listing, opts = {}) {
     const canStart = (ev)=>{ const t = ev.target; return !(t && t.closest && (t.closest('button')||t.closest('input')||t.closest('textarea')||t.closest('#auv3-file-menu'))); };
     header.addEventListener('pointerdown', (ev)=>{
       if (!canStart(ev)) return;
-      dragging = true; const r = win.getBoundingClientRect(); sx = ev.clientX||0; sy = ev.clientY||0; startLeft=r.left; startTop=r.top; ev.preventDefault();
+  dragging = true; try{ window.__AUV3_WIN_DRAG = true; }catch(_){ }
+  const r = win.getBoundingClientRect(); sx = ev.clientX||0; sy = ev.clientY||0; startLeft=r.left; startTop=r.top; ev.preventDefault();
     });
     window.addEventListener('pointermove', (ev)=>{
       if (!dragging) return;
@@ -1163,21 +1164,34 @@ function display_files(target, listing, opts = {}) {
       WSTATE.left=pctL.toFixed(2)+'%'; WSTATE.top=pctT.toFixed(2)+'%';
       win.style.left=WSTATE.left; win.style.top=WSTATE.top;
     });
-    window.addEventListener('pointerup', ()=>{ dragging=false; });
+  const stopDrag = ()=>{ dragging=false; try{ window.__AUV3_WIN_DRAG = false; }catch(_){ } };
+  window.addEventListener('pointerup', stopDrag);
+  window.addEventListener('pointercancel', stopDrag);
   }catch(_){ }
-  // Resizer grip
+  // Resizer grip (visible, touch-friendly)
   try{
-    const grip = $('div', { parent: win, css: { position:'absolute', right:'2px', bottom:'2px', width:'14px', height:'14px', cursor:'nwse-resize' } });
+  const grip = $('div', { parent: wrap, css: {
+      position:'absolute', right:'6px', bottom:'6px', width:'18px', height:'18px',
+      cursor:'nwse-resize', zIndex:'2', touchAction:'none',
+      backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.25) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.25) 75%, transparent 75%, transparent)',
+      backgroundSize: '8px 8px', opacity:'0.8', borderRadius:'3px'
+    }, title: 'Resize' });
     let resizing=false, sx=0, sy=0, startW=0, startH=0;
-    grip.addEventListener('pointerdown', (ev)=>{ resizing=true; const r=win.getBoundingClientRect(); sx=ev.clientX||0; sy=ev.clientY||0; startW=r.width; startH=r.height; ev.stopPropagation(); });
+    grip.addEventListener('pointerdown', (ev)=>{
+      try{ grip.setPointerCapture && grip.setPointerCapture(ev.pointerId); }catch(_){ }
+      resizing=true; try{ window.__AUV3_WIN_RESIZE = true; }catch(_){ }
+      const r=win.getBoundingClientRect(); sx=ev.clientX||0; sy=ev.clientY||0; startW=r.width; startH=r.height; ev.stopPropagation(); ev.preventDefault();
+    });
     window.addEventListener('pointermove', (ev)=>{
-      if (!resizing) return;
+      if (!resizing) return; ev.preventDefault();
       const dx=(ev.clientX||0)-sx, dy=(ev.clientY||0)-sy; const hb=host.getBoundingClientRect();
       let w=startW+dx, h=startH+dy; w=Math.max(240, Math.min(w, hb.width)); h=Math.max(180, Math.min(h, hb.height));
       const pctW=(w/hb.width)*100, pctH=(h/hb.height)*100; WSTATE.width=pctW.toFixed(2)+'%'; WSTATE.height=pctH.toFixed(2)+'%';
       win.style.width=WSTATE.width; win.style.height=WSTATE.height;
     });
-    window.addEventListener('pointerup', ()=>{ resizing=false; });
+    const stopResize = (ev)=>{ try{ grip.releasePointerCapture && grip.releasePointerCapture(ev.pointerId); }catch(_){ } resizing=false; try{ window.__AUV3_WIN_RESIZE = false; }catch(_){ } };
+    window.addEventListener('pointerup', stopResize);
+    window.addEventListener('pointercancel', stopResize);
   }catch(_){ }
 
     // Shift-lock toggle
@@ -1312,11 +1326,12 @@ function display_files(target, listing, opts = {}) {
         // Long-press to open context menu (files and folders)
         try{
           const start = (e)=>{
+            if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
             try{ close_file_context_menu(); }catch(_){ }
             const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
             startX = pt.clientX||0; startY = pt.clientY||0;
             if (pressTimer) { clearTimeout(pressTimer); }
-            pressTimer = setTimeout(()=>{ longPressFired = true; show_file_context_menu(li, it, fullPath, listing); }, 450);
+            pressTimer = setTimeout(()=>{ if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return; longPressFired = true; show_file_context_menu(li, it, fullPath, listing); }, 450);
           };
           const move = (e)=>{
             if (!pressTimer) return;
@@ -1371,6 +1386,7 @@ function display_files(target, listing, opts = {}) {
     try{
       let emptyPressTimer = null; let sx=0, sy=0;
       const startEmpty = (e)=>{
+        if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
         const target = e.target;
         const isListContent = target && (target.closest && target.closest('li[data-fullpath]'));
         const onHeaderBtn = target && ((target.closest && target.closest('#btn-shift')) || (target.closest && target.closest('#btn-import')));
@@ -1378,7 +1394,7 @@ function display_files(target, listing, opts = {}) {
         const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
         sx = pt.clientX||0; sy = pt.clientY||0;
         if (emptyPressTimer) clearTimeout(emptyPressTimer);
-        emptyPressTimer = setTimeout(()=>{ open_file_menu_at(sx, sy, null, null, listing); }, 500);
+        emptyPressTimer = setTimeout(()=>{ if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return; open_file_menu_at(sx, sy, null, null, listing); }, 500);
       };
       const cancelEmpty = ()=>{ if (emptyPressTimer) { clearTimeout(emptyPressTimer); emptyPressTimer=null; } };
       wrap.addEventListener('pointerdown', startEmpty);
