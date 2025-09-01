@@ -1,29 +1,36 @@
-// Console redefinition (robust, forwards all args to Swift and original console)
-    window.console.log = (function(oldLog) {
-      return function() {
-        try { oldLog.apply(console, arguments); } catch(_) {}
-        try {
-          var parts = Array.prototype.slice.call(arguments).map(function(x){
+// Console redefinition with throttled bridging (reduces IPC bursts)
+    (function(){
+      var oldLog = window.console.log.bind(window.console);
+      var oldErr = window.console.error.bind(window.console);
+      var buf = [];
+      var timer = null;
+      var MAX_BATCH = 30; // cap per flush
+      var INTERVAL = 200; // ms
+      function flush(){
+        try{
+          timer = null;
+          if (!buf.length) return;
+          var chunk = buf.splice(0, MAX_BATCH);
+          var payload = chunk.join('\n');
+          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console) {
+            window.webkit.messageHandlers.console.postMessage(payload);
+          }
+          if (buf.length) { timer = setTimeout(flush, INTERVAL); }
+        }catch(_){ timer = null; }
+      }
+      function enqueue(prefix, args){
+        try{
+          var parts = Array.prototype.slice.call(args).map(function(x){
             if (x && typeof x === 'object') { try { return JSON.stringify(x); } catch(_) { return String(x); } }
             return String(x);
           });
-          window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console && window.webkit.messageHandlers.console.postMessage("LOG: " + parts.join(' '));
-        } catch(_) {}
+          buf.push(prefix + parts.join(' '));
+          if (!timer) { timer = setTimeout(flush, INTERVAL); }
+        }catch(_){ }
       }
-    })(window.console.log);
-
-    window.console.error = (function(oldErr) {
-      return function() {
-        try { oldErr.apply(console, arguments); } catch(_) {}
-        try {
-          var parts = Array.prototype.slice.call(arguments).map(function(x){
-            if (x && typeof x === 'object') { try { return JSON.stringify(x); } catch(_) { return String(x); } }
-            return String(x);
-          });
-          window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.console && window.webkit.messageHandlers.console.postMessage("ERROR: " + parts.join(' '));
-        } catch(_) {}
-      }
-    })(window.console.error);
+      window.console.log = function(){ try{ oldLog.apply(console, arguments); }catch(_){ } enqueue('C.LOG: ', arguments); };
+      window.console.error = function(){ try{ oldErr.apply(console, arguments); }catch(_){ } enqueue('C.ERROR: ', arguments); };
+    })();
 
 
 
@@ -82,6 +89,118 @@ const UI = {
   }
 };
 
+// Simple debug logger
+function __dbg(){
+  try{
+    if (window.__AUV3_DEBUG === false) return;
+    const args = Array.prototype.slice.call(arguments);
+    args.unshift('[AUv3]');
+    console.log.apply(console, args);
+  }catch(_){ }
+}
+
+// ------------------------------
+// FS operation guard + debounced refresh
+// ------------------------------
+const __FS_OP = { active: false, until: 0, timer: null, navTimer: null, queued: null, wdTimer: null };
+function fs_is_blocked(){ try{ return __FS_OP.active && Date.now() < __FS_OP.until; }catch(_){ return false; } }
+function fs_begin(minMs = 600){
+  try{
+    const now = Date.now();
+    __dbg('fs_begin', { minMs, now });
+    __FS_OP.active = true;
+    __FS_OP.until = Math.max(__FS_OP.until || 0, now + Math.max(200, Math.min(minMs, 3000)));
+    if (__FS_OP.timer) { try{ clearTimeout(__FS_OP.timer); }catch(_){ } __FS_OP.timer = null; }
+    if (__FS_OP.wdTimer) { try{ clearTimeout(__FS_OP.wdTimer); }catch(_){ } __FS_OP.wdTimer = null; }
+    show_busy_overlay();
+    // Watchdog: auto-release after a hard cap in case a callback never fires
+    const cap = Math.max(1200, Math.min(4000, minMs + 1500));
+    __FS_OP.wdTimer = setTimeout(()=>{
+      try {
+        __dbg('fs_watchdog_fire');
+        __FS_OP.active = false; __FS_OP.until = 0;
+        hide_busy_overlay();
+        const q = __FS_OP.queued; __FS_OP.queued = null; if (q) navigate_auv3_refresh(q.path, q.target, q.opts);
+      } catch(_) { }
+    }, cap);
+  }catch(_){ }
+}
+function fs_end(padMs = 250){
+  try{
+    const now = Date.now();
+    __dbg('fs_end_request', { padMs, now });
+    __FS_OP.until = Math.max(__FS_OP.until || 0, now + Math.max(0, Math.min(padMs, 2000)));
+    if (__FS_OP.timer) { try{ clearTimeout(__FS_OP.timer); }catch(_){ } __FS_OP.timer = null; }
+    if (__FS_OP.wdTimer) { try{ clearTimeout(__FS_OP.wdTimer); }catch(_){ } __FS_OP.wdTimer = null; }
+    __FS_OP.timer = setTimeout(()=>{
+      try{ __dbg('fs_end_commit'); __FS_OP.active = false; }catch(_){ }
+      hide_busy_overlay();
+      // If a refresh was queued while blocked, run it now (debounced)
+      try{
+        const q = __FS_OP.queued; __FS_OP.queued = null;
+        if (q) navigate_auv3_refresh(q.path, q.target, q.opts);
+      }catch(_){ }
+    }, Math.max(0, (__FS_OP.until - now)) + 10);
+  }catch(_){ }
+}
+function navigate_auv3_refresh(path, target, opts){
+  try{
+    // Coalesce navigations
+  __dbg('nav_refresh_request', { path, target, blocked: fs_is_blocked() });
+    if (fs_is_blocked()) {
+      __FS_OP.queued = { path, target, opts };
+      if (!__FS_OP.navTimer) {
+        const tick = () => {
+          __FS_OP.navTimer = null;
+          try {
+            if (fs_is_blocked()) {
+              __FS_OP.navTimer = setTimeout(tick, 120);
+            } else {
+        __dbg('nav_refresh_commit');
+              const q = __FS_OP.queued; __FS_OP.queued = null; if (q) navigate_auv3(q.path, q.target, q.opts);
+            }
+          } catch(_) { __FS_OP.navTimer = setTimeout(tick, 150); }
+        };
+        __FS_OP.navTimer = setTimeout(tick, 120);
+      }
+      return;
+    }
+    __FS_OP.queued = { path, target, opts };
+    if (__FS_OP.navTimer) { try{ clearTimeout(__FS_OP.navTimer); }catch(_){ } __FS_OP.navTimer = null; }
+    __FS_OP.navTimer = setTimeout(()=>{
+    try { const q = __FS_OP.queued; __FS_OP.queued = null; if (q) { __dbg('nav_refresh_commit_timer'); navigate_auv3(q.path, q.target, q.opts); } } catch(_){ }
+    }, 120);
+  }catch(_){ try{ navigate_auv3(path, target, opts); }catch(__){} }
+}
+
+// Busy overlay (blocks interactions while FS is settling)
+function show_busy_overlay(){
+  try{
+    if (document.getElementById('auv3-busy-overlay')) return;
+    const el = $('div', {
+      id: 'auv3-busy-overlay',
+      parent: document.body,
+      css: {
+        position: 'fixed', left: '0', top: '0', right: '0', bottom: '0',
+        backgroundColor: 'rgba(0,0,0,0.08)',
+        zIndex: '99998',
+        pointerEvents: 'auto'
+      }
+    });
+    $('div', {
+      parent: el,
+      css: {
+        position: 'absolute', left: '50%', top: '12%', transform: 'translateX(-50%)',
+        backgroundColor: UI.colors.dialogBg, color: UI.colors.dialogText,
+        border: '1px solid ' + UI.colors.border, borderRadius: '8px',
+        padding: '6px 10px', boxShadow: UI.shadows.dialog, fontSize: '12px'
+      },
+      text: 'Working…'
+    });
+  }catch(_){ }
+}
+function hide_busy_overlay(){ try{ const el = document.getElementById('auv3-busy-overlay'); el && el.remove && el.remove(); }catch(_){ } }
+
 // Small helper to build a delete icon button with the shared skin
 function create_delete_button(parent, onClick, themeOverrides){
   const cssBase = {
@@ -117,15 +236,13 @@ function edit_filer_element(listing, fullPath){
   try{
     const wrap = document.getElementById('auv3-file-list'); if (!wrap) return;
     const li = wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
-    if (!li) {
-      const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: fullPath } });
-      navigate_auv3(listing.path, nav_context().target, opts);
-      return;
-    }
+  if (!li) { return; }
     const nameSpan = li.querySelector('span[data-role="name"]');
     if (!nameSpan) return;
     const oldName = nameSpan.textContent || '';
-    try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; nameSpan.inputMode = 'text'; }catch(_){ }
+  try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; nameSpan.inputMode = 'text'; }catch(_){ }
+  try{ nameSpan.style.userSelect = 'text'; nameSpan.style.WebkitUserSelect = 'text'; nameSpan.style.pointerEvents = 'auto'; nameSpan.style.webkitTouchCallout = 'default'; }catch(_){ }
+  try{ window.__INLINE_EDITING = true; }catch(_){ }
     nameSpan.style.outline = '1px dashed ' + UI.colors.accent;
     nameSpan.style.backgroundColor = 'rgba(255,255,255,0.05)';
     const selectAll = ()=>{
@@ -135,16 +252,22 @@ function edit_filer_element(listing, fullPath){
         const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
       }catch(_){ }
     };
-    setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 0);
+  setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 0);
+  setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 60);
+  setTimeout(()=>{ try{ nameSpan.focus(); selectAll(); }catch(_){ } }, 180);
     const commit = ()=>{
-      try{ nameSpan.contentEditable = 'false'; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; }catch(_){ }
+  try{ nameSpan.contentEditable = 'false'; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ }
+  try{ window.__INLINE_EDITING = false; }catch(_){ }
       const newName = (nameSpan.textContent||'').trim();
-      if (!newName || newName === oldName) { navigate_auv3(listing.path, nav_context().target, {}); return; }
+      if (!newName || newName === oldName) { navigate_auv3_refresh(listing.path, nav_context().target, {}); return; }
       const oldPath = fullPath; const newPath = path_join(listing.path, newName);
-      if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.renameItem !== 'function') { navigate_auv3(listing.path, nav_context().target, {}); return; }
-      try{ window.AtomeFileSystem.renameItem(oldPath, newPath, ()=>{ navigate_auv3(listing.path, nav_context().target, {}); }); }catch(_){ navigate_auv3(listing.path, nav_context().target, {}); }
+      if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.renameItem !== 'function') { navigate_auv3_refresh(listing.path, nav_context().target, {}); return; }
+      try{
+        fs_begin(700);
+        window.AtomeFileSystem.renameItem(oldPath, newPath, ()=>{ fs_end(300); navigate_auv3_refresh(listing.path, nav_context().target, {}); });
+      }catch(_){ fs_end(200); navigate_auv3_refresh(listing.path, nav_context().target, {}); }
     };
-    const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; }catch(_){ } navigate_auv3(listing.path, nav_context().target, {}); };
+  const cancel = ()=>{ try{ nameSpan.contentEditable = 'false'; nameSpan.textContent = oldName; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ } try{ window.__INLINE_EDITING = false; }catch(_){ } navigate_auv3_refresh(listing.path, nav_context().target, {}); };
     const onKey = (e)=>{
       const k = e.key;
       if (k === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
@@ -157,8 +280,8 @@ function edit_filer_element(listing, fullPath){
 }
 window.edit_filer_element = window.edit_filer_element || edit_filer_element;
 function nav_context(){ return { target: (window.__auv3_browser_state && window.__auv3_browser_state.target) || '#view', opts: (window.__auv3_browser_state && window.__auv3_browser_state.opts) || null }; }
-function nav_enter_folder(path){ try{ navigate_auv3(path, nav_context().target, nav_context().opts); }catch(_){ } }
-function nav_leave_folder(currentPath){ try{ navigate_auv3(parent_of(currentPath), nav_context().target, nav_context().opts); }catch(_){ } }
+function nav_enter_folder(path){ try{ navigate_auv3_refresh(path, nav_context().target, nav_context().opts); }catch(_){ } }
+function nav_leave_folder(currentPath){ try{ navigate_auv3_refresh(parent_of(currentPath), nav_context().target, nav_context().opts); }catch(_){ } }
 function nav_open_import(destPath){ try{ ios_file_chooser(true, destPath); }catch(_){ } }
 function nav_preview_file_by_name(fullPath){ try{ const name = (fullPath||'').split('/').pop()||''; const type = detect_file_type(name); file_type_decision(type, { name }, fullPath); }catch(_){ } }
 function nav_open_focused_or_selected(wrap, listing, opts){
@@ -206,14 +329,17 @@ function nav_create_folder(listing){
     const path = path_join(listing.path, name);
     const cb = ()=>{
       try{
-        const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path } });
-        navigate_auv3(listing.path, nav_context().target, opts);
+  const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path } });
+  fs_end(350);
+  navigate_auv3_refresh(listing.path, nav_context().target, opts);
       }catch(_){ }
     };
-    if (typeof FS.createDirectory === 'function') { FS.createDirectory(path, cb); return; }
-    if (typeof FS.mkdir === 'function') { FS.mkdir(path, cb); return; }
-    if (typeof FS.createFolder === 'function') { FS.createFolder(path, cb); return; }
-    if (typeof FS.makeDir === 'function') { FS.makeDir(path, cb); return; }
+  fs_begin(800);
+  if (typeof FS.createDirectory === 'function') { FS.createDirectory(path, cb); return; }
+  if (typeof FS.mkdir === 'function') { FS.mkdir(path, cb); return; }
+  if (typeof FS.createFolder === 'function') { FS.createFolder(path, cb); return; }
+  if (typeof FS.makeDir === 'function') { FS.makeDir(path, cb); return; }
+  fs_end(0);
     console.warn('createDirectory indisponible');
   }catch(_){ }
 }
@@ -230,13 +356,16 @@ function nav_create_file(listing){
     const full = path_join(listing.path, name);
     const cb = ()=>{
       try{
-        const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: full } });
-        navigate_auv3(listing.path, nav_context().target, opts);
+  const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: full } });
+  fs_end(350);
+  navigate_auv3_refresh(listing.path, nav_context().target, opts);
       }catch(_){ }
     };
     const empty = '';
-    if (typeof FS.saveFile === 'function') { FS.saveFile(full, empty, cb); return; }
-    if (typeof FS.writeFile === 'function') { FS.writeFile(full, empty, cb); return; }
+  fs_begin(800);
+  if (typeof FS.saveFile === 'function') { FS.saveFile(full, empty, cb); return; }
+  if (typeof FS.writeFile === 'function') { FS.writeFile(full, empty, cb); return; }
+  fs_end(0);
     console.warn('saveFile/writeFile indisponible');
   }catch(_){ }
 }
@@ -260,29 +389,22 @@ function ios_file_chooser(multiple, destFolder) {
 
     const onDone = (res) => {
       if (res && res.success) {
-  try { if (typeof listRecordings === 'function') listRecordings(); } catch(_){ }
-  // If the browser panel is currently visible, refresh it, otherwise do nothing
-  try {
-    const st = window.__auv3_browser_state;
-    if (st && st.target) {
-      const host = document.querySelector(st.target);
-      if (host && host.querySelector('#auv3-file-list')) {
-        navigate_auv3(st.path || '.', st.target, st.opts);
-      }
-    }
-  } catch(_){ }
-      } else {
-        console.warn('Import échoué', res && res.error);
+        try { if (typeof listRecordings === 'function') listRecordings(); } catch(_){ }
+        // If the browser panel is currently visible, refresh it
+        try {
+          const st = window.__auv3_browser_state;
+          if (st && st.target) {
+            const host = document.querySelector(st.target);
+            if (host && host.querySelector('#auv3-file-list')) {
+              try{ fs_begin(900); }catch(_){ }
+              try{ if (res && (res.success===undefined || res.success===true)) { fs_end(400); navigate_auv3_refresh(dest, st.target, st.opts); } else { fs_end(0); } }catch(_){ try{ fs_end(0); }catch(__){} }
+            }
+          }
+        } catch(_){ }
       }
     };
 
-  if (allowMulti && typeof window.AtomeFileSystem.copy_multiple_to_ios_local === 'function') {
-      // iOS multiple selection (DocumentPicker with allowsMultipleSelection)
-      window.AtomeFileSystem.copy_multiple_to_ios_local(dest, types, onDone);
-    } else {
-      // Single file selection
-      window.AtomeFileSystem.copy_to_ios_local(dest, types, onDone);
-    }
+    window.AtomeFileSystem.copy_to_ios_local(dest, types, onDone);
   } catch (e) {
     console.warn('import error', e);
   }
@@ -349,12 +471,18 @@ function parent_of(path){
 
 async function navigate_auv3(path='.', target='#view', opts=null){
   try{
+    __dbg('navigate_auv3_enter', { path, target });
+    // Defensive: ensure no overlay blocks and guard isn't stuck
+    try { hide_busy_overlay(); __FS_OP.active = false; __FS_OP.until = 0; } catch(_){ }
     const prevPath = (window.__auv3_browser_state && window.__auv3_browser_state.path) || null;
     window.__auv3_browser_state = { path, target, opts, visible: true };
     if (!prevPath || prevPath !== path) { try{ sel_clear(); }catch(_){ } }
   }catch(_){ window.__auv3_browser_state = { path, target, opts, visible: true }; }
+  const t0 = Date.now();
   const listing = await get_auv3_files(path);
+  __dbg('navigate_auv3_got_listing', { path, ms: Date.now() - t0, items: (listing.files||[]).length + (listing.folders||[]).length });
   display_files(target, listing, opts);
+  try { window.__auv3_last_display_ts = Date.now(); } catch(_){ }
 }
 
 function toggle_auv3_browser(target = '#view'){
@@ -368,10 +496,15 @@ function toggle_auv3_browser(target = '#view'){
       window.__auv3_browser_state.visible = false;
       try { document.body && (document.body.style.overflow = ''); } catch(_){ }
       try { if (window.__auv3_doc_key_handler) { document.removeEventListener('keydown', window.__auv3_doc_key_handler, true); window.__auv3_doc_key_handler = null; } } catch(_){ }
+  // Ensure overlay never blocks interactions after closing
+  try { hide_busy_overlay(); __FS_OP.active = false; __FS_OP.until = 0; if (__FS_OP.navTimer) { clearTimeout(__FS_OP.navTimer); __FS_OP.navTimer = null; } } catch(_){ }
       return;
     }
     try { document.body && (document.body.style.overflow = 'hidden'); } catch(_){ }
-    navigate_auv3(st.path || '.', target, st.opts || {});
+  // Avoid re-opening while FS is settling
+  const path = st.path || '.';
+  if (fs_is_blocked()) { navigate_auv3_refresh(path, target, st.opts || {}); }
+  else { navigate_auv3_refresh(path, target, st.opts || {}); }
   }catch(e){ console.warn('toggle_auv3_browser error', e); }
 }
 
@@ -431,47 +564,52 @@ window.file_type_decision = window.file_type_decision || file_type_decision;
 
 // Returns an object { path, folders:[{name,size,modified}], files:[{name,size,modified}] }
 async function get_auv3_files(path = '.') {
-  if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.listFiles !== 'function') {
-    console.warn('AtomeFileSystem.listFiles indisponible');
-    return { path, folders: [], files: [] };
-  }
-  const normalize = (arr) => {
-    const folders = [];
-    const files = [];
-    (arr || []).forEach((it) => {
-      const name = it && (it.name || it.fileName || it.path || '');
-      const isDir = !!(it && (it.isDirectory || it.directory));
-      const size = (it && it.size) || 0;
-      const modified = (it && it.modified) || 0;
-      const entry = { name, size, modified, isDirectory: isDir };
-      if (isDir) folders.push(entry); else files.push(entry);
-    });
-    return { folders, files };
-  };
-
-  // Support both callback and promise styles
   try {
-    const maybe = window.AtomeFileSystem.listFiles(path, (res) => {});
-    if (maybe && typeof maybe.then === 'function') {
-      const res = await maybe;
-      const items = (res && (res.files || res.items || res.data && res.data.files)) || [];
-      const { folders, files } = normalize(items);
-      return { path, folders, files };
+    if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.listFiles !== 'function') {
+      __dbg('listFiles missing');
+      return { path, folders: [], files: [] };
     }
-  } catch(_){ /* fall through to callback style */ }
-
-  return new Promise((resolve) => {
-    try {
-      window.AtomeFileSystem.listFiles(path, (res) => {
-        const ok = res && (res.success === undefined ? true : !!res.success);
-        const items = ok ? (res.files || res.items || (res.data && res.data.files) || []) : [];
-        const { folders, files } = normalize(items);
-        resolve({ path, folders, files });
+    // Coalesce concurrent requests by path
+    window.__auv3_list_inflight = window.__auv3_list_inflight || new Map();
+    if (window.__auv3_list_inflight.has(path)) {
+      try { return await window.__auv3_list_inflight.get(path); } catch(_){ /* ignore */ }
+    }
+    const normalize = (arr) => {
+      const folders = [];
+      const files = [];
+      (arr || []).forEach((it) => {
+        const name = it && (it.name || it.fileName || it.path || '');
+        const isDir = !!(it && (it.isDirectory || it.directory));
+        const size = (it && it.size) || 0;
+        const modified = (it && it.modified) || 0;
+        const entry = { name, size, modified, isDirectory: isDir };
+        if (isDir) folders.push(entry); else files.push(entry);
       });
-    } catch (e) {
-      console.warn('listFiles error', e); resolve({ path, folders: [], files: [] });
-    }
-  });
+      return { folders, files };
+    };
+
+    // Single-call: callback-style (avoids duplicate IPC from probing for Promise support)
+    const p = new Promise((resolve) => {
+      try {
+        window.AtomeFileSystem.listFiles(path, (res) => {
+          // Swift bridge may wrap payload inside { success, data: <json|string> }
+          let payload = res;
+          try { if (typeof payload === 'string') { payload = JSON.parse(payload); } } catch(_){ }
+          try { if (payload && typeof payload.data === 'string') { payload = { ...payload, data: JSON.parse(payload.data) }; } } catch(_){ }
+          const arr = (payload && (payload.entries || payload.files || payload.items || (payload.data && payload.data.files) || payload)) || [];
+          const { folders, files } = normalize(arr);
+          resolve({ path, folders, files });
+        });
+      } catch(e) {
+        __dbg('listFiles callback error', e);
+        resolve({ path, folders: [], files: [] });
+      }
+    });
+    window.__auv3_list_inflight.set(path, p);
+    return await p;
+  } finally {
+    try { window.__auv3_list_inflight && window.__auv3_list_inflight.delete(path); } catch(_){ }
+  }
 }
 
 // --- Context menu helpers and delete action reuse ---
@@ -629,8 +767,9 @@ function paste_into_current_folder(listing){
     if (!cb || !cb.length) return;
     if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.copyFiles !== 'function') return;
     const dest = (listing && listing.path) ? listing.path : './';
+    try{ fs_begin(900); }catch(_){ }
     window.AtomeFileSystem.copyFiles(dest, cb, (res)=>{
-      try{ if (res && (res.success===undefined || res.success===true)) { navigate_auv3(dest, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); } }catch(_){ }
+      try{ if (res && (res.success===undefined || res.success===true)) { fs_end(400); navigate_auv3_refresh(dest, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); } else { fs_end(0); } }catch(_){ try{ fs_end(0); }catch(__){} }
     });
   }catch(_){ }
 }
@@ -641,9 +780,10 @@ function request_delete_selection_or_item(fullPath, listing){
   if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.deleteFile !== 'function') { console.warn('deleteFile indisponible'); return; }
   let i = 0;
   const next = ()=>{
-    if (i >= arr.length) { try{ navigate_auv3(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
+    if (i >= arr.length) { try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
     const p = arr[i++];
     try{
+      fs_begin(700);
       window.AtomeFileSystem.deleteFile(p, ()=>{ next(); });
     }catch(_){ next(); }
   };
@@ -656,12 +796,14 @@ function request_delete_file(fullPath, li, listing){
     return;
   }
   try {
-    window.AtomeFileSystem.deleteFile(fullPath, (res)=>{
+  fs_begin(700);
+  window.AtomeFileSystem.deleteFile(fullPath, (res)=>{
       if (res && (res.success === undefined || res.success === true)) {
-        try { navigate_auv3(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }
+    try { fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }
         catch(_){ try{ li && li.remove && li.remove(); }catch(__){} }
       } else {
         console.warn('Suppression échouée', res && res.error);
+    try{ fs_end(0); }catch(_){ }
       }
     });
   } catch(e){ console.warn('deleteFile error', e); }
@@ -819,9 +961,19 @@ function display_files(target, listing, opts = {}) {
     const host = (typeof target === 'string') ? document.querySelector(target) : target;
     if (!host) { console.warn('display_files: target introuvable', target); return; }
 
-    // Remove previous container if any
-    const prev = host.querySelector('#auv3-file-list'); if (prev) prev.remove();
+    // Defensive: close any open context menu and confirm dialog from previous view to avoid lingering listeners
+    try { close_file_context_menu(); } catch(_){ }
+    try {
+      if (window.__auv3_confirm_key_handler) { document.removeEventListener('keydown', window.__auv3_confirm_key_handler, true); }
+      if (window.__auv3_confirm_focus_handler) { document.removeEventListener('focusin', window.__auv3_confirm_focus_handler, true); }
+      window.__auv3_confirm_key_handler = null; window.__auv3_confirm_focus_handler = null;
+      const prevDlg = document.getElementById('auv3-confirm'); if (prevDlg) prevDlg.remove();
+    } catch(_) { }
 
+  // Remove previous container if any
+  const prev = host.querySelector('#auv3-file-list'); if (prev) prev.remove();
+  // Ensure any busy overlay from previous FS operation is removed and guard is released
+  try { hide_busy_overlay(); __FS_OP.active = false; __FS_OP.until = 0; } catch(_){ }
     const defaults = {
       container: { marginTop: UI.layout.containerMarginTop, backgroundColor: UI.colors.bgContainer, border: '1px solid ' + UI.colors.border, borderRadius: UI.buttons.radius, padding: UI.layout.containerPadding, color: UI.colors.text, fontFamily: UI.typography.fontFamily, fontSize: UI.typography.fontSize, userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' },
       header: { marginBottom: '6px', color: UI.colors.headerText, display: 'flex', alignItems: 'center', gap: UI.layout.headerGap, userSelect: 'none', WebkitUserSelect: 'none' },
@@ -840,8 +992,16 @@ function display_files(target, listing, opts = {}) {
   const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container, overscrollBehavior: 'contain', touchAction: 'pan-y' } });
     try { wrap.setAttribute('tabindex','0'); } catch(_){ }
     // Block browser text selection and drag in the file list area
+    // Ensure any busy overlay from previous FS operation is removed and guard is released
+    try { hide_busy_overlay(); __FS_OP.active = false; __FS_OP.until = 0; } catch(_){ }
     try {
-      wrap.addEventListener('selectstart', function(e){ e.preventDefault(); }, true);
+      wrap.addEventListener('selectstart', function(e){
+        try {
+          const t = e.target;
+          const inEditable = (t && (t.isContentEditable || (t.closest && t.closest('[contenteditable="true"]')))) || (document.activeElement && document.activeElement.isContentEditable) || (window.__INLINE_EDITING === true);
+          if (!inEditable) { e.preventDefault(); }
+        } catch(_) { e.preventDefault(); }
+      }, true);
       wrap.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
       // Prevent scroll chaining to the outer AUv3 view while preserving inner scroll
       wrap.addEventListener('touchmove', function(e){ try{ e.stopPropagation(); }catch(_){ } }, { passive: true });
@@ -1033,7 +1193,11 @@ function display_files(target, listing, opts = {}) {
     // If requested, start inline rename on a specific item (newly created)
     try{
       const plan = opts && opts.startInlineRename;
-      if (plan && plan.path) { edit_filer_element(listing, plan.path); }
+      if (plan && plan.path) {
+        // consume the plan to avoid re-entrancy loops
+        try { delete opts.startInlineRename; } catch(_){ }
+        edit_filer_element(listing, plan.path);
+      }
     }catch(_){ }
 
     // Long-press on empty area opens the menu (for paste/select all/new)
@@ -1209,3 +1373,5 @@ function display_files(target, listing, opts = {}) {
         boxShadow: '0 2px 4px rgba(0,0,0,1)',
     }
   });
+
+  console.log('iPlug AUv3 sampler example loaded taratata');

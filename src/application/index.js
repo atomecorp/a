@@ -52,7 +52,11 @@
 import('./iplug/audio.facade.js');
 import('./iplug/backend.iplug.js');
 import('./iplug/backend.html.js');
+// File editor helpers (create/rename + iOS keyboard + trash icon fix)
+import('./examples/file_editor.js');
+
 import('./examples/iplug_sampler.js');
+
 
 
 

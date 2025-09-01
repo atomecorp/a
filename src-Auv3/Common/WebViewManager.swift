@@ -691,8 +691,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
         webView.evaluateJavaScript(notchJS, completionHandler: nil)
         print("notch info: hasNotch=\(hasNotch) topInset=\(topInset)")
-        // Auto-restore entitlements to sync JS UI after load
-        if FeatureFlags.sendPurchaseRestoreOnDidFinish {
+        // Auto-restore entitlements to sync JS UI after load (App only; AUv3 can't present auth UI)
+        let isExtension: Bool = Bundle.main.bundlePath.hasSuffix(".appex")
+        if FeatureFlags.sendPurchaseRestoreOnDidFinish && !isExtension {
             if #available(iOS 15.0, *) {
                 Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }
             }
