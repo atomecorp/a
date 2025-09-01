@@ -89,15 +89,7 @@ const UI = {
   }
 };
 
-// Simple debug logger
-function __dbg(){
-  try{
-    if (window.__AUV3_DEBUG === false) return;
-    const args = Array.prototype.slice.call(arguments);
-    args.unshift('[AUv3]');
-    console.log.apply(console, args);
-  }catch(_){ }
-}
+// (debug logger removed)
 
 // ------------------------------
 // FS operation guard + debounced refresh
@@ -107,7 +99,6 @@ function fs_is_blocked(){ try{ return __FS_OP.active && Date.now() < __FS_OP.unt
 function fs_begin(minMs = 600){
   try{
     const now = Date.now();
-    __dbg('fs_begin', { minMs, now });
     __FS_OP.active = true;
     __FS_OP.until = Math.max(__FS_OP.until || 0, now + Math.max(200, Math.min(minMs, 3000)));
     if (__FS_OP.timer) { try{ clearTimeout(__FS_OP.timer); }catch(_){ } __FS_OP.timer = null; }
@@ -117,7 +108,6 @@ function fs_begin(minMs = 600){
     const cap = Math.max(1200, Math.min(4000, minMs + 1500));
     __FS_OP.wdTimer = setTimeout(()=>{
       try {
-        __dbg('fs_watchdog_fire');
         __FS_OP.active = false; __FS_OP.until = 0;
         hide_busy_overlay();
         const q = __FS_OP.queued; __FS_OP.queued = null; if (q) navigate_auv3_refresh(q.path, q.target, q.opts);
@@ -128,12 +118,11 @@ function fs_begin(minMs = 600){
 function fs_end(padMs = 250){
   try{
     const now = Date.now();
-    __dbg('fs_end_request', { padMs, now });
     __FS_OP.until = Math.max(__FS_OP.until || 0, now + Math.max(0, Math.min(padMs, 2000)));
     if (__FS_OP.timer) { try{ clearTimeout(__FS_OP.timer); }catch(_){ } __FS_OP.timer = null; }
     if (__FS_OP.wdTimer) { try{ clearTimeout(__FS_OP.wdTimer); }catch(_){ } __FS_OP.wdTimer = null; }
     __FS_OP.timer = setTimeout(()=>{
-      try{ __dbg('fs_end_commit'); __FS_OP.active = false; }catch(_){ }
+  try{ __FS_OP.active = false; }catch(_){ }
       hide_busy_overlay();
       // If a refresh was queued while blocked, run it now (debounced)
       try{
@@ -146,7 +135,6 @@ function fs_end(padMs = 250){
 function navigate_auv3_refresh(path, target, opts){
   try{
     // Coalesce navigations
-  __dbg('nav_refresh_request', { path, target, blocked: fs_is_blocked() });
     if (fs_is_blocked()) {
       __FS_OP.queued = { path, target, opts };
       if (!__FS_OP.navTimer) {
@@ -156,7 +144,6 @@ function navigate_auv3_refresh(path, target, opts){
             if (fs_is_blocked()) {
               __FS_OP.navTimer = setTimeout(tick, 120);
             } else {
-        __dbg('nav_refresh_commit');
               const q = __FS_OP.queued; __FS_OP.queued = null; if (q) navigate_auv3(q.path, q.target, q.opts);
             }
           } catch(_) { __FS_OP.navTimer = setTimeout(tick, 150); }
@@ -168,7 +155,7 @@ function navigate_auv3_refresh(path, target, opts){
     __FS_OP.queued = { path, target, opts };
     if (__FS_OP.navTimer) { try{ clearTimeout(__FS_OP.navTimer); }catch(_){ } __FS_OP.navTimer = null; }
     __FS_OP.navTimer = setTimeout(()=>{
-    try { const q = __FS_OP.queued; __FS_OP.queued = null; if (q) { __dbg('nav_refresh_commit_timer'); navigate_auv3(q.path, q.target, q.opts); } } catch(_){ }
+  try { const q = __FS_OP.queued; __FS_OP.queued = null; if (q) { navigate_auv3(q.path, q.target, q.opts); } } catch(_){ }
     }, 120);
   }catch(_){ try{ navigate_auv3(path, target, opts); }catch(__){} }
 }
@@ -471,7 +458,6 @@ function parent_of(path){
 
 async function navigate_auv3(path='.', target='#view', opts=null){
   try{
-    __dbg('navigate_auv3_enter', { path, target });
     // Defensive: ensure no overlay blocks and guard isn't stuck
     try { hide_busy_overlay(); __FS_OP.active = false; __FS_OP.until = 0; } catch(_){ }
     const prevPath = (window.__auv3_browser_state && window.__auv3_browser_state.path) || null;
@@ -480,7 +466,6 @@ async function navigate_auv3(path='.', target='#view', opts=null){
   }catch(_){ window.__auv3_browser_state = { path, target, opts, visible: true }; }
   const t0 = Date.now();
   const listing = await get_auv3_files(path);
-  __dbg('navigate_auv3_got_listing', { path, ms: Date.now() - t0, items: (listing.files||[]).length + (listing.folders||[]).length });
   display_files(target, listing, opts);
   try { window.__auv3_last_display_ts = Date.now(); } catch(_){ }
 }
@@ -566,7 +551,7 @@ window.file_type_decision = window.file_type_decision || file_type_decision;
 async function get_auv3_files(path = '.') {
   try {
     if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.listFiles !== 'function') {
-      __dbg('listFiles missing');
+  /* listFiles missing */
       return { path, folders: [], files: [] };
     }
     // Coalesce concurrent requests by path
@@ -601,7 +586,7 @@ async function get_auv3_files(path = '.') {
           resolve({ path, folders, files });
         });
       } catch(e) {
-        __dbg('listFiles callback error', e);
+  /* listFiles callback error */
         resolve({ path, folders: [], files: [] });
       }
     });
@@ -1374,4 +1359,4 @@ function display_files(target, listing, opts = {}) {
     }
   });
 
-  console.log('iPlug AUv3 sampler example loaded taratata');
+  // iPlug AUv3 sampler example initialized
