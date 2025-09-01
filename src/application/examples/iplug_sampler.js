@@ -95,12 +95,24 @@ function update_selection_ui(container){
     const items = container.querySelectorAll('li[data-fullpath]');
     items.forEach((li)=>{
       const fp = li.getAttribute('data-fullpath')||'';
+      const isDir = li.getAttribute('data-isdir') === '1';
+      const dot = li.querySelector('span[data-role="dot"]');
+      const nameSpan = li.querySelector('span[data-role="name"]');
       if (sel_is_selected(fp)) {
         li.style.backgroundColor = '#2a3645';
         li.style.color = '#e1f0ff';
+        if (dot) dot.style.color = '#e1f0ff';
+        if (nameSpan) nameSpan.style.color = '#e1f0ff';
       } else {
         li.style.backgroundColor = '';
         li.style.color = '';
+        if (isDir) {
+          if (dot) dot.style.color = '#8fd';
+          if (nameSpan) nameSpan.style.color = '#9bd6ff';
+        } else {
+          if (dot) dot.style.color = '';
+          if (nameSpan) nameSpan.style.color = '';
+        }
       }
     });
   }catch(_){ }
@@ -429,7 +441,7 @@ function display_files(target, listing, opts = {}) {
       wrap.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
     } catch(_){ }
 
-    // Header with Up button and breadcrumbs
+  // Header with controls and breadcrumbs
   const header = $('div', { parent: wrap, css: { ...defaults.header, ...theme.header } });
 
     // Shift-lock toggle
@@ -463,32 +475,19 @@ function display_files(target, listing, opts = {}) {
         marginLeft: 'auto' // push to top-right within flex header
       }
     });
-    // Up button
-    Button({
-      id: 'auv3-up', onText: '..', offText: '..',
-      onAction: ()=> navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts),
-      offAction: ()=> navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts),
-      parent: header,
-      css: { ...defaults.upButton, ...(theme.upButton||{}) }
-    });
+  // Current folder header above the list (click to go up)
+  const currName = (function(){ const p = listing.path||'.'; if (p==='.'||p==='./') return '.'; const parts = p.split('/').filter(Boolean); return parts[parts.length-1] || '.'; })();
+  const folderHead = $('div', { parent: wrap, css: { display:'flex', alignItems:'center', gap:'8px', margin:'6px 0 6px 0', userSelect:'none', WebkitUserSelect:'none' } });
+  $('span', { parent: folderHead, text: '●', css: { color:'#8fd', fontSize:'10px' } });
+  $('span', { parent: folderHead, text: currName, css: { fontWeight:'bold', color:'#9bd6ff', cursor:'pointer' }, onclick: ()=> navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
 
-    // Breadcrumbs
-    const crumbs = listing.path && listing.path !== '.' ? listing.path.split('/').filter(Boolean) : [];
-  const bc = $('div', { parent: header, css: { userSelect: 'none', WebkitUserSelect: 'none' } });
-    // Root crumb
-  $('span', { parent: bc, text: '.', css: { ...defaults.crumb, ...(theme.crumb||{}) }, onclick: ()=> navigate_auv3('.', window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
-    let acc = '';
-    crumbs.forEach((seg) => {
-  $('span', { parent: bc, text: ' / ', css: { color: '#666', userSelect: 'none', WebkitUserSelect: 'none' } });
-      acc = path_join(acc || '.', seg);
-      $('span', { parent: bc, text: seg, css: { ...defaults.crumb, ...(theme.crumb||{}) }, onclick: ()=> navigate_auv3(acc, window.__auv3_browser_state.target, window.__auv3_browser_state.opts) });
-    });
+  // Breadcrumbs removed: folder header now handles navigation up
 
     // Sections
     let __linearIndex = 0; const __indexToPath = [];
     const mkSection = (label, items, isDir) => {
       const sec = $('div', { parent: wrap });
-      $('div', { parent: sec, text: label, css: { ...defaults.sectionTitle, ...(theme.sectionTitle||{}) } });
+      // Removed section title as requested
       const ul = $('ul', { parent: sec, css: { ...defaults.list, ...(theme.list||{}) } });
       (items || []).forEach((it) => {
         const fullPath = path_join(listing.path, it.name);
@@ -497,7 +496,7 @@ function display_files(target, listing, opts = {}) {
     let shiftDownAtPointerDown = false;
     let dragging = false;
     let dragStarted = false;
-        const li = $('li', {
+  const li = $('li', {
           parent: ul,
           css: {
             ...defaults.item,
@@ -533,10 +532,14 @@ function display_files(target, listing, opts = {}) {
           }
         });
         li.setAttribute('data-fullpath', fullPath);
+        li.setAttribute('data-isdir', isDir ? '1' : '0');
         li.setAttribute('data-index', String(__linearIndex));
         __indexToPath[__linearIndex] = fullPath; __linearIndex++;
         // File name label (keeps whole-row click behavior)
-  $('span', { parent: li, text: it.name, css: { userSelect: 'none' } });
+        if (isDir) {
+          $('span', { parent: li, text: '●', css: { color:'#8fd', fontSize:'10px', marginRight:'6px' }, 'data-role': 'dot' });
+        }
+        $('span', { parent: li, text: it.name, css: { userSelect: 'none' }, 'data-role': 'name' });
         // Add delete icon for files only
         if (!isDir) {
           const delBtnCss = {
