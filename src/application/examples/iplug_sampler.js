@@ -145,8 +145,11 @@ function toggle_auv3_browser(target = '#view'){
     if (panel) {
       panel.remove();
       window.__auv3_browser_state.visible = false;
+      try { document.body && (document.body.style.overflow = ''); } catch(_){ }
+      try { if (window.__auv3_doc_key_handler) { document.removeEventListener('keydown', window.__auv3_doc_key_handler, true); window.__auv3_doc_key_handler = null; } } catch(_){ }
       return;
     }
+    try { document.body && (document.body.style.overflow = 'hidden'); } catch(_){ }
     navigate_auv3(st.path || '.', target, st.opts || {});
   }catch(e){ console.warn('toggle_auv3_browser error', e); }
 }
@@ -433,12 +436,24 @@ function display_files(target, listing, opts = {}) {
     const theme = opts.css || {};
 
     // Container
-    const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container } });
+    const wrap = $('div', { id: 'auv3-file-list', parent: host, css: { ...defaults.container, ...theme.container, overscrollBehavior: 'contain', touchAction: 'pan-y' } });
     try { wrap.setAttribute('tabindex','0'); } catch(_){ }
     // Block browser text selection and drag in the file list area
     try {
       wrap.addEventListener('selectstart', function(e){ e.preventDefault(); }, true);
       wrap.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
+      // Prevent scroll chaining to the outer AUv3 view while preserving inner scroll
+      wrap.addEventListener('touchmove', function(e){ try{ e.stopPropagation(); }catch(_){ } }, { passive: true });
+      // Ensure host (#view) keeps its own overflow and also prevents bubbling
+      try {
+        if (host && host.style) {
+          if (!host.style.overflow) host.style.overflow = 'auto';
+          host.style.overscrollBehavior = 'contain';
+          host.style.touchAction = 'pan-y';
+          host.addEventListener('touchmove', function(ev){ try{ ev.stopPropagation(); }catch(_){ } }, { passive: true });
+          host.addEventListener('wheel', function(ev){ try{ ev.stopPropagation(); }catch(_){ } }, { passive: true });
+        }
+      } catch(_){ }
     } catch(_){ }
 
   // Header with controls and breadcrumbs
@@ -619,34 +634,104 @@ function display_files(target, listing, opts = {}) {
     mkSection('Dossiers', (listing && listing.folders) || [], true);
     mkSection('Fichiers', (listing && listing.files) || [], false);
 
-    // Keyboard navigation with arrows; Shift extends selection
+    // Helpers for keyboard actions
+    function handleArrowKey(e, key){
+      e.preventDefault(); e.stopPropagation();
+      const nodes = wrap.querySelectorAll('li[data-index]');
+      const total = nodes.length;
+      if (!total) return;
+      const extend = is_shift_active(e);
+      let focus = (window.__auv3_selection.focus==null) ? -1 : window.__auv3_selection.focus;
+      if (key === 'ArrowDown') focus = Math.min(total-1, focus+1); else focus = Math.max(0, focus-1);
+      if (focus < 0) return;
+      if (!extend) {
+        const li = wrap.querySelector(`li[data-index="${focus}"]`);
+        const fp = li ? li.getAttribute('data-fullpath') : null;
+        if (fp) { sel_replace([fp]); window.__auv3_selection.anchor = focus; window.__auv3_selection.focus = focus; }
+      } else {
+        const a = (window.__auv3_selection.anchor==null) ? focus : window.__auv3_selection.anchor;
+        window.__auv3_selection.focus = focus;
+        const [s,e2] = a<=focus ? [a,focus] : [focus,a];
+        const paths = []; for (let i=s;i<=e2;i++){ const li = wrap.querySelector(`li[data-index="${i}"]`); if (li) { const fp = li.getAttribute('data-fullpath'); if (fp) paths.push(fp); } }
+        sel_replace(paths);
+      }
+      update_selection_ui(wrap);
+      try{ const el = wrap.querySelector(`li[data-index="${focus}"]`); el && el.scrollIntoView && el.scrollIntoView({ block:'nearest' }); }catch(_){ }
+    }
+
+    function handleEnterKey(e){
+      e.preventDefault(); e.stopPropagation();
+      const nodes = wrap.querySelectorAll('li[data-index]');
+      if (!nodes || !nodes.length) return;
+      let focus = (window.__auv3_selection.focus==null) ? null : window.__auv3_selection.focus;
+      if (focus == null) {
+        // Fallback: use first selected item if any
+        try {
+          const selected = sel_list();
+          if (selected && selected.length) {
+            const first = selected[0];
+            for (let i = 0; i < nodes.length; i++) {
+              if (nodes[i].getAttribute('data-fullpath') === first) { focus = i; break; }
+            }
+          }
+        } catch(_) { }
+      }
+      if (focus == null) return;
+      const li = wrap.querySelector(`li[data-index="${focus}"]`);
+      if (!li) return;
+      const fullPath = li.getAttribute('data-fullpath');
+      const isDir = li.getAttribute('data-isdir') === '1';
+      if (isDir) {
+        try {
+          const name = (fullPath||'').split('/').pop() || '';
+          if (opts && typeof opts.onFolderClick === 'function') { opts.onFolderClick({ name, isDirectory: true }, fullPath); }
+          else { navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }
+        } catch(_) { navigate_auv3(fullPath, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }
+      } else {
+        try {
+          const name = (fullPath||'').split('/').pop() || '';
+          const type = detect_file_type(name);
+          file_type_decision(type, { name }, fullPath);
+        } catch(e2) { console.warn('enter key open error', e2); }
+      }
+    }
+
+    function handleEscapeKey(e){
+      e.preventDefault(); e.stopPropagation();
+      try { navigate_auv3(parent_of(listing.path), window.__auv3_browser_state.target, window.__auv3_browser_state.opts); } catch(_){ }
+    }
+
+    // Keyboard navigation with arrows; Shift extends selection. Enter opens folder or activates file. ESC navigates up.
     try{
       wrap.addEventListener('keydown', (e)=>{
         const key = e.key;
-        if (key !== 'ArrowDown' && key !== 'ArrowUp') return;
-        e.preventDefault(); e.stopPropagation();
-        const nodes = wrap.querySelectorAll('li[data-index]');
-        const total = nodes.length;
-        if (!total) return;
-        const extend = is_shift_active(e);
-        let focus = (window.__auv3_selection.focus==null) ? -1 : window.__auv3_selection.focus;
-        if (key === 'ArrowDown') focus = Math.min(total-1, focus+1); else focus = Math.max(0, focus-1);
-        if (focus < 0) return;
-        if (!extend) {
-          const li = wrap.querySelector(`li[data-index="${focus}"]`);
-          const fp = li ? li.getAttribute('data-fullpath') : null;
-          if (fp) { sel_replace([fp]); window.__auv3_selection.anchor = focus; window.__auv3_selection.focus = focus; }
-        } else {
-          const a = (window.__auv3_selection.anchor==null) ? focus : window.__auv3_selection.anchor;
-          window.__auv3_selection.focus = focus;
-          const [s,e2] = a<=focus ? [a,focus] : [focus,a];
-          const paths = []; for (let i=s;i<=e2;i++){ const li = wrap.querySelector(`li[data-index="${i}"]`); if (li) { const fp = li.getAttribute('data-fullpath'); if (fp) paths.push(fp); } }
-          sel_replace(paths);
-        }
-        update_selection_ui(wrap);
-        try{ const el = wrap.querySelector(`li[data-index="${focus}"]`); el && el.scrollIntoView && el.scrollIntoView({ block:'nearest' }); }catch(_){ }
+        if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
+        if (key === 'Enter') { handleEnterKey(e); return; }
+        if (key === 'Escape' || key === 'Esc') { handleEscapeKey(e); return; }
       });
     }catch(_){ }
+
+    // Global key handler so arrows immediately control the file list, and ESC/Enter work even when focus is outside
+    try {
+      if (window.__auv3_doc_key_handler) { document.removeEventListener('keydown', window.__auv3_doc_key_handler, true); }
+      window.__auv3_doc_key_handler = function(e){
+        try{
+          if (!window.__auv3_browser_state || !window.__auv3_browser_state.visible) return;
+          const key = e.key;
+          if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape' && key !== 'Esc') return;
+          const t = e.target;
+          const inEditable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+          if (inEditable) return; // don't hijack typing
+          if (!wrap || !document.body.contains(wrap)) return;
+          // If a confirm dialog is open, don't navigate up on ESC automatically
+          if ((key === 'Escape' || key === 'Esc') && document.getElementById('auv3-confirm')) return;
+          if (key === 'ArrowDown' || key === 'ArrowUp') { handleArrowKey(e, key); return; }
+          if (key === 'Enter') { handleEnterKey(e); return; }
+          if (key === 'Escape' || key === 'Esc') { handleEscapeKey(e); return; }
+        }catch(_){ }
+      };
+      document.addEventListener('keydown', window.__auv3_doc_key_handler, true);
+    } catch(_){ }
   } catch (e) { console.warn('display_files error', e); }
 }
 
