@@ -271,6 +271,20 @@ function nav_enter_folder(path){ try{ navigate_auv3_refresh(path, nav_context().
 function nav_leave_folder(currentPath){ try{ navigate_auv3_refresh(parent_of(currentPath), nav_context().target, nav_context().opts); }catch(_){ } }
 function nav_open_import(destPath){ try{ ios_file_chooser(true, destPath); }catch(_){ } }
 function nav_preview_file_by_name(fullPath){ try{ const name = (fullPath||'').split('/').pop()||''; const type = detect_file_type(name); file_type_decision(type, { name }, fullPath); }catch(_){ } }
+// Select a specific item by full path, update focus and UI, and scroll into view
+function select_item_by_path(wrap, fullPath){
+  try{
+    if (!wrap || !fullPath) return false;
+    const li = wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
+    if (!li) return false;
+    const idx = parseInt(li.getAttribute('data-index')||'0',10);
+    sel_replace([fullPath]);
+    window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+    update_selection_ui(wrap);
+    try{ li.scrollIntoView && li.scrollIntoView({ block:'nearest' }); }catch(_){ }
+    return true;
+  }catch(_){ return false; }
+}
 function nav_open_focused_or_selected(wrap, listing, opts){
   try{
     const nodes = wrap.querySelectorAll('li[data-index]'); if (!nodes || !nodes.length) return;
@@ -415,14 +429,15 @@ function rename_apple_document(pathOrName = null){
         fullPath = nodes[0].getAttribute('data-fullpath');
       }
     }
-    if (!fullPath) return;
-    const wrap = document.getElementById('auv3-file-list');
-    const exists = wrap && wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
+  if (!fullPath) return;
+  const wrap = document.getElementById('auv3-file-list');
+  const exists = wrap && wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
     if (!exists) {
       const opts = Object.assign({}, nav_context().opts||{}, { startInlineRename: { path: fullPath } });
       return navigate_auv3_refresh(listing.path, nav_context().target, opts);
     }
-    edit_filer_element(listing, fullPath);
+  try{ select_item_by_path(wrap, fullPath); }catch(_){ }
+  setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0);
   }catch(e){ console.warn('rename_apple_document error', e); }
 }
 // expose public APIs
@@ -1046,8 +1061,8 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     // Rename action
     Button({
       id: 'auv3-menu-rename', onText: 'Rename', offText: 'Rename',
-      onAction: ()=>{ try{ if (fullPath) edit_filer_element(listing, fullPath); }finally{ close_file_context_menu(); } },
-      offAction: ()=>{ try{ if (fullPath) edit_filer_element(listing, fullPath); }finally{ close_file_context_menu(); } },
+      onAction: ()=>{ try{ if (fullPath) { const wrap = document.getElementById('auv3-file-list'); try{ select_item_by_path(wrap, fullPath); }catch(_){ } setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0); } }finally{ close_file_context_menu(); } },
+      offAction: ()=>{ try{ if (fullPath) { const wrap = document.getElementById('auv3-file-list'); try{ select_item_by_path(wrap, fullPath); }catch(_){ } setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0); } }finally{ close_file_context_menu(); } },
       parent: menu,
       css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.headerText, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
     });
@@ -1441,13 +1456,16 @@ function display_files(target, listing, opts = {}) {
       }
     }catch(_){ }
 
-    // If requested, start inline rename on a specific item (newly created)
+  // If requested, start inline rename on a specific item (newly created)
     try{
       const plan = opts && opts.startInlineRename;
       if (plan && plan.path) {
         // consume the plan to avoid re-entrancy loops
         try { delete opts.startInlineRename; } catch(_){ }
-        edit_filer_element(listing, plan.path);
+    try{ select_item_by_path(wrap, plan.path); }catch(_){ }
+    setTimeout(()=>{ try{ select_item_by_path(wrap, plan.path); }catch(_){ } }, 50);
+    setTimeout(()=>{ try{ edit_filer_element(listing, plan.path); }catch(_){ } }, 0);
+    setTimeout(()=>{ try{ edit_filer_element(listing, plan.path); }catch(_){ } }, 120);
       }
     }catch(_){ }
 
