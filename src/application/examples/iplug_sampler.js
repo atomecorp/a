@@ -1401,6 +1401,22 @@ function display_files(target, listing, opts = {}) {
           li.addEventListener('touchmove', move, { passive: true });
           li.addEventListener('touchend', cancel);
           li.addEventListener('touchcancel', cancel);
+          // Right-click (mouse) to open context menu
+          li.addEventListener('contextmenu', (e)=>{
+            try{ e.preventDefault(); e.stopPropagation(); }catch(_){ }
+            try{ close_file_context_menu(); }catch(_){ }
+            // Select the item under cursor unless multi-selection is already active
+            try{
+              const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
+              if (!multi) {
+                const idx = parseInt(li.getAttribute('data-index')||'0',10);
+                sel_replace([fullPath]);
+                window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+                update_selection_ui(wrap);
+              }
+            }catch(_){ }
+            try{ show_file_context_menu(li, it, fullPath, listing); }catch(_){ }
+          });
         }catch(_){ }
       });
     };
