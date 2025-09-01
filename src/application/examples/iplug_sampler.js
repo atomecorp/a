@@ -913,6 +913,28 @@ function request_delete_selection_or_item(fullPath, listing){
   next();
 }
 
+// Force-delete a specific path, ignoring current selection. Useful for context menu on unselected items.
+function request_delete_exact(fullPath, listing){
+  try{
+    if (!fullPath) return;
+    const FS = window.AtomeFileSystem || {};
+    const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
+    const delDir = (FS.deleteDirectory && typeof FS.deleteDirectory==='function') ? FS.deleteDirectory.bind(FS)
+                 : (FS.removeDirectory && typeof FS.removeDirectory==='function') ? FS.removeDirectory.bind(FS)
+                 : (FS.rmdir && typeof FS.rmdir==='function') ? FS.rmdir.bind(FS)
+                 : (FS.deleteFolder && typeof FS.deleteFolder==='function') ? FS.deleteFolder.bind(FS)
+                 : (FS.removeFolder && typeof FS.removeFolder==='function') ? FS.removeFolder.bind(FS)
+                 : null;
+    if (!delFile && !delDir) { console.warn('Aucune API de suppression disponible'); return; }
+    const isDir = !!(((listing&&listing.folders)||[]).find(f=> path_join(listing.path, String(f.name||'')) === fullPath));
+    fs_begin(700);
+    const done = ()=>{ try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ try{ fs_end(0); }catch(__){} } };
+    if (isDir && delDir) { try{ delDir(fullPath, done); }catch(_){ done(); } return; }
+    if (delFile) { try{ delFile(fullPath, done); }catch(_){ done(); } return; }
+    done();
+  }catch(_){ }
+}
+
 function request_delete_file(fullPath, li, listing){
   if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.deleteFile !== 'function') {
     console.warn('AtomeFileSystem.deleteFile indisponible');
@@ -1019,13 +1041,25 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
       id: 'auv3-menu-delete', onText: 'Delete', offText: 'Delete',
       onAction: ()=>{
         const sel = sel_list();
-        const msg = (sel && sel.length>1) ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((fullPath||'').split('/').pop()||'cet élément') + ' » ?');
-        show_confirm_dialog(msg, ()=>{ nav_delete_item_path(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        const targetIsMulti = sel && sel.length>1 && (!fullPath || sel.includes(fullPath));
+        if (targetIsMulti) {
+          const msg = 'Supprimer ' + sel.length + ' éléments ?';
+          show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        } else {
+          const base = (fullPath||'').split('/').pop()||'cet élément';
+          show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_exact(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        }
       },
       offAction: ()=>{
         const sel = sel_list();
-        const msg = (sel && sel.length>1) ? ('Supprimer ' + sel.length + ' éléments ?') : ('Supprimer « ' + ((fullPath||'').split('/').pop()||'cet élément') + ' » ?');
-        show_confirm_dialog(msg, ()=>{ nav_delete_item_path(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        const targetIsMulti = sel && sel.length>1 && (!fullPath || sel.includes(fullPath));
+        if (targetIsMulti) {
+          const msg = 'Supprimer ' + sel.length + ' éléments ?';
+          show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        } else {
+          const base = (fullPath||'').split('/').pop()||'cet élément';
+          show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_exact(fullPath, listing); close_file_context_menu(); }, ()=>{ close_file_context_menu(); });
+        }
       },
       parent: menu,
       css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.danger, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small }
@@ -1483,8 +1517,8 @@ function display_files(target, listing, opts = {}) {
         const li = wrap.querySelector(`li[data-index="${focus}"]`);
         if (!li) return;
         targetPath = li.getAttribute('data-fullpath');
-        const base = (targetPath||'').split('/').pop() || 'cet élément';
-  show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ nav_delete_item_path(targetPath, listing); }, ()=>{});
+    const base = (targetPath||'').split('/').pop() || 'cet élément';
+  show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_exact(targetPath, listing); }, ()=>{});
       }catch(_){ }
     }
 

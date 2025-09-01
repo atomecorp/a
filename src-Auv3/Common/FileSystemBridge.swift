@@ -76,6 +76,8 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             handleListFiles(body: body, webView: message.webView)
         case "deleteFile":
             handleDeleteFile(body: body, webView: message.webView)
+        case "deleteDirectory":
+            handleDeleteDirectory(body: body, webView: message.webView)
         case "getStorageInfo":
             handleGetStorageInfo(webView: message.webView)
         case "showStorageSettings":
@@ -101,6 +103,31 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         default:
             sendErrorResponse(to: message.webView, error: "Unknown action: \(action)")
         }
+    }
+
+    // MARK: - Coordinated deletion helpers
+    private func deleteCoordinated(at url: URL, isDirectory: Bool) throws {
+        var coordError: NSError?
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        coordinator.coordinate(writingItemAt: url, options: .forDeleting, error: &coordError) { coordinatedURL in
+            do {
+                if isDirectory {
+                    // Best-effort hidden content cleanup
+                    if let enumerator = FileManager.default.enumerator(at: coordinatedURL, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsSubdirectoryDescendants]) {
+                        for case let child as URL in enumerator {
+                            if child.lastPathComponent.hasPrefix(".") {
+                                try? FileManager.default.removeItem(at: child)
+                            }
+                        }
+                    }
+                }
+                try FileManager.default.removeItem(at: coordinatedURL)
+            } catch {
+                // Re-throw to outer scope
+                do { throw error } catch { }
+            }
+        }
+        if let e = coordError { throw e }
     }
     
     private func handleSaveFile(body: [String: Any], webView: WKWebView?) {
@@ -219,14 +246,47 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             sendErrorResponse(to: webView, error: "Invalid path")
             return
         }
-        
-        do {
-            try FileManager.default.removeItem(at: fileURL)
-            sendSuccessResponse(to: webView, data: ["message": "File deleted successfully"])
-            // Immediate sync to propagate tombstone
+        // Pause autosync to avoid resurrection during the operation
+        FileSyncCoordinator.shared.stopAutoSync()
+        defer {
+            // Mark tombstone and resume sync
+            FileSyncCoordinator.shared.markDeleted(url: fileURL)
             FileSyncCoordinator.shared.syncAll(force: true)
+            // Resume after a short delay allowing UI quiescence
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) {
+                FileSyncCoordinator.shared.startAutoSync()
+            }
+        }
+        do {
+            try deleteCoordinated(at: fileURL, isDirectory: false)
+            sendSuccessResponse(to: webView, data: ["message": "File deleted successfully"])
         } catch {
             sendErrorResponse(to: webView, error: "Failed to delete file: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleDeleteDirectory(body: [String: Any], webView: WKWebView?) {
+        guard let path = body["path"] as? String else {
+            sendErrorResponse(to: webView, error: "Invalid path parameter")
+            return
+        }
+        guard let dirURL = resolveURL(for: path, isDirectory: true) else {
+            sendErrorResponse(to: webView, error: "Invalid path")
+            return
+        }
+        FileSyncCoordinator.shared.stopAutoSync()
+        defer {
+            FileSyncCoordinator.shared.markDeleted(url: dirURL)
+            FileSyncCoordinator.shared.syncAll(force: true)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) {
+                FileSyncCoordinator.shared.startAutoSync()
+            }
+        }
+        do {
+            try deleteCoordinated(at: dirURL, isDirectory: true)
+            sendSuccessResponse(to: webView, data: ["message": "Directory deleted successfully"])
+        } catch {
+            sendErrorResponse(to: webView, error: "Failed to delete directory: \(error.localizedDescription)")
         }
     }
     
@@ -330,6 +390,13 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                 window.fileSystemCallback = callback;
                 webkit.messageHandlers.fileSystem.postMessage({
                     action: 'deleteFile',
+                    path: path
+                });
+            },
+            deleteDirectory: function(path, callback) {
+                window.fileSystemCallback = callback;
+                webkit.messageHandlers.fileSystem.postMessage({
+                    action: 'deleteDirectory',
                     path: path
                 });
             },

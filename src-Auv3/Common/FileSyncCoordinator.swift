@@ -118,6 +118,39 @@ final class FileSyncCoordinator {
         }
     }
 
+    // MARK: - Tombstone / deletion hints
+    func markDeleted(url: URL) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.loadInventoryIfNeeded()
+            let rels = self.relativePaths(for: url)
+            let now = Date().timeIntervalSince1970
+            for rel in rels {
+                var rec = self.inventory[rel] ?? InventoryRecord(lastModified: now, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil, lastSeenVisibleRoot: nil)
+                rec.deletedAt = now
+                self.inventory[rel] = rec
+                self.inventoryDirty = true
+                print("\u{26B0}\u{FE0F} Mark tombstone rel=\(rel)")
+            }
+            self.persistInventoryIfNeeded()
+        }
+    }
+
+    private func relativePaths(for url: URL) -> [String] {
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        var rels: [String] = []
+        let roots = availableRoots()
+        for root in roots {
+            let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+            if path == rootPath { continue }
+            if path.hasPrefix(rootPath + "/") {
+                let rel = String(path.dropFirst(rootPath.count + 1))
+                if !rel.isEmpty { rels.append(rel) }
+            }
+        }
+        return Array(Set(rels))
+    }
+
     // MARK: - Core Sync Logic
     private func _runSync() {
         loadInventoryIfNeeded()
