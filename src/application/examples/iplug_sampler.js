@@ -219,11 +219,19 @@ function create_delete_button(parent, onClick, themeOverrides){
 // ------------------------------
 // Navigator helpers (centralized facilities)
 // ------------------------------
+// Shared constants
+const CLICK_SUPPRESS_MS = 500;
+const MENU_OPEN_GRACE_MS = 600; // ignore early close events right after opening
+// Short window to ignore stray clicks right after a menu action (prevents instant deselection)
+function suppress_item_clicks(ms = 220){
+  try{ window.__AUV3_CLICK_SUPPRESS_UNTIL = Date.now() + Math.max(50, Math.min(ms, 800)); }catch(_){ }
+}
+function clicks_suppressed(){ try{ return (window.__AUV3_CLICK_SUPPRESS_UNTIL||0) > Date.now(); }catch(_){ return false; } }
 // Ajoute cette fonction sans changer les noms existants
 function create_editable_name_span(text, role = 'name') {
   try {
     const span = document.createElement('span');
-    span.textContent = text;
+  span.textContent = text || '';
     try { span.setAttribute('data-role', role); } catch(_){}
   // Non-éditable par défaut; l'édition sera activée via edit_filer_element (long-press/rename)
   span.contentEditable = 'false';
@@ -235,7 +243,7 @@ function create_editable_name_span(text, role = 'name') {
     span.style.userSelect = 'text';
     span.style.WebkitUserSelect = 'text';
     span.style.pointerEvents = 'auto';
-    span.style.webkitTouchCallout = 'default';
+  span.style.webkitTouchCallout = 'none';
   // Pas de stopPropagation global ici; les handlers dédiés gèrent selon le contexte
     return span;
   } catch(_) { return $('span', { text, 'data-role': role }); }
@@ -244,7 +252,19 @@ function edit_filer_element(listing, fullPath){
   try{
     const wrap = document.getElementById('auv3-file-list'); if (!wrap) return;
     const li = wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
-  if (!li) { return; }
+  if (!li) return;
+    // Mode-aware selection: single mode selects only this item; multi mode preserves selection
+    try{
+      const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
+      const idx = parseInt(li.getAttribute('data-index')||'0',10);
+      if (!multi) {
+        sel_replace([fullPath]);
+        window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+        update_selection_ui(wrap);
+      } else {
+        if (sel_is_selected(fullPath)) { window.__auv3_selection.focus = idx; update_selection_ui(wrap); }
+      }
+    }catch(_){ }
     const nameSpan = li.querySelector('span[data-role="name"]');
     if (!nameSpan) return;
     const oldName = nameSpan.textContent || '';
@@ -266,8 +286,24 @@ function edit_filer_element(listing, fullPath){
     const commit = ()=>{
   try{ nameSpan.contentEditable = 'false'; nameSpan.style.outline=''; nameSpan.style.backgroundColor=''; nameSpan.style.userSelect=''; nameSpan.style.WebkitUserSelect=''; nameSpan.style.pointerEvents=''; }catch(_){ }
   try{ window.__INLINE_EDITING = false; }catch(_){ }
-      const newName = (nameSpan.textContent||'').trim();
+      // Sanitize and ensure uniqueness within the same directory
+      const sanitize = (s)=> String(s||'').replace(/[\n\r\t]/g,' ').replace(/[\\:*?"<>|]/g,'_').trim();
+      let newName = sanitize(nameSpan.textContent||'');
       if (!newName || newName === oldName) { navigate_auv3_refresh(listing.path, nav_context().target, {}); return; }
+      try{
+        const wrap2 = document.getElementById('auv3-file-list');
+        if (wrap2) {
+          const existing = new Set();
+          const spans = wrap2.querySelectorAll('li[data-fullpath] > span[data-role="name"]');
+          spans && spans.forEach(sp=>{ const n=(sp.textContent||'').trim(); if (n && n!==oldName) existing.add(n); });
+          if (existing.has(newName)) {
+            // add numeric suffix similar to "Name 2"
+            const base = newName; let idx=2; let candidate = base + ' ' + idx;
+            while (existing.has(candidate) && idx < 999) { idx++; candidate = base + ' ' + idx; }
+            newName = candidate;
+          }
+        }
+      }catch(_){ }
       const oldPath = fullPath; const newPath = path_join(listing.path, newName);
       if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.renameItem !== 'function') { navigate_auv3_refresh(listing.path, nav_context().target, {}); return; }
       try{
@@ -299,8 +335,10 @@ function select_item_by_path(wrap, fullPath){
     const li = wrap.querySelector('li[data-fullpath="' + String(fullPath).replace(/"/g,'\\"') + '"]');
     if (!li) return false;
     const idx = parseInt(li.getAttribute('data-index')||'0',10);
-    sel_replace([fullPath]);
-    window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+  const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
+  if (!multi) { sel_replace([fullPath]); }
+  else { if (!sel_is_selected(fullPath)) sel_add(fullPath); }
+  window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
     update_selection_ui(wrap);
     try{ li.scrollIntoView && li.scrollIntoView({ block:'nearest' }); }catch(_){ }
     return true;
@@ -332,8 +370,19 @@ function nav_copy_selection_to_clipboard(fullPath){ try{ copy_selection_or_item(
 function nav_paste_clipboard_to_current(listing){ try{ paste_into_current_folder(listing); }catch(_){ } }
 function nav_select_all(wrap){
   try{
+    // Only select items that are currently visible
+    const isVisible = (el)=>{
+      try{
+        if (!el) return false;
+        if (el.hidden) return false;
+        if (el.offsetParent === null) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity||'1') === 0) return false;
+        return true;
+      }catch(_){ return true; }
+    };
     const nodes = wrap.querySelectorAll('li[data-fullpath]');
-    const all = []; nodes.forEach((li)=>{ const fp = li.getAttribute('data-fullpath'); if (fp) all.push(fp); });
+    const all = []; nodes.forEach((li)=>{ if (!isVisible(li)) return; const fp = li.getAttribute('data-fullpath'); if (fp) all.push(fp); });
     sel_replace(all); update_selection_ui(wrap);
   }catch(_){ }
 }
@@ -507,6 +556,16 @@ function ios_file_chooser(multiple, destFolder) {
 
 // Simple state for the AUv3 file browser (current path, last opts/target)
 window.__auv3_browser_state = { path: '.', target: '#view', opts: null, visible: false };
+// Input modality tracker to differentiate mouse vs touch behavior
+window.__auv3_input = window.__auv3_input || { modality: 'mouse', ts: 0 };
+// Long-press guard to prevent immediate menu close during same gesture
+window.__auv3_longpress_guard = window.__auv3_longpress_guard || { until: 0 };
+try{
+  const updateModality = (kind)=>{ try{ window.__auv3_input.modality = kind; window.__auv3_input.ts = Date.now(); }catch(_){ } };
+  window.addEventListener('pointerdown', (e)=>{ try{ updateModality((e && e.pointerType) || 'mouse'); }catch(_){ } }, true);
+  window.addEventListener('touchstart', ()=>{ try{ updateModality('touch'); }catch(_){ } }, { passive: true, capture: true });
+  window.addEventListener('mousemove', ()=>{ try{ updateModality('mouse'); }catch(_){ } }, { capture: true });
+}catch(_){ }
 
 // Selection state and helpers
 window.__auv3_selection = window.__auv3_selection || {
@@ -535,7 +594,7 @@ function update_selection_ui(container){
       if (sel_is_selected(fp)) {
         li.style.backgroundColor = UI.colors.selectionBg;
         li.style.color = UI.colors.selectionText;
-        if (dot) dot.style.color = UI.colors.selectionText;
+  if (dot) dot.style.color = UI.colors.danger; // selected items: dot in red
         if (nameSpan) nameSpan.style.color = UI.colors.selectionText;
       } else {
         li.style.backgroundColor = '';
@@ -1100,7 +1159,7 @@ function request_delete_file(fullPath, li, listing){
   } catch(e){ console.warn('deleteFile error', e); }
 }
 
-function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
+function show_file_context_menu(anchorEl, fileItem, fullPath, listing, opts){
   try{
     close_file_context_menu();
     const rect = anchorEl.getBoundingClientRect();
@@ -1122,6 +1181,9 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     boxShadow: UI.shadows.menu
       }
     });
+  try{ window.__FILE_MENU_MODALITY = (window.__auv3_input && window.__auv3_input.modality) || 'mouse'; }catch(_){ }
+  try{ window.__FILE_MENU_OPENED_AT = Date.now(); }catch(_){ }
+  try{ window.__FILE_MENU_STATE = { x: left, y: top, fileItem, fullPath, listing, opts }; }catch(_){ }
 
     // Title
     $('div', { parent: menu, text: fileItem && fileItem.name ? fileItem.name : 'Fichier', css: { fontSize: '11px', color: '#9db2cc', marginBottom: '6px', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } });
@@ -1149,11 +1211,56 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     // Select All
     Button({
       id: 'auv3-menu-selectall', onText: 'Select all', offText: 'Select all',
-      onAction: ()=>{ try{ const wrap = document.getElementById('auv3-file-list'); wrap && nav_select_all(wrap); }finally{ close_file_context_menu(); } },
-      offAction: ()=>{ try{ const wrap = document.getElementById('auv3-file-list'); wrap && nav_select_all(wrap); }finally{ close_file_context_menu(); } },
+  onAction: ()=>{
+    try{
+      const wrap = document.getElementById('auv3-file-list');
+      const modality = (window.__FILE_MENU_MODALITY || (window.__auv3_input && window.__auv3_input.modality) || 'mouse');
+      if (wrap) { nav_select_all(wrap); }
+      if (modality === 'touch') {
+        try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+        try{ window.__KEEP_MENU_OPEN = Date.now() + 350; }catch(_){ }
+  try{ const st = window.__FILE_MENU_STATE; setTimeout(()=>{ try{ if (!document.getElementById('auv3-file-menu') && st) { open_file_menu_at(st.x, st.y, st.fileItem, st.fullPath, st.listing, { suppressAutoFocus: true }); } }catch(_){ } }, 60); }catch(_){ }
+      } else {
+        // Keep menu open for mouse as well
+        try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+      }
+    }catch(_){ }
+  },
+  offAction: ()=>{
+    try{
+      const wrap = document.getElementById('auv3-file-list');
+      const modality = (window.__FILE_MENU_MODALITY || (window.__auv3_input && window.__auv3_input.modality) || 'mouse');
+      if (wrap) { nav_select_all(wrap); }
+      if (modality === 'touch') {
+        try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+        try{ window.__KEEP_MENU_OPEN = Date.now() + 350; }catch(_){ }
+  try{ const st = window.__FILE_MENU_STATE; setTimeout(()=>{ try{ if (!document.getElementById('auv3-file-menu') && st) { open_file_menu_at(st.x, st.y, st.fileItem, st.fullPath, st.listing, { suppressAutoFocus: true }); } }catch(_){ } }, 60); }catch(_){ }
+      } else {
+        // Keep menu open for mouse as well
+        try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+      }
+    }catch(_){ }
+  },
       parent: menu,
       css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.headerText, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
     });
+
+    // Touch keep-open guard: set early (capture-phase) before doc-close listener to avoid immediate close on touchstart
+    try{
+      const guard = function(ev){
+        try{
+          const t = ev.target;
+          if (!t) return;
+          const btn = document.getElementById('auv3-menu-selectall');
+          if (btn && (t === btn || (t.closest && t.closest('#auv3-menu-selectall')))) {
+            window.__KEEP_MENU_OPEN = Date.now() + 350;
+          }
+        }catch(_){ }
+      };
+      window.__file_menu_keep_guard = guard;
+      document.addEventListener('touchstart', guard, true);
+      document.addEventListener('pointerdown', guard, true);
+    }catch(_){ }
 
     // Create Folder
     Button({
@@ -1176,8 +1283,8 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     // Rename action
     Button({
       id: 'auv3-menu-rename', onText: 'Rename', offText: 'Rename',
-      onAction: ()=>{ try{ if (fullPath) { const wrap = document.getElementById('auv3-file-list'); try{ select_item_by_path(wrap, fullPath); }catch(_){ } setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0); } }finally{ close_file_context_menu(); } },
-      offAction: ()=>{ try{ if (fullPath) { const wrap = document.getElementById('auv3-file-list'); try{ select_item_by_path(wrap, fullPath); }catch(_){ } setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0); } }finally{ close_file_context_menu(); } },
+  onAction: ()=>{ try{ if (fullPath) { const wrap = document.getElementById('auv3-file-list'); try{ const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock); if (wrap) { const li = wrap.querySelector('li[data-fullpath="'+String(fullPath).replace(/"/g,'\\"')+'"]'); const idx = li ? parseInt(li.getAttribute('data-index')||'0',10) : null; if (multi) { if (idx!=null && sel_is_selected(fullPath)) { window.__auv3_selection.focus = idx; } } else { if (idx!=null) { sel_replace([fullPath]); window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx; } } update_selection_ui(wrap); } }catch(_){ } setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0); } }finally{ close_file_context_menu(); } },
+  offAction: ()=>{ try{ if (fullPath) { const wrap = document.getElementById('auv3-file-list'); try{ const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock); if (wrap) { const li = wrap.querySelector('li[data-fullpath="'+String(fullPath).replace(/"/g,'\\"')+'"]'); const idx = li ? parseInt(li.getAttribute('data-index')||'0',10) : null; if (multi) { if (idx!=null && sel_is_selected(fullPath)) { window.__auv3_selection.focus = idx; } } else { if (idx!=null) { sel_replace([fullPath]); window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx; } } update_selection_ui(wrap); } }catch(_){ } setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0); } }finally{ close_file_context_menu(); } },
       parent: menu,
       css: { width: '96px', height: '24px', color: '#fff', backgroundColor: UI.colors.headerText, border: 'none', borderRadius: '6px', cursor: 'pointer', boxShadow: UI.shadows.small, marginBottom: '6px' }
     });
@@ -1215,7 +1322,7 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     // Keyboard navigation in menu (Left/Right/Tab to cycle, Enter to activate, Esc to close)
     const focusables = function(){ return Array.prototype.slice.call(menu.querySelectorAll('button')); };
     function menuFocus(idx){ const arr = focusables(); if (!arr.length) return; const i = (idx+arr.length)%arr.length; try{ arr[i].focus(); }catch(_){ } }
-    try{ setTimeout(()=>{ menuFocus(0); }, 0); }catch(_){ }
+  try{ setTimeout(()=>{ if (!opts || !opts.suppressAutoFocus) { menuFocus(0); } }, 0); }catch(_){ }
 
     function onMenuKey(e){
       try{
@@ -1229,31 +1336,52 @@ function show_file_context_menu(anchorEl, fileItem, fullPath, listing){
     }
     document.addEventListener('keydown', onMenuKey, true);
 
-    window.__file_menu_doc_close = function(ev){
+  window.__file_menu_doc_close = function(ev){
       try{
+    const openedAt = window.__FILE_MENU_OPENED_AT || 0;
+  if (openedAt && (Date.now() - openedAt) < MENU_OPEN_GRACE_MS) return;
+  if (window.__auv3_longpress_guard && Date.now() < window.__auv3_longpress_guard.until) return;
+  if (window.__KEEP_MENU_OPEN === true) return;
+  if (typeof window.__KEEP_MENU_OPEN === 'number') {
+    if (Date.now() < window.__KEEP_MENU_OPEN) return; else { try{ window.__KEEP_MENU_OPEN = null; }catch(_){ } }
+  }
         const m = document.getElementById('auv3-file-menu');
         if (!m) return;
-        if (!m.contains(ev.target)) close_file_context_menu();
+    if (!m.contains(ev.target)) { try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ } close_file_context_menu(); }
       }catch(_){ }
     };
-    document.addEventListener('mousedown', window.__file_menu_doc_close, true);
-    document.addEventListener('touchstart', window.__file_menu_doc_close, true);
+    // Install close listeners with a tiny delay to ignore trailing events from the long-press gesture
+    try{
+      setTimeout(()=>{
+        try{ document.addEventListener('mousedown', window.__file_menu_doc_close, true); }catch(_){ }
+        try{ document.addEventListener('touchstart', window.__file_menu_doc_close, true); }catch(_){ }
+      }, 60);
+    }catch(_){ }
 
     // Ensure cleanup of the key handler when menu closes
-    const oldClose = close_file_context_menu;
-    close_file_context_menu = function(){ try{ document.removeEventListener('keydown', onMenuKey, true); }catch(_){ } try{ window.__file_menu_doc_close && document.removeEventListener('mousedown', window.__file_menu_doc_close, true); }catch(_){ } try{ window.__file_menu_doc_close && document.removeEventListener('touchstart', window.__file_menu_doc_close, true); }catch(_){ } window.__file_menu_doc_close = null; try{ const m = document.getElementById('auv3-file-menu'); m && m.remove(); }catch(_){ } };
+  const oldClose = close_file_context_menu;
+    close_file_context_menu = function(){
+      try{ document.removeEventListener('keydown', onMenuKey, true); }catch(_){ }
+      try{ window.__file_menu_doc_close && document.removeEventListener('mousedown', window.__file_menu_doc_close, true); }catch(_){ }
+      try{ window.__file_menu_doc_close && document.removeEventListener('touchstart', window.__file_menu_doc_close, true); }catch(_){ }
+      try{ window.__file_menu_keep_guard && document.removeEventListener('touchstart', window.__file_menu_keep_guard, true); }catch(_){ }
+      try{ window.__file_menu_keep_guard && document.removeEventListener('pointerdown', window.__file_menu_keep_guard, true); }catch(_){ }
+      window.__file_menu_doc_close = null; window.__file_menu_keep_guard = null;
+      try{ window.__KEEP_MENU_OPEN = false; }catch(_){ }
+      try{ const m = document.getElementById('auv3-file-menu'); m && m.remove(); }catch(_){ }
+    };
   }catch(e){ console.warn('show_file_context_menu error', e); }
 }
 
 // Open menu at arbitrary position (for empty area or global triggers)
-function open_file_menu_at(x, y, fileItem, fullPath, listing){
+function open_file_menu_at(x, y, fileItem, fullPath, listing, opts){
   try{
     close_file_context_menu();
     const left = Math.min(window.innerWidth - 160, Math.max(8, x));
     const top = Math.min(window.innerHeight - 60, Math.max(8, y));
     // Create a temporary anchor
     const anchor = $('div', { parent: document.body, css: { position:'fixed', left: left+'px', top: top+'px', width:'1px', height:'1px', pointerEvents:'none', opacity:'0' } });
-    show_file_context_menu(anchor, fileItem, fullPath, listing);
+  show_file_context_menu(anchor, fileItem, fullPath, listing, opts);
     try{ setTimeout(()=>{ anchor && anchor.remove && anchor.remove(); }, 0); }catch(_){ }
   }catch(e){ console.warn('open_file_menu_at error', e); }
 }
@@ -1405,14 +1533,43 @@ function display_files(target, listing, opts = {}) {
 
     // Sections
     let __linearIndex = 0; const __indexToPath = [];
+    // Small helper to open the context menu at event coords while preserving selection
+    function openMenuPreserveSelection(e, li, fileItem, fullPath, listing){
+      try{ e.preventDefault(); e.stopPropagation(); }catch(_){ }
+      try{ close_file_context_menu(); }catch(_){ }
+      try{
+        const modality = (window.__auv3_input && window.__auv3_input.modality) || 'mouse';
+        const currentSel = sel_list();
+        const idx = parseInt(li.getAttribute('data-index')||'0',10);
+        if (modality === 'mouse') {
+          // Mouse: if a selection exists, preserve it entirely; only set focus if item is in selection
+          if (currentSel && currentSel.length > 0) {
+            if (sel_is_selected(fullPath)) { window.__auv3_selection.focus = idx; update_selection_ui(wrap); }
+          } else {
+            sel_replace([fullPath]);
+            window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+            update_selection_ui(wrap);
+          }
+        } else {
+          // Touch or other: fall back to single select behavior
+          sel_replace([fullPath]);
+          window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+          update_selection_ui(wrap);
+        }
+      }catch(_){ }
+      try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+      try{ open_file_menu_at(e.clientX||8, e.clientY||8, fileItem, fullPath, listing); }catch(_){ }
+    }
+
     const mkSection = (label, items, isDir) => {
       const sec = $('div', { parent: wrap });
       // Removed section title as requested
       const ul = $('ul', { parent: sec, css: { ...defaults.list, ...(theme.list||{}) } });
       try{ ul.setAttribute('data-section', isDir ? 'folders' : 'files'); }catch(_){ }
       (items || []).forEach((it) => {
-        const fullPath = path_join(listing.path, it.name);
-        let longPressFired = false;
+  const fullPath = path_join(listing.path, it.name);
+  let longPressFired = false;
+  let rightMouseDown = false;
         // Shared state for pointer cycle
         let shiftDownAtPointerDown = false;
         let dragging = false;
@@ -1426,37 +1583,9 @@ function display_files(target, listing, opts = {}) {
             ...(theme.item||{}),
             ...(isDir ? (theme.folderItem||{}) : (theme.fileItem||{})),
             ...(isDir ? {} : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' })
-          },
-          onclick: (ev)=>{
-            if (longPressFired) { longPressFired = false; return; }
-            if (dragStarted) { dragStarted = false; return; }
-            const multiMode = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
-            // In multi mode, treat clicks as selection (do not enter folders)
-            const shift = multiMode || !!shiftDownAtPointerDown || is_shift_active(ev);
-            if (isDir && !shift) {
-              // Single-click folder open only when not in multi/shift mode
-              if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath);
-              else nav_enter_folder(fullPath);
-              return;
-            }
-            // Selection logic for both files and folders when shift/multi is active
-            const idx = parseInt(li.getAttribute('data-index')||'0',10);
-            if (!shift) {
-              // Single selection mode
-              sel_replace([fullPath]);
-              window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
-            } else {
-              // Multi-select toggle behavior
-              if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath);
-              window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
-            }
-            update_selection_ui(wrap);
-          },
-          ondblclick: ()=>{
-            if (isDir) return;
-            try { const t = detect_file_type(it.name); file_type_decision(t, it, fullPath); } catch(e){ console.warn('open error', e); }
-          }
+    }
         });
+  // All item click/touch interactions disabled per request
         li.setAttribute('data-fullpath', fullPath);
         li.setAttribute('data-isdir', isDir ? '1' : '0');
         li.setAttribute('data-index', String(__linearIndex));
@@ -1467,69 +1596,39 @@ function display_files(target, listing, opts = {}) {
         }
         const nameSpan = create_editable_name_span(it.name);
         try { li.appendChild(nameSpan); } catch(_) { }
+        // Inline rename on long-press of the label (mouse hold or touch hold)
         try{
-          // Single click on name: only select, no edit
-          nameSpan.addEventListener('click', (ev)=>{
+          // Mouse long-press on label
+          nameSpan.addEventListener('mousedown', (ev)=>{
+            if (ev.button !== 0) return; // left only
             ev.stopPropagation();
-            const idx = parseInt(li.getAttribute('data-index')||'0',10);
-            const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
-            const shift = is_shift_active(ev);
-            // If it's a folder and not in multi/shift mode, open it directly
-            if (isDir && !shift) {
-              try { if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath); else nav_enter_folder(fullPath); } catch(_){ }
-              return;
-            }
-            try{
-              if (multi) {
-                if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath);
-                window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
-              } else {
-                sel_replace([fullPath]);
-                window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+            const sx = ev.clientX||0, sy = ev.clientY||0; let moved=false;
+            const mv = (e2)=>{ if (Math.hypot((e2.clientX||0)-sx, (e2.clientY||0)-sy) > 6) moved=true; };
+            const up = ()=>{ window.removeEventListener('mousemove', mv, true); window.removeEventListener('mouseup', up, true); };
+            window.addEventListener('mousemove', mv, true);
+            window.addEventListener('mouseup', up, true);
+            const timer = setTimeout(()=>{
+              if (!moved) { try{ sel_replace([fullPath]); const idx=parseInt(li.getAttribute('data-index')||'0',10); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; update_selection_ui(wrap); }catch(_){ } edit_filer_element(listing, fullPath); }
+            }, 550);
+            window.addEventListener('mouseup', ()=>{ try{ clearTimeout(timer); }catch(_){ } }, { once:true, capture:true });
+          }, true);
+          // Touch long-press on label
+          nameSpan.addEventListener('touchstart', (ev)=>{
+            ev.stopPropagation();
+            const t = ev.changedTouches && ev.changedTouches[0]; if (!t) return;
+            const sx=t.clientX, sy=t.clientY; let moved=false;
+            const onMove=(e2)=>{ const tt=e2.changedTouches&&e2.changedTouches[0]; if (!tt) return; if (Math.hypot(tt.clientX-sx, tt.clientY-sy) > 12) moved=true; };
+            const onEnd=()=>{ window.removeEventListener('touchmove', onMove, true); };
+            window.addEventListener('touchmove', onMove, true);
+            window.addEventListener('touchend', onEnd, { once:true, capture:true });
+            const timer = setTimeout(()=>{
+              if (!moved) {
+                try{ sel_replace([fullPath]); const idx=parseInt(li.getAttribute('data-index')||'0',10); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; update_selection_ui(wrap); }catch(_){ }
+                edit_filer_element(listing, fullPath);
               }
-            }catch(_){ }
-            try{ update_selection_ui(wrap); }catch(_){ }
-          });
-          // Long-press on name: start inline edit (not on the whole row)
-          let nsTimer = null; let nsSX=0, nsSY=0;
-          const nsStart = (e)=>{
-            try{ e.stopPropagation(); }catch(_){ }
-            if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
-            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-            nsSX = pt.clientX||0; nsSY = pt.clientY||0;
-            if (nsTimer) clearTimeout(nsTimer);
-            nsTimer = setTimeout(()=>{
-              longPressFired = true;
-              try {
-                const selected = sel_list();
-                const count = (selected && selected.length) ? selected.length : 0;
-                if (count > 0) {
-                  // Preserve selection; open context menu
-                  show_file_context_menu(li, it, fullPath, listing);
-                } else {
-                  // Select this item, then open context menu
-                  try{ sel_replace([fullPath]); window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10); update_selection_ui(wrap); }catch(_){ }
-                  show_file_context_menu(li, it, fullPath, listing);
-                }
-              } catch(_) { show_file_context_menu(li, it, fullPath, listing); }
-            }, 450);
-          };
-          const nsMove = (e)=>{
-            try{ e.stopPropagation(); }catch(_){ }
-            if (!nsTimer) return;
-            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-            const dx = Math.abs((pt.clientX||0) - nsSX), dy = Math.abs((pt.clientY||0) - nsSY);
-            if (dx > 8 || dy > 8) { clearTimeout(nsTimer); nsTimer=null; }
-          };
-          const nsCancel = (e)=>{ try{ e && e.stopPropagation && e.stopPropagation(); }catch(_){ } if (nsTimer) { clearTimeout(nsTimer); nsTimer=null; } };
-          nameSpan.addEventListener('pointerdown', nsStart);
-          nameSpan.addEventListener('pointermove', nsMove);
-          nameSpan.addEventListener('pointerup', nsCancel);
-          nameSpan.addEventListener('pointerleave', nsCancel);
-          nameSpan.addEventListener('touchstart', nsStart, { passive:true });
-          nameSpan.addEventListener('touchmove', nsMove, { passive:true });
-          nameSpan.addEventListener('touchend', nsCancel);
-          nameSpan.addEventListener('touchcancel', nsCancel);
+            }, 600);
+            window.addEventListener('touchend', ()=>{ try{ clearTimeout(timer); }catch(_){ } }, { once:true, capture:true });
+          }, { capture:true });
         }catch(_){ }
         // Focus auto si dans les créations récentes
         try {
@@ -1561,95 +1660,115 @@ function display_files(target, listing, opts = {}) {
           }, (theme.deleteButton||{}));
         }
 
-        // Drag-to-select across items
+        // Mouse interactions on row
         try{
-          if (isDir) { /* no drag-to-select on directories */ throw new Error('skip-drag-setup'); }
-          const startDrag = (e)=>{ if (e && e.buttons===1) { dragging = true; dragStarted = false; shiftDownAtPointerDown = is_shift_active(e); } };
-          const ensureStartSelected = ()=>{
-            if (!dragging || dragStarted) return;
-            // If a long-press is pending, don't alter selection
-            if (pressTimer) return;
-            dragStarted = true;
-            if (!shiftDownAtPointerDown) sel_clear();
-            sel_add(fullPath); update_selection_ui(wrap);
-          };
-          const enter = ()=>{ if (!dragging) return; ensureStartSelected(); sel_add(fullPath); update_selection_ui(wrap); };
-          li.addEventListener('pointerenter', enter);
-          li.addEventListener('touchmove', enter, { passive: true });
-          li.addEventListener('pointerdown', startDrag);
-          li.addEventListener('pointermove', ensureStartSelected);
-          const stopDrag = ()=>{ dragging = false; };
-          li.addEventListener('pointerup', stopDrag);
-          li.addEventListener('pointerleave', ()=>{});
+          // Left click selection
+          li.addEventListener('click', (e)=>{
+            // Ignore synthetic clicks shortly after touch interactions
+            if (clicks_suppressed && clicks_suppressed()) { e.preventDefault(); e.stopPropagation(); return; }
+            e.stopPropagation();
+            const multi = is_shift_active(e);
+            const idx = parseInt(li.getAttribute('data-index')||'0',10);
+            if (multi) {
+              if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath);
+              if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor = idx;
+              window.__auv3_selection.focus = idx;
+            } else {
+              sel_replace([fullPath]); window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+            }
+            update_selection_ui(wrap);
+          }, true);
+          // Double-click open
+          li.addEventListener('dblclick', (e)=>{
+            e.stopPropagation(); e.preventDefault();
+            if (isDir) { nav_enter_folder(fullPath); } else { nav_preview_file_by_name(fullPath); }
+          }, true);
+          // Right-click: preserve selection and open context menu
+          li.addEventListener('contextmenu', (e)=>{
+            e.preventDefault(); e.stopPropagation();
+            const idx = parseInt(li.getAttribute('data-index')||'0',10);
+            const hasSel = sel_list().length>0;
+            if (!hasSel) { sel_replace([fullPath]); window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx; }
+            else if (sel_is_selected(fullPath)) { window.__auv3_selection.focus = idx; }
+            update_selection_ui(wrap);
+            open_file_menu_at(e.clientX||8, e.clientY||8, it, fullPath, listing);
+          }, true);
+          // Mouse long-press (hold) starts inline rename
+          li.addEventListener('mousedown', (ev)=>{
+            if (ev.button!==0) return;
+            ev.stopPropagation();
+            const sx=ev.clientX||0, sy=ev.clientY||0; let moved=false;
+            const mv=(e2)=>{ if (Math.hypot((e2.clientX||0)-sx, (e2.clientY||0)-sy)>6) moved=true; };
+            const up=()=>{ window.removeEventListener('mousemove', mv, true); window.removeEventListener('mouseup', up, true); };
+            window.addEventListener('mousemove', mv, true); window.addEventListener('mouseup', up, true);
+      const timer=setTimeout(()=>{
+              if (!moved) {
+                const idx=parseInt(li.getAttribute('data-index')||'0',10);
+                if (!window.__auv3_selection.shiftLock) { sel_replace([fullPath]); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
+                else if (!sel_is_selected(fullPath)) { sel_add(fullPath); window.__auv3_selection.focus=idx; if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor=idx; }
+                update_selection_ui(wrap);
+                edit_filer_element(listing, fullPath);
+        try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+              }
+            }, 550);
+            window.addEventListener('mouseup', ()=>{ try{ clearTimeout(timer); }catch(_){ } }, { once:true, capture:true });
+          }, true);
         }catch(_){ }
 
-        // Long-press to open context menu (files and folders)
+        // Touch interactions on row
         try{
-          const start = (e)=>{
-            if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
-            try{ close_file_context_menu(); }catch(_){ }
-            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-            startX = pt.clientX||0; startY = pt.clientY||0;
-            if (pressTimer) { clearTimeout(pressTimer); }
-            pressTimer = setTimeout(()=>{
-              if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
-              longPressFired = true;
-              try {
-                const selected = sel_list();
-                const count = (selected && selected.length) ? selected.length : 0;
-                if (count > 0) {
-                  // With an active selection, open menu and keep selection unchanged
-                  show_file_context_menu(li, it, fullPath, listing);
-                } else {
-                  // No selection: select the pressed item, then open menu
-                  try{ sel_replace([fullPath]); window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10); update_selection_ui(wrap); }catch(_){ }
-                  show_file_context_menu(li, it, fullPath, listing);
-                }
-              } catch(_) { show_file_context_menu(li, it, fullPath, listing); }
-            }, 450);
-          };
-          const move = (e)=>{
-            if (!pressTimer) return;
-            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-            const dx = Math.abs((pt.clientX||0) - startX), dy = Math.abs((pt.clientY||0) - startY);
-            if (dx > 8 || dy > 8) { clearTimeout(pressTimer); pressTimer=null; }
-          };
-          const cancel = ()=>{ if (pressTimer) { clearTimeout(pressTimer); pressTimer=null; } };
-          li.addEventListener('pointerdown', start);
-          li.addEventListener('pointermove', move);
-          li.addEventListener('pointerup', cancel);
-          li.addEventListener('pointerleave', cancel);
-          li.addEventListener('touchstart', start, { passive: true });
-          li.addEventListener('touchmove', move, { passive: true });
-          li.addEventListener('touchend', cancel);
-          li.addEventListener('touchcancel', cancel);
-          // Right-click (mouse) to open context menu
-          li.addEventListener('contextmenu', (e)=>{
-            try{ e.preventDefault(); e.stopPropagation(); }catch(_){ }
-            try{ close_file_context_menu(); }catch(_){ }
-            // Preserve selection if the clicked item is already within it; otherwise select just this item
-            try{
-              const selection = sel_list();
-              const idx = parseInt(li.getAttribute('data-index')||'0',10);
-              const inSelection = selection && selection.indexOf(fullPath) !== -1;
-              if (inSelection) {
-                // Keep current selection; only update focus to the clicked item
-                window.__auv3_selection.focus = idx;
-              } else {
-                // Replace selection with the clicked item
-                sel_replace([fullPath]);
-                window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+          let lastTap=0, lastX=0, lastY=0;
+          li.addEventListener('touchstart', (ev)=>{
+            ev.stopPropagation();
+            const t = ev.changedTouches && ev.changedTouches[0]; if (!t) return;
+            const x=t.clientX, y=t.clientY; const idx = parseInt(li.getAttribute('data-index')||'0',10);
+            let moved=false; let longFired=false;
+            const onMove=(e2)=>{ const tt=e2.changedTouches&&e2.changedTouches[0]; if (!tt) return; if (Math.hypot(tt.clientX-x, tt.clientY-y) > 12) moved=true; };
+            const onEnd=()=>{ window.removeEventListener('touchmove', onMove, true); };
+            window.addEventListener('touchmove', onMove, true);
+            window.addEventListener('touchend', onEnd, { once:true, capture:true });
+            // Detect double tap
+            const now = Date.now(); const dbl = (now-lastTap<400) && Math.abs(x-lastX)<24 && Math.abs(y-lastY)<24;
+            if (dbl) {
+              if (isDir) { nav_enter_folder(fullPath); } else { nav_preview_file_by_name(fullPath); }
+              lastTap = 0; return;
+            }
+            // Long press opens menu and may start rename if on label
+            const onLabel = !!nameSpan.contains(ev.target);
+            const timer = setTimeout(()=>{
+              if (!moved) {
+                longFired = true;
+                const multi = !!window.__auv3_selection.shiftLock;
+                if (!multi) { sel_replace([fullPath]); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
+                else { if (!sel_is_selected(fullPath)) sel_add(fullPath); window.__auv3_selection.focus=idx; if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor=idx; }
                 update_selection_ui(wrap);
+                open_file_menu_at(x, y, it, fullPath, listing, { suppressAutoFocus: true });
+                if (onLabel) edit_filer_element(listing, fullPath);
+                try{ window.__auv3_longpress_guard = window.__auv3_longpress_guard || {}; window.__auv3_longpress_guard.until = Date.now() + 350; }catch(_){ }
+                try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
               }
-            }catch(_){ }
-            try{ show_file_context_menu(li, it, fullPath, listing); }catch(_){ }
-          });
+            }, 600);
+      window.addEventListener('touchend', ()=>{
+              try{ clearTimeout(timer); }catch(_){ }
+              if (!longFired) {
+                const multi = !!window.__auv3_selection.shiftLock;
+                if (multi) { if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath); if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
+                else { sel_replace([fullPath]); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
+                update_selection_ui(wrap);
+                lastTap = Date.now(); lastX=x; lastY=y;
+        // Suppress the following synthetic click to avoid toggling back
+        try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+              }
+            }, { once:true, capture:true });
+          }, { capture:true });
         }catch(_){ }
       });
     };
 
     mkSection('Dossiers', (listing && listing.folders) || [], true);
     mkSection('Fichiers', (listing && listing.files) || [], false);
+
+  // Custom filer event module integration disabled as requested.
 
     // Auto-select the first item when entering a folder if nothing is selected
     try{
@@ -1674,44 +1793,41 @@ function display_files(target, listing, opts = {}) {
       if (plan && plan.path) {
         // consume the plan to avoid re-entrancy loops
         try { delete opts.startInlineRename; } catch(_){ }
-    try{ select_item_by_path(wrap, plan.path); }catch(_){ }
-    setTimeout(()=>{ try{ select_item_by_path(wrap, plan.path); }catch(_){ } }, 50);
-    setTimeout(()=>{ try{ edit_filer_element(listing, plan.path); }catch(_){ } }, 0);
-    setTimeout(()=>{ try{ edit_filer_element(listing, plan.path); }catch(_){ } }, 120);
+  try{ select_item_by_path(wrap, plan.path); }catch(_){ }
+  setTimeout(()=>{ try{ select_item_by_path(wrap, plan.path); }catch(_){ } }, 50);
+  setTimeout(()=>{ try{ select_item_by_path(wrap, plan.path); }catch(_){ } }, 110);
+  setTimeout(()=>{ try{ edit_filer_element(listing, plan.path); }catch(_){ } }, 0);
+  setTimeout(()=>{ try{ edit_filer_element(listing, plan.path); }catch(_){ } }, 120);
       }
     }catch(_){ }
 
-    // Long-press on empty area opens the menu (for paste/select all/new)
+    // Empty-area interactions
     try{
-      let emptyPressTimer = null; let sx=0, sy=0;
-      const startEmpty = (e)=>{
-        if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
-        const target = e.target;
-        const isListContent = target && (target.closest && target.closest('li[data-fullpath]'));
-        const onHeaderBtn = target && ((target.closest && target.closest('#btn-shift')) || (target.closest && target.closest('#btn-import')));
-        if (isListContent || onHeaderBtn) return; // handled by item long-press / ignore header buttons
-        const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
-        sx = pt.clientX||0; sy = pt.clientY||0;
-        if (emptyPressTimer) clearTimeout(emptyPressTimer);
-        emptyPressTimer = setTimeout(()=>{ if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return; open_file_menu_at(sx, sy, null, null, listing); }, 500);
-      };
-      const cancelEmpty = ()=>{ if (emptyPressTimer) { clearTimeout(emptyPressTimer); emptyPressTimer=null; } };
-      wrap.addEventListener('pointerdown', startEmpty);
-      wrap.addEventListener('pointerup', cancelEmpty);
-      wrap.addEventListener('pointerleave', cancelEmpty);
-      wrap.addEventListener('touchstart', startEmpty, { passive:true });
-      wrap.addEventListener('touchend', cancelEmpty);
-      wrap.addEventListener('touchcancel', cancelEmpty);
-      // Right-click in empty area: open menu at cursor position
+      // Left click on empty space: clear selection
+      wrap.addEventListener('click', (e)=>{
+        const li = e.target && e.target.closest && e.target.closest('li[data-fullpath]');
+        if (!li) { sel_clear(); update_selection_ui(wrap); }
+      });
+      // Right click on empty space: open context menu at cursor, do not clear selection
       wrap.addEventListener('contextmenu', (e)=>{
-        try{
-          const target = e.target;
-          const inItem = target && target.closest && target.closest('li[data-fullpath]');
-          const inHeaderBtn = target && target.closest && (target.closest('#btn-shift') || target.closest('#btn-import'));
-          if (inItem || inHeaderBtn) return; // per-item handler covers those cases
-          e.preventDefault(); e.stopPropagation();
-          open_file_menu_at(e.clientX||8, e.clientY||8, null, null, listing);
-        }catch(_){ }
+        const li = e.target && e.target.closest && e.target.closest('li[data-fullpath]');
+        if (!li) { e.preventDefault(); e.stopPropagation(); open_file_menu_at(e.clientX||8, e.clientY||8, null, null, listing); }
+      });
+      // Long press on empty space (touch): open menu
+      wrap.addEventListener('touchstart', (e)=>{
+        const li = e.target && e.target.closest && e.target.closest('li[data-fullpath]'); if (li) return;
+        const t = e.changedTouches && e.changedTouches[0]; if (!t) return;
+        const x=t.clientX, y=t.clientY; let moved=false;
+        const onMove=(ev)=>{ const tt=ev.changedTouches&&ev.changedTouches[0]; if (!tt) return; if (Math.hypot(tt.clientX-x, tt.clientY-y)>12) moved=true; };
+        const clear=()=>{ window.removeEventListener('touchmove', onMove, true); };
+        window.addEventListener('touchmove', onMove, true);
+        const timer=setTimeout(()=>{ if (!moved) { open_file_menu_at(x, y, null, null, listing); try{ window.__auv3_longpress_guard = window.__auv3_longpress_guard || {}; window.__auv3_longpress_guard.until = Date.now() + 350; }catch(_){ } try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ } } }, 600);
+        window.addEventListener('touchend', ()=>{ try{ clearTimeout(timer); clear(); }catch(_){ } }, { once:true, capture:true });
+      }, { capture:true });
+      // Tap on empty space clears selection (touch)
+      wrap.addEventListener('touchend', (e)=>{
+        const li = e.target && e.target.closest && e.target.closest('li[data-fullpath]');
+        if (!li) { sel_clear(); update_selection_ui(wrap); }
       });
     }catch(_){ }
 
