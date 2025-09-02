@@ -1627,11 +1627,16 @@ function display_files(target, listing, opts = {}) {
           li.addEventListener('contextmenu', (e)=>{
             try{ e.preventDefault(); e.stopPropagation(); }catch(_){ }
             try{ close_file_context_menu(); }catch(_){ }
-            // Select the item under cursor unless multi-selection is already active
+            // Preserve selection if the clicked item is already within it; otherwise select just this item
             try{
-              const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
-              if (!multi) {
-                const idx = parseInt(li.getAttribute('data-index')||'0',10);
+              const selection = sel_list();
+              const idx = parseInt(li.getAttribute('data-index')||'0',10);
+              const inSelection = selection && selection.indexOf(fullPath) !== -1;
+              if (inSelection) {
+                // Keep current selection; only update focus to the clicked item
+                window.__auv3_selection.focus = idx;
+              } else {
+                // Replace selection with the clicked item
                 sel_replace([fullPath]);
                 window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
                 update_selection_ui(wrap);
