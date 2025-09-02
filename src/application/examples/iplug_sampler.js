@@ -936,8 +936,9 @@ function request_delete_selection_or_item(fullPath, listing){
     const isDir = dirSet.has(p);
     try{
       fs_begin(700);
-      if (isDir && delDir) {
-        try { delDir(p, ()=>{ next(); }); } catch(_){ next(); }
+      if (isDir) {
+        // Recursively delete directories (handles non-empty folders)
+        (async ()=>{ try{ await delete_dir_recursive(p); }catch(_){ } next(); })();
       } else if (delFile) {
         try { delFile(p, ()=>{ next(); }); } catch(_){ next(); }
       } else {
@@ -946,6 +947,56 @@ function request_delete_selection_or_item(fullPath, listing){
     }catch(_){ next(); }
   };
   next();
+}
+
+// Recursive delete utilities to remove non-empty folders safely
+async function delete_dir_recursive(path){
+  const FS = window.AtomeFileSystem || {};
+  // Prefer a native recursive API if available
+  try{
+    if (typeof FS.deleteDirectoryRecursive === 'function') {
+      return await new Promise((resolve)=>{ try{ FS.deleteDirectoryRecursive(path, ()=>resolve()); }catch(_){ resolve(); } });
+    }
+    if (typeof FS.removeDirectoryRecursive === 'function') {
+      return await new Promise((resolve)=>{ try{ FS.removeDirectoryRecursive(path, ()=>resolve()); }catch(_){ resolve(); } });
+    }
+  }catch(_){ }
+  // Promisified helpers
+  const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
+  const delDir = (FS.deleteDirectory && typeof FS.deleteDirectory==='function') ? FS.deleteDirectory.bind(FS)
+               : (FS.removeDirectory && typeof FS.removeDirectory==='function') ? FS.removeDirectory.bind(FS)
+               : (FS.rmdir && typeof FS.rmdir==='function') ? FS.rmdir.bind(FS)
+               : (FS.deleteFolder && typeof FS.deleteFolder==='function') ? FS.deleteFolder.bind(FS)
+               : (FS.removeFolder && typeof FS.removeFolder==='function') ? FS.removeFolder.bind(FS)
+               : null;
+  const pDeleteFile = async (p)=>{
+    if (!delFile) return;
+    await new Promise((resolve)=>{ try{ delFile(p, ()=>resolve()); }catch(_){ resolve(); } });
+  };
+  const pDeleteDir = async (p)=>{
+    if (!delDir) return;
+    await new Promise((resolve)=>{ try{ delDir(p, ()=>resolve()); }catch(_){ resolve(); } });
+  };
+  // List children, delete them, then delete the folder
+  try{
+    const childListing = await get_auv3_files(path);
+    const folders = (childListing && childListing.folders) || [];
+    const files = (childListing && childListing.files) || [];
+    // Delete files first
+    for (let i=0; i<files.length; i++){
+      const f = files[i];
+      const child = path_join(path, String(f.name||''));
+      await pDeleteFile(child);
+    }
+    // Recurse into subfolders
+    for (let j=0; j<folders.length; j++){
+      const d = folders[j];
+      const childDir = path_join(path, String(d.name||''));
+      await delete_dir_recursive(childDir);
+    }
+  }catch(_){ /* ignore */ }
+  // Finally remove the now-empty directory
+  try{ await pDeleteDir(path); }catch(_){ }
 }
 
 // Use native batch delete when multiple are selected for atomic behavior
@@ -962,7 +1013,30 @@ function nav_delete_selection(listing){
     }
   }catch(_){ }
   // Fallback to previous per-item path
-  try{ request_delete_selection_or_item(null, listing); }catch(_){ }
+  try{
+    // Fallback: delete items one by one, using recursive delete for directories
+    const arr = sel_list();
+    if (!arr || !arr.length) return;
+    const dirSet = new Set(((listing&&listing.folders)||[]).map(f=> path_join(listing.path, String(f.name||''))));
+    let i = 0;
+    const next = ()=>{
+      if (i >= arr.length) { try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
+      const p = arr[i++];
+      const isDir = dirSet.has(p);
+      try{
+        fs_begin(700);
+        if (isDir) {
+          (async ()=>{ try{ await delete_dir_recursive(p); }catch(_){ } next(); })();
+        } else {
+          const FS = window.AtomeFileSystem || {};
+          const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
+          if (delFile) { try{ delFile(p, ()=> next()); }catch(_){ next(); } }
+          else { next(); }
+        }
+      }catch(_){ next(); }
+    };
+    next();
+  }catch(_){ }
 }
 
 // Force-delete a specific path, ignoring current selection. Useful for context menu on unselected items.
@@ -979,9 +1053,29 @@ function request_delete_exact(fullPath, listing){
                  : null;
     if (!delFile && !delDir) { console.warn('Aucune API de suppression disponible'); return; }
     const isDir = !!(((listing&&listing.folders)||[]).find(f=> path_join(listing.path, String(f.name||'')) === fullPath));
-    fs_begin(700);
+    fs_begin(900);
     const done = ()=>{ try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ try{ fs_end(0); }catch(__){} } };
-    if (isDir && delDir) { try{ delDir(fullPath, done); }catch(_){ done(); } return; }
+    if (isDir) {
+      (async ()=>{
+        try {
+          // Check if directory is empty
+          const childListing = await get_auv3_files(fullPath);
+          const hasChildren = !!((childListing && ((childListing.files&&childListing.files.length) || (childListing.folders&&childListing.folders.length))) || 0);
+          if (hasChildren) {
+            await delete_dir_recursive(fullPath);
+            done();
+            return;
+          }
+          // Empty directory: try native simple delete
+          if (delDir) {
+            try { delDir(fullPath, ()=> done()); } catch(_) { done(); }
+          } else {
+            done();
+          }
+        } catch(_) { done(); }
+      })();
+      return;
+    }
     if (delFile) { try{ delFile(fullPath, done); }catch(_){ done(); } return; }
     done();
   }catch(_){ }
@@ -1379,6 +1473,12 @@ function display_files(target, listing, opts = {}) {
             ev.stopPropagation();
             const idx = parseInt(li.getAttribute('data-index')||'0',10);
             const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
+            const shift = is_shift_active(ev);
+            // If it's a folder and not in multi/shift mode, open it directly
+            if (isDir && !shift) {
+              try { if (opts && typeof opts.onFolderClick === 'function') opts.onFolderClick(it, fullPath); else nav_enter_folder(fullPath); } catch(_){ }
+              return;
+            }
             try{
               if (multi) {
                 if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath);
@@ -1404,14 +1504,14 @@ function display_files(target, listing, opts = {}) {
                 const selected = sel_list();
                 const count = (selected && selected.length) ? selected.length : 0;
                 if (count > 0) {
-                  // With an active selection, only open the context menu; do not modify selection
+                  // Preserve selection; open context menu
                   show_file_context_menu(li, it, fullPath, listing);
                 } else {
-                  // No selection: select this item and start inline edit
+                  // Select this item, then open context menu
                   try{ sel_replace([fullPath]); window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10); update_selection_ui(wrap); }catch(_){ }
-                  try{ edit_filer_element(listing, fullPath); }catch(_){ }
+                  show_file_context_menu(li, it, fullPath, listing);
                 }
-              } catch(_) { }
+              } catch(_) { show_file_context_menu(li, it, fullPath, listing); }
             }, 450);
           };
           const nsMove = (e)=>{
@@ -1493,23 +1593,16 @@ function display_files(target, listing, opts = {}) {
             if (pressTimer) { clearTimeout(pressTimer); }
             pressTimer = setTimeout(()=>{
               if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
-              // If long-press originated on the name, prefer inline edit instead of menu
-              const t = e.target;
               longPressFired = true;
               try {
                 const selected = sel_list();
                 const count = (selected && selected.length) ? selected.length : 0;
                 if (count > 0) {
-                  // With an active selection, always open menu and keep selection unchanged
+                  // With an active selection, open menu and keep selection unchanged
                   show_file_context_menu(li, it, fullPath, listing);
-                  return;
-                }
-                if (t && t.closest && t.closest('span[data-role="name"]')) {
-                  // No selection and press on name: start edit
-                  try{ sel_replace([fullPath]); window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10); update_selection_ui(wrap); }catch(_){ }
-                  try{ edit_filer_element(listing, fullPath); }catch(_){ }
                 } else {
-                  // No selection: open menu
+                  // No selection: select the pressed item, then open menu
+                  try{ sel_replace([fullPath]); window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10); update_selection_ui(wrap); }catch(_){ }
                   show_file_context_menu(li, it, fullPath, listing);
                 }
               } catch(_) { show_file_context_menu(li, it, fullPath, listing); }
