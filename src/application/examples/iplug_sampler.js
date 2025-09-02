@@ -252,7 +252,7 @@ function edit_filer_element(listing, fullPath){
   try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; nameSpan.inputMode = 'text'; }catch(_){ }
   try{ nameSpan.style.userSelect = 'text'; nameSpan.style.WebkitUserSelect = 'text'; nameSpan.style.pointerEvents = 'auto'; nameSpan.style.webkitTouchCallout = 'default'; }catch(_){ }
   try{ window.__INLINE_EDITING = true; }catch(_){ }
-    nameSpan.style.outline = '1px dashed ' + UI.colors.accent;
+    nameSpan.style.outline = 'none' + UI.colors.accent;
     nameSpan.style.backgroundColor = 'rgba(255,255,255,0.05)';
     const selectAll = ()=>{
       try{
