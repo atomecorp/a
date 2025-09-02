@@ -1749,6 +1749,8 @@ function display_files(target, listing, opts = {}) {
             const t = ev.changedTouches && ev.changedTouches[0]; if (!t) return;
             const x=t.clientX, y=t.clientY; const idx = parseInt(li.getAttribute('data-index')||'0',10);
             let moved=false; let longFired=false;
+            // Record touch-drag start info so the origin item is included once drag begins
+            try{ window.__auv3_touch_drag_info = { startPath: fullPath, started: false }; }catch(_){ }
             const onMove=(e2)=>{ const tt=e2.changedTouches&&e2.changedTouches[0]; if (!tt) return; if (Math.hypot(tt.clientX-x, tt.clientY-y) > 12) moved=true; };
             const onEnd=()=>{ window.removeEventListener('touchmove', onMove, true); };
             window.addEventListener('touchmove', onMove, true);
@@ -1775,9 +1777,9 @@ function display_files(target, listing, opts = {}) {
                 try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
               }
             }, 600);
-      window.addEventListener('touchend', ()=>{
+  window.addEventListener('touchend', ()=>{
               try{ clearTimeout(timer); }catch(_){ }
-              if (!longFired) {
+      if (!longFired && !moved) {
                 const multi = !!window.__auv3_selection.shiftLock;
                 if (multi) { if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath); if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
                 else { sel_replace([fullPath]); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
@@ -1786,6 +1788,8 @@ function display_files(target, listing, opts = {}) {
         // Suppress the following synthetic click to avoid toggling back
         try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
               }
+      // Reset touch-drag info at gesture end
+      try{ if (window.__auv3_touch_drag_info) window.__auv3_touch_drag_info = null; }catch(_){ }
             }, { once:true, capture:true });
           }, { capture:true });
         }catch(_){ }
@@ -1861,6 +1865,8 @@ function display_files(target, listing, opts = {}) {
         wrap.addEventListener('pointermove', (e)=>{
           try{
             if (!e || !(e.buttons & 1)) return; // only when primary button is pressed
+            // Mark that we are dragging with mouse so selection is preserved and clicks suppressed on release
+            try{ window.__auv3_mouse_dragging = true; }catch(_){ }
             const x = e.clientX||0, y = e.clientY||0;
             const el = document.elementFromPoint(x,y);
             if (!el) return;
@@ -1876,6 +1882,14 @@ function display_files(target, listing, opts = {}) {
             }
           }catch(_){ }
         }, { capture: true });
+        // On mouseup after a drag, suppress the trailing click so selection stays
+        window.addEventListener('mouseup', ()=>{
+          try{
+            if (window.__auv3_mouse_dragging) {
+              suppress_item_clicks(CLICK_SUPPRESS_MS);
+            }
+          }catch(_){ } finally { try{ window.__auv3_mouse_dragging = false; }catch(_){ } }
+        }, true);
       }catch(_){ }
       // Hover-select during touch drag: select item under finger while moving
       try{
@@ -1892,10 +1906,20 @@ function display_files(target, listing, opts = {}) {
             const now = Date.now();
             if (!window.__auv3_hover_sel_ts || now - window.__auv3_hover_sel_ts > 50) {
               window.__auv3_hover_sel_ts = now;
+              // Include the starting item once when drag begins
+              try{
+                if (window.__auv3_touch_drag_info && !window.__auv3_touch_drag_info.started) {
+                  const sp = window.__auv3_touch_drag_info.startPath;
+                  if (sp) select_item_by_path(wrap, sp);
+                  window.__auv3_touch_drag_info.started = true;
+                }
+              }catch(_){ }
               select_item_by_path(wrap, fp);
             }
           }catch(_){ }
         }, { capture: true, passive: true });
+        // On touchend, just clear the drag flag; selection remains as built during drag
+        window.addEventListener('touchend', ()=>{ try{ if (window.__auv3_touch_drag_info) window.__auv3_touch_drag_info = null; }catch(_){ } }, true);
       }catch(_){ }
     }catch(_){ }
 
