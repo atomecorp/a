@@ -1697,6 +1697,17 @@ function display_files(target, listing, opts = {}) {
       wrap.addEventListener('touchstart', startEmpty, { passive:true });
       wrap.addEventListener('touchend', cancelEmpty);
       wrap.addEventListener('touchcancel', cancelEmpty);
+      // Right-click in empty area: open menu at cursor position
+      wrap.addEventListener('contextmenu', (e)=>{
+        try{
+          const target = e.target;
+          const inItem = target && target.closest && target.closest('li[data-fullpath]');
+          const inHeaderBtn = target && target.closest && (target.closest('#btn-shift') || target.closest('#btn-import'));
+          if (inItem || inHeaderBtn) return; // per-item handler covers those cases
+          e.preventDefault(); e.stopPropagation();
+          open_file_menu_at(e.clientX||8, e.clientY||8, null, null, listing);
+        }catch(_){ }
+      });
     }catch(_){ }
 
     // Helpers for keyboard actions
