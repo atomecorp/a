@@ -219,6 +219,28 @@ function create_delete_button(parent, onClick, themeOverrides){
 // ------------------------------
 // Navigator helpers (centralized facilities)
 // ------------------------------
+// Ajoute cette fonction sans changer les noms existants
+function create_editable_name_span(text, role = 'name') {
+  try {
+    const span = document.createElement('span');
+    span.textContent = text;
+    try { span.setAttribute('data-role', role); } catch(_){}
+    span.contentEditable = 'true';
+    span.spellcheck = false;
+    // Styles requis pour l'édition inline lisible et non intrusive
+    span.style.outline = 'none';
+    span.style.display = 'inline-block';
+    span.style.minWidth = '1ch';
+    span.style.userSelect = 'text';
+    span.style.WebkitUserSelect = 'text';
+    span.style.pointerEvents = 'auto';
+    span.style.webkitTouchCallout = 'default';
+    // Empêcher la ligne/parent de capter le clic et les touches quand on édite
+    span.onkeydown = (event) => { try{ event.stopPropagation(); }catch(_){} };
+    span.onclick = (event) => { try{ event.stopPropagation(); }catch(_){} };
+    return span;
+  } catch(_) { return $('span', { text, 'data-role': role }); }
+}
 function edit_filer_element(listing, fullPath){
   try{
     const wrap = document.getElementById('auv3-file-list'); if (!wrap) return;
@@ -1350,7 +1372,8 @@ function display_files(target, listing, opts = {}) {
         if (isDir) {
           $('span', { parent: li, text: '●', css: { color: UI.colors.accent, fontSize:'10px', marginRight:'6px' }, 'data-role': 'dot' });
         }
-        const nameSpan = $('span', { parent: li, text: it.name, css: { userSelect: 'text' }, 'data-role': 'name' });
+        const nameSpan = create_editable_name_span(it.name);
+        try { li.appendChild(nameSpan); } catch(_) { }
         try{
           nameSpan.addEventListener('click', (ev)=>{
             ev.stopPropagation();
@@ -1360,6 +1383,21 @@ function display_files(target, listing, opts = {}) {
             setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0);
           });
         }catch(_){ }
+        // Focus auto si dans les créations récentes
+        try {
+          if (window.__recent_creations && window.__recent_creations.has(it.name)) {
+            setTimeout(() => {
+              try {
+                nameSpan.focus();
+                const range = document.createRange();
+                range.selectNodeContents(nameSpan);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+              } catch (_) {}
+            }, 100);
+          }
+        } catch(_){}
         // Add delete icon for files only
         if (!isDir) {
           create_delete_button(li, (ev)=>{
