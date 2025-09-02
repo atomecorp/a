@@ -1683,13 +1683,13 @@ function display_files(target, listing, opts = {}) {
             e.stopPropagation(); e.preventDefault();
             if (isDir) { nav_enter_folder(fullPath); } else { nav_preview_file_by_name(fullPath); }
           }, true);
-          // Right-click: preserve selection and open context menu
+          // Right-click with mouse: select the item under the cursor and open the menu
           li.addEventListener('contextmenu', (e)=>{
             e.preventDefault(); e.stopPropagation();
             const idx = parseInt(li.getAttribute('data-index')||'0',10);
-            const hasSel = sel_list().length>0;
-            if (!hasSel) { sel_replace([fullPath]); window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx; }
-            else if (sel_is_selected(fullPath)) { window.__auv3_selection.focus = idx; }
+            sel_replace([fullPath]);
+            window.__auv3_selection.anchor = idx;
+            window.__auv3_selection.focus = idx;
             update_selection_ui(wrap);
             open_file_menu_at(e.clientX||8, e.clientY||8, it, fullPath, listing);
           }, true);
