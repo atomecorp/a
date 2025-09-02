@@ -1836,6 +1836,8 @@ function display_files(target, listing, opts = {}) {
     try{
       // Left click on empty space: clear selection
       wrap.addEventListener('click', (e)=>{
+  // If a drag just ended, a trailing click may fire; ignore it to keep selection
+  try{ if (clicks_suppressed && clicks_suppressed()) { e.preventDefault(); e.stopPropagation(); return; } }catch(_){ }
         const li = e.target && e.target.closest && e.target.closest('li[data-fullpath]');
         if (!li) { sel_clear(); update_selection_ui(wrap); }
       });
