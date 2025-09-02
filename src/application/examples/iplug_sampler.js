@@ -240,8 +240,9 @@ function create_editable_name_span(text, role = 'name') {
     span.style.outline = 'none';
     span.style.display = 'inline-block';
     span.style.minWidth = '1ch';
-    span.style.userSelect = 'text';
-    span.style.WebkitUserSelect = 'text';
+  // Disable selection by default to avoid iOS long-tap text selection & system menu
+  span.style.userSelect = 'none';
+  span.style.WebkitUserSelect = 'none';
     span.style.pointerEvents = 'auto';
   span.style.webkitTouchCallout = 'none';
   // Pas de stopPropagation global ici; les handlers dédiés gèrent selon le contexte
@@ -1596,7 +1597,7 @@ function display_files(target, listing, opts = {}) {
         }
         const nameSpan = create_editable_name_span(it.name);
         try { li.appendChild(nameSpan); } catch(_) { }
-        // Inline rename on long-press of the label (mouse hold or touch hold)
+        // Long-press behavior on the label: open menu on touch, only select on mouse (no inline rename)
         try{
           // Mouse long-press on label
           nameSpan.addEventListener('mousedown', (ev)=>{
@@ -1608,7 +1609,15 @@ function display_files(target, listing, opts = {}) {
             window.addEventListener('mousemove', mv, true);
             window.addEventListener('mouseup', up, true);
             const timer = setTimeout(()=>{
-              if (!moved) { try{ sel_replace([fullPath]); const idx=parseInt(li.getAttribute('data-index')||'0',10); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; update_selection_ui(wrap); }catch(_){ } edit_filer_element(listing, fullPath); }
+              if (!moved) {
+                try{
+                  sel_replace([fullPath]);
+                  const idx=parseInt(li.getAttribute('data-index')||'0',10);
+                  window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx;
+                  update_selection_ui(wrap);
+                }catch(_){ }
+                // No inline rename on mouse long-press
+              }
             }, 550);
             window.addEventListener('mouseup', ()=>{ try{ clearTimeout(timer); }catch(_){ } }, { once:true, capture:true });
           }, true);
@@ -1623,8 +1632,18 @@ function display_files(target, listing, opts = {}) {
             window.addEventListener('touchend', onEnd, { once:true, capture:true });
             const timer = setTimeout(()=>{
               if (!moved) {
-                try{ sel_replace([fullPath]); const idx=parseInt(li.getAttribute('data-index')||'0',10); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; update_selection_ui(wrap); }catch(_){ }
-                edit_filer_element(listing, fullPath);
+                try{
+                  sel_replace([fullPath]);
+                  const idx=parseInt(li.getAttribute('data-index')||'0',10);
+                  window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx;
+                  update_selection_ui(wrap);
+                }catch(_){ }
+                // On touch long-press the label, open the context menu (no inline rename)
+                // Clear any accidental text selection from the long-press before opening menu
+                try{ const sel = window.getSelection && window.getSelection(); sel && sel.removeAllRanges && sel.removeAllRanges(); }catch(_){ }
+                try{ open_file_menu_at(sx, sy, it, fullPath, listing, { suppressAutoFocus: true }); }catch(_){ }
+                try{ window.__auv3_longpress_guard = window.__auv3_longpress_guard || {}; window.__auv3_longpress_guard.until = Date.now() + 350; }catch(_){ }
+                try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
               }
             }, 600);
             window.addEventListener('touchend', ()=>{ try{ clearTimeout(timer); }catch(_){ } }, { once:true, capture:true });
@@ -1678,6 +1697,14 @@ function display_files(target, listing, opts = {}) {
             }
             update_selection_ui(wrap);
           }, true);
+          // While dragging something over this row (HTML5 DnD), select the item under cursor
+          li.addEventListener('dragover', (e)=>{
+            try{
+              e.preventDefault(); // mark droppable and keep dragover firing
+              e.stopPropagation();
+              select_item_by_path(wrap, fullPath);
+            }catch(_){ }
+          }, true);
           // Double-click open
           li.addEventListener('dblclick', (e)=>{
             e.stopPropagation(); e.preventDefault();
@@ -1693,7 +1720,7 @@ function display_files(target, listing, opts = {}) {
             update_selection_ui(wrap);
             open_file_menu_at(e.clientX||8, e.clientY||8, it, fullPath, listing);
           }, true);
-          // Mouse long-press (hold) starts inline rename
+      // Mouse long-press (hold) no longer starts inline rename (selection only)
           li.addEventListener('mousedown', (ev)=>{
             if (ev.button!==0) return;
             ev.stopPropagation();
@@ -1707,8 +1734,7 @@ function display_files(target, listing, opts = {}) {
                 if (!window.__auv3_selection.shiftLock) { sel_replace([fullPath]); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
                 else if (!sel_is_selected(fullPath)) { sel_add(fullPath); window.__auv3_selection.focus=idx; if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor=idx; }
                 update_selection_ui(wrap);
-                edit_filer_element(listing, fullPath);
-        try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
+        // No inline rename here
               }
             }, 550);
             window.addEventListener('mouseup', ()=>{ try{ clearTimeout(timer); }catch(_){ } }, { once:true, capture:true });
@@ -1733,7 +1759,7 @@ function display_files(target, listing, opts = {}) {
               if (isDir) { nav_enter_folder(fullPath); } else { nav_preview_file_by_name(fullPath); }
               lastTap = 0; return;
             }
-            // Long press opens menu and may start rename if on label
+            // Long press opens menu (no inline rename)
             const onLabel = !!nameSpan.contains(ev.target);
             const timer = setTimeout(()=>{
               if (!moved) {
@@ -1742,8 +1768,9 @@ function display_files(target, listing, opts = {}) {
                 if (!multi) { sel_replace([fullPath]); window.__auv3_selection.anchor=idx; window.__auv3_selection.focus=idx; }
                 else { if (!sel_is_selected(fullPath)) sel_add(fullPath); window.__auv3_selection.focus=idx; if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor=idx; }
                 update_selection_ui(wrap);
+                // Clear any accidental text selection to avoid iOS system menu
+                try{ const sel = window.getSelection && window.getSelection(); sel && sel.removeAllRanges && sel.removeAllRanges(); }catch(_){ }
                 open_file_menu_at(x, y, it, fullPath, listing, { suppressAutoFocus: true });
-                if (onLabel) edit_filer_element(listing, fullPath);
                 try{ window.__auv3_longpress_guard = window.__auv3_longpress_guard || {}; window.__auv3_longpress_guard.until = Date.now() + 350; }catch(_){ }
                 try{ suppress_item_clicks && suppress_item_clicks(CLICK_SUPPRESS_MS); }catch(_){ }
               }
@@ -1829,6 +1856,47 @@ function display_files(target, listing, opts = {}) {
         const li = e.target && e.target.closest && e.target.closest('li[data-fullpath]');
         if (!li) { sel_clear(); update_selection_ui(wrap); }
       });
+      // Hover-select during drag: mouse pointermove with button pressed selects item under cursor
+      try{
+        wrap.addEventListener('pointermove', (e)=>{
+          try{
+            if (!e || !(e.buttons & 1)) return; // only when primary button is pressed
+            const x = e.clientX||0, y = e.clientY||0;
+            const el = document.elementFromPoint(x,y);
+            if (!el) return;
+            const li = el.closest && el.closest('li[data-fullpath]');
+            if (!li) return;
+            const fp = li.getAttribute('data-fullpath');
+            if (!fp) return;
+            // Throttle a bit
+            const now = Date.now();
+            if (!window.__auv3_hover_sel_ts || now - window.__auv3_hover_sel_ts > 30) {
+              window.__auv3_hover_sel_ts = now;
+              select_item_by_path(wrap, fp);
+            }
+          }catch(_){ }
+        }, { capture: true });
+      }catch(_){ }
+      // Hover-select during touch drag: select item under finger while moving
+      try{
+        wrap.addEventListener('touchmove', (e)=>{
+          try{
+            const t = e.changedTouches && e.changedTouches[0]; if (!t) return;
+            const x = t.clientX||0, y = t.clientY||0;
+            const el = document.elementFromPoint(x,y);
+            if (!el) return;
+            const li = el.closest && el.closest('li[data-fullpath]');
+            if (!li) return;
+            const fp = li.getAttribute('data-fullpath');
+            if (!fp) return;
+            const now = Date.now();
+            if (!window.__auv3_hover_sel_ts || now - window.__auv3_hover_sel_ts > 50) {
+              window.__auv3_hover_sel_ts = now;
+              select_item_by_path(wrap, fp);
+            }
+          }catch(_){ }
+        }, { capture: true, passive: true });
+      }catch(_){ }
     }catch(_){ }
 
     // Helpers for keyboard actions
