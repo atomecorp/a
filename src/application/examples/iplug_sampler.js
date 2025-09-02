@@ -225,8 +225,9 @@ function create_editable_name_span(text, role = 'name') {
     const span = document.createElement('span');
     span.textContent = text;
     try { span.setAttribute('data-role', role); } catch(_){}
-    span.contentEditable = 'true';
-    span.spellcheck = false;
+  // Non-éditable par défaut; l'édition sera activée via edit_filer_element (long-press/rename)
+  span.contentEditable = 'false';
+  span.spellcheck = false;
     // Styles requis pour l'édition inline lisible et non intrusive
     span.style.outline = 'none';
     span.style.display = 'inline-block';
@@ -235,9 +236,7 @@ function create_editable_name_span(text, role = 'name') {
     span.style.WebkitUserSelect = 'text';
     span.style.pointerEvents = 'auto';
     span.style.webkitTouchCallout = 'default';
-    // Empêcher la ligne/parent de capter le clic et les touches quand on édite
-    span.onkeydown = (event) => { try{ event.stopPropagation(); }catch(_){} };
-    span.onclick = (event) => { try{ event.stopPropagation(); }catch(_){} };
+  // Pas de stopPropagation global ici; les handlers dédiés gèrent selon le contexte
     return span;
   } catch(_) { return $('span', { text, 'data-role': role }); }
 }
@@ -1375,13 +1374,62 @@ function display_files(target, listing, opts = {}) {
         const nameSpan = create_editable_name_span(it.name);
         try { li.appendChild(nameSpan); } catch(_) { }
         try{
+          // Single click on name: only select, no edit
           nameSpan.addEventListener('click', (ev)=>{
             ev.stopPropagation();
-            try{ window.__auv3_selection && sel_replace([fullPath]); }catch(_){ }
-            try{ window.__auv3_selection && (window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10)); }catch(_){ }
+            const idx = parseInt(li.getAttribute('data-index')||'0',10);
+            const multi = !!(window.__auv3_selection && window.__auv3_selection.shiftLock);
+            try{
+              if (multi) {
+                if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath);
+                window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+              } else {
+                sel_replace([fullPath]);
+                window.__auv3_selection.anchor = idx; window.__auv3_selection.focus = idx;
+              }
+            }catch(_){ }
             try{ update_selection_ui(wrap); }catch(_){ }
-            setTimeout(()=>{ try{ edit_filer_element(listing, fullPath); }catch(_){ } }, 0);
           });
+          // Long-press on name: start inline edit (not on the whole row)
+          let nsTimer = null; let nsSX=0, nsSY=0;
+          const nsStart = (e)=>{
+            try{ e.stopPropagation(); }catch(_){ }
+            if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
+            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+            nsSX = pt.clientX||0; nsSY = pt.clientY||0;
+            if (nsTimer) clearTimeout(nsTimer);
+            nsTimer = setTimeout(()=>{
+              longPressFired = true;
+              try {
+                const selected = sel_list();
+                const count = (selected && selected.length) ? selected.length : 0;
+                if (count > 0) {
+                  // With an active selection, only open the context menu; do not modify selection
+                  show_file_context_menu(li, it, fullPath, listing);
+                } else {
+                  // No selection: select this item and start inline edit
+                  try{ sel_replace([fullPath]); window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10); update_selection_ui(wrap); }catch(_){ }
+                  try{ edit_filer_element(listing, fullPath); }catch(_){ }
+                }
+              } catch(_) { }
+            }, 450);
+          };
+          const nsMove = (e)=>{
+            try{ e.stopPropagation(); }catch(_){ }
+            if (!nsTimer) return;
+            const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
+            const dx = Math.abs((pt.clientX||0) - nsSX), dy = Math.abs((pt.clientY||0) - nsSY);
+            if (dx > 8 || dy > 8) { clearTimeout(nsTimer); nsTimer=null; }
+          };
+          const nsCancel = (e)=>{ try{ e && e.stopPropagation && e.stopPropagation(); }catch(_){ } if (nsTimer) { clearTimeout(nsTimer); nsTimer=null; } };
+          nameSpan.addEventListener('pointerdown', nsStart);
+          nameSpan.addEventListener('pointermove', nsMove);
+          nameSpan.addEventListener('pointerup', nsCancel);
+          nameSpan.addEventListener('pointerleave', nsCancel);
+          nameSpan.addEventListener('touchstart', nsStart, { passive:true });
+          nameSpan.addEventListener('touchmove', nsMove, { passive:true });
+          nameSpan.addEventListener('touchend', nsCancel);
+          nameSpan.addEventListener('touchcancel', nsCancel);
         }catch(_){ }
         // Focus auto si dans les créations récentes
         try {
@@ -1443,7 +1491,29 @@ function display_files(target, listing, opts = {}) {
             const pt = (e.touches && e.touches[0]) ? e.touches[0] : e;
             startX = pt.clientX||0; startY = pt.clientY||0;
             if (pressTimer) { clearTimeout(pressTimer); }
-            pressTimer = setTimeout(()=>{ if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return; longPressFired = true; show_file_context_menu(li, it, fullPath, listing); }, 450);
+            pressTimer = setTimeout(()=>{
+              if (window.__AUV3_WIN_DRAG || window.__AUV3_WIN_RESIZE) return;
+              // If long-press originated on the name, prefer inline edit instead of menu
+              const t = e.target;
+              longPressFired = true;
+              try {
+                const selected = sel_list();
+                const count = (selected && selected.length) ? selected.length : 0;
+                if (count > 0) {
+                  // With an active selection, always open menu and keep selection unchanged
+                  show_file_context_menu(li, it, fullPath, listing);
+                  return;
+                }
+                if (t && t.closest && t.closest('span[data-role="name"]')) {
+                  // No selection and press on name: start edit
+                  try{ sel_replace([fullPath]); window.__auv3_selection.focus = parseInt(li.getAttribute('data-index')||'0',10); update_selection_ui(wrap); }catch(_){ }
+                  try{ edit_filer_element(listing, fullPath); }catch(_){ }
+                } else {
+                  // No selection: open menu
+                  show_file_context_menu(li, it, fullPath, listing);
+                }
+              } catch(_) { show_file_context_menu(li, it, fullPath, listing); }
+            }, 450);
           };
           const move = (e)=>{
             if (!pressTimer) return;
