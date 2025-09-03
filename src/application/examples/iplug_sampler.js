@@ -6,6 +6,42 @@
 		return /\.(m4a|wav|mp3|aif|caf)$/i.test(String(name||''));
 	}
 
+	// Remove sample div by id
+	function delete_sample(id){
+		try{ var el = document.getElementById(id); if (el && el.remove) el.remove(); }catch(_){ }
+	}
+
+	// create a small red delete bubble in the top-right of the sample div
+	function createDeleteBubble(parentId){
+		try{
+			var parent = document.getElementById(parentId); if (!parent) return;
+			// remove existing bubble if any
+			var existing = parent.querySelector('.sample-delete-bubble'); if (existing && existing.remove) existing.remove();
+			var btn = document.createElement('div');
+			btn.className = 'sample-delete-bubble';
+			btn.title = 'Delete sample';
+			btn.style.position = 'absolute';
+			btn.style.right = '6px';
+			btn.style.top = '6px';
+			btn.style.width = '18px';
+			btn.style.height = '18px';
+			btn.style.borderRadius = '9px';
+			btn.style.background = '#d33';
+			btn.style.color = '#fff';
+			btn.style.display = 'inline-flex';
+			btn.style.alignItems = 'center';
+			btn.style.justifyContent = 'center';
+			btn.style.fontSize = '12px';
+			btn.style.cursor = 'pointer';
+			btn.style.zIndex = '9999';
+			btn.textContent = '×';
+			btn.onclick = function(ev){ ev && ev.stopPropagation && ev.stopPropagation(); try{ delete_sample(parentId); }catch(_){ } };
+			// Ensure parent is positioned
+			try{ var cs = window.getComputedStyle(parent); if (cs && (cs.position === '' || cs.position === 'static')) parent.style.position = 'relative'; }catch(_){ parent.style.position = 'relative'; }
+			parent.appendChild(btn);
+		}catch(_){ }
+	}
+
 	// Create a visible div for the audio file (id and text = filename)
 	function audio_load_handler(fullPath){
 		try{
@@ -30,6 +66,8 @@
 					},
 					text: name
 				});
+				// add delete bubble
+				try{ createDeleteBubble(id); }catch(_){ }
 			}catch(e){
 				// Fallback if $ is not available: create a simple element
 				var el = document.createElement('div');
@@ -37,6 +75,8 @@
 				el.style.position = 'relative'; el.style.backgroundColor = '#00f'; el.style.left = '70px'; el.style.top = '16px';
 				el.style.padding = '12px'; el.style.color = 'white'; el.style.margin = '10px'; el.style.display = 'inline-block';
 				document.body.appendChild(el);
+				// add delete bubble for fallback element
+				try{ createDeleteBubble(id); }catch(_){ }
 			}
 		}catch(_){ }
 	}
