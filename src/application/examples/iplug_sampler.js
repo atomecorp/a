@@ -1,119 +1,3 @@
-// Project creator UI and logic (button id=prj_creator)
-(function(){
-	'use strict';
-	function mkElement(tag, props){ try{ if (typeof $ === 'function') return $(tag, props); }catch(_){ }
-		var el = document.createElement(tag.replace(/[^a-z0-9]/gi,''));
-		if (props) {
-			if (props.id) el.id = props.id;
-			if (props.text) el.textContent = props.text;
-			if (props.css) Object.assign(el.style, props.css);
-			if (props.parent && typeof props.parent.appendChild === 'function') props.parent.appendChild(el);
-			if (props.onclick) el.addEventListener('click', props.onclick);
-		}
-		return el;
-	}
-
-	function setupProjectCreatorUI(){
-		try{
-			var btnList = document.getElementById('btn-list');
-			var container = document.createElement('div');
-			container.id = 'prj_creator_container';
-			container.style.display = 'inline-flex';
-			container.style.alignItems = 'center';
-			container.style.marginLeft = '8px';
-
-			var btn = mkElement('button', { id: 'prj_creator', text: 'Create Project', css: { padding: '6px 10px', borderRadius: '6px', cursor: 'pointer' } });
-			btn.addEventListener('click', onCreateProject);
-			var label = mkElement('span', { id: 'prj_creator_label', text: '', css: { marginLeft: '10px', color: '#eee', cursor: 'default', userSelect: 'none' } });
-
-			container.appendChild(btn);
-			container.appendChild(label);
-
-			if (btnList && btnList.parentNode) {
-				btnList.parentNode.insertBefore(container, btnList.nextSibling);
-			} else {
-				// fallback to top-right area: append to body
-				document.body.insertBefore(container, document.body.firstChild);
-			}
-
-			setupLongPress(label, function(){ startRenameProject(label); });
-		}catch(_){ }
-	}
-
-	function setupLongPress(el, cb){
-		try{
-			var timer = null;
-			var start = function(e){ try{ e.preventDefault && e.preventDefault(); }catch(_){ } timer = setTimeout(function(){ cb && cb(); }, 600); };
-			var cancel = function(){ if (timer) { clearTimeout(timer); timer = null; } };
-			el.addEventListener('touchstart', start, { passive: true }); el.addEventListener('mousedown', start);
-			el.addEventListener('touchend', cancel); el.addEventListener('mouseup', cancel); el.addEventListener('mouseleave', cancel);
-		}catch(_){ }
-	}
-
-	window.__prj_counter = window.__prj_counter || 1;
-	function makeProjectBaseName(){ var base = 'Project'; var i = window.__prj_counter || 1; var name = (i===1) ? base : (base + ' ' + i); window.__prj_counter = i + 1; return name; }
-
-	function onCreateProject(){
-		try{
-			var base = makeProjectBaseName();
-			var fileName = base + '.atm';
-			var path = 'Projects/' + fileName;
-			var content = '{}';
-			var label = document.getElementById('prj_creator_label');
-			var FS = window.AtomeFileSystem || null;
-				var done = function(success){ if (label) label.textContent = fileName; };
-				// Ensure projects directory exists first
-				var ensureAndSave = function(){
-					try{
-						if (FS && typeof FS.saveFile === 'function') {
-							return FS.saveFile(path, content, function(res){ try{ if (res && res.success!==false) done(true); else done(false); }catch(_){ done(false); } });
-						}
-					}catch(_){ }
-					try { webkit.messageHandlers.fileSystem.postMessage({ action: 'saveFile', path: path, data: content }); done(true); } catch(_){ done(false); }
-				};
-
-				try{
-					if (FS) {
-						// Prefer createDirectory API if available
-						if (typeof FS.createDirectory === 'function') { FS.createDirectory('projects', function(){ ensureAndSave(); }); return; }
-						if (typeof FS.mkdir === 'function') { FS.mkdir('projects', function(){ ensureAndSave(); }); return; }
-						if (typeof FS.createFolder === 'function') { FS.createFolder('projects', function(){ ensureAndSave(); }); return; }
-					}
-				}catch(_){ }
-
-				// Fallback: call bridge to create directory then save
-				try { webkit.messageHandlers.fileSystem.postMessage({ action: 'createDirectory', path: 'projects' }); } catch(_){ }
-				// Small delay to allow native side to create dir, then save
-				setTimeout(function(){ ensureAndSave(); }, 120);
-		}catch(_){ }
-	}
-
-	function startRenameProject(label){
-		try{
-			var current = (label && label.textContent) ? label.textContent.trim() : '';
-			if (!current) return;
-			// Try inline edit if available
-			if (typeof window.edit_filer_element === 'function') {
-				// Create a temporary fake fullPath to reuse edit flow (the listing may not contain it)
-			var fakeFullPath = 'Projects/' + current;
-				try { edit_filer_element(fakeFullPath); } catch(_) { }
-				// After editing, the global edit flow commits via AtomeFileSystem.renameItem if integrated.
-				return;
-			}
-			var n = prompt('Rename project (without extension)', current.replace(/\.atm$/i, ''));
-			if (!n) return;
-			var newName = n.trim(); if (!/\.atm$/i.test(newName)) newName = newName + '.atm';
-			var oldPath = 'Projects/' + current; var newPath = 'Projects/' + newName;
-			var FS = window.AtomeFileSystem || null;
-			try{ if (FS && FS.renameItem) { FS.renameItem(oldPath, newPath, function(){ if (label) label.textContent = newName; }); return; } }catch(_){ }
-			try { webkit.messageHandlers.fileSystem.postMessage({ action: 'renameItem', oldPath: oldPath, newPath: newPath }); if (label) label.textContent = newName; } catch(_){ }
-		}catch(_){ }
-	}
-
-	if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupProjectCreatorUI); else setupProjectCreatorUI();
-
-})();
-
 // Minimal audio double-click handler and UI helper
 (function(){
 	'use strict';
@@ -170,6 +54,140 @@
 
 	// Expose for manual invocation
 	window.audio_load_handler = audio_load_handler;
+
+})();
+
+
+// Project creator UI: button 'prj_creator' placed to the right of '#btn-list'
+(function(){
+	'use strict';
+
+	function $(tag, opts){ try{ return window.$ && window.$(tag, opts); }catch(_){ return null; } }
+
+	function insertAfter(newNode, refNode){ if (!refNode || !refNode.parentNode) return; refNode.parentNode.insertBefore(newNode, refNode.nextSibling); }
+
+	function sanitizeName(name){ return String(name||'').replace(/[\\/:*?"<>|\n\r\t]/g,'_').trim(); }
+
+	function ensureProjectsDir(cb){
+		try{
+			const FS = window.AtomeFileSystem || {};
+			if (typeof FS.createDirectory === 'function') { FS.createDirectory('Projects', function(res){ try{ cb && cb(true); }catch(_){ } }); return; }
+			try { webkit.messageHandlers.fileSystem.postMessage({ action: 'createDirectory', path: 'Projects' }); cb && cb(true); return; } catch(_) { cb && cb(false); }
+		}catch(_){ cb && cb(false); }
+	}
+
+	function listProjects(cb){
+		try{
+			const FS = window.AtomeFileSystem || {};
+			if (typeof FS.listFiles === 'function') { FS.listFiles('Projects', function(res){ try{ if (res && res.success && res.data && res.data.files) cb && cb(res.data.files.map(f=>f.name)); else cb && cb([]); }catch(_){ cb && cb([]); } }); return; }
+			try { window.fileSystemCallback = function(r){ try{ cb && cb((r && r.data && r.data.files)||[]); }catch(_){ cb && cb([]); } }; webkit.messageHandlers.fileSystem.postMessage({ action: 'listFiles', folder: 'Projects' }); return; } catch(_) { cb && cb([]); }
+		}catch(_){ cb && cb([]); }
+	}
+
+	function saveProjectFile(relPath, data, cb){
+		try{
+			const FS = window.AtomeFileSystem || {};
+			if (typeof FS.saveFile === 'function') { FS.saveFile(relPath, data||'', cb); return; }
+			try { webkit.messageHandlers.fileSystem.postMessage({ action:'saveFile', path: relPath, data: data||'' }); cb && cb({ success: true }); return; } catch(_) { cb && cb({ success: false }); }
+		}catch(_){ cb && cb({ success: false }); }
+	}
+
+	function makeUniqueProjectName(existing){
+		const base = 'Project';
+		const ext = '.atm';
+		let candidate = base + ext;
+		const names = new Set((existing||[]).map(String));
+		if (!names.has(candidate)) return candidate;
+		let idx = 2;
+		while(idx < 1000){ candidate = base + ' ' + idx + ext; if (!names.has(candidate)) return candidate; idx++; }
+		return base + '-' + Date.now() + ext;
+	}
+
+	function createLabelFor(button, fileName, fullPath){
+		try{
+			var span = document.createElement('span');
+			span.id = 'prj_label_' + fileName.replace(/[^a-z0-9\-_]/gi,'_');
+			span.textContent = fileName;
+			span.style.marginLeft = '10px'; span.style.cursor = 'pointer'; span.style.userSelect = 'none'; span.setAttribute('data-path', fullPath);
+			// long-press to rename (mouse/touch)
+			var tmr = null; var startName = fileName;
+			function start(e){ e && e.preventDefault && e.preventDefault(); tmr = setTimeout(()=>{ beginInlineRename(span); }, 600); }
+			function cancel(){ if (tmr) { clearTimeout(tmr); tmr = null; } }
+			span.addEventListener('mousedown', start); span.addEventListener('touchstart', start);
+			span.addEventListener('mouseup', cancel); span.addEventListener('mouseleave', cancel); span.addEventListener('touchend', cancel);
+			return span;
+		}catch(_){ return null; }
+	}
+
+	function beginInlineRename(span){
+		try{
+			const old = span.textContent || '';
+			span.contentEditable = 'true'; span.spellcheck = false; span.style.userSelect = 'text'; span.focus();
+			const sel = window.getSelection(); try{ const r = document.createRange(); r.selectNodeContents(span); sel.removeAllRanges(); sel.addRange(r); }catch(_){ }
+			function commit(){ span.contentEditable = 'false'; span.style.userSelect='none'; const newName = sanitizeName(span.textContent||''); if (!newName || newName === old) { span.textContent = old; return; }
+				// Ensure .atm
+				const final = newName.endsWith('.atm') ? newName : (newName + '.atm');
+				const oldPath = span.getAttribute('data-path') || ('Projects/' + old);
+				const newPath = 'Projects/' + final;
+				try{
+					const FS = window.AtomeFileSystem || {};
+					if (FS && FS.renameItem) {
+						FS.renameItem(oldPath, newPath, function(res){ if (res && res.success) { span.setAttribute('data-path', newPath); span.textContent = final; } else { span.textContent = old; } });
+					} else {
+						try{ webkit.messageHandlers.fileSystem.postMessage({ action:'renameItem', oldPath: oldPath, newPath: newPath }); span.setAttribute('data-path', newPath); span.textContent = final; }catch(_){ span.textContent = old; }
+					}
+				}catch(_){ span.textContent = old; }
+			}
+			function cancel(){ span.contentEditable = 'false'; span.style.userSelect='none'; span.textContent = old; }
+			span.addEventListener('blur', commit, { once: true });
+			span.addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); commit(); span.blur && span.blur(); } else if (e.key === 'Escape') { e.preventDefault(); cancel(); span.blur && span.blur(); } });
+		}catch(_){ }
+	}
+
+	function createProjectAndShow(){
+		try{
+			ensureProjectsDir(function(ok){
+				listProjects(function(names){
+					var candidate = makeUniqueProjectName(names);
+					var rel = 'Projects/' + candidate;
+					saveProjectFile(rel, '', function(res){
+						// show label next to button — remove any previous project labels first
+						var btn = document.getElementById('prj_creator');
+						if (!btn) return;
+						// Remove existing prj_label_* elements adjacent to the button
+						try{
+							var sibling = btn.nextSibling;
+							while(sibling){
+								var next = sibling.nextSibling;
+								if (sibling.id && String(sibling.id).indexOf('prj_label_') === 0) { try{ sibling.remove(); }catch(_){ } }
+								sibling = next;
+							}
+						}catch(_){ }
+						var label = createLabelFor(btn, candidate, rel);
+						insertAfter(label, btn);
+					});
+				});
+			});
+		}catch(_){ }
+	}
+
+	// Create button and wire it
+	function ensureButton(){
+		try{
+			var existing = document.getElementById('prj_creator'); if (existing) return existing;
+			var btn = null;
+			try{
+				btn = $('button', { id: 'prj_creator', text: '+', css: { marginLeft: '8px' } });
+			}catch(_){ btn = document.createElement('button'); btn.id = 'prj_creator'; btn.textContent = '+'; btn.style.marginLeft = '8px'; document.body.appendChild(btn); }
+			// place to the right of #btn-list if present
+			var ref = document.getElementById('btn-list'); if (ref && ref.parentNode) { insertAfter(btn, ref); } else { document.body.appendChild(btn); }
+			btn.addEventListener('click', function(){ createProjectAndShow(); });
+			return btn;
+		}catch(_){ return null; }
+	}
+
+	// ensure on load
+	if (document.readyState === 'complete' || document.readyState === 'interactive') { setTimeout(ensureButton, 50); } else { document.addEventListener('DOMContentLoaded', function(){ setTimeout(ensureButton, 50); }); }
 
 })();
 
