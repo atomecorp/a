@@ -1745,7 +1745,25 @@ function display_files(target, listing, opts = {}) {
             e.stopPropagation();
             const multi = is_shift_active(e);
             const idx = parseInt(li.getAttribute('data-index')||'0',10);
-            if (multi) {
+            // If physical Shift is held, select a contiguous range from anchor to current index
+            if (multi && e && e.shiftKey) {
+              const anchor = (window.__auv3_selection.anchor==null) ? idx : window.__auv3_selection.anchor;
+              const a = Math.min(anchor, idx), b = Math.max(anchor, idx);
+              const nodes = wrap.querySelectorAll('li[data-index]');
+              const inRange = [];
+              nodes.forEach((node)=>{
+                try{
+                  const nidx = parseInt(node.getAttribute('data-index')||'0',10);
+                  if (nidx >= a && nidx <= b) {
+                    const fp = node.getAttribute('data-fullpath'); if (fp) inRange.push(fp);
+                  }
+                }catch(_){ }
+              });
+              sel_replace(inRange);
+              window.__auv3_selection.anchor = anchor;
+              window.__auv3_selection.focus = idx;
+            } else if (multi) {
+              // Multi-mode without Shift (shiftLock): toggle single item
               if (sel_is_selected(fullPath)) sel_remove(fullPath); else sel_add(fullPath);
               if (window.__auv3_selection.anchor==null) window.__auv3_selection.anchor = idx;
               window.__auv3_selection.focus = idx;
@@ -1771,9 +1789,14 @@ function display_files(target, listing, opts = {}) {
           li.addEventListener('contextmenu', (e)=>{
             e.preventDefault(); e.stopPropagation();
             const idx = parseInt(li.getAttribute('data-index')||'0',10);
-            sel_replace([fullPath]);
-            window.__auv3_selection.anchor = idx;
-            window.__auv3_selection.focus = idx;
+            // Preserve selection when right-clicking within the current selection; otherwise select this item
+            if (sel_is_selected(fullPath)) {
+              window.__auv3_selection.focus = idx;
+            } else {
+              sel_replace([fullPath]);
+              window.__auv3_selection.anchor = idx;
+              window.__auv3_selection.focus = idx;
+            }
             update_selection_ui(wrap);
             open_file_menu_at(e.clientX||8, e.clientY||8, it, fullPath, listing);
           }, true);
