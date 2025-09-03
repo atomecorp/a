@@ -42,18 +42,96 @@
 	}
 
 	// Listen for double-clicks on file list items and trigger audio_load_handler for audio files
+	function isProjectFileName(name){ return /\.atm$/i.test(String(name||'')); }
+
+	// Display current project label to the right of #prj_creator (fallback to #btn-list) and replace any existing project label
+	function showCurrentProjectLabel(name, fullPath){
+		try{
+			// Remove any existing current project label
+			var existing = document.getElementById('current_project_label');
+			if (existing && existing.remove) existing.remove();
+
+			// Prefer to place the label after the project creator button; fall back to btn-list
+			var ref = document.getElementById('prj_creator') || document.getElementById('btn-list');
+
+			// If there are old prj_label_* nodes or leftover current_project_label nodes after the ref, remove them
+			try{
+				if (ref && ref.parentNode){
+					var sibling = ref.nextSibling;
+					while(sibling){
+						var next = sibling.nextSibling;
+						try{
+							if (sibling.id && (String(sibling.id).indexOf('prj_label_') === 0 || sibling.id === 'current_project_label')){
+								sibling.remove();
+							}
+						}catch(_){ }
+						sibling = next;
+					}
+				}
+			}catch(_){ }
+
+			var span = document.createElement('span');
+			span.id = 'current_project_label';
+			span.textContent = name || '';
+			span.style.marginLeft = '10px';
+			span.style.fontWeight = '600';
+			span.style.cursor = 'pointer';
+			span.setAttribute('data-path', fullPath||'');
+
+			if (ref && ref.parentNode) ref.parentNode.insertBefore(span, ref.nextSibling);
+			else document.body.appendChild(span);
+		}catch(_){ }
+	}
+
 	document.addEventListener('dblclick', function(e){
 		try{
 			var li = e && e.target && e.target.closest && e.target.closest('li[data-fullpath]');
 			if (!li) return;
 			var fullPath = li.getAttribute('data-fullpath') || '';
 			var name = (fullPath||'').split('/').pop() || '';
+			if (isProjectFileName(name)) { 
+				project_load_handler(fullPath);
+				return;
+			}
 			if (isAudioFileName(name)) { audio_load_handler(fullPath); }
 		}catch(_){ }
 	}, true);
 
 	// Expose for manual invocation
 	window.audio_load_handler = audio_load_handler;
+
+	// Load .atm project and show as current project
+	function project_load_handler(fullPath){
+		try{
+			var name = (fullPath||'').split('/').pop() || '';
+			if (!name) return;
+			// Use AtomeFileSystem.loadFile if available
+			try{
+				const FS = window.AtomeFileSystem || {};
+				if (FS && FS.loadFile) {
+					FS.loadFile(fullPath, function(res){
+						try{
+							// Show the project label when the load reports success (content may be empty)
+							if (res && res.success) {
+								showCurrentProjectLabel(name, fullPath);
+							}
+						}catch(_){ }
+					});
+					return;
+				}
+				// Fallback: ask Swift via message handler
+				try{
+					window.fileSystemCallback = function(r){ try{ if (r && r.success) showCurrentProjectLabel(name, fullPath); }catch(_){ } };
+					webkit.messageHandlers.fileSystem.postMessage({ action: 'loadFile', path: fullPath });
+					return;
+				}catch(_){ }
+			}catch(_){ }
+				// If no bridge is available or an error occurred, still show the project name as a best-effort UI update
+				try{ showCurrentProjectLabel(name, fullPath); }catch(_){ }
+		}catch(_){ }
+	}
+
+	window.project_load_handler = project_load_handler;
 
 })();
 
@@ -177,7 +255,7 @@
 			var existing = document.getElementById('prj_creator'); if (existing) return existing;
 			var btn = null;
 			try{
-				btn = $('button', { id: 'prj_creator', text: '+', css: { marginLeft: '8px' } });
+				btn = $('button', { id: 'prj_creator', text: 'new', css: { marginLeft: '18px' } });
 			}catch(_){ btn = document.createElement('button'); btn.id = 'prj_creator'; btn.textContent = '+'; btn.style.marginLeft = '8px'; document.body.appendChild(btn); }
 			// place to the right of #btn-list if present
 			var ref = document.getElementById('btn-list'); if (ref && ref.parentNode) { insertAfter(btn, ref); } else { document.body.appendChild(btn); }
