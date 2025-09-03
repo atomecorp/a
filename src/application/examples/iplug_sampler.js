@@ -17,10 +17,10 @@
 			try{
 				$('div', {
 					id: id,
-					parent: document.body,
+					parent: '#view',
 					css: {
 						position: 'relative',
-						backgroundColor: '#00f',
+						backgroundColor: 'rgba(255, 0, 162, 1)',
 						left: '70px',
 						top: '16px',
 						padding: '12px',
