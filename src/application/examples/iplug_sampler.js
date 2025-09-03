@@ -44,38 +44,31 @@
 	// Listen for double-clicks on file list items and trigger audio_load_handler for audio files
 	function isProjectFileName(name){ return /\.atm$/i.test(String(name||'')); }
 
-	// Display current project label to the right of #prj_creator (fallback to #btn-list) and replace any existing project label
+	// Show project using the prj_label_<name> element (remove any other prj_label_* first)
 	function showCurrentProjectLabel(name, fullPath){
 		try{
-			// Remove any existing current project label
-			var existing = document.getElementById('current_project_label');
-			if (existing && existing.remove) existing.remove();
+			if (!name) return;
+			// sanitize name for id
+			var safe = String(name).replace(/[^a-z0-9\-_]/gi,'_');
+			var newId = 'prj_label_' + safe;
 
 			// Prefer to place the label after the project creator button; fall back to btn-list
 			var ref = document.getElementById('prj_creator') || document.getElementById('btn-list');
 
-			// If there are old prj_label_* nodes or leftover current_project_label nodes after the ref, remove them
+			// Remove any existing prj_label_* nodes before inserting the new label
 			try{
-				if (ref && ref.parentNode){
-					var sibling = ref.nextSibling;
-					while(sibling){
-						var next = sibling.nextSibling;
-						try{
-							if (sibling.id && (String(sibling.id).indexOf('prj_label_') === 0 || sibling.id === 'current_project_label')){
-								sibling.remove();
-							}
-						}catch(_){ }
-						sibling = next;
-					}
-				}
+				// global cleanup of any old nodes
+				var all = document.querySelectorAll('[id^="prj_label_"]');
+				for(var i=0;i<all.length;i++){ try{ all[i].remove(); }catch(_){ } }
 			}catch(_){ }
 
 			var span = document.createElement('span');
-			span.id = 'current_project_label';
+			span.id = newId;
 			span.textContent = name || '';
 			span.style.marginLeft = '10px';
-			span.style.fontWeight = '600';
 			span.style.cursor = 'pointer';
+			span.style.userSelect = 'none';
+			span.style.fontWeight = '600';
 			span.setAttribute('data-path', fullPath||'');
 
 			if (ref && ref.parentNode) ref.parentNode.insertBefore(span, ref.nextSibling);
@@ -160,6 +153,40 @@
 			if (typeof FS.listFiles === 'function') { FS.listFiles('Projects', function(res){ try{ if (res && res.success && res.data && res.data.files) cb && cb(res.data.files.map(f=>f.name)); else cb && cb([]); }catch(_){ cb && cb([]); } }); return; }
 			try { window.fileSystemCallback = function(r){ try{ cb && cb((r && r.data && r.data.files)||[]); }catch(_){ cb && cb([]); } }; webkit.messageHandlers.fileSystem.postMessage({ action: 'listFiles', folder: 'Projects' }); return; } catch(_) { cb && cb([]); }
 		}catch(_){ cb && cb([]); }
+	}
+
+	// Return detailed file entries for Projects (objects as returned by the bridge)
+	function listProjectFilesDetailed(cb){
+		try{
+			const FS = window.AtomeFileSystem || {};
+			if (typeof FS.listFiles === 'function') { FS.listFiles('Projects', function(res){ try{ if (res && res.success && res.data && res.data.files) cb && cb(res.data.files); else cb && cb([]); }catch(_){ cb && cb([]); } }); return; }
+			try { window.fileSystemCallback = function(r){ try{ cb && cb((r && r.data && r.data.files)||[]); }catch(_){ cb && cb([]); } }; webkit.messageHandlers.fileSystem.postMessage({ action: 'listFiles', folder: 'Projects' }); return; } catch(_) { cb && cb([]); }
+		}catch(_){ cb && cb([]); }
+	}
+
+	function pickMostRecentProject(files){
+		try{
+			if (!files || !files.length) return null;
+			var best = null; var bestTime = -1;
+			files.forEach(function(f){
+				try{
+					var name = f && (f.name || f.filename || f.file);
+					if (!name || !/\.atm$/i.test(name)) return;
+					var t = 0;
+					if (f.mtime) t = +f.mtime;
+					else if (f.mtimeMs) t = +f.mtimeMs;
+					else if (f.modified) t = +f.modified;
+					else if (f.lastModified) t = +f.lastModified;
+					else if (f.timestamp) t = +f.timestamp;
+					else if (f.stat && f.stat.mtime) t = +f.stat.mtime;
+					// try parse ISO strings
+					if (!t && typeof f.mtime === 'string') { var p = Date.parse(f.mtime); if (!isNaN(p)) t = p; }
+					if (!t && typeof f.modified === 'string') { var p2 = Date.parse(f.modified); if (!isNaN(p2)) t = p2; }
+					if (t > bestTime){ bestTime = t; best = { name: name, path: 'Projects/' + name }; }
+				}catch(_){ }
+			});
+			return best;
+		}catch(_){ return null; }
 	}
 
 	function saveProjectFile(relPath, data, cb){
@@ -266,6 +293,30 @@
 
 	// ensure on load
 	if (document.readyState === 'complete' || document.readyState === 'interactive') { setTimeout(ensureButton, 50); } else { document.addEventListener('DOMContentLoaded', function(){ setTimeout(ensureButton, 50); }); }
+
+	// On startup: if no project loaded, load most recent .atm from Projects, else create one and load it
+	function initProjectOnStartup(){
+		try{
+			// ensure button exists
+			setTimeout(ensureButton, 50);
+			ensureProjectsDir(function(ok){
+				listProjectFilesDetailed(function(files){
+					var pick = pickMostRecentProject(files || []);
+					if (pick && pick.path){
+						// load it
+						project_load_handler(pick.path);
+						return;
+					}
+					// none found — create one and load
+					var candidate = makeUniqueProjectName([]);
+					var rel = 'Projects/' + candidate;
+					saveProjectFile(rel, '', function(res){ if (res && res.success){ project_load_handler(rel); } else { project_load_handler(rel); } });
+				});
+			});
+		}catch(_){ }
+	}
+
+	if (document.readyState === 'complete' || document.readyState === 'interactive') { setTimeout(initProjectOnStartup, 200); } else { document.addEventListener('DOMContentLoaded', function(){ setTimeout(initProjectOnStartup, 200); }); }
 
 })();
 
