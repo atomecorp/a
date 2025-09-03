@@ -1752,20 +1752,7 @@ function display_files(target, listing, opts = {}) {
             }, 100);
           }
         } catch(_){}
-        // Add delete icon for files only
-        if (!isDir) {
-          create_delete_button(li, (ev)=>{
-            const selected = sel_list();
-            const multi = selected && selected.length > 1; // always honor multi-selection
-            if (multi) {
-              const msg = 'Supprimer ' + selected.length + ' éléments ?';
-              show_confirm_dialog(msg, ()=>{ nav_delete_selection(listing); }, ()=>{});
-            } else {
-              const base = (fullPath||'').split('/').pop() || 'cet élément';
-              show_confirm_dialog('Supprimer « ' + base + ' » ?', ()=>{ request_delete_exact(fullPath, listing); }, ()=>{});
-            }
-          }, (theme.deleteButton||{}));
-        }
+  // delete icon removed for file rows (UI simplified)
 
         // Mouse interactions on row
         try{
