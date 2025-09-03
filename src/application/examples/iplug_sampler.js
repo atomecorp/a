@@ -577,6 +577,37 @@ try{
   window.addEventListener('mousemove', ()=>{ try{ updateModality('mouse'); }catch(_){ } }, { capture: true });
 }catch(_){ }
 
+// Physical Shift key: while held, enable shiftLock (btn-shift mode). Clear on release or window blur.
+try{
+  window.addEventListener('keydown', (e)=>{
+    try{
+      if (e && e.key === 'Shift') {
+        if (!window.__auv3_selection) window.__auv3_selection = { set:new Set(), anchor:null, focus:null, shiftLock:false, clipboard:[] };
+        if (!window.__auv3_selection.shiftLock) {
+          window.__auv3_selection.shiftLock = true;
+          try{
+            const b = document.getElementById('btn-shift'); if (b) { try{ b.classList && b.classList.add('on'); }catch(_){ try{ b.dataset && (b.dataset.state='1'); }catch(_){ } } }
+          }catch(_){ }
+        }
+      }
+    }catch(_){ }
+  }, true);
+
+  window.addEventListener('keyup', (e)=>{
+    try{
+      if (e && e.key === 'Shift') {
+        if (window.__auv3_selection) window.__auv3_selection.shiftLock = false;
+        try{
+          const b = document.getElementById('btn-shift'); if (b) { try{ b.classList && b.classList.remove('on'); }catch(_){ try{ b.dataset && (b.dataset.state='0'); }catch(_){ } } }
+        }catch(_){ }
+      }
+    }catch(_){ }
+  }, true);
+
+  // Safety: clear if window loses focus
+  window.addEventListener('blur', ()=>{ try{ if (window.__auv3_selection) window.__auv3_selection.shiftLock = false; const b=document.getElementById('btn-shift'); if (b) { try{ b.classList && b.classList.remove('on'); }catch(_){ try{ b.dataset && (b.dataset.state='0'); }catch(_){ } } } }catch(_){ } }, true);
+}catch(_){ }
+
 // Selection state and helpers
 window.__auv3_selection = window.__auv3_selection || {
   set: new Set(),
