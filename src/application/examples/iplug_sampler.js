@@ -268,7 +268,8 @@ function edit_filer_element(listing, fullPath){
     }catch(_){ }
     const nameSpan = li.querySelector('span[data-role="name"]');
     if (!nameSpan) return;
-    const oldName = nameSpan.textContent || '';
+  const oldName = nameSpan.textContent || '';
+  const oldPath = fullPath;
   try{ nameSpan.contentEditable = 'true'; nameSpan.spellcheck = false; nameSpan.inputMode = 'text'; }catch(_){ }
   try{ nameSpan.style.userSelect = 'text'; nameSpan.style.WebkitUserSelect = 'text'; nameSpan.style.pointerEvents = 'auto'; nameSpan.style.webkitTouchCallout = 'default'; }catch(_){ }
   try{ window.__INLINE_EDITING = true; }catch(_){ }
@@ -296,7 +297,15 @@ function edit_filer_element(listing, fullPath){
         if (wrap2) {
           const existing = new Set();
           const spans = wrap2.querySelectorAll('li[data-fullpath] > span[data-role="name"]');
-          spans && spans.forEach(sp=>{ const n=(sp.textContent||'').trim(); if (n && n!==oldName) existing.add(n); });
+          spans && spans.forEach(sp=>{
+            // Ignore the currently edited item to avoid false self-collision
+            if (sp === nameSpan) return;
+            const liSp = sp.closest && sp.closest('li[data-fullpath]');
+            const liSpPath = liSp && liSp.getAttribute && liSp.getAttribute('data-fullpath');
+            if (liSpPath && liSpPath === oldPath) return;
+            const n=(sp.textContent||'').trim();
+            if (n && n!==oldName) existing.add(n);
+          });
           if (existing.has(newName)) {
             // add numeric suffix similar to "Name 2"
             const base = newName; let idx=2; let candidate = base + ' ' + idx;
@@ -305,7 +314,7 @@ function edit_filer_element(listing, fullPath){
           }
         }
       }catch(_){ }
-      const oldPath = fullPath; const newPath = path_join(listing.path, newName);
+  const newPath = path_join(listing.path, newName);
       if (!window.AtomeFileSystem || typeof window.AtomeFileSystem.renameItem !== 'function') { navigate_auv3_refresh(listing.path, nav_context().target, {}); return; }
       try{
         fs_begin(700);
@@ -1125,20 +1134,27 @@ function request_delete_exact(fullPath, listing){
   try{
     if (!fullPath) return;
     const FS = window.AtomeFileSystem || {};
-  const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
+    const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
     const delDir = (FS.deleteDirectory && typeof FS.deleteDirectory==='function') ? FS.deleteDirectory.bind(FS)
                  : (FS.removeDirectory && typeof FS.removeDirectory==='function') ? FS.removeDirectory.bind(FS)
                  : (FS.rmdir && typeof FS.rmdir==='function') ? FS.rmdir.bind(FS)
                  : (FS.deleteFolder && typeof FS.deleteFolder==='function') ? FS.deleteFolder.bind(FS)
                  : (FS.removeFolder && typeof FS.removeFolder==='function') ? FS.removeFolder.bind(FS)
                  : null;
-  const delMulti = (typeof FS.deleteMultiple === 'function') ? FS.deleteMultiple.bind(FS) : null;
+    const delMulti = (typeof FS.deleteMultiple === 'function') ? FS.deleteMultiple.bind(FS) : null;
     if (!delFile && !delDir) { console.warn('Aucune API de suppression disponible'); return; }
-    const isDir = !!(((listing&&listing.folders)||[]).find(f=> path_join(listing.path, String(f.name||'')) === fullPath));
     fs_begin(900);
     const done = ()=>{ try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ try{ fs_end(0); }catch(__){} } };
-    if (isDir) {
-      (async ()=>{
+    (async ()=>{
+      // Robustly detect directory even if listing is stale
+      let isDir = !!(((listing&&listing.folders)||[]).find(f=> path_join(listing.path, String(f.name||'')) === fullPath));
+      if (!isDir) {
+        try {
+          const probe = await get_auv3_files(fullPath);
+          if (probe && (Array.isArray(probe.folders) || Array.isArray(probe.files))) isDir = true;
+        } catch(e){ /* ignore */ }
+      }
+      if (isDir) {
         try {
           // Check if directory is empty
           const childListing = await get_auv3_files(fullPath);
@@ -1150,16 +1166,35 @@ function request_delete_exact(fullPath, listing){
           }
           // Empty directory: try native simple delete
           if (delDir) {
-            try { delDir(fullPath, ()=> done()); } catch(_) { done(); }
+            try { delDir(fullPath, (res)=>{ try{ if(res && res.success===false) console.warn('deleteDirectory failed', res.error); }catch(_){ } done(); }); } catch(err) { console.warn('deleteDirectory threw', err); done(); }
           } else if (delMulti) {
-            try { delMulti([fullPath], ()=> done()); } catch(_) { done(); }
+            try { delMulti([fullPath], (res)=>{ try{ if(res && res.success===false) console.warn('deleteMultiple(dir) failed', res.error); }catch(_){ } done(); }); } catch(err) { console.warn('deleteMultiple(dir) threw', err); done(); }
           } else { done(); }
-        } catch(_) { done(); }
-      })();
-      return;
-    }
-    if (delFile) { try{ delFile(fullPath, done); }catch(_){ done(); } return; }
-    done();
+        } catch(err) { console.warn('Dir delete flow error', err); done(); }
+        return;
+      }
+      // File path (or misclassified dir) => attempt file delete, then fallback to dir if needed
+      if (delFile) {
+        try {
+          delFile(fullPath, (res)=>{
+            try{
+              if (res && res.success === false) {
+                const msg = String(res.error||'');
+                if (/is a directory|dir(ectory)?/i.test(msg)) {
+                  // Fallback to directory delete
+                  if (delDir) { try { return delDir(fullPath, ()=> done()); } catch(_){ /* continue */ } }
+                  if (delMulti) { try { return delMulti([fullPath], ()=> done()); } catch(_){ /* continue */ } }
+                }
+                console.warn('deleteFile failed', res.error);
+              }
+            }catch(_){ }
+            done();
+          });
+        } catch(err) { console.warn('deleteFile threw', err); done(); }
+        return;
+      }
+      done();
+    })();
   }catch(_){ }
 }
 

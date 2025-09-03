@@ -212,8 +212,12 @@ final class FileSyncCoordinator {
                 // 3. Deletion older than a grace window (2s) -> treat reappearance as recreation
                // let nowTs = now
                 let presentInVisible = (visibleRoot != nil) ? (inventories[visibleRoot!]?[rel] != nil) : false
-                // Resurrection désormais SEULEMENT si modification plus récente que la tombstone OU action explicite (visible)
-                let resurrect = (newestMTime > deletedAt) || presentInVisible
+                // Resurrection: for directories, require a strictly newer mtime than tombstone (ignore mere presence);
+                // for files, allow presence in visible root as explicit user action.
+                let resurrect: Bool = {
+                    if isDir { return (newestMTime > deletedAt) }
+                    return (newestMTime > deletedAt) || presentInVisible
+                }()
                 if resurrect {
                     existing.deletedAt = nil
                     existing.lastModified = max(existing.lastModified, newestMTime, deletedAt + 0.001)
@@ -283,7 +287,15 @@ final class FileSyncCoordinator {
                 }
             }
 
-            if isDir { for root in roots { ensureDirectory(root.appendingPathComponent(rel)) }; continue }
+            if isDir {
+                // If this directory has a tombstone, enforce deletion across all roots instead of recreating it
+                if let r = inventory[rel], r.deletedAt != nil {
+                    for root in roots { deleteItemIfExists(root.appendingPathComponent(rel)) }
+                    continue
+                }
+                for root in roots { ensureDirectory(root.appendingPathComponent(rel)) }
+                continue
+            }
             // Winner: canonical root file if exists, else newest
             let winner: (root: URL, meta: FileMeta) = {
                 if let canon = canonicalRoot, let meta = inventories[canon]?[rel] { return (canon, meta) }
