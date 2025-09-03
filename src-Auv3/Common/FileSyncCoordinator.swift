@@ -151,6 +151,43 @@ final class FileSyncCoordinator {
         return Array(Set(rels))
     }
 
+    // Record an explicit move/rename so the inventory doesn't interpret it as a deletion + recreation
+    func recordMove(oldURL: URL, newURL: URL) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.loadInventoryIfNeeded()
+            let oldRels = self.relativePaths(for: oldURL)
+            let newRels = self.relativePaths(for: newURL)
+            // Remove old entries from inventory and delete surviving copies across other roots
+            let roots = self.availableRoots()
+            for rel in oldRels {
+                // Delete copies in all roots except the new destination (if it matches)
+                for root in roots {
+                    let candidate = root.appendingPathComponent(rel)
+                    // Skip deleting if candidate.path == newURL.path
+                    if candidate.resolvingSymlinksInPath().standardizedFileURL.path == newURL.resolvingSymlinksInPath().standardizedFileURL.path { continue }
+                    self.deleteItemIfExists(candidate)
+                }
+                if self.inventory[rel] != nil {
+                    self.inventory.removeValue(forKey: rel)
+                    self.inventoryDirty = true
+                    print("🔁 Record move: removed old rel=\(rel)")
+                }
+            }
+
+            // Add/update all new relative paths discovered for the destination
+            for newRel in newRels {
+                if let attrs = try? self.fm.attributesOfItem(atPath: newURL.path), let mod = attrs[.modificationDate] as? Date {
+                    let rec = InventoryRecord(lastModified: mod.timeIntervalSince1970, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil, lastSeenVisibleRoot: nil)
+                    self.inventory[newRel] = rec
+                    self.inventoryDirty = true
+                    print("🔁 Record move: added new rel=\(newRel) mtime=\(mod.timeIntervalSince1970)")
+                }
+            }
+            self.persistInventoryIfNeeded()
+        }
+    }
+
     // MARK: - Core Sync Logic
     private func _runSync() {
         loadInventoryIfNeeded()

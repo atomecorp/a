@@ -607,17 +607,40 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
 
     private func handleRenameItem(body: [String: Any], webView: WKWebView?) {
         guard let oldRel = body["oldPath"] as? String, !oldRel.isEmpty,
-              let newRel = body["newPath"] as? String, !newRel.isEmpty,
-              let oldURL = resolveURL(for: oldRel, isDirectory: false),
-              let newURL = resolveURL(for: newRel, isDirectory: false) else {
+              let newRel = body["newPath"] as? String, !newRel.isEmpty else {
             sendErrorResponse(to: webView, error: "Invalid parameters for renameItem")
             return
         }
+
+        let fm = FileManager.default
+
+        // First resolve a tentative URL for the old path to detect whether it's a directory
+        guard let tentativeOld = resolveURL(for: oldRel, isDirectory: false) else {
+            sendErrorResponse(to: webView, error: "Invalid oldPath")
+            return
+        }
+
+        var isDir: ObjCBool = false
+        if !fm.fileExists(atPath: tentativeOld.path, isDirectory: &isDir) {
+            // If the item doesn't exist, still attempt with false (treat as file)
+            isDir = false
+        }
+
+        // Re-resolve URLs using the detected type for better path semantics
+        guard let oldURL = resolveURL(for: oldRel, isDirectory: isDir.boolValue),
+              let newURL = resolveURL(for: newRel, isDirectory: isDir.boolValue) else {
+            sendErrorResponse(to: webView, error: "Invalid parameters for renameItem")
+            return
+        }
+
         do {
-            let fm = FileManager.default
+            // Create parent directories for destination only when they are not the item itself
             let parent = newURL.deletingLastPathComponent()
-            try fm.createDirectory(at: parent, withIntermediateDirectories: true)
-            // If destination exists, try to find a unique name by appending copy (2)
+            if parent.path != oldURL.path {
+                try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+            }
+
+            // If destination exists, try to find a unique name by appending a numeric suffix
             var finalURL = newURL
             if fm.fileExists(atPath: newURL.path) {
                 let name = newURL.deletingPathExtension().lastPathComponent
@@ -629,7 +652,26 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                     idx += 1; if idx > 500 { break }
                 }
             }
-            try fm.moveItem(at: oldURL, to: finalURL)
+
+            // Use NSFileCoordinator to perform a coordinated move to avoid races with the sync subsystem
+            var coordError: NSError?
+            var moveError: NSError?
+            let coordinator = NSFileCoordinator(filePresenter: nil)
+            coordinator.coordinate(writingItemAt: oldURL, options: [], writingItemAt: finalURL, options: [], error: &coordError) { coordinatedOld, coordinatedNew in
+                do {
+                    try fm.moveItem(at: coordinatedOld, to: coordinatedNew)
+                } catch {
+                    // Capture move error separately to avoid overlapping access with coordError inout
+                    moveError = error as NSError
+                }
+            }
+            // Prefer moveError if present
+            if let m = moveError { coordError = m }
+            if let err = coordError {
+                throw err
+            }
+            // Inform sync coordinator about the move to avoid tombstone/resurrection races
+            FileSyncCoordinator.shared.recordMove(oldURL: oldURL, newURL: finalURL)
             sendSuccessResponse(to: webView, data: ["message": "Renamed"]) 
             FileSyncCoordinator.shared.syncAll(force: true)
         } catch {
