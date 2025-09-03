@@ -6,11 +6,6 @@
 		return /\.(m4a|wav|mp3|aif|caf)$/i.test(String(name||''));
 	}
 
-	// Remove sample div by id
-	function delete_sample(id){
-		try{ var el = document.getElementById(id); if (el && el.remove) el.remove(); }catch(_){ }
-	}
-
 	// create a small red delete bubble in the top-right of the sample div
 	function createDeleteBubble(parentId){
 		try{
@@ -42,6 +37,13 @@
 		}catch(_){ }
 	}
 
+	// Remove sample div by id
+	function delete_sample(id){
+		try{ var el = document.getElementById(id); if (el && el.remove) el.remove(); }catch(_){ }
+	}
+
+
+
 	// Create a visible div for the audio file (id and text = filename)
 	function audio_load_handler(fullPath){
 		try{
@@ -56,7 +58,7 @@
 					parent: '#view',
 					css: {
 						position: 'relative',
-						backgroundColor: 'rgba(255, 0, 162, 1)',
+						backgroundColor: 'rgba(52, 73, 70, 1)',
 						left: '70px',
 						top: '16px',
 						padding: '12px',
