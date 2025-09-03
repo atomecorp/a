@@ -986,25 +986,37 @@ function request_delete_selection_or_item(fullPath, listing){
                : (FS.deleteFolder && typeof FS.deleteFolder==='function') ? FS.deleteFolder.bind(FS)
                : (FS.removeFolder && typeof FS.removeFolder==='function') ? FS.removeFolder.bind(FS)
                : null;
+  const delMulti = (typeof FS.deleteMultiple === 'function') ? FS.deleteMultiple.bind(FS) : null;
   if (!delFile && !delDir) { console.warn('Aucune API de suppression disponible'); return; }
   // Build quick lookup sets from listing to know which paths are directories
   const dirSet = new Set(((listing&&listing.folders)||[]).map(f=> path_join(listing.path, String(f.name||''))));
   let i = 0;
   const next = ()=>{
-  if (i >= arr.length) { try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
+    if (i >= arr.length) { try{ fs_end(350); navigate_auv3_refresh(listing.path, window.__auv3_browser_state.target, window.__auv3_browser_state.opts); }catch(_){ } return; }
     const p = arr[i++];
-    const isDir = dirSet.has(p);
-    try{
-      fs_begin(700);
-      if (isDir) {
-        // Recursively delete directories (handles non-empty folders)
-        (async ()=>{ try{ await delete_dir_recursive(p); }catch(_){ } next(); })();
-      } else if (delFile) {
-        try { delFile(p, ()=>{ next(); }); } catch(_){ next(); }
-      } else {
-        next();
+    // Determine if p is a directory: prefer current listing; if unknown, probe
+    (async ()=>{
+      let isDir = dirSet.has(p);
+      if (!isDir) {
+        try { const probe = await get_auv3_files(p); if (probe && (Array.isArray(probe.folders) || Array.isArray(probe.files))) isDir = true; }catch(_){ }
       }
-    }catch(_){ next(); }
+      try{
+        fs_begin(700);
+        if (isDir) {
+          // Recursively delete directories (handles non-empty folders)
+          try{ await delete_dir_recursive(p); }catch(_){ }
+          // If native dir delete missing, try batch as a single-item fallback
+          if (!delDir && delMulti) {
+            try{ await new Promise((resolve)=>{ try{ delMulti([p], ()=>resolve()); }catch(_){ resolve(); } }); }catch(_){ }
+          }
+          next();
+        } else if (delFile) {
+          try { delFile(p, ()=>{ next(); }); } catch(_){ next(); }
+        } else {
+          next();
+        }
+      }catch(_){ next(); }
+    })();
   };
   next();
 }
@@ -1029,6 +1041,7 @@ async function delete_dir_recursive(path){
                : (FS.deleteFolder && typeof FS.deleteFolder==='function') ? FS.deleteFolder.bind(FS)
                : (FS.removeFolder && typeof FS.removeFolder==='function') ? FS.removeFolder.bind(FS)
                : null;
+  const delMulti = (typeof FS.deleteMultiple === 'function') ? FS.deleteMultiple.bind(FS) : null;
   const pDeleteFile = async (p)=>{
     if (!delFile) return;
     await new Promise((resolve)=>{ try{ delFile(p, ()=>resolve()); }catch(_){ resolve(); } });
@@ -1056,7 +1069,15 @@ async function delete_dir_recursive(path){
     }
   }catch(_){ /* ignore */ }
   // Finally remove the now-empty directory
-  try{ await pDeleteDir(path); }catch(_){ }
+  try{
+    if (pDeleteDir) {
+      await pDeleteDir(path);
+    } else if (delDir) {
+      await new Promise((resolve)=>{ try{ delDir(path, ()=>resolve()); }catch(_){ resolve(); } });
+    } else if (delMulti) {
+      await new Promise((resolve)=>{ try{ delMulti([path], ()=>resolve()); }catch(_){ resolve(); } });
+    }
+  }catch(_){ }
 }
 
 // Use native batch delete when multiple are selected for atomic behavior
@@ -1104,13 +1125,14 @@ function request_delete_exact(fullPath, listing){
   try{
     if (!fullPath) return;
     const FS = window.AtomeFileSystem || {};
-    const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
+  const delFile = (typeof FS.deleteFile === 'function') ? FS.deleteFile.bind(FS) : null;
     const delDir = (FS.deleteDirectory && typeof FS.deleteDirectory==='function') ? FS.deleteDirectory.bind(FS)
                  : (FS.removeDirectory && typeof FS.removeDirectory==='function') ? FS.removeDirectory.bind(FS)
                  : (FS.rmdir && typeof FS.rmdir==='function') ? FS.rmdir.bind(FS)
                  : (FS.deleteFolder && typeof FS.deleteFolder==='function') ? FS.deleteFolder.bind(FS)
                  : (FS.removeFolder && typeof FS.removeFolder==='function') ? FS.removeFolder.bind(FS)
                  : null;
+  const delMulti = (typeof FS.deleteMultiple === 'function') ? FS.deleteMultiple.bind(FS) : null;
     if (!delFile && !delDir) { console.warn('Aucune API de suppression disponible'); return; }
     const isDir = !!(((listing&&listing.folders)||[]).find(f=> path_join(listing.path, String(f.name||'')) === fullPath));
     fs_begin(900);
@@ -1129,9 +1151,9 @@ function request_delete_exact(fullPath, listing){
           // Empty directory: try native simple delete
           if (delDir) {
             try { delDir(fullPath, ()=> done()); } catch(_) { done(); }
-          } else {
-            done();
-          }
+          } else if (delMulti) {
+            try { delMulti([fullPath], ()=> done()); } catch(_) { done(); }
+          } else { done(); }
         } catch(_) { done(); }
       })();
       return;
