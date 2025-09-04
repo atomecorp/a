@@ -203,20 +203,104 @@ get_file_content(path).then(svgcontent => {
 
 }
 
-function resize(id, newWidth, newHeight) {
+function resize(id, newWidth, newHeight, durationSec = 0, easing = 'ease') {
   let el = document.getElementById(id);
   if (!el) return false;
   if (!(el instanceof SVGElement)) {
     el = el.querySelector ? el.querySelector('svg') : null;
   }
   if (!el) return false;
+
   const w = typeof newWidth === 'number' ? newWidth : parseFloat(newWidth);
   const h = (newHeight == null) ? w : (typeof newHeight === 'number' ? newHeight : parseFloat(newHeight));
   if (!isFinite(w) || !isFinite(h)) return false;
-  el.setAttribute('width', String(w));
-  el.setAttribute('height', String(h));
+
+  const ms = Math.max(0, (typeof durationSec === 'number' ? durationSec : parseFloat(durationSec)) * 1000);
+  // Special easings using WAAPI for bounce/elastic effects when available
+  if (ms && (easing === 'bounce' || easing === 'elastic') && typeof el.animate === 'function') {
+    const cs = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(el) : null;
+    const currentW = (cs ? parseFloat(cs.width) : 0) || parseFloat(el.getAttribute('width')) || w;
+    const currentH = (cs ? parseFloat(cs.height) : 0) || parseFloat(el.getAttribute('height')) || h;
+
+    let keyframes;
+    if (easing === 'bounce') {
+      keyframes = [
+        { offset: 0, width: `${currentW}px`, height: `${currentH}px` },
+        { offset: 0.6, width: `${w * 1.10}px`, height: `${h * 1.10}px` },
+        { offset: 0.8, width: `${w * 0.94}px`, height: `${h * 0.94}px` },
+        { offset: 0.92, width: `${w * 1.03}px`, height: `${h * 1.03}px` },
+        { offset: 1, width: `${w}px`, height: `${h}px` },
+      ];
+    } else { // elastic
+      keyframes = [
+        { offset: 0, width: `${currentW}px`, height: `${currentH}px` },
+        { offset: 0.5, width: `${w * 1.25}px`, height: `${h * 1.25}px` },
+        { offset: 0.7, width: `${w * 0.90}px`, height: `${h * 0.90}px` },
+        { offset: 0.85, width: `${w * 1.05}px`, height: `${h * 1.05}px` },
+        { offset: 1, width: `${w}px`, height: `${h}px` },
+      ];
+    }
+
+    const anim = el.animate(keyframes, { duration: ms, easing: 'linear', fill: 'forwards' });
+    const done = () => {
+      el.setAttribute('width', String(w));
+      el.setAttribute('height', String(h));
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+    };
+    try {
+      // Some engines support addEventListener on Animation, others use onfinish
+      if (typeof anim.addEventListener === 'function') {
+        anim.addEventListener('finish', done, { once: true });
+      } else {
+        anim.onfinish = done;
+      }
+      setTimeout(done, ms + 50);
+    } catch (_) {
+      anim.onfinish = done;
+      setTimeout(done, ms + 50);
+    }
+    return true;
+  }
+  if (!ms) {
+    // instant resize
+    el.setAttribute('width', String(w));
+    el.setAttribute('height', String(h));
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+    return true;
+  }
+
+  const prevTransition = el.style.transition;
+  // Animate CSS width/height; attributes updated at the end to keep them in sync
+  el.style.transition = `width ${ms}ms ${easing}, height ${ms}ms ${easing}`;
+  // Force reflow to ensure transition takes effect
+  void el.offsetWidth; // eslint-disable-line no-unused-expressions
+
+  // Apply target sizes via CSS to animate
   el.style.width = `${w}px`;
   el.style.height = `${h}px`;
+
+  const done = () => {
+    // Sync SVG attributes and cleanup transition
+    el.setAttribute('width', String(w));
+    el.setAttribute('height', String(h));
+    el.style.transition = prevTransition || '';
+  };
+
+  try {
+    el.addEventListener('transitionend', function handler(ev) {
+      if (ev.propertyName === 'width' || ev.propertyName === 'height') {
+        el.removeEventListener('transitionend', handler);
+        done();
+      }
+    });
+    // Safety timeout in case transitionend doesn't fire
+    setTimeout(done, ms + 50);
+  } catch (_) {
+    // Fallback: apply instantly if events not supported
+    done();
+  }
   return true;
 }
 
@@ -270,5 +354,5 @@ fetch_and_render_svg('../../assets/images/icons/activate.svg', 120, 120, 'white'
 setTimeout(() => {
   fillColor('my_nice_svg', 'green');
   strokeColor('my_nice_svg', 'orange');
-  resize('my_nice_svg', 33);
-}, 2500);
+  resize('my_nice_svg', 33, 66, 0.5, 'elastic');
+}, 1500);
