@@ -1,0 +1,348 @@
+// atome.menu – Modular Snake/Nibble Menu Spec v1.1 (based on user answers)
+// Notes: canvas holds a working spec with JSON + comments. JSON sections may include // comments.
+
+const intuition = {
+  "version": "1.1",
+  "meta": { "namespace": "atome.menu", "defaultLocale": "en" },
+
+  // =============================
+  // 1) Providers (unchanged)
+  // =============================
+  "providers": {
+    "templates": { "type": "static", "items": [
+      { "id": "tpl.photo", "type": "template", "labelKey": "Templates.Photos" },
+      { "id": "tpl.videoFx", "type": "template", "labelKey": "Templates.VideoFX" },
+      { "id": "tpl.programming", "type": "template", "labelKey": "Templates.Programming" }
+    ]},
+    "viewModes": { "type": "static", "items": [
+      { "id": "vm.list", "type": "viewMode", "labelKey": "ViewMode.List", "icon": "list", "action": { "command": "ui.setViewMode", "params": { "mode": "list" } } },
+      { "id": "vm.grid", "type": "viewMode", "labelKey": "ViewMode.Grid", "icon": "grid", "action": { "command": "ui.setViewMode", "params": { "mode": "grid" } } },
+      { "id": "vm.code", "type": "viewMode", "labelKey": "ViewMode.Code", "icon": "code", "action": { "command": "ui.setViewMode", "params": { "mode": "code" } } }
+    ]},
+    "recentProjects": { "type": "dynamic", "endpoint": "menu.fetchRecentProjects", "cacheTtlSec": 30 }
+  },
+
+  // =============================
+  // 2) Menu Tree (sample)
+  // =============================
+  "menu": {
+    "id": "root",
+    "type": "group",
+    "children": [
+      {
+        "id": "home",
+        "type": "group",
+        "labelKey": "Home",
+        "icon": "home",
+        "children": [
+          { "id": "home.system", "type": "item", "labelKey": "System", "icon": "cpu", "action": { "command": "system.open" } },
+          { "id": "home.user", "type": "item", "labelKey": "User", "icon": "user", "action": { "command": "user.openProfile" } },
+          { "id": "home.recent", "type": "group", "labelKey": "Recent", "icon": "clock", "childrenProvider": { "use": "recentProjects" } }
+        ]
+      },
+
+      { "id": "find", "type": "group", "labelKey": "Find", "icon": "search", "children": [
+        { "id": "find.filter", "type": "item", "labelKey": "Filter", "icon": "filter", "action": { "command": "search.openFilter" } },
+        { "id": "find.selector", "type": "group", "labelKey": "SelectorTags", "icon": "tag", "children": [
+          { "id": "find.selector.label", "type": "item", "labelKey": "Label", "action": { "command": "tags.pick", "params": { "scope": "label" } } },
+          { "id": "find.selector.name", "type": "item", "labelKey": "Name", "action": { "command": "tags.pick", "params": { "scope": "name" } } },
+          { "id": "find.selector.slicer", "type": "item", "labelKey": "Slicer", "action": { "command": "tags.slicer" } }
+        ]}
+      ]},
+
+      { "id": "time", "type": "group", "labelKey": "Time", "icon": "timer", "children": [
+        { "id": "time.schedule", "type": "item", "labelKey": "Schedule", "action": { "command": "time.schedule" } },
+        { "id": "time.clock", "type": "item", "labelKey": "Clock", "action": { "command": "time.clock" } },
+        { "id": "time.timeline", "type": "group", "labelKey": "Timeline", "children": [
+          { "id": "time.undo", "type": "item", "labelKey": "Undo", "icon": "undo", "action": { "command": "history.undo" } },
+          { "id": "time.redo", "type": "item", "labelKey": "Redo", "icon": "redo", "action": { "command": "history.redo" } }
+        ]},
+        { "id": "time.wait", "type": "item", "labelKey": "Wait", "action": { "command": "time.waitDialog" } },
+        { "id": "time.every", "type": "item", "labelKey": "Every", "action": { "command": "time.repeat" } }
+      ]},
+
+      { "id": "view", "type": "group", "labelKey": "View", "icon": "layout", "childrenProvider": { "use": "viewModes" } },
+      { "id": "templates", "type": "group", "labelKey": "Templates", "icon": "template", "childrenProvider": { "use": "templates" } },
+
+      { "id": "tools", "type": "group", "labelKey": "Tools", "icon": "wrench", "children": [
+        { "id": "tools.communication", "type": "group", "labelKey": "Communication", "children": [
+          { "id": "tools.share", "type": "item", "labelKey": "Share", "icon": "share", "action": { "command": "comm.share" } },
+          { "id": "tools.message", "type": "item", "labelKey": "Message", "action": { "command": "comm.message" } },
+          { "id": "tools.visio", "type": "item", "labelKey": "Visio", "action": { "command": "comm.visio" } },
+          { "id": "tools.tel", "type": "item", "labelKey": "Phone", "action": { "command": "comm.phone" } },
+          { "id": "tools.collab", "type": "item", "labelKey": "Collab", "action": { "command": "comm.collab" } }
+        ]},
+        { "id": "tools.capture", "type": "item", "labelKey": "Capture", "icon": "camera", "action": { "command": "capture.open" } },
+        { "id": "tools.edit", "type": "item", "labelKey": "EditToolbox", "icon": "edit", "action": { "command": "toolbox.edit" } },
+        { "id": "tools.create", "type": "item", "labelKey": "Create", "action": { "command": "content.create" } },
+        { "id": "tools.change", "type": "item", "labelKey": "Change", "action": { "command": "content.change" } },
+        { "id": "tools.find", "type": "item", "labelKey": "Find", "action": { "command": "search.open" } },
+        { "id": "tools.userHome", "type": "item", "labelKey": "UserHome", "action": { "command": "nav.open", "params": { "path": "atome://home" } } },
+        { "id": "tools.view", "type": "item", "labelKey": "View", "action": { "command": "ui.toggle" } },
+        { "id": "tools.time", "type": "item", "labelKey": "Time", "action": { "command": "time.panel" } }
+      ]},
+
+      { "id": "settings", "type": "group", "labelKey": "Settings", "icon": "settings", "children": [
+        { "id": "settings.language", "type": "item", "labelKey": "Language", "action": { "command": "settings.language" } },
+        { "id": "settings.inspector", "type": "item", "labelKey": "Inspector", "action": { "command": "inspector.toggle" } },
+        { "id": "settings.clear", "type": "item", "labelKey": "Clear", "action": { "command": "app.clearCache" } }
+      ]},
+
+      { "id": "help", "type": "group", "labelKey": "Help", "icon": "help", "children": [
+        { "id": "help.docs", "type": "item", "labelKey": "Docs", "action": { "route": "/help" } },
+        { "id": "help.about", "type": "item", "labelKey": "About", "action": { "command": "app.about" } }
+      ]},
+
+      { "id": "quit", "type": "item", "labelKey": "Quit", "icon": "power", "action": { "command": "app.quit" } }
+    ]
+  }
+};
+
+// =============================
+// 3) Instance Options (from user answers)
+// =============================
+// Not in JSON data; passed at instantiation time.
+const instanceOptions = {
+  anchor: "top-left",                       // top-left | top-right | bottom-left | bottom-right
+  primaryOrientation: "vertical",           // vertical | horizontal (N1)
+  maxDepth: 5,                               // hard limit
+  maxItemsPerLevel: 7,                       // enforce capping
+  spacingPx: 12,                             // fixed spacing between levels
+  overflow: "scroll",                       // when level exceeds viewport -> scroll
+  mode: "step",                             // step | glide (gesture path)
+  // Grip behavior
+  grip: {
+    enabled: true,
+    // In step mode: replacing previous level; click grip -> restore previous level
+    // In glide mode: previous level is cleared; hovering the grip while moving back restores
+    sizePx: 28,
+    longPressMs: 350,                         // long press on grip → pin/extract panel
+    duplicateOnExtract: true                  // extracting creates a duplicate panel/tool
+  },
+  // Interaction
+  interaction: {
+    openOnHover: false,                      // desktop hover disabled
+    openDelayMs: 0,
+    autoCloseOnFocusExit: true
+  },
+  // Gesture (glide mode)
+  gesture: {
+    angleToleranceDeg: 35,
+    minVelocityPxPerS: 250,
+    snapRadiusPx: 40
+  },
+  // Alternating directions
+  directions: {
+    alternate: true,                         // N1 = primary, N2 = perpendicular, then repeat
+    flipOnEdges: true,                       // flip when colliding screen edges
+    rtlHorizontalInvert: true                // respect RTL locales
+  },
+  // Accessibility & keyboard
+  a11y: {
+    keyboard: true,                          // arrows/enter/esc
+    tabCycle: true,
+    roles: true,                             // aria roles
+    // Physical sizing target: ~1.2 cm touch target (maps to >=44 px on most phones)
+    minTouchSizeCm: 1.2,
+    focusRing: true
+  },
+  // Animations & perf
+  animation: {
+    durationMs: 140,
+    easing: "easeOutQuad",
+    staggerMs: 12,
+    rubberEffect: 0.08                        // subtle overshoot
+  },
+  performance: {
+    lazyMount: true,
+    virtualizeLongLists: true
+  },
+  // Data & dynamics
+  data: {
+    cacheDynamicProviders: true,             // cache recent/favorites
+    fastestLoading: true,                    // choose spinner/skeleton heuristics
+    liveFilterEnabled: true                  // Find regenerates current level
+  },
+  // Persistence
+  persistence: {
+    rememberLastPathPerContext: true,
+    pinnedDock: {
+      enabled: true,
+      allowExtractSingleTool: true
+    }
+  },
+  // Theme
+  theme: {
+    scheme: "auto",                          // light | dark | auto
+    contrast: "AA",                           // AA | AAA (AAA when option enabled)
+    allowDensityTweaks: false                // only light/dark; no density/skins
+  }
+};
+
+// =============================
+// 4) Layout Algorithm (pseudocode)
+// =============================
+/*
+function openLevel(parentLevel, levelIndex, anchor, primaryOrientation) {
+  const dir = (levelIndex % 2 === 1) ? primaryOrientation : perpendicular(primaryOrientation);
+  const origin = computeOriginFromAnchor(anchor); // e.g., top-left
+  const rect = computeLevelRect(parentLevel, dir, instanceOptions.spacingPx);
+  if (wouldOverflow(rect)) {
+    if (instanceOptions.directions.flipOnEdges) flipDirection(dir);
+    if (stillOverflow(rect)) enableScroll(levelIndex); // overflow policy: scroll
+  }
+  renderLevel(levelIndex, rect, dir);
+}
+*/
+
+// =============================
+// 5) Grip Behavior (spec)
+// =============================
+// - Step mode: When entering level N, level N-1 is replaced by a GRIP placeholder.
+//   Clicking the GRIP restores N-1 and collapses deeper levels.
+// - Glide mode: Levels are cleared while the pointer follows the path; hovering the GRIP while moving back rehydrates the previous level.
+
+// =============================
+// 6) Keyboard Map
+// =============================
+// ArrowUp/ArrowDown: move focus within vertical levels
+// ArrowLeft/ArrowRight: move focus within horizontal levels or ascend/descend depending on dir
+// Enter/Space: activate/open focused item
+// Esc: ascend one level (or close all if at root)
+
+// =============================
+// 7) Physical Sizing Helper
+// =============================
+/*
+// Note: CSS cm units are unreliable across devices. We compute px-per-cm at runtime:
+function pxPerCm() {
+  const div = document.createElement('div');
+  div.style.width = '10cm';
+  div.style.position = 'absolute';
+  div.style.visibility = 'hidden';
+  document.body.appendChild(div);
+  const px = div.getBoundingClientRect().width;
+  document.body.removeChild(div);
+  return px / 10; // px per 1 cm
+}
+const MIN_TOUCH_CM = instanceOptions.a11y.minTouchSizeCm; // 1.2
+const MIN_TOUCH_PX = Math.max(44, Math.round(pxPerCm() * MIN_TOUCH_CM));
+// Use MIN_TOUCH_PX for size of items and hit areas.
+*/
+
+// =============================
+// 8) Panels & Item Types (normalized)
+// =============================
+// Separate navigation items from content panels.
+// Types: group (toolbox), action (tool), option (toggle/button), property (slider/pot), input (text/radios/check), panel (specialized zone)
+
+// Example item referencing a panel
+/*
+{
+  id: "tools.color",
+  type: "action",
+  labelKey: "Tools.Color",
+  icon: "palette",
+  panelId: "palette.colors"
+}
+*/
+
+// Example panel definition
+/*
+const panels = {
+  "palette.colors": { kind: "colorPicker", props: { columns: 8, preview: true } },
+  "pads.grid": { kind: "pads", props: { rows: 4, cols: 4, velocity: true } }
+};
+*/
+
+// =============================
+// 9) Gesture Path (glide) Parameters
+// =============================
+/*
+- angleToleranceDeg: 35 → direction changes only when the pointer path deviates beyond 35° from current dir.
+- minVelocityPxPerS: 250 → ignore jittery slow moves.
+- snapRadiusPx: 40 → when path passes within 40px of an item center, snap focus to it.
+*/
+
+// =============================
+// 10) Persistence Model
+// =============================
+/*
+localState = {
+  lastPathByContext: { [contextId]: [itemIds...] },
+  pinned: [{ panelId, position, size }],
+  extractedTools: [{ itemId, position }]
+}
+*/
+
+// =============================
+// 11) Open Questions
+// =============================
+// - Do we cap item label length and ellipsize beyond N chars? Suggest: 18 chars, tooltip on hover.
+// - Max scroll height per level? Suggest: clamp to 60% of viewport height.
+// - Rubber effect curve fine-tuning (currently 0.08). Want a per-level decay?
+
+const Inntuition_theme={
+  "light": {
+    "tool-bg": "#575656ff",
+    "tool-text": "#000000",
+    "tool-hover-bg": "#f0f0f0",
+    "tool-hover-fg": "#000000",
+    "tool-active-bg": "#e0e0e0",
+    "tool-active-fg": "#000000",
+  
+    "tool-font-size": "14px",
+    "item-shadow": "3px 3px 3px rgba(0,0,0,0.39)",
+    "tool-icon-size": "20px",
+    "item-border-radius": "3px",
+    "item-width": "15px",
+    "item-height": "15px",
+}
+};
+
+function toolbox(name, orientation='vertical',  position='bottom-left', theme="light") { 
+
+
+  $('span', {
+  // pas besoin de 'tag'
+  css: {
+    backgroundColor: Inntuition_theme[theme]["tool-bg"],
+    width: Inntuition_theme[theme]["item-width"],
+    height: Inntuition_theme[theme]["item-height"],
+  boxShadow: Inntuition_theme[theme]["item-shadow"],
+    borderRadius: Inntuition_theme[theme]["item-border-radius"],
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+
+  },
+
+     id: `toolsbox.${name}`,
+    theme: theme,
+    icon: "toolbox",
+    orientation: orientation, // vertical | horizontal
+    position: position,       // top-left | top-right | bottom-left | bottom-right
+});
+ 
+}
+
+function palette(name) {  
+}
+
+function tool(name) {  
+
+}
+
+function particle(name) {  
+}
+
+function options(name) {  
+}
+
+function zonespecial(name) {  
+}
+
+toolbox("root");
+tool("color");

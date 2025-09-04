@@ -43,3 +43,232 @@ const atomeSvgInline = $('svg', {
 });
 
 
+/// code to add 
+
+
+// Promise-based util: get_file_content(path)
+// - path: string (URL or relative file path)
+
+function create_svg(svgcontent, width = 200, height = 200, color = null, path_color = null, id ) {
+  const view = document.getElementById('view');
+  if (!view) return;
+
+  // Reuse container if present to avoid duplicates
+  let container = document.getElementById('edit-svg-raw');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = id || 'edit-svg-raw';
+    container.style.display = 'inline-block';
+    container.style.marginLeft = '10px';
+    view.appendChild(container);
+  }
+  container.innerHTML = svgcontent;
+
+  // Adjust viewBox to fit content if off-canvas
+  const svgEl = container.querySelector('svg');
+  // ensure the inner <svg> carries the provided id for direct access
+  if (svgEl && id) {
+    try { svgEl.id = id; } catch (_) {}
+  }
+  if (svgEl && typeof svgEl.querySelector === 'function') {
+    // Compute maximum stroke width among common shape elements
+    const allShapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+    const getStrokeWidth = (el) => {
+      let sw = el.getAttribute('stroke-width');
+      if (!sw && typeof window !== 'undefined' && window.getComputedStyle) {
+        const cs = window.getComputedStyle(el);
+        sw = cs && cs.strokeWidth;
+      }
+      if (typeof sw === 'string') sw = parseFloat(sw);
+      return Number.isFinite(sw) ? sw : 0;
+    };
+    let maxStroke = 0;
+    try {
+      allShapes.forEach((n) => { const v = getStrokeWidth(n); if (v > maxStroke) maxStroke = v; });
+    } catch (_) {}
+
+    const contentNode = svgEl.querySelector('g') || svgEl.querySelector('path') || svgEl;
+    if (contentNode && typeof contentNode.getBBox === 'function') {
+      const bb = contentNode.getBBox();
+      if (bb && isFinite(bb.width) && isFinite(bb.height) && bb.width > 0 && bb.height > 0) {
+        const pad = Math.ceil((maxStroke || 0) / 2) + 2; // account for stroke extending outside + small safety
+        const x = bb.x - pad;
+        const y = bb.y - pad;
+        const w = bb.width + pad * 2;
+        const h = bb.height + pad * 2;
+        svgEl.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      }
+    }
+    // Ensure overflow visibility (mostly for nested <svg>)
+    svgEl.style.overflow = 'visible';
+
+    // Apply requested size
+    const w = typeof width === 'number' ? width : parseFloat(width) || 200;
+    const h = typeof height === 'number' ? height : parseFloat(height) || 200;
+    svgEl.setAttribute('width', String(w));
+    svgEl.setAttribute('height', String(h));
+    svgEl.style.width = `${w}px`;
+    svgEl.style.height = `${h}px`;
+
+    // Apply colors
+    try {
+      const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+      shapes.forEach(node => {
+        if (path_color) node.setAttribute('stroke', path_color);
+        if (color) {
+          const currentFill = node.getAttribute('fill');
+          // Only override when fill is not explicitly none, unless we want to force it
+          if (currentFill === null || currentFill.toLowerCase() !== 'none') {
+            node.setAttribute('fill', color);
+          }
+        }
+      });
+      // Optionally set default fill/stroke on root if shapes missing
+      if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
+      if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+    } catch (_) {}
+  }
+}
+
+
+
+function get_file_content(pathArg) {
+  return new Promise((resolve, reject) => {
+    if (typeof pathArg !== 'string') {
+      const err = new Error('path must be a string');
+      reject(err);
+      return;
+    }
+
+    const resolveWith = (text) => resolve(text);
+
+    // Try fetch first (browser/runtime)
+  if (typeof fetch === 'function') {
+      fetch(pathArg)
+        .then(resp => {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.text();
+        })
+        .then(text => resolveWith(text))
+        .catch(err => {
+          // fallback to fs when available (only if globalThis.require exists)
+          if (typeof globalThis !== 'undefined' && typeof globalThis.require === 'function') {
+            try {
+              const fs = globalThis.require('fs');
+              const path = globalThis.require('path');
+              const isAbs = path.isAbsolute(pathArg);
+              const filePath = isAbs
+                ? pathArg
+                : (typeof __dirname !== 'undefined' ? path.join(__dirname, pathArg) : pathArg);
+              const content = fs.readFileSync(filePath, 'utf8');
+              resolveWith(content);
+            } catch (e) { reject(e); }
+          } else { reject(err); }
+        });
+      return;
+    }
+
+    // If fetch not available but Node-style require is
+    if (typeof globalThis !== 'undefined' && typeof globalThis.require === 'function') {
+      try {
+        const fs = globalThis.require('fs');
+        const path = globalThis.require('path');
+        const isAbs = path.isAbsolute(pathArg);
+        const filePath = isAbs
+          ? pathArg
+          : (typeof __dirname !== 'undefined' ? path.join(__dirname, pathArg) : pathArg);
+        const content = fs.readFileSync(filePath, 'utf8');
+        resolveWith(content);
+      } catch (e) { reject(e); }
+      return;
+    }
+
+    reject(new Error('No fetch() or require() available to load file'));
+  });
+}
+
+
+
+function fetch_and_render_svg(path, width = 200, height = 200, color = 'lightgray', path_color = 'lightgray', id=null) {
+
+get_file_content(path).then(svgcontent => {
+  try {
+  create_svg(svgcontent, width, height, color, path_color, id);
+  } catch (e) {
+    console.error('failed to render fetched svg', e);
+  }
+})
+
+
+}
+
+function resize(id, newWidth, newHeight) {
+  let el = document.getElementById(id);
+  if (!el) return false;
+  if (!(el instanceof SVGElement)) {
+    el = el.querySelector ? el.querySelector('svg') : null;
+  }
+  if (!el) return false;
+  const w = typeof newWidth === 'number' ? newWidth : parseFloat(newWidth);
+  const h = (newHeight == null) ? w : (typeof newHeight === 'number' ? newHeight : parseFloat(newHeight));
+  if (!isFinite(w) || !isFinite(h)) return false;
+  el.setAttribute('width', String(w));
+  el.setAttribute('height', String(h));
+  el.style.width = `${w}px`;
+  el.style.height = `${h}px`;
+  return true;
+}
+
+
+function strokeColor(id, color) {
+  let el = document.getElementById(id);
+  if (!el) return false;
+  if (!(el instanceof SVGElement)) {
+    el = el.querySelector ? el.querySelector('svg') : null;
+  }
+  if (!el) return false;
+  try {
+    const shapes = el.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+    shapes.forEach(node => {
+      node.setAttribute('stroke', color);
+    });
+    // Optionally set default stroke on root if shapes missing
+    if (!el.getAttribute('stroke')) el.setAttribute('stroke', color);
+  } catch (_) { return false; }
+  return true;
+}   
+
+
+function fillColor(id, color) {     
+  let el = document.getElementById(id);
+  if (!el) return false;
+  if (!(el instanceof SVGElement)) {
+    el = el.querySelector ? el.querySelector('svg') : null;
+  }
+  if (!el) return false;
+  try {
+    const shapes = el.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+    shapes.forEach(node => {
+      node.setAttribute('fill', color);
+    });
+    // Optionally set default fill on root if shapes missing
+    if (!el.getAttribute('fill')) el.setAttribute('fill', color);
+  } catch (_) { return false; }
+  return true;
+}     
+
+
+
+
+
+fetch_and_render_svg('../../assets/images/icons/activate.svg', 120, 120, 'white', 'red', 'my_nice_svg');
+
+
+// Example of resizing an existing SVG by id after a delay
+
+setTimeout(() => {
+  fillColor('my_nice_svg', 'green');
+  strokeColor('my_nice_svg', 'orange');
+  resize('my_nice_svg', 33);
+}, 2500);
