@@ -347,14 +347,15 @@ const applyTemplateEffects = (button, template) => {
 define('button-container', {
   tag: 'button',
   class: 'hs-button',
-  text: 'hello',
+  text: '',
   css: {
     position: 'relative',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '8px 16px',
-    border: '1px solid #ccc',
+  // remove default contour
+  border: 'none',
     borderRadius: '4px',
     // backgroundColor: '#f8f9fa', // ❌ Retiré pour éviter les conflits
     // color: '#333', // ❌ Retiré pour éviter les conflits
@@ -521,7 +522,8 @@ const buttonSizes = {
  */
 const createButton = (config = {}) => {
   const {
-    text = 'Button',
+    // default to empty text: components will show no label unless explicitly provided
+    text = '',
     icon,
     badge,
     variant = 'default',
@@ -638,6 +640,44 @@ const createButton = (config = {}) => {
     containerStyles.opacity = '0.6';
     containerStyles.cursor = 'not-allowed';
     containerStyles.pointerEvents = 'none';
+  }
+
+  // Respect explicit small width/height: if the developer provided small dimensions
+  // prefer an icon-only compact button (no padding/minWidth that would expand it).
+  const parsePx = (v) => {
+    if (v === undefined || v === null) return null;
+    if (typeof v === 'number') return v;
+    const m = String(v).match(/^(-?\d+(?:\.\d+)?)(px)?$/);
+    return m ? Number(m[1]) : null;
+  };
+
+  const explicitW = parsePx(containerStyles.width || processedConfig.width || processedConfig.css && processedConfig.css.width);
+  const explicitH = parsePx(containerStyles.height || processedConfig.height || processedConfig.css && processedConfig.css.height);
+  const smallThreshold = 32; // px — consider buttons <= this size as icon-only
+  const isSmall = (explicitW !== null && explicitW <= smallThreshold) || (explicitH !== null && explicitH <= smallThreshold);
+
+  if (isSmall) {
+    // Force compact rendering by overriding template defaults so explicit sizes are respected
+    containerStyles.boxSizing = 'border-box';
+    containerStyles.padding = '0';
+    containerStyles.minWidth = '0';
+    containerStyles.minHeight = '0';
+    // ensure explicit width/height remain as provided (if numeric, add px)
+    if (explicitW !== null) containerStyles.width = String(explicitW) + 'px';
+    if (explicitH !== null) containerStyles.height = String(explicitH) + 'px';
+    // hide any text when small unless explicitly forced
+    if (!processedConfig.forceText) {
+      // this will make later checks like `if (finalText)` fail and avoid adding text nodes
+      finalText = '';
+    }
+    // reduce font-size influence
+    containerStyles.fontSize = '0px';
+    // make overflow hidden so inner content doesn't push size
+    containerStyles.overflow = 'hidden';
+    // ensure inline-flex alignment centers icon
+    containerStyles.display = 'inline-flex';
+    containerStyles.alignItems = 'center';
+    containerStyles.justifyContent = 'center';
   }
 
   // Fonction de gestion du clic
@@ -757,6 +797,15 @@ const createButton = (config = {}) => {
   // Empêcher la sélection/drag native pour que tout le bouton soit la cible
   button.addEventListener('dragstart', (e) => e.preventDefault());
   button.addEventListener('selectstart', (e) => e.preventDefault());
+
+  // Ensure no default outline/border remains (some templates or UA styles may inject them)
+  try {
+    // remove possible outline and border set later
+    button.style.setProperty('outline', 'none');
+    button.style.setProperty('border', 'none');
+  } catch (e) {
+    // ignore
+  }
 
   // ✅ FORCER TOUS les styles critiques manuellement
   Object.keys(cleanStyles).forEach(key => {

@@ -305,6 +305,7 @@ localState = {
 const Inntuition_theme = {
   "light": {
     "tool-bg": "#313131ff",
+     "tool-bg-active": "#656565ff",
     "item-text": "#000000",
     "tool-text": "#8c8b8bff",
     "tool-hover-bg": "#f0f0f0",
@@ -319,7 +320,7 @@ const Inntuition_theme = {
     "icon-height": "23px",
 
     "tool-font-size": "10px",
-    "item-shadow": "3px 3px 3px rgba(0,0,0,0.39)",
+    "item-shadow": "0px 0px 5px rgba(0,0,0,0.69)",
     "tool-icon-size": "20px",
     "item-border-radius": "3px",
     "item-width": "39px",
@@ -334,31 +335,32 @@ function currentToolbox() {
 }
 
 function intuitionCommon(cfg) {
-  const { id, label = null, icon = null, colorise = false, theme = 'light' } = cfg;
+  const { id, label = null, icon = null, button=null,colorise = false, theme = 'light' } = cfg;
 
   const id_created = `toolsbox.${id}`;
   const label_color = Inntuition_theme[theme]["tool-text"];
 
   const el = $('div', {
     parent: '#intuition',
-    css: {
-      backgroundColor: Inntuition_theme[theme]["tool-bg"],
-      width: Inntuition_theme[theme]["item-width"],
-      height: Inntuition_theme[theme]["item-height"],
-      boxShadow: Inntuition_theme[theme]["item-shadow"],
-      userSelect: 'none',         // standard
-      WebkitUserSelect: 'none',   // webkit
-      MozUserSelect: 'none',      // firefox
-      borderRadius: Inntuition_theme[theme]["item-border-radius"],
-      color: label_color,
-      margin: '1px',
-      display: 'inline-block',
-      fontSize: Inntuition_theme[theme]["tool-font-size"],
-      textTransform: 'capitalize',
-      fontFamily: 'Roboto',
-      textAlign: 'center',
-      lineHeight: '18px',
-    },
+  css: {
+    backgroundColor: Inntuition_theme[theme]["tool-bg"],
+    width: Inntuition_theme[theme]["item-width"],
+    height: Inntuition_theme[theme]["item-height"],
+    boxShadow: Inntuition_theme[theme]["item-shadow"],
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    MozUserSelect: 'none',
+    borderRadius: Inntuition_theme[theme]["item-border-radius"],
+    color: label_color,
+    margin: '1px',
+    display: 'inline-block',
+    verticalAlign: 'top',          // align all items to top
+    fontSize: Inntuition_theme[theme]["tool-font-size"],
+    textTransform: 'capitalize',
+    fontFamily: 'Roboto',
+    textAlign: 'center',
+    lineHeight: '18px',
+  },
 
     // Affiche le texte seulement si un label est fourni
     text: (function (n) {
@@ -399,6 +401,56 @@ function intuitionCommon(cfg) {
       id_created
     );
   }
+  if (button) {
+    const parentSelector = '#' + (window.CSS && CSS.escape
+      ? CSS.escape(id_created)           // ex: toolsbox.boolean -> toolsbox\.boolean
+      : id_created.replace(/\./g, '\\.') // fallback simple
+    );
+
+     Button({
+      parent: parentSelector,
+      css: {
+        left: '0px',
+        top: '-3px',
+        width: '19px',
+        height: '19px',
+        position: 'relative',
+        boxSizing: 'border-box',
+        padding: '0',
+        minWidth: '0px',
+        minHeight: '0px',
+        overflow: 'hidden',
+        fontSize: '0px',
+        borderRadius: '3px',
+        backgroundColor: Inntuition_theme[theme]["tool-bg"],
+        boxShadow: Inntuition_theme[theme]["item-shadow"]
+      }
+    });
+
+    // toggle background color when button is "on"
+    (function(){
+      const parentEl = document.querySelector(parentSelector);
+      if (!parentEl) return;
+      const btn = parentEl.querySelector('button.hs-button, button');
+      if (!btn) return;
+
+      const normalBg = Inntuition_theme[theme]["tool-bg"];
+      const activeBg = Inntuition_theme[theme]["tool-bg-active"] || normalBg;
+
+      // init
+      btn.style.backgroundColor = normalBg;
+      btn.dataset.on = 'false';
+      btn.setAttribute('aria-pressed','false');
+
+      btn.addEventListener('click', () => {
+        const nowOn = btn.dataset.on === 'true' ? 'false' : 'true';
+        btn.dataset.on = nowOn;
+        btn.setAttribute('aria-pressed', nowOn);
+        btn.style.backgroundColor = nowOn === 'true' ? activeBg : normalBg;
+      });
+    })();
+  }
+  
 
   return el;
 }
@@ -423,20 +475,22 @@ function palette(cfg) {
   const el = intuitionCommon(cfg)
 }
 
-function tool(name) {
+function tool(cfg) {
 
-  let theme = currentToolbox().theme;
-  const el = intuitionCommon(theme, name)
+  cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
 
 }
 
-function particle(name) {
+function particle(cfg) {
 }
 
-function options(name) {
+function option(cfg) {
+    cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
 }
 
-function zonespecial(name) {
+function zonespecial(cfg) {
 }
 //toolbox("id", 'label/nil', 'icon/nil', 'colorise/false');
 let toolboxToCreate={
@@ -456,20 +510,28 @@ toolbox(toolboxToCreate);
 
 palette({
   id: "communication",
+  type: "palette",
   label: 'communication',
-  icon: 'menu',
+  icon: 'communication',
   colorise: true, // true | false | 'color' | '#rrggbb'
 });
-// tool("color");
 
 
-// fetch_and_render_svg('../../assets/images/icons/activate.svg', 120, 120, 'white', 'red', 'my_nice_svg');
+
+tool({
+    id: "create",
+    type: "tool",
+  label: 'create',
+  icon: 'create',
+  colorise: true, 
+});
+
+option({
+    id: "boolean",
+    type: "option",
+  label: 'boolean',
+  button: 'boolean',
+  colorise: true, 
+});
 
 
-// // Example of resizing an existing SVG by id after a delay
-
-// setTimeout(() => {
-//   fillColor('my_nice_svg', 'green');
-//   strokeColor('my_nice_svg', 'orange');
-//   resize('my_nice_svg', 33, 66, 0.5, 'elastic');
-// }, 1500);
