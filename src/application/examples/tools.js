@@ -424,31 +424,42 @@ function intuitionCommon(cfg) {
         borderRadius: '3px',
         backgroundColor: Inntuition_theme[theme]["tool-bg"],
         boxShadow: Inntuition_theme[theme]["item-shadow"]
-      }
+      },
+         onStyle: {
+        background: 'linear-gradient(135deg, #48c6ef 0%, #6f86d6 100%)',
+        transform: 'scale(1.05)',
+        boxShadow: '0 6px 20px rgba(72, 198, 239, 0.6)'
+    },
+    offStyle: {
+        background: 'linear-gradient(135deg, #fc466b 0%, #3f5efb 100%)',
+        transform: 'scale(0.95)',
+        boxShadow: '0 2px 10px rgba(252, 70, 107, 0.4)'
+    },
     });
 
     // toggle background color when button is "on"
-    (function(){
-      const parentEl = document.querySelector(parentSelector);
-      if (!parentEl) return;
-      const btn = parentEl.querySelector('button.hs-button, button');
-      if (!btn) return;
+  //   (function(){
+  //     const parentEl = document.querySelector(parentSelector);
+  //     if (!parentEl) return;
+  //     const btn = parentEl.querySelector('button.hs-button, button');
+  //     if (!btn) return;
 
-      const normalBg = Inntuition_theme[theme]["tool-bg"];
-      const activeBg = Inntuition_theme[theme]["tool-bg-active"] || normalBg;
+  //     const normalBg = Inntuition_theme[theme]["tool-bg"];
+  //     const activeBg = Inntuition_theme[theme]["tool-bg-active"] || normalBg;
 
-      // init
-      btn.style.backgroundColor = normalBg;
-      btn.dataset.on = 'false';
-      btn.setAttribute('aria-pressed','false');
+  //     // init
+  //     btn.style.backgroundColor = normalBg;
+  //     btn.dataset.on = 'false';
+  //     btn.setAttribute('aria-pressed','false');
 
-      btn.addEventListener('click', () => {
-        const nowOn = btn.dataset.on === 'true' ? 'false' : 'true';
-        btn.dataset.on = nowOn;
-        btn.setAttribute('aria-pressed', nowOn);
-        btn.style.backgroundColor = nowOn === 'true' ? activeBg : normalBg;
-      });
-    })();
+  //     btn.addEventListener('click', () => {
+  //       const nowOn = btn.dataset.on === 'true' ? 'false' : 'true';
+  //       btn.dataset.on = nowOn;
+  //       btn.setAttribute('aria-pressed', nowOn);
+  //       btn.style.backgroundColor = nowOn === 'true' ? activeBg : normalBg;
+  //     });
+  //   }
+  // )();
   }
   
 
