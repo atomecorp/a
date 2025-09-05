@@ -567,7 +567,16 @@ const createButton = (config = {}) => {
   }
 
   // Déterminer le mode de fonctionnement
-  const isToggleMode = onText !== undefined || offText !== undefined;
+  // Toggle mode if any of: onText/offText, onStyle/offStyle, onAction/offAction, or explicit toggle flag
+  const isToggleMode = (
+    onText !== undefined ||
+    offText !== undefined ||
+    (onStyle && Object.keys(onStyle).length > 0) ||
+    (offStyle && Object.keys(offStyle).length > 0) ||
+    typeof onAction === 'function' ||
+    typeof offAction === 'function' ||
+    processedConfig.toggle === true
+  );
   const isMultiStateMode = states && states.length > 0;
   
   // État interne pour le toggle
@@ -629,6 +638,12 @@ const createButton = (config = {}) => {
     }
     if (userStateStyles && Object.keys(userStateStyles).length > 0) {
       containerStyles = { ...containerStyles, ...userStateStyles };
+    }
+  } else if (isToggleMode) {
+    // Apply user-provided state styles even without a template
+    const userStateStylesOnly = currentToggleState ? (processedConfig.onStyle || {}) : (processedConfig.offStyle || {});
+    if (Object.keys(userStateStylesOnly).length > 0) {
+      containerStyles = { ...containerStyles, ...userStateStylesOnly };
     }
   } else if (Object.keys(finalStyles).length > 0) {
     // Pour les modes non-toggle, appliquer finalStyles
@@ -707,11 +722,12 @@ const createButton = (config = {}) => {
       
       // ✅ Fusionner les styles: template base + template state + user state + user css
       const templateBase = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
+      // Compose so state styles override base CSS. Base = template + user css; State = template state + user state.
       const finalStyles = {
-        ...templateBase,        // 1. Template base styles
-        ...templateStateStyles, // 2. Template state styles (onStyle/offStyle from template)
-        ...userStateStyles,     // 3. User state styles (onStyle/offStyle from config)
-        ...processedConfig.css  // 4. User CSS overrides (highest priority)
+        ...templateBase,        // 1) Template base styles
+        ...processedConfig.css, // 2) User base CSS
+        ...templateStateStyles, // 3) Template state styles
+        ...userStateStyles      // 4) User state styles (highest priority)
       };
       
       button.$({ css: finalStyles });

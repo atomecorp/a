@@ -1,4 +1,4 @@
-// atome.menu – Modular Snake/Nibble Menu Spec v1.1 (based on user answers)
+// menu – Modular Snake/Nibble Menu Spec v1.1 
 // Notes: canvas holds a working spec with JSON + comments. JSON sections may include // comments.
 
 const intuition = {
@@ -437,29 +437,7 @@ function intuitionCommon(cfg) {
     },
     });
 
-    // toggle background color when button is "on"
-  //   (function(){
-  //     const parentEl = document.querySelector(parentSelector);
-  //     if (!parentEl) return;
-  //     const btn = parentEl.querySelector('button.hs-button, button');
-  //     if (!btn) return;
-
-  //     const normalBg = Inntuition_theme[theme]["tool-bg"];
-  //     const activeBg = Inntuition_theme[theme]["tool-bg-active"] || normalBg;
-
-  //     // init
-  //     btn.style.backgroundColor = normalBg;
-  //     btn.dataset.on = 'false';
-  //     btn.setAttribute('aria-pressed','false');
-
-  //     btn.addEventListener('click', () => {
-  //       const nowOn = btn.dataset.on === 'true' ? 'false' : 'true';
-  //       btn.dataset.on = nowOn;
-  //       btn.setAttribute('aria-pressed', nowOn);
-  //       btn.style.backgroundColor = nowOn === 'true' ? activeBg : normalBg;
-  //     });
-  //   }
-  // )();
+   
   }
   
 
@@ -494,6 +472,8 @@ function tool(cfg) {
 }
 
 function particle(cfg) {
+    cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
 }
 
 function option(cfg) {
@@ -502,9 +482,13 @@ function option(cfg) {
 }
 
 function zonespecial(cfg) {
+ cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
 }
-//toolbox("id", 'label/nil', 'icon/nil', 'colorise/false');
-let toolboxToCreate={
+
+
+toolbox(
+  {
   id: "intuition",
   label: null,
   icon: 'menu',
@@ -513,8 +497,7 @@ let toolboxToCreate={
   position: 'bottom-left', // top-left | top-right | bottom-left | bottom-right
   theme: 'light' // light | dark | auto 
 }
-
-toolbox(toolboxToCreate);
+);
 
 
 
@@ -543,6 +526,35 @@ option({
   label: 'boolean',
   button: 'boolean',
   colorise: true, 
+});
+
+
+zonespecial({
+    id: "color-pallete",
+    type: "special",
+  label: 'palette',
+  icon: 'color',
+  colorise: true, 
+});
+
+
+particle({
+    id: "width-particle",
+    type: "particle",
+  label: 'width',
+  input: 0.5,
+  selector:['%','px','cm','em','rem','vh','vw'],
+
+});
+
+
+particle({
+    id: "red-particle",
+    type: "particle",
+  label: 'color',
+  input: 0.5,
+  value: 'red',
+
 });
 
 
