@@ -34,6 +34,9 @@ import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
 import Slice, { createSlice } from './components/slice_builder.js';
 
+// === default behavior ===
+import './default/shortcuts.js';
+
 // === OPTIONAL INTEGRATIONS ===
 import initIPlugWeb from './integrations/iplug_web.js';
 

@@ -29,3 +29,5 @@
      console.log('you press: ' + key);
      };
   shortcut('cmd-b', myFct);
+
+
