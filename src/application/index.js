@@ -59,8 +59,8 @@
 
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)
 
-// import('./examples/tools.js');
-import('./examples/drop_doswn.js');
+import('./examples/tools.js');
+// import('./examples/drop_doswn.js');
 
 
 

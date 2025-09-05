@@ -17,7 +17,8 @@ function dropDown(config) {
     listCss = {},
     itemCss = {},
     textCss = {},
-    onChange
+  onChange,
+  onHover
   } = config || {};
 
   // Normalize options to { label, value }
@@ -126,8 +127,46 @@ function dropDown(config) {
   };
 
   // Build items
+  const items = [];
+
+  // Centralized selection logic
+  const commitSelection = (i, userInitiated = true) => {
+    if (i < 0 || i >= opts.length) return;
+    if (selectedIndex === i && !userInitiated) return; // avoid redundant re-dispatch
+    selectedIndex = i;
+    const opt = opts[i];
+    const label = opt.label;
+    const value = opt.value;
+    // Update display text robustly (some webviews are picky)
+    display.textContent = label;
+    display.innerText = label;
+    root.value = value;
+    root.label = label;
+    // aria selection
+    items.forEach((el, idx) => {
+      if (!el) return;
+      el.setAttribute('aria-selected', idx === i ? 'true' : 'false');
+    });
+    // Close menu if user picked it
+    if (userInitiated) {
+      menu.style.display = 'none';
+      window.removeEventListener('resize', placeMenu);
+      window.removeEventListener('scroll', placeMenu, true);
+    }
+    // Fire callback
+    if (typeof onChange === 'function') {
+      try { onChange(value, label, i); } catch (err) { console.error('dropDown onChange error', err); }
+    }
+    // Fire DOM event for external listeners
+    try {
+      root.dispatchEvent(new CustomEvent('change', { detail: { value, label, index: i }}));
+    } catch (err) {
+      // Some very old environments may lack CustomEvent constructor (unlikely here)
+    }
+  };
+
   opts.forEach((o, i) => {
-    $('div', {
+    const item = $('div', {
       parent: menu,
       text: o.label,
       css: Object.assign({
@@ -138,25 +177,41 @@ function dropDown(config) {
         color: labelColor,
         textAlign: 'center',
         cursor: 'pointer'
-      }, itemCss),
-      on: {
-        click: (e) => {
-          e.stopPropagation();
-          selectedIndex = i;
-          display.textContent = o.label;
-          menu.style.display = 'none';
-          root.value = o.value;
-          root.label = o.label;
-          if (typeof onChange === 'function') onChange(o.value, o.label, i);
-        },
-        mouseenter: (e) => {
-          e.currentTarget.style.backgroundColor = themeObj["tool-bg-active"] || '#444';
-        },
-        mouseleave: (e) => {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }
+      }, itemCss)
+    });
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', i === selectedIndex ? 'true' : 'false');
+
+    // Hover (desktop)
+    item.addEventListener('mouseenter', (e) => {
+      e.currentTarget.style.backgroundColor = themeObj["tool-bg-active"] || '#444';
+      if (typeof onHover === 'function') {
+        const opt = opts[i];
+        try { onHover(opt.value, opt.label, i); } catch(err){ console.error('dropDown onHover error', err); }
       }
     });
+    item.addEventListener('mouseleave', (e) => {
+      e.currentTarget.style.backgroundColor = 'transparent';
+    });
+
+    // Selection handlers: pointer > touch > click fallbacks
+    const selectHandler = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      commitSelection(i, true);
+    };
+
+    if (window.PointerEvent) {
+      item.addEventListener('pointerdown', selectHandler, { passive: false });
+    } else {
+      // Touch first for iOS/WKWebView reliability
+      item.addEventListener('touchstart', selectHandler, { passive: false });
+      item.addEventListener('mousedown', selectHandler); // desktop fallback
+    }
+    // Ensure click also works (some browsers synthesize click after touchstart; commitSelection guards redundant events)
+    item.addEventListener('click', selectHandler);
+
+    items.push(item);
   });
 
   const toggleMenu = (e) => {
@@ -191,10 +246,8 @@ function dropDown(config) {
   root.setValue = (val) => {
     const idx = opts.findIndex((o) => o.value === String(val));
     if (idx >= 0) {
-      selectedIndex = idx;
-      display.textContent = opts[idx].label;
-      root.value = opts[idx].value;
-      root.label = opts[idx].label;
+      // userInitiated = false to avoid closing menu (if open) & avoid double-callback if same index
+      commitSelection(idx, false);
     }
   };
   root.destroyDropDown = () => {
@@ -214,7 +267,6 @@ function dropDown(config) {
 
   return root;
 }
-
 const intuition = {
   "version": "1.1",
   "meta": { "namespace": "atome.menu", "defaultLocale": "en" },
