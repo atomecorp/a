@@ -352,6 +352,7 @@ function intuitionCommon(cfg) {
     MozUserSelect: 'none',
     borderRadius: Inntuition_theme[theme]["item-border-radius"],
     color: label_color,
+  position: 'relative',
     margin: '1px',
     display: 'inline-block',
     verticalAlign: 'top',          // align all items to top
@@ -400,6 +401,104 @@ function intuitionCommon(cfg) {
       `${id_created}_icon`,
       id_created
     );
+  }
+
+  // Sélecteur skinnable en bas si cfg.selector est fourni
+  if (Array.isArray(cfg.selector) && cfg.selector.length > 0) {
+    const selectEl = $('select', {
+      parent: el,
+      css: {
+        position: 'absolute',
+        bottom: '0px',
+        left: '0px',
+        width: '100%',
+        height: '18px',
+        backgroundColor: 'transparent',
+        color: label_color,
+        border: 'none',
+        outline: 'none',
+        fontFamily: 'Roboto',
+        fontSize: Inntuition_theme[theme]["tool-font-size"],
+        textTransform: 'inherit',
+        lineHeight: '18px',
+        padding: '0',
+        margin: '0',
+        WebkitAppearance: 'none',
+        MozAppearance: 'none',
+        appearance: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none'
+      }
+    });
+
+    // Peupler les options
+    cfg.selector.forEach((opt) => {
+      const val = (opt && typeof opt === 'object') ? (opt.value ?? opt.label ?? opt.toString()) : String(opt);
+      const labelTxt = (opt && typeof opt === 'object') ? (opt.label ?? String(val)) : String(opt);
+      $('option', { parent: selectEl, attrs: { value: String(val) }, text: String(labelTxt) });
+    });
+  }
+
+  // Texte en bas si cfg.value est fourni
+  if (cfg.value !== undefined && cfg.value !== null) {
+    const hasSelector = Array.isArray(cfg.selector) && cfg.selector.length > 0;
+    const bottomText = $('div', {
+      parent: el,
+      text: String(cfg.value),
+      css: {
+        position: 'absolute',
+        bottom: hasSelector ? '18px' : '0px',
+        left: '0px',
+        width: '100%',
+        height: '18px',
+        backgroundColor: 'transparent',
+        color: label_color,
+        fontFamily: 'Roboto',
+        fontSize: Inntuition_theme[theme]["tool-font-size"],
+        textTransform: 'inherit',
+        textAlign: 'center',
+        lineHeight: '18px',
+        pointerEvents: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none'
+      }
+    });
+  }
+
+  // Petit bouton intermédiaire si cfg.input est fourni
+  if (cfg.input !== undefined) {
+    const hasSelector = Array.isArray(cfg.selector) && cfg.selector.length > 0;
+    const hasValue = cfg.value !== undefined && cfg.value !== null;
+    // Place it just above value/select block(s)
+    // - if both value and select: above value -> bottom: 36px
+    // - if either value or select present: bottom: 18px
+    // - else: bottom: 0px
+    const bottomOffset = (hasSelector && hasValue) ? 36 : ((hasSelector || hasValue) ? 18 : 0);
+
+    const parentSelectorForEl = '#' + (window.CSS && CSS.escape
+      ? CSS.escape(id_created)
+      : id_created.replace(/\./g, '\\.')
+    );
+
+    Button({
+      parent: parentSelectorForEl,
+      css: {
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        bottom: bottomOffset + 'px',
+        width: '25px',
+        height: '6px',
+        padding: '0',
+        margin: '0',
+        boxSizing: 'border-box',
+        overflow: 'hidden',
+        fontSize: '0px',
+        borderRadius: '3px',
+        backgroundColor: Inntuition_theme[theme]["tool-bg-active"],
+        boxShadow: Inntuition_theme[theme]["item-shadow"]
+      }
+    });
   }
   if (button) {
     const parentSelector = '#' + (window.CSS && CSS.escape
