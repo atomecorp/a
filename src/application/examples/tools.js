@@ -300,11 +300,18 @@ const Inntuition_theme={
 }
 };
 
+function current_toolbox() {
+  // Common utility functions for the Intuition framework
+   let current_toolbox = grab('toolsbox.' + window.IntuitionToolbox);
+   return current_toolbox;
+}
+{
+  
+}
 function toolbox(name, orientation='vertical',  position='bottom-left', theme="light") { 
+ window.IntuitionToolbox = name
 
-
-  $('span', {
-  // pas besoin de 'tag'
+    const el = $('div', {
   css: {
     backgroundColor: Inntuition_theme[theme]["tool-bg"],
     width: Inntuition_theme[theme]["item-width"],
@@ -325,13 +332,56 @@ function toolbox(name, orientation='vertical',  position='bottom-left', theme="l
     orientation: orientation, // vertical | horizontal
     position: position,       // top-left | top-right | bottom-left | bottom-right
 });
- 
+   if (el) el.theme = theme;
 }
 
 function palette(name) {  
+  let theme=current_toolbox().theme;
+console.log(theme);
+  $('div', {
+  css: {
+    backgroundColor: Inntuition_theme[theme]["tool-bg"],
+    width: Inntuition_theme[theme]["item-width"],
+    height: Inntuition_theme[theme]["item-height"],
+  boxShadow: Inntuition_theme[theme]["item-shadow"],
+    borderRadius: Inntuition_theme[theme]["item-border-radius"],
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+
+  },
+
+     id: `toolsbox.${name}`,
+    theme: theme,
+    icon: "toolbox",
+});
 }
 
 function tool(name) {  
+
+let theme=current_toolbox().theme;
+console.log(theme);
+  $('div', {
+  css: {
+    backgroundColor: Inntuition_theme[theme]["tool-bg"],
+    width: Inntuition_theme[theme]["item-width"],
+    height: Inntuition_theme[theme]["item-height"],
+  boxShadow: Inntuition_theme[theme]["item-shadow"],
+    borderRadius: Inntuition_theme[theme]["item-border-radius"],
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+
+  },
+
+     id: `toolsbox.${name}`,
+    theme: theme,
+    icon: "toolbox",
+});
 
 }
 
@@ -344,5 +394,18 @@ function options(name) {
 function zonespecial(name) {  
 }
 
-toolbox("root");
+toolbox("root_toolbox");
+palette("communication");
 tool("color");
+
+
+// fetch_and_render_svg('../../assets/images/icons/activate.svg', 120, 120, 'white', 'red', 'my_nice_svg');
+
+
+// // Example of resizing an existing SVG by id after a delay
+
+// setTimeout(() => {
+//   fillColor('my_nice_svg', 'green');
+//   strokeColor('my_nice_svg', 'orange');
+//   resize('my_nice_svg', 33, 66, 0.5, 'elastic');
+// }, 1500);
