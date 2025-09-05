@@ -1,6 +1,220 @@
 // menu – Modular Snake/Nibble Menu Spec v1.1 
 // Notes: canvas holds a working spec with JSON + comments. JSON sections may include // comments.
 
+// =============================
+// Custom DropDown Component (UI-controlled)
+// =============================
+function dropDown(config) {
+  const {
+    parent,
+    id,
+    options = [],
+    value,
+    theme = 'light',
+    placeholder = '',
+  openDirection = 'up', // 'up' | 'down' (will auto-flip if no space)
+    css = {},
+    listCss = {},
+    itemCss = {},
+    textCss = {},
+    onChange
+  } = config || {};
+
+  // Normalize options to { label, value }
+  const opts = options.map((opt) => {
+    if (opt && typeof opt === 'object') {
+      const v = (opt.value ?? opt.label ?? String(opt));
+      return { label: (opt.label ?? String(v)), value: String(v) };
+    }
+    return { label: String(opt), value: String(opt) };
+  });
+
+  let selectedIndex = 0;
+  if (value !== undefined && value !== null) {
+    const idx = opts.findIndex((o) => o.value === String(value));
+    if (idx >= 0) selectedIndex = idx;
+  }
+
+  // Theme lookups are evaluated at runtime (available later in file)
+  const themeObj = (typeof Inntuition_theme !== 'undefined' && Inntuition_theme[theme]) ? Inntuition_theme[theme] : {};
+  const labelColor = themeObj["tool-text"] || css.color || '#cccccc';
+  const bgColor = css.backgroundColor !== undefined ? css.backgroundColor : 'transparent';
+  const fontFamily = css.fontFamily || 'Roboto';
+  const fontSize = css.fontSize || (themeObj["tool-font-size"] || '10px');
+  const height = css.height || '18px';
+
+  const root = $('div', {
+    parent: parent,
+    id: id,
+    css: Object.assign({
+      position: 'relative',
+      width: css.width || '100%',
+      height: height,
+      backgroundColor: bgColor,
+      color: labelColor,
+      cursor: 'pointer',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      MozUserSelect: 'none'
+    }, css)
+  });
+
+  const display = $('div', {
+    parent: root,
+    text: (opts[selectedIndex] ? opts[selectedIndex].label : placeholder),
+    css: Object.assign({
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      width: '100%',
+      height: '100%',
+      lineHeight: height,
+      textAlign: 'center',
+      fontFamily,
+      fontSize,
+      color: labelColor,
+      pointerEvents: 'none'
+    }, textCss)
+  });
+
+  const menu = $('div', {
+    parent: root,
+    css: Object.assign({
+      position: 'absolute',
+      left: '0px',
+      width: '100%',
+      maxHeight: '140px',
+      overflowY: 'auto',
+      display: 'none',
+      zIndex: 1000,
+      backgroundColor: themeObj["tool-bg"] || '#222',
+      boxShadow: themeObj["item-shadow"] || '0 2px 6px rgba(0,0,0,0.3)',
+      borderRadius: themeObj["item-border-radius"] || '3px'
+    }, listCss)
+  });
+
+  // Dynamic placement to avoid leaving the viewport
+  const placeMenu = () => {
+    // Show temporarily to measure
+    const wasHidden = (menu.style.display === 'none');
+    if (wasHidden) menu.style.display = 'block';
+
+    const rect = root.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const margin = 6;
+    const above = rect.top - margin;
+    const below = (vh - rect.bottom) - margin;
+    const contentH = menu.scrollHeight;
+    let dir = openDirection; // requested direction
+
+    // Flip if requested direction lacks space
+    if (dir === 'up' && above < Math.min(contentH, 100) && below > above) dir = 'down';
+    if (dir === 'down' && below < Math.min(contentH, 100) && above > below) dir = 'up';
+
+    // Apply placement
+    if (dir === 'down') {
+      menu.style.top = height;
+      menu.style.bottom = 'auto';
+      menu.style.maxHeight = Math.max(18, Math.floor(below)).toString() + 'px';
+    } else {
+      menu.style.bottom = height;
+      menu.style.top = 'auto';
+      menu.style.maxHeight = Math.max(18, Math.floor(above)).toString() + 'px';
+    }
+
+    if (wasHidden) menu.style.display = 'none';
+  };
+
+  // Build items
+  opts.forEach((o, i) => {
+    $('div', {
+      parent: menu,
+      text: o.label,
+      css: Object.assign({
+        padding: '2px 6px',
+        lineHeight: '18px',
+        fontFamily,
+        fontSize,
+        color: labelColor,
+        textAlign: 'center',
+        cursor: 'pointer'
+      }, itemCss),
+      on: {
+        click: (e) => {
+          e.stopPropagation();
+          selectedIndex = i;
+          display.textContent = o.label;
+          menu.style.display = 'none';
+          root.value = o.value;
+          root.label = o.label;
+          if (typeof onChange === 'function') onChange(o.value, o.label, i);
+        },
+        mouseenter: (e) => {
+          e.currentTarget.style.backgroundColor = themeObj["tool-bg-active"] || '#444';
+        },
+        mouseleave: (e) => {
+          e.currentTarget.style.backgroundColor = 'transparent';
+        }
+      }
+    });
+  });
+
+  const toggleMenu = (e) => {
+    e.stopPropagation();
+    const showing = menu.style.display !== 'none';
+    if (showing) {
+      menu.style.display = 'none';
+      window.removeEventListener('resize', placeMenu);
+      window.removeEventListener('scroll', placeMenu, true);
+    } else {
+      menu.style.display = 'block';
+      placeMenu();
+      window.addEventListener('resize', placeMenu);
+      window.addEventListener('scroll', placeMenu, true);
+    }
+  };
+
+  root.addEventListener('click', toggleMenu);
+
+  const outsideClose = (ev) => {
+    if (!root.contains(ev.target)) {
+      menu.style.display = 'none';
+  window.removeEventListener('resize', placeMenu);
+  window.removeEventListener('scroll', placeMenu, true);
+    }
+  };
+  document.addEventListener('mousedown', outsideClose);
+
+  // Public API
+  root.getValue = () => opts[selectedIndex] ? opts[selectedIndex].value : undefined;
+  root.getLabel = () => opts[selectedIndex] ? opts[selectedIndex].label : undefined;
+  root.setValue = (val) => {
+    const idx = opts.findIndex((o) => o.value === String(val));
+    if (idx >= 0) {
+      selectedIndex = idx;
+      display.textContent = opts[idx].label;
+      root.value = opts[idx].value;
+      root.label = opts[idx].label;
+    }
+  };
+  root.destroyDropDown = () => {
+    document.removeEventListener('mousedown', outsideClose);
+  window.removeEventListener('resize', placeMenu);
+  window.removeEventListener('scroll', placeMenu, true);
+  };
+
+  // Initialize public data
+  root.value = opts[selectedIndex] ? opts[selectedIndex].value : undefined;
+  root.label = opts[selectedIndex] ? opts[selectedIndex].label : undefined;
+
+  // Expose globally for convenience
+  if (typeof window !== 'undefined') {
+    window.dropDown = window.dropDown || dropDown;
+  }
+
+  return root;
+}
+
 const intuition = {
   "version": "1.1",
   "meta": { "namespace": "atome.menu", "defaultLocale": "en" },
@@ -405,37 +619,44 @@ function intuitionCommon(cfg) {
 
   // Sélecteur skinnable en bas si cfg.selector est fourni
   if (Array.isArray(cfg.selector) && cfg.selector.length > 0) {
-    const selectEl = $('select', {
+    const ddWrap = $('div', {
       parent: el,
       css: {
         position: 'absolute',
         bottom: '0px',
         left: '0px',
         width: '100%',
-        height: '18px',
-        backgroundColor: 'transparent',
-        color: label_color,
-        border: 'none',
-        outline: 'none',
-        fontFamily: 'Roboto',
-        fontSize: Inntuition_theme[theme]["tool-font-size"],
-        textTransform: 'inherit',
-        lineHeight: '18px',
-        padding: '0',
-        margin: '0',
-        WebkitAppearance: 'none',
-        MozAppearance: 'none',
-        appearance: 'none',
-        userSelect: 'none',
-        WebkitUserSelect: 'none'
+        height: '12px'
       }
     });
 
-    // Peupler les options
-    cfg.selector.forEach((opt) => {
-      const val = (opt && typeof opt === 'object') ? (opt.value ?? opt.label ?? opt.toString()) : String(opt);
-      const labelTxt = (opt && typeof opt === 'object') ? (opt.label ?? String(val)) : String(opt);
-      $('option', { parent: selectEl, attrs: { value: String(val) }, text: String(labelTxt) });
+    dropDown({
+      parent: ddWrap,
+      options: cfg.selector,
+      theme,
+      openDirection: 'up',
+      css: {
+        width: '100%',
+        height: '100%',
+        backgroundColor: 'transparent',
+        color: label_color,
+        fontFamily: 'Roboto',
+        fontSize: Inntuition_theme[theme]["tool-font-size"],
+        textAlign: 'center',
+        lineHeight: '18px'
+      },
+      listCss: {
+        backgroundColor: Inntuition_theme[theme]["tool-bg"],
+        boxShadow: Inntuition_theme[theme]["item-shadow"],
+        borderRadius: Inntuition_theme[theme]["item-border-radius"]
+      },
+      itemCss: {
+        fontFamily: 'Roboto',
+        fontSize: Inntuition_theme[theme]["tool-font-size"],
+        color: label_color,
+        lineHeight: '18px',
+        textAlign: 'center'
+      }
     });
   }
 
