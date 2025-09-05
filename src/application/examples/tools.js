@@ -295,93 +295,60 @@ const Inntuition_theme={
     "item-shadow": "3px 3px 3px rgba(0,0,0,0.39)",
     "tool-icon-size": "20px",
     "item-border-radius": "3px",
-    "item-width": "15px",
-    "item-height": "15px",
+    "item-width": "39px",
+    "item-height": "39px",
 }
 };
 
-function current_toolbox() {
+function currentToolbox() {
   // Common utility functions for the Intuition framework
    let current_toolbox = grab('toolsbox.' + window.IntuitionToolbox);
    return current_toolbox;
 }
+
+function intuitionCommon(theme, name) {
+  // Common utility functions for the Intuition framework
+let el=$('div', {
+  css: {
+    backgroundColor: Inntuition_theme[theme]["tool-bg"],
+    width: Inntuition_theme[theme]["item-width"],
+    height: Inntuition_theme[theme]["item-height"],
+  boxShadow: Inntuition_theme[theme]["item-shadow"],
+    borderRadius: Inntuition_theme[theme]["item-border-radius"],
+    color: 'white',
+    margin: '1px',
+    display: 'inline-block'
+
+  },
+
+     id: `toolsbox.${name}`,
+    icon: "toolbox",
+
+});
+return el
+}
+
 {
   
 }
 function toolbox(name, orientation='vertical',  position='bottom-left', theme="light") { 
  window.IntuitionToolbox = name
 
-    const el = $('div', {
-  css: {
-    backgroundColor: Inntuition_theme[theme]["tool-bg"],
-    width: Inntuition_theme[theme]["item-width"],
-    height: Inntuition_theme[theme]["item-height"],
-  boxShadow: Inntuition_theme[theme]["item-shadow"],
-    borderRadius: Inntuition_theme[theme]["item-border-radius"],
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-
-  },
-
-     id: `toolsbox.${name}`,
-    theme: theme,
-    icon: "toolbox",
-    orientation: orientation, // vertical | horizontal
-    position: position,       // top-left | top-right | bottom-left | bottom-right
-});
-   if (el) el.theme = theme;
+    const el = intuitionCommon(theme, name) 
+  el.theme = theme;
+  el.orientation= orientation; // vertical | horizontal
+  el.position= position;       // top-left | top-right | bottom-left | bottom-right
 }
 
 function palette(name) {  
-  let theme=current_toolbox().theme;
-console.log(theme);
-  $('div', {
-  css: {
-    backgroundColor: Inntuition_theme[theme]["tool-bg"],
-    width: Inntuition_theme[theme]["item-width"],
-    height: Inntuition_theme[theme]["item-height"],
-  boxShadow: Inntuition_theme[theme]["item-shadow"],
-    borderRadius: Inntuition_theme[theme]["item-border-radius"],
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-
-  },
-
-     id: `toolsbox.${name}`,
-    theme: theme,
-    icon: "toolbox",
-});
+  let theme=currentToolbox().theme;
+    const el = intuitionCommon(theme, name) 
 }
 
 function tool(name) {  
 
-let theme=current_toolbox().theme;
-console.log(theme);
-  $('div', {
-  css: {
-    backgroundColor: Inntuition_theme[theme]["tool-bg"],
-    width: Inntuition_theme[theme]["item-width"],
-    height: Inntuition_theme[theme]["item-height"],
-  boxShadow: Inntuition_theme[theme]["item-shadow"],
-    borderRadius: Inntuition_theme[theme]["item-border-radius"],
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-
-  },
-
-     id: `toolsbox.${name}`,
-    theme: theme,
-    icon: "toolbox",
-});
+let theme=currentToolbox().theme;
+     const el = intuitionCommon(theme, name) 
 
 }
 
