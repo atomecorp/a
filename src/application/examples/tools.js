@@ -9,16 +9,20 @@ const intuition = {
   // 1) Providers (unchanged)
   // =============================
   "providers": {
-    "templates": { "type": "static", "items": [
-      { "id": "tpl.photo", "type": "template", "labelKey": "Templates.Photos" },
-      { "id": "tpl.videoFx", "type": "template", "labelKey": "Templates.VideoFX" },
-      { "id": "tpl.programming", "type": "template", "labelKey": "Templates.Programming" }
-    ]},
-    "viewModes": { "type": "static", "items": [
-      { "id": "vm.list", "type": "viewMode", "labelKey": "ViewMode.List", "icon": "list", "action": { "command": "ui.setViewMode", "params": { "mode": "list" } } },
-      { "id": "vm.grid", "type": "viewMode", "labelKey": "ViewMode.Grid", "icon": "grid", "action": { "command": "ui.setViewMode", "params": { "mode": "grid" } } },
-      { "id": "vm.code", "type": "viewMode", "labelKey": "ViewMode.Code", "icon": "code", "action": { "command": "ui.setViewMode", "params": { "mode": "code" } } }
-    ]},
+    "templates": {
+      "type": "static", "items": [
+        { "id": "tpl.photo", "type": "template", "labelKey": "Templates.Photos" },
+        { "id": "tpl.videoFx", "type": "template", "labelKey": "Templates.VideoFX" },
+        { "id": "tpl.programming", "type": "template", "labelKey": "Templates.Programming" }
+      ]
+    },
+    "viewModes": {
+      "type": "static", "items": [
+        { "id": "vm.list", "type": "viewMode", "labelKey": "ViewMode.List", "icon": "list", "action": { "command": "ui.setViewMode", "params": { "mode": "list" } } },
+        { "id": "vm.grid", "type": "viewMode", "labelKey": "ViewMode.Grid", "icon": "grid", "action": { "command": "ui.setViewMode", "params": { "mode": "grid" } } },
+        { "id": "vm.code", "type": "viewMode", "labelKey": "ViewMode.Code", "icon": "code", "action": { "command": "ui.setViewMode", "params": { "mode": "code" } } }
+      ]
+    },
     "recentProjects": { "type": "dynamic", "endpoint": "menu.fetchRecentProjects", "cacheTtlSec": 30 }
   },
 
@@ -41,57 +45,73 @@ const intuition = {
         ]
       },
 
-      { "id": "find", "type": "group", "labelKey": "Find", "icon": "search", "children": [
-        { "id": "find.filter", "type": "item", "labelKey": "Filter", "icon": "filter", "action": { "command": "search.openFilter" } },
-        { "id": "find.selector", "type": "group", "labelKey": "SelectorTags", "icon": "tag", "children": [
-          { "id": "find.selector.label", "type": "item", "labelKey": "Label", "action": { "command": "tags.pick", "params": { "scope": "label" } } },
-          { "id": "find.selector.name", "type": "item", "labelKey": "Name", "action": { "command": "tags.pick", "params": { "scope": "name" } } },
-          { "id": "find.selector.slicer", "type": "item", "labelKey": "Slicer", "action": { "command": "tags.slicer" } }
-        ]}
-      ]},
+      {
+        "id": "find", "type": "group", "labelKey": "Find", "icon": "search", "children": [
+          { "id": "find.filter", "type": "item", "labelKey": "Filter", "icon": "filter", "action": { "command": "search.openFilter" } },
+          {
+            "id": "find.selector", "type": "group", "labelKey": "SelectorTags", "icon": "tag", "children": [
+              { "id": "find.selector.label", "type": "item", "labelKey": "Label", "action": { "command": "tags.pick", "params": { "scope": "label" } } },
+              { "id": "find.selector.name", "type": "item", "labelKey": "Name", "action": { "command": "tags.pick", "params": { "scope": "name" } } },
+              { "id": "find.selector.slicer", "type": "item", "labelKey": "Slicer", "action": { "command": "tags.slicer" } }
+            ]
+          }
+        ]
+      },
 
-      { "id": "time", "type": "group", "labelKey": "Time", "icon": "timer", "children": [
-        { "id": "time.schedule", "type": "item", "labelKey": "Schedule", "action": { "command": "time.schedule" } },
-        { "id": "time.clock", "type": "item", "labelKey": "Clock", "action": { "command": "time.clock" } },
-        { "id": "time.timeline", "type": "group", "labelKey": "Timeline", "children": [
-          { "id": "time.undo", "type": "item", "labelKey": "Undo", "icon": "undo", "action": { "command": "history.undo" } },
-          { "id": "time.redo", "type": "item", "labelKey": "Redo", "icon": "redo", "action": { "command": "history.redo" } }
-        ]},
-        { "id": "time.wait", "type": "item", "labelKey": "Wait", "action": { "command": "time.waitDialog" } },
-        { "id": "time.every", "type": "item", "labelKey": "Every", "action": { "command": "time.repeat" } }
-      ]},
+      {
+        "id": "time", "type": "group", "labelKey": "Time", "icon": "timer", "children": [
+          { "id": "time.schedule", "type": "item", "labelKey": "Schedule", "action": { "command": "time.schedule" } },
+          { "id": "time.clock", "type": "item", "labelKey": "Clock", "action": { "command": "time.clock" } },
+          {
+            "id": "time.timeline", "type": "group", "labelKey": "Timeline", "children": [
+              { "id": "time.undo", "type": "item", "labelKey": "Undo", "icon": "undo", "action": { "command": "history.undo" } },
+              { "id": "time.redo", "type": "item", "labelKey": "Redo", "icon": "redo", "action": { "command": "history.redo" } }
+            ]
+          },
+          { "id": "time.wait", "type": "item", "labelKey": "Wait", "action": { "command": "time.waitDialog" } },
+          { "id": "time.every", "type": "item", "labelKey": "Every", "action": { "command": "time.repeat" } }
+        ]
+      },
 
       { "id": "view", "type": "group", "labelKey": "View", "icon": "layout", "childrenProvider": { "use": "viewModes" } },
       { "id": "templates", "type": "group", "labelKey": "Templates", "icon": "template", "childrenProvider": { "use": "templates" } },
 
-      { "id": "tools", "type": "group", "labelKey": "Tools", "icon": "wrench", "children": [
-        { "id": "tools.communication", "type": "group", "labelKey": "Communication", "children": [
-          { "id": "tools.share", "type": "item", "labelKey": "Share", "icon": "share", "action": { "command": "comm.share" } },
-          { "id": "tools.message", "type": "item", "labelKey": "Message", "action": { "command": "comm.message" } },
-          { "id": "tools.visio", "type": "item", "labelKey": "Visio", "action": { "command": "comm.visio" } },
-          { "id": "tools.tel", "type": "item", "labelKey": "Phone", "action": { "command": "comm.phone" } },
-          { "id": "tools.collab", "type": "item", "labelKey": "Collab", "action": { "command": "comm.collab" } }
-        ]},
-        { "id": "tools.capture", "type": "item", "labelKey": "Capture", "icon": "camera", "action": { "command": "capture.open" } },
-        { "id": "tools.edit", "type": "item", "labelKey": "EditToolbox", "icon": "edit", "action": { "command": "toolbox.edit" } },
-        { "id": "tools.create", "type": "item", "labelKey": "Create", "action": { "command": "content.create" } },
-        { "id": "tools.change", "type": "item", "labelKey": "Change", "action": { "command": "content.change" } },
-        { "id": "tools.find", "type": "item", "labelKey": "Find", "action": { "command": "search.open" } },
-        { "id": "tools.userHome", "type": "item", "labelKey": "UserHome", "action": { "command": "nav.open", "params": { "path": "atome://home" } } },
-        { "id": "tools.view", "type": "item", "labelKey": "View", "action": { "command": "ui.toggle" } },
-        { "id": "tools.time", "type": "item", "labelKey": "Time", "action": { "command": "time.panel" } }
-      ]},
+      {
+        "id": "tools", "type": "group", "labelKey": "Tools", "icon": "wrench", "children": [
+          {
+            "id": "tools.communication", "type": "group", "labelKey": "Communication", "children": [
+              { "id": "tools.share", "type": "item", "labelKey": "Share", "icon": "share", "action": { "command": "comm.share" } },
+              { "id": "tools.message", "type": "item", "labelKey": "Message", "action": { "command": "comm.message" } },
+              { "id": "tools.visio", "type": "item", "labelKey": "Visio", "action": { "command": "comm.visio" } },
+              { "id": "tools.tel", "type": "item", "labelKey": "Phone", "action": { "command": "comm.phone" } },
+              { "id": "tools.collab", "type": "item", "labelKey": "Collab", "action": { "command": "comm.collab" } }
+            ]
+          },
+          { "id": "tools.capture", "type": "item", "labelKey": "Capture", "icon": "camera", "action": { "command": "capture.open" } },
+          { "id": "tools.edit", "type": "item", "labelKey": "EditToolbox", "icon": "edit", "action": { "command": "toolbox.edit" } },
+          { "id": "tools.create", "type": "item", "labelKey": "Create", "action": { "command": "content.create" } },
+          { "id": "tools.change", "type": "item", "labelKey": "Change", "action": { "command": "content.change" } },
+          { "id": "tools.find", "type": "item", "labelKey": "Find", "action": { "command": "search.open" } },
+          { "id": "tools.userHome", "type": "item", "labelKey": "UserHome", "action": { "command": "nav.open", "params": { "path": "atome://home" } } },
+          { "id": "tools.view", "type": "item", "labelKey": "View", "action": { "command": "ui.toggle" } },
+          { "id": "tools.time", "type": "item", "labelKey": "Time", "action": { "command": "time.panel" } }
+        ]
+      },
 
-      { "id": "settings", "type": "group", "labelKey": "Settings", "icon": "settings", "children": [
-        { "id": "settings.language", "type": "item", "labelKey": "Language", "action": { "command": "settings.language" } },
-        { "id": "settings.inspector", "type": "item", "labelKey": "Inspector", "action": { "command": "inspector.toggle" } },
-        { "id": "settings.clear", "type": "item", "labelKey": "Clear", "action": { "command": "app.clearCache" } }
-      ]},
+      {
+        "id": "settings", "type": "group", "labelKey": "Settings", "icon": "settings", "children": [
+          { "id": "settings.language", "type": "item", "labelKey": "Language", "action": { "command": "settings.language" } },
+          { "id": "settings.inspector", "type": "item", "labelKey": "Inspector", "action": { "command": "inspector.toggle" } },
+          { "id": "settings.clear", "type": "item", "labelKey": "Clear", "action": { "command": "app.clearCache" } }
+        ]
+      },
 
-      { "id": "help", "type": "group", "labelKey": "Help", "icon": "help", "children": [
-        { "id": "help.docs", "type": "item", "labelKey": "Docs", "action": { "route": "/help" } },
-        { "id": "help.about", "type": "item", "labelKey": "About", "action": { "command": "app.about" } }
-      ]},
+      {
+        "id": "help", "type": "group", "labelKey": "Help", "icon": "help", "children": [
+          { "id": "help.docs", "type": "item", "labelKey": "Docs", "action": { "route": "/help" } },
+          { "id": "help.about", "type": "item", "labelKey": "About", "action": { "command": "app.about" } }
+        ]
+      },
 
       { "id": "quit", "type": "item", "labelKey": "Quit", "icon": "power", "action": { "command": "app.quit" } }
     ]
@@ -282,88 +302,146 @@ localState = {
 // - Max scroll height per level? Suggest: clamp to 60% of viewport height.
 // - Rubber effect curve fine-tuning (currently 0.08). Want a per-level decay?
 
-const Inntuition_theme={
+const Inntuition_theme = {
   "light": {
-    "tool-bg": "#575656ff",
-    "tool-text": "#000000",
+    "tool-bg": "#313131ff",
+    "item-text": "#000000",
+    "tool-text": "#8c8b8bff",
     "tool-hover-bg": "#f0f0f0",
     "tool-hover-fg": "#000000",
     "tool-active-bg": "#e0e0e0",
     "tool-active-fg": "#000000",
-  
-    "tool-font-size": "14px",
+
+    "tool-font-size": "10px",
     "item-shadow": "3px 3px 3px rgba(0,0,0,0.39)",
     "tool-icon-size": "20px",
     "item-border-radius": "3px",
     "item-width": "39px",
     "item-height": "39px",
-}
+  }
 };
 
 function currentToolbox() {
   // Common utility functions for the Intuition framework
-   let current_toolbox = grab('toolsbox.' + window.IntuitionToolbox);
-   return current_toolbox;
+  let current_toolbox = grab('toolsbox.' + window.IntuitionToolbox);
+  return current_toolbox;
 }
 
-function intuitionCommon(theme, name) {
-  // Common utility functions for the Intuition framework
-let el=$('div', {
-  css: {
-    backgroundColor: Inntuition_theme[theme]["tool-bg"],
-    width: Inntuition_theme[theme]["item-width"],
-    height: Inntuition_theme[theme]["item-height"],
-  boxShadow: Inntuition_theme[theme]["item-shadow"],
-    borderRadius: Inntuition_theme[theme]["item-border-radius"],
-    color: 'white',
-    margin: '1px',
-    display: 'inline-block'
+function intuitionCommon(cfg) {
+  const { id, label = null, icon = null, colorise = false, theme = 'light' } = cfg;
 
-  },
+  const id_created = `toolsbox.${id}`;
+  const label_color = Inntuition_theme[theme]["tool-text"];
 
-     id: `toolsbox.${name}`,
-    icon: "toolbox",
+  const el = $('div', {
+    parent: '#intuition',
+    css: {
+      backgroundColor: Inntuition_theme[theme]["tool-bg"],
+      width: Inntuition_theme[theme]["item-width"],
+      height: Inntuition_theme[theme]["item-height"],
+      boxShadow: Inntuition_theme[theme]["item-shadow"],
+      userSelect: 'none',         // standard
+      WebkitUserSelect: 'none',   // webkit
+      MozUserSelect: 'none',      // firefox
+      borderRadius: Inntuition_theme[theme]["item-border-radius"],
+      color: label_color,
+      margin: '1px',
+      display: 'inline-block',
+      fontSize: Inntuition_theme[theme]["tool-font-size"],
+      textTransform: 'capitalize',
+      fontFamily: 'Roboto',
+      textAlign: 'center',
+      lineHeight: '18px',
+    },
 
-});
-return el
+    // Affiche le texte seulement si un label est fourni
+    text: (function (n) {
+      if (!n) return undefined; // pas de label -> pas de texte
+      const chars = Array.from(String(n));
+      return chars.length > 5 ? chars.slice(0, 4).join('') + '.' : String(n);
+    })(label),
+
+    id: id_created,
+    icon: icon || undefined,
+  });
+
+  // Icône: insère le SVG seulement si 'icon' est fourni
+  if (icon) {
+    // Choix des couleurs selon 'colorise'
+    let fill = null, stroke = null;
+    if (colorise === false) {
+      fill = null; stroke = null;
+    } else if (typeof colorise === 'string') {
+      fill = colorise; stroke = colorise;
+    } else {
+      // colorise === true (ou truthy non-string)
+      fill = label_color; stroke = label_color;
+    }
+
+    // top, left, width, height, fill, stroke, id, parent
+    fetch_and_render_svg(
+      `../../assets/images/icons/${icon}.svg`,
+      '0px', '-3px',
+      '23px', '23px',
+      fill, stroke,
+      `${id_created}_icon`,
+      id_created
+    );
+  }
+
+  return el;
 }
 
 {
-  
-}
-function toolbox(name, orientation='vertical',  position='bottom-left', theme="light") { 
- window.IntuitionToolbox = name
 
-    const el = intuitionCommon(theme, name) 
+}
+function toolbox(cfg) {
+  const { id, orientation = 'vertical', position = 'bottom-left', theme = 'light' } = cfg;
+  window.IntuitionToolbox = id;
+  const el = intuitionCommon(cfg);
   el.theme = theme;
-  el.orientation= orientation; // vertical | horizontal
-  el.position= position;       // top-left | top-right | bottom-left | bottom-right
+  el.orientation = orientation;
+  el.position = position;
+  // keep original config for later use
+  el._intuitionCfg = cfg;
+  return el;
 }
 
-function palette(name) {  
-  let theme=currentToolbox().theme;
-    const el = intuitionCommon(theme, name) 
+function palette(name) {
+  let theme = currentToolbox().theme;
+  const el = intuitionCommon(theme, name)
 }
 
-function tool(name) {  
+function tool(name) {
 
-let theme=currentToolbox().theme;
-     const el = intuitionCommon(theme, name) 
+  let theme = currentToolbox().theme;
+  const el = intuitionCommon(theme, name)
 
 }
 
-function particle(name) {  
+function particle(name) {
 }
 
-function options(name) {  
+function options(name) {
 }
 
-function zonespecial(name) {  
+function zonespecial(name) {
 }
+//toolbox("id", 'label/nil', 'icon/nil', 'colorise/false');
+let toolboxToCreate={
+  id: "intuition",
+  label: null,
+  icon: 'menu',
+  colorise: true, // true | false | 'color' | '#rrggbb'
+  orientation: 'vertical', // vertical | horizontal
+  position: 'bottom-left', // top-left | top-right | bottom-left | bottom-right
+  theme: 'light' // light | dark | auto 
+}
+// Create the main toolbox
 
-toolbox("root_toolbox");
-palette("communication");
-tool("color");
+toolbox(toolboxToCreate);
+// palette("communication");
+// tool("color");
 
 
 // fetch_and_render_svg('../../assets/images/icons/activate.svg', 120, 120, 'white', 'red', 'my_nice_svg');

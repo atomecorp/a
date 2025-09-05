@@ -89,36 +89,84 @@
 	function isProjectFileName(name){ return /\.atm$/i.test(String(name||'')); }
 
 	// Show project using the prj_label_<name> element (remove any other prj_label_* first)
-	function showCurrentProjectLabel(name, fullPath){
-		try{
-			if (!name) return;
-			// sanitize name for id
-			var safe = String(name).replace(/[^a-z0-9\-_]/gi,'_');
-			var newId = 'prj_label_' + safe;
+	// ...existing code...
+function showCurrentProjectLabel(name, fullPath){
+    try{
+        if (!name) return;
+        // sanitize name for id
+        var safe = String(name).replace(/[^a-z0-9\-_]/gi,'_');
+        var newId = 'prj_label_' + safe;
 
-			// Prefer to place the label after the project creator button; fall back to btn-list
-			var ref = document.getElementById('prj_creator') || document.getElementById('btn-list');
+        // Prefer to place the label after the project creator button; fall back to btn-list
+        var ref = document.getElementById('prj_creator') || document.getElementById('btn-list');
 
-			// Remove any existing prj_label_* nodes before inserting the new label
-			try{
-				// global cleanup of any old nodes
-				var all = document.querySelectorAll('[id^="prj_label_"]');
-				for(var i=0;i<all.length;i++){ try{ all[i].remove(); }catch(_){ } }
-			}catch(_){ }
+        // Remove any existing prj_label_* nodes before inserting the new label
+        try{
+            var all = document.querySelectorAll('[id^="prj_label_"]');
+            for(var i=0;i<all.length;i++){ try{ all[i].remove(); }catch(_){ } }
+        }catch(_){ }
 
-			var span = document.createElement('span');
-			span.id = newId;
-			span.textContent = name || '';
-			span.style.marginLeft = '10px';
-			span.style.cursor = 'pointer';
-			span.style.userSelect = 'none';
-			span.style.fontWeight = '600';
-			span.setAttribute('data-path', fullPath||'');
+        // create using Squirrel helper when available (keeps styling consistent)
+        var span = null;
+        try{
+            span = $('span', {
+                id: newId,
+                text: name || '',
+                css: {
+                    marginLeft: '10px',
+                    color: '#0f0',
+                    cursor: 'pointer',
+                    userSelect: 'none',         // standard
+                    WebkitUserSelect: 'none',   // webkit
+                    MozUserSelect: 'none',      // firefox
+                    fontWeight: '600',
+                    display: 'inline-block'
+                },
+                parent: (ref && ref.parentNode) ? ref.parentNode : 'body'
+            });
+            // If helper returned a selector string or node, normalize to element
+            if (typeof span === 'string') span = document.getElementById(newId);
+        }catch(_){
+            // fallback to DOM API if $ not available
+            span = document.createElement('span');
+            span.id = newId;
+            span.textContent = name || '';
+            span.style.marginLeft = '10px';
+            span.style.color = '#0f0';
+            span.style.cursor = 'pointer';
+            span.style.userSelect = 'none';
+            span.style.webkitUserSelect = 'none';
+            span.style.MozUserSelect = 'none';
+            span.style.fontWeight = '600';
+            span.style.display = 'inline-block';
+            if (ref && ref.parentNode) ref.parentNode.insertBefore(span, ref.nextSibling);
+            else document.body.appendChild(span);
+        }
 
-			if (ref && ref.parentNode) ref.parentNode.insertBefore(span, ref.nextSibling);
-			else document.body.appendChild(span);
-		}catch(_){ }
-	}
+        // If we used Squirrel helper but need to insert after ref, ensure correct position
+        try{
+            if (ref && ref.parentNode && span && span.parentNode !== ref.parentNode) {
+                // move into correct parent and place after ref
+                try { span.remove(); }catch(_){}
+                ref.parentNode.insertBefore(span, ref.nextSibling);
+            }
+        }catch(_){}
+
+        // Force inline properties with vendor-prefixed setProperty to survive CSS overrides
+        try{
+            if (span && span.style && typeof span.style.setProperty === 'function') {
+                span.style.setProperty('user-select', 'none', 'important');
+                span.style.setProperty('-webkit-user-select', 'none', 'important');
+                span.style.setProperty('-moz-user-select', 'none', 'important');
+            }
+        }catch(_){ }
+
+        // store path attribute and keep API-consistent
+        try{ span.setAttribute('data-path', fullPath||''); }catch(_){ }
+
+    }catch(_){ }
+}
+// ...existing code...
 
 	document.addEventListener('dblclick', function(e){
 		try{

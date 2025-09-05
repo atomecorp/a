@@ -44,7 +44,7 @@ const atomeSvgInline = $('svg', {
 
 // Example of fetching and rendering an SVG with custom size and colors
 
-fetch_and_render_svg('../../assets/images/icons/activate.svg', 120, 120, 'white', 'red', 'my_nice_svg');
+fetch_and_render_svg('../../assets/images/icons/activate.svg','12px', '99px', '120px', '120px' , 'white', 'red', 'my_nice_svg', 'view');
 
 
 // Example of resizing an existing SVG by id after a delay

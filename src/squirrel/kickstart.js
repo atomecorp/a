@@ -1,14 +1,14 @@
-// === 🎉 KICKSTART INDÉPENDANT ===
-// Créer view et déclencher squirrel:ready quand tout est prêt
+// === 🎉 INDEPENDENT KICKSTART ===
+// Create the view and dispatch 'squirrel:ready' when everything is ready
 
 function initKickstart() {
-  // Vérifier que les fonctions globales sont disponibles
+  // Verify that the global helper functions are available
   if (typeof window.$ !== 'function' || typeof window.define !== 'function') {
     console.error('❌ Kickstart: Fonctions $ ou define non disponibles');
     return;
   }
 
-  // 1. Template basique pour view
+  // 1. Basic template for the view
   window.define('view', {
       tag: 'div',
       class: 'atome',
@@ -25,21 +25,48 @@ function initKickstart() {
       }
   });
 
-  // 2. Créer l'élément view
+  // 2. Create the view element
   window.$('view', {
       parent: document.body,
+
+  });
+  // 1. Basic template for the intuition layer
+  window.define('intuition', {
+	  tag: 'div',
+	  class: 'atome',
+	  id: 'intuition',
+			css: {
+        zIndex: 9999999,
+		  background: 'transparent',
+		  color: 'lightgray',
+		  left: '0px',
+		  top: '0px',
+		  position: 'absolute',
+		  width: 'px',
+		  height: '0px',
+		  overflow: 'visible',
+	  }
+  });
+
+  // 2. Create the view element
+  window.$('intuition', {
+	  parent: document.body,
 
   });
   
   // console.log('✅ Kickstart demo initialized');
   
-  // === ÉVÉNEMENT READY MAINTENANT ===
-  // Framework vraiment prêt : Core + Kickstart fini !
+  // === READY EVENT NOW ===
+  // Framework truly ready: Core + Kickstart finished!
   window.dispatchEvent(new CustomEvent('squirrel:ready'));
-  // console.log('🎉 Framework Squirrel vraiment prêt !');
+  // console.log('🎉 Squirrel framework is truly ready!');
 }
 
-// Exécuter kickstart dès que ce fichier est chargé
-// Les fonctions globales sont déjà exposées par spark.js
+
+
+
+
+// Run kickstart as soon as this file is loaded
+// Global helpers are already exposed by spark.js
 initKickstart();
 console.log('✅ Squirrel 1.0.5 ©atome');

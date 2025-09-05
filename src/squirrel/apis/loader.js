@@ -1,16 +1,26 @@
-function create_svg(svgcontent, width = 200, height = 200, color = null, path_color = null, id ) {
-  const view = document.getElementById('view');
-  if (!view) return;
+function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', height = '200px', color = null, path_color = null, id , parent_id) {
+  const parent = document.getElementById(parent_id);
+  
 
   // Reuse container if present to avoid duplicates
-  let container = document.getElementById('edit-svg-raw');
-  if (!container) {
-    container = document.createElement('div');
+  // let container = document.getElementById('edit-svg-raw');
+    // let container = document.getElementById(parent);
+    // puts()
+  // if (!container) {
+   let container = document.createElement('div');
     container.id = id || 'edit-svg-raw';
     container.style.display = 'inline-block';
-    container.style.marginLeft = '10px';
-    view.appendChild(container);
-  }
+    container.style.marginLeft = '0px';
+    container.style.marginTop = '0px';
+    container.style.position = 'relative';
+    container.style.top = top;
+    container.style.left = left;
+    // container.style.width = width + 'px';
+    // container.style.height = height + 'px';
+    // container.style.border = '1px solid blue';
+    if (parent)
+    parent.appendChild(container);
+  // }
   container.innerHTML = svgcontent;
 
   // Adjust viewBox to fit content if off-canvas
@@ -139,11 +149,11 @@ function get_file_content(pathArg) {
 
 
 
-function fetch_and_render_svg(path, width = 200, height = 200, color = 'lightgray', path_color = 'lightgray', id=null) {
+function fetch_and_render_svg(path, left= '0px', top= '0px', width = '200px', height = '200px', color = 'lightgray', path_color = 'lightgray', id=null, parent_id='view') {
 
 get_file_content(path).then(svgcontent => {
   try {
-  create_svg(svgcontent, width, height, color, path_color, id);
+  create_svg(svgcontent, top, left, width, height, color, path_color, id, parent_id);
   } catch (e) {
     console.error('failed to render fetched svg', e);
   }
