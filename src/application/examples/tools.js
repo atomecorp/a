@@ -311,6 +311,12 @@ const Inntuition_theme = {
     "tool-hover-fg": "#000000",
     "tool-active-bg": "#e0e0e0",
     "tool-active-fg": "#000000",
+    "icon-top": "-3px",
+    "icon-left": "0px",
+        "icon-centered-top": "7px",
+    "icon-centered-left": "0px",
+    "icon-width": "23px",
+    "icon-height": "23px",
 
     "tool-font-size": "10px",
     "item-shadow": "3px 3px 3px rgba(0,0,0,0.39)",
@@ -366,7 +372,13 @@ function intuitionCommon(cfg) {
   });
 
   // Icône: insère le SVG seulement si 'icon' est fourni
-  if (icon) {
+ if (icon) {
+    const hasLabel = !!label && String(label).length > 0;
+    const icon_top  = Inntuition_theme[theme][hasLabel ? "icon-top" : "icon-centered-top"];
+    const icon_left = Inntuition_theme[theme][hasLabel ? "icon-left" : "icon-centered-left"];
+    const icon_width = Inntuition_theme[theme]["icon-width"];
+    const icon_height = Inntuition_theme[theme]["icon-height"];
+
     // Choix des couleurs selon 'colorise'
     let fill = null, stroke = null;
     if (colorise === false) {
@@ -374,15 +386,14 @@ function intuitionCommon(cfg) {
     } else if (typeof colorise === 'string') {
       fill = colorise; stroke = colorise;
     } else {
-      // colorise === true (ou truthy non-string)
       fill = label_color; stroke = label_color;
     }
 
     // top, left, width, height, fill, stroke, id, parent
     fetch_and_render_svg(
       `../../assets/images/icons/${icon}.svg`,
-      '0px', '-3px',
-      '23px', '23px',
+     icon_left, icon_top, 
+      icon_width, icon_height,
       fill, stroke,
       `${id_created}_icon`,
       id_created
@@ -407,9 +418,9 @@ function toolbox(cfg) {
   return el;
 }
 
-function palette(name) {
-  let theme = currentToolbox().theme;
-  const el = intuitionCommon(theme, name)
+function palette(cfg) {
+  cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
 }
 
 function tool(name) {
@@ -437,10 +448,18 @@ let toolboxToCreate={
   position: 'bottom-left', // top-left | top-right | bottom-left | bottom-right
   theme: 'light' // light | dark | auto 
 }
-// Create the main toolbox
 
 toolbox(toolboxToCreate);
-// palette("communication");
+
+
+
+
+palette({
+  id: "communication",
+  label: 'communication',
+  icon: 'menu',
+  colorise: true, // true | false | 'color' | '#rrggbb'
+});
 // tool("color");
 
 
