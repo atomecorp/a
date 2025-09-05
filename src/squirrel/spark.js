@@ -29,6 +29,7 @@ import Unit, {
 } from './components/unit_builder.js';
 import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from './components/draggable_builder.js';
 import Badge from './components/badge_builder.js';
+import dropDown from './components/dropDown_builder.js';
 import Tooltip from './components/tooltip_builder.js';
 import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
@@ -64,6 +65,7 @@ window.makeDraggable = makeDraggable;
 window.makeDraggableWithDrop = makeDraggableWithDrop;
 window.makeDropZone = makeDropZone;
 window.Badge = Badge;
+window.dropDown = dropDown;
 window.Tooltip = Tooltip;
 window.Template = Template;
 window.Minimal = Minimal;
