@@ -453,6 +453,7 @@ function intuitionCommon(cfg) {
     const hasSelector = Array.isArray(cfg.selector) && cfg.selector.length > 0;
     const bottomText = $('div', {
       parent: el,
+      id: id_created + '_value',
       text: String(cfg.value),
       css: {
         position: 'absolute',
