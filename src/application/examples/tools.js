@@ -408,6 +408,7 @@ function intuitionCommon(cfg) {
   if (Array.isArray(cfg.selector) && cfg.selector.length > 0) {
     const ddWrap = $('div', {
       parent: el,
+      id: id_created + '_selector',
       css: {
         position: 'absolute',
         bottom: '0px',
@@ -490,6 +491,7 @@ function intuitionCommon(cfg) {
 
     Button({
       parent: parentSelectorForEl,
+      id: id_created + '_input',
       css: {
         position: 'absolute',
         left: '50%',
