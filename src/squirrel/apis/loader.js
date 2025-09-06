@@ -7,12 +7,13 @@ function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', heig
     // let container = document.getElementById(parent);
     // puts()
   // if (!container) {
-   let container = document.createElement('div');
+  let container = document.createElement('div');
     container.id = id || 'edit-svg-raw';
     container.style.display = 'inline-block';
     container.style.marginLeft = '0px';
     container.style.marginTop = '0px';
-    container.style.position = 'relative';
+   // Use absolute so top/left are interpreted exactly as requested coordinates
+   container.style.position = 'absolute';
     container.style.top = top;
     container.style.left = left;
     // container.style.width = width + 'px';
@@ -87,6 +88,43 @@ function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', heig
       if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
       if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
     } catch (_) {}
+    // Enforce exact visual size based on union bbox of all shapes (contain, preserve aspect)
+    try {
+      if (!svgEl.__normalizedSize) {
+        const shapeNodes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+        if (shapeNodes.length) {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          shapeNodes.forEach(node => {
+            try {
+              const b = node.getBBox();
+              if (b && b.width >= 0 && b.height >= 0) {
+                if (b.x < minX) minX = b.x;
+                if (b.y < minY) minY = b.y;
+                const bx = b.x + b.width; if (bx > maxX) maxX = bx;
+                const by = b.y + b.height; if (by > maxY) maxY = by;
+              }
+            } catch(_){}
+          });
+          if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX>minX && maxY>minY) {
+            const bboxW = maxX - minX;
+            const bboxH = maxY - minY;
+            const scale = Math.min(w / bboxW, h / bboxH);
+            // Centering translation: we apply scale first, then translate in scaled coordinate space
+            // Use transform order: scale(s) translate(tx, ty)
+            const tx = -minX + (w/scale - bboxW)/2;
+            const ty = -minY + (h/scale - bboxH)/2;
+            const ns = 'http://www.w3.org/2000/svg';
+            const wrapper = document.createElementNS(ns, 'g');
+            while (svgEl.firstChild) wrapper.appendChild(svgEl.firstChild);
+            wrapper.setAttribute('transform', `scale(${scale}) translate(${tx},${ty})`);
+            svgEl.appendChild(wrapper);
+            svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            Object.defineProperty(svgEl, '__normalizedSize', { value: true });
+          }
+        }
+      }
+    } catch(_){ /* ignore normalization errors */ }
   }
 }
 
