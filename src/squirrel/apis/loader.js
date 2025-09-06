@@ -98,10 +98,22 @@ function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', heig
             try {
               const b = node.getBBox();
               if (b && b.width >= 0 && b.height >= 0) {
-                if (b.x < minX) minX = b.x;
-                if (b.y < minY) minY = b.y;
-                const bx = b.x + b.width; if (bx > maxX) maxX = bx;
-                const by = b.y + b.height; if (by > maxY) maxY = by;
+                // Include stroke width (getBBox excludes stroke). Use computed style or attribute.
+                let sw = node.getAttribute('stroke-width');
+                if (!sw && typeof window !== 'undefined' && window.getComputedStyle) {
+                  try { sw = window.getComputedStyle(node).strokeWidth; } catch(_){}
+                }
+                sw = (typeof sw === 'string') ? parseFloat(sw) : sw;
+                if (!Number.isFinite(sw)) sw = 0;
+                const pad = sw / 2;
+                const x0 = b.x - pad;
+                const y0 = b.y - pad;
+                const x1 = b.x + b.width + pad;
+                const y1 = b.y + b.height + pad;
+                if (x0 < minX) minX = x0;
+                if (y0 < minY) minY = y0;
+                if (x1 > maxX) maxX = x1;
+                if (y1 > maxY) maxY = y1;
               }
             } catch(_){}
           });
