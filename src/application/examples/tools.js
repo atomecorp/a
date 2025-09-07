@@ -767,13 +767,32 @@ function _updateIntuitionDomScale() {
               valueEl.style.bottom = '';
               valueEl.style.top = rowTop + 'px';
             } else if (selectorEl) {
-              const selectorH = (parseInt(selectorEl.style.height) || Math.round(14 * scale));
+              // Only selector present: make it adopt value baseline height (18*scale) and vertically center text
+              const valueBaseH = Math.round(18 * scale);
               selectorEl.style.position = 'absolute';
               selectorEl.style.bottom = '';
               selectorEl.style.top = rowTop + 'px';
-              const innerNudge = Math.max(2, Math.round(2 * scale));
-              selectorEl.style.paddingTop = innerNudge + 'px';
-              selectorEl.style.lineHeight = Math.max(1, selectorH - innerNudge) + 'px';
+              selectorEl.style.height = valueBaseH + 'px';
+              selectorEl.style.paddingTop = '0px';
+              selectorEl.style.lineHeight = valueBaseH + 'px';
+              try {
+                const scFirst = selectorEl.firstElementChild;
+                if (scFirst) {
+                  scFirst.style.height = valueBaseH + 'px';
+                  scFirst.style.paddingTop = '0px';
+                  scFirst.style.lineHeight = valueBaseH + 'px';
+                  // Adjust inner absolute text node slightly downward for visual baseline alignment
+                  try {
+                    const innerTxt = scFirst.firstElementChild;
+                    if (innerTxt && innerTxt.style) {
+                      const nudge = 0.3 * scale; // adjusted to 0.6px * scale
+                      innerTxt.style.top = nudge + 'px';
+                      innerTxt.style.height = (valueBaseH - nudge) + 'px';
+                      innerTxt.style.lineHeight = (valueBaseH - nudge) + 'px';
+                    }
+                  } catch(e) {}
+                }
+              } catch(e) {}
             }
           } catch(e) { /* ignore layout errors */ }
         }
@@ -1090,13 +1109,32 @@ function intuitionCommon(cfg) {
             valueEl.style.bottom = '';
             valueEl.style.top = rowTop + 'px';
           } else if (selectorEl) {
-            const selectorH = (parseInt(selectorEl.style.height) || Math.round(14 * scale));
+            // Only selector present: unify with value baseline height for cross-particle alignment
+            const valueBaseH = Math.round(18 * scale);
             selectorEl.style.position = 'absolute';
             selectorEl.style.bottom = '';
             selectorEl.style.top = rowTop + 'px';
-            const innerNudge = Math.max(2, Math.round(2 * scale));
-            selectorEl.style.paddingTop = innerNudge + 'px';
-            selectorEl.style.lineHeight = Math.max(1, selectorH - innerNudge) + 'px';
+            selectorEl.style.height = valueBaseH + 'px';
+            selectorEl.style.paddingTop = '0px';
+            selectorEl.style.lineHeight = valueBaseH + 'px';
+            try {
+              const scFirst = selectorEl.firstElementChild;
+              if (scFirst) {
+                scFirst.style.height = valueBaseH + 'px';
+                scFirst.style.paddingTop = '0px';
+                scFirst.style.lineHeight = valueBaseH + 'px';
+                // Slight downward nudge for inner text to match value baseline in other particles
+                try {
+                  const innerTxt = scFirst.firstElementChild;
+                  if (innerTxt && innerTxt.style) {
+                    const nudge = 0.6 * scale; // adjusted to 0.6px * scale
+                    innerTxt.style.top = nudge + 'px';
+                    innerTxt.style.height = (valueBaseH - nudge) + 'px';
+                    innerTxt.style.lineHeight = (valueBaseH - nudge) + 'px';
+                  }
+                } catch(e) {}
+              }
+            } catch(e) {}
           }
         } catch(e) {}
       },0);
