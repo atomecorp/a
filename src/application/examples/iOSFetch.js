@@ -20,23 +20,8 @@ let __loremTxtCache = null;
 async function __loadLoremText() {
   if (__loremTxtCache) return __loremTxtCache;
   if (typeof fetch !== 'function') throw new Error('fetch indisponible');
-
-  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent : '';
-  const looksIOS = /iPad|iPhone|iPod/.test(ua);
   const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
 
-//   if (looksIOS) {
-//     // Sur iOS on veut absolument passer par le serveur local (cohérence AUv3 / app)
-//     if (!port) throw new Error('Port local non injecté (iOS)');
-//     const url = `http://127.0.0.1:${port}/text/lorem.txt`;
-//     const r = await fetch(url).catch(e => { throw new Error('Fetch iOS échoué: ' + e.message); });
-//     if (!r.ok) throw new Error('HTTP ' + r.status);
-//     const txt = await r.text();
-//     if (!txt || !txt.length) throw new Error('Réponse vide');
-//     __loremTxtCache = txt; return txt;
-//   }
-
-//   // Autres plateformes: si port dispo on l'utilise sinon asset
   if (port) {
     const url = `http://127.0.0.1:${port}/text/lorem.txt`;
     try {
