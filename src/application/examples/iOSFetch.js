@@ -1,3 +1,19 @@
+// Player principal (src défini ensuite)
+    const audioPlayer = $('audio', {
+      id: 'audioPlayer',
+      attrs: {
+        controls: true,
+        preload: 'none'
+      },
+      css: {
+        margin: '4px 0 6px 0',
+        width: '300px',
+        outline: 'none',
+        borderRadius: '6px',
+        background: '#000'
+      }
+    });
+
 $('span', {
   // pas besoin de 'tag'
   id: 'verif',
@@ -128,7 +144,26 @@ function fct_to_trig(state) {
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
   }, 3000   );
-  
+
+  // Nouveau: récupérer l'URL réelle (stream) puis jouer dans la balise audio
+  setTimeout(() => {
+    dataFetcher('audios/a.m4a', { mode: 'url' })
+      .then(url => {
+        const audioEl = grab('audioPlayer');
+        if (audioEl) {
+          audioEl.src = url;
+          // tenter lecture (peut nécessiter interaction utilisateur; fct_to_trig est déclenchée par bouton donc OK)
+          const p = audioEl.play();
+          if (p && typeof p.catch === 'function') {
+            p.catch(e => console.log('lecture refusée:', e.message));
+          }
+          span.textContent = '[AUDIO PLAY] ' + url.split('/').pop();
+        } else {
+          span.textContent = 'Audio element introuvable';
+        }
+      })
+      .catch(err => { span.textContent = 'Erreur audio: ' + err.message; });
+  }, 3600);
 }
 
 
