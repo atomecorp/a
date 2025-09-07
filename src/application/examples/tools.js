@@ -339,7 +339,7 @@ const _Inntuition_theme_base = JSON.parse(JSON.stringify(Inntuition_theme));
 let IntuitionMasterScale = 1; // global master scale
 // Dropdown spacing configuration (user-adjustable)
 const _intuitionDropdownSpacingCfg = {
-  density: 'overlap' // 'overlap' | 'ultra' | 'compact' | 'medium' | 'roomy'
+  density: 'crush' // 'crush' | 'overlap' | 'ultra' | 'compact' | 'medium' | 'roomy'
 };
 
 // Proportional horizontal offset ratio so the icon appears consistently near the left edge
@@ -390,7 +390,7 @@ function refreshIntuitionScale() {
 }
 
 function setIntuitionDropdownDensity(density) {
-  if (!['overlap','ultra','compact','medium','roomy'].includes(density)) return;
+  if (!['crush','overlap','ultra','compact','medium','roomy'].includes(density)) return;
   _intuitionDropdownSpacingCfg.density = density;
   // Rebuild styles + reapply spacing
   _ensureDropdownSpacingStyle();
@@ -403,8 +403,10 @@ function _ensureDropdownSpacingStyle() {
     const s = IntuitionMasterScale || 1;
     let lineMult, bonusPerScale, padBase, padScale, gapBase, gapScale;
     switch (_intuitionDropdownSpacingCfg.density) {
+      case 'crush':
+        // extrême: line-height bien plus petit que font-size, aucun padding/marge
+        lineMult = 0.8; bonusPerScale = 0; padBase = 0; padScale = 0; gapBase = 0; gapScale = 0; break;
       case 'overlap':
-        // sur-compression: line-height < font-size
         lineMult = 0.9; bonusPerScale = 0; padBase = 0; padScale = 0; gapBase = 0; gapScale = 0; break;
       case 'ultra':
   // ultra plat: aucun espace supplémentaire
@@ -461,6 +463,7 @@ function _applyDropdownListScaling(selectorWrap) {
   const baseLine = 18;
   let lineMult, bonusPerScale, gapBase, gapScale;
   switch (_intuitionDropdownSpacingCfg.density) {
+    case 'crush': lineMult = 0.8; bonusPerScale = 0; gapBase = 0; gapScale = 0; break;
     case 'overlap': lineMult = 0.9; bonusPerScale = 0; gapBase = 0; gapScale = 0; break;
     case 'ultra': lineMult = 1.0; bonusPerScale = 0; gapBase = 0; gapScale = 0; break;
     case 'compact': lineMult = 1.02; bonusPerScale = 1; gapBase = 1; gapScale = 0.6; break;
@@ -488,15 +491,16 @@ function _applyDropdownListScaling(selectorWrap) {
     // For medium density aim 1.15, compact 1.12, roomy 1.25 relative to declared font
     let rel;
     switch (_intuitionDropdownSpacingCfg.density) {
-      case 'overlap': rel = 0.9; break; // en-dessous de la taille
-      case 'ultra': rel = 1.0; break; // collé
+      case 'crush': rel = 0.78; break;
+      case 'overlap': rel = 0.9; break;
+      case 'ultra': rel = 1.0; break;
       case 'compact': rel = 1.06; break;
       case 'roomy': rel = 1.25; break;
       case 'medium':
       default: rel = 1.15; break;
     }
     const targetLine = Math.max(itemLine, Math.round(declaredFont * rel));
-    const innerPad = Math.max(4, Math.round(targetLine * 0.22));
+    const innerPad = (_intuitionDropdownSpacingCfg.density === 'crush') ? 0 : Math.max(2, Math.round(targetLine * 0.18));
     // Force with important (override existing inline 18px etc.)
     it.style.setProperty('line-height', targetLine + 'px', 'important');
     it.style.setProperty('min-height', targetLine + 'px', 'important');
@@ -515,7 +519,8 @@ function _applyDropdownListScaling(selectorWrap) {
     // Margin between items adapted to density
     let mbBase;
     switch (_intuitionDropdownSpacingCfg.density) {
-      case 'overlap': mbBase = 0; break;
+      case 'crush':
+      case 'overlap':
       case 'ultra': mbBase = 0; break;
       case 'compact': mbBase = 1; break;
       case 'roomy': mbBase = 6; break;
