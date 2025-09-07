@@ -406,7 +406,29 @@ function _updateIntuitionDomScale() {
     }
     const selectorWrap = el.querySelector('[id$="_selector"]');
     if (selectorWrap) {
-      selectorWrap.style.height = Math.round(12 * IntuitionMasterScale) + 'px';
+      // Base (unscaled) selector height is 12px; scale proportionally
+      const selectorScaledH = Math.round(12 * IntuitionMasterScale);
+      selectorWrap.style.height = selectorScaledH + 'px';
+      selectorWrap.style.fontSize = theme['tool-font-size'];
+      // Use its own height for vertical centering instead of generic scaledLine (prevents text shift like 'poiluu')
+      selectorWrap.style.lineHeight = selectorScaledH + 'px';
+      // Immediate displayed button/content (first child) mirrors same metrics
+      const firstChild = selectorWrap.firstElementChild;
+      if (firstChild) {
+        try {
+          firstChild.style.fontSize = theme['tool-font-size'];
+          firstChild.style.lineHeight = selectorScaledH + 'px';
+          firstChild.style.height = selectorScaledH + 'px';
+        } catch(e) {}
+      }
+      // Deep adjust all descendants to propagate font scaling to internal label spans
+      try {
+        selectorWrap.querySelectorAll('*').forEach(n => {
+          n.style.fontSize = theme['tool-font-size'];
+          n.style.lineHeight = selectorScaledH + 'px';
+          if (!n.style.height) n.style.height = selectorScaledH + 'px';
+        });
+      } catch(e) {}
     }
     const miniBtn = el.querySelector('[id$="_input"]');
     if (miniBtn) {
@@ -479,6 +501,54 @@ function _updateIntuitionDomScale() {
           iconSvg.setAttribute('width', parseFloat(Inntuition_theme.light['icon-width']) || iconW);
           iconSvg.setAttribute('height', parseFloat(Inntuition_theme.light['icon-height']) || iconH);
         } catch(e){}
+      }
+    }
+
+    // Particle stacking re-layout on scale change: keep mini button centered; place value & selector BELOW the mini button (not anchored to bottom).
+    if (el.getAttribute('data-kind') === 'particle') {
+      const mb = el.querySelector('[id$="_input"]');
+      if (mb) {
+        const selectorEl = el.querySelector('[id$="_selector"]');
+        const valueEl = el.querySelector('[id$="_value"]');
+        if (selectorEl || valueEl) {
+          try {
+            const scale = IntuitionMasterScale || 1;
+            const spacing = Math.round(4 * scale);
+            const rootH = el.clientHeight;
+            const mbRect = mb.getBoundingClientRect();
+            const rootRect = el.getBoundingClientRect();
+            const miniTopInside = (mbRect.top - rootRect.top);
+            const miniHeight = mbRect.height;
+            const miniBottomInside = miniTopInside + miniHeight;
+            let cursorTop = miniBottomInside + spacing; // start below mini button
+            // Order: value (if present) then selector (if present) so selector can sit just under value
+            if (valueEl) {
+              const valueH = parseInt(valueEl.style.height) || Math.round(18 * scale);
+              valueEl.style.position = 'absolute';
+              valueEl.style.bottom = '';
+              valueEl.style.top = cursorTop + 'px';
+              cursorTop += valueH + spacing;
+            }
+            if (selectorEl) {
+              const selectorH = (parseInt(selectorEl.style.height) || Math.round(12 * scale));
+              selectorEl.style.position = 'absolute';
+              selectorEl.style.bottom = '';
+              selectorEl.style.top = cursorTop + 'px';
+              cursorTop += selectorH; // no extra spacing after last
+            }
+            // Overflow handling: if last element exceeds container, shift block upward but keep above mini button
+            const overflow = cursorTop - rootH;
+            if (overflow > 0) {
+              const shift = Math.min(overflow, (miniBottomInside - (miniBottomInside + spacing)) * -1); // don't cross the mini button
+              if (valueEl) {
+                valueEl.style.top = (parseInt(valueEl.style.top) - shift) + 'px';
+              }
+              if (selectorEl) {
+                selectorEl.style.top = (parseInt(selectorEl.style.top) - shift) + 'px';
+              }
+            }
+          } catch(e) { /* ignore layout errors */ }
+        }
       }
     }
   });
@@ -628,7 +698,8 @@ function intuitionCommon(cfg) {
         fontFamily: 'Roboto',
         fontSize: Inntuition_theme[theme]["tool-font-size"],
         textAlign: 'center',
-        lineHeight: '18px'
+  // Match base selector height (12px) so scaling logic can substitute correctly
+  lineHeight: '12px'
       },
       listCss: {
         backgroundColor: Inntuition_theme[theme]["tool-bg"],
@@ -639,7 +710,8 @@ function intuitionCommon(cfg) {
         fontFamily: 'Roboto',
         fontSize: Inntuition_theme[theme]["tool-font-size"],
         color: label_color,
-        lineHeight: '18px',
+  // Keep list items at 18px base line-height (they are separate from selector button)
+  lineHeight: '18px',
         textAlign: 'center'
       }
     });
@@ -681,22 +753,23 @@ function intuitionCommon(cfg) {
     // - if either value or select present: bottom: 18px
     // - else: bottom: 0px
     const bottomOffset = (hasSelector && hasValue) ? 36 : ((hasSelector || hasValue) ? 18 : 0);
-    const isParticle = cfg.type === 'particle';
+  const isParticle = cfg.type === 'particle';
 
     const parentSelectorForEl = '#' + (window.CSS && CSS.escape
       ? CSS.escape(id_created)
       : id_created.replace(/\./g, '\\.')
     );
 
-    Button({
+    const miniBtn = Button({
       parent: parentSelectorForEl,
       id: id_created + '_input',
       css: {
         position: 'absolute',
         left: '50%',
-        top: isParticle ? '50%' : undefined,
-        transform: isParticle ? 'translate(-50%, -50%)' : 'translateX(-50%)',
-        bottom: isParticle ? undefined : bottomOffset + 'px',
+  // Always keep particle mini button vertically centered; selector/value will be placed BELOW it.
+  top: (isParticle ? '50%' : undefined),
+  transform: (isParticle ? 'translate(-50%, -50%)' : 'translateX(-50%)'),
+  bottom: (isParticle ? undefined : bottomOffset + 'px'),
         width: '25px',
         height: '6px',
         padding: '0',
@@ -709,6 +782,46 @@ function intuitionCommon(cfg) {
         boxShadow: Inntuition_theme[theme]["item-shadow"]
       }
     });
+
+    // Re-layout for particle stacking (mini centered; then value and selector BELOW mini button)
+    if (isParticle && (hasSelector || hasValue)) {
+      setTimeout(() => {
+        try {
+          const elRoot = document.getElementById(id_created);
+          if (!elRoot) return;
+          const mb = document.getElementById(id_created + '_input');
+          const selectorEl = document.getElementById(id_created + '_selector');
+          const valueEl = document.getElementById(id_created + '_value');
+          if (!mb) return;
+          const scale = (window.getIntuitionMasterScale && window.getIntuitionMasterScale()) || 1;
+          const spacing = Math.round(4 * scale);
+          const rootRect = elRoot.getBoundingClientRect();
+          const mbRect = mb.getBoundingClientRect();
+          const miniBottom = (mbRect.top - rootRect.top) + mbRect.height;
+          let cursorTop = miniBottom + spacing;
+          if (valueEl) {
+            const valueH = parseInt(valueEl.style.height) || Math.round(18 * scale);
+            valueEl.style.position = 'absolute';
+            valueEl.style.bottom = '';
+            valueEl.style.top = cursorTop + 'px';
+            cursorTop += valueH + spacing;
+          }
+          if (selectorEl) {
+            const selectorH = (parseInt(selectorEl.style.height) || Math.round(12 * scale));
+            selectorEl.style.position = 'absolute';
+            selectorEl.style.bottom = '';
+            selectorEl.style.top = cursorTop + 'px';
+            cursorTop += selectorH;
+          }
+          // Adjust if overflow
+          const overflow = cursorTop - elRoot.clientHeight;
+          if (overflow > 0) {
+            if (valueEl) valueEl.style.top = (parseInt(valueEl.style.top) - overflow) + 'px';
+            if (selectorEl) selectorEl.style.top = (parseInt(selectorEl.style.top) - overflow) + 'px';
+          }
+        } catch(e) {}
+      },0);
+    }
   }
   if (button) {
     const parentSelector = '#' + (window.CSS && CSS.escape
@@ -863,7 +976,7 @@ particle({
     type: "particle",
   label: 'width',
   input: 0.5,
-  selector:['%','px','cm','em','rem','vh','vw'],
+  selector:['poiluu','px','cm','em','rem','vh','vw'],
 
 });
 
@@ -873,148 +986,148 @@ particle({
     type: "particle",
   label: 'color',
   input: 0.5,
-  value: 'red',
+  value: 'redatarte',
 
 });
 
 // === Debug instrumentation: log icon positions before and after setIntuitionMasterScale(1) ===
-function debugLogIconPositions(stage) {
-  try {
-    const scale = (window.getIntuitionMasterScale && window.getIntuitionMasterScale()) || 'n/a';
-    const items = document.querySelectorAll('div[id^="toolsbox."]');
-    const out = [];
-    items.forEach(el => {
-      const iconContainer = document.getElementById(el.id + '_icon');
-      if (!iconContainer) return;
-      const rect = iconContainer.getBoundingClientRect();
-      // Also inspect direct SVG child (first svg within container/root)
-      const svg = iconContainer.tagName.toLowerCase() === 'svg' ? iconContainer : iconContainer.querySelector('svg');
-      const svgRect = svg ? svg.getBoundingClientRect() : null;
-      out.push({
-        stage,
-        id: el.id,
-        hasLabel: el.getAttribute('data-has-label'),
-        orientation: el.orientation || el.getAttribute('data-orientation') || 'n/a',
-        styleLeft: iconContainer.style.left,
-        styleTop: iconContainer.style.top,
-        styleWidth: iconContainer.style.width,
-        styleHeight: iconContainer.style.height,
-        rectLeft: Math.round(rect.left),
-        rectTop: Math.round(rect.top),
-        rectW: Math.round(rect.width),
-        rectH: Math.round(rect.height),
-        containerTag: iconContainer.tagName,
-        svgTag: svg ? svg.tagName : null,
-        svgAttrW: svg ? svg.getAttribute('width') : null,
-        svgAttrH: svg ? svg.getAttribute('height') : null,
-        svgRectW: svgRect ? Math.round(svgRect.width) : null,
-        svgRectH: svgRect ? Math.round(svgRect.height) : null,
-        themeIconLeft: Inntuition_theme.light['icon-left'],
-        themeIconTop: Inntuition_theme.light['icon-top'],
-        themeIconCenteredLeft: Inntuition_theme.light['icon-centered-left'],
-        themeIconCenteredTop: Inntuition_theme.light['icon-centered-top'],
-        scale
-      });
-    });
-    // Raw detailed dump
-    console.log('[INTUITION ICON DEBUG]', stage, out);
-    // Compact table (subset)
-    const compact = out.map(o => ({
-      stage: o.stage,
-      id: o.id.replace('toolsbox.', ''),
-      sL: o.styleLeft,
-      sT: o.styleTop,
-      rL: o.rectLeft,
-      rT: o.rectTop,
-  cW: o.rectW,
-  cH: o.rectH,
-  sW: o.svgRectW,
-  sH: o.svgRectH,
-      lbl: o.hasLabel,
-      ori: o.orientation,
-      scale: o.scale
-    }));
-    try { console.table(compact); } catch(_) {}
+// function debugLogIconPositions(stage) {
+//   try {
+//     const scale = (window.getIntuitionMasterScale && window.getIntuitionMasterScale()) || 'n/a';
+//     const items = document.querySelectorAll('div[id^="toolsbox."]');
+//     const out = [];
+//     items.forEach(el => {
+//       const iconContainer = document.getElementById(el.id + '_icon');
+//       if (!iconContainer) return;
+//       const rect = iconContainer.getBoundingClientRect();
+//       // Also inspect direct SVG child (first svg within container/root)
+//       const svg = iconContainer.tagName.toLowerCase() === 'svg' ? iconContainer : iconContainer.querySelector('svg');
+//       const svgRect = svg ? svg.getBoundingClientRect() : null;
+//       out.push({
+//         stage,
+//         id: el.id,
+//         hasLabel: el.getAttribute('data-has-label'),
+//         orientation: el.orientation || el.getAttribute('data-orientation') || 'n/a',
+//         styleLeft: iconContainer.style.left,
+//         styleTop: iconContainer.style.top,
+//         styleWidth: iconContainer.style.width,
+//         styleHeight: iconContainer.style.height,
+//         rectLeft: Math.round(rect.left),
+//         rectTop: Math.round(rect.top),
+//         rectW: Math.round(rect.width),
+//         rectH: Math.round(rect.height),
+//         containerTag: iconContainer.tagName,
+//         svgTag: svg ? svg.tagName : null,
+//         svgAttrW: svg ? svg.getAttribute('width') : null,
+//         svgAttrH: svg ? svg.getAttribute('height') : null,
+//         svgRectW: svgRect ? Math.round(svgRect.width) : null,
+//         svgRectH: svgRect ? Math.round(svgRect.height) : null,
+//         themeIconLeft: Inntuition_theme.light['icon-left'],
+//         themeIconTop: Inntuition_theme.light['icon-top'],
+//         themeIconCenteredLeft: Inntuition_theme.light['icon-centered-left'],
+//         themeIconCenteredTop: Inntuition_theme.light['icon-centered-top'],
+//         scale
+//       });
+//     });
+//     // Raw detailed dump
+//     console.log('[INTUITION ICON DEBUG]', stage, out);
+//     // Compact table (subset)
+//     const compact = out.map(o => ({
+//       stage: o.stage,
+//       id: o.id.replace('toolsbox.', ''),
+//       sL: o.styleLeft,
+//       sT: o.styleTop,
+//       rL: o.rectLeft,
+//       rT: o.rectTop,
+//   cW: o.rectW,
+//   cH: o.rectH,
+//   sW: o.svgRectW,
+//   sH: o.svgRectH,
+//       lbl: o.hasLabel,
+//       ori: o.orientation,
+//       scale: o.scale
+//     }));
+//     try { console.table(compact); } catch(_) {}
 
-    // Keep a baseline after INIT+SVG only
-    if (stage === 'INIT+SVG' && !window.__intuitionDebugBaseline) {
-      window.__intuitionDebugBaseline = JSON.parse(JSON.stringify(compact));
-      console.log('[INTUITION ICON DEBUG] Baseline stored (INIT+SVG).');
-    } else if (window.__intuitionDebugBaseline) {
-      // Compare with baseline
-      const base = window.__intuitionDebugBaseline;
-      const diffs = [];
-      compact.forEach(entry => {
-        const b = base.find(x => x.id === entry.id);
-        if (!b) return;
-        const scaleChanged = b.scale !== entry.scale;
-        // Allow styleLeft change when scale changed (inverse scaling logic). Evaluate physical drift via rectLeft with tolerance.
-        const leftPhysDrift = Math.abs(entry.rL - b.rL) > 1; // >1px tolerance
-        const topPhysDrift  = Math.abs(entry.rT - b.rT) > 1;
-        const leftStyleDrift = !scaleChanged && (b.sL !== entry.sL);
-        const topStyleDrift  = !scaleChanged && (b.sT !== entry.sT);
-        if (leftPhysDrift || topPhysDrift || leftStyleDrift || topStyleDrift) {
-          diffs.push({ id: entry.id, baseStyleLeft: b.sL, newStyleLeft: entry.sL, baseStyleTop: b.sT, newStyleTop: entry.sT, baseRectLeft: b.rL, newRectLeft: entry.rL, baseRectTop: b.rT, newRectTop: entry.rT, scale: entry.scale, stage: entry.stage });
-        }
-      });
-      if (diffs.length) {
-        console.warn('[INTUITION ICON DEBUG] DRIFT detected vs baseline:', diffs);
-        try { console.table(diffs); } catch(_) {}
-      } else {
-        console.log('[INTUITION ICON DEBUG] No drift vs baseline at stage', stage);
-      }
-    }
-  } catch(e) {
-    console.warn('debugLogIconPositions error', e);
-  }
-}
+//     // Keep a baseline after INIT+SVG only
+//     if (stage === 'INIT+SVG' && !window.__intuitionDebugBaseline) {
+//       window.__intuitionDebugBaseline = JSON.parse(JSON.stringify(compact));
+//       console.log('[INTUITION ICON DEBUG] Baseline stored (INIT+SVG).');
+//     } else if (window.__intuitionDebugBaseline) {
+//       // Compare with baseline
+//       const base = window.__intuitionDebugBaseline;
+//       const diffs = [];
+//       compact.forEach(entry => {
+//         const b = base.find(x => x.id === entry.id);
+//         if (!b) return;
+//         const scaleChanged = b.scale !== entry.scale;
+//         // Allow styleLeft change when scale changed (inverse scaling logic). Evaluate physical drift via rectLeft with tolerance.
+//         const leftPhysDrift = Math.abs(entry.rL - b.rL) > 1; // >1px tolerance
+//         const topPhysDrift  = Math.abs(entry.rT - b.rT) > 1;
+//         const leftStyleDrift = !scaleChanged && (b.sL !== entry.sL);
+//         const topStyleDrift  = !scaleChanged && (b.sT !== entry.sT);
+//         if (leftPhysDrift || topPhysDrift || leftStyleDrift || topStyleDrift) {
+//           diffs.push({ id: entry.id, baseStyleLeft: b.sL, newStyleLeft: entry.sL, baseStyleTop: b.sT, newStyleTop: entry.sT, baseRectLeft: b.rL, newRectLeft: entry.rL, baseRectTop: b.rT, newRectTop: entry.rT, scale: entry.scale, stage: entry.stage });
+//         }
+//       });
+//       if (diffs.length) {
+//         console.warn('[INTUITION ICON DEBUG] DRIFT detected vs baseline:', diffs);
+//         try { console.table(diffs); } catch(_) {}
+//       } else {
+//         console.log('[INTUITION ICON DEBUG] No drift vs baseline at stage', stage);
+//       }
+//     }
+//   } catch(e) {
+//     console.warn('debugLogIconPositions error', e);
+//   }
+// }
 
-// Initial log after current tick (ensure DOM nodes created & initial SVG insert attempts scheduled)
-setTimeout(() => {
-  debugLogIconPositions('INIT');
-  // Allow async SVG fetch/render to complete then capture stable baseline
-  setTimeout(() => {
-    debugLogIconPositions('INIT+SVG');
-    // Log before scale(1) (should be identical to after if no drift)
-    debugLogIconPositions('BEFORE_SET_SCALE_1');
-    console.log('[INTUITION ICON DEBUG] calling setIntuitionMasterScale(1)');
-    if (window.setIntuitionMasterScale) {
-      window.setIntuitionMasterScale(1);
-    }
-    // Immediate post-call log
-    debugLogIconPositions('AFTER_SET_SCALE_1');
-    // Slight delay to catch any deferred repositioning
-    setTimeout(() => debugLogIconPositions('AFTER_SET_SCALE_1+DELAY'), 100);
-    // Trigger scale=2 test automatically for drift check
-    setTimeout(() => {
-      console.log('[INTUITION ICON DEBUG] calling setIntuitionMasterScale(2)');
-      if (window.setIntuitionMasterScale) window.setIntuitionMasterScale(2);
-      debugLogIconPositions('AFTER_SET_SCALE_2');
-      setTimeout(() => debugLogIconPositions('AFTER_SET_SCALE_2+DELAY'), 120);
-    }, 250);
-  }, 150);
-}, 0);
+// // Initial log after current tick (ensure DOM nodes created & initial SVG insert attempts scheduled)
+// setTimeout(() => {
+//   debugLogIconPositions('INIT');
+//   // Allow async SVG fetch/render to complete then capture stable baseline
+//   setTimeout(() => {
+//     debugLogIconPositions('INIT+SVG');
+//     // Log before scale(1) (should be identical to after if no drift)
+//     debugLogIconPositions('BEFORE_SET_SCALE_1');
+//     console.log('[INTUITION ICON DEBUG] calling setIntuitionMasterScale(1)');
+//     if (window.setIntuitionMasterScale) {
+//       window.setIntuitionMasterScale(1);
+//     }
+//     // Immediate post-call log
+//     debugLogIconPositions('AFTER_SET_SCALE_1');
+//     // Slight delay to catch any deferred repositioning
+//     setTimeout(() => debugLogIconPositions('AFTER_SET_SCALE_1+DELAY'), 100);
+//     // Trigger scale=2 test automatically for drift check
+//     setTimeout(() => {
+//       console.log('[INTUITION ICON DEBUG] calling setIntuitionMasterScale(2)');
+//       if (window.setIntuitionMasterScale) window.setIntuitionMasterScale(2);
+//       debugLogIconPositions('AFTER_SET_SCALE_2');
+//       setTimeout(() => debugLogIconPositions('AFTER_SET_SCALE_2+DELAY'), 120);
+//     }, 250);
+//   }, 150);
+// }, 0);
 
 // Force refresh after base offset tweak (keep current scale value)
-setTimeout(() => {
-  if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
-    const s = window.getIntuitionMasterScale();
-    window.setIntuitionMasterScale(s === 0 ? 1 : s); // reapply
-  }
-}, 20);
+// setTimeout(() => {
+//   if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
+//     const s = window.getIntuitionMasterScale();
+//     window.setIntuitionMasterScale(s === 0 ? 1 : s); // reapply
+//   }
+// }, 20);
 
-// Also reapply after a short delay to ensure all async SVG loads got processed
-setTimeout(() => {
-  if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
-    window.setIntuitionMasterScale(window.getIntuitionMasterScale());
-  }
-}, 400);
-// Extra refresh after introducing toggle scaling
-setTimeout(() => {
-  if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
-    window.setIntuitionMasterScale(window.getIntuitionMasterScale());
-  }
-}, 800);
+// // Also reapply after a short delay to ensure all async SVG loads got processed
+// setTimeout(() => {
+//   if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
+//     window.setIntuitionMasterScale(window.getIntuitionMasterScale());
+//   }
+// }, 400);
+// // Extra refresh after introducing toggle scaling
+// setTimeout(() => {
+//   if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
+//     window.setIntuitionMasterScale(window.getIntuitionMasterScale());
+//   }
+// }, 800);
 
 
 // setIntuitionMasterScale(3); // test scale=3 for drift
