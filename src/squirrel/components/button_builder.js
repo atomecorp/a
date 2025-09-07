@@ -311,15 +311,32 @@ const applyTemplateEffects = (button, template) => {
     });
 
     button.addEventListener('mouseleave', () => {
-      // Retourner au style de base
       const currentState = button.getState ? button.getState() : null;
+      const preserveSize = () => {
+        const css = {};
+        if (button && /_toggle$/.test(button.id)) {
+          let masterScale = 1;
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+            const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+            if (baseSize) {
+              const scaled = Math.round(baseSize * masterScale) + 'px';
+              css.width = scaled;
+              css.height = scaled;
+            } else {
+              if (button.style.width) css.width = button.style.width;
+              if (button.style.height) css.height = button.style.height;
+            }
+          if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+        }
+        return css;
+      };
       if (currentState !== null) {
-        // Mode toggle - appliquer le style selon l'état
         const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-        button.$({ css: { ...template.css, ...stateStyle } });
+        const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+        button.$({ css: merged });
       } else {
-        // Mode normal - retourner au style de base
-        button.$({ css: template.css });
+        const baseCss = { ...template.css, ...preserveSize() };
+        button.$({ css: baseCss });
       }
     });
   }
@@ -331,11 +348,31 @@ const applyTemplateEffects = (button, template) => {
 
     button.addEventListener('mouseup', () => {
       const currentState = button.getState ? button.getState() : null;
+      const preserveSize = () => {
+        const css = {};
+        if (button && /_toggle$/.test(button.id)) {
+          let masterScale = 1;
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+          const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+          if (baseSize) {
+            const scaled = Math.round(baseSize * masterScale) + 'px';
+            css.width = scaled;
+            css.height = scaled;
+          } else {
+            if (button.style.width) css.width = button.style.width;
+            if (button.style.height) css.height = button.style.height;
+          }
+          if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+        }
+        return css;
+      };
       if (currentState !== null) {
         const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-        button.$({ css: { ...template.css, ...stateStyle } });
+        const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+        button.$({ css: merged });
       } else {
-        button.$({ css: template.css });
+        const baseCss = { ...template.css, ...preserveSize() };
+        button.$({ css: baseCss });
       }
     });
   }
@@ -729,6 +766,28 @@ const createButton = (config = {}) => {
         ...templateStateStyles, // 3) Template state styles
         ...userStateStyles      // 4) User state styles (highest priority)
       };
+
+      // --- Preserve externally imposed size (e.g. Intuition master scale) ---
+      // If the button already has inline width/height coming from another system (and caller didn't explicitly set new ones in finalStyles), keep them.
+      if (button && button.id && /_toggle$/.test(button.id)) {
+        // Recompute width/height from stored base size * external master scale if available
+        const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+        let masterScale = 1;
+        try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+        if (baseSize) {
+          const scaled = Math.round(baseSize * masterScale) + 'px';
+          finalStyles.width = scaled;
+          finalStyles.height = scaled;
+        } else {
+          const existingW = button.style.width;
+          const existingH = button.style.height;
+          if (existingW && finalStyles.width === undefined) finalStyles.width = existingW;
+          if (existingH && finalStyles.height === undefined) finalStyles.height = existingH;
+        }
+        // Also ensure borderRadius kept if externally scaled
+        const existingBR = button.style.borderRadius;
+        if (existingBR && finalStyles.borderRadius === undefined) finalStyles.borderRadius = existingBR;
+      }
       
       button.$({ css: finalStyles });
       

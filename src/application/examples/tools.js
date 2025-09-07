@@ -303,6 +303,9 @@ localState = {
 // - Max scroll height per level? Suggest: clamp to 60% of viewport height.
 // - Rubber effect curve fine-tuning (currently 0.08). Want a per-level decay?
 
+
+
+// === Theme (base) ===
 const Inntuition_theme = {
   "light": {
     "tool-bg": "#313131ff",
@@ -314,20 +317,176 @@ const Inntuition_theme = {
     "tool-active-bg": "#e0e0e0",
     "tool-active-fg": "#000000",
     "icon-top": "16px",
-    "icon-left": "9px",
-        "icon-centered-top": "12px",
-    "icon-centered-left": "9px",
+  // Adjusted base left offsets (was 9px) to remove right bias at scale=1
+  "icon-left": "5px",
+  "icon-centered-top": "12px",
+  "icon-centered-left": "5px",
     "icon-width": "21px",
     "icon-height": "16px",
-
     "tool-font-size": "10px",
     "item-shadow": "0px 0px 5px rgba(0,0,0,0.69)",
     "tool-icon-size": "20px",
     "item-border-radius": "3px",
     "item-width": "39px",
     "item-height": "39px",
+  // Toggle button (option) base size
+  "toggle-btn-size": "19px"
   }
 };
+
+// Keep an immutable base copy for scaling computations
+const _Inntuition_theme_base = JSON.parse(JSON.stringify(Inntuition_theme));
+let IntuitionMasterScale = 1; // global master scale
+
+// Proportional horizontal offset ratio so the icon appears consistently near the left edge
+// Chosen so that at scale=2 (item width ~78px) left ≈2px (2/78 ≈ 0.026) which user found correct.
+const INTUITION_ICON_LEFT_RATIO = 0.026; // ~2.6% of item width
+
+// Keys that should scale (pixel values only)
+const INTUITION_SCALABLE_KEYS = [
+  // NOTE: we deliberately exclude horizontal offsets so icons don't drift right when scaling
+  'icon-top',/*'icon-left',*/'icon-centered-top',/*'icon-centered-left',*/
+  'icon-width','icon-height','tool-font-size','tool-icon-size',
+  'item-border-radius','item-width','item-height','toggle-btn-size'
+];
+
+function _scalePx(value, scale) {
+  if (typeof value !== 'string') return value;
+  const m = value.match(/(-?\d*\.?\d+)/);
+  if (!m) return value;
+  const num = parseFloat(m[1]);
+  if (!isFinite(num)) return value;
+  const unit = value.replace(m[1], '') || 'px';
+  return (Math.round(num * scale * 100) / 100) + unit;
+}
+
+function setIntuitionMasterScale(scale) {
+  const s = Math.max(0.3, Math.min(4, Number(scale) || 1));
+  if (s === IntuitionMasterScale) {
+    // No-op: avoid unnecessary DOM recalculations when scale hasn't changed
+    return;
+  }
+  IntuitionMasterScale = s;
+  // Recompute themed values from base
+  Object.keys(_Inntuition_theme_base).forEach(themeName => {
+    const base = _Inntuition_theme_base[themeName];
+    const live = Inntuition_theme[themeName];
+    INTUITION_SCALABLE_KEYS.forEach(k => {
+      if (base[k]) live[k] = _scalePx(base[k], s);
+    });
+  });
+  // Update existing rendered toolbox items
+  try { _updateIntuitionDomScale(); } catch(e) { /* ignore */ }
+}
+
+function _updateIntuitionDomScale() {
+  const container = document.getElementById('intuition');
+  if (!container) return;
+  // Try to find the toolbox root element (id starts with toolsbox.) inside container
+  const toolboxRoot = container.querySelector('div[id^="toolsbox."]');
+  const rootOrientation = (toolboxRoot && (toolboxRoot.orientation || toolboxRoot.getAttribute('data-orientation'))) || 'vertical';
+  const items = container.querySelectorAll('div[id^="toolsbox."]');
+  items.forEach(el => {
+    const theme = Inntuition_theme['light']; // only light implemented
+    if (!theme) return;
+    // Resize container
+    el.style.width = theme['item-width'];
+    el.style.height = theme['item-height'];
+    // Font size + line heights (lineHeight proportionally 18px * scale)
+    const baseLine = 18; // base constant used earlier
+    const scaledLine = Math.round(baseLine * IntuitionMasterScale);
+    el.style.fontSize = theme['tool-font-size'];
+    el.style.lineHeight = scaledLine + 'px';
+    // Bottom value + selector + mini-button adjustments
+    const valueEl = el.querySelector('[id$="_value"]');
+    if (valueEl) {
+      valueEl.style.fontSize = theme['tool-font-size'];
+      valueEl.style.height = scaledLine + 'px';
+      valueEl.style.lineHeight = scaledLine + 'px';
+    }
+    const selectorWrap = el.querySelector('[id$="_selector"]');
+    if (selectorWrap) {
+      selectorWrap.style.height = Math.round(12 * IntuitionMasterScale) + 'px';
+    }
+    const miniBtn = el.querySelector('[id$="_input"]');
+    if (miniBtn) {
+      miniBtn.style.width = Math.round(25 * IntuitionMasterScale) + 'px';
+      miniBtn.style.height = Math.max(4, Math.round(6 * IntuitionMasterScale)) + 'px';
+      miniBtn.style.borderRadius = _scalePx(_Inntuition_theme_base.light['item-border-radius'], IntuitionMasterScale);
+      // If this is a particle item, enforce vertical centering
+      if (el.getAttribute('data-kind') === 'particle') {
+        miniBtn.style.top = '50%';
+        miniBtn.style.left = '50%';
+        miniBtn.style.bottom = '';
+        miniBtn.style.transform = 'translate(-50%, -50%)';
+      }
+    }
+    // Scale toggle button (option) if present
+    const toggleBtn = el.querySelector('[id$="_toggle"]');
+    if (toggleBtn) {
+      const size = Inntuition_theme.light['toggle-btn-size'];
+      toggleBtn.style.width = size;
+      toggleBtn.style.height = size;
+      toggleBtn.style.borderRadius = Inntuition_theme.light['item-border-radius'];
+      // Keep it positioned relative; if using relative top offset keep as-is
+    }
+    // Reposition / resize icon SVG if present
+  // Prefer svg with _svg suffix (after loader change) else first svg
+  let iconSvg = document.getElementById(el.id + '_icon_svg');
+  if (!iconSvg) iconSvg = el.querySelector('svg');
+    if (iconSvg) {
+      iconSvg.style.width = Inntuition_theme.light['icon-width'];
+      iconSvg.style.height = Inntuition_theme.light['icon-height'];
+      // Attempt to set top/left via its container div
+      const parentDiv = iconSvg.parentElement;
+      if (parentDiv && parentDiv.id === iconSvg.id) { /* ignore - id reuse */ }
+      // Reposition container wrapper if present (id pattern: toolsbox.<id>_icon)
+      const iconContainer = document.getElementById(el.id + '_icon');
+      if (iconContainer) {
+        const hasLabel = el.getAttribute('data-has-label') === '1';
+        const topKey = hasLabel ? 'icon-top' : 'icon-centered-top';
+        // Always use base left offset (non-scaled) to lock icon horizontally when scaling
+        const baseLeft = _Inntuition_theme_base.light['icon-left'];
+        iconContainer.style.position = 'absolute';
+        const parentW = el.clientWidth || parseFloat(Inntuition_theme.light['item-width']) || 0;
+        const parentH = el.clientHeight || parseFloat(Inntuition_theme.light['item-height']) || 0;
+        const iconNumW = parseFloat(Inntuition_theme.light['icon-width']);
+        const iconNumH = parseFloat(Inntuition_theme.light['icon-height']);
+        const centerLeftPx = Math.round((parentW - iconNumW)/2);
+        const centerTopPx  = Math.round((parentH - iconNumH)/2);
+        const isHorizontal = (rootOrientation === 'horizontal');
+        if (isHorizontal) {
+          // Horizontal layout: full centering
+          iconContainer.style.left = centerLeftPx + 'px';
+          iconContainer.style.top  = centerTopPx + 'px';
+        } else {
+          // Vertical layout: keep icon anchored near left edge regardless of scale.
+          // Proportional left offset (percentage of current item width) for consistent visual alignment
+          const dynamicLeft = Math.max(1, Math.round(parentW * INTUITION_ICON_LEFT_RATIO));
+          iconContainer.style.left = dynamicLeft + 'px';
+          if (hasLabel) {
+            iconContainer.style.top = Inntuition_theme.light[topKey];
+          } else {
+            // No label: vertical center for aesthetic balance
+            iconContainer.style.top = centerTopPx + 'px';
+          }
+        }
+        iconContainer.style.transform = '';
+        iconContainer.style.width = Inntuition_theme.light['icon-width'];
+        iconContainer.style.height = Inntuition_theme.light['icon-height'];
+        // Keep svg attributes aligned to theme size
+        try {
+          iconSvg.setAttribute('width', parseFloat(Inntuition_theme.light['icon-width']) || iconW);
+          iconSvg.setAttribute('height', parseFloat(Inntuition_theme.light['icon-height']) || iconH);
+        } catch(e){}
+      }
+    }
+  });
+}
+
+// Expose scaling API
+window.setIntuitionMasterScale = setIntuitionMasterScale;
+window.getIntuitionMasterScale = () => IntuitionMasterScale;
 
 function currentToolbox() {
   // Common utility functions for the Intuition framework
@@ -336,13 +495,13 @@ function currentToolbox() {
 }
 
 function intuitionCommon(cfg) {
-  const { id, label = null, icon = null, button=null,colorise = false, theme = 'light' } = cfg;
+  const { id, label = null, icon = null, button=null, colorise = false, theme = 'light', type = null } = cfg;
 
   const id_created = `toolsbox.${id}`;
   const label_color = Inntuition_theme[theme]["tool-text"];
-
   const el = $('div', {
     parent: '#intuition',
+    class: cfg.type,
   css: {
     backgroundColor: Inntuition_theme[theme]["tool-bg"],
     width: Inntuition_theme[theme]["item-width"],
@@ -374,12 +533,19 @@ function intuitionCommon(cfg) {
     id: id_created,
     icon: icon || undefined,
   });
+  // Preserve original label presence (later textContent includes SVG)
+  try { el.setAttribute('data-has-label', label ? '1' : '0'); } catch(e) {}
+  // Tag element kind if provided (tool, palette, particle, option, etc.)
+  if (type) {
+    try { el.setAttribute('data-kind', type); } catch(e) {}
+  }
 
   // Icône: insère le SVG seulement si 'icon' est fourni
  if (icon) {
-    const hasLabel = !!label && String(label).length > 0;
-    const icon_top  = Inntuition_theme[theme][hasLabel ? "icon-top" : "icon-centered-top"];
-    const icon_left = Inntuition_theme[theme][hasLabel ? "icon-left" : "icon-centered-left"];
+  const hasLabel = el.getAttribute('data-has-label') === '1';
+  const icon_top  = Inntuition_theme[theme][hasLabel ? "icon-top" : "icon-centered-top"];
+  // Use base (unscaled) left to prevent drift
+  const icon_left = _Inntuition_theme_base[theme]["icon-left"]; // ignore centered-left to avoid drift
     const icon_width = Inntuition_theme[theme]["icon-width"];
     const icon_height = Inntuition_theme[theme]["icon-height"];
 
@@ -402,6 +568,37 @@ function intuitionCommon(cfg) {
       `${id_created}_icon`,
       id_created
     );
+    // After SVG insertion, normalize position.
+    setTimeout(() => {
+      try {
+        const ori = el.orientation || el.getAttribute('data-orientation');
+        const iconContainer = document.getElementById(id_created + '_icon');
+        if (iconContainer) {
+          const parentW = el.clientWidth || parseFloat(Inntuition_theme[theme]['item-width']) || 0;
+          const parentH = el.clientHeight || parseFloat(Inntuition_theme[theme]['item-height']) || 0;
+          const iconWnum = parseFloat(Inntuition_theme[theme]['icon-width']) || 0;
+          const iconHnum = parseFloat(Inntuition_theme[theme]['icon-height']) || 0;
+          const centerLeft = Math.round((parentW - iconWnum)/2);
+          const centerTop  = Math.round((parentH - iconHnum)/2);
+          if (ori === 'horizontal') {
+            iconContainer.style.left = centerLeft + 'px';
+            iconContainer.style.top  = centerTop + 'px';
+          } else {
+            const dynamicLeft = Math.max(1, Math.round(parentW * INTUITION_ICON_LEFT_RATIO));
+            iconContainer.style.left = dynamicLeft + 'px';
+            if (hasLabel) {
+              iconContainer.style.top = Inntuition_theme[theme][hasLabel ? 'icon-top' : 'icon-centered-top'];
+            } else {
+              iconContainer.style.top = centerTop + 'px';
+            }
+          }
+          iconContainer.style.position = 'absolute';
+          iconContainer.style.width = Inntuition_theme[theme]['icon-width'];
+          iconContainer.style.height = Inntuition_theme[theme]['icon-height'];
+          iconContainer.style.transform = '';
+        }
+      } catch(e) { /* ignore */ }
+    }, 0);
   }
 
   // Sélecteur skinnable en bas si cfg.selector est fourni
@@ -484,6 +681,7 @@ function intuitionCommon(cfg) {
     // - if either value or select present: bottom: 18px
     // - else: bottom: 0px
     const bottomOffset = (hasSelector && hasValue) ? 36 : ((hasSelector || hasValue) ? 18 : 0);
+    const isParticle = cfg.type === 'particle';
 
     const parentSelectorForEl = '#' + (window.CSS && CSS.escape
       ? CSS.escape(id_created)
@@ -496,8 +694,9 @@ function intuitionCommon(cfg) {
       css: {
         position: 'absolute',
         left: '50%',
-        transform: 'translateX(-50%)',
-        bottom: bottomOffset + 'px',
+        top: isParticle ? '50%' : undefined,
+        transform: isParticle ? 'translate(-50%, -50%)' : 'translateX(-50%)',
+        bottom: isParticle ? undefined : bottomOffset + 'px',
         width: '25px',
         height: '6px',
         padding: '0',
@@ -519,11 +718,12 @@ function intuitionCommon(cfg) {
 
      Button({
       parent: parentSelector,
+      id: id_created + '_toggle',
       css: {
         left: '0px',
         top: '-3px',
-        width: '19px',
-        height: '19px',
+        width: Inntuition_theme[theme]['toggle-btn-size'],
+        height: Inntuition_theme[theme]['toggle-btn-size'],
         position: 'relative',
         boxSizing: 'border-box',
         padding: '0',
@@ -531,7 +731,7 @@ function intuitionCommon(cfg) {
         minHeight: '0px',
         overflow: 'hidden',
         fontSize: '0px',
-        borderRadius: '3px',
+        borderRadius: Inntuition_theme[theme]['item-border-radius'],
         backgroundColor: Inntuition_theme[theme]["tool-bg"],
         boxShadow: Inntuition_theme[theme]["item-shadow"]
       },
@@ -546,6 +746,14 @@ function intuitionCommon(cfg) {
         boxShadow: '0 2px 10px rgba(252, 70, 107, 0.4)'
     },
     });
+
+    // Stocke la taille de base (non scalée) pour recalcul dynamique après interactions
+    setTimeout(() => {
+      const t = document.getElementById(id_created + '_toggle');
+      if (t) {
+        try { t.dataset.baseToggleSize = (_Inntuition_theme_base[theme]['toggle-btn-size']||'19px').replace('px',''); } catch(e) {}
+      }
+    },0);
 
    
   }
@@ -582,8 +790,9 @@ function tool(cfg) {
 }
 
 function particle(cfg) {
-    cfg.theme = currentToolbox().theme;
-  const el = intuitionCommon(cfg)
+  cfg.theme = currentToolbox().theme;
+  if (!cfg.type) cfg.type = 'particle';
+  const el = intuitionCommon(cfg);
 }
 
 function option(cfg) {
@@ -600,6 +809,7 @@ function zonespecial(cfg) {
 toolbox(
   {
   id: "intuition",
+   type: "toolsbox",
   label: null,
   icon: 'menu',
   colorise: true, // true | false | 'color' | '#rrggbb'
@@ -667,4 +877,144 @@ particle({
 
 });
 
+// === Debug instrumentation: log icon positions before and after setIntuitionMasterScale(1) ===
+function debugLogIconPositions(stage) {
+  try {
+    const scale = (window.getIntuitionMasterScale && window.getIntuitionMasterScale()) || 'n/a';
+    const items = document.querySelectorAll('div[id^="toolsbox."]');
+    const out = [];
+    items.forEach(el => {
+      const iconContainer = document.getElementById(el.id + '_icon');
+      if (!iconContainer) return;
+      const rect = iconContainer.getBoundingClientRect();
+      // Also inspect direct SVG child (first svg within container/root)
+      const svg = iconContainer.tagName.toLowerCase() === 'svg' ? iconContainer : iconContainer.querySelector('svg');
+      const svgRect = svg ? svg.getBoundingClientRect() : null;
+      out.push({
+        stage,
+        id: el.id,
+        hasLabel: el.getAttribute('data-has-label'),
+        orientation: el.orientation || el.getAttribute('data-orientation') || 'n/a',
+        styleLeft: iconContainer.style.left,
+        styleTop: iconContainer.style.top,
+        styleWidth: iconContainer.style.width,
+        styleHeight: iconContainer.style.height,
+        rectLeft: Math.round(rect.left),
+        rectTop: Math.round(rect.top),
+        rectW: Math.round(rect.width),
+        rectH: Math.round(rect.height),
+        containerTag: iconContainer.tagName,
+        svgTag: svg ? svg.tagName : null,
+        svgAttrW: svg ? svg.getAttribute('width') : null,
+        svgAttrH: svg ? svg.getAttribute('height') : null,
+        svgRectW: svgRect ? Math.round(svgRect.width) : null,
+        svgRectH: svgRect ? Math.round(svgRect.height) : null,
+        themeIconLeft: Inntuition_theme.light['icon-left'],
+        themeIconTop: Inntuition_theme.light['icon-top'],
+        themeIconCenteredLeft: Inntuition_theme.light['icon-centered-left'],
+        themeIconCenteredTop: Inntuition_theme.light['icon-centered-top'],
+        scale
+      });
+    });
+    // Raw detailed dump
+    console.log('[INTUITION ICON DEBUG]', stage, out);
+    // Compact table (subset)
+    const compact = out.map(o => ({
+      stage: o.stage,
+      id: o.id.replace('toolsbox.', ''),
+      sL: o.styleLeft,
+      sT: o.styleTop,
+      rL: o.rectLeft,
+      rT: o.rectTop,
+  cW: o.rectW,
+  cH: o.rectH,
+  sW: o.svgRectW,
+  sH: o.svgRectH,
+      lbl: o.hasLabel,
+      ori: o.orientation,
+      scale: o.scale
+    }));
+    try { console.table(compact); } catch(_) {}
 
+    // Keep a baseline after INIT+SVG only
+    if (stage === 'INIT+SVG' && !window.__intuitionDebugBaseline) {
+      window.__intuitionDebugBaseline = JSON.parse(JSON.stringify(compact));
+      console.log('[INTUITION ICON DEBUG] Baseline stored (INIT+SVG).');
+    } else if (window.__intuitionDebugBaseline) {
+      // Compare with baseline
+      const base = window.__intuitionDebugBaseline;
+      const diffs = [];
+      compact.forEach(entry => {
+        const b = base.find(x => x.id === entry.id);
+        if (!b) return;
+        const scaleChanged = b.scale !== entry.scale;
+        // Allow styleLeft change when scale changed (inverse scaling logic). Evaluate physical drift via rectLeft with tolerance.
+        const leftPhysDrift = Math.abs(entry.rL - b.rL) > 1; // >1px tolerance
+        const topPhysDrift  = Math.abs(entry.rT - b.rT) > 1;
+        const leftStyleDrift = !scaleChanged && (b.sL !== entry.sL);
+        const topStyleDrift  = !scaleChanged && (b.sT !== entry.sT);
+        if (leftPhysDrift || topPhysDrift || leftStyleDrift || topStyleDrift) {
+          diffs.push({ id: entry.id, baseStyleLeft: b.sL, newStyleLeft: entry.sL, baseStyleTop: b.sT, newStyleTop: entry.sT, baseRectLeft: b.rL, newRectLeft: entry.rL, baseRectTop: b.rT, newRectTop: entry.rT, scale: entry.scale, stage: entry.stage });
+        }
+      });
+      if (diffs.length) {
+        console.warn('[INTUITION ICON DEBUG] DRIFT detected vs baseline:', diffs);
+        try { console.table(diffs); } catch(_) {}
+      } else {
+        console.log('[INTUITION ICON DEBUG] No drift vs baseline at stage', stage);
+      }
+    }
+  } catch(e) {
+    console.warn('debugLogIconPositions error', e);
+  }
+}
+
+// Initial log after current tick (ensure DOM nodes created & initial SVG insert attempts scheduled)
+setTimeout(() => {
+  debugLogIconPositions('INIT');
+  // Allow async SVG fetch/render to complete then capture stable baseline
+  setTimeout(() => {
+    debugLogIconPositions('INIT+SVG');
+    // Log before scale(1) (should be identical to after if no drift)
+    debugLogIconPositions('BEFORE_SET_SCALE_1');
+    console.log('[INTUITION ICON DEBUG] calling setIntuitionMasterScale(1)');
+    if (window.setIntuitionMasterScale) {
+      window.setIntuitionMasterScale(1);
+    }
+    // Immediate post-call log
+    debugLogIconPositions('AFTER_SET_SCALE_1');
+    // Slight delay to catch any deferred repositioning
+    setTimeout(() => debugLogIconPositions('AFTER_SET_SCALE_1+DELAY'), 100);
+    // Trigger scale=2 test automatically for drift check
+    setTimeout(() => {
+      console.log('[INTUITION ICON DEBUG] calling setIntuitionMasterScale(2)');
+      if (window.setIntuitionMasterScale) window.setIntuitionMasterScale(2);
+      debugLogIconPositions('AFTER_SET_SCALE_2');
+      setTimeout(() => debugLogIconPositions('AFTER_SET_SCALE_2+DELAY'), 120);
+    }, 250);
+  }, 150);
+}, 0);
+
+// Force refresh after base offset tweak (keep current scale value)
+setTimeout(() => {
+  if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
+    const s = window.getIntuitionMasterScale();
+    window.setIntuitionMasterScale(s === 0 ? 1 : s); // reapply
+  }
+}, 20);
+
+// Also reapply after a short delay to ensure all async SVG loads got processed
+setTimeout(() => {
+  if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
+    window.setIntuitionMasterScale(window.getIntuitionMasterScale());
+  }
+}, 400);
+// Extra refresh after introducing toggle scaling
+setTimeout(() => {
+  if (window.getIntuitionMasterScale && window.setIntuitionMasterScale) {
+    window.setIntuitionMasterScale(window.getIntuitionMasterScale());
+  }
+}, 800);
+
+
+// setIntuitionMasterScale(3); // test scale=3 for drift

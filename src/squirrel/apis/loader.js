@@ -8,19 +8,17 @@ function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', heig
     // puts()
   // if (!container) {
   let container = document.createElement('div');
-    container.id = id || 'edit-svg-raw';
-    container.style.display = 'inline-block';
-    container.style.marginLeft = '0px';
-    container.style.marginTop = '0px';
-   // Use absolute so top/left are interpreted exactly as requested coordinates
-   container.style.position = 'absolute';
-    container.style.top = top;
-    container.style.left = left;
-    // container.style.width = width + 'px';
-    // container.style.height = height + 'px';
-    // container.style.border = '1px solid blue';
-    if (parent)
-    parent.appendChild(container);
+  container.id = id || 'edit-svg-raw';
+  // Absolute positioning to respect provided coordinates
+  container.style.position = 'absolute';
+  container.style.top = top;
+  container.style.left = left;
+  // Remove inline-block baseline gap issues
+  container.style.display = 'block';
+  container.style.margin = '0';
+  container.style.padding = '0';
+  container.style.lineHeight = '0';
+  if (parent) parent.appendChild(container);
   // }
   container.innerHTML = svgcontent;
 
@@ -28,7 +26,8 @@ function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', heig
   const svgEl = container.querySelector('svg');
   // ensure the inner <svg> carries the provided id for direct access
   if (svgEl && id) {
-    try { svgEl.id = id; } catch (_) {}
+    // Avoid duplicating container id on the SVG; use suffix
+    try { svgEl.id = id + '_svg'; } catch (_) {}
   }
   if (svgEl && typeof svgEl.querySelector === 'function') {
     // Compute maximum stroke width among common shape elements
@@ -63,13 +62,16 @@ function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', heig
     // Ensure overflow visibility (mostly for nested <svg>)
     svgEl.style.overflow = 'visible';
 
-    // Apply requested size
-    const w = typeof width === 'number' ? width : parseFloat(width) || 200;
-    const h = typeof height === 'number' ? height : parseFloat(height) || 200;
-    svgEl.setAttribute('width', String(w));
-    svgEl.setAttribute('height', String(h));
-    svgEl.style.width = `${w}px`;
-    svgEl.style.height = `${h}px`;
+  // Apply requested size (numeric extraction once)
+  const w = typeof width === 'number' ? width : parseFloat(width) || 200;
+  const h = typeof height === 'number' ? height : parseFloat(height) || 200;
+  svgEl.setAttribute('width', String(w));
+  svgEl.setAttribute('height', String(h));
+  svgEl.style.width = `${w}px`;
+  svgEl.style.height = `${h}px`;
+  // Explicitly size container to eliminate extra vertical space (previous drift 22px vs 16px)
+  container.style.width = `${w}px`;
+  container.style.height = `${h}px`;
 
     // Apply colors
     try {
