@@ -1,6 +1,3 @@
-
-
-
 $('span', {
   // pas besoin de 'tag'
   id: 'verif',
@@ -17,50 +14,84 @@ $('span', {
 
 const __dataCache = {};
 
-async function dataFetcher(path) {
-  const key = path;
+async function dataFetcher(path, opts = {}) {
+  const mode = (opts.mode || 'auto').toLowerCase(); // auto|text|url|arraybuffer|blob|preview
+  const key = path + '::' + mode + '::' + (opts.preview||'');
   if (__dataCache[key]) return __dataCache[key];
   if (typeof fetch !== 'function') throw new Error('fetch indisponible');
 
-  // Nettoyage chemin (pour URL serveur)
-  let cleanPath = (path || '').trim().replace(/^\/+/, '').replace(/^[.]+/, '');
+  let cleanPath = (path || '').trim().replace(/^\/+/,'').replace(/^[.]+/,'');
   if (!cleanPath) throw new Error('Chemin vide');
   const filename = cleanPath.split('/').pop();
+  const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
   const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
 
-  // Textish => tentative serveur iOS/AUv3
-  const isTextish = /\.(txt|json|md|svg)$/i.test(filename) || /^texts\//.test(cleanPath);
-  if (port && isTextish) {
+  const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
+  const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
+  const binPreferred = /^(png|jpe?g|gif|webp|avif|bmp|ico|mp4|mov|webm|m4v|woff2?|ttf|otf|pdf)$/;
+
+  const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
+  const looksAudio = audioExt.test(ext);
+  const looksBinary = binPreferred.test(ext) || looksAudio;
+
+  const serverCandidates = [];
+  if (port) {
+    // unified endpoint first
+    serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
+    if (looksText) {
+      serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
+    }
+    if (looksAudio) {
+      serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
+      serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
+    }
+  }
+
+  let assetPath = cleanPath;
+  if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
+  const assetCandidates = [assetPath];
+  const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
+  if (altAsset !== assetPath) assetCandidates.push(altAsset);
+
+  if (mode === 'url') {
+    const out = serverCandidates[0] || assetCandidates[0];
+    __dataCache[key] = out; return out;
+  }
+  const done = v => { __dataCache[key] = v; return v; };
+
+  for (const u of serverCandidates) {
     try {
-      const r = await fetch(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
-      if (r.ok) {
+      const r = await fetch(u);
+      if (!r.ok) continue;
+      if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+      if (mode === 'blob') return done(await r.blob());
+      if (looksText || mode === 'text' || mode === 'preview') {
         const txt = await r.text();
-        if (txt && txt.length) { __dataCache[key] = txt; return txt; }
+        if (mode === 'preview' || opts.preview) {
+          const max = opts.preview || 120; return done(txt.slice(0,max));
+        }
+        return done(txt);
       }
-    } catch(_) { /* ignore */ }
+      if (looksAudio && mode === 'auto') return done(u); // streaming URL
+      return done(u); // generic binary
+    } catch(_) {}
   }
 
-  // Normalisation: si l'appelant n'a pas mis assets/ ou src/assets/, on préfixe automatiquement assets/
-  if (!/^(assets|src\/assets)\//.test(cleanPath)) {
-    cleanPath = 'assets/' + cleanPath;
-  }
-
-  // Liste minimale de fallback (éviter explosion): chemin direct + variante src/assets/
-  const variants = [cleanPath];
-  const alt = cleanPath.replace(/^assets\//, 'src/assets/');
-  if (alt !== cleanPath) variants.push(alt);
-
-  for (const url of variants) {
+  for (const u of assetCandidates) {
     try {
-      const r2 = await fetch(url);
-      if (r2.ok) {
-        const txt2 = await r2.text();
-        if (txt2 && txt2.length) { __dataCache[key] = txt2; return txt2; }
+      if (looksText || mode === 'text' || mode === 'preview') {
+        const r = await fetch(u); if (!r.ok) continue;
+        const txt = await r.text();
+        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+        return done(txt);
       }
-    } catch(_) { /* ignore */ }
+      if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+      if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+      return done(u);
+    } catch(_) {}
   }
 
-  throw new Error('Introuvable: ' + variants.join(' | '));
+  throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
 }
 
 function fct_to_trig(state) {
@@ -74,28 +105,29 @@ function fct_to_trig(state) {
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
 
-      setTimeout(() => {
-  dataFetcher('audios/a.txt')
-     .then(txt => { span.textContent = txt; })
-    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-
-  }, 1000   );
 
       setTimeout(() => {
   dataFetcher('images/logos/arp.svg')
     .then(txt => { span.textContent = txt; })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
-  }, 2000   );
+  }, 1000   );
 
       setTimeout(() => {
   dataFetcher('images/logos/atome.svg')
     .then(txt => { span.textContent = txt; })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
+  }, 2000   );
+
+
+      setTimeout(() => {
+  // Aperçu (preview) des 120 premiers caractères ou header hex si binaire
+  dataFetcher('audios/a.m4a', { mode: 'preview', preview: 120 })
+     .then(txt => { span.textContent = '[AUDIO PREVIEW] ' + txt; })
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
   }, 3000   );
-
-
   
 }
 
