@@ -337,6 +337,10 @@ const Inntuition_theme = {
 // Keep an immutable base copy for scaling computations
 const _Inntuition_theme_base = JSON.parse(JSON.stringify(Inntuition_theme));
 let IntuitionMasterScale = 1; // global master scale
+// Dropdown spacing configuration (user-adjustable)
+const _intuitionDropdownSpacingCfg = {
+  density: 'overlap' // 'overlap' | 'ultra' | 'compact' | 'medium' | 'roomy'
+};
 
 // Proportional horizontal offset ratio so the icon appears consistently near the left edge
 // Chosen so that at scale=2 (item width ~78px) left ≈2px (2/78 ≈ 0.026) which user found correct.
@@ -360,14 +364,14 @@ function _scalePx(value, scale) {
   return (Math.round(num * scale * 100) / 100) + unit;
 }
 
-function setIntuitionMasterScale(scale) {
+function setIntuitionMasterScale(scale, force = false) {
   const s = Math.max(0.3, Math.min(4, Number(scale) || 1));
-  if (s === IntuitionMasterScale) {
-    // No-op: avoid unnecessary DOM recalculations when scale hasn't changed
-    return;
+  const unchanged = (s === IntuitionMasterScale);
+  if (unchanged && !force) {
+    return; // silent no-op unless force
   }
   IntuitionMasterScale = s;
-  // Recompute themed values from base
+  _ensureDropdownSpacingStyle();
   Object.keys(_Inntuition_theme_base).forEach(themeName => {
     const base = _Inntuition_theme_base[themeName];
     const live = Inntuition_theme[themeName];
@@ -375,8 +379,188 @@ function setIntuitionMasterScale(scale) {
       if (base[k]) live[k] = _scalePx(base[k], s);
     });
   });
-  // Update existing rendered toolbox items
   try { _updateIntuitionDomScale(); } catch(e) { /* ignore */ }
+  // Deferred passes (in case dropdown DOM injected slightly later)
+  [30, 90, 180].forEach(delay => setTimeout(() => { try { _intuitionRespaceAllDropdowns(); } catch(e){} }, delay));
+}
+
+// Public helper to reapply spacing & scaling without changing scale value
+function refreshIntuitionScale() {
+  setIntuitionMasterScale(IntuitionMasterScale, true);
+}
+
+function setIntuitionDropdownDensity(density) {
+  if (!['overlap','ultra','compact','medium','roomy'].includes(density)) return;
+  _intuitionDropdownSpacingCfg.density = density;
+  // Rebuild styles + reapply spacing
+  _ensureDropdownSpacingStyle();
+  _intuitionRespaceAllDropdowns();
+}
+
+// Inject / update a global stylesheet for dropdown spacing (more robust than inline only)
+function _ensureDropdownSpacingStyle() {
+  try {
+    const s = IntuitionMasterScale || 1;
+    let lineMult, bonusPerScale, padBase, padScale, gapBase, gapScale;
+    switch (_intuitionDropdownSpacingCfg.density) {
+      case 'overlap':
+        // sur-compression: line-height < font-size
+        lineMult = 0.9; bonusPerScale = 0; padBase = 0; padScale = 0; gapBase = 0; gapScale = 0; break;
+      case 'ultra':
+  // ultra plat: aucun espace supplémentaire
+  lineMult = 1.0; bonusPerScale = 0; padBase = 0; padScale = 0; gapBase = 0; gapScale = 0; break;
+      case 'compact':
+        lineMult = 1.02; bonusPerScale = 1; padBase = 1; padScale = 1.0; gapBase = 1; gapScale = 0.6; break;
+      case 'roomy':
+        lineMult = 1.25; bonusPerScale = 6; padBase = 4; padScale = 3; gapBase = 4; gapScale = 2.4; break;
+      case 'medium':
+      default:
+        lineMult = 1.12; bonusPerScale = 3; padBase = 3; padScale = 2.2; gapBase = 3; gapScale = 1.8; break;
+    }
+    const line = Math.round(18 * s * lineMult + bonusPerScale * Math.max(0, s - 1));
+    const pad = Math.max(padBase, Math.round(padBase + (padScale * (s - 1))));
+    const gap = Math.max(gapBase, Math.round(gapBase + (gapScale * (s - 1))));
+    let tag = document.getElementById('intuitionDropdownSpacingStyle');
+    const css = `/* dynamic dropdown spacing */\n` +
+      `[data-intuition-dd]{overflow-y:auto;}` +
+      `[data-intuition-dd] > [data-intuition-dd-item]{display:block !important; line-height:${line}px !important; min-height:${line}px !important; padding:${pad}px 8px !important; margin:0 !important; font-size:inherit; box-sizing:border-box;}` +
+      `[data-intuition-dd] > [data-intuition-dd-item]:not(:last-child){margin-bottom:${gap}px !important; border-bottom:1px solid rgba(255,255,255,0.07) !important;}` +
+      `[data-intuition-dd] > [data-intuition-dd-item]:last-child{border-bottom:none !important;}`;
+    if (!tag) {
+      tag = document.createElement('style');
+      tag.id = 'intuitionDropdownSpacingStyle';
+      document.head.appendChild(tag);
+    }
+    if (tag.textContent !== css) tag.textContent = css;
+  } catch(e) {}
+}
+
+// Extracted global helper so we can call from observers / deferred passes
+function _applyDropdownListScaling(selectorWrap) {
+  if (!selectorWrap) return;
+  const scale = IntuitionMasterScale || 1;
+  // Accept multiple possible list containers (plugin variants)
+  let list = selectorWrap.querySelector('.dropdown-list, ul, .list, .options');
+  if (!list) {
+    // Fallback: look for a child having many direct children (>2) - heuristic
+    const candidates = Array.from(selectorWrap.children).filter(c => c.children && c.children.length > 2);
+    list = candidates[0];
+  }
+  // Additional heuristic: look for a sibling / descendant whose children have role="option"
+  if (!list) {
+    const roleCandidates = selectorWrap.querySelectorAll('div');
+    roleCandidates.forEach(rc => {
+      if (list) return;
+      const kids = Array.from(rc.children);
+      if (kids.length > 1 && kids.every(k => k.getAttribute && k.getAttribute('role') === 'option')) {
+        list = rc;
+      }
+    });
+  }
+  if (!list) return;
+  const baseLine = 18;
+  let lineMult, bonusPerScale, gapBase, gapScale;
+  switch (_intuitionDropdownSpacingCfg.density) {
+    case 'overlap': lineMult = 0.9; bonusPerScale = 0; gapBase = 0; gapScale = 0; break;
+    case 'ultra': lineMult = 1.0; bonusPerScale = 0; gapBase = 0; gapScale = 0; break;
+    case 'compact': lineMult = 1.02; bonusPerScale = 1; gapBase = 1; gapScale = 0.6; break;
+    case 'roomy': lineMult = 1.25; bonusPerScale = 6; gapBase = 4; gapScale = 2.4; break;
+    case 'medium':
+    default: lineMult = 1.12; bonusPerScale = 3; gapBase = 3; gapScale = 1.8; break;
+  }
+  const itemLine = Math.round(baseLine * scale * lineMult + bonusPerScale * Math.max(0, scale - 1));
+  const gap = Math.max(gapBase, Math.round(gapBase + gapScale * (scale - 1)));
+  list.style.paddingTop = gap + 'px';
+  list.style.paddingBottom = gap + 'px';
+  list.style.overflowY = 'auto';
+  list.style.maxHeight = Math.round(140 * scale * (1 + 0.15 * Math.max(0, scale - 1))) + 'px';
+  list.setAttribute('data-intuition-dd','1');
+  // Broaden item selector: li, div, button except structural container
+  const items = list.querySelectorAll('.dropdown-item, li, .item, div[role="option"], button');
+  let count = 0;
+  items.forEach(it => {
+    // Skip if element is the list itself or acts as container with many children
+    if (it === list) return;
+    if (it.children && it.children.length > 3 && count === 0) return; // likely container, skip
+    count++;
+    it.setAttribute('data-intuition-dd-item','1');
+    const declaredFont = parseFloat(it.style.fontSize) || (10 * scale * 3);
+    // For medium density aim 1.15, compact 1.12, roomy 1.25 relative to declared font
+    let rel;
+    switch (_intuitionDropdownSpacingCfg.density) {
+      case 'overlap': rel = 0.9; break; // en-dessous de la taille
+      case 'ultra': rel = 1.0; break; // collé
+      case 'compact': rel = 1.06; break;
+      case 'roomy': rel = 1.25; break;
+      case 'medium':
+      default: rel = 1.15; break;
+    }
+    const targetLine = Math.max(itemLine, Math.round(declaredFont * rel));
+    const innerPad = Math.max(4, Math.round(targetLine * 0.22));
+    // Force with important (override existing inline 18px etc.)
+    it.style.setProperty('line-height', targetLine + 'px', 'important');
+    it.style.setProperty('min-height', targetLine + 'px', 'important');
+    it.style.setProperty('padding-top', innerPad + 'px', 'important');
+    it.style.setProperty('padding-bottom', innerPad + 'px', 'important');
+    it.style.setProperty('display','block','important');
+    it.style.margin = '0';
+    if (!it.style.borderBottom) it.style.borderBottom = '1px solid rgba(255,255,255,0.07)';
+  });
+  // Clean last
+  const realItems = Array.from(items).filter(n => n !== list);
+  const last = realItems[realItems.length - 1];
+  if (last) last.style.borderBottom = 'none';
+  for (let i = 0; i < realItems.length - 1; i++) {
+    const it = realItems[i];
+    // Margin between items adapted to density
+    let mbBase;
+    switch (_intuitionDropdownSpacingCfg.density) {
+      case 'overlap': mbBase = 0; break;
+      case 'ultra': mbBase = 0; break;
+      case 'compact': mbBase = 1; break;
+      case 'roomy': mbBase = 6; break;
+      case 'medium':
+      default: mbBase = 4; break;
+    }
+    const mb = Math.max(mbBase, Math.round(mbBase + (scale - 1) * (mbBase * 0.6)));
+    it.style.marginBottom = mb + 'px';
+  }
+  // Force global style injection each time (idempotent)
+  _ensureDropdownSpacingStyle();
+  // Fallback: if after all this two first items still have same top/bottom (no gap), inject a spacer div
+  try {
+    const firstTwo = realItems.slice(0,2);
+    if (firstTwo.length === 2) {
+      const r1 = firstTwo[0].getBoundingClientRect();
+      const r2 = firstTwo[1].getBoundingClientRect();
+      if (Math.abs(r2.top - r1.bottom) < 2) {
+        const spacer = document.createElement('div');
+        spacer.style.height = Math.max(6, Math.round(scale * 4)) + 'px';
+        spacer.style.pointerEvents = 'none';
+        spacer.style.background = 'transparent';
+        list.insertBefore(spacer, firstTwo[1]);
+      }
+    }
+  } catch(e) {}
+}
+
+function _intuitionRespaceAllDropdowns() {
+  try {
+    const root = document.getElementById('intuition');
+    if (!root) return;
+    root.querySelectorAll('div[id$="_selector"]').forEach(w => _applyDropdownListScaling(w));
+    // Also scan for detached / portal style dropdown lists (if any library appends to body)
+    document.querySelectorAll('.dropdown-list, div').forEach(list => {
+      if (list.getAttribute && list.getAttribute('data-intuition-dd')) return; // already processed
+      const kids = list.children ? Array.from(list.children) : [];
+      if (kids.length > 1 && kids.every(k => k.getAttribute && k.getAttribute('role') === 'option')) {
+        // Try find associated selector wrapper upwards
+        let wrap = list.parentElement;
+        while (wrap && wrap !== document.body && !wrap.id.endsWith('_selector')) wrap = wrap.parentElement;
+        _applyDropdownListScaling(wrap || list.parentElement);
+      }
+    });
+  } catch(e) {}
 }
 
 function _updateIntuitionDomScale() {
@@ -406,29 +590,48 @@ function _updateIntuitionDomScale() {
     }
     const selectorWrap = el.querySelector('[id$="_selector"]');
     if (selectorWrap) {
-      // Base (unscaled) selector height is 12px; scale proportionally
-      const selectorScaledH = Math.round(12 * IntuitionMasterScale);
+      // Base (unscaled) selector height is 14px (was 12px) for deeper label placement; scale proportionally
+      const selectorScaledH = Math.round(14 * IntuitionMasterScale);
       selectorWrap.style.height = selectorScaledH + 'px';
       selectorWrap.style.fontSize = theme['tool-font-size'];
-      // Use its own height for vertical centering instead of generic scaledLine (prevents text shift like 'poiluu')
-      selectorWrap.style.lineHeight = selectorScaledH + 'px';
+      // Larger downward nudge (2px * scale, min 2)
+      const selectorNudgePx = Math.max(2, Math.round(2 * IntuitionMasterScale));
+      selectorWrap.style.paddingTop = selectorNudgePx + 'px';
+      selectorWrap.style.lineHeight = Math.max(1, selectorScaledH - selectorNudgePx) + 'px';
+      // Allow dropdown list to extend beyond wrapper when opened
+      selectorWrap.style.overflow = 'visible';
       // Immediate displayed button/content (first child) mirrors same metrics
       const firstChild = selectorWrap.firstElementChild;
       if (firstChild) {
         try {
           firstChild.style.fontSize = theme['tool-font-size'];
-          firstChild.style.lineHeight = selectorScaledH + 'px';
           firstChild.style.height = selectorScaledH + 'px';
+          firstChild.style.lineHeight = Math.max(1, selectorScaledH - selectorNudgePx) + 'px';
+          firstChild.style.paddingTop = selectorNudgePx + 'px';
         } catch(e) {}
       }
       // Deep adjust all descendants to propagate font scaling to internal label spans
       try {
         selectorWrap.querySelectorAll('*').forEach(n => {
+          // Skip dropdown list container & its items to avoid clipping / stacking issues
+          const cls = (n.className || '').toString();
+          if (/dropdown-list|dropdown-item/i.test(cls) || n.tagName === 'UL' || n.tagName === 'LI') return;
           n.style.fontSize = theme['tool-font-size'];
-          n.style.lineHeight = selectorScaledH + 'px';
-          if (!n.style.height) n.style.height = selectorScaledH + 'px';
+          // Only adjust lineHeight for elements inside the closed button region (depth 1)
+          if (n !== selectorWrap && n.parentElement === selectorWrap) {
+            n.style.lineHeight = Math.max(1, selectorScaledH - selectorNudgePx) + 'px';
+            if (!n.style.height) n.style.height = selectorScaledH + 'px';
+            if (!n.style.paddingTop) n.style.paddingTop = selectorNudgePx + 'px';
+          }
         });
       } catch(e) {}
+      // Apply scalable spacing to dropdown list items (if already rendered)
+      _applyDropdownListScaling(selectorWrap);
+      // Hook once to reapply after opening (list usually rendered on first open)
+      if (!selectorWrap.dataset.dropdownScaledHook) {
+        selectorWrap.addEventListener('click', () => { setTimeout(() => _applyDropdownListScaling(selectorWrap), 0); });
+        selectorWrap.dataset.dropdownScaledHook = '1';
+      }
     }
     const miniBtn = el.querySelector('[id$="_input"]');
     if (miniBtn) {
@@ -513,49 +716,95 @@ function _updateIntuitionDomScale() {
         if (selectorEl || valueEl) {
           try {
             const scale = IntuitionMasterScale || 1;
-            const spacing = Math.round(4 * scale);
+            // Further reduced spacing (was 2*scale) for slightly higher row
+            const spacing = Math.max(0, Math.round(1 * scale));
             const rootH = el.clientHeight;
             const mbRect = mb.getBoundingClientRect();
             const rootRect = el.getBoundingClientRect();
             const miniTopInside = (mbRect.top - rootRect.top);
             const miniHeight = mbRect.height;
             const miniBottomInside = miniTopInside + miniHeight;
-            let cursorTop = miniBottomInside + spacing; // start below mini button
-            // Order: value (if present) then selector (if present) so selector can sit just under value
-            if (valueEl) {
+            const rowTop = miniBottomInside + spacing; // unified row position below mini button
+            if (valueEl && selectorEl) {
+              // Side-by-side layout
+              const valueH = parseInt(valueEl.style.height) || Math.round(18 * scale);
+              const selectorH = (parseInt(selectorEl.style.height) || Math.round(14 * scale));
+              const rowH = Math.max(valueH, selectorH);
+              // Value
+              valueEl.style.position = 'absolute';
+              valueEl.style.bottom = '';
+              valueEl.style.top = rowTop + 'px';
+              valueEl.style.height = rowH + 'px';
+              valueEl.style.lineHeight = rowH + 'px';
+              valueEl.style.left = '0px';
+              valueEl.style.width = '50%';
+              // Selector
+              selectorEl.style.position = 'absolute';
+              selectorEl.style.bottom = '';
+              selectorEl.style.top = rowTop + 'px';
+              selectorEl.style.height = rowH + 'px';
+              const innerNudge = Math.max(2, Math.round(2 * scale));
+              selectorEl.style.paddingTop = innerNudge + 'px';
+              selectorEl.style.lineHeight = Math.max(1, rowH - innerNudge) + 'px';
+              selectorEl.style.left = '50%';
+              selectorEl.style.width = '50%';
+              try {
+                const scFirst = selectorEl.firstElementChild;
+                if (scFirst) {
+                  scFirst.style.paddingTop = innerNudge + 'px';
+                  scFirst.style.lineHeight = Math.max(1, rowH - innerNudge) + 'px';
+                  scFirst.style.height = rowH + 'px';
+                }
+              } catch(e) {}
+            } else if (valueEl) {
               const valueH = parseInt(valueEl.style.height) || Math.round(18 * scale);
               valueEl.style.position = 'absolute';
               valueEl.style.bottom = '';
-              valueEl.style.top = cursorTop + 'px';
-              cursorTop += valueH + spacing;
-            }
-            if (selectorEl) {
-              const selectorH = (parseInt(selectorEl.style.height) || Math.round(12 * scale));
+              valueEl.style.top = rowTop + 'px';
+            } else if (selectorEl) {
+              const selectorH = (parseInt(selectorEl.style.height) || Math.round(14 * scale));
               selectorEl.style.position = 'absolute';
               selectorEl.style.bottom = '';
-              selectorEl.style.top = cursorTop + 'px';
-              cursorTop += selectorH; // no extra spacing after last
-            }
-            // Overflow handling: if last element exceeds container, shift block upward but keep above mini button
-            const overflow = cursorTop - rootH;
-            if (overflow > 0) {
-              const shift = Math.min(overflow, (miniBottomInside - (miniBottomInside + spacing)) * -1); // don't cross the mini button
-              if (valueEl) {
-                valueEl.style.top = (parseInt(valueEl.style.top) - shift) + 'px';
-              }
-              if (selectorEl) {
-                selectorEl.style.top = (parseInt(selectorEl.style.top) - shift) + 'px';
-              }
+              selectorEl.style.top = rowTop + 'px';
+              const innerNudge = Math.max(2, Math.round(2 * scale));
+              selectorEl.style.paddingTop = innerNudge + 'px';
+              selectorEl.style.lineHeight = Math.max(1, selectorH - innerNudge) + 'px';
             }
           } catch(e) { /* ignore layout errors */ }
         }
       }
     }
   });
+  // Global mutation observer (only once) to catch async list insertion
+  if (!container.__intuitionDropdownObserver) {
+    try {
+      const obs = new MutationObserver(muts => {
+        muts.forEach(m => {
+          m.addedNodes.forEach(n => {
+            if (!(n instanceof HTMLElement)) return;
+            // If a list appears inside a selector wrapper
+            const isNamedList = (n.classList && /dropdown-list|options|list/i.test(n.className)) || n.tagName === 'UL';
+            const hasRoleOptions = !isNamedList && n.children && n.children.length > 1 && Array.from(n.children).every(k => k.getAttribute && k.getAttribute('role') === 'option');
+            if (isNamedList || hasRoleOptions) {
+              let wrap = n.parentElement;
+              while (wrap && wrap !== container && !wrap.id.endsWith('_selector')) wrap = wrap.parentElement;
+              _applyDropdownListScaling(wrap || n.parentElement);
+            }
+          });
+        });
+      });
+      obs.observe(container, { childList: true, subtree: true });
+      container.__intuitionDropdownObserver = obs;
+    } catch(e) {}
+  }
+  // Final pass to ensure all current selectors spaced
+  _intuitionRespaceAllDropdowns();
 }
 
 // Expose scaling API
 window.setIntuitionMasterScale = setIntuitionMasterScale;
+window.refreshIntuitionScale = refreshIntuitionScale;
+window.setIntuitionDropdownDensity = setIntuitionDropdownDensity;
 window.getIntuitionMasterScale = () => IntuitionMasterScale;
 
 function currentToolbox() {
@@ -680,8 +929,9 @@ function intuitionCommon(cfg) {
         position: 'absolute',
         bottom: '0px',
         left: '0px',
-        width: '100%',
-        height: '12px'
+    width: '100%',
+  height: '14px',
+  overflow: 'visible'
       }
     });
 
@@ -698,7 +948,9 @@ function intuitionCommon(cfg) {
         fontFamily: 'Roboto',
         fontSize: Inntuition_theme[theme]["tool-font-size"],
         textAlign: 'center',
-  // Match base selector height (12px) so scaling logic can substitute correctly
+  // Base selector height increased to 14px (was 12px) for deeper vertical placement
+  // Nudge label 2px downward
+  paddingTop: '2px',
   lineHeight: '12px'
       },
       listCss: {
@@ -783,7 +1035,7 @@ function intuitionCommon(cfg) {
       }
     });
 
-    // Re-layout for particle stacking (mini centered; then value and selector BELOW mini button)
+    // Re-layout for particle stacking (mini centered; then value & selector share one row side-by-side below mini)
     if (isParticle && (hasSelector || hasValue)) {
       setTimeout(() => {
         try {
@@ -794,30 +1046,52 @@ function intuitionCommon(cfg) {
           const valueEl = document.getElementById(id_created + '_value');
           if (!mb) return;
           const scale = (window.getIntuitionMasterScale && window.getIntuitionMasterScale()) || 1;
-          const spacing = Math.round(4 * scale);
+          // Further reduced spacing (was 2*scale) for slightly higher row
+          const spacing = Math.max(0, Math.round(1 * scale));
           const rootRect = elRoot.getBoundingClientRect();
           const mbRect = mb.getBoundingClientRect();
           const miniBottom = (mbRect.top - rootRect.top) + mbRect.height;
-          let cursorTop = miniBottom + spacing;
-          if (valueEl) {
+          const rowTop = miniBottom + spacing;
+          if (valueEl && selectorEl) {
             const valueH = parseInt(valueEl.style.height) || Math.round(18 * scale);
+            const selectorH = (parseInt(selectorEl.style.height) || Math.round(14 * scale));
+            const rowH = Math.max(valueH, selectorH);
             valueEl.style.position = 'absolute';
             valueEl.style.bottom = '';
-            valueEl.style.top = cursorTop + 'px';
-            cursorTop += valueH + spacing;
-          }
-          if (selectorEl) {
-            const selectorH = (parseInt(selectorEl.style.height) || Math.round(12 * scale));
+            valueEl.style.top = rowTop + 'px';
+            valueEl.style.height = rowH + 'px';
+            valueEl.style.lineHeight = rowH + 'px';
+            valueEl.style.left = '0px';
+            valueEl.style.width = '50%';
             selectorEl.style.position = 'absolute';
             selectorEl.style.bottom = '';
-            selectorEl.style.top = cursorTop + 'px';
-            cursorTop += selectorH;
-          }
-          // Adjust if overflow
-          const overflow = cursorTop - elRoot.clientHeight;
-          if (overflow > 0) {
-            if (valueEl) valueEl.style.top = (parseInt(valueEl.style.top) - overflow) + 'px';
-            if (selectorEl) selectorEl.style.top = (parseInt(selectorEl.style.top) - overflow) + 'px';
+            selectorEl.style.top = rowTop + 'px';
+            selectorEl.style.height = rowH + 'px';
+            const innerNudge = Math.max(2, Math.round(2 * scale));
+            selectorEl.style.paddingTop = innerNudge + 'px';
+            selectorEl.style.lineHeight = Math.max(1, rowH - innerNudge) + 'px';
+            selectorEl.style.left = '50%';
+            selectorEl.style.width = '50%';
+            try {
+              const scFirst = selectorEl.firstElementChild;
+              if (scFirst) {
+                scFirst.style.paddingTop = innerNudge + 'px';
+                scFirst.style.lineHeight = Math.max(1, rowH - innerNudge) + 'px';
+                scFirst.style.height = rowH + 'px';
+              }
+            } catch(e) {}
+          } else if (valueEl) {
+            valueEl.style.position = 'absolute';
+            valueEl.style.bottom = '';
+            valueEl.style.top = rowTop + 'px';
+          } else if (selectorEl) {
+            const selectorH = (parseInt(selectorEl.style.height) || Math.round(14 * scale));
+            selectorEl.style.position = 'absolute';
+            selectorEl.style.bottom = '';
+            selectorEl.style.top = rowTop + 'px';
+            const innerNudge = Math.max(2, Math.round(2 * scale));
+            selectorEl.style.paddingTop = innerNudge + 'px';
+            selectorEl.style.lineHeight = Math.max(1, selectorH - innerNudge) + 'px';
           }
         } catch(e) {}
       },0);
