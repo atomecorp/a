@@ -162,9 +162,9 @@ final class LocalHTTPServer {
         if let audioURL = Bundle.main.url(forResource: name.replacingOccurrences(of: ".m4a", with: ""), withExtension: "m4a") {
             candidates.append(audioURL)
         }
-        // 4. Bundle text / generic resources (.txt, .json) — add if request name has such extension
+    // 4. Bundle text / generic resources (.txt, .json, .svg, .md) — add if request name has such extension (served via /text/*)
         let lower = name.lowercased()
-        if lower.hasSuffix(".txt") || lower.hasSuffix(".json") {
+    if lower.hasSuffix(".txt") || lower.hasSuffix(".json") || lower.hasSuffix(".svg") || lower.hasSuffix(".md") {
             let baseName = (name as NSString).deletingPathExtension
             let ext = (name as NSString).pathExtension
             if let txtURL = Bundle.main.url(forResource: baseName, withExtension: ext) {
@@ -189,6 +189,9 @@ final class LocalHTTPServer {
                 let fileOnly = (name as NSString).lastPathComponent
                 candidates.append(srcRoot.appendingPathComponent("assets/audios/").appendingPathComponent(fileOnly))
                 candidates.append(srcRoot.appendingPathComponent("assets/texts/").appendingPathComponent(fileOnly))
+        candidates.append(srcRoot.appendingPathComponent("assets/images/").appendingPathComponent(name))
+        candidates.append(srcRoot.appendingPathComponent("assets/images/icons/").appendingPathComponent((name as NSString).lastPathComponent))
+        candidates.append(srcRoot.appendingPathComponent("assets/images/logos/").appendingPathComponent((name as NSString).lastPathComponent))
             }
         }
         // 5. Inside src/ if packaged (e.g., src/audio)

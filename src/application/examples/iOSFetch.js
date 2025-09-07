@@ -23,72 +23,80 @@ async function dataFetcher(path) {
   if (typeof fetch !== 'function') throw new Error('fetch indisponible');
 
   // Nettoyage chemin (pour URL serveur)
-  const cleanPath = (path || '').trim().replace(/^\/+/, '');
+  let cleanPath = (path || '').trim().replace(/^\/+/, '').replace(/^[.]+/, '');
+  if (!cleanPath) throw new Error('Chemin vide');
   const filename = cleanPath.split('/').pop();
   const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
 
-  // 1. Serveur local si port dispo
-  if (port) {
-    // On n'utilise /text/<filename> que pour les chemins textuels (dossier texts/ ou extension .txt/.json)
-    const isTextish = /\.(txt|json|md)$/i.test(filename) || /^texts\//.test(cleanPath);
-    if (isTextish) {
-      const encodedPath = encodeURI(cleanPath); // conserve sous-dossiers
-      const serverURL = `http://127.0.0.1:${port}/text/${encodedPath}`;
-      try {
-        const r = await fetch(serverURL);
-        if (r.ok) {
-          const txt = await r.text();
-          if (txt && txt.length) { __dataCache[key] = txt; return txt; }
-        }
-      } catch(_) {}
-    }
+  // Textish => tentative serveur iOS/AUv3
+  const isTextish = /\.(txt|json|md|svg)$/i.test(filename) || /^texts\//.test(cleanPath);
+  if (port && isTextish) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
+      if (r.ok) {
+        const txt = await r.text();
+        if (txt && txt.length) { __dataCache[key] = txt; return txt; }
+      }
+    } catch(_) { /* ignore */ }
   }
 
-  // 2. Fallback asset: conserver l'arborescence demandée dans assets/
-  // Exemples d'entrées acceptées: 'texts/lorem.txt', 'icons/app/logo.svg', 'assets/texts/lorem.txt'
-  const sanitized = cleanPath.replace(/^[.\\/]+/, '');
-  const assetCandidatesSet = new Set();
-  if (sanitized.startsWith('assets/')) assetCandidatesSet.add(sanitized);
-  assetCandidatesSet.add('assets/' + sanitized);
-  // On tente d'abord l'arborescence exacte; puis fallback vers le fichier seul si échec
-  assetCandidatesSet.add('assets/' + filename);
-  const assetCandidates = Array.from(assetCandidatesSet);
+  // Normalisation: si l'appelant n'a pas mis assets/ ou src/assets/, on préfixe automatiquement assets/
+  if (!/^(assets|src\/assets)\//.test(cleanPath)) {
+    cleanPath = 'assets/' + cleanPath;
+  }
 
-  for (const assetURL of assetCandidates) {
+  // Liste minimale de fallback (éviter explosion): chemin direct + variante src/assets/
+  const variants = [cleanPath];
+  const alt = cleanPath.replace(/^assets\//, 'src/assets/');
+  if (alt !== cleanPath) variants.push(alt);
+
+  for (const url of variants) {
     try {
-      const r2 = await fetch(assetURL);
+      const r2 = await fetch(url);
       if (r2.ok) {
         const txt2 = await r2.text();
         if (txt2 && txt2.length) { __dataCache[key] = txt2; return txt2; }
       }
-    } catch(_) {}
+    } catch(_) { /* ignore */ }
   }
 
-  throw new Error('Asset introuvable (candidats: ' + assetCandidates.join(', ') + ')');
+  throw new Error('Introuvable: ' + variants.join(' | '));
 }
 
 function fct_to_trig(state) {
   console.log('trig: ' + state);
   const span = grab('verif');
 //   if (!span) return;
-  span.style.backgroundColor = state ? '#0f0' : '#f00';
+  span.style.backgroundColor = state ? 'rgba(26, 61, 26, 1)' : '#f00';
   span.textContent = 'Chargement…';
-//   dataFetcher('texts/lorem.txt')
   dataFetcher('texts/lorem.txt')
     .then(txt => { span.textContent = txt; })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
 
       setTimeout(() => {
-//   dataFetcher('texts/lorem.txt')
-  dataFetcher('audios/testing.txt')
-    .then(txt => { span.textContent = txt; })
+  dataFetcher('audios/a.txt')
+     .then(txt => { span.textContent = txt; })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-
 
   }, 1000   );
 
+      setTimeout(() => {
+  dataFetcher('images/logos/arp.svg')
+    .then(txt => { span.textContent = txt; })
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
+  }, 2000   );
+
+      setTimeout(() => {
+  dataFetcher('images/logos/atome.svg')
+    .then(txt => { span.textContent = txt; })
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+  }, 3000   );
+
+
+  
 }
 
 
