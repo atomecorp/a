@@ -174,15 +174,28 @@ final class LocalHTTPServer {
             if let assetsRoot = Bundle.main.url(forResource: "assets", withExtension: nil) {
                 candidates.append(assetsRoot.appendingPathComponent(name))
                 candidates.append(assetsRoot.appendingPathComponent("texts/").appendingPathComponent(name))
+                // Additional generic & audio/text subfolders
+                candidates.append(assetsRoot.appendingPathComponent("audios/").appendingPathComponent(name))
+                candidates.append(assetsRoot.appendingPathComponent("audio/").appendingPathComponent(name))
+                // If name includes a subfolder already (e.g. audios/testing.txt), also try just filename in texts/
+                let fileOnly = (name as NSString).lastPathComponent
+                candidates.append(assetsRoot.appendingPathComponent("texts/").appendingPathComponent(fileOnly))
+                candidates.append(assetsRoot.appendingPathComponent("audios/").appendingPathComponent(fileOnly))
             }
             if let srcRoot = Bundle.main.url(forResource: "src", withExtension: nil) {
                 candidates.append(srcRoot.appendingPathComponent("assets/texts/").appendingPathComponent(name))
+                candidates.append(srcRoot.appendingPathComponent("assets/").appendingPathComponent(name))
+                candidates.append(srcRoot.appendingPathComponent("assets/audios/").appendingPathComponent(name))
+                let fileOnly = (name as NSString).lastPathComponent
+                candidates.append(srcRoot.appendingPathComponent("assets/audios/").appendingPathComponent(fileOnly))
+                candidates.append(srcRoot.appendingPathComponent("assets/texts/").appendingPathComponent(fileOnly))
             }
         }
         // 5. Inside src/ if packaged (e.g., src/audio)
         if let srcRoot = Bundle.main.url(forResource: "src", withExtension: nil) {
             candidates.append(srcRoot.appendingPathComponent(name))
             candidates.append(srcRoot.appendingPathComponent("audio/").appendingPathComponent(name))
+            candidates.append(srcRoot.appendingPathComponent("audios/").appendingPathComponent(name))
         }
         return candidates
     }
@@ -500,7 +513,11 @@ final class LocalHTTPServer {
 
     // MARK: - Text file serving
     private func serveText(named name: String, on connection: NWConnection) {
-        guard let url = candidateFileURLs(for: name).first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+    let candidates = candidateFileURLs(for: name)
+    #if DEBUG
+    print("🔍 Text lookup for \(name) candidates=\n" + candidates.map { "  • " + $0.path }.joined(separator: "\n"))
+    #endif
+    guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
             sendSimple(status: 404, reason: "Not Found", body: "text file missing", on: connection)
             return
         }

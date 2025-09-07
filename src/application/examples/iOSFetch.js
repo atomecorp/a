@@ -15,30 +15,56 @@ $('span', {
   text: 'Je suis un SPAN ! 🎯'
 });
 
-let __loremTxtCache = null;
+const __dataCache = {};
 
-async function __loadLoremText() {
-  if (__loremTxtCache) return __loremTxtCache;
+async function dataFetcher(path) {
+  const key = path;
+  if (__dataCache[key]) return __dataCache[key];
   if (typeof fetch !== 'function') throw new Error('fetch indisponible');
+
+  // Nettoyage chemin (pour URL serveur)
+  const cleanPath = (path || '').trim().replace(/^\/+/, '');
+  const filename = cleanPath.split('/').pop();
   const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
 
+  // 1. Serveur local si port dispo
   if (port) {
-    const url = `http://127.0.0.1:${port}/text/lorem.txt`;
+    // On n'utilise /text/<filename> que pour les chemins textuels (dossier texts/ ou extension .txt/.json)
+    const isTextish = /\.(txt|json|md)$/i.test(filename) || /^texts\//.test(cleanPath);
+    if (isTextish) {
+      const encodedPath = encodeURI(cleanPath); // conserve sous-dossiers
+      const serverURL = `http://127.0.0.1:${port}/text/${encodedPath}`;
+      try {
+        const r = await fetch(serverURL);
+        if (r.ok) {
+          const txt = await r.text();
+          if (txt && txt.length) { __dataCache[key] = txt; return txt; }
+        }
+      } catch(_) {}
+    }
+  }
+
+  // 2. Fallback asset: conserver l'arborescence demandée dans assets/
+  // Exemples d'entrées acceptées: 'texts/lorem.txt', 'icons/app/logo.svg', 'assets/texts/lorem.txt'
+  const sanitized = cleanPath.replace(/^[.\\/]+/, '');
+  const assetCandidatesSet = new Set();
+  if (sanitized.startsWith('assets/')) assetCandidatesSet.add(sanitized);
+  assetCandidatesSet.add('assets/' + sanitized);
+  // On tente d'abord l'arborescence exacte; puis fallback vers le fichier seul si échec
+  assetCandidatesSet.add('assets/' + filename);
+  const assetCandidates = Array.from(assetCandidatesSet);
+
+  for (const assetURL of assetCandidates) {
     try {
-      const r = await fetch(url);
-      if (r.ok) {
-        const txt = await r.text();
-        if (txt && txt.length) { __loremTxtCache = txt; return txt; }
+      const r2 = await fetch(assetURL);
+      if (r2.ok) {
+        const txt2 = await r2.text();
+        if (txt2 && txt2.length) { __dataCache[key] = txt2; return txt2; }
       }
     } catch(_) {}
   }
 
-  // Fallback asset
-  const r2 = await fetch('assets/texts/lorem.txt').catch(e => { throw new Error('Fetch asset échoué: ' + e.message); });
-  if (!r2.ok) throw new Error('Asset HTTP ' + r2.status);
-  const txt2 = await r2.text();
-  if (!txt2 || !txt2.length) throw new Error('Asset vide');
-  __loremTxtCache = txt2; return txt2;
+  throw new Error('Asset introuvable (candidats: ' + assetCandidates.join(', ') + ')');
 }
 
 function fct_to_trig(state) {
@@ -47,9 +73,22 @@ function fct_to_trig(state) {
 //   if (!span) return;
   span.style.backgroundColor = state ? '#0f0' : '#f00';
   span.textContent = 'Chargement…';
-  __loadLoremText()
+//   dataFetcher('texts/lorem.txt')
+  dataFetcher('texts/lorem.txt')
     .then(txt => { span.textContent = txt; })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+
+      setTimeout(() => {
+//   dataFetcher('texts/lorem.txt')
+  dataFetcher('audios/testing.txt')
+    .then(txt => { span.textContent = txt; })
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+
+  }, 1000   );
+
+
 }
 
 
