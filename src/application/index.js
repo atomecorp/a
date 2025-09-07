@@ -59,7 +59,9 @@
 
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)
 
-import('./examples/tools.js');
+// import('./examples/tools.js');
+import('./examples/iOSFetch.js');
+
 // import('./examples/class.js');
 // import('./examples/drop_down.js');
 

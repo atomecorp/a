@@ -158,11 +158,28 @@ final class LocalHTTPServer {
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             candidates.append(docs.appendingPathComponent(name))
         }
-        // 3. Main bundle direct
-        if let bundleURL = Bundle.main.url(forResource: name.replacingOccurrences(of: ".m4a", with: ""), withExtension: "m4a") {
-            candidates.append(bundleURL)
+        // 3. Main bundle audio (legacy m4a support)
+        if let audioURL = Bundle.main.url(forResource: name.replacingOccurrences(of: ".m4a", with: ""), withExtension: "m4a") {
+            candidates.append(audioURL)
         }
-        // 4. Inside src/ if packaged (e.g., src/audio)
+        // 4. Bundle text / generic resources (.txt, .json) — add if request name has such extension
+        let lower = name.lowercased()
+        if lower.hasSuffix(".txt") || lower.hasSuffix(".json") {
+            let baseName = (name as NSString).deletingPathExtension
+            let ext = (name as NSString).pathExtension
+            if let txtURL = Bundle.main.url(forResource: baseName, withExtension: ext) {
+                candidates.append(txtURL)
+            }
+            // Try common assets subpaths inside bundle (if structure preserved)
+            if let assetsRoot = Bundle.main.url(forResource: "assets", withExtension: nil) {
+                candidates.append(assetsRoot.appendingPathComponent(name))
+                candidates.append(assetsRoot.appendingPathComponent("texts/").appendingPathComponent(name))
+            }
+            if let srcRoot = Bundle.main.url(forResource: "src", withExtension: nil) {
+                candidates.append(srcRoot.appendingPathComponent("assets/texts/").appendingPathComponent(name))
+            }
+        }
+        // 5. Inside src/ if packaged (e.g., src/audio)
         if let srcRoot = Bundle.main.url(forResource: "src", withExtension: nil) {
             candidates.append(srcRoot.appendingPathComponent(name))
             candidates.append(srcRoot.appendingPathComponent("audio/").appendingPathComponent(name))
