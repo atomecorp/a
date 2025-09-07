@@ -147,7 +147,7 @@ function fct_to_trig(state) {
 
   // Nouveau: récupérer l'URL réelle (stream) puis jouer dans la balise audio
   setTimeout(() => {
-    dataFetcher('audios/a.m4a', { mode: 'url' })
+    dataFetcher('audios/riff.m4a', { mode: 'url' })
       .then(url => {
         const audioEl = grab('audioPlayer');
         if (audioEl) {
