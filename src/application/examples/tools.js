@@ -318,7 +318,7 @@ const Inntuition_theme = {
     "tool-active-fg": "#000000",
     "icon-top": "16px",
   // Adjusted base left offsets (was 9px) to remove right bias at scale=1
-  "icon-left": "5px",
+  "icon-left": "9px",
   "icon-centered-top": "12px",
   "icon-centered-left": "5px",
     "icon-width": "21px",
