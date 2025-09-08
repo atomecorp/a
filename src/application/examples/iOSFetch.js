@@ -91,30 +91,17 @@ async function dataFetcher(path, opts = {}) {
 //svg creator
 function create_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)) , parent_id='view', top = '120px', left = '120px', width = '200px', height = '200px', color = null, path_color = null) {
   const parent = document.getElementById(parent_id);
-  
+  if (!parent) return null;
+  const temp = document.createElement('div');
+  temp.innerHTML = svgcontent.trim();
+  let svgEl = temp.querySelector('svg');
+  if (!svgEl) return null;
+  // Positionnement direct sur le <svg>
+  svgEl.style.position = 'absolute';
+  svgEl.style.top = top;
+  svgEl.style.left = left;
+  parent.appendChild(svgEl);
 
-  // Reuse container if present to avoid duplicates
-  // let container = document.getElementById('edit-svg-raw');
-    // let container = document.getElementById(parent);
-    // puts()
-  // if (!container) {
-  let container = document.createElement('div');
-  container.id = id || 'edit-svg-raw';
-  // Absolute positioning to respect provided coordinates
-  container.style.position = 'absolute';
-  container.style.top = top;
-  container.style.left = left;
-  // Remove inline-block baseline gap issues
-  container.style.display = 'block';
-  container.style.margin = '0';
-  container.style.padding = '0';
-  container.style.lineHeight = '0';
-  if (parent) parent.appendChild(container);
-  // }
-  container.innerHTML = svgcontent;
-
-  // Adjust viewBox to fit content if off-canvas
-  const svgEl = container.querySelector('svg');
   // ensure the inner <svg> carries the provided id for direct access
   if (svgEl && id) {
     // Avoid duplicating container id on the SVG; use suffix
@@ -153,16 +140,13 @@ function create_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
     // Ensure overflow visibility (mostly for nested <svg>)
     svgEl.style.overflow = 'visible';
 
-  // Apply requested size (numeric extraction once)
+  // Dimensions cible
   const w = typeof width === 'number' ? width : parseFloat(width) || 200;
   const h = typeof height === 'number' ? height : parseFloat(height) || 200;
-  svgEl.setAttribute('width', String(w));
-  svgEl.setAttribute('height', String(h));
+  // Supprimer dimensions existantes et appliquer les nôtres
+  try { svgEl.removeAttribute('width'); svgEl.removeAttribute('height'); } catch(_) {}
   svgEl.style.width = `${w}px`;
   svgEl.style.height = `${h}px`;
-  // Explicitly size container to eliminate extra vertical space (previous drift 22px vs 16px)
-  container.style.width = `${w}px`;
-  container.style.height = `${h}px`;
 
     // Apply colors
     try {
@@ -181,7 +165,7 @@ function create_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
       if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
       if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
     } catch (_) {}
-    // Enforce exact visual size based on union bbox of all shapes (contain, preserve aspect)
+  // Enforce exact visual size based on union bbox of all shapes (contain, preserve aspect)
     try {
       if (!svgEl.__normalizedSize) {
         const shapeNodes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
@@ -213,17 +197,8 @@ function create_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
           if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX>minX && maxY>minY) {
             const bboxW = maxX - minX;
             const bboxH = maxY - minY;
-            const scale = Math.min(w / bboxW, h / bboxH);
-            // Centering translation: we apply scale first, then translate in scaled coordinate space
-            // Use transform order: scale(s) translate(tx, ty)
-            const tx = -minX + (w/scale - bboxW)/2;
-            const ty = -minY + (h/scale - bboxH)/2;
-            const ns = 'http://www.w3.org/2000/svg';
-            const wrapper = document.createElementNS(ns, 'g');
-            while (svgEl.firstChild) wrapper.appendChild(svgEl.firstChild);
-            wrapper.setAttribute('transform', `scale(${scale}) translate(${tx},${ty})`);
-            svgEl.appendChild(wrapper);
-            svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+            // Ajuster viewBox pour l'étendue réelle puis laisser CSS dimensionner
+            svgEl.setAttribute('viewBox', `${minX} ${minY} ${bboxW} ${bboxH}`);
             svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
             Object.defineProperty(svgEl, '__normalizedSize', { value: true });
           }
