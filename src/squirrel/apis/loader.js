@@ -5,15 +5,19 @@ if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
   window.span = { textContent: '' };
 }
 
-// --- Local server readiness (single global health probe) ---
+// --- Local server readiness (single global health probe; only iOS / ios_auv3 needs real waiting) ---
 let __localServerReady = false;
 let __localServerReadyPromise = null;
+function __isIOSLikePlatform(){
+  try { return typeof current_platform === 'function' && /^(ios|ios_auv3)$/.test(current_platform()); } catch(_) { return false; }
+}
 async function __waitLocalServerReady(){
+  // Skip active waiting if not iOS platform
+  if (!__isIOSLikePlatform()) { __localServerReady = true; return true; }
   if (__localServerReady) return true;
   if (__localServerReadyPromise) return __localServerReadyPromise;
   __localServerReadyPromise = (async () => {
-    // Retry /health until OK or fallback after maxAttempts so UI doesn't block forever.
-    const maxAttempts = 25; // ~3.7s at 150ms
+    const maxAttempts = 25; // ~3.7s at 150ms (only iOS)
     for (let attempt=0; attempt < maxAttempts; attempt++) {
       try {
         const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
@@ -21,13 +25,12 @@ async function __waitLocalServerReady(){
           try {
             const resp = await fetch(`http://127.0.0.1:${port}/health?ts=${Date.now()}`, { cache: 'no-store' });
             if (resp.ok) { __localServerReady = true; return true; }
-          } catch(_) { /* health fetch failed, will retry */ }
+          } catch(_) {}
         }
       } catch(_) {}
       await new Promise(r => setTimeout(r, 150));
     }
-    // Fallback: proceed anyway (asset relative fetch will still work). Mark as ready to avoid future waits.
-    __localServerReady = true;
+    __localServerReady = true; // fallback
     return false;
   })();
   return __localServerReadyPromise;
@@ -87,23 +90,24 @@ async function dataFetcher(path, opts = {}) {
         const r = await fetch(u); if (!r.ok) continue; return done(u);
       } catch(_) {}
     }
-    // If assets failed, do a short rapid poll for port (<= 900ms) so first icon still precedes second (setTimeout 1000)
-    const startPoll = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    while (true) {
-      const pNow = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
-      if (pNow) {
-        // update and build candidates then break to normal flow
-        serverCandidates.push(`http://127.0.0.1:${pNow}/file/${encodeURI(cleanPath)}`);
-        if (looksText) serverCandidates.push(`http://127.0.0.1:${pNow}/text/${encodeURI(cleanPath)}`);
-        if (looksAudio) {
-          serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURIComponent(filename)}`);
-          serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURI(cleanPath)}`);
+    // Only iOS actively polls for late port assignment; others proceed immediately
+    if (__isIOSLikePlatform()) {
+      const startPoll = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      while (true) {
+        const pNow = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
+        if (pNow) {
+          serverCandidates.push(`http://127.0.0.1:${pNow}/file/${encodeURI(cleanPath)}`);
+          if (looksText) serverCandidates.push(`http://127.0.0.1:${pNow}/text/${encodeURI(cleanPath)}`);
+          if (looksAudio) {
+            serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURIComponent(filename)}`);
+            serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURI(cleanPath)}`);
+          }
+          break;
         }
-        break;
+        const nowT = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+        if (nowT - startPoll > 900) break;
+        await new Promise(r => setTimeout(r, 60));
       }
-      const nowT = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      if (nowT - startPoll > 900) break;
-      await new Promise(r => setTimeout(r, 60));
     }
   }
 
