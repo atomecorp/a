@@ -82,245 +82,234 @@ async function dataFetcher(path, opts = {}) {
 }
 
 
-
+//svg creator
+function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)), parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null, single=true) {
+  const parent = document.getElementById(parent_id);
+  if (!parent) return null;
+  if (single) parent.querySelectorAll('svg.__auto_svg').forEach(n => n.remove());
+  const tmp = document.createElement('div');
+  tmp.innerHTML = svgcontent.trim();
+  const svgEl = tmp.querySelector('svg');
+  if (!svgEl) return null;
+  try { svgEl.id = id + '_svg'; } catch(_) {}
+  svgEl.classList.add('__auto_svg');
+  svgEl.style.position = 'absolute';
+  svgEl.style.top = top; svgEl.style.left = left;
+  const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
+  const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
+  svgEl.style.width = targetW + 'px';
+  svgEl.style.height = targetH + 'px';
+  // Insert first (hidden) so getBBox works for all browsers
+  const prevVisibility = svgEl.style.visibility;
+  svgEl.style.visibility = 'hidden';
+  parent.appendChild(svgEl);
+  // Collect shapes & compute bbox (inflated by stroke width/2 so strokes aren't clipped)
+  const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
+  const getStrokeWidth = (el) => {
+    let sw = el.getAttribute('stroke-width');
+    if ((!sw || sw === '0' || sw === '') && typeof window !== 'undefined' && window.getComputedStyle) {
+      try { sw = window.getComputedStyle(el).strokeWidth; } catch(_) {}
+    }
+    sw = parseFloat(sw);
+    return Number.isFinite(sw) ? sw : 0;
+  };
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  shapes.forEach(node => {
+    try {
+      const b = node.getBBox();
+      if (b && b.width >= 0 && b.height >= 0) {
+        const sw = getStrokeWidth(node);
+        const pad = sw/2; // stroke extends equally each side
+        const x0 = b.x - pad;
+        const y0 = b.y - pad;
+        const x1 = b.x + b.width + pad;
+        const y1 = b.y + b.height + pad;
+        if (x0 < minX) minX = x0;
+        if (y0 < minY) minY = y0;
+        if (x1 > maxX) maxX = x1;
+        if (y1 > maxY) maxY = y1;
+      }
+    } catch(_){}
+  });
+  const bboxValid = isFinite(minX)&&isFinite(minY)&&isFinite(maxX)&&isFinite(maxY)&&maxX>minX&&maxY>minY;
+  if (bboxValid) {
+    const bboxW = maxX-minX, bboxH = maxY-minY;
+    const scale = Math.max(targetW / bboxW, targetH / bboxH); // cover
+    const tx = (targetW - bboxW*scale)/2 - minX*scale;
+    const ty = (targetH - bboxH*scale)/2 - minY*scale;
+    const ns = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(ns,'g');
+    while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
+    g.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+    svgEl.appendChild(g);
+    svgEl.setAttribute('viewBox', `0 0 ${targetW} ${targetH}`);
+    svgEl.setAttribute('preserveAspectRatio','none');
+  } else {
+    // Fallback: keep original coordinate system so large coords remain visible when scaled by CSS
+    if (!svgEl.getAttribute('viewBox')) {
+      const origW = parseFloat(svgEl.getAttribute('width')) || targetW;
+      const origH = parseFloat(svgEl.getAttribute('height')) || targetH;
+      svgEl.setAttribute('viewBox', `0 0 ${origW} ${origH}`);
+      svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
+    }
+  }
+  // Colors
+  if ((color || path_color) && shapes.length) {
+    shapes.forEach(node => {
+      if (path_color) node.setAttribute('stroke', path_color);
+      if (color) {
+        const f = node.getAttribute('fill');
+        if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
+      }
+    });
+    if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
+    if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+  }
+  svgEl.style.visibility = prevVisibility || 'visible';
+  return svgEl.id;
+}
 
 
 ////usecase
 
 
-//svg creator
-function create_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)) , parent_id='view', top = '120px', left = '0px', width = '200px', height = '200px', color = null, path_color = null) {
-  const parent = document.getElementById(parent_id);
-  if (!parent) return null;
-  const temp = document.createElement('div');
-  temp.innerHTML = svgcontent.trim();
-  let svgEl = temp.querySelector('svg');
-  if (!svgEl) return null;
-  // Positionnement direct sur le <svg>
-  svgEl.style.position = 'absolute';
-  svgEl.style.top = top;
-  svgEl.style.left = left;
-  parent.appendChild(svgEl);
-
-  // ensure the inner <svg> carries the provided id for direct access
-  if (svgEl && id) {
-    // Avoid duplicating container id on the SVG; use suffix
-    try { svgEl.id = id + '_svg'; } catch (_) {}
-  }
-  if (svgEl && typeof svgEl.querySelector === 'function') {
-    // Compute maximum stroke width among common shape elements
-    const allShapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
-    const getStrokeWidth = (el) => {
-      let sw = el.getAttribute('stroke-width');
-      if (!sw && typeof window !== 'undefined' && window.getComputedStyle) {
-        const cs = window.getComputedStyle(el);
-        sw = cs && cs.strokeWidth;
-      }
-      if (typeof sw === 'string') sw = parseFloat(sw);
-      return Number.isFinite(sw) ? sw : 0;
-    };
-    let maxStroke = 0;
-    try {
-      allShapes.forEach((n) => { const v = getStrokeWidth(n); if (v > maxStroke) maxStroke = v; });
-    } catch (_) {}
-
-    const contentNode = svgEl.querySelector('g') || svgEl.querySelector('path') || svgEl;
-    if (contentNode && typeof contentNode.getBBox === 'function') {
-      const bb = contentNode.getBBox();
-      if (bb && isFinite(bb.width) && isFinite(bb.height) && bb.width > 0 && bb.height > 0) {
-        const pad = Math.ceil((maxStroke || 0) / 2) + 2; // account for stroke extending outside + small safety
-        const x = bb.x - pad;
-        const y = bb.y - pad;
-        const w = bb.width + pad * 2;
-        const h = bb.height + pad * 2;
-        svgEl.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      }
-    }
-    // Ensure overflow visibility (mostly for nested <svg>)
-    svgEl.style.overflow = 'visible';
-
-  // Dimensions cible
-  const w = typeof width === 'number' ? width : parseFloat(width) || 200;
-  const h = typeof height === 'number' ? height : parseFloat(height) || 200;
-  // Supprimer dimensions existantes et appliquer les nôtres
-  try { svgEl.removeAttribute('width'); svgEl.removeAttribute('height'); } catch(_) {}
-  svgEl.style.width = `${w}px`;
-  svgEl.style.height = `${h}px`;
-
-    // Apply colors
-    try {
-      const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
-      shapes.forEach(node => {
-        if (path_color) node.setAttribute('stroke', path_color);
-        if (color) {
-          const currentFill = node.getAttribute('fill');
-          // Only override when fill is not explicitly none, unless we want to force it
-          if (currentFill === null || currentFill.toLowerCase() !== 'none') {
-            node.setAttribute('fill', color);
-          }
-        }
-      });
-      // Optionally set default fill/stroke on root if shapes missing
-      if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
-      if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
-    } catch (_) {}
-  // Enforce exact visual size based on union bbox of all shapes (contain, preserve aspect)
-    try {
-      if (!svgEl.__normalizedSize) {
-        const shapeNodes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
-        if (shapeNodes.length) {
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          shapeNodes.forEach(node => {
-            try {
-              const b = node.getBBox();
-              if (b && b.width >= 0 && b.height >= 0) {
-                // Include stroke width (getBBox excludes stroke). Use computed style or attribute.
-                let sw = node.getAttribute('stroke-width');
-                if (!sw && typeof window !== 'undefined' && window.getComputedStyle) {
-                  try { sw = window.getComputedStyle(node).strokeWidth; } catch(_){}
-                }
-                sw = (typeof sw === 'string') ? parseFloat(sw) : sw;
-                if (!Number.isFinite(sw)) sw = 0;
-                const pad = sw / 2;
-                const x0 = b.x - pad;
-                const y0 = b.y - pad;
-                const x1 = b.x + b.width + pad;
-                const y1 = b.y + b.height + pad;
-                if (x0 < minX) minX = x0;
-                if (y0 < minY) minY = y0;
-                if (x1 > maxX) maxX = x1;
-                if (y1 > maxY) maxY = y1;
-              }
-            } catch(_){}
-          });
-          if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX>minX && maxY>minY) {
-            const bboxW = maxX - minX;
-            const bboxH = maxY - minY;
-            // Ajuster viewBox pour l'étendue réelle puis laisser CSS dimensionner
-            svgEl.setAttribute('viewBox', `${minX} ${minY} ${bboxW} ${bboxH}`);
-            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-            Object.defineProperty(svgEl, '__normalizedSize', { value: true });
-          }
-        }
-      }
-    } catch(_){ /* ignore normalization errors */ }
-  }
-}
 
 
 
-// Player principal (src défini ensuite)
-    const audioPlayer = $('audio', {
-      id: 'audioPlayer',
-      attrs: {
-        controls: true,
-        preload: 'none'
-      },
-      css: {
-        margin: '4px 0 6px 0',
-        width: '300px',
-        outline: 'none',
-        borderRadius: '6px',
-        background: '#000'
-      }
-    });
 
-$('span', {
-  // pas besoin de 'tag'
-  id: 'verif',
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'Je suis un SPAN ! 🎯'
-});
+// // Player principal (src défini ensuite)
+//     const audioPlayer = $('audio', {
+//       id: 'audioPlayer',
+//       attrs: {
+//         controls: true,
+//         preload: 'none'
+//       },
+//       css: {
+//         margin: '4px 0 6px 0',
+//         width: '300px',
+//         outline: 'none',
+//         borderRadius: '6px',
+//         background: '#000'
+//       }
+//     });
+
+// $('span', {
+//   // pas besoin de 'tag'
+//   id: 'verif',
+//   css: {
+//     backgroundColor: '#00f',
+//     marginLeft: '0',
+//     padding: '10px',
+//     color: 'white',
+//     margin: '10px',
+//     display: 'inline-block'
+//   },
+//   text: 'Je suis un SPAN ! 🎯'
+// });
 
 
-function fct_to_trig(state) {
-  console.log('trig: ' + state);
-  const span = grab('verif');
-//   if (!span) return;
-  span.style.backgroundColor = state ? 'rgba(26, 61, 26, 1)' : '#f00';
-  span.textContent = 'Chargement…';
-  dataFetcher('texts/lorem.txt')
-    .then(txt => { span.textContent = txt; })
+// function fct_to_trig(state) {
+//   console.log('trig: ' + state);
+//   const span = grab('verif');
+// //   if (!span) return;
+//   span.style.backgroundColor = state ? 'rgba(26, 61, 26, 1)' : '#f00';
+//   dataFetcher('texts/lorem.txt')
+//     .then(txt => { span.textContent = txt; })
+//     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+
+
+//       setTimeout(() => {
+//   dataFetcher('images/logos/arp.svg')
+//     .then(txt => { span.textContent = txt; })
+//     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+//   }, 1000   );
+
+//       setTimeout(() => {
+//   dataFetcher('images/icons/activate.svg')
+//     .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '99px', '120px', '120px' , 'green', 'red');  })
+//     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+//   }, 2000   );
+
+
+//       setTimeout(() => {
+//   // Aperçu (preview) des 120 premiers caractères ou header hex si binaire
+//   dataFetcher('audios/riff.m4a', { mode: 'preview', preview: 120 })
+//      .then(txt => { span.textContent = '[AUDIO PREVIEW] ' + txt; })
+//     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+//   }, 3000   );
+
+//   // Nouveau: récupérer l'URL réelle (stream) puis jouer dans la balise audio
+//   setTimeout(() => {
+//     dataFetcher('audios/riff.m4a', { mode: 'url' })
+//       .then(url => {
+//         const audioEl = grab('audioPlayer');
+//         if (audioEl) {
+//           audioEl.src = url;
+//           // tenter lecture (peut nécessiter interaction utilisateur; fct_to_trig est déclenchée par bouton donc OK)
+//           const p = audioEl.play();
+//           if (p && typeof p.catch === 'function') {
+//             p.catch(e => console.log('lecture refusée:', e.message));
+//           }
+//           span.textContent = '[AUDIO PLAY] ' + url.split('/').pop();
+//         } else {
+//           span.textContent = 'Audio element introuvable';
+//         }
+//       })
+//       .catch(err => { span.textContent = 'Erreur audio: ' + err.message; });
+//   }, 3600);
+// }
+
+
+
+
+
+// const toggle = Button({
+//     onText: 'ON',
+//     offText: 'OFF',
+//     onAction: fct_to_trig,
+//     offAction: fct_to_trig,
+//     parent: '#view', // parent direct
+//     onStyle: { backgroundColor: '#28a745', color: 'white' },
+//     offStyle: { backgroundColor: '#dc3545', color: 'white' },
+//     css: {
+//         position: 'absolute',
+//         width: '50px',
+//         height: '24px',
+//         left: '120px',
+//         top: '120px',
+//         borderRadius: '6px',
+//         backgroundColor: 'orange',
+//         border: 'none',
+//         cursor: 'pointer',
+//         transition: 'background-color 0.3s ease',
+//         border: '3px solid rgba(255,255,255,0.3)',
+//         boxShadow: '0 2px 4px rgba(255,255,1,1)',
+//     }
+// });
+
+
+  //    setTimeout(() => {
+  // dataFetcher('images/icons/communication.svg')
+  //   .then(txt => { render_svg(txt); })
+
+
+
+
+  //   .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+  // }, 2000   );
+
+
+  // dataFetcher('images/icons/activate.svg')
+  //   .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '99px', '120px', '120px' , 'green', 'red'); })
+
+
+
+
+        setTimeout(() => {
+  dataFetcher('images/icons/activate.svg')
+    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '99px', '120px', '120px' , 'green', 'red');  })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-
-
-
-      setTimeout(() => {
-  dataFetcher('images/logos/arp.svg')
-    .then(txt => { span.textContent = txt; })
-    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-
-  }, 1000   );
-
-      setTimeout(() => {
-  dataFetcher('images/logos/atome.svg')
-    .then(txt => { create_svg(txt); })
-    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-
   }, 2000   );
-
-
-      setTimeout(() => {
-  // Aperçu (preview) des 120 premiers caractères ou header hex si binaire
-  dataFetcher('audios/a.m4a', { mode: 'preview', preview: 120 })
-     .then(txt => { span.textContent = '[AUDIO PREVIEW] ' + txt; })
-    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-
-  }, 3000   );
-
-  // Nouveau: récupérer l'URL réelle (stream) puis jouer dans la balise audio
-  setTimeout(() => {
-    dataFetcher('audios/riff.m4a', { mode: 'url' })
-      .then(url => {
-        const audioEl = grab('audioPlayer');
-        if (audioEl) {
-          audioEl.src = url;
-          // tenter lecture (peut nécessiter interaction utilisateur; fct_to_trig est déclenchée par bouton donc OK)
-          const p = audioEl.play();
-          if (p && typeof p.catch === 'function') {
-            p.catch(e => console.log('lecture refusée:', e.message));
-          }
-          span.textContent = '[AUDIO PLAY] ' + url.split('/').pop();
-        } else {
-          span.textContent = 'Audio element introuvable';
-        }
-      })
-      .catch(err => { span.textContent = 'Erreur audio: ' + err.message; });
-  }, 3600);
-}
-
-
-
-
-
-const toggle = Button({
-    onText: 'ON',
-    offText: 'OFF',
-    onAction: fct_to_trig,
-    offAction: fct_to_trig,
-    parent: '#view', // parent direct
-    onStyle: { backgroundColor: '#28a745', color: 'white' },
-    offStyle: { backgroundColor: '#dc3545', color: 'white' },
-    css: {
-        position: 'absolute',
-        width: '50px',
-        height: '24px',
-        left: '120px',
-        top: '120px',
-        borderRadius: '6px',
-        backgroundColor: 'orange',
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'background-color 0.3s ease',
-        border: '3px solid rgba(255,255,255,0.3)',
-        boxShadow: '0 2px 4px rgba(255,255,1,1)',
-    }
-});

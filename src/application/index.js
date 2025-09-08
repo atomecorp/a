@@ -27,8 +27,9 @@
 
 // import('./vie/vie.js');
 // import('./examples/svg.js');
-// import('./examples/shortcut.js');
 // import('./examples/anim_svg.js');
+// import('./examples/shortcut.js');
+
 
 
 // import('./examples/leaflet.js');

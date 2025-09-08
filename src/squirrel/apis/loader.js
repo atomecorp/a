@@ -1,218 +1,150 @@
-function create_svg(svgcontent, top = '0px', left = '0px', width = '200px', height = '200px', color = null, path_color = null, id , parent_id) {
+
+
+const __dataCache = {};
+
+async function dataFetcher(path, opts = {}) {
+  const mode = (opts.mode || 'auto').toLowerCase(); // auto|text|url|arraybuffer|blob|preview
+  const key = path + '::' + mode + '::' + (opts.preview||'');
+  if (__dataCache[key]) return __dataCache[key];
+  if (typeof fetch !== 'function') throw new Error('fetch indisponible');
+
+  let cleanPath = (path || '').trim().replace(/^\/+/,'').replace(/^[.]+/,'');
+  if (!cleanPath) throw new Error('Chemin vide');
+  const filename = cleanPath.split('/').pop();
+  const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+  const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+
+  const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
+  const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
+  const binPreferred = /^(png|jpe?g|gif|webp|avif|bmp|ico|mp4|mov|webm|m4v|woff2?|ttf|otf|pdf)$/;
+
+  const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
+  const looksAudio = audioExt.test(ext);
+  const looksBinary = binPreferred.test(ext) || looksAudio;
+
+  const serverCandidates = [];
+  if (port) {
+    // unified endpoint first
+    serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
+    if (looksText) {
+      serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
+    }
+    if (looksAudio) {
+      serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
+      serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
+    }
+  }
+
+  let assetPath = cleanPath;
+  if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
+  const assetCandidates = [assetPath];
+  const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
+  if (altAsset !== assetPath) assetCandidates.push(altAsset);
+
+  if (mode === 'url') {
+    const out = serverCandidates[0] || assetCandidates[0];
+    __dataCache[key] = out; return out;
+  }
+  const done = v => { __dataCache[key] = v; return v; };
+
+  for (const u of serverCandidates) {
+    try {
+      const r = await fetch(u);
+      if (!r.ok) continue;
+      if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+      if (mode === 'blob') return done(await r.blob());
+      if (looksText || mode === 'text' || mode === 'preview') {
+        const txt = await r.text();
+        if (mode === 'preview' || opts.preview) {
+          const max = opts.preview || 120; return done(txt.slice(0,max));
+        }
+        return done(txt);
+      }
+      if (looksAudio && mode === 'auto') return done(u); // streaming URL
+      return done(u); // generic binary
+    } catch(_) {}
+  }
+
+  for (const u of assetCandidates) {
+    try {
+      if (looksText || mode === 'text' || mode === 'preview') {
+        const r = await fetch(u); if (!r.ok) continue;
+        const txt = await r.text();
+        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+        return done(txt);
+      }
+      if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+      if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+      return done(u);
+    } catch(_) {}
+  }
+
+  throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+}
+
+
+//svg creator
+function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)), parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null, single=true) {
   const parent = document.getElementById(parent_id);
-  
-
-  // Reuse container if present to avoid duplicates
-  // let container = document.getElementById('edit-svg-raw');
-    // let container = document.getElementById(parent);
-    // puts()
-  // if (!container) {
-  let container = document.createElement('div');
-  container.id = id || 'edit-svg-raw';
-  // Absolute positioning to respect provided coordinates
-  container.style.position = 'absolute';
-  container.style.top = top;
-  container.style.left = left;
-  // Remove inline-block baseline gap issues
-  container.style.display = 'block';
-  container.style.margin = '0';
-  container.style.padding = '0';
-  container.style.lineHeight = '0';
-  if (parent) parent.appendChild(container);
-  // }
-  container.innerHTML = svgcontent;
-
-  // Adjust viewBox to fit content if off-canvas
-  const svgEl = container.querySelector('svg');
-  // ensure the inner <svg> carries the provided id for direct access
-  if (svgEl && id) {
-    // Avoid duplicating container id on the SVG; use suffix
-    try { svgEl.id = id + '_svg'; } catch (_) {}
-  }
-  if (svgEl && typeof svgEl.querySelector === 'function') {
-    // Compute maximum stroke width among common shape elements
-    const allShapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
-    const getStrokeWidth = (el) => {
-      let sw = el.getAttribute('stroke-width');
-      if (!sw && typeof window !== 'undefined' && window.getComputedStyle) {
-        const cs = window.getComputedStyle(el);
-        sw = cs && cs.strokeWidth;
-      }
-      if (typeof sw === 'string') sw = parseFloat(sw);
-      return Number.isFinite(sw) ? sw : 0;
-    };
-    let maxStroke = 0;
-    try {
-      allShapes.forEach((n) => { const v = getStrokeWidth(n); if (v > maxStroke) maxStroke = v; });
-    } catch (_) {}
-
-    const contentNode = svgEl.querySelector('g') || svgEl.querySelector('path') || svgEl;
-    if (contentNode && typeof contentNode.getBBox === 'function') {
-      const bb = contentNode.getBBox();
-      if (bb && isFinite(bb.width) && isFinite(bb.height) && bb.width > 0 && bb.height > 0) {
-        const pad = Math.ceil((maxStroke || 0) / 2) + 2; // account for stroke extending outside + small safety
-        const x = bb.x - pad;
-        const y = bb.y - pad;
-        const w = bb.width + pad * 2;
-        const h = bb.height + pad * 2;
-        svgEl.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-      }
-    }
-    // Ensure overflow visibility (mostly for nested <svg>)
-    svgEl.style.overflow = 'visible';
-
-  // Apply requested size (numeric extraction once)
-  const w = typeof width === 'number' ? width : parseFloat(width) || 200;
-  const h = typeof height === 'number' ? height : parseFloat(height) || 200;
-  svgEl.setAttribute('width', String(w));
-  svgEl.setAttribute('height', String(h));
-  svgEl.style.width = `${w}px`;
-  svgEl.style.height = `${h}px`;
-  // Explicitly size container to eliminate extra vertical space (previous drift 22px vs 16px)
-  container.style.width = `${w}px`;
-  container.style.height = `${h}px`;
-
-    // Apply colors
-    try {
-      const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
-      shapes.forEach(node => {
-        if (path_color) node.setAttribute('stroke', path_color);
-        if (color) {
-          const currentFill = node.getAttribute('fill');
-          // Only override when fill is not explicitly none, unless we want to force it
-          if (currentFill === null || currentFill.toLowerCase() !== 'none') {
-            node.setAttribute('fill', color);
-          }
-        }
-      });
-      // Optionally set default fill/stroke on root if shapes missing
-      if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
-      if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
-    } catch (_) {}
-    // Enforce exact visual size based on union bbox of all shapes (contain, preserve aspect)
-    try {
-      if (!svgEl.__normalizedSize) {
-        const shapeNodes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
-        if (shapeNodes.length) {
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          shapeNodes.forEach(node => {
-            try {
-              const b = node.getBBox();
-              if (b && b.width >= 0 && b.height >= 0) {
-                // Include stroke width (getBBox excludes stroke). Use computed style or attribute.
-                let sw = node.getAttribute('stroke-width');
-                if (!sw && typeof window !== 'undefined' && window.getComputedStyle) {
-                  try { sw = window.getComputedStyle(node).strokeWidth; } catch(_){}
-                }
-                sw = (typeof sw === 'string') ? parseFloat(sw) : sw;
-                if (!Number.isFinite(sw)) sw = 0;
-                const pad = sw / 2;
-                const x0 = b.x - pad;
-                const y0 = b.y - pad;
-                const x1 = b.x + b.width + pad;
-                const y1 = b.y + b.height + pad;
-                if (x0 < minX) minX = x0;
-                if (y0 < minY) minY = y0;
-                if (x1 > maxX) maxX = x1;
-                if (y1 > maxY) maxY = y1;
-              }
-            } catch(_){}
-          });
-          if (isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX>minX && maxY>minY) {
-            const bboxW = maxX - minX;
-            const bboxH = maxY - minY;
-            const scale = Math.min(w / bboxW, h / bboxH);
-            // Centering translation: we apply scale first, then translate in scaled coordinate space
-            // Use transform order: scale(s) translate(tx, ty)
-            const tx = -minX + (w/scale - bboxW)/2;
-            const ty = -minY + (h/scale - bboxH)/2;
-            const ns = 'http://www.w3.org/2000/svg';
-            const wrapper = document.createElementNS(ns, 'g');
-            while (svgEl.firstChild) wrapper.appendChild(svgEl.firstChild);
-            wrapper.setAttribute('transform', `scale(${scale}) translate(${tx},${ty})`);
-            svgEl.appendChild(wrapper);
-            svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
-            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-            Object.defineProperty(svgEl, '__normalizedSize', { value: true });
-          }
-        }
-      }
-    } catch(_){ /* ignore normalization errors */ }
-  }
-}
-
-
-
-function get_file_content(pathArg) {
-  return new Promise((resolve, reject) => {
-    if (typeof pathArg !== 'string') {
-      const err = new Error('path must be a string');
-      reject(err);
-      return;
-    }
-
-    const resolveWith = (text) => resolve(text);
-
-    // Try fetch first (browser/runtime)
-  if (typeof fetch === 'function') {
-      fetch(pathArg)
-        .then(resp => {
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          return resp.text();
-        })
-        .then(text => resolveWith(text))
-        .catch(err => {
-          // fallback to fs when available (only if globalThis.require exists)
-          if (typeof globalThis !== 'undefined' && typeof globalThis.require === 'function') {
-            try {
-              const fs = globalThis.require('fs');
-              const path = globalThis.require('path');
-              const isAbs = path.isAbsolute(pathArg);
-              const filePath = isAbs
-                ? pathArg
-                : (typeof __dirname !== 'undefined' ? path.join(__dirname, pathArg) : pathArg);
-              const content = fs.readFileSync(filePath, 'utf8');
-              resolveWith(content);
-            } catch (e) { reject(e); }
-          } else { reject(err); }
-        });
-      return;
-    }
-
-    // If fetch not available but Node-style require is
-    if (typeof globalThis !== 'undefined' && typeof globalThis.require === 'function') {
-      try {
-        const fs = globalThis.require('fs');
-        const path = globalThis.require('path');
-        const isAbs = path.isAbsolute(pathArg);
-        const filePath = isAbs
-          ? pathArg
-          : (typeof __dirname !== 'undefined' ? path.join(__dirname, pathArg) : pathArg);
-        const content = fs.readFileSync(filePath, 'utf8');
-        resolveWith(content);
-      } catch (e) { reject(e); }
-      return;
-    }
-
-    reject(new Error('No fetch() or require() available to load file'));
+  if (!parent) return null;
+  if (single) parent.querySelectorAll('svg.__auto_svg').forEach(n => n.remove());
+  const tmp = document.createElement('div');
+  tmp.innerHTML = svgcontent.trim();
+  const svgEl = tmp.querySelector('svg');
+  if (!svgEl) return null;
+  // assign id
+  try { svgEl.id = id + '_svg'; } catch(_){ }
+  svgEl.classList.add('__auto_svg');
+  // position
+  svgEl.style.position = 'absolute';
+  svgEl.style.top = top;
+  svgEl.style.left = left;
+  // target size numeric
+  const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
+  const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
+  svgEl.style.width = targetW + 'px';
+  svgEl.style.height = targetH + 'px';
+  // gather shapes
+  const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  shapes.forEach(node => {
+    try { const b=node.getBBox(); if (b && b.width>=0 && b.height>=0){
+      if (b.x<minX) minX=b.x; if (b.y<minY) minY=b.y; if (b.x+b.width>maxX) maxX=b.x+b.width; if (b.y+b.height>maxY) maxY=b.y+b.height;
+    }} catch(_){ }
   });
-}
-
-
-
-function fetch_and_render_svg(path, left= '0px', top= '0px', width = '200px', height = '200px', color = 'lightgray', path_color = 'lightgray', id=null, parent_id='view') {
-
-get_file_content(path).then(svgcontent => {
-  try {
-  create_svg(svgcontent, top, left, width, height, color, path_color, id, parent_id);
-  } catch (e) {
-    console.error('failed to render fetched svg', e);
+  const bboxValid = isFinite(minX)&&isFinite(minY)&&isFinite(maxX)&&isFinite(maxY)&&maxX>minX&&maxY>minY;
+  if (bboxValid) {
+    const bboxW = maxX-minX; const bboxH = maxY-minY;
+    const scale = Math.max(targetW / bboxW, targetH / bboxH); // cover
+    const tx = (targetW - bboxW*scale)/2 - minX*scale;
+    const ty = (targetH - bboxH*scale)/2 - minY*scale;
+    const ns = 'http://www.w3.org/2000/svg';
+    const wrapper = document.createElementNS(ns, 'g');
+    while (svgEl.firstChild) wrapper.appendChild(svgEl.firstChild);
+    wrapper.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+    svgEl.appendChild(wrapper);
+    svgEl.setAttribute('viewBox', `0 0 ${targetW} ${targetH}`);
+    svgEl.setAttribute('preserveAspectRatio', 'none');
+  } else if (!svgEl.getAttribute('viewBox')) {
+    svgEl.setAttribute('viewBox', `0 0 ${targetW} ${targetH}`);
   }
-})
-
-
+  // colors
+  if ((color || path_color) && shapes.length) {
+    shapes.forEach(node => {
+      if (path_color) node.setAttribute('stroke', path_color);
+      if (color) {
+        const f = node.getAttribute('fill');
+        if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
+      }
+    });
+    if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
+    if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+  }
+  parent.appendChild(svgEl);
+  return svgEl.id;
 }
+
+
 
 function resize(id, newWidth, newHeight, durationSec = 0, easing = 'ease') {
   let el = document.getElementById(id);
@@ -354,8 +286,8 @@ function fillColor(id, color) {
 }     
 
 
-window.fetch_and_render_svg = fetch_and_render_svg;
-
+window.render_svg = render_svg;
+window.dataFetcher = dataFetcher;
 window.resize = resize;
 window.strokeColor = strokeColor;
 window.fillColor = fillColor;
