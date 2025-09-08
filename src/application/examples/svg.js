@@ -46,15 +46,20 @@ const atomeSvgInline = $('svg', {
 
 // Example of fetching and rendering an SVG with custom size and colors
 
-  dataFetcher('images/icons/copy.svg')
+  dataFetcher('images/icons/add.svg')
     .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '333px', '120px', '120px' , 'green', 'red');  })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
 // Example of resizing an existing SVG by id after a delay
 
 setTimeout(() => {
-  fillColor('my_nice_svg', 'green');
+  fillColor('my_nice_svg', 'purple');
   strokeColor('my_nice_svg', 'orange');
-  resize('my_nice_svg', 33, 66, 0.5, 'elastic');
-}, 1500);
+  }, 1500);
+
+  setTimeout(() => {
+  resize('my_nice_svg', 33, 33, 0.5, 'elastic');
+  }, 2500);
+
+
 

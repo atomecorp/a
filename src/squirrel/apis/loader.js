@@ -112,14 +112,17 @@ function dataFetcher(path, opts = {}) {
 
 
 //svg creator
-function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)), parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
+// render_svg: inserts an SVG string. If an id is provided it's kept EXACT; if omitted an id is generated.
+function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
   const parent = document.getElementById(parent_id);
   if (!parent) return null;
   const tmp = document.createElement('div');
   tmp.innerHTML = svgcontent.trim();
   const svgEl = tmp.querySelector('svg');
   if (!svgEl) return null;
-  try { svgEl.id = id + '_svg'; } catch(_) {}
+  // Preserve provided id; generate one if missing.
+  let finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
+  try { svgEl.id = finalId; } catch(_) {}
   svgEl.classList.add('__auto_svg');
   svgEl.style.position = 'absolute';
   svgEl.style.top = top; svgEl.style.left = left;
@@ -218,7 +221,7 @@ function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
     if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
   }
   svgEl.style.visibility = prevVisibility || 'visible';
-  return svgEl.id;
+  return svgEl.id; // returns the actual id used (no suffixing)
 }
 
 
