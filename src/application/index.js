@@ -39,7 +39,7 @@
 // import('./examples/audio.js');
 
 // import('./examples/audio_swift.js'); // Active les boutons audio (routeButton Local/Auto/Host + C4/A4/E5/Chord)
-// import('./examples/console_to_swift.js');
+import('./examples/console_to_swift.js');
 
 
 

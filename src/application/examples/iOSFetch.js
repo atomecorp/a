@@ -83,10 +83,9 @@ async function dataFetcher(path, opts = {}) {
 
 
 //svg creator
-function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)), parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null, single=true) {
+function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)), parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
   const parent = document.getElementById(parent_id);
   if (!parent) return null;
-  if (single) parent.querySelectorAll('svg.__auto_svg').forEach(n => n.remove());
   const tmp = document.createElement('div');
   tmp.innerHTML = svgcontent.trim();
   const svgEl = tmp.querySelector('svg');
@@ -308,8 +307,15 @@ function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
 
 
 
-        setTimeout(() => {
+        // setTimeout(() => {
   dataFetcher('images/icons/activate.svg')
-    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '99px', '120px', '120px' , 'green', 'red');  })
+    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '0px', '120px', '120px' , 'green', 'red');  })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-  }, 2000   );
+  // }, 2000   );
+
+
+     setTimeout(() => {
+  dataFetcher('images/icons/activate.svg')
+    .then(svgData => { render_svg(svgData,'my_nice_svg2', 'view','133px', '199px', '120px', '120px' , 'green', 'red');  })
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+  }, 1000   );
