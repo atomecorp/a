@@ -1,6 +1,40 @@
 
 const __dataCache = {};
 
+// Minimal placeholder to avoid ReferenceError if user keeps catch handlers with span
+if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
+  window.span = { textContent: '' };
+}
+
+// --- Local server readiness (single global health probe) ---
+let __localServerReady = false;
+let __localServerReadyPromise = null;
+async function __waitLocalServerReady(){
+  if (__localServerReady) return true;
+  if (__localServerReadyPromise) return __localServerReadyPromise;
+  __localServerReadyPromise = (async () => {
+    // Retry /health until OK or fallback after maxAttempts so UI doesn't block forever.
+    const maxAttempts = 25; // ~3.7s at 150ms
+    for (let attempt=0; attempt < maxAttempts; attempt++) {
+      try {
+        const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
+        if (port) {
+          try {
+            const resp = await fetch(`http://127.0.0.1:${port}/health?ts=${Date.now()}`, { cache: 'no-store' });
+            if (resp.ok) { __localServerReady = true; return true; }
+          } catch(_) { /* health fetch failed, will retry */ }
+        }
+      } catch(_) {}
+      await new Promise(r => setTimeout(r, 150));
+    }
+    // Fallback: proceed anyway (asset relative fetch will still work). Mark as ready to avoid future waits.
+    __localServerReady = true;
+    return false;
+  })();
+  return __localServerReadyPromise;
+}
+// -----------------------------------------------------------
+
 async function dataFetcher(path, opts = {}) {
   const mode = (opts.mode || 'auto').toLowerCase(); // auto|text|url|arraybuffer|blob|preview
   const key = path + '::' + mode + '::' + (opts.preview||'');
@@ -11,7 +45,9 @@ async function dataFetcher(path, opts = {}) {
   if (!cleanPath) throw new Error('Chemin vide');
   const filename = cleanPath.split('/').pop();
   const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+  // Kick off (non bloquant) readiness probe if not started
   const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+  if (typeof window !== 'undefined' && !__localServerReady && !__localServerReadyPromise) { __waitLocalServerReady(); }
 
   const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
   const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
@@ -23,11 +59,8 @@ async function dataFetcher(path, opts = {}) {
 
   const serverCandidates = [];
   if (port) {
-    // unified endpoint first
     serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
-    if (looksText) {
-      serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
-    }
+    if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
     if (looksAudio) {
       serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
       serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
@@ -39,6 +72,41 @@ async function dataFetcher(path, opts = {}) {
   const assetCandidates = [assetPath];
   const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
   if (altAsset !== assetPath) assetCandidates.push(altAsset);
+
+  // If no port yet (iOS race) try assets immediately; if success we return now.
+  if (!port) {
+    for (const u of assetCandidates) {
+      try {
+        if (looksText || mode === 'text' || mode === 'preview') {
+          const r = await fetch(u); if (!r.ok) continue;
+          const txt = await r.text();
+          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+          return done(txt);
+        }
+        if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+        if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+        const r = await fetch(u); if (!r.ok) continue; return done(u);
+      } catch(_) {}
+    }
+    // If assets failed, do a short rapid poll for port (<= 900ms) so first icon still precedes second (setTimeout 1000)
+    const startPoll = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    while (true) {
+      const pNow = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
+      if (pNow) {
+        // update and build candidates then break to normal flow
+        serverCandidates.push(`http://127.0.0.1:${pNow}/file/${encodeURI(cleanPath)}`);
+        if (looksText) serverCandidates.push(`http://127.0.0.1:${pNow}/text/${encodeURI(cleanPath)}`);
+        if (looksAudio) {
+          serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURIComponent(filename)}`);
+          serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURI(cleanPath)}`);
+        }
+        break;
+      }
+      const nowT = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      if (nowT - startPoll > 900) break;
+      await new Promise(r => setTimeout(r, 60));
+    }
+  }
 
   if (mode === 'url') {
     const out = serverCandidates[0] || assetCandidates[0];
@@ -318,4 +386,4 @@ function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
   dataFetcher('images/icons/activate.svg')
     .then(svgData => { render_svg(svgData,'my_nice_svg2', 'view','133px', '199px', '120px', '120px' , 'green', 'red');  })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-  }, 1000   );
+  }, 2000   );
