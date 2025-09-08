@@ -20,15 +20,28 @@ function current_platform() {
       return 'Taurie';
     }
 
-    // AUv3 bridge heuristics (keep same list) + forced flag
-    const hasAUv3Bridge = !!(isIOS && window.webkit && window.webkit.messageHandlers && (
-      window.webkit.messageHandlers.auv3 ||
-      window.webkit.messageHandlers.auv3Bridge ||
-      window.webkit.messageHandlers.bridge ||
-      window.webkit.messageHandlers.swift ||
-      window.webkit.messageHandlers['atome-bridge']
-    ));
-    if (hasAUv3Bridge || window.forceAUv3Mode === true) return 'ios_auv3';
+    // AUv3 bridge heuristics (extended)
+    let hasAUv3Bridge = false;
+  // Fast explicit flag (injected by Swift) or query param (?auv3=1 / ?mode=auv3)
+  const explicitAUv3 = !!(window.__AUV3_MODE__ || window.__AUV3__ || (typeof location !== 'undefined' && /[?&](auv3=1|mode=auv3)(?:&|$)/i.test(location.search)));
+  if (explicitAUv3 && isIOS) return 'ios_auv3';
+    if (isIOS && window.webkit && window.webkit.messageHandlers) {
+      try {
+        const mh = window.webkit.messageHandlers;
+        const names = Object.keys(mh);
+        if (names.length) {
+          // match typical naming patterns
+          const pattern = /(auv3|plug|audio|swift|host|bridge|atome)/i;
+          if (names.some(n => pattern.test(n))) hasAUv3Bridge = true;
+          // fallback: if running from file:// or embedded context with any handlers
+          if (!hasAUv3Bridge && (location.protocol === 'file:' || names.length > 1)) {
+            hasAUv3Bridge = true;
+          }
+        }
+      } catch(_) {}
+    }
+    if (window.forceAUv3Mode === true) hasAUv3Bridge = true;
+    if (hasAUv3Bridge) return 'ios_auv3';
     if (isIOS) return 'ios';
 
     // Distinguish Safari (desktop) from generic desktop Mac

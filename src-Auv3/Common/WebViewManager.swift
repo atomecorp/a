@@ -685,14 +685,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")
             }
         }
-        // Inject notch information & class
+    // Inject AUv3 / App context flag early for JS platform detection
+    let isExtension: Bool = Bundle.main.bundlePath.hasSuffix(".appex")
+    let auv3JS = "window.__AUV3_MODE__=" + (isExtension ? "true" : "false") + ";"
+    webView.evaluateJavaScript(auv3JS, completionHandler: nil)
+    // Inject notch information & class
         let topInset = webView.safeAreaInsets.top
         let hasNotch = UIDevice.current.userInterfaceIdiom == .phone && topInset >= 44
         let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
         webView.evaluateJavaScript(notchJS, completionHandler: nil)
         print("notch info: hasNotch=\(hasNotch) topInset=\(topInset)")
         // Auto-restore entitlements to sync JS UI after load (App only; AUv3 can't present auth UI)
-        let isExtension: Bool = Bundle.main.bundlePath.hasSuffix(".appex")
         if FeatureFlags.sendPurchaseRestoreOnDidFinish && !isExtension {
             if #available(iOS 15.0, *) {
                 Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }
