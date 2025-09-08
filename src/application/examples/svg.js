@@ -7,14 +7,16 @@ const atomeSvg = $('svg', {
     viewBox: '0 0 237 237',
     xmlns: 'http://www.w3.org/2000/svg'
   },
-  svgSrc: '../../assets/images/logos/vie.svg',
+  svgSrc: './assets/images/logos/vie.svg',
   parent: '#view',  
   css: {
     width: '200px',    
     height: '200px',
   }
 });
-
+setTimeout(() => {
+  // resize('svg-vie-from-file', 100, 100, 1.0, 'elastic');
+}, 1500); 
 // Exemple avec innerHTML pour comparaison
 const atomeSvgInline = $('svg', {
   id: 'svg-atome-inline',

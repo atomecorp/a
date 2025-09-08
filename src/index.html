@@ -17,8 +17,27 @@
    <script type="module" src="js/three.min.js"></script>
   <script type="module" src="squirrel/spark.js"></script>
   <script type="module">
+    // Max optimized readiness: zero network probes; only (iOS) brief wait for native-injected port variable.
+    // If native later wants to be explicit, it can dispatch: window.dispatchEvent(new Event('local-server-ready'));
+    let __localServerReadyProm;
+    function __waitLocalServerReadyOnce() {
+      if (__localServerReadyProm) return __localServerReadyProm;
+      __localServerReadyProm = (async () => {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (!isIOS) return true; // desktop / web: no delay
+        const portGetter = () => (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT);
+        // Wait up to 800ms for port to appear; bail earlier as soon as it exists.
+        const end = performance.now() + 800;
+        while (!portGetter() && performance.now() < end) {
+          await new Promise(r => setTimeout(r, 55));
+        }
+        // Even if absent we continue to avoid blocking UI; late code can retry access lazily.
+        return true;
+      })();
+      return __localServerReadyProm;
+    }
     window.addEventListener('squirrel:ready', () => {
-      import('./application/index.js');
+      __waitLocalServerReadyOnce().finally(() => import('./application/index.js'));
     });
   </script>
 </head>

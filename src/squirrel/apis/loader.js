@@ -5,37 +5,8 @@ if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
   window.span = { textContent: '' };
 }
 
-// --- Local server readiness (single global health probe; only iOS / ios_auv3 needs real waiting) ---
-let __localServerReady = false;
-let __localServerReadyPromise = null;
-function __isIOSLikePlatform(){
-  try { return typeof current_platform === 'function' && /^(ios|ios_auv3)$/.test(current_platform()); } catch(_) { return false; }
-}
-async function __waitLocalServerReady(){
-  // Skip active waiting if not iOS platform
-  if (!__isIOSLikePlatform()) { __localServerReady = true; return true; }
-  if (__localServerReady) return true;
-  if (__localServerReadyPromise) return __localServerReadyPromise;
-  __localServerReadyPromise = (async () => {
-    const maxAttempts = 25; // ~3.7s at 150ms (only iOS)
-    for (let attempt=0; attempt < maxAttempts; attempt++) {
-      try {
-        const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
-        if (port) {
-          try {
-            const resp = await fetch(`http://127.0.0.1:${port}/health?ts=${Date.now()}`, { cache: 'no-store' });
-            if (resp.ok) { __localServerReady = true; return true; }
-          } catch(_) {}
-        }
-      } catch(_) {}
-      await new Promise(r => setTimeout(r, 150));
-    }
-    __localServerReady = true; // fallback
-    return false;
-  })();
-  return __localServerReadyPromise;
-}
-// -----------------------------------------------------------
+// (Removed __waitLocalServerReady waiting logic: SVG/data fetch is now immediate on all platforms)
+let __localServerReady = true;
 
 async function dataFetcher(path, opts = {}) {
   const mode = (opts.mode || 'auto').toLowerCase(); // auto|text|url|arraybuffer|blob|preview
@@ -49,7 +20,7 @@ async function dataFetcher(path, opts = {}) {
   const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
   // Kick off (non bloquant) readiness probe if not started
   const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
-  if (typeof window !== 'undefined' && !__localServerReady && !__localServerReadyPromise) { __waitLocalServerReady(); }
+  // no readiness wait
 
   const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
   const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
@@ -91,24 +62,7 @@ async function dataFetcher(path, opts = {}) {
       } catch(_) {}
     }
     // Only iOS actively polls for late port assignment; others proceed immediately
-    if (__isIOSLikePlatform()) {
-      const startPoll = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-      while (true) {
-        const pNow = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
-        if (pNow) {
-          serverCandidates.push(`http://127.0.0.1:${pNow}/file/${encodeURI(cleanPath)}`);
-          if (looksText) serverCandidates.push(`http://127.0.0.1:${pNow}/text/${encodeURI(cleanPath)}`);
-          if (looksAudio) {
-            serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURIComponent(filename)}`);
-            serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURI(cleanPath)}`);
-          }
-          break;
-        }
-        const nowT = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-        if (nowT - startPoll > 900) break;
-        await new Promise(r => setTimeout(r, 60));
-      }
-    }
+  // no polling (immediate fallback to assets)
   }
 
   if (mode === 'url') {
