@@ -179,13 +179,22 @@ function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
     sw = parseFloat(sw);
     return Number.isFinite(sw) ? sw : 0;
   };
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,maxStroke=0;
   shapes.forEach(node => {
     try {
       const b = node.getBBox();
       if (b && b.width >= 0 && b.height >= 0) {
         const sw = getStrokeWidth(node);
-        const pad = sw/2; // stroke extends equally each side
+        if (sw > maxStroke) maxStroke = sw;
+        // Adjust pad according to join style (miter can project further)
+        let join = (node.getAttribute('stroke-linejoin')||'').toLowerCase();
+        let miterLimit = parseFloat(node.getAttribute('stroke-miterlimit'));
+        if (!isFinite(miterLimit) || miterLimit <= 1) miterLimit = 4; // default SVG
+        let pad = sw/2; // base
+        if (join === 'miter') pad = Math.min(sw/2 * miterLimit, sw*2); // cap extreme
+        else if (join === 'bevel') pad = sw * 0.75;
+        else if (join === 'round') pad = sw * 0.6;
+        // Compute inflated bounds
         const x0 = b.x - pad;
         const y0 = b.y - pad;
         const x1 = b.x + b.width + pad;
@@ -195,14 +204,29 @@ function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
         if (x1 > maxX) maxX = x1;
         if (y1 > maxY) maxY = y1;
       }
-    } catch(_){}
-  });
+    } catch(_){}}
+  );
   const bboxValid = isFinite(minX)&&isFinite(minY)&&isFinite(maxX)&&isFinite(maxY)&&maxX>minX&&maxY>minY;
   if (bboxValid) {
+    // Safety extra margin (covers antialias + potential miter overshoot not caught)
+    const safety = Math.max(0.75, maxStroke * 0.35);
+    // Base extra margin (already solved left/right)
+    const extra = Math.max(1, maxStroke * 0.25);
+    // Apply symmetric horizontal padding
+    minX -= (safety + extra);
+    maxX += (safety + extra);
+    // Apply base vertical padding then extend more to fix top/bottom missing pixels
+    minY -= (safety + extra);
+    maxY += (safety + extra);
+    // Additional vertical-only boost (doesn't change horizontal already OK)
+    const verticalBoost = Math.max( (safety+extra)*0.6, maxStroke + 1.5 );
+    minY -= verticalBoost;
+    maxY += verticalBoost;
     const bboxW = maxX-minX, bboxH = maxY-minY;
-    const scale = Math.max(targetW / bboxW, targetH / bboxH); // cover
-    const tx = (targetW - bboxW*scale)/2 - minX*scale;
-    const ty = (targetH - bboxH*scale)/2 - minY*scale;
+  // Use contain scaling (no cropping) instead of cover to avoid vertical trimming
+  const scale = Math.min(targetW / bboxW, targetH / bboxH); // contain scaling
+  const tx = (targetW - bboxW*scale)/2 - minX*scale; // center horizontally
+  const ty = (targetH - bboxH*scale)/2 - minY*scale; // center vertically
     const ns = 'http://www.w3.org/2000/svg';
     const g = document.createElementNS(ns,'g');
     while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
