@@ -1,6 +1,38 @@
-
-
 const __dataCache = {};
+
+// Minimal placeholder to avoid ReferenceError if user keeps catch handlers with span
+if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
+  window.span = { textContent: '' };
+}
+
+// --- Local server readiness (single global health probe) ---
+let __localServerReady = false;
+let __localServerReadyPromise = null;
+async function __waitLocalServerReady(){
+  if (__localServerReady) return true;
+  if (__localServerReadyPromise) return __localServerReadyPromise;
+  __localServerReadyPromise = (async () => {
+    // Retry /health until OK or fallback after maxAttempts so UI doesn't block forever.
+    const maxAttempts = 25; // ~3.7s at 150ms
+    for (let attempt=0; attempt < maxAttempts; attempt++) {
+      try {
+        const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
+        if (port) {
+          try {
+            const resp = await fetch(`http://127.0.0.1:${port}/health?ts=${Date.now()}`, { cache: 'no-store' });
+            if (resp.ok) { __localServerReady = true; return true; }
+          } catch(_) { /* health fetch failed, will retry */ }
+        }
+      } catch(_) {}
+      await new Promise(r => setTimeout(r, 150));
+    }
+    // Fallback: proceed anyway (asset relative fetch will still work). Mark as ready to avoid future waits.
+    __localServerReady = true;
+    return false;
+  })();
+  return __localServerReadyPromise;
+}
+// -----------------------------------------------------------
 
 async function dataFetcher(path, opts = {}) {
   const mode = (opts.mode || 'auto').toLowerCase(); // auto|text|url|arraybuffer|blob|preview
@@ -12,7 +44,9 @@ async function dataFetcher(path, opts = {}) {
   if (!cleanPath) throw new Error('Chemin vide');
   const filename = cleanPath.split('/').pop();
   const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+  // Kick off (non bloquant) readiness probe if not started
   const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+  if (typeof window !== 'undefined' && !__localServerReady && !__localServerReadyPromise) { __waitLocalServerReady(); }
 
   const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
   const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
@@ -24,11 +58,8 @@ async function dataFetcher(path, opts = {}) {
 
   const serverCandidates = [];
   if (port) {
-    // unified endpoint first
     serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
-    if (looksText) {
-      serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
-    }
+    if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
     if (looksAudio) {
       serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
       serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
@@ -40,6 +71,41 @@ async function dataFetcher(path, opts = {}) {
   const assetCandidates = [assetPath];
   const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
   if (altAsset !== assetPath) assetCandidates.push(altAsset);
+
+  // If no port yet (iOS race) try assets immediately; if success we return now.
+  if (!port) {
+    for (const u of assetCandidates) {
+      try {
+        if (looksText || mode === 'text' || mode === 'preview') {
+          const r = await fetch(u); if (!r.ok) continue;
+          const txt = await r.text();
+          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+          return done(txt);
+        }
+        if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+        if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+        const r = await fetch(u); if (!r.ok) continue; return done(u);
+      } catch(_) {}
+    }
+    // If assets failed, do a short rapid poll for port (<= 900ms) so first icon still precedes second (setTimeout 1000)
+    const startPoll = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    while (true) {
+      const pNow = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT;
+      if (pNow) {
+        // update and build candidates then break to normal flow
+        serverCandidates.push(`http://127.0.0.1:${pNow}/file/${encodeURI(cleanPath)}`);
+        if (looksText) serverCandidates.push(`http://127.0.0.1:${pNow}/text/${encodeURI(cleanPath)}`);
+        if (looksAudio) {
+          serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURIComponent(filename)}`);
+          serverCandidates.push(`http://127.0.0.1:${pNow}/audio/${encodeURI(cleanPath)}`);
+        }
+        break;
+      }
+      const nowT = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      if (nowT - startPoll > 900) break;
+      await new Promise(r => setTimeout(r, 60));
+    }
+  }
 
   if (mode === 'url') {
     const out = serverCandidates[0] || assetCandidates[0];
@@ -84,51 +150,76 @@ async function dataFetcher(path, opts = {}) {
 
 
 //svg creator
-function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)), parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null, single=true) {
+function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)), parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
   const parent = document.getElementById(parent_id);
   if (!parent) return null;
-  if (single) parent.querySelectorAll('svg.__auto_svg').forEach(n => n.remove());
   const tmp = document.createElement('div');
   tmp.innerHTML = svgcontent.trim();
   const svgEl = tmp.querySelector('svg');
   if (!svgEl) return null;
-  // assign id
-  try { svgEl.id = id + '_svg'; } catch(_){ }
+  try { svgEl.id = id + '_svg'; } catch(_) {}
   svgEl.classList.add('__auto_svg');
-  // position
   svgEl.style.position = 'absolute';
-  svgEl.style.top = top;
-  svgEl.style.left = left;
-  // target size numeric
+  svgEl.style.top = top; svgEl.style.left = left;
   const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
   const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
   svgEl.style.width = targetW + 'px';
   svgEl.style.height = targetH + 'px';
-  // gather shapes
-  const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+  // Insert first (hidden) so getBBox works for all browsers
+  const prevVisibility = svgEl.style.visibility;
+  svgEl.style.visibility = 'hidden';
+  parent.appendChild(svgEl);
+  // Collect shapes & compute bbox (inflated by stroke width/2 so strokes aren't clipped)
+  const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
+  const getStrokeWidth = (el) => {
+    let sw = el.getAttribute('stroke-width');
+    if ((!sw || sw === '0' || sw === '') && typeof window !== 'undefined' && window.getComputedStyle) {
+      try { sw = window.getComputedStyle(el).strokeWidth; } catch(_) {}
+    }
+    sw = parseFloat(sw);
+    return Number.isFinite(sw) ? sw : 0;
+  };
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
   shapes.forEach(node => {
-    try { const b=node.getBBox(); if (b && b.width>=0 && b.height>=0){
-      if (b.x<minX) minX=b.x; if (b.y<minY) minY=b.y; if (b.x+b.width>maxX) maxX=b.x+b.width; if (b.y+b.height>maxY) maxY=b.y+b.height;
-    }} catch(_){ }
+    try {
+      const b = node.getBBox();
+      if (b && b.width >= 0 && b.height >= 0) {
+        const sw = getStrokeWidth(node);
+        const pad = sw/2; // stroke extends equally each side
+        const x0 = b.x - pad;
+        const y0 = b.y - pad;
+        const x1 = b.x + b.width + pad;
+        const y1 = b.y + b.height + pad;
+        if (x0 < minX) minX = x0;
+        if (y0 < minY) minY = y0;
+        if (x1 > maxX) maxX = x1;
+        if (y1 > maxY) maxY = y1;
+      }
+    } catch(_){}
   });
   const bboxValid = isFinite(minX)&&isFinite(minY)&&isFinite(maxX)&&isFinite(maxY)&&maxX>minX&&maxY>minY;
   if (bboxValid) {
-    const bboxW = maxX-minX; const bboxH = maxY-minY;
+    const bboxW = maxX-minX, bboxH = maxY-minY;
     const scale = Math.max(targetW / bboxW, targetH / bboxH); // cover
     const tx = (targetW - bboxW*scale)/2 - minX*scale;
     const ty = (targetH - bboxH*scale)/2 - minY*scale;
     const ns = 'http://www.w3.org/2000/svg';
-    const wrapper = document.createElementNS(ns, 'g');
-    while (svgEl.firstChild) wrapper.appendChild(svgEl.firstChild);
-    wrapper.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
-    svgEl.appendChild(wrapper);
+    const g = document.createElementNS(ns,'g');
+    while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
+    g.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+    svgEl.appendChild(g);
     svgEl.setAttribute('viewBox', `0 0 ${targetW} ${targetH}`);
-    svgEl.setAttribute('preserveAspectRatio', 'none');
-  } else if (!svgEl.getAttribute('viewBox')) {
-    svgEl.setAttribute('viewBox', `0 0 ${targetW} ${targetH}`);
+    svgEl.setAttribute('preserveAspectRatio','none');
+  } else {
+    // Fallback: keep original coordinate system so large coords remain visible when scaled by CSS
+    if (!svgEl.getAttribute('viewBox')) {
+      const origW = parseFloat(svgEl.getAttribute('width')) || targetW;
+      const origH = parseFloat(svgEl.getAttribute('height')) || targetH;
+      svgEl.setAttribute('viewBox', `0 0 ${origW} ${origH}`);
+      svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
+    }
   }
-  // colors
+  // Colors
   if ((color || path_color) && shapes.length) {
     shapes.forEach(node => {
       if (path_color) node.setAttribute('stroke', path_color);
@@ -140,9 +231,10 @@ function render_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(
     if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
     if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
   }
-  parent.appendChild(svgEl);
+  svgEl.style.visibility = prevVisibility || 'visible';
   return svgEl.id;
 }
+
 
 
 
