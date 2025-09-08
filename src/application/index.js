@@ -26,7 +26,8 @@
 // import('./examples/image.js');
 
 // import('./vie/vie.js');
-import('./examples/svg.js');
+// import('./examples/svg.js');
+import('./examples/platform.js');
 // import('./examples/anim_svg.js');
 // import('./examples/shortcut.js');
 
