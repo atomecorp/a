@@ -89,7 +89,7 @@ async function dataFetcher(path, opts = {}) {
 
 
 //svg creator
-function create_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)) , parent_id='view', top = '120px', left = '120px', width = '200px', height = '200px', color = null, path_color = null) {
+function create_svg(svgcontent, id = ('svg_' + Math.random().toString(36).slice(2)) , parent_id='view', top = '120px', left = '0px', width = '200px', height = '200px', color = null, path_color = null) {
   const parent = document.getElementById(parent_id);
   if (!parent) return null;
   const temp = document.createElement('div');
