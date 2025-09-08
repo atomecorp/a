@@ -2,9 +2,17 @@ function current_platform() {
   try {
     if (typeof window === 'undefined') return 'serveur';
     const ua = navigator.userAgent || '';
-    const isIOS = /iPad|iPhone|iPod/.test(ua);
-    const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
+    const vendor = navigator.vendor || '';
+    const lowerUA = ua.toLowerCase();
+    const isAppleVendor = /apple/i.test(vendor);
+    const touchCapable = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
 
+    const isTrueIOSUA = /iPad|iPhone|iPod/.test(ua);
+    // iPadOS 13+ can present itself as Mac; detect via touch + Apple vendor + 'Mac' in UA
+    const isIPadDesktopMode = (!isTrueIOSUA && isAppleVendor && touchCapable && /macintosh/i.test(ua));
+    const isIOS = isTrueIOSUA || isIPadDesktopMode;
+
+    const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
     if (isTauri) {
       if (/Macintosh|Mac OS X/.test(ua)) return 'Taurie_mac';
       if (/Windows/.test(ua)) return 'Taurie_windows';
@@ -12,7 +20,7 @@ function current_platform() {
       return 'Taurie';
     }
 
-    // AUv3 bridge 
+    // AUv3 bridge heuristics (keep same list) + forced flag
     const hasAUv3Bridge = !!(isIOS && window.webkit && window.webkit.messageHandlers && (
       window.webkit.messageHandlers.auv3 ||
       window.webkit.messageHandlers.auv3Bridge ||
@@ -20,11 +28,13 @@ function current_platform() {
       window.webkit.messageHandlers.swift ||
       window.webkit.messageHandlers['atome-bridge']
     ));
-
     if (hasAUv3Bridge || window.forceAUv3Mode === true) return 'ios_auv3';
     if (isIOS) return 'ios';
 
-    if (/Macintosh|Mac OS X/.test(ua)) return 'desktop_mac';
+    // Distinguish Safari (desktop) from generic desktop Mac
+    const isSafari = isAppleVendor && /safari/i.test(ua) && !/chrome|crios|chromium|edg|opr|firefox|fxios|tauri|electron/i.test(lowerUA);
+
+    if (/Macintosh|Mac OS X/.test(ua)) return isSafari ? 'safari_mac' : 'desktop_mac';
     if (/Windows/.test(ua)) return 'desktop_windows';
     if (/Linux/.test(ua)) return 'desktop_linux';
 
@@ -33,6 +43,9 @@ function current_platform() {
     return 'inconnu';
   }
 }
+
+// expose globally
+if (typeof window !== 'undefined') { window.current_platform = current_platform; }
 
 
 // usage 
@@ -51,4 +64,32 @@ $('span', {
   text: 'platform: '
 });
 
-grab('test1').textContent = 'platform: ' + current_platform();
+// Safe badge update (works even if element not yet created by squirrel at first call)
+(function(){
+  const updater = () => {
+    const g = (typeof grab === 'function') ? grab : (id => document.getElementById(id));
+    let el = g('test1');
+    if (!el && typeof $ === 'function') {
+      el = $('span', { id:'test1', css:{ backgroundColor:'#00f', marginLeft:'0', padding:'10px', color:'white', margin:'10px', display:'inline-block' }, text:'' });
+    }
+    if (!el) {
+      const s = document.createElement('span');
+      s.id = 'test1';
+      s.style.backgroundColor = '#00f';
+      s.style.padding = '10px';
+      s.style.color = 'white';
+      s.style.margin = '10px';
+      s.style.display = 'inline-block';
+      document.body.appendChild(s);
+      el = s;
+    }
+    el.textContent = 'platform: ' + current_platform();
+  };
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    updater();
+  } else {
+    document.addEventListener('DOMContentLoaded', updater, { once:true });
+  }
+  // Refresh once after small delay to catch late AUv3 bridge injection
+  setTimeout(() => { try { updater(); } catch(_){} }, 400);
+})();
