@@ -52,9 +52,9 @@ const atomeSvgInline = $('svg', {
 
 // Example of resizing an existing SVG by id after a delay
 
-// setTimeout(() => {
-//   fillColor('my_nice_svg', 'green');
-//   strokeColor('my_nice_svg', 'orange');
-//   resize('my_nice_svg', 33, 66, 0.5, 'elastic');
-// }, 1500);
+setTimeout(() => {
+  fillColor('my_nice_svg', 'green');
+  strokeColor('my_nice_svg', 'orange');
+  resize('my_nice_svg', 33, 66, 0.5, 'elastic');
+}, 1500);
 

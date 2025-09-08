@@ -17,28 +17,18 @@
    <script type="module" src="js/three.min.js"></script>
   <script type="module" src="squirrel/spark.js"></script>
   <script type="module">
-    // Max optimized readiness: zero network probes; only (iOS) brief wait for native-injected port variable.
-    // If native later wants to be explicit, it can dispatch: window.dispatchEvent(new Event('local-server-ready'));
-    let __localServerReadyProm;
-    function __waitLocalServerReadyOnce() {
-      if (__localServerReadyProm) return __localServerReadyProm;
-      __localServerReadyProm = (async () => {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        if (!isIOS) return true; // desktop / web: no delay
-        const portGetter = () => (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT);
-        // Wait up to 800ms for port to appear; bail earlier as soon as it exists.
-        const end = performance.now() + 800;
-        while (!portGetter() && performance.now() < end) {
-          await new Promise(r => setTimeout(r, 55));
-        }
-        // Even if absent we continue to avoid blocking UI; late code can retry access lazily.
-        return true;
-      })();
-      return __localServerReadyProm;
+    // Ultra minimal readiness: rely purely on native event (local-server-ready) or immediate import on non-iOS.
+    let __appImported = false;
+    function __importAppOnce(){ if(__appImported) return; __appImported = true; import('./application/index.js'); }
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!isIOS) {
+      window.addEventListener('squirrel:ready', __importAppOnce, { once:true });
+    } else {
+      // iOS waits for explicit native signal
+      window.addEventListener('local-server-ready', __importAppOnce, { once:true });
+      // Safety fallback: if native forgot to dispatch within 900ms, continue anyway.
+      window.addEventListener('squirrel:ready', () => { setTimeout(__importAppOnce, 900); }, { once:true });
     }
-    window.addEventListener('squirrel:ready', () => {
-      __waitLocalServerReadyOnce().finally(() => import('./application/index.js'));
-    });
   </script>
 </head>
 

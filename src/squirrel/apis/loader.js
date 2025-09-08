@@ -8,46 +8,87 @@ if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
 // (Removed __waitLocalServerReady waiting logic: SVG/data fetch is now immediate on all platforms)
 let __localServerReady = true;
 
-async function dataFetcher(path, opts = {}) {
-  const mode = (opts.mode || 'auto').toLowerCase(); // auto|text|url|arraybuffer|blob|preview
+const __inflightData = {};
+function dataFetcher(path, opts = {}) {
+  const mode = (opts.mode || 'auto').toLowerCase();
   const key = path + '::' + mode + '::' + (opts.preview||'');
-  if (__dataCache[key]) return __dataCache[key];
-  if (typeof fetch !== 'function') throw new Error('fetch indisponible');
+  if (__dataCache[key]) return Promise.resolve(__dataCache[key]);
+  if (__inflightData[key]) return __inflightData[key];
+  if (typeof fetch !== 'function') return Promise.reject(new Error('fetch indisponible'));
 
-  let cleanPath = (path || '').trim().replace(/^\/+/,'').replace(/^[.]+/,'');
-  if (!cleanPath) throw new Error('Chemin vide');
-  const filename = cleanPath.split('/').pop();
-  const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
-  // Kick off (non bloquant) readiness probe if not started
-  const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
-  // no readiness wait
+  const p = (async () => {
+    let cleanPath = (path || '').trim().replace(/^\/+/,'').replace(/^[.]+/,'');
+    if (!cleanPath) throw new Error('Chemin vide');
+    const filename = cleanPath.split('/').pop();
+    const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+    const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
 
-  const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
-  const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
-  const binPreferred = /^(png|jpe?g|gif|webp|avif|bmp|ico|mp4|mov|webm|m4v|woff2?|ttf|otf|pdf)$/;
+    const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
+    const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
+    const binPreferred = /^(png|jpe?g|gif|webp|avif|bmp|ico|mp4|mov|webm|m4v|woff2?|ttf|otf|pdf)$/;
 
-  const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
-  const looksAudio = audioExt.test(ext);
-  const looksBinary = binPreferred.test(ext) || looksAudio;
+    const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
+    const looksAudio = audioExt.test(ext);
+    const looksBinary = binPreferred.test(ext) || looksAudio; // kept for future branching
 
-  const serverCandidates = [];
-  if (port) {
-    serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
-    if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
-    if (looksAudio) {
-      serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
-      serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
+    const serverCandidates = [];
+    if (port) {
+      serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
+      if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
+      if (looksAudio) {
+        serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
+        serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
+      }
     }
-  }
 
-  let assetPath = cleanPath;
-  if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
-  const assetCandidates = [assetPath];
-  const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
-  if (altAsset !== assetPath) assetCandidates.push(altAsset);
+    let assetPath = cleanPath;
+    if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
+    const assetCandidates = [assetPath];
+    const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
+    if (altAsset !== assetPath) assetCandidates.push(altAsset);
 
-  // If no port yet (iOS race) try assets immediately; if success we return now.
-  if (!port) {
+    const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
+
+    // Immediate asset try if no port yet
+    if (!port) {
+      for (const u of assetCandidates) {
+        try {
+          if (looksText || mode === 'text' || mode === 'preview') {
+            const r = await fetch(u); if (!r.ok) continue;
+            const txt = await r.text();
+            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+            return done(txt);
+          }
+          if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+          if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+          const r = await fetch(u); if (!r.ok) continue; return done(u);
+        } catch(_) {}
+      }
+    }
+
+    if (mode === 'url') {
+      const out = serverCandidates[0] || assetCandidates[0];
+      return done(out);
+    }
+
+    for (const u of serverCandidates) {
+      try {
+        const r = await fetch(u);
+        if (!r.ok) continue;
+        if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+        if (mode === 'blob') return done(await r.blob());
+        if (looksText || mode === 'text' || mode === 'preview') {
+          const txt = await r.text();
+          if (mode === 'preview' || opts.preview) {
+            const max = opts.preview || 120; return done(txt.slice(0,max));
+          }
+            return done(txt);
+        }
+        if (looksAudio && mode === 'auto') return done(u); // streaming URL path
+        return done(u);
+      } catch(_) {}
+    }
+
     for (const u of assetCandidates) {
       try {
         if (looksText || mode === 'text' || mode === 'preview') {
@@ -58,52 +99,15 @@ async function dataFetcher(path, opts = {}) {
         }
         if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
         if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
-        const r = await fetch(u); if (!r.ok) continue; return done(u);
+        return done(u);
       } catch(_) {}
     }
-    // Only iOS actively polls for late port assignment; others proceed immediately
-  // no polling (immediate fallback to assets)
-  }
 
-  if (mode === 'url') {
-    const out = serverCandidates[0] || assetCandidates[0];
-    __dataCache[key] = out; return out;
-  }
-  const done = v => { __dataCache[key] = v; return v; };
-
-  for (const u of serverCandidates) {
-    try {
-      const r = await fetch(u);
-      if (!r.ok) continue;
-      if (mode === 'arraybuffer') return done(await r.arrayBuffer());
-      if (mode === 'blob') return done(await r.blob());
-      if (looksText || mode === 'text' || mode === 'preview') {
-        const txt = await r.text();
-        if (mode === 'preview' || opts.preview) {
-          const max = opts.preview || 120; return done(txt.slice(0,max));
-        }
-        return done(txt);
-      }
-      if (looksAudio && mode === 'auto') return done(u); // streaming URL
-      return done(u); // generic binary
-    } catch(_) {}
-  }
-
-  for (const u of assetCandidates) {
-    try {
-      if (looksText || mode === 'text' || mode === 'preview') {
-        const r = await fetch(u); if (!r.ok) continue;
-        const txt = await r.text();
-        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
-        return done(txt);
-      }
-      if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
-      if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
-      return done(u);
-    } catch(_) {}
-  }
-
-  throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+    delete __inflightData[key];
+    throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+  })();
+  __inflightData[key] = p;
+  return p;
 }
 
 
