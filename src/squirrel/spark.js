@@ -5,6 +5,7 @@
 
 // === STATIC ES6 IMPORTS ===
 import './apis/essentials.js';
+import './apis/utils.js';
 import './apis/loader.js';
 import './apis/shortcut.js';
 import { $, define, observeMutations } from './squirrel.js';

@@ -69,4 +69,6 @@ function initKickstart() {
 // Run kickstart as soon as this file is loaded
 // Global helpers are already exposed by spark.js
 initKickstart();
-console.log('✅ Squirrel 1.0.5 ©atome');
+
+console.log('Squirrel 1.0.5 ©atome');
+console.log('Current platform: '+current_platform());
