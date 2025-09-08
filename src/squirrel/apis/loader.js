@@ -17,7 +17,13 @@ function dataFetcher(path, opts = {}) {
   if (typeof fetch !== 'function') return Promise.reject(new Error('fetch indisponible'));
 
   const p = (async () => {
-    let cleanPath = (path || '').trim().replace(/^\/+/,'').replace(/^[.]+/,'');
+  // Normalize path: remove leading './' or '/', but keep first segment intact
+  let cleanPath = (path || '').trim();
+  // Remove any leading ./ sequences
+  cleanPath = cleanPath.replace(/^(?:\.\/)+/, '');
+  // Then strip remaining leading slashes
+  cleanPath = cleanPath.replace(/^\/+/, '');
+  // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
     if (!cleanPath) throw new Error('Chemin vide');
     const filename = cleanPath.split('/').pop();
     const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
@@ -225,11 +231,18 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
 }
 
 
-function fetch_and_render_svg(path, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
-  dataFetcher(path, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) 
-    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '333px', '120px', '120px' , 'green', 'red');  })
-    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
-
+// fetch_and_render_svg: convenience wrapper specialized for SVG paths.
+// Param order kept for existing calls: (path, id, parent_id, left, top, width, height, fill, stroke)
+// Note: render_svg expects (top, left) order, so we swap when forwarding.
+function fetch_and_render_svg(path, id, parent_id='view', left='0px', top='0px', width='100px', height='100px', fill=null, stroke=null) {
+  return dataFetcher(path, { mode: 'text' })
+    .then(svgData => {
+      // Remove prior element with same id to avoid duplicates
+      const prev = document.getElementById(id);
+      if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+      return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke);
+    })
+    .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
 }
 
 
