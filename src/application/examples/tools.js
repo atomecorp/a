@@ -905,11 +905,11 @@ function intuitionCommon(cfg) {
     // top, left, width, height, fill, stroke, id, parent
     fetch_and_render_svg(
       `./assets/images/icons/${icon}.svg`,
+      `${id_created}_icon`,
+      id_created,
      icon_left, icon_top, 
       icon_width, icon_height,
-      fill, stroke,
-      `${id_created}_icon`,
-      id_created
+      fill, stroke
     );
     // After SVG insertion, normalize position.
     setTimeout(() => {

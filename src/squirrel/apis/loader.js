@@ -225,6 +225,15 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
 }
 
 
+function fetch_and_render_svg(path, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
+  dataFetcher(path, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) 
+    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '333px', '120px', '120px' , 'green', 'red');  })
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+}
+
+
+
 
 
 function resize(id, newWidth, newHeight, durationSec = 0, easing = 'ease') {
@@ -366,9 +375,9 @@ function fillColor(id, color) {
   return true;
 }     
 
-
-window.render_svg = render_svg;
 window.dataFetcher = dataFetcher;
+window.render_svg = render_svg;
+window.fetch_and_render_svg = fetch_and_render_svg;
 window.resize = resize;
 window.strokeColor = strokeColor;
 window.fillColor = fillColor;
