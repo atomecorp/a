@@ -42,6 +42,7 @@ const __BASE_CELL_SIZE = 140;
 let __currentScale = 1;
 let __colorOverride = false; // toggles red/green override
 let __cellDarkTheme = true; // true: dark cells, false: light cells
+let __cellSeq = 0; // incremental index for gradient alternance
 
 function __colorArgs(){
 	return __colorOverride ? { fill: 'red', stroke: 'green' } : { fill: null, stroke: null };
@@ -170,6 +171,7 @@ function createCell(title) {
 	label.style.width = '100%';
 	cell.appendChild(label);
 	cell.setAttribute('data-svg-cell','1');
+	cell.dataset.seq = String(__cellSeq++);
 	// placeholder area for actual rendered svg (tracked by id + clone)
 	cell.style.width = __BASE_CELL_SIZE + 'px';
 	cell.style.height = __BASE_CELL_SIZE + 'px';
@@ -179,10 +181,25 @@ function createCell(title) {
 
 function __applyCellTheme(cell){
 	if (!cell) return;
-	// Unique gradient (skyblue -> yellowgreen) regardless of theme toggle
-	cell.style.background = 'linear-gradient(135deg, skyblue 0%, yellowgreen 100%)';
-	cell.style.color = '#111';
-	cell.style.border = '1px solid rgba(0,0,0,0.15)';
+	const idx = parseInt(cell.dataset.seq || '0', 10) || 0;
+	const alt = (idx % 2) === 1; // alternate flag
+	if (__cellDarkTheme) {
+		// Deux variantes de dégradés sombres
+		const g1 = 'linear-gradient(135deg,#1e2024 0%,#343a40 100%)';
+		const g2 = 'linear-gradient(135deg,#22252a 0%,#40474f 100%)';
+		cell.style.background = alt ? g2 : g1;
+		cell.style.color = '#eee';
+		cell.style.border = '1px solid rgba(255,255,255,0.08)';
+		cell.style.boxShadow = '0 1px 2px rgba(0,0,0,0.55), inset 0 0 3px rgba(255,255,255,0.05)';
+	} else {
+		// Deux variantes de dégradés clairs
+		const g1 = 'linear-gradient(135deg,#fdfdfd 0%,#e9ecef 100%)';
+		const g2 = 'linear-gradient(135deg,#f7f9fb 0%,#dfe3e8 100%)';
+		cell.style.background = alt ? g2 : g1;
+		cell.style.color = '#111';
+		cell.style.border = '1px solid rgba(0,0,0,0.15)';
+		cell.style.boxShadow = '0 1px 2px rgba(0,0,0,0.18), inset 0 0 3px rgba(255,255,255,0.5)';
+	}
 }
 
 function __applyThemeToAllCells(){
