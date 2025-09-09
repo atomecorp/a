@@ -1,3 +1,17 @@
+// --- Port persistence (survive refresh) -------------------------------------------------
+(function persistLocalPort(){
+  if (typeof window === 'undefined') return;
+  const k = '__ATOME_LOCAL_HTTP_PORT__';
+  // Restore if lost after refresh
+  if (!window[k]) {
+    try { const saved = localStorage.getItem(k); if (saved) window[k] = parseInt(saved,10); } catch(_){ }
+  }
+  // Save if present
+  if (window[k]) {
+    try { localStorage.setItem(k, String(window[k])); } catch(_){ }
+  }
+})();
+
 const __dataCache = {};
 
 // Minimal placeholder to avoid ReferenceError if user keeps catch handlers with span
@@ -25,9 +39,11 @@ function dataFetcher(path, opts = {}) {
   cleanPath = cleanPath.replace(/^\/+/, '');
   // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
     if (!cleanPath) throw new Error('Chemin vide');
-    const filename = cleanPath.split('/').pop();
-    const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
-    const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+  const filename = cleanPath.split('/').pop();
+  const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+  const looksSvg = ext === 'svg';
+  const hasSpace = cleanPath.includes(' ');
+  const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
 
     const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
     const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
@@ -37,7 +53,7 @@ function dataFetcher(path, opts = {}) {
     const looksAudio = audioExt.test(ext);
     const looksBinary = binPreferred.test(ext) || looksAudio; // kept for future branching
 
-    const serverCandidates = [];
+  const serverCandidates = [];
     if (port) {
       serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
       if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
@@ -49,19 +65,51 @@ function dataFetcher(path, opts = {}) {
 
     let assetPath = cleanPath;
     if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
-    const assetCandidates = [assetPath];
+  const assetCandidates = [assetPath];
     const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
     if (altAsset !== assetPath) assetCandidates.push(altAsset);
 
     const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
 
+    // Helper: detect HTML fallback (index.html returned instead of asset)
+    const isHtmlFallback = (txt) => {
+      if (!txt) return false; const t = txt.slice(0,120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
+    };
+
+    // Helper: attempt direct Tauri FS read for svg with space (server often rewrites to index)
+    async function tryTauriSvgSpace(fsRelPath){
+      if (!(looksSvg && hasSpace)) return null;
+      if (typeof window === 'undefined' || !window.__TAURI__ || !window.__TAURI__.fs) return null;
+      const fs = window.__TAURI__.fs;
+      // Prefer original path; if starts with assets/ also try src/assets equivalent
+      const candidates = [fsRelPath];
+      if (/^assets\//.test(fsRelPath) && !/^src\/assets\//.test(fsRelPath)) {
+        candidates.unshift('src/' + fsRelPath);
+      }
+      for (const c of candidates) {
+        try {
+          const txt = await fs.readTextFile(c).catch(()=>null);
+          if (txt && /^<svg[\s>]/i.test(txt.trim()) && !isHtmlFallback(txt)) return { txt, path: c };
+        } catch(_) {}
+      }
+      return null;
+    }
+
+    // 1) Direct FS read first for svg with space (most robust after refresh)
+    const directFs = await tryTauriSvgSpace(cleanPath);
+    if (directFs) {
+      if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0,max)); }
+      return done(directFs.txt);
+    }
+
     // Immediate asset try if no port yet
-    if (!port) {
+  if (!port) {
       for (const u of assetCandidates) {
         try {
           if (looksText || mode === 'text' || mode === 'preview') {
             const r = await fetch(u); if (!r.ok) continue;
             const txt = await r.text();
+      if (looksSvg && isHtmlFallback(txt)) { continue; }
             if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
             return done(txt);
           }
@@ -85,6 +133,7 @@ function dataFetcher(path, opts = {}) {
         if (mode === 'blob') return done(await r.blob());
         if (looksText || mode === 'text' || mode === 'preview') {
           const txt = await r.text();
+          if (looksSvg && isHtmlFallback(txt)) { continue; }
           if (mode === 'preview' || opts.preview) {
             const max = opts.preview || 120; return done(txt.slice(0,max));
           }
@@ -100,6 +149,7 @@ function dataFetcher(path, opts = {}) {
         if (looksText || mode === 'text' || mode === 'preview') {
           const r = await fetch(u); if (!r.ok) continue;
           const txt = await r.text();
+          if (looksSvg && isHtmlFallback(txt)) { continue; }
           if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
           return done(txt);
         }
