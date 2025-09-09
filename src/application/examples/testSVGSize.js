@@ -89,7 +89,6 @@ function __applyScale(){
 	const v = parseFloat(scaleInput.value);
 	if (!isFinite(v) || v <= 0) { console.warn('[testSVGSize] invalid scale input', scaleInput.value); return; }
 	__currentScale = v;
-	console.log('[testSVGSize] Applying master scale', v);
 	try { setIntuitionMasterScale(v); } catch(e) { console.warn('setIntuitionMasterScale error', e); }
 	if (typeof refreshIntuitionScale === 'function') { try { refreshIntuitionScale(); } catch(e){} }
 	__rebuildShowcaseFromCache();
@@ -274,7 +273,6 @@ function __rebuildShowcaseFromCache(){
 window.__refreshSVGShowcase = __rebuildShowcaseFromCache;
 
 // Log helper
-console.log('[testSVGSize] Loaded showcase for', __SVG_ICON_PATHS.length, 'icons and', __SVG_LOGO_PATHS.length, 'logos (alphabetical ordering enabled)');
 
 function __resizeGridCells(){
 	const cells = grid.querySelectorAll('[data-svg-cell="1"]');
