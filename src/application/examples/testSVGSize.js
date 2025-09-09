@@ -32,6 +32,7 @@ const svgCache = new Map();
 const __BASE_CELL_SIZE = 140;
 let __currentScale = 1;
 let __colorOverride = false; // toggles red/green override
+let __cellDarkTheme = true; // true: dark cells, false: light cells
 
 function __colorArgs(){
 	return __colorOverride ? { fill: 'red', stroke: 'green' } : { fill: null, stroke: null };
@@ -46,6 +47,7 @@ function __fullRerender(){
 	while (grid.firstChild) grid.removeChild(grid.firstChild);
 	__getAllSortedSvgPaths().forEach(loadAndRender);
 	__resizeGridCells();
+	__applyThemeToAllCells();
 }
 
 // Root container (ensure #view exists already in host app; we build a sub-root)
@@ -79,6 +81,9 @@ applyBtn.style.cursor = 'pointer';
 const toggleColorsBtn = document.createElement('button');
 toggleColorsBtn.textContent = 'Couleurs OFF';
 toggleColorsBtn.style.cursor = 'pointer';
+const toggleCellThemeBtn = document.createElement('button');
+toggleCellThemeBtn.textContent = 'Cellules: Noir';
+toggleCellThemeBtn.style.cursor = 'pointer';
 
 function __applyScale(){
 	const v = parseFloat(scaleInput.value);
@@ -96,10 +101,16 @@ scaleInput.addEventListener('keydown', e => { if(e.key === 'Enter'){ __applyScal
 controls.appendChild(scaleInput);
 controls.appendChild(applyBtn);
 controls.appendChild(toggleColorsBtn);
+controls.appendChild(toggleCellThemeBtn);
 toggleColorsBtn.onclick = () => {
 	__colorOverride = !__colorOverride;
 	toggleColorsBtn.textContent = __colorOverride ? 'Couleurs ON' : 'Couleurs OFF';
 	__fullRerender();
+};
+toggleCellThemeBtn.onclick = () => {
+	__cellDarkTheme = !__cellDarkTheme;
+	toggleCellThemeBtn.textContent = 'Cellules: ' + (__cellDarkTheme ? 'Noir' : 'Blanc');
+	__applyThemeToAllCells();
 };
 showcaseRoot.appendChild(controls);
 
@@ -132,11 +143,9 @@ viewEl.style.pointerEvents = 'none';
 // Helper to create a cell wrapper
 function createCell(title) {
 	const cell = document.createElement('div');
-	cell.style.border = '1px solid #333';
 	cell.style.borderRadius = '6px';
 	cell.style.padding = '6px 4px 8px';
-	cell.style.background = '#111';
-	cell.style.color = '#ddd';
+	// theme applied after sizing
 	cell.style.fontSize = '11px';
 	cell.style.display = 'flex';
 	cell.style.flexDirection = 'column';
@@ -156,7 +165,26 @@ function createCell(title) {
 	// placeholder area for actual rendered svg (tracked by id + clone)
 	cell.style.width = __BASE_CELL_SIZE + 'px';
 	cell.style.height = __BASE_CELL_SIZE + 'px';
+	__applyCellTheme(cell);
 	return cell;
+}
+
+function __applyCellTheme(cell){
+	if (!cell) return;
+	if (__cellDarkTheme) {
+		cell.style.background = '#111';
+		cell.style.color = '#ddd';
+		cell.style.border = '1px solid #333';
+	} else {
+		cell.style.background = '#fff';
+		cell.style.color = '#000';
+		cell.style.border = '1px solid #ccc';
+	}
+}
+
+function __applyThemeToAllCells(){
+	const cells = grid.querySelectorAll('[data-svg-cell="1"]');
+	cells.forEach(c => __applyCellTheme(c));
 }
 
 // Render one SVG (fetch if needed, then render_svg)
