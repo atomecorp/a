@@ -72,13 +72,16 @@ let viewEl = document.getElementById('view');
 if (!viewEl) {
 	viewEl = document.createElement('div');
 	viewEl.id = 'view';
-	viewEl.style.position = 'relative';
-	viewEl.style.width = '1px';
-	viewEl.style.height = '1px';
-	viewEl.style.overflow = 'visible';
-	viewEl.style.pointerEvents = 'none';
 	document.body.appendChild(viewEl);
 }
+// Ensure the storage view is off-screen but still renderable for measurements
+viewEl.style.position = 'absolute';
+viewEl.style.top = '-10000px';
+viewEl.style.left = '-10000px';
+viewEl.style.width = '0px';
+viewEl.style.height = '0px';
+viewEl.style.overflow = 'hidden';
+viewEl.style.pointerEvents = 'none';
 
 // Helper to create a cell wrapper
 function createCell(title) {
@@ -116,15 +119,15 @@ function loadAndRender(path) {
 	grid.appendChild(cell);
 	// If already cached use it directly
 	const cached = svgCache.get(path);
-	if (cached) {
-		render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', null, null);
-		attachClone(id, cell);
-		return;
-	}
+		if (cached) {
+			render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'blue', 'red');
+			attachClone(id, cell);
+			return;
+		}
 	dataFetcher(path, { mode: 'text' })
 		.then(svgData => {
 			svgCache.set(path, svgData);
-			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', null, null);
+			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', 'blue', 'red');
 			attachClone(id, cell);
 		})
 		.catch(err => {
@@ -139,7 +142,7 @@ function loadAndRender(path) {
 
 // Attach a cloned visible copy inside the cell while keeping original in hidden #view for layout isolation
 function attachClone(origId, cell) {
-	const orig = document.getElementById(origId);
+		const orig = document.getElementById(origId);
 	if (!orig) return;
 	// Clone node to display it inside the grid cell (avoid absolute coords collision)
 	const clone = orig.cloneNode(true);
@@ -152,7 +155,12 @@ function attachClone(origId, cell) {
 	clone.style.height = '100%';
 	clone.style.maxWidth = '120px';
 	clone.style.maxHeight = '120px';
-	cell.appendChild(clone);
+		cell.appendChild(clone);
+		// Hide / move off-screen the original (we keep it for potential future metrics)
+		orig.style.position = 'absolute';
+		orig.style.top = '-999999px';
+		orig.style.left = '-999999px';
+		orig.style.visibility = 'hidden';
 }
 
 // Kickoff loading for all icons & logos
