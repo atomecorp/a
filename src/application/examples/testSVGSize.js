@@ -223,7 +223,6 @@ function loadAndRender(path) {
 	}
 	dataFetcher(path, { mode: 'text' })
 		.then(svgData => {
-            console.log('Fetched SVG', path +': ', svgData);
 			svgCache.set(path, svgData);
 			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', clr.fill, clr.stroke);
 			attachClone(id, cell);
