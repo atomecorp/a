@@ -18,6 +18,9 @@ const __SVG_LOGO_PATHS = [
 
 // Simple in-memory cache: path -> raw svg text
 const svgCache = new Map();
+// Base cell size (square) before applying master scale
+const __BASE_CELL_SIZE = 140;
+let __currentScale = 1;
 
 // Root container (ensure #view exists already in host app; we build a sub-root)
 let showcaseRoot = document.getElementById('svg-showcase-root');
@@ -49,9 +52,17 @@ applyBtn.textContent = 'Appliquer';
 applyBtn.style.cursor = 'pointer';
 applyBtn.onclick = () => {
 	const v = parseFloat(scaleInput.value);
-	if (isFinite(v) && v > 0) {
-		try { setIntuitionMasterScale(v); } catch(e) { console.warn('setIntuitionMasterScale error', e); }
+	if (!isFinite(v) || v <= 0) { console.warn('[testSVGSize] invalid scale input', scaleInput.value); return; }
+	__currentScale = v;
+	console.log('[testSVGSize] Applying master scale', v);
+	try { setIntuitionMasterScale(v); } catch(e) { console.warn('setIntuitionMasterScale error', e); }
+	// If refresh helper exists (ensures theme-derived metrics update)
+	if (typeof refreshIntuitionScale === 'function') {
+		try { refreshIntuitionScale(); } catch(e){}
 	}
+	// Rebuild grid from cache (no network) so cloned instances reflect any layout side-effects
+	__rebuildShowcaseFromCache();
+	__resizeGridCells();
 };
 controls.appendChild(scaleInput);
 controls.appendChild(applyBtn);
@@ -106,7 +117,10 @@ function createCell(title) {
 	label.style.textOverflow = 'ellipsis';
 	label.style.width = '100%';
 	cell.appendChild(label);
-	// placeholder area for actual rendered svg (we track by id)
+	cell.setAttribute('data-svg-cell','1');
+	// placeholder area for actual rendered svg (tracked by id + clone)
+	cell.style.width = __BASE_CELL_SIZE + 'px';
+	cell.style.height = __BASE_CELL_SIZE + 'px';
 	return cell;
 }
 
@@ -120,14 +134,14 @@ function loadAndRender(path) {
 	// If already cached use it directly
 	const cached = svgCache.get(path);
 		if (cached) {
-			render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'blue', 'red');
+			render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'yellow', 'orange');
 			attachClone(id, cell);
 			return;
 		}
 	dataFetcher(path, { mode: 'text' })
 		.then(svgData => {
 			svgCache.set(path, svgData);
-			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', 'blue', 'red');
+			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', 'lightgreen', 'purple');
 			attachClone(id, cell);
 		})
 		.catch(err => {
@@ -141,8 +155,9 @@ function loadAndRender(path) {
 }
 
 // Attach a cloned visible copy inside the cell while keeping original in hidden #view for layout isolation
+
 function attachClone(origId, cell) {
-		const orig = document.getElementById(origId);
+	const orig = document.getElementById(origId);
 	if (!orig) return;
 	// Clone node to display it inside the grid cell (avoid absolute coords collision)
 	const clone = orig.cloneNode(true);
@@ -151,10 +166,16 @@ function attachClone(origId, cell) {
 	clone.style.top = '';
 	clone.style.left = '';
 	clone.style.margin = '0';
+	// Let master scale drive internal metrics; clone just fills its cell
 	clone.style.width = '100%';
 	clone.style.height = '100%';
-	clone.style.maxWidth = '120px';
-	clone.style.maxHeight = '120px';
+	clone.style.maxWidth = '100%';
+	clone.style.maxHeight = '100%';
+	// Ensure clone is visible even if original was temporarily hidden during render pipeline
+	try {
+		clone.style.visibility = 'visible';
+		clone.removeAttribute('visibility');
+	} catch(e) {}
 		cell.appendChild(clone);
 		// Hide / move off-screen the original (we keep it for potential future metrics)
 		orig.style.position = 'absolute';
@@ -167,8 +188,7 @@ function attachClone(origId, cell) {
 [...__SVG_ICON_PATHS, ...__SVG_LOGO_PATHS].forEach(loadAndRender);
 
 // Optional: expose a manual refresh that re-clones from cache if needed
-window.__refreshSVGShowcase = function(){
-	// Remove all cells and rebuild purely from cache
+function __rebuildShowcaseFromCache(){
 	while (grid.firstChild) grid.removeChild(grid.firstChild);
 	[...__SVG_ICON_PATHS, ...__SVG_LOGO_PATHS].forEach(p => {
 		const cached = svgCache.get(p);
@@ -178,16 +198,28 @@ window.__refreshSVGShowcase = function(){
 		const cell = createCell(baseName);
 		grid.appendChild(cell);
 		if (cached) {
-			// ensure original exists (if user cleared view) then clone
 			if (!document.getElementById(id)) {
-				render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', null, null);
+				render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'red', 'blue');
 			}
 			attachClone(id, cell);
 		} else {
 			loadAndRender(p);
 		}
 	});
-};
+}
+
+window.__refreshSVGShowcase = __rebuildShowcaseFromCache;
 
 // Log helper
 console.log('[testSVGSize] Loaded showcase for', __SVG_ICON_PATHS.length, 'icons and', __SVG_LOGO_PATHS.length, 'logos');
+
+function __resizeGridCells(){
+	const cells = grid.querySelectorAll('[data-svg-cell="1"]');
+	const side = Math.round(__BASE_CELL_SIZE * __currentScale);
+	cells.forEach(c => { c.style.width = side + 'px'; c.style.height = side + 'px'; });
+	// Keep strict homothety: remove previous capping at 260px
+	grid.style.gridTemplateColumns = `repeat(auto-fill, ${side}px)`;
+	grid.style.gridAutoRows = side + 'px';
+}
+
+__resizeGridCells();
