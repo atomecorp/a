@@ -189,6 +189,28 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
   svgEl.style.top = top; svgEl.style.left = left;
   const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
   const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
+  // ---- Anti-troncature / scaling fiable ----
+  try {
+    const existingViewBox = svgEl.getAttribute('viewBox');
+    const attrW = parseFloat(svgEl.getAttribute('width')) || null;
+    const attrH = parseFloat(svgEl.getAttribute('height')) || null;
+    // Si pas de viewBox: on en déduit un depuis width/height d'origine (sinon fallback 0 0 targetW targetH)
+    if (!existingViewBox) {
+      const vbW = (attrW && attrW > 0) ? attrW : targetW;
+      const vbH = (attrH && attrH > 0) ? attrH : targetH;
+      svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+    }
+    // Force un preserveAspectRatio 'xMidYMid meet' si absent (évite crop sur stretch)
+    if (!svgEl.getAttribute('preserveAspectRatio')) {
+      svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
+    }
+    // Laisse les attributs width/height d'origine intacts pour ne pas fausser le viewBox; on retire s'ils existent pour ne garder que le style (scaling CSS)
+    if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
+    if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
+    // Autorise le dessin à dépasser (strokes, ombres)
+    svgEl.style.overflow = 'visible';
+  } catch(_) {}
+  // Applique la taille demandée via CSS (scaling extérieur propre)
   svgEl.style.width = targetW + 'px';
   svgEl.style.height = targetH + 'px';
   if (color || path_color) {

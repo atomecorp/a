@@ -18,12 +18,6 @@ const __SVG_LOGO_PATHS = [
     'assets/images/logos/YouTube.svg','assets/images/logos/vie.svg','assets/images/logos/Facebook.svg','assets/images/logos/atome.svg','assets/images/logos/arp.svg','assets/images/logos/LinkedIn-full.svg','assets/images/logos/instagram.svg','assets/images/logos/vimeo.svg','assets/images/logos/freebsd.svg','assets/images/logos/GitHub.svg'
 ];
 
-// const __SVG_ICON_PATHS = [
-//     ];
-
-// const __SVG_LOGO_PATHS = [
-//     'assets/images/logos/GitHub Black.svg',
-// ];
 
 // Build a single alphabetically sorted list of all SVG asset paths (case-insensitive by filename)
 function __getAllSortedSvgPaths(){
