@@ -26,7 +26,7 @@
 // import('./examples/image.js');
 
 // import('./vie/vie.js');
-// import('./examples/svg.js');
+import('./examples/svg.js');
 // import('./examples/platform.js');
 // import('./examples/anim_svg.js');
 // import('./examples/shortcut.js');
@@ -62,7 +62,7 @@
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)
 
 // import('./examples/tools.js');
-import('./examples/testSVGSize.js');
+// import('./examples/testSVGSize.js');
 // import('./examples/iOSFetch.js');
 
 // import('./examples/class.js');

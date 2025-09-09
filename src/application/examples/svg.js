@@ -46,8 +46,8 @@ const atomeSvgInline = $('svg', {
 
 // Example of fetching and rendering an SVG with custom size and colors
 
-  dataFetcher('images/icons/add.svg')
-    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '333px', '120px', '120px' , 'green', 'red');  })
+  dataFetcher('assets/images/icons/add.svg')
+    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '333px', '120px', '120px' , null, null);  })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
 // Example of resizing an existing SVG by id after a delay
