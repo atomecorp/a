@@ -4,6 +4,6 @@
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
 
-//      setTimeout(() => {
-//   resize('my_nice_svg', 33, 33, 0.5, 'elastic');
-//   }, 2500);
+     setTimeout(() => {
+  resize('my_nice_svg', 233, 333, 0.5, 'elastic');
+  }, 2500);
