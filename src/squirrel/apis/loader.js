@@ -120,262 +120,54 @@ function dataFetcher(path, opts = {}) {
 // Lightweight whitelisting sanitizer (no external deps) to clean incoming SVG code
 // before insertion. Removes dangerous elements/attributes and optionally normalizes
 // width/height so our internal scaling logic can operate consistently.
-function sanitizeSVG(raw, cfg) {
-  cfg = cfg || (typeof window !== 'undefined' && window.__SVG_SANITIZE) || {};
-  if (!raw || typeof raw !== 'string') return raw;
-  if (cfg.enabled === false) return raw; // allow disabling
-  // Fast path: only process if it looks like SVG
-  if (!/<svg[\s>]/i.test(raw)) return raw;
-  let parser; try { parser = new DOMParser(); } catch(_) {}
-  if (!parser) {
-    // Fallback very naive strip (better than nothing)
-    return raw
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
-      .replace(/ on[a-z]+="[^"]*"/gi, '')
-      .replace(/ on[a-z]+='[^']*'/gi, '');
-  }
-  let doc;
-  try { doc = parser.parseFromString(raw, 'image/svg+xml'); } catch(_) { return raw; }
-  if (!doc || !doc.documentElement || doc.getElementsByTagName('parsererror').length) return raw;
-  const svg = doc.documentElement;
-
-  const ALLOWED_TAGS = new Set([
-    'svg','g','path','rect','circle','ellipse','polygon','polyline','line',
-    'defs','clipPath','mask','linearGradient','radialGradient','stop','symbol','use'
-  ]);
-  const URL_ATTRS = ['fill','stroke','filter','mask','clip-path'];
-  const ALLOWED_ATTR = new Set([
-    'id','class','d','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','stroke-miterlimit',
-    'transform','viewBox','width','height','x','y','cx','cy','r','rx','ry','points','x1','y1','x2','y2',
-    'gradientUnits','gradientTransform','offset','stop-color','stop-opacity','preserveAspectRatio','xmlns','xmlns:xlink','version','href','xlink:href','opacity','fill-opacity','stroke-opacity'
-  ]);
-  const DROP_TAGS = new Set([
-    'script','foreignObject','iframe','audio','video','canvas','embed','object','animate','animateTransform','animateMotion','set','desc','metadata'
-  ]);
-  if (cfg.allowTitle !== true) DROP_TAGS.add('title');
-
-  let removed = 0, removedAttr = 0, droppedExternal = 0;
-
-  const walk = (node) => {
-    if (node.nodeType === 1) { // element
-      const tag = node.tagName;
-      if (DROP_TAGS.has(tag) || (!ALLOWED_TAGS.has(tag) && tag !== 'svg')) {
-        removed++; node.remove(); return; }
-      // Remove event handlers & disallowed attributes
-      // Copy attr list first because we'll modify
-      const attrs = Array.from(node.attributes||[]);
-      for (const a of attrs) {
-        const name = a.name;
-        const lname = name.toLowerCase();
-        if (/^on[a-z]+/.test(lname)) { node.removeAttribute(name); removedAttr++; continue; }
-        if (!ALLOWED_ATTR.has(lname)) { node.removeAttribute(name); removedAttr++; continue; }
-        // External href filtering for <use>, <image> etc
-        if ((lname === 'href' || lname === 'xlink:href')) {
-          const v = a.value.trim();
-          if (/^(https?:|data:)/i.test(v) && !/^data:image\/(png|jpeg|jpg|gif|svg\+xml);/i.test(v)) {
-            node.removeAttribute(name); removedAttr++; droppedExternal++; continue; }
-          if (/^javascript:/i.test(v)) { node.removeAttribute(name); removedAttr++; continue; }
-        }
-        // Sanitize url() references
-        if (URL_ATTRS.includes(lname)) {
-          const v = a.value;
-            if (/url\(\s*['"]?\s*(https?:|data:|javascript:)/i.test(v)) {
-              node.removeAttribute(name); removedAttr++; continue;
-            }
-        }
-      }
-      // Optionally drop style attribute entirely (simplifies bbox + avoids CSS injection)
-      if (cfg.dropStyle !== false && node.hasAttribute('style')) { node.removeAttribute('style'); removedAttr++; }
-    }
-    // Recurse on a static copy of children (live list safety)
-    Array.from(node.childNodes||[]).forEach(ch => walk(ch));
-  };
-  walk(svg);
-
-  // Normalize width/height if viewBox exists: remove explicit width/height so it is responsive
-  if (svg.hasAttribute('viewBox')) {
-    if (cfg.removeWH !== false) { svg.removeAttribute('width'); svg.removeAttribute('height'); }
-  }
-
-  // Optional: clamp absurd stroke-width (e.g., > viewBox major /2)
-  if (cfg.clampStroke !== false) {
-    try {
-      const vb = (svg.getAttribute('viewBox')||'').split(/\s+/).map(parseFloat);
-      if (vb.length === 4 && vb.every(isFinite)) {
-        const maxDim = Math.max(vb[2], vb[3]);
-        const limit = maxDim / 2;
-        svg.querySelectorAll('[stroke-width]').forEach(el => {
-          const sw = parseFloat(el.getAttribute('stroke-width'));
-          if (isFinite(sw) && sw > limit) el.setAttribute('stroke-width', String(Math.round(limit)));
-        });
-      }
-    } catch(_) {}
-  }
-
-  if (cfg.log !== false && typeof console !== 'undefined') {
-    console.log('[svg-sanitize]', {removedTags: removed, removedAttrs: removedAttr, droppedExternal});
-  }
-  return svg.outerHTML.trim();
-}
+// Sanitizer removed for performance: kept as identity to avoid ReferenceErrors.
+function sanitizeSVG(raw) { return raw; }
 
 
 //svg creator
 // render_svg: inserts an SVG string. If an id is provided it's kept EXACT; if omitted an id is generated.
 function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
-  // Sanitize upfront to avoid inserting risky markup
-  try { svgcontent = sanitizeSVG(svgcontent); } catch(_) {}
   const parent = document.getElementById(parent_id);
-  if (!parent) return null;
+  if (!parent || !svgcontent) return null;
   const tmp = document.createElement('div');
-  tmp.innerHTML = svgcontent.trim();
+  tmp.innerHTML = String(svgcontent).trim();
   const svgEl = tmp.querySelector('svg');
   if (!svgEl) return null;
-  // Preserve provided id; generate one if missing.
-  let finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
+  const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
   try { svgEl.id = finalId; } catch(_) {}
-  svgEl.classList.add('__auto_svg');
   svgEl.style.position = 'absolute';
   svgEl.style.top = top; svgEl.style.left = left;
   const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
   const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
   svgEl.style.width = targetW + 'px';
   svgEl.style.height = targetH + 'px';
-  // Insert first (hidden) so getBBox works for all browsers
-  const prevVisibility = svgEl.style.visibility;
-  svgEl.style.visibility = 'hidden';
-  parent.appendChild(svgEl);
-  // Collect shapes & compute bbox (inflated by stroke width/2 so strokes aren't clipped)
-  const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
-  const getStrokeWidth = (el) => {
-    let sw = el.getAttribute('stroke-width');
-    if ((!sw || sw === '0' || sw === '') && typeof window !== 'undefined' && window.getComputedStyle) {
-      try { sw = window.getComputedStyle(el).strokeWidth; } catch(_) {}
-    }
-    sw = parseFloat(sw);
-    return Number.isFinite(sw) ? sw : 0;
-  };
-  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,maxStroke=0;
-  let rawMinX, rawMinY, rawMaxX, rawMaxY; // snapshot before padding
-  shapes.forEach(node => {
-    try {
-      const b = node.getBBox();
-      if (b && b.width >= 0 && b.height >= 0) {
-        const sw = getStrokeWidth(node);
-        if (sw > maxStroke) maxStroke = sw;
-        // Adjust pad according to join style (miter can project further)
-        let join = (node.getAttribute('stroke-linejoin')||'').toLowerCase();
-        let miterLimit = parseFloat(node.getAttribute('stroke-miterlimit'));
-        if (!isFinite(miterLimit) || miterLimit <= 1) miterLimit = 4; // default SVG
-        let pad = sw/2; // base
-        if (join === 'miter') pad = Math.min(sw/2 * miterLimit, sw*2); // cap extreme
-        else if (join === 'bevel') pad = sw * 0.75;
-        else if (join === 'round') pad = sw * 0.6;
-        // Compute inflated bounds
-        const x0 = b.x - pad;
-        const y0 = b.y - pad;
-        const x1 = b.x + b.width + pad;
-        const y1 = b.y + b.height + pad;
-    if (x0 < minX) minX = x0;
-    if (y0 < minY) minY = y0;
-    if (x1 > maxX) maxX = x1;
-    if (y1 > maxY) maxY = y1;
-      }
-    } catch(_){}}
-  );
-  rawMinX = minX; rawMinY = minY; rawMaxX = maxX; rawMaxY = maxY;
-  const bboxValid = isFinite(minX)&&isFinite(minY)&&isFinite(maxX)&&isFinite(maxY)&&maxX>minX&&maxY>minY;
-  if (bboxValid) {
-    // Simpler stable normalization (regression rollback):
-    // 1. Uniform padding
-    const pad = Math.max(1, maxStroke * 0.5);
-    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
-    const bboxW = maxX - minX; const bboxH = maxY - minY;
-    const ns = 'http://www.w3.org/2000/svg';
-    const g = document.createElementNS(ns,'g');
-    while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
-    // Remove non scaling stroke attributes so global scaling applies uniformly
-    g.querySelectorAll('[vector-effect="non-scaling-stroke"]').forEach(n=>n.removeAttribute('vector-effect'));
-    // Adaptive normalization band (reduces disparity between extremely large and tiny icons).
-    const cfg = (typeof window !== 'undefined' && window.__SVG_NORM) ? window.__SVG_NORM : { enable:true, target:900, high:1200 };
-    let normScale = 1;
-    if (cfg.enable) {
-      const longest = Math.max(bboxW, bboxH);
-      if (longest > cfg.high) {
-        normScale = cfg.target / longest; // downscale only
-      }
-    }
-    let transformStr = `translate(${-minX},${-minY})`;
-    if (normScale !== 1) transformStr += ` scale(${normScale})`;
-    g.setAttribute('transform', transformStr);
-    svgEl.appendChild(g);
-    try { svgEl.removeAttribute('width'); svgEl.removeAttribute('height'); } catch(_){}
-    const vbW = normScale === 1 ? bboxW : bboxW * normScale;
-    const vbH = normScale === 1 ? bboxH : bboxH * normScale;
-    svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
-    svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
-    // Metrics & logging
-    try {
-      const rawW = (rawMaxX - rawMinX); const rawH = (rawMaxY - rawMinY);
-      const finalRatio = bboxW / bboxH;
-      const targetWn = targetW, targetHn = targetH;
-      const fillFactor = (bboxW * bboxH) / (targetWn * targetHn); // >1 means natural bbox larger than requested area
-      // Initialize global metrics store
-      if (typeof window !== 'undefined') {
-        if (!window.__SVG_METRICS) window.__SVG_METRICS = [];
-        window.__SVG_METRICS.push({
-          id: svgEl.id,
-          raw: { w: rawW, h: rawH },
-            padded: { w: bboxW, h: bboxH },
-          ratio: finalRatio,
-          target: { w: targetWn, h: targetHn },
-          fillFactor,
-          maxStroke,
-          shapes: shapes.length
-        });
-        if (!window.__DUMP_SVG_METRICS) {
-          window.__DUMP_SVG_METRICS = function(limit=20){
-            const list = (window.__SVG_METRICS||[]).slice();
-            list.sort((a,b)=> (b.fillFactor - a.fillFactor));
-            console.log('[__DUMP_SVG_METRICS] total', list.length, 'top fillFactor outliers:', list.slice(0,limit));
-            const ratios = [...list].sort((a,b)=> (b.ratio - a.ratio));
-            console.log('[__DUMP_SVG_METRICS] aspect ratio extremes:', ratios.slice(0,5), ratios.slice(-5));
-          };
-          // Auto dump once after window load (async) if debug flag set
-          if ((window.__SVG_DEBUG||'').toString()==='true') {
-            setTimeout(()=>{ try { window.__DUMP_SVG_METRICS(); } catch(_){} }, 1500);
-          }
-        }
-      }
-      const alwaysLog = true; // user requested explicit verification logs
-      if (alwaysLog || (window && (window.__SVG_DEBUG||'').toString()==='true')) {
-  const effectiveFill = (vbW * vbH) / (targetWn * targetHn);
-  console.log('[svg-metric]', svgEl.id, 'raw', {w:rawW,h:rawH}, 'padded', {w:bboxW,h:bboxH}, 'normScale', normScale, 'vb', {w:vbW,h:vbH}, 'target', {w:targetWn,h:targetHn}, 'ratio', finalRatio.toFixed(3), 'fillFactorRaw', fillFactor.toFixed(2), 'fillFactorEff', effectiveFill.toFixed(2), 'maxStroke', maxStroke, 'shapes', shapes.length);
-      }
-    } catch(_){ }
-  } else {
-    // Fallback: keep original coordinate system so large coords remain visible when scaled by CSS
-    if (!svgEl.getAttribute('viewBox')) {
-      const origW = parseFloat(svgEl.getAttribute('width')) || targetW;
-      const origH = parseFloat(svgEl.getAttribute('height')) || targetH;
-      svgEl.setAttribute('viewBox', `0 0 ${origW} ${origH}`);
-      svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
-    }
-  }
-  // Colors
-  if ((color || path_color) && shapes.length) {
+  if (color || path_color) {
+    const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
     shapes.forEach(node => {
-      if (path_color) node.setAttribute('stroke', path_color);
+      if (path_color) {
+        try { if (node.style) node.style.stroke = path_color; } catch(_) {}
+        node.setAttribute('stroke', path_color);
+      }
       if (color) {
+        // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
+        try { if (node.style) node.style.fill = color; } catch(_) {}
         const f = node.getAttribute('fill');
         if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
+        // Remove gradient/URL fill if we want solid override
+        if (/^url\(/i.test(f||'')) node.removeAttribute('fill');
       }
     });
-    if (color && !svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
-    if (path_color && !svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+    if (color) {
+      try { if (svgEl.style) svgEl.style.fill = color; } catch(_) {}
+      if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
+    }
+    if (path_color) {
+      try { if (svgEl.style) svgEl.style.stroke = path_color; } catch(_) {}
+      if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+    }
   }
-  svgEl.style.visibility = prevVisibility || 'visible';
-  return svgEl.id; // returns the actual id used (no suffixing)
+  parent.appendChild(svgEl);
+  return svgEl.id;
 }
 
 
@@ -388,8 +180,6 @@ function fetch_and_render_svg(path, id, parent_id='view', left='0px', top='0px',
       // Remove prior element with same id to avoid duplicates
       const prev = document.getElementById(id);
       if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
-  // Sanitize string before rendering (double safety even if render_svg also sanitizes)
-  try { svgData = sanitizeSVG(svgData); } catch(_) {}
   return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke);
     })
     .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });

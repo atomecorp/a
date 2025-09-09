@@ -1,5 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024"  xml:space="preserve" id="recordCanvas">
-    <path id="recordCanvas-path1" stroke="none" fill="rgb(255, 255, 255)" d="M 869,511.03 C 869,713.77 704.82,878 502.03,878 299.6,878 135.33,713.77 135.33,511.03 135.33,308.51 299.6,144.33 502.03,144.33 704.82,144.33 869,308.51 869,511.03 Z M 869,511.03" />
-</svg>
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g transform="translate(0, 0) scale(1) translate(0, 0)">
+<g transform="translate(0, 0) scale(0.125) translate(0, 0)">
+
+    <path stroke="none" fill="rgb(255, 255, 255)" d="M 869,511.03 C 869,713.77 704.82,878 502.03,878 299.6,878 135.33,713.77 135.33,511.03 135.33,308.51 299.6,144.33 502.03,144.33 704.82,144.33 869,308.51 869,511.03 Z M 869,511.03" />
+
+</g>
+</g></svg>

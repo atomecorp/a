@@ -1,8 +1,12 @@
-<svg width="800px" height="800px"  viewBox="0 0 24 24" fill="#000000" xmlns="http://www.w3.org/2000/svg">
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0, 0) scale(1) translate(0, 0)">
+<g transform="translate(0, 0) scale(5.333333) translate(0, 0)">
+
   <g>
-  <path id="p1" d="M5 7H19" stroke="#eee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<path id="p2" d="M5 12L19 12" stroke="#eee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-<path id="p3" d="M5 17L19 17" stroke="#eee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M5 7H19" stroke="#eee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M5 12L19 12" stroke="#eee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M5 17L19 17" stroke="#eee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 
   </g>
-</svg>
+
+</g>
+</g></svg>

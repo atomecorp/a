@@ -31,6 +31,22 @@ const svgCache = new Map();
 // Base cell size (square) before applying master scale
 const __BASE_CELL_SIZE = 140;
 let __currentScale = 1;
+let __colorOverride = false; // toggles red/green override
+
+function __colorArgs(){
+	return __colorOverride ? { fill: 'red', stroke: 'green' } : { fill: null, stroke: null };
+}
+
+function __fullRerender(){
+	__getAllSortedSvgPaths().forEach(p => {
+		const id = 'svg_' + p.replace(/[^a-z0-9_\-]/gi,'_');
+		const el = document.getElementById(id);
+		if (el && el.parentNode) el.parentNode.removeChild(el);
+	});
+	while (grid.firstChild) grid.removeChild(grid.firstChild);
+	__getAllSortedSvgPaths().forEach(loadAndRender);
+	__resizeGridCells();
+}
 
 // Root container (ensure #view exists already in host app; we build a sub-root)
 let showcaseRoot = document.getElementById('svg-showcase-root');
@@ -60,6 +76,9 @@ scaleInput.style.width = '70px';
 const applyBtn = document.createElement('button');
 applyBtn.textContent = 'Appliquer';
 applyBtn.style.cursor = 'pointer';
+const toggleColorsBtn = document.createElement('button');
+toggleColorsBtn.textContent = 'Couleurs OFF';
+toggleColorsBtn.style.cursor = 'pointer';
 
 function __applyScale(){
 	const v = parseFloat(scaleInput.value);
@@ -76,6 +95,12 @@ applyBtn.onclick = __applyScale;
 scaleInput.addEventListener('keydown', e => { if(e.key === 'Enter'){ __applyScale(); } });
 controls.appendChild(scaleInput);
 controls.appendChild(applyBtn);
+controls.appendChild(toggleColorsBtn);
+toggleColorsBtn.onclick = () => {
+	__colorOverride = !__colorOverride;
+	toggleColorsBtn.textContent = __colorOverride ? 'Couleurs ON' : 'Couleurs OFF';
+	__fullRerender();
+};
 showcaseRoot.appendChild(controls);
 
 // Grid container
@@ -142,15 +167,16 @@ function loadAndRender(path) {
 	const cell = createCell(baseName);
 	grid.appendChild(cell);
 	const cached = svgCache.get(path);
+	const clr = __colorArgs();
 	if (cached) {
-		render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'yellow', 'orange');
+		render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', clr.fill, clr.stroke);
 		attachClone(id, cell);
 		return;
 	}
 	dataFetcher(path, { mode: 'text' })
 		.then(svgData => {
 			svgCache.set(path, svgData);
-			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', 'lightgreen', 'purple');
+			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', clr.fill, clr.stroke);
 			attachClone(id, cell);
 		})
 		.catch(err => {
@@ -206,8 +232,9 @@ function __rebuildShowcaseFromCache(){
 		const cell = createCell(baseName);
 		grid.appendChild(cell);
 		if (cached) {
+			const clr = __colorArgs();
 			if (!document.getElementById(id)) {
-				render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'red', 'blue');
+				render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', clr.fill, clr.stroke);
 			}
 			attachClone(id, cell);
 		} else {

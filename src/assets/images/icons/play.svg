@@ -1,5 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024"  xml:space="preserve" id="playCanvas">
-    <polygon id="playCanvas-nextCanvaspolygon" stroke="rgb(255, 255, 255)" stroke-width="120" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" fill="none" points="0,-503.63 451.32,251.81 -451.32,251.81" transform="translate(386.86, 504.42) rotate(-30)"  />
-</svg>
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g transform="translate(0, 0) scale(1) translate(0, 0)">
+<g transform="translate(0, 0) scale(0.125) translate(0, 0)">
+
+    <polygon stroke="rgb(255, 255, 255)" stroke-width="120" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" fill="none" points="0,-503.63 451.32,251.81 -451.32,251.81" transform="translate(386.86, 504.42) rotate(-30)"  />
+
+</g>
+</g></svg>

@@ -1,12 +1,14 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024"  xml:space="preserve" id="sequenceCanvas">
-    <g id="sequenceCanvas-group">
-        <path id="sequenceCanvas-sequenceCanvassequenceCanvasscatteralignmentsvgrepocomCanvasbezier" stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 193.51,353.29 L 345.93,352.63" />
-        <path id="sequenceCanvas-sequenceCanvassequenceCanvasscatteralignmentsvgrepocomCanvasbezier2" stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 81.67,606.6 L 474.99,606.6" />
-        <path id="sequenceCanvas-sequenceCanvassequenceCanvasscatteralignmentsvgrepocomCanvasbezier3" stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 82.28,845.67 L 942.67,845.67" />
-        <path id="sequenceCanvas-sequenceCanvassequenceCanvasscatteralignmentsvgrepocomCanvasbezier4" stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 613.26,350.6 L 942.37,351.62" />
-        <path id="sequenceCanvas-sequenceCanvassequenceCanvasscatteralignmentsvgrepocomCanvasbezier5" stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 677.17,606.6 L 899.04,606.6" />
-        <path id="sequenceCanvas-sequenceCanvassequenceCanvasscatteralignmentsvgrepocomCanvasbezier6" stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 382.81,121 L 899.04,121" />
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g transform="translate(0, 0) scale(1) translate(0, 0)">
+<g transform="translate(0, 0) scale(0.125) translate(0, 0)">
+
+    <g>
+        <path stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 193.51,353.29 L 345.93,352.63" />
+        <path stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 81.67,606.6 L 474.99,606.6" />
+        <path stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 82.28,845.67 L 942.67,845.67" />
+        <path stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 613.26,350.6 L 942.37,351.62" />
+        <path stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 677.17,606.6 L 899.04,606.6" />
+        <path stroke="rgb(255, 255, 255)" stroke-width="150" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="4" fill="none" d="M 382.81,121 L 899.04,121" />
     </g>
-</svg>
+
+</g>
+</g></svg>
