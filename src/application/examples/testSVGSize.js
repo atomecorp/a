@@ -8,22 +8,22 @@
 
 // NOTE: If new SVG files are added, update the arrays below.
 
-// const __SVG_ICON_PATHS = [
-// 	'assets/images/icons/high_pass.svg','assets/images/icons/shape.svg','assets/images/icons/open_menu.svg','assets/images/icons/tools.svg','assets/images/icons/target.svg','assets/images/icons/hamburger.svg','assets/images/icons/fullscreen.svg','assets/images/icons/create.svg','assets/images/icons/tool.svg','assets/images/icons/stop.svg','assets/images/icons/record.svg','assets/images/icons/load.svg','assets/images/icons/select-.svg','assets/images/icons/mail_green.svg','assets/images/icons/waveform-.svg','assets/images/icons/wave-saw.svg','assets/images/icons/settings1.svg','assets/images/icons/settings.svg','assets/images/icons/group.svg','assets/images/icons/wave-square-.svg','assets/images/icons/email.svg','assets/images/icons/mail_orange.svg','assets/images/icons/link.svg','assets/images/icons/settings2.svg','assets/images/icons/clear.svg','assets/images/icons/file.svg','assets/images/icons/microphone.svg','assets/images/icons/add.svg','assets/images/icons/waveform.svg','assets/images/icons/settings_old.svg','assets/images/icons/sequence.svg','assets/images/icons/wave-square.svg','assets/images/icons/select-all.svg','assets/images/icons/play2.svg','assets/images/icons/copy.svg','assets/images/icons/atome.svg','assets/images/icons/play.svg','assets/images/icons/select--.svg','assets/images/icons/previous.svg','assets/images/icons/midi_out.svg','assets/images/icons/save.svg','assets/images/icons/band_pass.svg','assets/images/icons/edition.svg','assets/images/icons/wave-sine.svg','assets/images/icons/panel.svg','assets/images/icons/communication.svg','assets/images/icons/color.svg','assets/images/icons/undo2.svg','assets/images/icons/infos.svg','assets/images/icons/filter.svg','assets/images/icons/undo.svg','assets/images/icons/modules.svg','assets/images/icons/edit-.svg','assets/images/icons/activate.svg','assets/images/icons/mail_gray.svg','assets/images/icons/midi_in.svg','assets/images/icons/new.svg','assets/images/icons/validate.svg','assets/images/icons/wave-triangle.svg','assets/images/icons/delete.svg','assets/images/icons/audio.svg','assets/images/icons/select.svg','assets/images/icons/equalizer.svg','assets/images/icons/next.svg','assets/images/icons/edit.svg','assets/images/icons/low_pass.svg','assets/images/icons/paste.svg','assets/images/icons/separator.svg','assets/images/icons/redo.svg','assets/images/icons/Lowpass.svg','assets/images/icons/speaker.svg','assets/images/icons/settingsBad.svg','assets/images/icons/mixer.svg','assets/images/icons/equalizer-.svg','assets/images/icons/folder.svg','assets/images/icons/menu.svg','assets/images/icons/pause.svg','assets/images/icons/module.svg'
-// ];
-
-// const __SVG_LOGO_PATHS = [
-// 	'assets/images/logos/TikTok.svg','assets/images/logos/apple.svg','assets/images/logos/tiktok_back.svg','assets/images/logos/Twitter.svg','assets/images/logos/LinkedIn.svg',
-//     'assets/images/logos/GitHub Black.svg', 'assets/images/logos/GitHub_Black.svg',
-//     'assets/images/logos/YouTube.svg','assets/images/logos/vie.svg','assets/images/logos/Facebook.svg','assets/images/logos/atome.svg','assets/images/logos/arp.svg','assets/images/logos/arp2.svg','assets/images/logos/LinkedIn-full.svg','assets/images/logos/instagram.svg','assets/images/logos/vimeo.svg','assets/images/logos/freebsd.svg','assets/images/logos/GitHub.svg'
-// ];
-
 const __SVG_ICON_PATHS = [
-    ];
+	'assets/images/icons/high_pass.svg','assets/images/icons/shape.svg','assets/images/icons/open_menu.svg','assets/images/icons/tools.svg','assets/images/icons/target.svg','assets/images/icons/hamburger.svg','assets/images/icons/fullscreen.svg','assets/images/icons/create.svg','assets/images/icons/tool.svg','assets/images/icons/stop.svg','assets/images/icons/record.svg','assets/images/icons/load.svg','assets/images/icons/select-.svg','assets/images/icons/mail_green.svg','assets/images/icons/waveform-.svg','assets/images/icons/wave-saw.svg','assets/images/icons/settings1.svg','assets/images/icons/settings.svg','assets/images/icons/group.svg','assets/images/icons/wave-square-.svg','assets/images/icons/email.svg','assets/images/icons/mail_orange.svg','assets/images/icons/link.svg','assets/images/icons/settings2.svg','assets/images/icons/clear.svg','assets/images/icons/file.svg','assets/images/icons/microphone.svg','assets/images/icons/add.svg','assets/images/icons/waveform.svg','assets/images/icons/settings_old.svg','assets/images/icons/sequence.svg','assets/images/icons/wave-square.svg','assets/images/icons/select-all.svg','assets/images/icons/play2.svg','assets/images/icons/copy.svg','assets/images/icons/atome.svg','assets/images/icons/play.svg','assets/images/icons/select--.svg','assets/images/icons/previous.svg','assets/images/icons/midi_out.svg','assets/images/icons/save.svg','assets/images/icons/band_pass.svg','assets/images/icons/edition.svg','assets/images/icons/wave-sine.svg','assets/images/icons/panel.svg','assets/images/icons/communication.svg','assets/images/icons/color.svg','assets/images/icons/undo2.svg','assets/images/icons/infos.svg','assets/images/icons/filter.svg','assets/images/icons/undo.svg','assets/images/icons/modules.svg','assets/images/icons/edit-.svg','assets/images/icons/activate.svg','assets/images/icons/mail_gray.svg','assets/images/icons/midi_in.svg','assets/images/icons/new.svg','assets/images/icons/validate.svg','assets/images/icons/wave-triangle.svg','assets/images/icons/delete.svg','assets/images/icons/audio.svg','assets/images/icons/select.svg','assets/images/icons/equalizer.svg','assets/images/icons/next.svg','assets/images/icons/edit.svg','assets/images/icons/low_pass.svg','assets/images/icons/paste.svg','assets/images/icons/separator.svg','assets/images/icons/redo.svg','assets/images/icons/Lowpass.svg','assets/images/icons/speaker.svg','assets/images/icons/settingsBad.svg','assets/images/icons/mixer.svg','assets/images/icons/equalizer-.svg','assets/images/icons/folder.svg','assets/images/icons/menu.svg','assets/images/icons/pause.svg','assets/images/icons/module.svg'
+];
 
 const __SVG_LOGO_PATHS = [
-    'assets/images/logos/GitHub Black.svg', 'assets/images/logos/GitHub_Black.svg',
+	'assets/images/logos/TikTok.svg','assets/images/logos/apple.svg','assets/images/logos/tiktok_back.svg','assets/images/logos/Twitter.svg','assets/images/logos/LinkedIn.svg',
+    'assets/images/logos/GitHub Black.svg',
+    'assets/images/logos/YouTube.svg','assets/images/logos/vie.svg','assets/images/logos/Facebook.svg','assets/images/logos/atome.svg','assets/images/logos/arp.svg','assets/images/logos/LinkedIn-full.svg','assets/images/logos/instagram.svg','assets/images/logos/vimeo.svg','assets/images/logos/freebsd.svg','assets/images/logos/GitHub.svg'
 ];
+
+// const __SVG_ICON_PATHS = [
+//     ];
+
+// const __SVG_LOGO_PATHS = [
+//     'assets/images/logos/GitHub Black.svg',
+// ];
 
 // Build a single alphabetically sorted list of all SVG asset paths (case-insensitive by filename)
 function __getAllSortedSvgPaths(){
@@ -206,6 +206,7 @@ function loadAndRender(path) {
 	}
 	dataFetcher(path, { mode: 'text' })
 		.then(svgData => {
+            console.log('Fetched SVG', path +': ', svgData);
 			svgCache.set(path, svgData);
 			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', clr.fill, clr.stroke);
 			attachClone(id, cell);
