@@ -1293,7 +1293,7 @@ particle({
     type: "particle",
   label: 'width',
   input: 0.5,
-  selector:['poiluu','px','cm','em','rem','vh','vw'],
+  selector:['%','px','cm','em','rem','vh','vw'],
 
 });
 
@@ -1448,3 +1448,4 @@ particle({
 
 
 // setIntuitionMasterScale(3); // test scale=3 for drift
+setIntuitionMasterScale(3)

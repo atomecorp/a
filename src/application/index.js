@@ -61,7 +61,8 @@
 
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)
 
-import('./examples/tools.js');
+// import('./examples/tools.js');
+import('./examples/testSVGSize.js');
 // import('./examples/iOSFetch.js');
 
 // import('./examples/class.js');

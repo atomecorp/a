@@ -1,0 +1,185 @@
+// SVG Showcase & global scaling demo
+// Requirements:
+// - List all SVGs from icons & logos folders (static array below)
+// - Fetch each via dataFetcher then render with render_svg only
+// - Provide a global scale control calling setIntuitionMasterScale(value)
+// - Cache raw svg text to avoid refetch on re-render
+// - Re-render (if desired) should reuse cache (current implementation keeps initial render; scaling is global through framework)
+
+// NOTE: If new SVG files are added, update the arrays below.
+
+const __SVG_ICON_PATHS = [
+	'assets/images/icons/high_pass.svg','assets/images/icons/shape.svg','assets/images/icons/open_menu.svg','assets/images/icons/tools.svg','assets/images/icons/target.svg','assets/images/icons/hamburger.svg','assets/images/icons/fullscreen.svg','assets/images/icons/create.svg','assets/images/icons/tool.svg','assets/images/icons/stop.svg','assets/images/icons/record.svg','assets/images/icons/load.svg','assets/images/icons/select-.svg','assets/images/icons/mail_green.svg','assets/images/icons/waveform-.svg','assets/images/icons/wave-saw.svg','assets/images/icons/settings1.svg','assets/images/icons/settings.svg','assets/images/icons/group.svg','assets/images/icons/wave-square-.svg','assets/images/icons/email.svg','assets/images/icons/mail_orange.svg','assets/images/icons/link.svg','assets/images/icons/settings2.svg','assets/images/icons/clear.svg','assets/images/icons/file.svg','assets/images/icons/microphone.svg','assets/images/icons/add.svg','assets/images/icons/waveform.svg','assets/images/icons/settings_old.svg','assets/images/icons/sequence.svg','assets/images/icons/wave-square.svg','assets/images/icons/select-all.svg','assets/images/icons/play2.svg','assets/images/icons/copy.svg','assets/images/icons/atome.svg','assets/images/icons/play.svg','assets/images/icons/select--.svg','assets/images/icons/previous.svg','assets/images/icons/midi_out.svg','assets/images/icons/save.svg','assets/images/icons/band_pass.svg','assets/images/icons/edition.svg','assets/images/icons/wave-sine.svg','assets/images/icons/panel.svg','assets/images/icons/communication.svg','assets/images/icons/color.svg','assets/images/icons/undo2.svg','assets/images/icons/infos.svg','assets/images/icons/filter.svg','assets/images/icons/undo.svg','assets/images/icons/modules.svg','assets/images/icons/edit-.svg','assets/images/icons/activate.svg','assets/images/icons/mail_gray.svg','assets/images/icons/midi_in.svg','assets/images/icons/new.svg','assets/images/icons/validate.svg','assets/images/icons/wave-triangle.svg','assets/images/icons/delete.svg','assets/images/icons/audio.svg','assets/images/icons/select.svg','assets/images/icons/equalizer.svg','assets/images/icons/next.svg','assets/images/icons/edit.svg','assets/images/icons/low_pass.svg','assets/images/icons/paste.svg','assets/images/icons/separator.svg','assets/images/icons/redo.svg','assets/images/icons/Lowpass.svg','assets/images/icons/speaker.svg','assets/images/icons/settingsBad.svg','assets/images/icons/mixer.svg','assets/images/icons/equalizer-.svg','assets/images/icons/folder.svg','assets/images/icons/menu.svg','assets/images/icons/pause.svg','assets/images/icons/module.svg'
+];
+
+const __SVG_LOGO_PATHS = [
+	'assets/images/logos/TikTok.svg','assets/images/logos/apple.svg','assets/images/logos/tiktok_back.svg','assets/images/logos/Twitter.svg','assets/images/logos/LinkedIn.svg','assets/images/logos/GitHub Black.svg','assets/images/logos/YouTube.svg','assets/images/logos/vie.svg','assets/images/logos/Facebook.svg','assets/images/logos/atome.svg','assets/images/logos/arp.svg','assets/images/logos/LinkedIn-full.svg','assets/images/logos/instagram.svg','assets/images/logos/vimeo.svg','assets/images/logos/freebsd.svg','assets/images/logos/GitHub.svg'
+];
+
+// Simple in-memory cache: path -> raw svg text
+const svgCache = new Map();
+
+// Root container (ensure #view exists already in host app; we build a sub-root)
+let showcaseRoot = document.getElementById('svg-showcase-root');
+if (!showcaseRoot) {
+	showcaseRoot = document.createElement('div');
+	showcaseRoot.id = 'svg-showcase-root';
+	showcaseRoot.style.padding = '8px';
+	showcaseRoot.style.fontFamily = 'sans-serif';
+	// Insert at top of body (before other dynamic stuff)
+	document.body.appendChild(showcaseRoot);
+}
+
+// Control bar
+const controls = document.createElement('div');
+controls.style.display = 'flex';
+controls.style.alignItems = 'center';
+controls.style.gap = '8px';
+controls.style.marginBottom = '12px';
+controls.style.flexWrap = 'wrap';
+controls.innerHTML = '<strong>SVG Scale:</strong>';
+const scaleInput = document.createElement('input');
+scaleInput.type = 'number';
+scaleInput.min = '0.1';
+scaleInput.step = '0.1';
+scaleInput.value = '1';
+scaleInput.style.width = '70px';
+const applyBtn = document.createElement('button');
+applyBtn.textContent = 'Appliquer';
+applyBtn.style.cursor = 'pointer';
+applyBtn.onclick = () => {
+	const v = parseFloat(scaleInput.value);
+	if (isFinite(v) && v > 0) {
+		try { setIntuitionMasterScale(v); } catch(e) { console.warn('setIntuitionMasterScale error', e); }
+	}
+};
+controls.appendChild(scaleInput);
+controls.appendChild(applyBtn);
+showcaseRoot.appendChild(controls);
+
+// Grid container
+const grid = document.createElement('div');
+grid.style.display = 'grid';
+grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(130px, 1fr))';
+grid.style.gap = '12px';
+grid.style.alignItems = 'start';
+grid.style.borderTop = '1px solid #444';
+grid.style.paddingTop = '10px';
+showcaseRoot.appendChild(grid);
+
+// Ensure a view container exists for render_svg parent usage
+let viewEl = document.getElementById('view');
+if (!viewEl) {
+	viewEl = document.createElement('div');
+	viewEl.id = 'view';
+	viewEl.style.position = 'relative';
+	viewEl.style.width = '1px';
+	viewEl.style.height = '1px';
+	viewEl.style.overflow = 'visible';
+	viewEl.style.pointerEvents = 'none';
+	document.body.appendChild(viewEl);
+}
+
+// Helper to create a cell wrapper
+function createCell(title) {
+	const cell = document.createElement('div');
+	cell.style.border = '1px solid #333';
+	cell.style.borderRadius = '6px';
+	cell.style.padding = '6px 4px 8px';
+	cell.style.background = '#111';
+	cell.style.color = '#ddd';
+	cell.style.fontSize = '11px';
+	cell.style.display = 'flex';
+	cell.style.flexDirection = 'column';
+	cell.style.alignItems = 'center';
+	cell.style.justifyContent = 'flex-start';
+	cell.style.position = 'relative';
+	const label = document.createElement('div');
+	label.textContent = title;
+	label.style.marginBottom = '4px';
+	label.style.textAlign = 'center';
+	label.style.whiteSpace = 'nowrap';
+	label.style.overflow = 'hidden';
+	label.style.textOverflow = 'ellipsis';
+	label.style.width = '100%';
+	cell.appendChild(label);
+	// placeholder area for actual rendered svg (we track by id)
+	return cell;
+}
+
+// Render one SVG (fetch if needed, then render_svg)
+function loadAndRender(path) {
+	const baseName = path.split('/').pop();
+	const nameNoExt = baseName.replace(/\.svg$/i,'');
+	const id = 'svg_' + nameNoExt.replace(/[^a-z0-9_\-]/gi,'_');
+	const cell = createCell(baseName);
+	grid.appendChild(cell);
+	// If already cached use it directly
+	const cached = svgCache.get(path);
+	if (cached) {
+		render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', null, null);
+		attachClone(id, cell);
+		return;
+	}
+	dataFetcher(path, { mode: 'text' })
+		.then(svgData => {
+			svgCache.set(path, svgData);
+			render_svg(svgData, id, 'view', '0px', '0px', '120px', '120px', null, null);
+			attachClone(id, cell);
+		})
+		.catch(err => {
+			const errDiv = document.createElement('div');
+			errDiv.textContent = 'Erreur de chargement';
+			errDiv.style.color = '#e66';
+			errDiv.style.fontSize = '10px';
+			cell.appendChild(errDiv);
+			console.warn('Failed to load', path, err);
+		});
+}
+
+// Attach a cloned visible copy inside the cell while keeping original in hidden #view for layout isolation
+function attachClone(origId, cell) {
+	const orig = document.getElementById(origId);
+	if (!orig) return;
+	// Clone node to display it inside the grid cell (avoid absolute coords collision)
+	const clone = orig.cloneNode(true);
+	// Reset positioning for clone
+	clone.style.position = 'static';
+	clone.style.top = '';
+	clone.style.left = '';
+	clone.style.margin = '0';
+	clone.style.width = '100%';
+	clone.style.height = '100%';
+	clone.style.maxWidth = '120px';
+	clone.style.maxHeight = '120px';
+	cell.appendChild(clone);
+}
+
+// Kickoff loading for all icons & logos
+[...__SVG_ICON_PATHS, ...__SVG_LOGO_PATHS].forEach(loadAndRender);
+
+// Optional: expose a manual refresh that re-clones from cache if needed
+window.__refreshSVGShowcase = function(){
+	// Remove all cells and rebuild purely from cache
+	while (grid.firstChild) grid.removeChild(grid.firstChild);
+	[...__SVG_ICON_PATHS, ...__SVG_LOGO_PATHS].forEach(p => {
+		const cached = svgCache.get(p);
+		const baseName = p.split('/').pop();
+		const nameNoExt = baseName.replace(/\.svg$/i,'');
+		const id = 'svg_' + nameNoExt.replace(/[^a-z0-9_\-]/gi,'_');
+		const cell = createCell(baseName);
+		grid.appendChild(cell);
+		if (cached) {
+			// ensure original exists (if user cleared view) then clone
+			if (!document.getElementById(id)) {
+				render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', null, null);
+			}
+			attachClone(id, cell);
+		} else {
+			loadAndRender(p);
+		}
+	});
+};
+
+// Log helper
+console.log('[testSVGSize] Loaded showcase for', __SVG_ICON_PATHS.length, 'icons and', __SVG_LOGO_PATHS.length, 'logos');
