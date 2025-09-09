@@ -16,6 +16,16 @@ const __SVG_LOGO_PATHS = [
 	'assets/images/logos/TikTok.svg','assets/images/logos/apple.svg','assets/images/logos/tiktok_back.svg','assets/images/logos/Twitter.svg','assets/images/logos/LinkedIn.svg','assets/images/logos/GitHub Black.svg','assets/images/logos/YouTube.svg','assets/images/logos/vie.svg','assets/images/logos/Facebook.svg','assets/images/logos/atome.svg','assets/images/logos/arp.svg','assets/images/logos/LinkedIn-full.svg','assets/images/logos/instagram.svg','assets/images/logos/vimeo.svg','assets/images/logos/freebsd.svg','assets/images/logos/GitHub.svg'
 ];
 
+// Build a single alphabetically sorted list of all SVG asset paths (case-insensitive by filename)
+function __getAllSortedSvgPaths(){
+	return [...__SVG_ICON_PATHS, ...__SVG_LOGO_PATHS]
+		.sort((a,b)=>{
+			const an = a.split('/').pop().toLowerCase();
+			const bn = b.split('/').pop().toLowerCase();
+			if(an < bn) return -1; if(an > bn) return 1; return 0;
+		});
+}
+
 // Simple in-memory cache: path -> raw svg text
 const svgCache = new Map();
 // Base cell size (square) before applying master scale
@@ -50,20 +60,20 @@ scaleInput.style.width = '70px';
 const applyBtn = document.createElement('button');
 applyBtn.textContent = 'Appliquer';
 applyBtn.style.cursor = 'pointer';
-applyBtn.onclick = () => {
+
+function __applyScale(){
 	const v = parseFloat(scaleInput.value);
 	if (!isFinite(v) || v <= 0) { console.warn('[testSVGSize] invalid scale input', scaleInput.value); return; }
 	__currentScale = v;
 	console.log('[testSVGSize] Applying master scale', v);
 	try { setIntuitionMasterScale(v); } catch(e) { console.warn('setIntuitionMasterScale error', e); }
-	// If refresh helper exists (ensures theme-derived metrics update)
-	if (typeof refreshIntuitionScale === 'function') {
-		try { refreshIntuitionScale(); } catch(e){}
-	}
-	// Rebuild grid from cache (no network) so cloned instances reflect any layout side-effects
+	if (typeof refreshIntuitionScale === 'function') { try { refreshIntuitionScale(); } catch(e){} }
 	__rebuildShowcaseFromCache();
 	__resizeGridCells();
-};
+}
+applyBtn.onclick = __applyScale;
+// Allow pressing Enter inside the scale input to trigger apply
+scaleInput.addEventListener('keydown', e => { if(e.key === 'Enter'){ __applyScale(); } });
 controls.appendChild(scaleInput);
 controls.appendChild(applyBtn);
 showcaseRoot.appendChild(controls);
@@ -127,17 +137,16 @@ function createCell(title) {
 // Render one SVG (fetch if needed, then render_svg)
 function loadAndRender(path) {
 	const baseName = path.split('/').pop();
-	const nameNoExt = baseName.replace(/\.svg$/i,'');
-	const id = 'svg_' + nameNoExt.replace(/[^a-z0-9_\-]/gi,'_');
+	// Use full path for uniqueness (icon vs logo may share same filename)
+	const id = 'svg_' + path.replace(/[^a-z0-9_\-]/gi,'_');
 	const cell = createCell(baseName);
 	grid.appendChild(cell);
-	// If already cached use it directly
 	const cached = svgCache.get(path);
-		if (cached) {
-			render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'yellow', 'orange');
-			attachClone(id, cell);
-			return;
-		}
+	if (cached) {
+		render_svg(cached, id, 'view', '0px', '0px', '120px', '120px', 'yellow', 'orange');
+		attachClone(id, cell);
+		return;
+	}
 	dataFetcher(path, { mode: 'text' })
 		.then(svgData => {
 			svgCache.set(path, svgData);
@@ -184,17 +193,16 @@ function attachClone(origId, cell) {
 		orig.style.visibility = 'hidden';
 }
 
-// Kickoff loading for all icons & logos
-[...__SVG_ICON_PATHS, ...__SVG_LOGO_PATHS].forEach(loadAndRender);
+// Kickoff loading for all icons & logos (alphabetical)
+__getAllSortedSvgPaths().forEach(loadAndRender);
 
 // Optional: expose a manual refresh that re-clones from cache if needed
 function __rebuildShowcaseFromCache(){
 	while (grid.firstChild) grid.removeChild(grid.firstChild);
-	[...__SVG_ICON_PATHS, ...__SVG_LOGO_PATHS].forEach(p => {
+	__getAllSortedSvgPaths().forEach(p => {
 		const cached = svgCache.get(p);
 		const baseName = p.split('/').pop();
-		const nameNoExt = baseName.replace(/\.svg$/i,'');
-		const id = 'svg_' + nameNoExt.replace(/[^a-z0-9_\-]/gi,'_');
+		const id = 'svg_' + p.replace(/[^a-z0-9_\-]/gi,'_');
 		const cell = createCell(baseName);
 		grid.appendChild(cell);
 		if (cached) {
@@ -211,7 +219,7 @@ function __rebuildShowcaseFromCache(){
 window.__refreshSVGShowcase = __rebuildShowcaseFromCache;
 
 // Log helper
-console.log('[testSVGSize] Loaded showcase for', __SVG_ICON_PATHS.length, 'icons and', __SVG_LOGO_PATHS.length, 'logos');
+console.log('[testSVGSize] Loaded showcase for', __SVG_ICON_PATHS.length, 'icons and', __SVG_LOGO_PATHS.length, 'logos (alphabetical ordering enabled)');
 
 function __resizeGridCells(){
 	const cells = grid.querySelectorAll('[data-svg-cell="1"]');

@@ -116,10 +116,115 @@ function dataFetcher(path, opts = {}) {
   return p;
 }
 
+// --- SVG Sanitizer ---------------------------------------------------------
+// Lightweight whitelisting sanitizer (no external deps) to clean incoming SVG code
+// before insertion. Removes dangerous elements/attributes and optionally normalizes
+// width/height so our internal scaling logic can operate consistently.
+function sanitizeSVG(raw, cfg) {
+  cfg = cfg || (typeof window !== 'undefined' && window.__SVG_SANITIZE) || {};
+  if (!raw || typeof raw !== 'string') return raw;
+  if (cfg.enabled === false) return raw; // allow disabling
+  // Fast path: only process if it looks like SVG
+  if (!/<svg[\s>]/i.test(raw)) return raw;
+  let parser; try { parser = new DOMParser(); } catch(_) {}
+  if (!parser) {
+    // Fallback very naive strip (better than nothing)
+    return raw
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
+      .replace(/ on[a-z]+="[^"]*"/gi, '')
+      .replace(/ on[a-z]+='[^']*'/gi, '');
+  }
+  let doc;
+  try { doc = parser.parseFromString(raw, 'image/svg+xml'); } catch(_) { return raw; }
+  if (!doc || !doc.documentElement || doc.getElementsByTagName('parsererror').length) return raw;
+  const svg = doc.documentElement;
+
+  const ALLOWED_TAGS = new Set([
+    'svg','g','path','rect','circle','ellipse','polygon','polyline','line',
+    'defs','clipPath','mask','linearGradient','radialGradient','stop','symbol','use'
+  ]);
+  const URL_ATTRS = ['fill','stroke','filter','mask','clip-path'];
+  const ALLOWED_ATTR = new Set([
+    'id','class','d','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','stroke-miterlimit',
+    'transform','viewBox','width','height','x','y','cx','cy','r','rx','ry','points','x1','y1','x2','y2',
+    'gradientUnits','gradientTransform','offset','stop-color','stop-opacity','preserveAspectRatio','xmlns','xmlns:xlink','version','href','xlink:href','opacity','fill-opacity','stroke-opacity'
+  ]);
+  const DROP_TAGS = new Set([
+    'script','foreignObject','iframe','audio','video','canvas','embed','object','animate','animateTransform','animateMotion','set','desc','metadata'
+  ]);
+  if (cfg.allowTitle !== true) DROP_TAGS.add('title');
+
+  let removed = 0, removedAttr = 0, droppedExternal = 0;
+
+  const walk = (node) => {
+    if (node.nodeType === 1) { // element
+      const tag = node.tagName;
+      if (DROP_TAGS.has(tag) || (!ALLOWED_TAGS.has(tag) && tag !== 'svg')) {
+        removed++; node.remove(); return; }
+      // Remove event handlers & disallowed attributes
+      // Copy attr list first because we'll modify
+      const attrs = Array.from(node.attributes||[]);
+      for (const a of attrs) {
+        const name = a.name;
+        const lname = name.toLowerCase();
+        if (/^on[a-z]+/.test(lname)) { node.removeAttribute(name); removedAttr++; continue; }
+        if (!ALLOWED_ATTR.has(lname)) { node.removeAttribute(name); removedAttr++; continue; }
+        // External href filtering for <use>, <image> etc
+        if ((lname === 'href' || lname === 'xlink:href')) {
+          const v = a.value.trim();
+          if (/^(https?:|data:)/i.test(v) && !/^data:image\/(png|jpeg|jpg|gif|svg\+xml);/i.test(v)) {
+            node.removeAttribute(name); removedAttr++; droppedExternal++; continue; }
+          if (/^javascript:/i.test(v)) { node.removeAttribute(name); removedAttr++; continue; }
+        }
+        // Sanitize url() references
+        if (URL_ATTRS.includes(lname)) {
+          const v = a.value;
+            if (/url\(\s*['"]?\s*(https?:|data:|javascript:)/i.test(v)) {
+              node.removeAttribute(name); removedAttr++; continue;
+            }
+        }
+      }
+      // Optionally drop style attribute entirely (simplifies bbox + avoids CSS injection)
+      if (cfg.dropStyle !== false && node.hasAttribute('style')) { node.removeAttribute('style'); removedAttr++; }
+    }
+    // Recurse on a static copy of children (live list safety)
+    Array.from(node.childNodes||[]).forEach(ch => walk(ch));
+  };
+  walk(svg);
+
+  // Normalize width/height if viewBox exists: remove explicit width/height so it is responsive
+  if (svg.hasAttribute('viewBox')) {
+    if (cfg.removeWH !== false) { svg.removeAttribute('width'); svg.removeAttribute('height'); }
+  }
+
+  // Optional: clamp absurd stroke-width (e.g., > viewBox major /2)
+  if (cfg.clampStroke !== false) {
+    try {
+      const vb = (svg.getAttribute('viewBox')||'').split(/\s+/).map(parseFloat);
+      if (vb.length === 4 && vb.every(isFinite)) {
+        const maxDim = Math.max(vb[2], vb[3]);
+        const limit = maxDim / 2;
+        svg.querySelectorAll('[stroke-width]').forEach(el => {
+          const sw = parseFloat(el.getAttribute('stroke-width'));
+          if (isFinite(sw) && sw > limit) el.setAttribute('stroke-width', String(Math.round(limit)));
+        });
+      }
+    } catch(_) {}
+  }
+
+  if (cfg.log !== false && typeof console !== 'undefined') {
+    console.log('[svg-sanitize]', {removedTags: removed, removedAttrs: removedAttr, droppedExternal});
+  }
+  return svg.outerHTML.trim();
+}
+
 
 //svg creator
 // render_svg: inserts an SVG string. If an id is provided it's kept EXACT; if omitted an id is generated.
 function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
+  // Sanitize upfront to avoid inserting risky markup
+  try { svgcontent = sanitizeSVG(svgcontent); } catch(_) {}
   const parent = document.getElementById(parent_id);
   if (!parent) return null;
   const tmp = document.createElement('div');
@@ -151,6 +256,7 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
     return Number.isFinite(sw) ? sw : 0;
   };
   let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity,maxStroke=0;
+  let rawMinX, rawMinY, rawMaxX, rawMaxY; // snapshot before padding
   shapes.forEach(node => {
     try {
       const b = node.getBBox();
@@ -170,41 +276,83 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
         const y0 = b.y - pad;
         const x1 = b.x + b.width + pad;
         const y1 = b.y + b.height + pad;
-        if (x0 < minX) minX = x0;
-        if (y0 < minY) minY = y0;
-        if (x1 > maxX) maxX = x1;
-        if (y1 > maxY) maxY = y1;
+    if (x0 < minX) minX = x0;
+    if (y0 < minY) minY = y0;
+    if (x1 > maxX) maxX = x1;
+    if (y1 > maxY) maxY = y1;
       }
     } catch(_){}}
   );
+  rawMinX = minX; rawMinY = minY; rawMaxX = maxX; rawMaxY = maxY;
   const bboxValid = isFinite(minX)&&isFinite(minY)&&isFinite(maxX)&&isFinite(maxY)&&maxX>minX&&maxY>minY;
   if (bboxValid) {
-    // Safety extra margin (covers antialias + potential miter overshoot not caught)
-    const safety = Math.max(0.75, maxStroke * 0.35);
-    // Base extra margin (already solved left/right)
-    const extra = Math.max(1, maxStroke * 0.25);
-    // Apply symmetric horizontal padding
-    minX -= (safety + extra);
-    maxX += (safety + extra);
-    // Apply base vertical padding then extend more to fix top/bottom missing pixels
-    minY -= (safety + extra);
-    maxY += (safety + extra);
-    // Additional vertical-only boost (doesn't change horizontal already OK)
-    const verticalBoost = Math.max( (safety+extra)*0.6, maxStroke + 1.5 );
-    minY -= verticalBoost;
-    maxY += verticalBoost;
-    const bboxW = maxX-minX, bboxH = maxY-minY;
-  // Use contain scaling (no cropping) instead of cover to avoid vertical trimming
-  const scale = Math.min(targetW / bboxW, targetH / bboxH); // contain scaling
-  const tx = (targetW - bboxW*scale)/2 - minX*scale; // center horizontally
-  const ty = (targetH - bboxH*scale)/2 - minY*scale; // center vertically
+    // Simpler stable normalization (regression rollback):
+    // 1. Uniform padding
+    const pad = Math.max(1, maxStroke * 0.5);
+    minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+    const bboxW = maxX - minX; const bboxH = maxY - minY;
     const ns = 'http://www.w3.org/2000/svg';
     const g = document.createElementNS(ns,'g');
     while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
-    g.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+    // Remove non scaling stroke attributes so global scaling applies uniformly
+    g.querySelectorAll('[vector-effect="non-scaling-stroke"]').forEach(n=>n.removeAttribute('vector-effect'));
+    // Adaptive normalization band (reduces disparity between extremely large and tiny icons).
+    const cfg = (typeof window !== 'undefined' && window.__SVG_NORM) ? window.__SVG_NORM : { enable:true, target:900, high:1200 };
+    let normScale = 1;
+    if (cfg.enable) {
+      const longest = Math.max(bboxW, bboxH);
+      if (longest > cfg.high) {
+        normScale = cfg.target / longest; // downscale only
+      }
+    }
+    let transformStr = `translate(${-minX},${-minY})`;
+    if (normScale !== 1) transformStr += ` scale(${normScale})`;
+    g.setAttribute('transform', transformStr);
     svgEl.appendChild(g);
-    svgEl.setAttribute('viewBox', `0 0 ${targetW} ${targetH}`);
-    svgEl.setAttribute('preserveAspectRatio','none');
+    try { svgEl.removeAttribute('width'); svgEl.removeAttribute('height'); } catch(_){}
+    const vbW = normScale === 1 ? bboxW : bboxW * normScale;
+    const vbH = normScale === 1 ? bboxH : bboxH * normScale;
+    svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+    svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
+    // Metrics & logging
+    try {
+      const rawW = (rawMaxX - rawMinX); const rawH = (rawMaxY - rawMinY);
+      const finalRatio = bboxW / bboxH;
+      const targetWn = targetW, targetHn = targetH;
+      const fillFactor = (bboxW * bboxH) / (targetWn * targetHn); // >1 means natural bbox larger than requested area
+      // Initialize global metrics store
+      if (typeof window !== 'undefined') {
+        if (!window.__SVG_METRICS) window.__SVG_METRICS = [];
+        window.__SVG_METRICS.push({
+          id: svgEl.id,
+          raw: { w: rawW, h: rawH },
+            padded: { w: bboxW, h: bboxH },
+          ratio: finalRatio,
+          target: { w: targetWn, h: targetHn },
+          fillFactor,
+          maxStroke,
+          shapes: shapes.length
+        });
+        if (!window.__DUMP_SVG_METRICS) {
+          window.__DUMP_SVG_METRICS = function(limit=20){
+            const list = (window.__SVG_METRICS||[]).slice();
+            list.sort((a,b)=> (b.fillFactor - a.fillFactor));
+            console.log('[__DUMP_SVG_METRICS] total', list.length, 'top fillFactor outliers:', list.slice(0,limit));
+            const ratios = [...list].sort((a,b)=> (b.ratio - a.ratio));
+            console.log('[__DUMP_SVG_METRICS] aspect ratio extremes:', ratios.slice(0,5), ratios.slice(-5));
+          };
+          // Auto dump once after window load (async) if debug flag set
+          if ((window.__SVG_DEBUG||'').toString()==='true') {
+            setTimeout(()=>{ try { window.__DUMP_SVG_METRICS(); } catch(_){} }, 1500);
+          }
+        }
+      }
+      const alwaysLog = true; // user requested explicit verification logs
+      if (alwaysLog || (window && (window.__SVG_DEBUG||'').toString()==='true')) {
+  const effectiveFill = (vbW * vbH) / (targetWn * targetHn);
+  console.log('[svg-metric]', svgEl.id, 'raw', {w:rawW,h:rawH}, 'padded', {w:bboxW,h:bboxH}, 'normScale', normScale, 'vb', {w:vbW,h:vbH}, 'target', {w:targetWn,h:targetHn}, 'ratio', finalRatio.toFixed(3), 'fillFactorRaw', fillFactor.toFixed(2), 'fillFactorEff', effectiveFill.toFixed(2), 'maxStroke', maxStroke, 'shapes', shapes.length);
+      }
+    } catch(_){ }
   } else {
     // Fallback: keep original coordinate system so large coords remain visible when scaled by CSS
     if (!svgEl.getAttribute('viewBox')) {
@@ -240,7 +388,9 @@ function fetch_and_render_svg(path, id, parent_id='view', left='0px', top='0px',
       // Remove prior element with same id to avoid duplicates
       const prev = document.getElementById(id);
       if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
-      return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke);
+  // Sanitize string before rendering (double safety even if render_svg also sanitizes)
+  try { svgData = sanitizeSVG(svgData); } catch(_) {}
+  return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke);
     })
     .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
 }
