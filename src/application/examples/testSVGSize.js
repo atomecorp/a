@@ -13,7 +13,7 @@ const __SVG_ICON_PATHS = [
 ];
 
 const __SVG_LOGO_PATHS = [
-	'assets/images/logos/TikTok.svg','assets/images/logos/apple.svg','assets/images/logos/tiktok_back.svg','assets/images/logos/Twitter.svg','assets/images/logos/LinkedIn.svg','assets/images/logos/GitHub Black.svg','assets/images/logos/YouTube.svg','assets/images/logos/vie.svg','assets/images/logos/Facebook.svg','assets/images/logos/atome.svg','assets/images/logos/arp.svg','assets/images/logos/LinkedIn-full.svg','assets/images/logos/instagram.svg','assets/images/logos/vimeo.svg','assets/images/logos/freebsd.svg','assets/images/logos/GitHub.svg'
+	'assets/images/logos/TikTok.svg','assets/images/logos/apple.svg','assets/images/logos/tiktok_back.svg','assets/images/logos/Twitter.svg','assets/images/logos/LinkedIn.svg','assets/images/logos/GitHub Black.svg','assets/images/logos/YouTube.svg','assets/images/logos/vie.svg','assets/images/logos/Facebook.svg','assets/images/logos/atome.svg','assets/images/logos/arp.svg','assets/images/logos/arp2.svg','assets/images/logos/LinkedIn-full.svg','assets/images/logos/instagram.svg','assets/images/logos/vimeo.svg','assets/images/logos/freebsd.svg','assets/images/logos/GitHub.svg'
 ];
 
 // Build a single alphabetically sorted list of all SVG asset paths (case-insensitive by filename)
