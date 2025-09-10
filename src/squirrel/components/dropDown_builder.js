@@ -40,7 +40,7 @@ function dropDown(config) {
   const labelColor = themeObj["tool-text"] || css.color || '#cccccc';
   const bgColor = css.backgroundColor !== undefined ? css.backgroundColor : 'transparent';
   const fontFamily = css.fontFamily || 'Roboto';
-  const fontSize = css.fontSize || (themeObj["tool-font-size"] || '10px');
+  const fontSize = css.fontSize || (themeObj["global-label-font-size"] || themeObj["tool-font-size"] || '10px');
   const height = css.height || '18px';
 
   const root = $('div', {

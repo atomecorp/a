@@ -324,13 +324,17 @@ const Inntuition_theme = {
     "icon-width": "21px",
     "icon-height": "16px",
     "tool-font-size": "10px",
+    // Nouvelle clé: taille de police globale pour tous les labels (peut diverger de tool-font-size si besoin)
+    "global-label-font-size": "8px",
     "item-shadow": "0px 0px 5px rgba(0,0,0,0.69)",
     "tool-icon-size": "20px",
     "item-border-radius": "3px",
     "item-width": "39px",
     "item-height": "39px",
   // Toggle button (option) base size
-  "toggle-btn-size": "19px"
+  "toggle-btn-size": "19px",
+  // Nouvelle clé: limite max de caractères pour les labels affichés (particle/select/value)
+  "label-max-chars": 5
   }
 };
 
@@ -350,9 +354,86 @@ const INTUITION_ICON_LEFT_RATIO = 0.026; // ~2.6% of item width
 const INTUITION_SCALABLE_KEYS = [
   // NOTE: we deliberately exclude horizontal offsets so icons don't drift right when scaling
   'icon-top',/*'icon-left',*/'icon-centered-top',/*'icon-centered-left',*/
-  'icon-width','icon-height','tool-font-size','tool-icon-size',
+  'icon-width','icon-height','tool-font-size','global-label-font-size','tool-icon-size',
   'item-border-radius','item-width','item-height','toggle-btn-size'
 ];
+
+// Met à jour dynamiquement la limite de caractères des labels (particles: value + selector options)
+window.setIntuitionLabelMaxChars = function(n){
+  try {
+  const theme = 'light'; // actuel
+    const num = parseInt(n,10);
+    if (!isNaN(num) && num > 0) {
+      Inntuition_theme[theme]['label-max-chars'] = num;
+    }
+    // Re-tronquer les values
+    document.querySelectorAll('[id$="_value"]').forEach(v => {
+      if (v.dataset && v.dataset.originalValue) {
+        v.textContent = window.__intuitionTruncate(v.dataset.originalValue);
+      }
+    });
+    // Re-tronquer les labels principaux
+    document.querySelectorAll('div[data-has-label="1"]').forEach(node => {
+      if (node.dataset.originalLabel) {
+        node.childNodes.forEach ? null : null; // no-op
+        // Si l'icône injecte du contenu, le label texte est potentiellement mélangé.
+        // On remplace seulement le premier nœud texte si présent.
+        try {
+          const orig = node.dataset.originalLabel;
+          const truncated = window.__intuitionTruncate(orig);
+          // Chercher un textNode direct avant éventuellement un svg
+          let replaced = false;
+          for (let i=0;i<node.childNodes.length;i++) {
+            const cn = node.childNodes[i];
+            if (cn.nodeType === 3) { // text
+              cn.nodeValue = truncated;
+              replaced = true;
+              break;
+            }
+          }
+          if (!replaced && node.textContent) {
+            node.textContent = truncated; // fallback
+          }
+        } catch(e) {}
+      }
+    });
+    // Re-tronquer les options visibles des dropdown (sélecteur principal)
+    document.querySelectorAll('[id$="_selector"]').forEach(sel => {
+      try {
+        const originalLabels = sel.dataset.originalLabels ? JSON.parse(sel.dataset.originalLabels) : null;
+        const display = sel.querySelector('div');
+        if (display) {
+          const base = display.dataset.originalLabel || (originalLabels ? originalLabels[0] : display.textContent);
+          if (!display.dataset.originalLabel) display.dataset.originalLabel = base;
+          display.textContent = window.__intuitionTruncate(base);
+        }
+        if (originalLabels) {
+          const listItems = sel.querySelectorAll('.dropdown-item, li, [role="option"]');
+          listItems.forEach((item, idx) => {
+            const orig = item.dataset.originalLabel || originalLabels[idx] || item.textContent;
+            if (!item.dataset.originalLabel) item.dataset.originalLabel = orig;
+            item.textContent = window.__intuitionTruncate(orig);
+          });
+        }
+      } catch(e) {}
+    });
+  } catch(e) { console.error('setIntuitionLabelMaxChars error', e); }
+};
+
+// Fonction globale de troncature (si déjà définie ne pas écraser)
+if (!window.__intuitionTruncate) {
+  window.__intuitionTruncate = function(txt, theme='light'){
+    try {
+      if (txt == null) return '';
+      const s = String(txt);
+      const th = Inntuition_theme[theme] || {};
+      const raw = th['label-max-chars'];
+      const maxChars = (typeof raw === 'number') ? raw : parseInt(raw,10) || 4;
+      if (s.length <= maxChars) return s;
+      return s.slice(0,maxChars) + '.';
+    } catch(e){ return String(txt); }
+  };
+}
 
 function _scalePx(value, scale) {
   if (typeof value !== 'string') return value;
@@ -412,7 +493,7 @@ function _ensureDropdownSpacingStyle() {
       case 'overlap':
         lineMult = 0.9; bonusPerScale = 0; padBase = 0; padScale = 0; gapBase = 0; gapScale = 0; break;
       case 'ultra':
-  // ultra plat: aucun espace supplémentaire
+    const theme = 'light'; // actuel
   lineMult = 1.0; bonusPerScale = 0; padBase = 0; padScale = 0; gapBase = 0; gapScale = 0; break;
       case 'compact':
         lineMult = 1.02; bonusPerScale = 1; padBase = 1; padScale = 1.0; gapBase = 1; gapScale = 0.6; break;
@@ -589,12 +670,12 @@ function _updateIntuitionDomScale() {
     // Font size + line heights (lineHeight proportionally 18px * scale)
     const baseLine = 18; // base constant used earlier
     const scaledLine = Math.round(baseLine * IntuitionMasterScale);
-    el.style.fontSize = theme['tool-font-size'];
+  el.style.fontSize = theme['global-label-font-size'] || theme['tool-font-size'];
     el.style.lineHeight = scaledLine + 'px';
     // Bottom value + selector + mini-button adjustments
     const valueEl = el.querySelector('[id$="_value"]');
     if (valueEl) {
-      valueEl.style.fontSize = theme['tool-font-size'];
+  valueEl.style.fontSize = theme['global-label-font-size'] || theme['tool-font-size'];
       valueEl.style.height = scaledLine + 'px';
       valueEl.style.lineHeight = scaledLine + 'px';
     }
@@ -603,7 +684,7 @@ function _updateIntuitionDomScale() {
       // Base (unscaled) selector height is 14px (was 12px) for deeper label placement; scale proportionally
       const selectorScaledH = Math.round(14 * IntuitionMasterScale);
       selectorWrap.style.height = selectorScaledH + 'px';
-      selectorWrap.style.fontSize = theme['tool-font-size'];
+  selectorWrap.style.fontSize = theme['global-label-font-size'] || theme['tool-font-size'];
       // Larger downward nudge (2px * scale, min 2)
       const selectorNudgePx = Math.max(2, Math.round(2 * IntuitionMasterScale));
       selectorWrap.style.paddingTop = selectorNudgePx + 'px';
@@ -614,7 +695,7 @@ function _updateIntuitionDomScale() {
       const firstChild = selectorWrap.firstElementChild;
       if (firstChild) {
         try {
-          firstChild.style.fontSize = theme['tool-font-size'];
+          firstChild.style.fontSize = theme['global-label-font-size'] || theme['tool-font-size'];
           firstChild.style.height = selectorScaledH + 'px';
           firstChild.style.lineHeight = Math.max(1, selectorScaledH - selectorNudgePx) + 'px';
           firstChild.style.paddingTop = selectorNudgePx + 'px';
@@ -626,7 +707,7 @@ function _updateIntuitionDomScale() {
           // Skip dropdown list container & its items to avoid clipping / stacking issues
           const cls = (n.className || '').toString();
           if (/dropdown-list|dropdown-item/i.test(cls) || n.tagName === 'UL' || n.tagName === 'LI') return;
-          n.style.fontSize = theme['tool-font-size'];
+          n.style.fontSize = theme['global-label-font-size'] || theme['tool-font-size'];
           // Only adjust lineHeight for elements inside the closed button region (depth 1)
           if (n !== selectorWrap && n.parentElement === selectorWrap) {
             n.style.lineHeight = Math.max(1, selectorScaledH - selectorNudgePx) + 'px';
@@ -814,7 +895,19 @@ function _updateIntuitionDomScale() {
             if (isNamedList || hasRoleOptions) {
               let wrap = n.parentElement;
               while (wrap && wrap !== container && !wrap.id.endsWith('_selector')) wrap = wrap.parentElement;
-              _applyDropdownListScaling(wrap || n.parentElement);
+              const targetWrap = wrap || n.parentElement;
+              _applyDropdownListScaling(targetWrap);
+              try {
+                if (targetWrap && targetWrap.dataset.originalLabels) {
+                  const originalLabels = JSON.parse(targetWrap.dataset.originalLabels);
+                  const items = targetWrap.querySelectorAll('.dropdown-item, li, [role="option"]');
+                  items.forEach((item, idx) => {
+                    const orig = item.dataset.originalLabel || originalLabels[idx] || item.textContent;
+                    if (!item.dataset.originalLabel) item.dataset.originalLabel = orig;
+                    item.textContent = window.__intuitionTruncate(orig);
+                  });
+                }
+              } catch(e) {}
             }
           });
         });
@@ -845,15 +938,8 @@ function intuitionCommon(cfg) {
   const id_created = `toolsbox.${id}`;
   const label_color = Inntuition_theme[theme]["tool-text"];
 
-  // Utilitaire de troncature centralisé: limite à 4 caractères et ajoute un point si coupé
-  function truncateParticleText(txt) {
-    try {
-      if (txt == null) return '';
-      const s = String(txt);
-      if (s.length <= 4) return s; // pas de point si <= 4
-      return s.slice(0,4) + '.'; // ajoute un point pour indiquer troncature
-    } catch(e) { return String(txt).slice(0,4); }
-  }
+  // Raccourci local vers la fonction globale
+  const truncateParticleText = (t)=> window.__intuitionTruncate(t, theme);
   const el = $('div', {
     parent: '#intuition',
     class: cfg.type,
@@ -871,7 +957,7 @@ function intuitionCommon(cfg) {
     margin: '1px',
     display: 'inline-block',
     verticalAlign: 'top',          // align all items to top
-    fontSize: Inntuition_theme[theme]["tool-font-size"],
+  fontSize: Inntuition_theme[theme]["global-label-font-size"] || Inntuition_theme[theme]["tool-font-size"],
     textTransform: 'capitalize',
     fontFamily: 'Roboto',
     textAlign: 'center',
@@ -881,15 +967,18 @@ function intuitionCommon(cfg) {
     // Affiche le texte seulement si un label est fourni
     text: (function (n) {
       if (!n) return undefined; // pas de label -> pas de texte
-      const chars = Array.from(String(n));
-      return chars.length > 5 ? chars.slice(0, 4).join('') + '.' : String(n);
+      // stocker l'original sur l'élément plus tard
+      return window.__intuitionTruncate(n, theme);
     })(label),
 
     id: id_created,
     icon: icon || undefined,
   });
   // Preserve original label presence (later textContent includes SVG)
-  try { el.setAttribute('data-has-label', label ? '1' : '0'); } catch(e) {}
+  try {
+    el.setAttribute('data-has-label', label ? '1' : '0');
+    if (label) el.dataset.originalLabel = String(label);
+  } catch(e) {}
   // Tag element kind if provided (tool, palette, particle, option, etc.)
   if (type) {
     try { el.setAttribute('data-kind', type); } catch(e) {}
@@ -958,18 +1047,16 @@ function intuitionCommon(cfg) {
   // Sélecteur skinnable en bas si cfg.selector est fourni
   if (Array.isArray(cfg.selector) && cfg.selector.length > 0) {
     const isParticle = cfg.type === 'particle';
-    // Prépare les options avec label tronqué à 4 chars pour les particles
-    let selectorOptions = cfg.selector.map(opt => {
-      if (typeof opt === 'string') {
-        return isParticle ? truncateParticleText(opt) : opt;
-      } else if (opt && typeof opt === 'object') {
-        const val = opt.value !== undefined ? opt.value : (opt.label !== undefined ? opt.label : String(opt));
-        const fullLabel = opt.label !== undefined ? opt.label : String(val);
-        const shortLabel = isParticle ? truncateParticleText(fullLabel) : fullLabel;
-        return { ...opt, label: shortLabel };
+    // Stocker les labels originaux (sans troncature)
+    let originalSelectorLabels = cfg.selector.map(opt => {
+      if (typeof opt === 'string') return opt;
+      if (opt && typeof opt === 'object') {
+        const val = opt.label !== undefined ? opt.label : (opt.value !== undefined ? opt.value : String(opt));
+        return String(val);
       }
-      return opt;
+      return String(opt);
     });
+    let selectorOptions = cfg.selector; // aucune modification pour dropDown
     const ddWrap = $('div', {
       parent: el,
       id: id_created + '_selector',
@@ -983,7 +1070,7 @@ function intuitionCommon(cfg) {
       }
     });
 
-    dropDown({
+    const dd = dropDown({
       parent: ddWrap,
       options: selectorOptions,
       theme,
@@ -994,7 +1081,7 @@ function intuitionCommon(cfg) {
         backgroundColor: 'transparent',
         color: label_color,
         fontFamily: 'Roboto',
-        fontSize: Inntuition_theme[theme]["tool-font-size"],
+  fontSize: Inntuition_theme[theme]["global-label-font-size"] || Inntuition_theme[theme]["tool-font-size"],
         textAlign: 'center',
   // Base selector height increased to 14px (was 12px) for deeper vertical placement
   // Nudge label 2px downward
@@ -1008,13 +1095,25 @@ function intuitionCommon(cfg) {
       },
       itemCss: {
         fontFamily: 'Roboto',
-        fontSize: Inntuition_theme[theme]["tool-font-size"],
+  fontSize: Inntuition_theme[theme]["global-label-font-size"] || Inntuition_theme[theme]["tool-font-size"],
         color: label_color,
   // Keep list items at 18px base line-height (they are separate from selector button)
   lineHeight: '18px',
         textAlign: 'center'
       }
     });
+    try { ddWrap.dataset.originalLabels = JSON.stringify(originalSelectorLabels); } catch(e) {}
+    if (isParticle) {
+      // Appliquer troncature affichage sélectionné immédiatement
+      try {
+        const display = ddWrap.querySelector('div');
+        if (display) {
+          const base = originalSelectorLabels[0] || display.textContent;
+          if (!display.dataset.originalLabel) display.dataset.originalLabel = base;
+          display.textContent = window.__intuitionTruncate(base, theme);
+        }
+      } catch(e) {}
+    }
   }
 
   // Texte en bas si cfg.value est fourni
@@ -1035,7 +1134,7 @@ function intuitionCommon(cfg) {
         backgroundColor: 'transparent',
         color: label_color,
         fontFamily: 'Roboto',
-        fontSize: Inntuition_theme[theme]["tool-font-size"],
+  fontSize: Inntuition_theme[theme]["global-label-font-size"] || Inntuition_theme[theme]["tool-font-size"],
         textTransform: 'inherit',
         textAlign: 'center',
         lineHeight: '18px',
@@ -1044,6 +1143,7 @@ function intuitionCommon(cfg) {
         WebkitUserSelect: 'none'
       }
     });
+  try { bottomText.dataset.originalValue = String(cfg.value); } catch(e) {}
   }
 
   // Petit bouton intermédiaire si cfg.input est fourni
