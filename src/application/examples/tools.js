@@ -1336,7 +1336,7 @@ particle({
 
 
 
- setIntuitionMasterScale(3)
+ setIntuitionMasterScale(1.7)
   dataFetcher('assets/images/icons/menu.svg')
     .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','120px', '200px', '33px', '33px' , null, null);  })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });
