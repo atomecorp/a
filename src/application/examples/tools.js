@@ -844,6 +844,16 @@ function intuitionCommon(cfg) {
 
   const id_created = `toolsbox.${id}`;
   const label_color = Inntuition_theme[theme]["tool-text"];
+
+  // Utilitaire de troncature centralisé: limite à 4 caractères et ajoute un point si coupé
+  function truncateParticleText(txt) {
+    try {
+      if (txt == null) return '';
+      const s = String(txt);
+      if (s.length <= 4) return s; // pas de point si <= 4
+      return s.slice(0,4) + '.'; // ajoute un point pour indiquer troncature
+    } catch(e) { return String(txt).slice(0,4); }
+  }
   const el = $('div', {
     parent: '#intuition',
     class: cfg.type,
@@ -947,6 +957,19 @@ function intuitionCommon(cfg) {
 
   // Sélecteur skinnable en bas si cfg.selector est fourni
   if (Array.isArray(cfg.selector) && cfg.selector.length > 0) {
+    const isParticle = cfg.type === 'particle';
+    // Prépare les options avec label tronqué à 4 chars pour les particles
+    let selectorOptions = cfg.selector.map(opt => {
+      if (typeof opt === 'string') {
+        return isParticle ? truncateParticleText(opt) : opt;
+      } else if (opt && typeof opt === 'object') {
+        const val = opt.value !== undefined ? opt.value : (opt.label !== undefined ? opt.label : String(opt));
+        const fullLabel = opt.label !== undefined ? opt.label : String(val);
+        const shortLabel = isParticle ? truncateParticleText(fullLabel) : fullLabel;
+        return { ...opt, label: shortLabel };
+      }
+      return opt;
+    });
     const ddWrap = $('div', {
       parent: el,
       id: id_created + '_selector',
@@ -962,7 +985,7 @@ function intuitionCommon(cfg) {
 
     dropDown({
       parent: ddWrap,
-      options: cfg.selector,
+      options: selectorOptions,
       theme,
       openDirection: 'up',
       css: {
@@ -996,11 +1019,13 @@ function intuitionCommon(cfg) {
 
   // Texte en bas si cfg.value est fourni
   if (cfg.value !== undefined && cfg.value !== null) {
+    const isParticle = cfg.type === 'particle';
+  const valueText = isParticle ? truncateParticleText(cfg.value) : String(cfg.value);
     const hasSelector = Array.isArray(cfg.selector) && cfg.selector.length > 0;
     const bottomText = $('div', {
       parent: el,
       id: id_created + '_value',
-      text: String(cfg.value),
+      text: valueText,
       css: {
         position: 'absolute',
         bottom: hasSelector ? '18px' : '0px',
@@ -1304,7 +1329,7 @@ particle({
     type: "particle",
   label: 'color',
   input: 0.5,
-  value: 'redatarte',
+  value: 'red',
 
 });
 
