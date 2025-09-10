@@ -317,23 +317,20 @@ const Inntuition_theme = {
     "tool-active-bg": "#e0e0e0",
     "tool-active-fg": "#000000",
     "icon-top": "16px",
-  // Adjusted base left offsets (was 9px) to remove right bias at scale=1
   "icon-left": "9px",
   "icon-centered-top": "12px",
   "icon-centered-left": "5px",
     "icon-width": "21px",
     "icon-height": "16px",
     "tool-font-size": "10px",
-    // Nouvelle clé: taille de police globale pour tous les labels (peut diverger de tool-font-size si besoin)
-    "global-label-font-size": "8px",
+
     "item-shadow": "0px 0px 5px rgba(0,0,0,0.69)",
     "tool-icon-size": "20px",
     "item-border-radius": "3px",
     "item-width": "39px",
     "item-height": "39px",
-  // Toggle button (option) base size
   "toggle-btn-size": "19px",
-  // Nouvelle clé: limite max de caractères pour les labels affichés (particle/select/value)
+      "global-label-font-size": "9px",
   "label-max-chars": 5
   }
 };
