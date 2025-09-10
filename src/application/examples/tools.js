@@ -1367,7 +1367,7 @@ toolbox(
   label: null,
   icon: 'menu',
   colorise: true, // true | false | 'color' | '#rrggbb'
-  orientation: 'vertical', // vertical | horizontal
+  orientation: 'horizontal', // vertical | horizontal
   position: 'bottom-left', // top-left | top-right | bottom-left | bottom-right
   theme: 'light' // light | dark | auto 
 }
@@ -1435,11 +1435,4 @@ particle({
 
 
  setIntuitionMasterScale(1.7)
-  dataFetcher('assets/images/icons/menu.svg')
-    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','120px', '200px', '33px', '33px' , null, null);  })
-    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
 
-
-     setTimeout(() => {
-  resize('my_nice_svg', 233, 333, 0.5, 'elastic');
-  }, 2500);
