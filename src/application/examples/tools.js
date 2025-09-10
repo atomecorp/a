@@ -2,7 +2,7 @@
 // Notes: canvas holds a working spec with JSON + comments. JSON sections may include // comments.
 
 
-const intuition = {
+const intuition_content = {
   "version": "1.1",
   "meta": { "namespace": "atome.menu", "defaultLocale": "en" },
 
@@ -30,7 +30,7 @@ const intuition = {
   // =============================
   // 2) Menu Tree (sample)
   // =============================
-  "menu": {
+  "toolsbox": {
     "id": "root",
     "type": "group",
     "children": [
@@ -119,190 +119,6 @@ const intuition = {
   }
 };
 
-// =============================
-// 3) Instance Options (from user answers)
-// =============================
-// Not in JSON data; passed at instantiation time.
-const instanceOptions = {
-  anchor: "top-left",                       // top-left | top-right | bottom-left | bottom-right
-  primaryOrientation: "vertical",           // vertical | horizontal (N1)
-  maxDepth: 5,                               // hard limit
-  maxItemsPerLevel: 7,                       // enforce capping
-  spacingPx: 12,                             // fixed spacing between levels
-  overflow: "scroll",                       // when level exceeds viewport -> scroll
-  mode: "step",                             // step | glide (gesture path)
-  // Grip behavior
-  grip: {
-    enabled: true,
-    // In step mode: replacing previous level; click grip -> restore previous level
-    // In glide mode: previous level is cleared; hovering the grip while moving back restores
-    sizePx: 28,
-    longPressMs: 350,                         // long press on grip → pin/extract panel
-    duplicateOnExtract: true                  // extracting creates a duplicate panel/tool
-  },
-  // Interaction
-  interaction: {
-    openOnHover: false,                      // desktop hover disabled
-    openDelayMs: 0,
-    autoCloseOnFocusExit: true
-  },
-  // Gesture (glide mode)
-  gesture: {
-    angleToleranceDeg: 35,
-    minVelocityPxPerS: 250,
-    snapRadiusPx: 40
-  },
-  // Alternating directions
-  directions: {
-    alternate: true,                         // N1 = primary, N2 = perpendicular, then repeat
-    flipOnEdges: true,                       // flip when colliding screen edges
-    rtlHorizontalInvert: true                // respect RTL locales
-  },
-  // Accessibility & keyboard
-  a11y: {
-    keyboard: true,                          // arrows/enter/esc
-    tabCycle: true,
-    roles: true,                             // aria roles
-    // Physical sizing target: ~1.2 cm touch target (maps to >=44 px on most phones)
-    minTouchSizeCm: 1.2,
-    focusRing: true
-  },
-  // Animations & perf
-  animation: {
-    durationMs: 140,
-    easing: "easeOutQuad",
-    staggerMs: 12,
-    rubberEffect: 0.08                        // subtle overshoot
-  },
-  performance: {
-    lazyMount: true,
-    virtualizeLongLists: true
-  },
-  // Data & dynamics
-  data: {
-    cacheDynamicProviders: true,             // cache recent/favorites
-    fastestLoading: true,                    // choose spinner/skeleton heuristics
-    liveFilterEnabled: true                  // Find regenerates current level
-  },
-  // Persistence
-  persistence: {
-    rememberLastPathPerContext: true,
-    pinnedDock: {
-      enabled: true,
-      allowExtractSingleTool: true
-    }
-  },
-  // Theme
-  theme: {
-    scheme: "auto",                          // light | dark | auto
-    contrast: "AA",                           // AA | AAA (AAA when option enabled)
-    allowDensityTweaks: false                // only light/dark; no density/skins
-  }
-};
-
-// =============================
-// 4) Layout Algorithm (pseudocode)
-// =============================
-/*
-function openLevel(parentLevel, levelIndex, anchor, primaryOrientation) {
-  const dir = (levelIndex % 2 === 1) ? primaryOrientation : perpendicular(primaryOrientation);
-  const origin = computeOriginFromAnchor(anchor); // e.g., top-left
-  const rect = computeLevelRect(parentLevel, dir, instanceOptions.spacingPx);
-  if (wouldOverflow(rect)) {
-    if (instanceOptions.directions.flipOnEdges) flipDirection(dir);
-    if (stillOverflow(rect)) enableScroll(levelIndex); // overflow policy: scroll
-  }
-  renderLevel(levelIndex, rect, dir);
-}
-*/
-
-// =============================
-// 5) Grip Behavior (spec)
-// =============================
-// - Step mode: When entering level N, level N-1 is replaced by a GRIP placeholder.
-//   Clicking the GRIP restores N-1 and collapses deeper levels.
-// - Glide mode: Levels are cleared while the pointer follows the path; hovering the GRIP while moving back rehydrates the previous level.
-
-// =============================
-// 6) Keyboard Map
-// =============================
-// ArrowUp/ArrowDown: move focus within vertical levels
-// ArrowLeft/ArrowRight: move focus within horizontal levels or ascend/descend depending on dir
-// Enter/Space: activate/open focused item
-// Esc: ascend one level (or close all if at root)
-
-// =============================
-// 7) Physical Sizing Helper
-// =============================
-/*
-// Note: CSS cm units are unreliable across devices. We compute px-per-cm at runtime:
-function pxPerCm() {
-  const div = document.createElement('div');
-  div.style.width = '10cm';
-  div.style.position = 'absolute';
-  div.style.visibility = 'hidden';
-  document.body.appendChild(div);
-  const px = div.getBoundingClientRect().width;
-  document.body.removeChild(div);
-  return px / 10; // px per 1 cm
-}
-const MIN_TOUCH_CM = instanceOptions.a11y.minTouchSizeCm; // 1.2
-const MIN_TOUCH_PX = Math.max(44, Math.round(pxPerCm() * MIN_TOUCH_CM));
-// Use MIN_TOUCH_PX for size of items and hit areas.
-*/
-
-// =============================
-// 8) Panels & Item Types (normalized)
-// =============================
-// Separate navigation items from content panels.
-// Types: group (toolbox), action (tool), option (toggle/button), property (slider/pot), input (text/radios/check), panel (specialized zone)
-
-// Example item referencing a panel
-/*
-{
-  id: "tools.color",
-  type: "action",
-  labelKey: "Tools.Color",
-  icon: "palette",
-  panelId: "palette.colors"
-}
-*/
-
-// Example panel definition
-/*
-const panels = {
-  "palette.colors": { kind: "colorPicker", props: { columns: 8, preview: true } },
-  "pads.grid": { kind: "pads", props: { rows: 4, cols: 4, velocity: true } }
-};
-*/
-
-// =============================
-// 9) Gesture Path (glide) Parameters
-// =============================
-/*
-- angleToleranceDeg: 35 → direction changes only when the pointer path deviates beyond 35° from current dir.
-- minVelocityPxPerS: 250 → ignore jittery slow moves.
-- snapRadiusPx: 40 → when path passes within 40px of an item center, snap focus to it.
-*/
-
-// =============================
-// 10) Persistence Model
-// =============================
-/*
-localState = {
-  lastPathByContext: { [contextId]: [itemIds...] },
-  pinned: [{ panelId, position, size }],
-  extractedTools: [{ itemId, position }]
-}
-*/
-
-// =============================
-// 11) Open Questions
-// =============================
-// - Do we cap item label length and ellipsize beyond N chars? Suggest: 18 chars, tooltip on hover.
-// - Max scroll height per level? Suggest: clamp to 60% of viewport height.
-// - Rubber effect curve fine-tuning (currently 0.08). Want a per-level decay?
-
 
 
 // === Theme (base) ===
@@ -331,7 +147,12 @@ const Inntuition_theme = {
     "item-height": "39px",
   "toggle-btn-size": "19px",
       "global-label-font-size": "9px",
-  "label-max-chars": 5
+  "label-max-chars": 5,
+  // Particle value setter (mini button between label and value/selector)
+  "particle_value_setter_width": "12px",
+  "particle_value_setter_height": "33px",
+  "particle_value_setter_color": "#656565ff", // default to tool-bg-active
+  "particle_value_setter_shadow": "0px 0px 5px rgba(0,0,0,0.69)" // default to item-shadow
   }
 };
 
@@ -352,7 +173,9 @@ const INTUITION_SCALABLE_KEYS = [
   // NOTE: we deliberately exclude horizontal offsets so icons don't drift right when scaling
   'icon-top',/*'icon-left',*/'icon-centered-top',/*'icon-centered-left',*/
   'icon-width','icon-height','tool-font-size','global-label-font-size','tool-icon-size',
-  'item-border-radius','item-width','item-height','toggle-btn-size'
+  'item-border-radius','item-width','item-height','toggle-btn-size',
+  // scalable particle mini value setter dimensions
+  'particle_value_setter_width','particle_value_setter_height'
 ];
 
 // Met à jour dynamiquement la limite de caractères des labels (particles: value + selector options)
@@ -1170,16 +993,16 @@ function intuitionCommon(cfg) {
   top: (isParticle ? '50%' : undefined),
   transform: (isParticle ? 'translate(-50%, -50%)' : 'translateX(-50%)'),
   bottom: (isParticle ? undefined : bottomOffset + 'px'),
-        width: '25px',
-        height: '6px',
+  width: (isParticle ? (Inntuition_theme[theme]["particle_value_setter_width"] || '25px') : '25px'),
+  height: (isParticle ? (Inntuition_theme[theme]["particle_value_setter_height"] || '6px') : '6px'),
         padding: '0',
         margin: '0',
         boxSizing: 'border-box',
         overflow: 'hidden',
         fontSize: '0px',
         borderRadius: '3px',
-        backgroundColor: Inntuition_theme[theme]["tool-bg-active"],
-        boxShadow: Inntuition_theme[theme]["item-shadow"]
+  backgroundColor: (isParticle ? (Inntuition_theme[theme]["particle_value_setter_color"] || Inntuition_theme[theme]["tool-bg-active"]) : Inntuition_theme[theme]["tool-bg-active"]),
+  boxShadow: (isParticle ? (Inntuition_theme[theme]["particle_value_setter_shadow"] || Inntuition_theme[theme]["item-shadow"]) : Inntuition_theme[theme]["item-shadow"])
       }
     });
 
