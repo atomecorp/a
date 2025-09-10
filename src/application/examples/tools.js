@@ -1104,13 +1104,14 @@ function intuitionCommon(cfg) {
     });
     try { ddWrap.dataset.originalLabels = JSON.stringify(originalSelectorLabels); } catch(e) {}
     if (isParticle) {
-      // Appliquer troncature affichage sélectionné immédiatement
+      // Appliquer troncature uniquement sur le display interne (évite d'écraser la structure)
       try {
-        const display = ddWrap.querySelector('div');
-        if (display) {
-          const base = originalSelectorLabels[0] || display.textContent;
-          if (!display.dataset.originalLabel) display.dataset.originalLabel = base;
-          display.textContent = window.__intuitionTruncate(base, theme);
+        const rootNode = ddWrap.firstElementChild; // root du dropdown
+        const displayNode = rootNode && rootNode.firstElementChild; // premier enfant = display
+        if (displayNode && displayNode !== rootNode) {
+          const base = displayNode.dataset.originalLabel || originalSelectorLabels[0] || displayNode.textContent;
+          if (!displayNode.dataset.originalLabel) displayNode.dataset.originalLabel = base;
+          displayNode.textContent = window.__intuitionTruncate(base, theme);
         }
       } catch(e) {}
     }
