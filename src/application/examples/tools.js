@@ -380,6 +380,9 @@ function setIntuitionMasterScale(scale, force = false) {
     });
   });
   try { _updateIntuitionDomScale(); } catch(e) { /* ignore */ }
+  // Deuxième passe après reflow pour stabiliser (icônes, left dynamiques)
+  setTimeout(() => { try { _updateIntuitionDomScale(); } catch(e){} }, 16); // ~1 frame
+  setTimeout(() => { try { _updateIntuitionDomScale(); } catch(e){} }, 64); // safety
   // Deferred passes (in case dropdown DOM injected slightly later)
   [30, 90, 180].forEach(delay => setTimeout(() => { try { _intuitionRespaceAllDropdowns(); } catch(e){} }, delay));
 }
@@ -581,6 +584,8 @@ function _updateIntuitionDomScale() {
     // Resize container
     el.style.width = theme['item-width'];
     el.style.height = theme['item-height'];
+    // Force reflow pour que clientWidth/clientHeight reflètent la nouvelle taille avant calculs position
+    void el.offsetWidth;
     // Font size + line heights (lineHeight proportionally 18px * scale)
     const baseLine = 18; // base constant used earlier
     const scaledLine = Math.round(baseLine * IntuitionMasterScale);
@@ -664,7 +669,7 @@ function _updateIntuitionDomScale() {
   // Prefer svg with _svg suffix (after loader change) else first svg
   let iconSvg = document.getElementById(el.id + '_icon_svg');
   if (!iconSvg) iconSvg = el.querySelector('svg');
-    if (iconSvg) {
+  if (iconSvg) {
       iconSvg.style.width = Inntuition_theme.light['icon-width'];
       iconSvg.style.height = Inntuition_theme.light['icon-height'];
       // Attempt to set top/left via its container div
@@ -678,32 +683,29 @@ function _updateIntuitionDomScale() {
         // Always use base left offset (non-scaled) to lock icon horizontally when scaling
         const baseLeft = _Inntuition_theme_base.light['icon-left'];
         iconContainer.style.position = 'absolute';
-        const parentW = el.clientWidth || parseFloat(Inntuition_theme.light['item-width']) || 0;
-        const parentH = el.clientHeight || parseFloat(Inntuition_theme.light['item-height']) || 0;
+  const parentW = el.clientWidth || parseFloat(Inntuition_theme.light['item-width']) || 0;
+  const parentH = el.clientHeight || parseFloat(Inntuition_theme.light['item-height']) || 0;
         const iconNumW = parseFloat(Inntuition_theme.light['icon-width']);
         const iconNumH = parseFloat(Inntuition_theme.light['icon-height']);
         const centerLeftPx = Math.round((parentW - iconNumW)/2);
         const centerTopPx  = Math.round((parentH - iconNumH)/2);
         const isHorizontal = (rootOrientation === 'horizontal');
+        // Centrage horizontal dans tous les cas
+        iconContainer.style.left = centerLeftPx + 'px';
         if (isHorizontal) {
-          // Horizontal layout: full centering
-          iconContainer.style.left = centerLeftPx + 'px';
           iconContainer.style.top  = centerTopPx + 'px';
         } else {
-          // Vertical layout: keep icon anchored near left edge regardless of scale.
-          // Proportional left offset (percentage of current item width) for consistent visual alignment
-          const dynamicLeft = Math.max(1, Math.round(parentW * INTUITION_ICON_LEFT_RATIO));
-          iconContainer.style.left = dynamicLeft + 'px';
           if (hasLabel) {
             iconContainer.style.top = Inntuition_theme.light[topKey];
           } else {
-            // No label: vertical center for aesthetic balance
             iconContainer.style.top = centerTopPx + 'px';
           }
         }
         iconContainer.style.transform = '';
-        iconContainer.style.width = Inntuition_theme.light['icon-width'];
-        iconContainer.style.height = Inntuition_theme.light['icon-height'];
+  iconContainer.style.width = Inntuition_theme.light['icon-width'];
+  iconContainer.style.height = Inntuition_theme.light['icon-height'];
+  // Marquage pour debug / recalcul
+  iconContainer.dataset.intuitionIcon = '1';
         // Keep svg attributes aligned to theme size
         try {
           iconSvg.setAttribute('width', parseFloat(Inntuition_theme.light['icon-width']) || iconW);
@@ -923,12 +925,11 @@ function intuitionCommon(cfg) {
           const iconHnum = parseFloat(Inntuition_theme[theme]['icon-height']) || 0;
           const centerLeft = Math.round((parentW - iconWnum)/2);
           const centerTop  = Math.round((parentH - iconHnum)/2);
+          // Centrage horizontal uniforme
+          iconContainer.style.left = centerLeft + 'px';
           if (ori === 'horizontal') {
-            iconContainer.style.left = centerLeft + 'px';
             iconContainer.style.top  = centerTop + 'px';
           } else {
-            const dynamicLeft = Math.max(1, Math.round(parentW * INTUITION_ICON_LEFT_RATIO));
-            iconContainer.style.left = dynamicLeft + 'px';
             if (hasLabel) {
               iconContainer.style.top = Inntuition_theme[theme][hasLabel ? 'icon-top' : 'icon-centered-top'];
             } else {
@@ -1310,7 +1311,7 @@ particle({
 
 
 
-// setIntuitionMasterScale(3)
+ setIntuitionMasterScale(3)
   dataFetcher('assets/images/icons/menu.svg')
     .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','120px', '200px', '33px', '33px' , null, null);  })
     .catch(err => { span.textContent = 'Erreur: ' + err.message; });

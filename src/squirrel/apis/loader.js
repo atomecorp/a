@@ -175,8 +175,11 @@ function sanitizeSVG(raw) { return raw; }
 
 
 //svg creator
-// render_svg: inserts an SVG string. If an id is provided it's kept EXACT; if omitted an id is generated.
-function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null) {
+// render_svg: inserts an SVG string.
+// Signature étendue: sizeMode (dernier param) peut valoir:
+//   null / undefined  => comportement fixe (taille px)
+//   'responsive' ou '%' => width/height 100%, suit le parent
+function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null, sizeMode=null) {
   const parent = document.getElementById(parent_id);
   if (!parent || !svgcontent) return null;
   const tmp = document.createElement('div');
@@ -189,30 +192,36 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
   svgEl.style.top = top; svgEl.style.left = left;
   const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
   const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
-  // ---- Anti-troncature / scaling fiable ----
+  const responsive = (sizeMode === 'responsive' || sizeMode === '%');
   try {
     const existingViewBox = svgEl.getAttribute('viewBox');
     const attrW = parseFloat(svgEl.getAttribute('width')) || null;
     const attrH = parseFloat(svgEl.getAttribute('height')) || null;
-    // Si pas de viewBox: on en déduit un depuis width/height d'origine (sinon fallback 0 0 targetW targetH)
     if (!existingViewBox) {
       const vbW = (attrW && attrW > 0) ? attrW : targetW;
       const vbH = (attrH && attrH > 0) ? attrH : targetH;
       svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
     }
-    // Force un preserveAspectRatio 'xMidYMid meet' si absent (évite crop sur stretch)
     if (!svgEl.getAttribute('preserveAspectRatio')) {
       svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
     }
-    // Laisse les attributs width/height d'origine intacts pour ne pas fausser le viewBox; on retire s'ils existent pour ne garder que le style (scaling CSS)
-    if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
-    if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
-    // Autorise le dessin à dépasser (strokes, ombres)
-    svgEl.style.overflow = 'visible';
+    if (responsive) {
+      // Mode responsive: largeur/hauteur 100%, parent contrôle la taille
+      if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
+      if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
+      svgEl.style.width = '100%';
+      svgEl.style.height = '100%';
+      try { svgEl.dataset.intuitionResponsive = '1'; } catch(_) {}
+    } else {
+      // Mode fixe: on applique aussi en attribut pour compat rétro + calculs getAttribute
+      try { svgEl.setAttribute('width', String(targetW)); } catch(_) {}
+      try { svgEl.setAttribute('height', String(targetH)); } catch(_) {}
+      svgEl.style.width = targetW + 'px';
+      svgEl.style.height = targetH + 'px';
+    }
+  svgEl.style.overflow = 'visible';
+    svgEl.style.display = 'block';
   } catch(_) {}
-  // Applique la taille demandée via CSS (scaling extérieur propre)
-  svgEl.style.width = targetW + 'px';
-  svgEl.style.height = targetH + 'px';
   if (color || path_color) {
     const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
     shapes.forEach(node => {
@@ -246,13 +255,13 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
 // fetch_and_render_svg: convenience wrapper specialized for SVG paths.
 // Param order kept for existing calls: (path, id, parent_id, left, top, width, height, fill, stroke)
 // Note: render_svg expects (top, left) order, so we swap when forwarding.
-function fetch_and_render_svg(path, id, parent_id='view', left='0px', top='0px', width='100px', height='100px', fill=null, stroke=null) {
+function fetch_and_render_svg(path, id, parent_id='view', left='0px', top='0px', width='100px', height='100px', fill=null, stroke=null, sizeMode=null) {
   return dataFetcher(path, { mode: 'text' })
     .then(svgData => {
       // Remove prior element with same id to avoid duplicates
       const prev = document.getElementById(id);
       if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
-  return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke);
+  return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
     })
     .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
 }
