@@ -149,8 +149,8 @@ const Inntuition_theme = {
       "global-label-font-size": "9px",
   "label-max-chars": 5,
   // Particle value setter (mini button between label and value/selector)
-  "particle_value_setter_width": "12px",
-  "particle_value_setter_height": "33px",
+  "particle_value_setter_width": "93%",
+  "particle_value_setter_height": "3%",
   "particle_value_setter_color": "#656565ff", // default to tool-bg-active
   "particle_value_setter_shadow": "0px 0px 5px rgba(0,0,0,0.69)" // default to item-shadow
   }
@@ -174,8 +174,8 @@ const INTUITION_SCALABLE_KEYS = [
   'icon-top',/*'icon-left',*/'icon-centered-top',/*'icon-centered-left',*/
   'icon-width','icon-height','tool-font-size','global-label-font-size','tool-icon-size',
   'item-border-radius','item-width','item-height','toggle-btn-size',
-  // scalable particle mini value setter dimensions
-  'particle_value_setter_width','particle_value_setter_height'
+  // scalable particle mini value setter dimensions (width excluded if percentage)
+  'particle_value_setter_height'
 ];
 
 // Met à jour dynamiquement la limite de caractères des labels (particles: value + selector options)
@@ -279,6 +279,10 @@ function setIntuitionMasterScale(scale, force = false) {
     INTUITION_SCALABLE_KEYS.forEach(k => {
       if (base[k]) live[k] = _scalePx(base[k], s);
     });
+    // Preserve non-scaled width (could be % or px we don't want double scaling logic)
+    if (base['particle_value_setter_width']) {
+      live['particle_value_setter_width'] = base['particle_value_setter_width'];
+    }
   });
   try { _updateIntuitionDomScale(); } catch(e) { /* ignore */ }
   // Deuxième passe après reflow pour stabiliser (icônes, left dynamiques)
@@ -546,11 +550,19 @@ function _updateIntuitionDomScale() {
     }
     const miniBtn = el.querySelector('[id$="_input"]');
     if (miniBtn) {
-      miniBtn.style.width = Math.round(25 * IntuitionMasterScale) + 'px';
-      miniBtn.style.height = Math.max(4, Math.round(6 * IntuitionMasterScale)) + 'px';
+      const isParticle = (el.getAttribute('data-kind') === 'particle');
+      if (isParticle) {
+        // Use themed/scaled values directly so they aren't overridden.
+        miniBtn.style.width  = theme['particle_value_setter_width']  || '25px';
+        miniBtn.style.height = theme['particle_value_setter_height'] || '6px';
+      } else {
+        // Legacy non-particle scaling logic
+        miniBtn.style.width = Math.round(25 * IntuitionMasterScale) + 'px';
+        miniBtn.style.height = Math.max(4, Math.round(6 * IntuitionMasterScale)) + 'px';
+      }
       miniBtn.style.borderRadius = _scalePx(_Inntuition_theme_base.light['item-border-radius'], IntuitionMasterScale);
-      // If this is a particle item, enforce vertical centering
-      if (el.getAttribute('data-kind') === 'particle') {
+      if (isParticle) {
+        // Keep vertical centering for particle layout
         miniBtn.style.top = '50%';
         miniBtn.style.left = '50%';
         miniBtn.style.bottom = '';
@@ -1235,14 +1247,14 @@ zonespecial({
 });
 
 
-particle({
-    id: "width-particle",
-    type: "particle",
-  label: 'width',
-  input: 0.5,
-  selector:['%','px','cm','em','rem','vh','vw'],
+// particle({
+//     id: "width-particle",
+//     type: "particle",
+//   label: 'width',
+//   input: 0.5,
+//   selector:['%','px','cm','em','rem','vh','vw'],
 
-});
+// });
 
 
 particle({
