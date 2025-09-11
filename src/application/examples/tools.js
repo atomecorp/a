@@ -9,137 +9,164 @@ const intuition_content = {
   meta: { "namespace": "atome.menu", "defaultLocale": "en" },
 
   toolsbox: {
-	id: "toolsbox",
-	type: "toolsbox",
-	children: ['home', 'find', 'time', 'view', 'tools', 'communcation', 'capture', 'edit'],
+    type: toolsbox,
+    children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit']
   },
   home: {
-	id: "home",
-	type: "palette",
-	children: ['quit', 'user', 'settings', 'clear', 'cleanup'],
+    type: palette,
+    children: ['quit', 'user', 'settings', 'clear', 'cleanup'],
   },
-   home: {
-	id: "find",
-	type: "palette",
-	children: ['filter'],
+
+  find: {
+    type: tool,
+    children: ['filter'],
   }
+  ,
+  time: {
+    type: particle,
+    children: ['filter'],
+  }
+  ,
+  view: {
+    type: option,
+    children: ['filter'],
+  }
+  ,
+  tools: {
+    type: zonespecial,
+    children: ['filter'],
+  }
+  ,
+  communication: {
+    type: palette,
+    children: ['filter'],
+  }
+  ,
+  capture: {
+    type: palette,
+    children: ['filter'],
+  }
+  ,
+  edit: {
+    type: palette,
+    children: ['filter'],
+  }
+
 };
-
-
 
 
 // === Theme (base) ===
 const Inntuition_theme = {
   "light": {
-  "items_spacing": "5px",
-  "item_size": "69px",
-	"tool_bg": "#020202ff",
-	"tool_bg_active": "#656565ff",
-	"tool_text": "#8c8b8bff",
-	"tool_active_bg": "#e0e0e0",
-	"icon_top": "45%",
-  "icon_left": "33%",
-  "icon_centered_top": "33%",
-  "icon_centered_left": "33%",
-	"icon_size": "16%",
-	"item_shadow": "0px 0px 5px rgba(0,0,0,0.69)",
-	"item_border_radius": "20%",
+    "items_spacing": "5px",
+    "item_size": "69px",
+    "tool_bg": "#020202ff",
+    "tool_bg_active": "#656565ff",
+    "tool_text": "#8c8b8bff",
+    "tool_active_bg": "#e0e0e0",
+    "icon_top": "45%",
+    "icon_left": "33%",
+    "icon_centered_top": "33%",
+    "icon_centered_left": "33%",
+    "icon_size": "16%",
+    "item_shadow": "0px 0px 5px rgba(0,0,0,0.69)",
+    "item_border_radius": "20%",
 
 
-	// "toggle-btn-size": "33px",
-	// "toggle-btn-left": "0px",
-	// "toggle-btn-top": "25%",
-	//   "global-label-font-size": "3%",
-  // "label-max-chars": 5,
-  // "particle_value_setter_width": "93%",
-  // "particle_value_setter_height": "3%",
-  // "particle_value_setter_color": "#656565ff", // default to tool-bg-active
-	// "particle_value_setter_shadow": "0% 0% 1% rgba(0,0,0,0.69)", // default to item-shadow
-	// "particle_value_setter_top": "50%",
-	// "particle_value_setter_left": "50%",
-	// "particle_value_setter_transform": "translate(-50%, -50%)"
-	// ,
-	// "particle_input_value_bottom": "",
-	// "particle_input_value_left": "",
-	// "label-top": "0px",
-	// "label-left": "0px",
-	// "value-top": "",
-	// "value-left": "0px",
+    // "toggle-btn-size": "33px",
+    // "toggle-btn-left": "0px",
+    // "toggle-btn-top": "25%",
+    //   "global-label-font-size": "3%",
+    // "label-max-chars": 5,
+    // "particle_value_setter_width": "93%",
+    // "particle_value_setter_height": "3%",
+    // "particle_value_setter_color": "#656565ff", // default to tool-bg-active
+    // "particle_value_setter_shadow": "0% 0% 1% rgba(0,0,0,0.69)", // default to item-shadow
+    // "particle_value_setter_top": "50%",
+    // "particle_value_setter_left": "50%",
+    // "particle_value_setter_transform": "translate(-50%, -50%)"
+    // ,
+    // "particle_input_value_bottom": "",
+    // "particle_input_value_left": "",
+    // "label-top": "0px",
+    // "label-left": "0px",
+    // "value-top": "",
+    // "value-left": "0px",
   }
 };
 
 function intuitionCommon(cfg) {
 
-  const el=$('div', {
-  id: cfg.id,
-  parent: cfg.parent,
-  class: cfg.type,
- css: {
-  backgroundColor: 'rgba(21, 255, 0, 1)',
-  width: currentTheme.item_size,
-  height: currentTheme.item_size,
-  color: 'white',
-  display: 'inline-block',
-  position: 'relative',
-  ...(cfg.css || {})   // <-- écrase/ajoute les clés fournies
-},
-});
- el.click=cfg.click; // attach click handler properly so the passed function is executed
-if (typeof cfg.click === 'function') {
-  el.addEventListener('click', function (e) { 
-   try { cfg.click.call(el, e); } catch (err) { console.error(err); }
+  const el = $('div', {
+    id: cfg.id,
+    parent: cfg.parent,
+    class: cfg.type,
+    css: {
+      backgroundColor: 'rgba(21, 255, 0, 1)',
+      width: currentTheme.item_size,
+      height: currentTheme.item_size,
+      color: 'white',
+      display: 'inline-block',
+      position: 'relative',
+      ...(cfg.css || {})   // <-- écrase/ajoute les clés fournies
+    },
   });
-}
-return el;
+  el.click = cfg.click; // attach click handler properly so the passed function is executed
+  if (typeof cfg.click === 'function') {
+    el.addEventListener('click', function (e) {
+      try { cfg.click.call(el, e); } catch (err) { console.error(err); }
+    });
+  }
+  return el;
 }
 
 
 function toolsbox(cfg) {
-const height = (currentTheme.position === 'left' || currentTheme.position === 'right') 
-  ? '100vh'  
-  : currentTheme.item_size;
+  const height = (currentTheme.position === 'left' || currentTheme.position === 'right')
+    ? '100vh'
+    : currentTheme.item_size;
 
-const width = (currentTheme.position === 'top' || currentTheme.position === 'bottom') 
-  ? '100vw'   
-  : currentTheme.item_size;
+  const width = (currentTheme.position === 'top' || currentTheme.position === 'bottom')
+    ? '100vw'
+    : currentTheme.item_size;
 
-let posCss = {};
-switch (currentTheme.position) {
-  case 'top':
-    posCss = { top: '0', left: '0' };
-    break;
-  case 'bottom':
-    posCss = { bottom: '0', left: '0' };
-    break;
-  case 'left':
-    posCss = { top: '0', left: '0' };
-    break;
-  case 'right':
-    posCss = { top: '0', right: '0' };
-    break;
-}
-
-const toolsbox_support = {
-  id: 'toolsbox_support',
-  type: 'toolsbox_support',
-  parent: '#intuition',
-  css: {
-    display: 'block',
-    width: width,
-    maxWidth: width,
-    height: height,
-    maxHeight: height,
-    position: 'fixed',
-    backgroundColor: 'red',
-    overflow: 'auto',
-    ...posCss  // injecte la bonne ancre (haut/bas/gauche/droite)
+  let posCss = {};
+  switch (currentTheme.position) {
+    case 'top':
+      posCss = { top: '0', left: '0' };
+      break;
+    case 'bottom':
+      posCss = { bottom: '0', left: '0' };
+      break;
+    case 'left':
+      posCss = { top: '0', left: '0' };
+      break;
+    case 'right':
+      posCss = { top: '0', right: '0' };
+      break;
   }
-};
+
+  const toolsbox_support = {
+    id: 'toolsbox_support',
+    type: 'toolsbox_support',
+    parent: '#intuition',
+    css: {
+      display: 'block',
+      width: width,
+      maxWidth: width,
+      height: height,
+      maxHeight: height,
+      position: 'fixed',
+      backgroundColor: 'red',
+      overflow: 'auto',
+      ...posCss  // injecte la bonne ancre (haut/bas/gauche/droite)
+    }
+  };
   intuitionCommon(toolsbox_support)
-  puts(cfg)
-if (currentTheme.direction == 'top'){
-cfg.css={...cfg.css, ... {position: 'absolute',bottom: '0px',}}
-}
+
+  if (currentTheme.direction == 'top') {
+    cfg.css = { ...cfg.css, ... { position: 'absolute', bottom: '0px', } }
+  }
 
   const el = intuitionCommon(cfg)
 
@@ -151,13 +178,13 @@ cfg.css={...cfg.css, ... {position: 'absolute',bottom: '0px',}}
 
 
 function palette(cfg) {
+  puts(cfg)
+  // cfg.css = {
+  // ...cfg.css,
 
-  cfg.css = {
-	...cfg.css,
+  // };
 
-  };
-
-  // const el = intuitionCommon(cfg)
+  const el = intuitionCommon(cfg)
 }
 
 function tool(cfg) {
@@ -173,53 +200,73 @@ function particle(cfg) {
 }
 
 function option(cfg) {
-	// cfg.theme = currentToolbox().theme;
+  // cfg.theme = currentToolbox().theme;
   const el = intuitionCommon(cfg)
 }
 
 function zonespecial(cfg) {
-//  cfg.theme = currentToolbox().theme;
+  //  cfg.theme = currentToolbox().theme;
   const el = intuitionCommon(cfg)
 }
 
 
-const currentTheme=Inntuition_theme.light
-currentTheme.direction="bottom";
-currentTheme.position="right";
+const currentTheme = Inntuition_theme.light
+currentTheme.direction = "bottom";
+currentTheme.position = "bottom";
 
 
 toolsbox(
-  {  
-  id: "toolsbox",
-  type: "toolsbox",
-  parent: '#toolsbox_support',
-   click: function(e){
-    puts(intuition_content.toolsbox.children);  
-    grab('toolsbox').style.backgroundColor='blue';
-  },
-  margin: currentTheme["items_spacing"], 
-  css: {
-    boxShadow: currentTheme["item_shadow"],
-    borderRadius: currentTheme["item_border_radius"],
-    backgroundColor: currentTheme["tool_bg"],
+  {
+    id: "toolsbox",
+    type: "toolsbox",
+    parent: '#toolsbox_support',
+    click: function (e) {
 
+      const methods = intuition_content.toolsbox.children || [];
+      methods.forEach(name => {
+        const fct_exec = intuition_content[name]['type']
+        if (typeof fct_exec === "function") {
+          const optionalParams = { ...{ id: name, label: name, icon: name, parent: '#toolsbox_support' }, ...intuitionAddOn[name] }
+          fct_exec(optionalParams);
+        } else {
+          console.warn(`Function ${fct_exec} not found`);
+        }
+      });
+      grab('toolsbox').style.backgroundColor = 'blue';
+    },
+    margin: currentTheme["items_spacing"],
+    css: {
+      boxShadow: currentTheme["item_shadow"],
+      borderRadius: currentTheme["item_border_radius"],
+      backgroundColor: currentTheme["tool_bg"],
 
-  },
-  label: null,
-  icon: 'menu',
-}
+    },
+    label: null,
+    icon: 'menu',
+  }
 );
 
 
+const intuitionAddOn = {
+  communication: {
+    // margin: currentTheme["items_spacing"],
+    label: 'communication',
+    icon: 'communication',
+  }
+}
 
-palette({
-  id: "communication",
-  // parent: 'toolsbox',
-  // margin: currentTheme["items_spacing"],
-  type: "palette",
-  label: 'communication',
-  icon: 'communication',
-});
+
+
+
+
+// palette({
+// id: "communication",
+// // parent: 'toolsbox',
+// // margin: currentTheme["items_spacing"],
+// type: "palette",
+// label: 'communication',
+// icon: 'communication',
+// });
 
 
 
