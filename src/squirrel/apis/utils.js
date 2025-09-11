@@ -14,10 +14,10 @@ function current_platform() {
 
     const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
     if (isTauri) {
-      if (/Macintosh|Mac OS X/.test(ua)) return 'Taurie_mac';
-      if (/Windows/.test(ua)) return 'Taurie_windows';
-      if (/Linux/.test(ua)) return 'Taurie_linux';
-      return 'Taurie';
+      if (/Macintosh|Mac OS X/.test(ua)) return 'Tauri Mac';
+      if (/Windows/.test(ua)) return 'Taur Windows';
+      if (/Linux/.test(ua)) return 'Tauri Unix';
+      return 'Tauri';
     }
 
     // AUv3 bridge heuristics (extended)
