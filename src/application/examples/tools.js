@@ -178,7 +178,7 @@ function toolsbox(cfg) {
 
 
 function palette(cfg) {
-  puts(cfg)
+  // puts(cfg)
   // cfg.css = {
   // ...cfg.css,
 
@@ -211,8 +211,36 @@ function zonespecial(cfg) {
 
 
 const currentTheme = Inntuition_theme.light
-currentTheme.direction = "bottom";
-currentTheme.position = "bottom";
+let menuOpen = 'false'
+currentTheme.direction = "top";
+currentTheme.position = "right";
+
+function reveal_children(parent) {
+  const methods = intuition_content[parent].children || [];
+  if (menuOpen !== parent) {
+
+    methods.forEach(name => {
+      const fct_exec = intuition_content[name]['type']
+      if (typeof fct_exec === "function") {
+        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolsbox_support' }, ...intuitionAddOn[name] }
+        fct_exec(optionalParams);
+      } else {
+        console.warn(`Function ${fct_exec} not found`);
+      }
+    });
+    menuOpen = parent;
+  }
+  else {
+    methods.forEach(name => {
+      const el = grab(`_intuition_${name}`);
+      if (el) {
+        el.remove();
+      }
+    });
+    menuOpen = 'false';
+  }
+
+}
 
 
 toolsbox(
@@ -221,18 +249,7 @@ toolsbox(
     type: "toolsbox",
     parent: '#toolsbox_support',
     click: function (e) {
-
-      const methods = intuition_content.toolsbox.children || [];
-      methods.forEach(name => {
-        const fct_exec = intuition_content[name]['type']
-        if (typeof fct_exec === "function") {
-          const optionalParams = { ...{ id: name, label: name, icon: name, parent: '#toolsbox_support' }, ...intuitionAddOn[name] }
-          fct_exec(optionalParams);
-        } else {
-          console.warn(`Function ${fct_exec} not found`);
-        }
-      });
-      grab('toolsbox').style.backgroundColor = 'blue';
+      reveal_children('toolsbox')
     },
     margin: currentTheme["items_spacing"],
     css: {
