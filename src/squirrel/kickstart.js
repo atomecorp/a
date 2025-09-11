@@ -42,7 +42,7 @@ function initKickstart() {
 		  left: '0px',
 		  top: '0px',
 		  position: 'absolute',
-		  width: 'px',
+		  width: '0px',
 		  height: '0px',
 		  overflow: 'visible',
 	  }
