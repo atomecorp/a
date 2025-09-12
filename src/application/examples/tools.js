@@ -8,8 +8,8 @@ const intuition_content = {
   version: "1.1",
   meta: { "namespace": "atome.menu", "defaultLocale": "en" },
 
-  toolsbox: {
-    type: toolsbox,
+  toolbox: {
+    //type: toolbox,
     children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit']
   },
   home: {
@@ -54,23 +54,28 @@ const intuition_content = {
 
 };
 
+const shadowLeft = 5,
+  shadowTop = 5,
+  shadowBlur = 5,
+  margin = shadowLeft + shadowTop + shadowBlur
 
 // === Theme (base) ===
 const Inntuition_theme = {
-  "light": {
-    "items_spacing": "5px",
-    "item_size": "69px",
-    "tool_bg": "#020202ff",
-    "tool_bg_active": "#656565ff",
-    "tool_text": "#8c8b8bff",
-    "tool_active_bg": "#e0e0e0",
-    "icon_top": "45%",
-    "icon_left": "33%",
-    "icon_centered_top": "33%",
-    "icon_centered_left": "33%",
-    "icon_size": "16%",
-    "item_shadow": "0px 0px 5px rgba(0,0,0,0.69)",
-    "item_border_radius": "20%",
+  light: {
+    margin: `${margin}px`,
+    items_spacing: "5px",
+    item_size: "69px",
+    tool_bg: "#484747ff",
+    tool_bg_active: "#656565ff",
+    tool_text: "#8c8b8bff",
+    tool_active_bg: "#e0e0e0",
+    icon_top: "45%",
+    icon_left: "33%",
+    icon_centered_top: "33%",
+    icon_centered_left: "33%",
+    icon_size: "16%",
+    item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
+    item_border_radius: "20%",
 
 
     // "toggle-btn-size": "33px",
@@ -102,13 +107,19 @@ function intuitionCommon(cfg) {
     parent: cfg.parent,
     class: cfg.type,
     css: {
-      backgroundColor: 'rgba(21, 255, 0, 1)',
+      backgroundColor: currentTheme.tool_bg,
       width: currentTheme.item_size,
       height: currentTheme.item_size,
-      color: 'white',
+      color: 'lightgray',
+      // padding: currentTheme["items_spacing"],
+      marginTop: currentTheme["items_spacing"],
+      boxShadow: currentTheme["item_shadow"],
+      borderRadius: currentTheme["item_border_radius"],
+      textAlign: 'center',
       display: 'inline-block',
       position: 'relative',
-      ...(cfg.css || {})   // <-- écrase/ajoute les clés fournies
+      flex: '0 0 auto',
+      ...(cfg.css || {})
     },
   });
   el.click = cfg.click; // attach click handler properly so the passed function is executed
@@ -121,58 +132,181 @@ function intuitionCommon(cfg) {
 }
 
 
-function toolsbox(cfg) {
-  const height = (currentTheme.position === 'left' || currentTheme.position === 'right')
-    ? '100vh'
-    : currentTheme.item_size;
+const toolbox = {
+  id: "toolbox",
+  type: "toolbox",
+  parent: '#toolbox_support',
+  click: function (e) {
+    reveal_children('toolbox')
+  },
+  label: null,
+  icon: 'menu',
+}
 
-  const width = (currentTheme.position === 'top' || currentTheme.position === 'bottom')
-    ? '100vw'
-    : currentTheme.item_size;
+function calculate_positions() {
+  let css_list = {};
+  const dir = (currentTheme?.direction || 'top_left').toLowerCase();
 
-  let posCss = {};
-  switch (currentTheme.position) {
-    case 'top':
-      posCss = { top: '0', left: '0' };
+  switch (dir) {
+    case 'top_left_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row',
+          top: '0',
+          left: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', left: '6px' }
+      };
       break;
-    case 'bottom':
-      posCss = { bottom: '0', left: '0' };
+
+    case 'top_left_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column',
+          top: '0',
+          left: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', left: '6px' }
+      };
       break;
-    case 'left':
-      posCss = { top: '0', left: '0' };
+
+    case 'top_right_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row-reverse',
+          top: '0',
+          right: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', right: '6px' }
+      };
       break;
-    case 'right':
-      posCss = { top: '0', right: '0' };
+
+    case 'top_right_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column',
+          top: '0',
+          right: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', right: '6px' }
+      };
       break;
+
+    case 'bottom_left_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row',
+          bottom: '0',
+          left: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', left: '6px' }
+      };
+      break;
+
+    case 'bottom_left_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column-reverse',
+          bottom: '0',
+          left: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', left: '6px' }
+      };
+      break;
+
+    case 'bottom_right_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row-reverse',
+          bottom: '0',
+          right: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', right: '6px' }
+      };
+      break;
+
+    case 'bottom_right_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column-reverse',
+          bottom: '0',
+          right: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', right: '6px' }
+      };
+      break;
+
+    default:
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row',
+          top: '0',
+          left: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', left: '6px' }
+      };
   }
 
-  const toolsbox_support = {
-    id: 'toolsbox_support',
-    type: 'toolsbox_support',
+  return css_list;
+}
+
+
+function init_inituition() {
+
+  const calculatedCSS = calculate_positions()
+  const width = calculatedCSS.toolbox_support.width
+  const height = calculatedCSS.toolbox_support.height
+  const posCss = calculatedCSS.toolbox_support
+
+  // puts('jen suis la ...., il faut recuperer les positions et taille height , width...')
+  const toolbox_support = {
+    id: 'toolbox_support',
+    type: 'toolbox_support',
     parent: '#intuition',
     css: {
-      display: 'block',
+      display: 'flex',
+      flexDirection: 'column-reverse',   /* le footer reste en bas, le reste s’empile au-dessus */
+      justifyContent: 'flex-start',      /* NE PAS utiliser space-between */
+      alignItems: 'flex-start',
       width: width,
       maxWidth: width,
       height: height,
       maxHeight: height,
       position: 'fixed',
+      boxShadow: "0px 0px 0px rgba(0,0,0,0)",
+      bottom: '20px',
+      borderRadius: 0,
       backgroundColor: 'red',
       overflow: 'auto',
+      gap: '0',
       ...posCss  // injecte la bonne ancre (haut/bas/gauche/droite)
     }
   };
-  intuitionCommon(toolsbox_support)
 
-  if (currentTheme.direction == 'top') {
-    cfg.css = { ...cfg.css, ... { position: 'absolute', bottom: '0px', } }
-  }
 
-  const el = intuitionCommon(cfg)
+  intuitionCommon(toolbox_support)
+  intuitionCommon(toolbox)
 
-  return el;
+
 }
-
 
 
 
@@ -212,8 +346,7 @@ function zonespecial(cfg) {
 
 const currentTheme = Inntuition_theme.light
 let menuOpen = 'false'
-currentTheme.direction = "top";
-currentTheme.position = "right";
+currentTheme.direction = "top_left_horizontal"; //direction: top, bottom, left, right
 
 function reveal_children(parent) {
   const methods = intuition_content[parent].children || [];
@@ -222,7 +355,7 @@ function reveal_children(parent) {
     methods.forEach(name => {
       const fct_exec = intuition_content[name]['type']
       if (typeof fct_exec === "function") {
-        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolsbox_support' }, ...intuitionAddOn[name] }
+        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' }, ...intuitionAddOn[name] }
         fct_exec(optionalParams);
       } else {
         console.warn(`Function ${fct_exec} not found`);
@@ -243,25 +376,25 @@ function reveal_children(parent) {
 }
 
 
-toolsbox(
-  {
-    id: "toolsbox",
-    type: "toolsbox",
-    parent: '#toolsbox_support',
-    click: function (e) {
-      reveal_children('toolsbox')
-    },
-    margin: currentTheme["items_spacing"],
-    css: {
-      boxShadow: currentTheme["item_shadow"],
-      borderRadius: currentTheme["item_border_radius"],
-      backgroundColor: currentTheme["tool_bg"],
+// toolbox(
+//   {
+//     id: "toolbox",
+//     type: "toolbox",
+//     parent: '#toolbox_support',
+//     click: function (e) {
+//       reveal_children('toolbox')
+//     },
+//     margin: currentTheme["items_spacing"],
+//     css: {
+//       boxShadow: currentTheme["item_shadow"],
+//       borderRadius: currentTheme["item_border_radius"],
+//       backgroundColor: currentTheme["tool_bg"],
 
-    },
-    label: null,
-    icon: 'menu',
-  }
-);
+//     },
+//     label: null,
+//     icon: 'menu',
+//   }
+// );
 
 
 const intuitionAddOn = {
@@ -274,11 +407,11 @@ const intuitionAddOn = {
 
 
 
-
+init_inituition()
 
 // palette({
 // id: "communication",
-// // parent: 'toolsbox',
+// // parent: 'toolbox',
 // // margin: currentTheme["items_spacing"],
 // type: "palette",
 // label: 'communication',
@@ -289,7 +422,7 @@ const intuitionAddOn = {
 
 // tool({
 // 	id: "create",
-//     margin: currentToolsBoxTheme["items_spacing"],
+//     margin: currenttoolboxTheme["items_spacing"],
 // 	type: "tool",
 //   label: 'create',
 //   icon: 'create',
@@ -297,7 +430,7 @@ const intuitionAddOn = {
 // });
 // option({
 // 	id: "boolean",
-//     margin: currentToolsBoxTheme["items_spacing"],
+//     margin: currenttoolboxTheme["items_spacing"],
 // 	type: "option",
 // 	label: 'boolean',
 // 	button: 'boolean',
@@ -307,7 +440,7 @@ const intuitionAddOn = {
 
 // zonespecial({
 // 	id: "color-pallete",
-//     margin: currentToolsBoxTheme["items_spacing"],
+//     margin: currenttoolboxTheme["items_spacing"],
 // 	type: "special",
 //   label: 'palette',
 //   icon: 'color',
@@ -317,7 +450,7 @@ const intuitionAddOn = {
 
 // particle({
 //     id: "width-particle",
-//       margin: currentToolsBoxTheme["items_spacing"],
+//       margin: currenttoolboxTheme["items_spacing"],
 //     type: "particle",
 //   label: 'width',
 //   input: 0.5,
@@ -328,12 +461,11 @@ const intuitionAddOn = {
 
 // particle({
 // 	id: "red-particle",
-//     margin: currentToolsBoxTheme["items_spacing"],
+//     margin: currenttoolboxTheme["items_spacing"],
 // 	type: "particle",
 //   label: 'color',
 //   input: 0.5,
 //   value: 'red',
 
 // });
-// intuition_content.current_toolsbox='poil'
-
+// intuition_content.current_toolbox='poil'
