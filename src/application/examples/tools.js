@@ -310,17 +310,6 @@ function reveal_children(parent) {
 
 
 // main builder
-function init_inituition() {
-
-
-
-  intuitionCommon(toolbox_support)
-  intuitionCommon(toolbox)
-
-
-}
-
-
 function intuitionCommon(cfg) {
   puts(calculatedCSS);
   const el = $('div', {
@@ -387,30 +376,6 @@ function zonespecial(cfg) {
 }
 
 
-
-
-
-// toolbox(
-//   {
-//     id: "toolbox",
-//     type: "toolbox",
-//     parent: '#toolbox_support',
-//     click: function (e) {
-//       reveal_children('toolbox')
-//     },
-//     margin: currentTheme["items_spacing"],
-//     css: {
-//       boxShadow: currentTheme["item_shadow"],
-//       borderRadius: currentTheme["item_border_radius"],
-//       backgroundColor: currentTheme["tool_bg"],
-
-//     },
-//     label: null,
-//     icon: 'menu',
-//   }
-// );
-
-
 const intuitionAddOn = {
   communication: {
     // margin: currentTheme["items_spacing"],
@@ -418,10 +383,17 @@ const intuitionAddOn = {
     icon: 'communication',
   }
 }
-
+// startup environment
+function init_inituition() {
+  intuitionCommon(toolbox_support)
+  intuitionCommon(toolbox)
+}
 
 
 init_inituition()
+
+
+
 
 // palette({
 // id: "communication",
