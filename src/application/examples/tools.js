@@ -1,8 +1,89 @@
 // menu – Modular Snake/Nibble Menu Spec v1.1 
-// Notes: canvas holds a working spec with JSON + comments. JSON sections may include // comments.
+
+// init constants
+let calculatedCSS = {};
+const shadowLeft = 5,
+  shadowTop = 5,
+  shadowBlur = 5,
+  margin = shadowLeft + shadowTop + shadowBlur
+let menuOpen = 'false'
+
+//Theme (base) 
+const Inntuition_theme = {
+  light: {
+    margin: `${margin}px`,
+    items_spacing: "5px",
+    item_size: "69px",
+    tool_bg: "#484747ff",
+    tool_bg_active: "#656565ff",
+    tool_text: "#8c8b8bff",
+    tool_active_bg: "#e0e0e0",
+    icon_top: "45%",
+    icon_left: "33%",
+    icon_centered_top: "33%",
+    icon_centered_left: "33%",
+    icon_size: "16%",
+    item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
+    item_border_radius: "20%",
 
 
+    // "toggle-btn-size": "33px",
+    // "toggle-btn-left": "0px",
+    // "toggle-btn-top": "25%",
+    //   "global-label-font-size": "3%",
+    // "label-max-chars": 5,
+    // "particle_value_setter_width": "93%",
+    // "particle_value_setter_height": "3%",
+    // "particle_value_setter_color": "#656565ff", // default to tool-bg-active
+    // "particle_value_setter_shadow": "0% 0% 1% rgba(0,0,0,0.69)", // default to item-shadow
+    // "particle_value_setter_top": "50%",
+    // "particle_value_setter_left": "50%",
+    // "particle_value_setter_transform": "translate(-50%, -50%)"
+    // ,
+    // "particle_input_value_bottom": "",
+    // "particle_input_value_left": "",
+    // "label-top": "0px",
+    // "label-left": "0px",
+    // "value-top": "",
+    // "value-left": "0px",
+  }
+};
 
+// curent theme
+const currentTheme = Inntuition_theme.light
+currentTheme.direction = "top_left_horizontal"; //direction: top, bottom, left, right
+
+// calculated values
+calculatedCSS = calculate_positions()
+const width = calculatedCSS.toolbox_support.width
+const height = calculatedCSS.toolbox_support.height
+const posCss = calculatedCSS.toolbox_support
+
+
+// basic components
+const toolbox_support = {
+  id: 'toolbox_support',
+  type: 'toolbox_support',
+  parent: '#intuition',
+  css: {
+    display: 'flex',
+    flexDirection: 'column-reverse',   /* le footer reste en bas, le reste s’empile au-dessus */
+    justifyContent: 'flex-start',      /* NE PAS utiliser space-between */
+    alignItems: 'flex-start',
+    width: width,
+    maxWidth: width,
+    height: height,
+    maxHeight: height,
+    position: 'fixed',
+    boxShadow: "0px 0px 0px rgba(0,0,0,0)",
+    bottom: '20px',
+    borderRadius: 0,
+    backgroundColor: 'red',
+    overflow: 'auto',
+    gap: '0',
+    ...posCss  // injecte la bonne ancre (haut/bas/gauche/droite)
+  }
+};
 
 const intuition_content = {
   version: "1.1",
@@ -54,88 +135,18 @@ const intuition_content = {
 
 };
 
-const shadowLeft = 5,
-  shadowTop = 5,
-  shadowBlur = 5,
-  margin = shadowLeft + shadowTop + shadowBlur
-
-// === Theme (base) ===
-const Inntuition_theme = {
-  light: {
-    margin: `${margin}px`,
-    items_spacing: "5px",
-    item_size: "69px",
-    tool_bg: "#484747ff",
-    tool_bg_active: "#656565ff",
-    tool_text: "#8c8b8bff",
-    tool_active_bg: "#e0e0e0",
-    icon_top: "45%",
-    icon_left: "33%",
-    icon_centered_top: "33%",
-    icon_centered_left: "33%",
-    icon_size: "16%",
-    item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
-    item_border_radius: "20%",
-
-
-    // "toggle-btn-size": "33px",
-    // "toggle-btn-left": "0px",
-    // "toggle-btn-top": "25%",
-    //   "global-label-font-size": "3%",
-    // "label-max-chars": 5,
-    // "particle_value_setter_width": "93%",
-    // "particle_value_setter_height": "3%",
-    // "particle_value_setter_color": "#656565ff", // default to tool-bg-active
-    // "particle_value_setter_shadow": "0% 0% 1% rgba(0,0,0,0.69)", // default to item-shadow
-    // "particle_value_setter_top": "50%",
-    // "particle_value_setter_left": "50%",
-    // "particle_value_setter_transform": "translate(-50%, -50%)"
-    // ,
-    // "particle_input_value_bottom": "",
-    // "particle_input_value_left": "",
-    // "label-top": "0px",
-    // "label-left": "0px",
-    // "value-top": "",
-    // "value-left": "0px",
-  }
-};
-
-function intuitionCommon(cfg) {
-
-  const el = $('div', {
-    id: cfg.id,
-    parent: cfg.parent,
-    class: cfg.type,
-    css: {
-      backgroundColor: currentTheme.tool_bg,
-      width: currentTheme.item_size,
-      height: currentTheme.item_size,
-      color: 'lightgray',
-      // padding: currentTheme["items_spacing"],
-      marginTop: currentTheme["items_spacing"],
-      boxShadow: currentTheme["item_shadow"],
-      borderRadius: currentTheme["item_border_radius"],
-      textAlign: 'center',
-      display: 'inline-block',
-      position: 'relative',
-      flex: '0 0 auto',
-      ...(cfg.css || {})
-    },
-  });
-  el.click = cfg.click; // attach click handler properly so the passed function is executed
-  if (typeof cfg.click === 'function') {
-    el.addEventListener('click', function (e) {
-      try { cfg.click.call(el, e); } catch (err) { console.error(err); }
-    });
-  }
-  return el;
-}
-
-
 const toolbox = {
   id: "toolbox",
   type: "toolbox",
-  parent: '#toolbox_support',
+  parent: '#intuition',
+  css: {
+    backgroundColor: 'red',
+    position: 'fixed',
+    // zIndex: 10000000,
+
+
+  },
+
   click: function (e) {
     reveal_children('toolbox')
   },
@@ -143,6 +154,7 @@ const toolbox = {
   icon: 'menu',
 }
 
+// utils
 function calculate_positions() {
   let css_list = {};
   const dir = (currentTheme?.direction || 'top_left').toLowerCase();
@@ -153,7 +165,7 @@ function calculate_positions() {
         toolbox_support: {
           flexDirection: 'row',
           top: '0',
-          left: '0',
+          left: `${parseInt(currentTheme.item_size)}px`,
           width: '100vw',
           height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
         },
@@ -268,38 +280,38 @@ function calculate_positions() {
   return css_list;
 }
 
+function reveal_children(parent) {
+  const methods = intuition_content[parent].children || [];
+  if (menuOpen !== parent) {
 
+    methods.forEach(name => {
+      const fct_exec = intuition_content[name]['type']
+      if (typeof fct_exec === "function") {
+        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' }, ...intuitionAddOn[name] }
+        fct_exec(optionalParams);
+      } else {
+        console.warn(`Function ${fct_exec} not found`);
+      }
+    });
+    menuOpen = parent;
+  }
+  else {
+    methods.forEach(name => {
+      const el = grab(`_intuition_${name}`);
+      if (el) {
+        el.remove();
+      }
+    });
+    menuOpen = 'false';
+  }
+
+}
+
+
+
+// main builder
 function init_inituition() {
 
-  const calculatedCSS = calculate_positions()
-  const width = calculatedCSS.toolbox_support.width
-  const height = calculatedCSS.toolbox_support.height
-  const posCss = calculatedCSS.toolbox_support
-
-  // puts('jen suis la ...., il faut recuperer les positions et taille height , width...')
-  const toolbox_support = {
-    id: 'toolbox_support',
-    type: 'toolbox_support',
-    parent: '#intuition',
-    css: {
-      display: 'flex',
-      flexDirection: 'column-reverse',   /* le footer reste en bas, le reste s’empile au-dessus */
-      justifyContent: 'flex-start',      /* NE PAS utiliser space-between */
-      alignItems: 'flex-start',
-      width: width,
-      maxWidth: width,
-      height: height,
-      maxHeight: height,
-      position: 'fixed',
-      boxShadow: "0px 0px 0px rgba(0,0,0,0)",
-      bottom: '20px',
-      borderRadius: 0,
-      backgroundColor: 'red',
-      overflow: 'auto',
-      gap: '0',
-      ...posCss  // injecte la bonne ancre (haut/bas/gauche/droite)
-    }
-  };
 
 
   intuitionCommon(toolbox_support)
@@ -309,7 +321,38 @@ function init_inituition() {
 }
 
 
+function intuitionCommon(cfg) {
+  puts(calculatedCSS);
+  const el = $('div', {
+    id: cfg.id,
+    parent: cfg.parent,
+    class: cfg.type,
+    css: {
+      backgroundColor: currentTheme.tool_bg,
+      width: currentTheme.item_size,
+      height: currentTheme.item_size,
+      color: 'lightgray',
+      // padding: currentTheme["items_spacing"],
+      marginTop: currentTheme["items_spacing"],
+      boxShadow: currentTheme["item_shadow"],
+      borderRadius: currentTheme["item_border_radius"],
+      textAlign: 'center',
+      display: 'inline-block',
+      position: 'relative',
+      flex: '0 0 auto',
+      ...(cfg.css || {})
+    },
+  });
+  el.click = cfg.click; // attach click handler properly so the passed function is executed
+  if (typeof cfg.click === 'function') {
+    el.addEventListener('click', function (e) {
+      try { cfg.click.call(el, e); } catch (err) { console.error(err); }
+    });
+  }
+  return el;
+}
 
+// item menu builder by type
 
 function palette(cfg) {
   // puts(cfg)
@@ -344,36 +387,7 @@ function zonespecial(cfg) {
 }
 
 
-const currentTheme = Inntuition_theme.light
-let menuOpen = 'false'
-currentTheme.direction = "top_left_horizontal"; //direction: top, bottom, left, right
 
-function reveal_children(parent) {
-  const methods = intuition_content[parent].children || [];
-  if (menuOpen !== parent) {
-
-    methods.forEach(name => {
-      const fct_exec = intuition_content[name]['type']
-      if (typeof fct_exec === "function") {
-        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' }, ...intuitionAddOn[name] }
-        fct_exec(optionalParams);
-      } else {
-        console.warn(`Function ${fct_exec} not found`);
-      }
-    });
-    menuOpen = parent;
-  }
-  else {
-    methods.forEach(name => {
-      const el = grab(`_intuition_${name}`);
-      if (el) {
-        el.remove();
-      }
-    });
-    menuOpen = 'false';
-  }
-
-}
 
 
 // toolbox(
