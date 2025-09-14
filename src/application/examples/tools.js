@@ -1,374 +1,456 @@
+// menu – Modular Snake/Nibble Menu Spec v1.1 
 
-// ===== Thème =====
-const currentTheme = {
-  item_size: '39px',
-  items_gap: '8px',
-  tool_bg: '#484747ff',
-  item_shadow: '0 10px 18px rgba(0,0,0,0.35)',
-  item_border_radius: '12px',
-  direction: 'top_left_horizontal',
-  offset_x: '12px',
-  offset_y: '10px',
-  open_duration: 0.39,
-  open_stagger: null,
-  bounce: true,
-  bounce_strength: 0.75
+// init constants
+let calculatedCSS = {};
+const shadowLeft = 5,
+  shadowTop = 5,
+  shadowBlur = 5,
+  margin = shadowLeft + shadowTop + shadowBlur
+let menuOpen = 'false'
+
+//Theme (base) 
+const Inntuition_theme = {
+  light: {
+    margin: `${margin}px`,
+    items_spacing: "5px",
+    item_size: "69px",
+    tool_bg: "#484747ff",
+    tool_bg_active: "#656565ff",
+    tool_text: "#8c8b8bff",
+    tool_active_bg: "#e0e0e0",
+    icon_top: "45%",
+    icon_left: "33%",
+    icon_centered_top: "33%",
+    icon_centered_left: "33%",
+    icon_size: "16%",
+    item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
+    item_border_radius: "20%",
+
+
+    // "toggle-btn-size": "33px",
+    // "toggle-btn-left": "0px",
+    // "toggle-btn-top": "25%",
+    //   "global-label-font-size": "3%",
+    // "label-max-chars": 5,
+    // "particle_value_setter_width": "93%",
+    // "particle_value_setter_height": "3%",
+    // "particle_value_setter_color": "#656565ff", // default to tool-bg-active
+    // "particle_value_setter_shadow": "0% 0% 1% rgba(0,0,0,0.69)", // default to item-shadow
+    // "particle_value_setter_top": "50%",
+    // "particle_value_setter_left": "50%",
+    // "particle_value_setter_transform": "translate(-50%, -50%)"
+    // ,
+    // "particle_input_value_bottom": "",
+    // "particle_input_value_left": "",
+    // "label-top": "0px",
+    // "label-left": "0px",
+    // "value-top": "",
+    // "value-left": "0px",
+  }
 };
 
-// ===== Utils =====
-const pxToNum = (v) => (typeof v === 'string' && v.endsWith('px')) ? parseFloat(v) : (Number(v) || 0);
-const numToPx = (n) => Math.round(n) + 'px';
+// curent theme
+const currentTheme = Inntuition_theme.light
+currentTheme.direction = "bottom_left_vertical"; //direction: top, bottom, left, right
 
-function resolveDirection(dir) {
-  const vertical = dir.includes('vertical');
-  const top = dir.includes('top');
-  const left = dir.includes('left');
-  return { axis: vertical ? 'column' : 'row', atTop: top, atLeft: left };
+// calculated values
+calculatedCSS = calculate_positions()
+const width = calculatedCSS.toolbox_support.width
+const height = calculatedCSS.toolbox_support.height
+const posCss = calculatedCSS.toolbox_support
+
+
+// basic components
+const toolbox_support = {
+  id: 'toolbox_support',
+  type: 'toolbox_support',
+  parent: '#intuition',
+  css: {
+    display: 'flex',
+    flexDirection: 'column-reverse',   /* le footer reste en bas, le reste s’empile au-dessus */
+    justifyContent: 'flex-start',      /* NE PAS utiliser space-between */
+    alignItems: 'flex-start',
+    width: width,
+    maxWidth: width,
+    height: height,
+    maxHeight: height,
+    position: 'fixed',
+    boxShadow: "0px 0px 0px rgba(0,0,0,0)",
+    bottom: '20px',
+    borderRadius: 0,
+    backgroundColor: 'red',
+    overflow: 'auto',
+    gap: '0',
+    ...posCss  // injecte la bonne ancre (haut/bas/gauche/droite)
+  }
+};
+
+const intuition_content = {
+  version: "1.1",
+  meta: { "namespace": "atome.menu", "defaultLocale": "en" },
+
+  toolbox: {
+    //type: toolbox,
+    children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit']
+  },
+  home: {
+    type: palette,
+    children: ['quit', 'user', 'settings', 'clear', 'cleanup'],
+  },
+
+  find: {
+    type: tool,
+    children: ['filter'],
+  }
+  ,
+  time: {
+    type: particle,
+    children: ['filter'],
+  }
+  ,
+  view: {
+    type: option,
+    children: ['filter'],
+  }
+  ,
+  tools: {
+    type: zonespecial,
+    children: ['filter'],
+  }
+  ,
+  communication: {
+    type: palette,
+    children: ['filter'],
+  }
+  ,
+  capture: {
+    type: palette,
+    children: ['filter'],
+  }
+  ,
+  edit: {
+    type: palette,
+    children: ['filter'],
+  }
+
+};
+
+const toolbox = {
+  id: "toolbox",
+  type: "toolbox",
+  parent: '#intuition',
+  css: {
+    backgroundColor: 'red',
+    position: 'fixed',
+    // zIndex: 10000000,
+
+
+  },
+
+  click: function (e) {
+    reveal_children('toolbox')
+  },
+  label: null,
+  icon: 'menu',
 }
 
-function setButtonRadii(btn1, btn2, axis, atLeft, atTop, R) {
-  btn1.style.borderRadius = R; btn2.style.borderRadius = R;
-  if (axis === 'row') {
-    if (atLeft) { btn1.style.borderTopRightRadius = '0'; btn1.style.borderBottomRightRadius = '0'; btn2.style.borderTopLeftRadius = '0'; btn2.style.borderBottomLeftRadius = '0'; }
-    else { btn1.style.borderTopLeftRadius = '0'; btn1.style.borderBottomLeftRadius = '0'; btn2.style.borderTopRightRadius = '0'; btn2.style.borderBottomRightRadius = '0'; }
-  } else {
-    if (atTop) { btn1.style.borderBottomLeftRadius = '0'; btn1.style.borderBottomRightRadius = '0'; btn2.style.borderTopLeftRadius = '0'; btn2.style.borderTopRightRadius = '0'; }
-    else { btn1.style.borderTopLeftRadius = '0'; btn1.style.borderTopRightRadius = '0'; btn2.style.borderBottomLeftRadius = '0'; btn2.style.borderBottomRightRadius = '0'; }
+// utils
+function calculate_positions() {
+  let css_list = {};
+  const dir = (currentTheme?.direction || 'top_left').toLowerCase();
+
+  switch (dir) {
+    case 'top_left_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row',
+          top: '0',
+          left: `${parseInt(currentTheme.item_size)}px`,
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', left: '6px' }
+      };
+      break;
+
+    case 'top_left_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column',
+          top: '0',
+          left: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', left: '6px' }
+      };
+      break;
+
+    case 'top_right_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row-reverse',
+          top: '0',
+          right: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', right: '6px' }
+      };
+      break;
+
+    case 'top_right_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column',
+          top: '0',
+          right: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', right: '6px' }
+      };
+      break;
+
+    case 'bottom_left_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row',
+          bottom: '0',
+          left: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', left: '6px' }
+      };
+      break;
+
+    case 'bottom_left_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column-reverse',
+          bottom: '0',
+          left: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', left: '6px' }
+      };
+      break;
+
+    case 'bottom_right_horizontal':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row-reverse',
+          bottom: '0',
+          right: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', right: '6px' }
+      };
+      break;
+
+    case 'bottom_right_vertical':
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'column-reverse',
+          bottom: '0',
+          right: '0',
+          height: '100vh',
+          width: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { bottom: '6px', right: '6px' }
+      };
+      break;
+
+    default:
+      css_list = {
+        toolbox_support: {
+          flexDirection: 'row',
+          top: '0',
+          left: '0',
+          width: '100vw',
+          height: `${parseInt(currentTheme.item_size) + parseInt(currentTheme.margin)}px`
+        },
+        toolbox: { top: '6px', left: '6px' }
+      };
   }
+
+  return css_list;
 }
 
-function buildCornerMenu({ parent = '#intuition', itemsCount = 8, theme = currentTheme }) {
-  const { axis, atTop, atLeft } = resolveDirection(theme.direction);
+function reveal_children(parent) {
+  const methods = intuition_content[parent].children || [];
+  if (menuOpen !== parent) {
 
-  const root = $('div', {
-    id: 'corner-menu-root',
-    parent,
-    css: {
-      position: 'fixed',
-      display: 'flex',
-      flexDirection: axis,
-      alignItems: 'stretch',
-      gap: '0',
-      perspective: '900px',
-      zIndex: 10001,
-      overflow: 'visible'
-    }
-  });
-  if (atTop) root.style.top = '0'; else root.style.bottom = '0';
-  if (atLeft) root.style.left = '0'; else root.style.right = '0';
-
-  const H = pxToNum(theme.item_size);
-  const W1 = (2 / 3) * H, W2 = (1 / 3) * H;
-  const width1 = (axis === 'row') ? numToPx(W1) : theme.item_size;
-  const width2 = (axis === 'row') ? numToPx(W2) : theme.item_size;
-  const height1 = (axis === 'row') ? theme.item_size : numToPx(W1);
-  const height2 = (axis === 'row') ? theme.item_size : numToPx(W2);
-
-  const wrapLeft = $('div', {
-    id: 'wrap-left',
-    parent: root,
-    css: {
-      position: 'relative',
-      display: 'flex',
-      overflow: 'visible',
-      flex: '0 0 auto',
-      margin: '0',
-      zIndex: 2
-    }
-  });
-  const wrapMid = $('div', {
-    id: 'wrap-mid',
-    parent: root,
-    css: {
-      position: 'relative',
-      display: 'flex',
-      overflow: 'visible',
-      flex: '0 1 auto',
-      margin: '0',
-      zIndex: 1
-    }
-  });
-  const wrapRight = $('div', {
-    id: 'wrap-right',
-    parent: root,
-    css: {
-      position: 'relative',
-      display: 'flex',
-      overflow: 'visible',
-      flex: '0 0 auto',
-      margin: '0',
-      zIndex: 2
-    }
-  });
-
-  const btn1 = $('div', {
-    id: 'toolboxLeft',
-    parent: wrapLeft,
-    css: {
-      background: theme.tool_bg,
-      width: width1,
-      height: height1,
-      boxShadow: theme.item_shadow,
-      borderRadius: theme.item_border_radius
-    }
-  });
-  const btn2 = $('div', {
-    id: 'toolboxRight',
-    parent: wrapRight,
-    css: {
-      background: theme.tool_bg,
-      width: width2,
-      height: height2,
-      boxShadow: theme.item_shadow,
-      borderRadius: theme.item_border_radius
-    }
-  });
-
-  const middle = $('div', {
-    id: 'panel',
-    parent: wrapMid,
-    class: 'no-scrollbar',
-    css: {
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: axis,
-      gap: theme.items_gap,
-      maxWidth: (axis === 'row') ? '0px' : '',
-      maxHeight: (axis === 'column') ? '0px' : '',
-      flex: '0 1 auto',
-      transformStyle: 'preserve-3d'
-    }
-  });
-  const items = [];
-  for (let i = 0; i < itemsCount; i++) {
-    items.push($('div', {
-      parent: middle,
-      class: 'flip-revealed',
-      css: {
-        background: theme.tool_bg,
-        width: theme.item_size,
-        height: theme.item_size,
-        boxShadow: theme.item_shadow,
-        borderRadius: theme.item_border_radius
-      }
-    }));
-  }
-
-  // ordre DOM selon coin
-  root.innerHTML = '';
-  if (axis === 'row') {
-    if (atLeft) { root.appendChild(wrapLeft); root.appendChild(wrapMid); root.appendChild(wrapRight); }
-    else { root.appendChild(wrapRight); root.appendChild(wrapMid); root.appendChild(wrapLeft); }
-  } else {
-    if (atTop) { root.appendChild(wrapLeft); root.appendChild(wrapMid); root.appendChild(wrapRight); }
-    else { root.appendChild(wrapRight); root.appendChild(wrapMid); root.appendChild(wrapLeft); }
-  }
-
-  const ox = theme.offset_x || '0px';
-  const oy = theme.offset_y || '0px';
-  if (axis === 'row') {
-    if (atLeft) wrapLeft.style.marginLeft = ox; else wrapLeft.style.marginRight = ox;
-    if (atTop) { wrapLeft.style.marginTop = oy; wrapMid.style.marginTop = oy; wrapRight.style.marginTop = oy; }
-    else { wrapLeft.style.marginBottom = oy; wrapMid.style.marginBottom = oy; wrapRight.style.marginBottom = oy; }
-  } else {
-    if (atTop) wrapLeft.style.marginTop = oy; else wrapLeft.style.marginBottom = oy;
-    if (atLeft) { wrapLeft.style.marginLeft = ox; wrapMid.style.marginLeft = ox; wrapRight.style.marginLeft = ox; }
-    else { wrapLeft.style.marginRight = ox; wrapMid.style.marginRight = ox; wrapRight.style.marginRight = ox; }
-  }
-
-  setButtonRadii(btn1, btn2, axis, atLeft, atTop, theme.item_border_radius);
-
-  // caches anti-ombres
-  const mask1 = $('div', {
-    id: 'mask-left',
-    parent: root,
-    css: {
-      position: 'absolute',
-      pointerEvents: 'none',
-      zIndex: 100000,
-      background: theme.tool_bg
-    }
-  });
-  const mask2 = $('div', {
-    id: 'mask-right',
-    parent: root,
-    css: {
-      position: 'absolute',
-      pointerEvents: 'none',
-      zIndex: 100000,
-      background: theme.tool_bg
-    }
-  });
-
-  function syncMaskRadii() {
-    const R = theme.item_border_radius;
-    mask1.style.borderRadius = R; mask2.style.borderRadius = R;
-    if (axis === 'row') {
-      if (atLeft) { mask1.style.borderTopRightRadius = '0'; mask1.style.borderBottomRightRadius = '0'; mask2.style.borderTopLeftRadius = '0'; mask2.style.borderBottomLeftRadius = '0'; }
-      else { mask1.style.borderTopLeftRadius = '0'; mask1.style.borderBottomLeftRadius = '0'; mask2.style.borderTopRightRadius = '0'; mask2.style.borderBottomRightRadius = '0'; }
-    } else {
-      if (atTop) { mask1.style.borderBottomLeftRadius = '0'; mask1.style.borderBottomRightRadius = '0'; mask2.style.borderTopLeftRadius = '0'; mask2.style.borderTopRightRadius = '0'; }
-      else { mask1.style.borderTopLeftRadius = '0'; mask1.style.borderTopRightRadius = '0'; mask2.style.borderBottomLeftRadius = '0'; mask2.style.borderBottomRightRadius = '0'; }
-    }
-  }
-  function rectRel(el) {
-    const rr = root.getBoundingClientRect();
-    const r = el.getBoundingClientRect();
-    return { x: r.left - rr.left, y: r.top - rr.top, w: r.width, h: r.height };
-  }
-  function updateMasks() {
-    const a = rectRel(btn1);
-    const b = rectRel(btn2);
-    Object.assign(mask1.style, { left: a.x + 'px', top: a.y + 'px', width: a.w + 'px', height: a.h + 'px' });
-    Object.assign(mask2.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' });
-    syncMaskRadii();
-  }
-  function positionMaskOver(el, mask) {
-    const r = rectRel(el);
-    Object.assign(mask.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
-  }
-
-  updateMasks();
-  window.addEventListener('resize', updateMasks);
-
-  let open = false;
-
-  function openMenu() {
-    open = true;
-
-    const startBtn2 = btn2.getBoundingClientRect();
-
-    if (axis === 'row') {
-      middle.style.maxWidth = 'calc(100vw - 24px)';
-      middle.style.overflowX = 'auto';
-      middle.style.overflowY = 'visible';
-      middle.style.paddingInline = theme.items_gap;
-      middle.style.paddingBlock = '0';
-    } else {
-      middle.style.maxHeight = 'calc(100vh - 24px)';
-      middle.style.overflowY = 'auto';
-      middle.style.overflowX = 'visible';
-      middle.style.paddingBlock = theme.items_gap;
-      middle.style.paddingInline = '0';
-    }
-    middle.style.flex = '1 1 auto';
-
-    const rotateProp = (axis === 'row') ? 'rotationY' : 'rotationX';
-    const origin = (axis === 'row') ? (atLeft ? 'left center' : 'right center') : (atTop ? 'top center' : 'bottom center');
-    const od = Math.max(0.01, (theme.open_duration ?? 0.45));
-    const st = (theme.open_stagger == null) ? Math.max(0.01, Math.min(0.2, od * 0.25)) : Math.max(0.0, theme.open_stagger);
-    items.forEach((it, i) => {
-      it.style.transformOrigin = origin;
-      const fromVal = (axis === 'row') ? (atLeft ? -90 : 90) : (atTop ? -90 : 90);
-      if (window.gsap) {
-        gsap.fromTo(it, { [rotateProp]: fromVal }, { [rotateProp]: 0, duration: od, delay: i * st, ease: 'power3.out' });
+    methods.forEach(name => {
+      const fct_exec = intuition_content[name]['type']
+      if (typeof fct_exec === "function") {
+        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' }, ...intuitionAddOn[name] }
+        fct_exec(optionalParams);
       } else {
-        it.style.transform = (rotateProp === 'rotationY') ? 'rotateY(0deg)' : 'rotateX(0deg)';
+        console.warn(`Function ${fct_exec} not found`);
       }
     });
-
-    const endBtn2 = btn2.getBoundingClientRect();
-    const dx = startBtn2.left - endBtn2.left;
-    const dy = startBtn2.top - endBtn2.top;
-
-    updateMasks();
-
-    if (window.gsap && theme.bounce) {
-      const easeBtn = `elastic.out(${theme.bounce_strength}, 0.3)`;
-      gsap.set([btn2, mask2], { x: dx, y: dy, scale: 0.95, transformOrigin: 'center center' });
-      gsap.to([btn2, mask2], { x: 0, y: 0, scale: 1, duration: od, ease: easeBtn });
-      gsap.fromTo([btn1, mask1], { scale: 0.95, transformOrigin: 'center center' }, { scale: 1, duration: od, ease: easeBtn });
-    }
-
-    if (window.gsap) gsap.delayedCall(od, updateMasks); else updateMasks();
+    menuOpen = parent;
+  }
+  else {
+    methods.forEach(name => {
+      const el = grab(`_intuition_${name}`);
+      if (el) {
+        el.remove();
+      }
+    });
+    menuOpen = 'false';
   }
 
-  function closeMenu() {
-    open = false;
-    const rotateProp = (axis === 'row') ? 'rotationY' : 'rotationX';
-    const toVal = (axis === 'row') ? (atLeft ? -90 : 90) : (atTop ? -90 : 90);
-    const od = Math.max(0.01, (theme.open_duration ?? 0.45));
-    const st = (theme.open_stagger == null) ? Math.max(0.01, Math.min(0.2, od * 0.25)) : Math.max(0.0, theme.open_stagger);
-
-    if (window.gsap) {
-      gsap.set([btn1, btn2, mask1, mask2], { x: 0, y: 0, scale: 1, rotation: 0, rotationX: 0, rotationY: 0 });
-
-      gsap.to(items, { [rotateProp]: toVal, duration: od, ease: 'power2.in', stagger: { each: st, from: 'end' } });
-
-      const total = od + Math.max(0, (items.length - 1)) * st;
-      gsap.delayedCall(total, () => {
-        const start2 = btn2.getBoundingClientRect();
-        if (axis === 'row') middle.style.maxWidth = '0px'; else middle.style.maxHeight = '0px';
-        middle.style.overflow = 'hidden';
-        middle.style.paddingInline = '0';
-        middle.style.paddingBlock = '0';
-
-        const end2 = btn2.getBoundingClientRect();
-        const dx = start2.left - end2.left;
-        const dy = start2.top - end2.top;
-
-        positionMaskOver(btn2, mask2);
-        positionMaskOver(btn1, mask1);
-        syncMaskRadii();
-
-        gsap.set([btn2, mask2], { x: dx, y: dy });
-        gsap.to([btn2, mask2], {
-          x: 0,
-          y: 0,
-          duration: od,
-          ease: 'power2.in',
-          onComplete: () => { positionMaskOver(btn2, mask2); }
-        });
-      });
-    } else {
-      if (axis === 'row') middle.style.maxWidth = '0px'; else middle.style.maxHeight = '0px';
-      middle.style.overflow = 'hidden';
-      middle.style.paddingInline = '0';
-      middle.style.paddingBlock = '0';
-      updateMasks();
-    }
-  }
-
-  wrapLeft.addEventListener('click', () => { open ? closeMenu() : openMenu(); });
-  wrapRight.addEventListener('click', () => { open ? closeMenu() : openMenu(); });
-
-  return { root, openMenu, closeMenu, middle, btn1, btn2 };
 }
 
-// --- Attach to Intuition by default ---
-// Expose the builder for manual usage and add a safe auto-init that attaches the menu
-// to the Intuition container if present and not already initialized.
-try { window.buildCornerMenu = buildCornerMenu; } catch (_) { }
 
-(function autoAttachCornerMenuToIntuition() {
-  const INIT_ID = 'corner-menu-root';
-  function ready(fn) {
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
-    else fn();
-  }
-  function ensure() {
-    // Require Squirrel's $ builder and the intuition container
-    const hasSquirrel = typeof window.$ === 'function';
-    const container = document.getElementById('intuition');
-    const already = document.getElementById(INIT_ID);
-    if (!hasSquirrel || !container || already) return false;
-    try {
-      buildCornerMenu({ parent: '#intuition' });
-      return true;
-    } catch (e) {
-      // If Squirrel isn't fully ready yet, retry shortly
-      return false;
-    }
-  }
-  ready(() => {
-    if (ensure()) return;
-    // Retry a few times in case Squirrel loads just after DOMContentLoaded
-    let attempts = 0;
-    const max = 10;
-    const timer = setInterval(() => {
-      attempts += 1;
-      if (ensure() || attempts >= max) clearInterval(timer);
-    }, 60);
+// main builder
+function intuitionCommon(cfg) {
+  puts(calculatedCSS);
+  const el = $('div', {
+    id: cfg.id,
+    parent: cfg.parent,
+    class: cfg.type,
+    css: {
+      backgroundColor: currentTheme.tool_bg,
+      width: currentTheme.item_size,
+      height: currentTheme.item_size,
+      color: 'lightgray',
+      // padding: currentTheme["items_spacing"],
+      marginTop: currentTheme["items_spacing"],
+      boxShadow: currentTheme["item_shadow"],
+      borderRadius: currentTheme["item_border_radius"],
+      textAlign: 'center',
+      display: 'inline-block',
+      position: 'relative',
+      flex: '0 0 auto',
+      ...(cfg.css || {})
+    },
   });
-})();
+  el.click = cfg.click; // attach click handler properly so the passed function is executed
+  if (typeof cfg.click === 'function') {
+    el.addEventListener('click', function (e) {
+      try { cfg.click.call(el, e); } catch (err) { console.error(err); }
+    });
+  }
+  return el;
+}
 
+// item menu builder by type
+
+function palette(cfg) {
+  // puts(cfg)
+  // cfg.css = {
+  // ...cfg.css,
+
+  // };
+
+  const el = intuitionCommon(cfg)
+}
+
+function tool(cfg) {
+  // cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
+
+}
+
+function particle(cfg) {
+  // cfg.theme = currentToolbox().theme;
+  // if (!cfg.type) cfg.type = 'particle';
+  const el = intuitionCommon(cfg);
+}
+
+function option(cfg) {
+  // cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
+}
+
+function zonespecial(cfg) {
+  //  cfg.theme = currentToolbox().theme;
+  const el = intuitionCommon(cfg)
+}
+
+
+const intuitionAddOn = {
+  communication: {
+    // margin: currentTheme["items_spacing"],
+    label: 'communication',
+    icon: 'communication',
+  }
+}
+// startup environment
+function init_inituition() {
+  intuitionCommon(toolbox_support)
+  intuitionCommon(toolbox)
+}
+
+
+init_inituition()
+
+
+
+
+// palette({
+// id: "communication",
+// // parent: 'toolbox',
+// // margin: currentTheme["items_spacing"],
+// type: "palette",
+// label: 'communication',
+// icon: 'communication',
+// });
+
+
+
+// tool({
+// 	id: "create",
+//     margin: currenttoolboxTheme["items_spacing"],
+// 	type: "tool",
+//   label: 'create',
+//   icon: 'create',
+//   colorise: true, 
+// });
+// option({
+// 	id: "boolean",
+//     margin: currenttoolboxTheme["items_spacing"],
+// 	type: "option",
+// 	label: 'boolean',
+// 	button: 'boolean',
+// 	colorise: true,
+// });
+
+
+// zonespecial({
+// 	id: "color-pallete",
+//     margin: currenttoolboxTheme["items_spacing"],
+// 	type: "special",
+//   label: 'palette',
+//   icon: 'color',
+//   colorise: true, 
+// });
+
+
+// particle({
+//     id: "width-particle",
+//       margin: currenttoolboxTheme["items_spacing"],
+//     type: "particle",
+//   label: 'width',
+//   input: 0.5,
+//   selector:['%','px','cm','em','rem','vh','vw'],
+
+// });
+
+
+// particle({
+// 	id: "red-particle",
+//     margin: currenttoolboxTheme["items_spacing"],
+// 	type: "particle",
+//   label: 'color',
+//   input: 0.5,
+//   value: 'red',
+
+// });
+// intuition_content.current_toolbox='poil'
