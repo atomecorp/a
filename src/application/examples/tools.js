@@ -18,15 +18,6 @@ const currentTheme = {
 // ===== Utils =====
 const pxToNum = (v) => (typeof v === 'string' && v.endsWith('px')) ? parseFloat(v) : (Number(v) || 0);
 const numToPx = (n) => Math.round(n) + 'px';
-function $(tag, cfg = {}) {
-  const e = document.createElement(tag);
-  if (cfg.id) e.id = cfg.id;
-  if (cfg.class) e.className = cfg.class;
-  if (cfg.html) e.innerHTML = cfg.html;
-  if (cfg.css) Object.assign(e.style, cfg.css);
-  if (cfg.parent) { (typeof cfg.parent === 'string' ? document.querySelector(cfg.parent) : cfg.parent).appendChild(e); }
-  return e;
-}
 
 function resolveDirection(dir) {
   const vertical = dir.includes('vertical');
@@ -46,10 +37,23 @@ function setButtonRadii(btn1, btn2, axis, atLeft, atTop, R) {
   }
 }
 
-function buildCornerMenu({ parent, itemsCount = 8, theme = currentTheme }) {
+function buildCornerMenu({ parent = '#intuition', itemsCount = 8, theme = currentTheme }) {
   const { axis, atTop, atLeft } = resolveDirection(theme.direction);
 
-  const root = $('div', { id: 'corner-menu-root', parent, css: { position: 'fixed', display: 'flex', flexDirection: axis, alignItems: 'stretch', gap: '0', perspective: '900px', zIndex: 10001, overflow: 'visible' } });
+  const root = $('div', {
+    id: 'corner-menu-root',
+    parent,
+    css: {
+      position: 'fixed',
+      display: 'flex',
+      flexDirection: axis,
+      alignItems: 'stretch',
+      gap: '0',
+      perspective: '900px',
+      zIndex: 10001,
+      overflow: 'visible'
+    }
+  });
   if (atTop) root.style.top = '0'; else root.style.bottom = '0';
   if (atLeft) root.style.left = '0'; else root.style.right = '0';
 
@@ -60,17 +64,94 @@ function buildCornerMenu({ parent, itemsCount = 8, theme = currentTheme }) {
   const height1 = (axis === 'row') ? theme.item_size : numToPx(W1);
   const height2 = (axis === 'row') ? theme.item_size : numToPx(W2);
 
-  const wrapLeft = $('div', { id: 'wrap-left', parent: root, css: { position: 'relative', display: 'flex', overflow: 'visible', flex: '0 0 auto', margin: '0', zIndex: 2 } });
-  const wrapMid = $('div', { id: 'wrap-mid', parent: root, css: { position: 'relative', display: 'flex', overflow: 'visible', flex: '0 1 auto', margin: '0', zIndex: 1 } });
-  const wrapRight = $('div', { id: 'wrap-right', parent: root, css: { position: 'relative', display: 'flex', overflow: 'visible', flex: '0 0 auto', margin: '0', zIndex: 2 } });
+  const wrapLeft = $('div', {
+    id: 'wrap-left',
+    parent: root,
+    css: {
+      position: 'relative',
+      display: 'flex',
+      overflow: 'visible',
+      flex: '0 0 auto',
+      margin: '0',
+      zIndex: 2
+    }
+  });
+  const wrapMid = $('div', {
+    id: 'wrap-mid',
+    parent: root,
+    css: {
+      position: 'relative',
+      display: 'flex',
+      overflow: 'visible',
+      flex: '0 1 auto',
+      margin: '0',
+      zIndex: 1
+    }
+  });
+  const wrapRight = $('div', {
+    id: 'wrap-right',
+    parent: root,
+    css: {
+      position: 'relative',
+      display: 'flex',
+      overflow: 'visible',
+      flex: '0 0 auto',
+      margin: '0',
+      zIndex: 2
+    }
+  });
 
-  const btn1 = $('div', { id: 'toolboxLeft', parent: wrapLeft, css: { background: theme.tool_bg, width: width1, height: height1, boxShadow: theme.item_shadow, borderRadius: theme.item_border_radius } });
-  const btn2 = $('div', { id: 'toolboxRight', parent: wrapRight, css: { background: theme.tool_bg, width: width2, height: height2, boxShadow: theme.item_shadow, borderRadius: theme.item_border_radius } });
+  const btn1 = $('div', {
+    id: 'toolboxLeft',
+    parent: wrapLeft,
+    css: {
+      background: theme.tool_bg,
+      width: width1,
+      height: height1,
+      boxShadow: theme.item_shadow,
+      borderRadius: theme.item_border_radius
+    }
+  });
+  const btn2 = $('div', {
+    id: 'toolboxRight',
+    parent: wrapRight,
+    css: {
+      background: theme.tool_bg,
+      width: width2,
+      height: height2,
+      boxShadow: theme.item_shadow,
+      borderRadius: theme.item_border_radius
+    }
+  });
 
-  const middle = $('div', { id: 'panel', parent: wrapMid, class: 'no-scrollbar', css: { overflow: 'hidden', display: 'flex', flexDirection: axis, gap: theme.items_gap, maxWidth: (axis === 'row') ? '0px' : '', maxHeight: (axis === 'column') ? '0px' : '', flex: '0 1 auto', transformStyle: 'preserve-3d' } });
+  const middle = $('div', {
+    id: 'panel',
+    parent: wrapMid,
+    class: 'no-scrollbar',
+    css: {
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: axis,
+      gap: theme.items_gap,
+      maxWidth: (axis === 'row') ? '0px' : '',
+      maxHeight: (axis === 'column') ? '0px' : '',
+      flex: '0 1 auto',
+      transformStyle: 'preserve-3d'
+    }
+  });
   const items = [];
   for (let i = 0; i < itemsCount; i++) {
-    items.push($('div', { parent: middle, class: 'flip-revealed', css: { background: theme.tool_bg, width: theme.item_size, height: theme.item_size, boxShadow: theme.item_shadow, borderRadius: theme.item_border_radius } }));
+    items.push($('div', {
+      parent: middle,
+      class: 'flip-revealed',
+      css: {
+        background: theme.tool_bg,
+        width: theme.item_size,
+        height: theme.item_size,
+        boxShadow: theme.item_shadow,
+        borderRadius: theme.item_border_radius
+      }
+    }));
   }
 
   // ordre DOM selon coin
@@ -98,8 +179,26 @@ function buildCornerMenu({ parent, itemsCount = 8, theme = currentTheme }) {
   setButtonRadii(btn1, btn2, axis, atLeft, atTop, theme.item_border_radius);
 
   // caches anti-ombres
-  const mask1 = $('div', { id: 'mask-left', parent: root, css: { position: 'absolute', pointerEvents: 'none', zIndex: 100000, background: theme.tool_bg } });
-  const mask2 = $('div', { id: 'mask-right', parent: root, css: { position: 'absolute', pointerEvents: 'none', zIndex: 100000, background: theme.tool_bg } });
+  const mask1 = $('div', {
+    id: 'mask-left',
+    parent: root,
+    css: {
+      position: 'absolute',
+      pointerEvents: 'none',
+      zIndex: 100000,
+      background: theme.tool_bg
+    }
+  });
+  const mask2 = $('div', {
+    id: 'mask-right',
+    parent: root,
+    css: {
+      position: 'absolute',
+      pointerEvents: 'none',
+      zIndex: 100000,
+      background: theme.tool_bg
+    }
+  });
 
   function syncMaskRadii() {
     const R = theme.item_border_radius;
@@ -235,4 +334,41 @@ function buildCornerMenu({ parent, itemsCount = 8, theme = currentTheme }) {
 
   return { root, openMenu, closeMenu, middle, btn1, btn2 };
 }
+
+// --- Attach to Intuition by default ---
+// Expose the builder for manual usage and add a safe auto-init that attaches the menu
+// to the Intuition container if present and not already initialized.
+try { window.buildCornerMenu = buildCornerMenu; } catch (_) { }
+
+(function autoAttachCornerMenuToIntuition() {
+  const INIT_ID = 'corner-menu-root';
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
+    else fn();
+  }
+  function ensure() {
+    // Require Squirrel's $ builder and the intuition container
+    const hasSquirrel = typeof window.$ === 'function';
+    const container = document.getElementById('intuition');
+    const already = document.getElementById(INIT_ID);
+    if (!hasSquirrel || !container || already) return false;
+    try {
+      buildCornerMenu({ parent: '#intuition' });
+      return true;
+    } catch (e) {
+      // If Squirrel isn't fully ready yet, retry shortly
+      return false;
+    }
+  }
+  ready(() => {
+    if (ensure()) return;
+    // Retry a few times in case Squirrel loads just after DOMContentLoaded
+    let attempts = 0;
+    const max = 10;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (ensure() || attempts >= max) clearInterval(timer);
+    }, 60);
+  });
+})();
 
