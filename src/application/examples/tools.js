@@ -356,6 +356,8 @@ const intuitionAddOn = {
 function init_inituition() {
   intuitionCommon(toolbox_support);
   intuitionCommon(toolbox);
+  // Ensure scrolling on the toolbox controls the support overflow
+  setupToolboxScrollProxy();
 }
 
 function apply_layout() {
@@ -378,6 +380,8 @@ function apply_layout() {
     ['top', 'right', 'bottom', 'left'].forEach(k => triggerEl.style[k] = 'auto');
     Object.assign(triggerEl.style, calculatedCSS.toolbox);
   }
+  // Re-ensure scroll proxy after layout updates
+  setupToolboxScrollProxy();
 }
 
 
@@ -470,6 +474,60 @@ function mountDirectionSelector() {
   });
 }
 mountDirectionSelector();
+
+
+
+
+// Forward wheel/touch interactions on the toolbox to scroll the toolbox_support overflow
+function setupToolboxScrollProxy() {
+  const toolboxEl = grab('toolbox');
+  const supportEl = grab('toolbox_support');
+  if (!toolboxEl || !supportEl) return;
+  if (toolboxEl._scrollProxyAttached) return;
+
+  const isHorizontal = () => (currentTheme?.direction || '').toLowerCase().includes('horizontal');
+
+  const onWheel = (e) => {
+    const horiz = isHorizontal();
+    const dx = e.deltaX || 0;
+    const dy = e.deltaY || 0;
+    // Prefer the component aligned with our main axis; fall back to dy for horizontal if dx is tiny
+    const main = horiz ? (Math.abs(dx) > Math.abs(dy) ? dx : dy) : dy;
+    if (main === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (horiz) supportEl.scrollBy({ left: main, behavior: 'auto' });
+    else supportEl.scrollBy({ top: main, behavior: 'auto' });
+  };
+
+  let tX = 0, tY = 0;
+  const onTouchStart = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    tX = e.touches[0].clientX;
+    tY = e.touches[0].clientY;
+  };
+  const onTouchMove = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const horiz = isHorizontal();
+    const x = e.touches[0].clientX;
+    const y = e.touches[0].clientY;
+    const dx = x - tX;
+    const dy = y - tY;
+    const main = horiz ? -dx : -dy; // natural feel
+    if (main !== 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (horiz) supportEl.scrollBy({ left: main, behavior: 'auto' });
+      else supportEl.scrollBy({ top: main, behavior: 'auto' });
+    }
+    tX = x; tY = y;
+  };
+
+  toolboxEl.addEventListener('wheel', onWheel, { passive: false });
+  toolboxEl.addEventListener('touchstart', onTouchStart, { passive: true });
+  toolboxEl.addEventListener('touchmove', onTouchMove, { passive: false });
+  toolboxEl._scrollProxyAttached = true;
+}
 
 
 
