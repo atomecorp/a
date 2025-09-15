@@ -33,9 +33,9 @@ const currentTheme = Intuition_theme.light;
 // currentTheme.direction = "top_right_horizontal";
 // currentTheme.direction = "bottom_left_horizontal";
 // currentTheme.direction = "bottom_right_horizontal";
-currentTheme.direction = "top_left_vertical";
+// currentTheme.direction = "top_left_vertical";
 // currentTheme.direction = "bottom_left_vertical";
-// currentTheme.direction = "bottom_right_vertical";
+currentTheme.direction = "bottom_right_vertical";
 // currentTheme.direction = "top_right_vertical";
 // currentTheme.direction = "bottom_right_vertical";
 
@@ -111,9 +111,9 @@ function calculate_positions() {
 
   // centre la bande support par rapport au centre de l’icône (différence cross‑axis)
   const centerDelta = (itemsSizeNum - thicknessNum) / 2;
-
+  const item_border_radius = parseFloat(currentTheme.item_border_radius);
   // offsets
-  const itemOffsetMainPx = `${toolboxOffsetMainNum}px`;
+  const itemOffsetMainPx = `${toolboxOffsetMainNum + itemsSizeNum - item_border_radius}px`;
   const itemOffsetEdgeNum = toolboxOffsetEdgeNum + centerDelta;
   const itemOffsetEdgePx = `${itemOffsetEdgeNum}px`;
 
