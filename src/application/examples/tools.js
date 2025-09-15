@@ -1,24 +1,23 @@
 let calculatedCSS = {};
-const shadowLeft = 5,
-  shadowTop = 5,
-  shadowBlur = 5;
-const items_spacing = 22;
-const item_border_radius = 12;
-const item_size = 69;
+const shadowLeft = 0,
+  shadowTop = 0,
+  shadowBlur = 12;
+const items_spacing = 6;
+const item_border_radius = 6;
+const item_size = 39;
 let menuOpen = 'false';
 
 const Intuition_theme = {
   light: {
-
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
-    support_thickness: "130px",
+    support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
     tool_bg: "#484747ff",
     tool_bg_active: "#656565ff",
     tool_text: "#8c8b8bff",
     tool_active_bg: "#e0e0e0",
-    toolboxOffsetMain: "116px",
-    toolboxOffsetEdge: "135px",
+    toolboxOffsetMain: "3px",
+    toolboxOffsetEdge: "3px",
     items_offset_main: item_border_radius + items_spacing + 'px',
     icon_top: "45%",
     icon_left: "33%",
@@ -32,21 +31,23 @@ const Intuition_theme = {
 
 const currentTheme = Intuition_theme.light;
 
-// currentTheme.direction = "top_left_horizontal";
-// currentTheme.direction = "top_right_horizontal";
-// currentTheme.direction = "bottom_left_horizontal";
-// currentTheme.direction = "bottom_right_horizontal";
-// currentTheme.direction = "top_left_vertical";
-// currentTheme.direction = "bottom_left_vertical";
-currentTheme.direction = "bottom_right_vertical";
-// currentTheme.direction = "top_right_vertical";
-// currentTheme.direction = "bottom_right_vertical";
+currentTheme.direction = "top_left_horizontal";
+
+const DIRECTIONS = [
+  "top_left_horizontal",
+  "top_right_horizontal",
+  "bottom_left_horizontal",
+  "bottom_right_horizontal",
+  "top_left_vertical",
+  "bottom_left_vertical",
+  "top_right_vertical",
+  "bottom_right_vertical"
+];
 
 function calculate_positions() {
   const dir = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
   const thickness = currentTheme.support_thickness || (parseFloat(currentTheme.item_size || '0') + parseFloat((currentTheme.margin || '0')) + 'px');
 
-  // nombres
   const thicknessNum = parseFloat(thickness) || 0;
   const itemsSizeNum = parseFloat(currentTheme.item_size) || 0;
   const toolboxOffsetMainNum = parseFloat(currentTheme.toolboxOffsetMain) || 0;
@@ -62,7 +63,7 @@ function calculate_positions() {
   const itemOffsetEdgeNum = toolboxOffsetEdgeNum + centerDelta;
   const itemOffsetEdgePx = `${itemOffsetEdgeNum}px`;
 
-  // tailles du support (on retire le padding main pour éviter le débordement)
+  // support sizes (we remove the main padding to avoid overflow)
   const H = { width: `calc(100vw - ${itemOffsetEdgeNum}px - ${itemsOffsetMainNum}px)`, height: thickness, columnGap: currentTheme.items_spacing };
   const V = { width: thickness, height: `calc(100vh - ${itemOffsetEdgeNum}px - ${itemsOffsetMainNum}px)`, rowGap: currentTheme.items_spacing };
 
@@ -107,7 +108,7 @@ function calculate_positions() {
       trigger = { top: `${toolboxOffsetEdgeNum}px`, left: `${toolboxOffsetMainNum}px` };
   }
 
-  // Applique le décalage des items sur l’axe principal via le padding du support
+  // Apply item offset on the main axis using the support’s padding
   const isHorizontal = dir.includes('horizontal');
   const isReverse = (isHorizontal && dir.includes('right')) || (!isHorizontal && dir.includes('bottom'));
   const padPx = `${itemsOffsetMainNum}px`;
@@ -120,7 +121,7 @@ function calculate_positions() {
     else support.paddingTop = padPx;
   }
 
-  // Masque (fondu) sur les 2 bords inchangé
+  // Fade mask on both edges unchanged
   const fadePx = Math.max(12, parseFloat(currentTheme.items_spacing) || 20);
   const mask = isHorizontal
     ? `linear-gradient(to right, transparent 0, black ${fadePx}px, black calc(100% - ${fadePx}px), transparent 100%)`
@@ -147,23 +148,17 @@ const toolbox_support = {
   parent: '#intuition',
   css: {
     display: 'flex',
-    justifyContent: 'flex-start',
     boxSizing: 'border-box',
     justifyContent: 'flex-start',
-    width: width,
-    maxWidth: width,
-    height: height,
-    maxHeight: height,
     position: 'fixed',
-    boxShadow: '0px 0px 0px rgba(0,0,0,0)',
-    borderRadius: 0,
-    backgroundColor: 'transparent',
+    // No width/height/posCss here, apply_layout will set them
+    backgroundColor: 'red',
     gap: currentTheme.items_spacing,
     scrollbarWidth: 'none',
-    msOverflowStyle: 'none',
-    ...posCss
+    msOverflowStyle: 'none'
   }
 };
+
 
 const intuition_content = {
   version: "1.1",
@@ -197,6 +192,13 @@ const toolbox = {
   label: null,
   icon: 'menu'
 };
+
+function open_menu(name) {
+
+}
+function close_menu(name) {
+
+}
 
 function reveal_children(parent) {
   const methods = (intuition_content[parent] && intuition_content[parent].children) || [];
@@ -275,20 +277,81 @@ function init_inituition() {
 
 function apply_layout() {
   calculatedCSS = calculate_positions();
+
   const supportEl = grab('toolbox_support');
   const triggerEl = grab('toolbox');
+
   if (supportEl) {
+    // Reset anchors and paddings that may remain from a previous direction
+    ['top', 'right', 'bottom', 'left'].forEach(k => supportEl.style[k] = 'auto');
+    ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].forEach(k => supportEl.style[k] = '0');
+
     Object.assign(supportEl.style, calculatedCSS.toolbox_support);
     supportEl.style.width = calculatedCSS.toolbox_support.width;
     supportEl.style.height = calculatedCSS.toolbox_support.height;
+    supportEl.style.gap = currentTheme.items_spacing;
   }
   if (triggerEl) {
+    ['top', 'right', 'bottom', 'left'].forEach(k => triggerEl.style[k] = 'auto');
     Object.assign(triggerEl.style, calculatedCSS.toolbox);
   }
 }
 
-window.addEventListener('resize', apply_layout);
-window.setDirection = function (dir) { currentTheme.direction = dir; apply_layout(); };
 
+
+window.addEventListener('resize', apply_layout);
+window.setDirection = function (dir) {
+  currentTheme.direction = String(dir).toLowerCase();
+  apply_layout();
+};
+
+// Helper to recalculate after theme/value changes
+window.refreshMenu = function (partialTheme = {}) {
+  Object.assign(currentTheme, partialTheme);
+  apply_layout();
+};
 init_inituition();
 apply_layout();
+
+
+function mountDirectionSelector() {
+  if (document.getElementById('intuition-direction-select')) return;
+
+  const wrap = $('div', {
+    id: 'intuition-direction-select',
+    parent: '#intuition',
+    css: {
+      position: 'fixed',
+      top: '108px',
+      left: '108px',
+      zIndex: 10000002,
+      backgroundColor: 'transparent',
+      padding: '0'
+    }
+  });
+
+  const select = $('select', {
+    parent: wrap,
+    css: {
+      fontSize: '12px',
+      padding: '2px 6px',
+      color: '#fff',
+      backgroundColor: '#2b2b2b',
+      border: '1px solid #555'
+    }
+  });
+
+  DIRECTIONS.forEach(d => {
+    const opt = $('option', { parent: select, text: d });
+    opt.value = d;
+  });
+
+
+  //test current value
+  select.value = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
+  select.addEventListener('change', (e) => {
+    window.setDirection(e.target.value);
+  });
+}
+mountDirectionSelector();
+
