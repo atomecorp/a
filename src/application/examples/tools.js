@@ -1,3 +1,22 @@
+// test
+//click: function (e) { reveal_children('toolbox'); },
+
+const test = $('div', {
+  id: 'test',
+  parent: '#intuition',
+  css: {
+    backgroundColor: 'green',
+    width: '200px',
+    height: '200px',
+    margin: 0,
+    position: 'relative',
+    // zIndex: 12000001
+  }
+});
+test.addEventListener('click', () => puts('hello!'));
+
+
+
 let calculatedCSS = {};
 const shadowLeft = 0,
   shadowTop = 0,
@@ -134,6 +153,9 @@ function calculate_positions() {
     support.maskImage = mask;
   }
 
+  support.pointerEvents = 'none';
+
+
   return { toolbox_support: support, toolbox: trigger };
 }
 
@@ -239,6 +261,8 @@ function intuitionCommon(cfg) {
       display: 'inline-block',
       position: 'relative',
       flex: '0 0 auto',
+      pointerEvents: 'auto',        // réactive les events sur l’item
+      touchAction: 'manipulation',  // tap/drag mobiles OK
       ...(cfg.css || {})
     }
   });
@@ -354,4 +378,8 @@ function mountDirectionSelector() {
   });
 }
 mountDirectionSelector();
+
+
+
+
 

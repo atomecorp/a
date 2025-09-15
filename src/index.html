@@ -10,24 +10,25 @@
   <meta name="apple-mobile-web-app-title" content="App">
   <title>atome</title>
   <link rel="stylesheet" href="js/leaflet.min.css">
+  <link rel="stylesheet" href="css/squirrel.css">
   <script src="js/gsap.min.js"></script>
- <script src="js/tone.min.js"></script>
-<script src="js/leaflet.min.js"></script>
-    <script src="js/wavesurfer.min.js"></script>
-   <script type="module" src="js/three.min.js"></script>
+  <script src="js/tone.min.js"></script>
+  <script src="js/leaflet.min.js"></script>
+  <script src="js/wavesurfer.min.js"></script>
+  <script type="module" src="js/three.min.js"></script>
   <script type="module" src="squirrel/spark.js"></script>
   <script type="module">
     // Ultra minimal readiness: rely purely on native event (local-server-ready) or immediate import on non-iOS.
     let __appImported = false;
-    function __importAppOnce(){ if(__appImported) return; __appImported = true; import('./application/index.js'); }
+    function __importAppOnce() { if (__appImported) return; __appImported = true; import('./application/index.js'); }
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (!isIOS) {
-      window.addEventListener('squirrel:ready', __importAppOnce, { once:true });
+      window.addEventListener('squirrel:ready', __importAppOnce, { once: true });
     } else {
       // iOS waits for explicit native signal
-      window.addEventListener('local-server-ready', __importAppOnce, { once:true });
+      window.addEventListener('local-server-ready', __importAppOnce, { once: true });
       // Safety fallback: if native forgot to dispatch within 900ms, continue anyway.
-      window.addEventListener('squirrel:ready', () => { setTimeout(__importAppOnce, 900); }, { once:true });
+      window.addEventListener('squirrel:ready', () => { setTimeout(__importAppOnce, 900); }, { once: true });
     }
   </script>
 </head>
