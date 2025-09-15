@@ -30,7 +30,7 @@ const shadowLeft = 0,
   shadowBlur = 12;
 const items_spacing = 6;
 const item_border_radius = 6;
-const item_size = 39;
+const item_size = 93;
 let menuOpen = 'false';
 
 const Intuition_theme = {
@@ -236,7 +236,7 @@ function reveal_children(parent) {
     methods.forEach(name => {
       const fct_exec = intuition_content[name]['type'];
       if (typeof fct_exec === 'function') {
-        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' }, ...(intuitionAddOn[name] || {}) };
+        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_items_wrap' }, ...(intuitionAddOn[name] || {}) };
         fct_exec(optionalParams);
       } else {
         console.warn(`Function ${fct_exec} not found`);
@@ -351,6 +351,19 @@ const intuitionAddOn = {
 
 function init_inituition() {
   intuitionCommon(toolbox_support);
+  // Insert wrapper between support and items to hold all menu items
+  const itemsWrap = $('div', {
+    id: 'toolbox_items_wrap',
+    parent: '#toolbox_support',
+    css: {
+      display: 'inline-flex',      // shrink-wrap to content size
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: currentTheme.items_spacing,
+      position: 'relative',
+      backgroundColor: 'green'
+    }
+  });
   intuitionCommon(toolbox);
 }
 
@@ -368,7 +381,15 @@ function apply_layout() {
     Object.assign(supportEl.style, calculatedCSS.toolbox_support);
     supportEl.style.width = calculatedCSS.toolbox_support.width;
     supportEl.style.height = calculatedCSS.toolbox_support.height;
-    supportEl.style.gap = currentTheme.items_spacing;
+    // Keep gap on inner wrapper where items actually live
+    const wrapEl = document.getElementById('toolbox_items_wrap');
+    if (wrapEl) {
+      wrapEl.style.gap = String(currentTheme.items_spacing);
+      // Mirror direction on wrapper so items keep same flow
+      if (calculatedCSS.toolbox_support.flexDirection) {
+        wrapEl.style.flexDirection = calculatedCSS.toolbox_support.flexDirection;
+      }
+    }
   }
   if (triggerEl) {
     ['top', 'right', 'bottom', 'left'].forEach(k => triggerEl.style[k] = 'auto');
