@@ -57,7 +57,7 @@ const Intuition_theme = {
 
 const currentTheme = Intuition_theme.light;
 
-currentTheme.direction = "top_left_horizontal";
+currentTheme.direction = "top_right_horizontal";
 
 const DIRECTIONS = [
   "top_left_horizontal",
@@ -291,12 +291,25 @@ const items_common = {
 
 };
 
-function palette(cfg) { intuitionCommon({ ...cfg, ...items_common }); }
-function tool(cfg) { intuitionCommon({ ...cfg, ...items_common }); }
-function particle(cfg) { intuitionCommon({ ...cfg, ...items_common }); }
-function option(cfg) { intuitionCommon({ ...cfg, ...items_common }); }
-function zonespecial(cfg) { intuitionCommon({ ...cfg, ...items_common }); }
 
+function palette(cfg) {
+  puts(cfg);
+  intuitionCommon({ ...cfg, ...items_common });
+  const label = { parent: `#${cfg.id}`, text: cfg.label, css: { position: 'relative', bottom: '2px', width: '90', height: '12px', fontSize: '0px', color: 'white', pointerEvents: 'none' } };
+  intuitionCommon(label);
+}
+function tool(cfg) {
+  intuitionCommon({ ...cfg, ...items_common });
+}
+function particle(cfg) {
+  intuitionCommon({ ...cfg, ...items_common });
+}
+function option(cfg) {
+  intuitionCommon({ ...cfg, ...items_common });
+}
+function zonespecial(cfg) {
+  intuitionCommon({ ...cfg, ...items_common });
+}
 const intuitionAddOn = {
   communication: { label: 'communication', icon: 'communication' }
 };
