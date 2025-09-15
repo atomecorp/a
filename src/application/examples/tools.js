@@ -49,49 +49,49 @@ function calculate_positions() {
   const toolboxOffsetEdge = currentTheme.toolboxOffsetEdge || '0px';
 
   const itemOffsetMain = '  139px  ';
-  const itemOffsetEdge = '  12px ';
+  const items_offset_edge = '  12px ';
 
-  const H = { width: `calc(100vw - ${itemOffsetEdge}px)`, height: thickness, columnGap: currentTheme.items_spacing };
-  const V = { width: thickness, height: `calc(100vh - ${itemOffsetEdge}px)`, rowGap: currentTheme.items_spacing };
+  const H = { width: `calc(100vw - ${items_offset_edge}px)`, height: thickness, columnGap: currentTheme.items_spacing };
+  const V = { width: thickness, height: `calc(100vh - ${items_offset_edge}px)`, rowGap: currentTheme.items_spacing };
 
   let support = {};
   let trigger = {};
 
   switch (dir) {
     case 'top_left_horizontal':
-      support = { ...H, flexDirection: 'row', top: itemOffsetEdge, left: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
+      support = { ...H, flexDirection: 'row', top: items_offset_edge, left: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
       trigger = { top: toolboxOffsetEdge, left: toolboxOffsetMain };
       break;
     case 'top_right_horizontal':
-      support = { ...H, flexDirection: 'row-reverse', top: itemOffsetEdge, right: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
+      support = { ...H, flexDirection: 'row-reverse', top: items_offset_edge, right: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
       trigger = { top: toolboxOffsetEdge, right: toolboxOffsetMain };
       break;
     case 'bottom_left_horizontal':
-      support = { ...H, flexDirection: 'row', bottom: itemOffsetEdge, left: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
+      support = { ...H, flexDirection: 'row', bottom: items_offset_edge, left: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
       trigger = { bottom: toolboxOffsetEdge, left: toolboxOffsetMain };
       break;
     case 'bottom_right_horizontal':
-      support = { ...H, flexDirection: 'row-reverse', bottom: itemOffsetEdge, right: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
+      support = { ...H, flexDirection: 'row-reverse', bottom: items_offset_edge, right: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
       trigger = { bottom: toolboxOffsetEdge, right: toolboxOffsetMain };
       break;
     case 'top_left_vertical':
-      support = { ...V, flexDirection: 'column', top: itemOffsetMain, left: itemOffsetEdge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-      trigger = { top: toolboxOffsetEdge, left: toolboxOffsetMain };
+      support = { ...V, flexDirection: 'column', top: itemOffsetMain, left: items_offset_edge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
+      trigger = { top: toolboxOffsetMain, left: toolboxOffsetEdge };
       break;
     case 'bottom_left_vertical':
-      support = { ...V, flexDirection: 'column-reverse', bottom: itemOffsetMain, left: itemOffsetEdge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-      trigger = { bottom: toolboxOffsetEdge, left: toolboxOffsetMain };
+      support = { ...V, flexDirection: 'column-reverse', bottom: itemOffsetMain, left: items_offset_edge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
+      trigger = { bottom: toolboxOffsetMain, left: toolboxOffsetEdge };
       break;
     case 'top_right_vertical':
-      support = { ...V, flexDirection: 'column', top: itemOffsetMain, right: itemOffsetEdge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-      trigger = { top: toolboxOffsetEdge, right: toolboxOffsetMain };
+      support = { ...V, flexDirection: 'column', top: itemOffsetMain, right: items_offset_edge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
+      trigger = { top: toolboxOffsetMain, right: toolboxOffsetEdge };
       break;
     case 'bottom_right_vertical':
-      support = { ...V, flexDirection: 'column-reverse', bottom: itemOffsetMain, right: itemOffsetEdge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-      trigger = { bottom: toolboxOffsetEdge, right: toolboxOffsetMain };
+      support = { ...V, flexDirection: 'column-reverse', bottom: itemOffsetMain, right: items_offset_edge, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
+      trigger = { bottom: toolboxOffsetMain, right: toolboxOffsetMain };
       break;
     default:
-      support = { ...H, flexDirection: 'row', top: itemOffsetEdge, left: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
+      support = { ...H, flexDirection: 'row', top: items_offset_edge, left: itemOffsetMain, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
       trigger = { top: toolboxOffsetEdge, left: toolboxOffsetMain };
   }
   return { toolbox_support: support, toolbox: trigger };
