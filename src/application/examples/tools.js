@@ -37,9 +37,11 @@ const Intuition_theme = {
   light: {
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
-    support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
-    tool_bg: "#484747ff",
+  support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
+  // Translucent gradient for a glassy look
+  tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
     tool_bg_active: "#656565ff",
+    tool_backDrop_effect: '8px',
     tool_text: "#8c8b8bff",
     text_char_max: 5,
     tool_active_bg: "#e0e0e0",
@@ -148,17 +150,23 @@ function calculate_positions() {
     else support.paddingTop = padPx;
   }
 
-  // Fade mask on both edges unchanged
-  const fadePx = Math.max(12, parseFloat(currentTheme.items_spacing) || 20);
-  const mask = isHorizontal
-    ? `linear-gradient(to right, transparent 0, black ${fadePx}px, black calc(100% - ${fadePx}px), transparent 100%)`
-    : `linear-gradient(to bottom, transparent 0, black ${fadePx}px, black calc(100% - ${fadePx}px), transparent 100%)`;
+  // Fade mask on both edges. Important: when blur is active on children, avoid applying a mask on the parent
+  // because WebKit may suppress backdrop-filter rendering for descendants under a masked ancestor.
+  if (!currentTheme.tool_backDrop_effect) {
+    const fadePx = Math.max(12, parseFloat(currentTheme.items_spacing) || 20);
+    const mask = isHorizontal
+      ? `linear-gradient(to right, transparent 0, black ${fadePx}px, black calc(100% - ${fadePx}px), transparent 100%)`
+      : `linear-gradient(to bottom, transparent 0, black ${fadePx}px, black calc(100% - ${fadePx}px), transparent 100%)`;
 
-  if (typeof CSS !== 'undefined' && CSS.supports &&
-    (CSS.supports('mask-image: linear-gradient(black, transparent)') ||
-      CSS.supports('-webkit-mask-image: linear-gradient(black, transparent)'))) {
-    support.webkitMaskImage = mask;
-    support.maskImage = mask;
+    if (typeof CSS !== 'undefined' && CSS.supports &&
+      (CSS.supports('mask-image: linear-gradient(black, transparent)') ||
+        CSS.supports('-webkit-mask-image: linear-gradient(black, transparent)'))) {
+      support.webkitMaskImage = mask;
+      support.maskImage = mask;
+    }
+  } else {
+    support.webkitMaskImage = 'none';
+    support.maskImage = 'none';
   }
 
   support.pointerEvents = 'none';
@@ -181,8 +189,13 @@ const toolbox_support = {
     boxSizing: 'border-box',
     justifyContent: 'flex-start',
     position: 'fixed',
-    // No width/height/posCss here, apply_layout will set them
-    backgroundColor: 'red',
+  // No width/height/posCss here, apply_layout will set them
+  background: 'transparent',
+  // Important: support container must NOT blur
+  backdropFilter: 'none',
+  WebkitBackdropFilter: 'none',
+    // Remove any shadow on the support container
+    boxShadow: 'none',
     gap: currentTheme.items_spacing,
     scrollbarWidth: 'none',
     msOverflowStyle: 'none'
@@ -209,7 +222,7 @@ const toolbox = {
   type: 'toolbox',
   parent: '#intuition',
   css: {
-    backgroundColor: currentTheme.tool_bg,
+    background: currentTheme.tool_bg,
     position: 'fixed',
     display: 'flex',
     alignItems: 'center',
@@ -238,6 +251,9 @@ function reveal_children(parent) {
       if (typeof fct_exec === 'function') {
         const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' }, ...(intuitionAddOn[name] || {}) };
         fct_exec(optionalParams);
+        // Apply blur to the newly created item
+        const itemEl = grab(`_intuition_${name}`);
+        if (itemEl) applyBackdropStyle(itemEl, currentTheme.tool_backDrop_effect);
       } else {
         console.warn(`Function ${fct_exec} not found`);
       }
@@ -262,7 +278,7 @@ function intuitionCommon(cfg) {
     parent: cfg.parent,
     class: cfg.type,
     css: {
-      backgroundColor: currentTheme.tool_bg,
+      background: currentTheme.tool_bg,
       width: currentTheme.item_size,
       height: currentTheme.item_size,
       color: 'lightgray',
@@ -283,6 +299,12 @@ function intuitionCommon(cfg) {
     el.addEventListener('click', function (e) {
       try { cfg.click.call(el, e); } catch (err) { console.error(err); }
     });
+  }
+  // Apply or disable blur according to element type
+  if (cfg.id === 'toolbox_support') {
+    applyBackdropStyle(el, null);
+  } else if (cfg.id === 'toolbox') {
+    applyBackdropStyle(el, currentTheme.tool_backDrop_effect);
   }
   return el;
 }
@@ -358,6 +380,11 @@ function init_inituition() {
   intuitionCommon(toolbox);
   // Ensure scrolling on the toolbox controls the support overflow
   setupToolboxScrollProxy();
+  // Apply initial backdrop styles
+  const supportEl = grab('toolbox_support');
+  const toolboxEl = grab('toolbox');
+  if (supportEl) applyBackdropStyle(supportEl, null);
+  if (toolboxEl) applyBackdropStyle(toolboxEl, currentTheme.tool_backDrop_effect);
 }
 
 function apply_layout() {
@@ -382,6 +409,28 @@ function apply_layout() {
   }
   // Re-ensure scroll proxy after layout updates
   setupToolboxScrollProxy();
+  // Re-apply backdrop styles (layout may reset style props)
+  if (supportEl) applyBackdropStyle(supportEl, null);
+  if (triggerEl) applyBackdropStyle(triggerEl, currentTheme.tool_backDrop_effect);
+  if (supportEl) {
+    Array.from(supportEl.children || []).forEach(child => {
+      if (child && child.id !== '_intuition_overflow_forcer') {
+        applyBackdropStyle(child, currentTheme.tool_backDrop_effect);
+      }
+    });
+  }
+}
+
+// Helper to set backdrop-filter with WebKit prefix
+function applyBackdropStyle(el, blurPx) {
+  if (!el || !el.style) return;
+  const val = blurPx ? `blur(${blurPx})` : 'none';
+  try {
+    el.style.backdropFilter = val;
+    el.style.WebkitBackdropFilter = val;
+    el.style.setProperty('backdrop-filter', val);
+    el.style.setProperty('-webkit-backdrop-filter', val);
+  } catch (e) { /* ignore */ }
 }
 
 
