@@ -1,19 +1,26 @@
 // test
 //click: function (e) { reveal_children('toolbox'); },
 
-const test = $('div', {
-  id: 'test',
-  parent: '#intuition',
+const vieLogo = $('img', {
+  id: 'img_test',
+  parent: "#view",
+  attrs: {
+    src: './assets/images/ballanim.png',
+    alt: 'ballanim'
+  },
   css: {
-    backgroundColor: 'green',
-    width: '200px',
-    height: '200px',
-    margin: 0,
+    marginLeft: '0',
+    color: 'white',
+    left: '90px',
+    top: '0px',
     position: 'relative',
-    // zIndex: 12000001
+    height: "120px",
+    width: "120px",
+    textAlign: 'center',
+    display: 'block'
   }
 });
-test.addEventListener('click', () => puts('hello!'));
+vieLogo.addEventListener('click', () => puts('hello!'));
 
 
 
