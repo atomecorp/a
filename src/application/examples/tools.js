@@ -2,14 +2,16 @@ let calculatedCSS = {};
 const shadowLeft = 5,
   shadowTop = 5,
   shadowBlur = 5;
-
+const items_spacing = 22;
+const item_border_radius = 12;
+const item_size = 69;
 let menuOpen = 'false';
 
 const Intuition_theme = {
   light: {
 
-    items_spacing: "25px",
-    item_size: "69px",
+    items_spacing: items_spacing + 'px',
+    item_size: item_size + 'px',
     support_thickness: "130px",
     tool_bg: "#484747ff",
     tool_bg_active: "#656565ff",
@@ -17,14 +19,14 @@ const Intuition_theme = {
     tool_active_bg: "#e0e0e0",
     toolboxOffsetMain: "116px",
     toolboxOffsetEdge: "135px",
-    items_offset_main: "55px", // replcae with a calculated value
+    items_offset_main: item_border_radius + items_spacing + 'px',
     icon_top: "45%",
     icon_left: "33%",
     icon_centered_top: "33%",
     icon_centered_left: "33%",
     icon_size: "16%",
     item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
-    item_border_radius: "20%",
+    item_border_radius: item_border_radius + 'px',
   }
 };
 
@@ -134,85 +136,6 @@ function calculate_positions() {
   return { toolbox_support: support, toolbox: trigger };
 }
 
-// function calculate_positions() {
-//   const dir = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
-//   const thickness = currentTheme.support_thickness || (parseFloat(currentTheme.item_size || '0') + parseFloat((currentTheme.margin || '0')) + 'px');
-
-//   // nombres
-//   const thicknessNum = parseFloat(thickness) || 0;
-//   const itemsSizeNum = parseFloat(currentTheme.item_size) || 0;
-//   const toolboxOffsetMainNum = parseFloat(currentTheme.toolboxOffsetMain) || 0;
-//   const toolboxOffsetEdgeNum = parseFloat(currentTheme.toolboxOffsetEdge) || 0;
-
-//   // centrage cross‑axis
-//   const centerDelta = (itemsSizeNum - thicknessNum) / 2;
-//   const item_border_radius = parseFloat(currentTheme.item_border_radius);
-
-//   // offsets
-//   const itemOffsetMainPx = `${toolboxOffsetMainNum + itemsSizeNum - item_border_radius}px`;
-//   const itemOffsetEdgeNum = toolboxOffsetEdgeNum + centerDelta;
-//   const itemOffsetEdgePx = `${itemOffsetEdgeNum}px`;
-
-//   const H = { width: `calc(100vw - ${itemOffsetEdgeNum}px)`, height: thickness, columnGap: currentTheme.items_spacing };
-//   const V = { width: thickness, height: `calc(100vh - ${itemOffsetEdgeNum}px)`, rowGap: currentTheme.items_spacing };
-
-//   let support = {};
-//   let trigger = {};
-
-//   switch (dir) {
-//     case 'top_left_horizontal':
-//       support = { ...H, flexDirection: 'row', top: itemOffsetEdgePx, left: itemOffsetMainPx, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
-//       trigger = { top: `${toolboxOffsetEdgeNum}px`, left: `${toolboxOffsetMainNum}px` };
-//       break;
-//     case 'top_right_horizontal':
-//       support = { ...H, flexDirection: 'row-reverse', top: itemOffsetEdgePx, right: itemOffsetMainPx, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
-//       trigger = { top: `${toolboxOffsetEdgeNum}px`, right: `${toolboxOffsetMainNum}px` };
-//       break;
-//     case 'bottom_left_horizontal':
-//       support = { ...H, flexDirection: 'row', bottom: itemOffsetEdgePx, left: itemOffsetMainPx, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
-//       trigger = { bottom: `${toolboxOffsetEdgeNum}px`, left: `${toolboxOffsetMainNum}px` };
-//       break;
-//     case 'bottom_right_horizontal':
-//       support = { ...H, flexDirection: 'row-reverse', bottom: itemOffsetEdgePx, right: itemOffsetMainPx, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
-//       trigger = { bottom: `${toolboxOffsetEdgeNum}px`, right: `${toolboxOffsetMainNum}px` };
-//       break;
-//     case 'top_left_vertical':
-//       support = { ...V, flexDirection: 'column', top: itemOffsetMainPx, left: itemOffsetEdgePx, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-//       trigger = { top: `${toolboxOffsetMainNum}px`, left: `${toolboxOffsetEdgeNum}px` };
-//       break;
-//     case 'bottom_left_vertical':
-//       support = { ...V, flexDirection: 'column-reverse', bottom: itemOffsetMainPx, left: itemOffsetEdgePx, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-//       trigger = { bottom: `${toolboxOffsetMainNum}px`, left: `${toolboxOffsetEdgeNum}px` };
-//       break;
-//     case 'top_right_vertical':
-//       support = { ...V, flexDirection: 'column', top: itemOffsetMainPx, right: itemOffsetEdgePx, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-//       trigger = { top: `${toolboxOffsetMainNum}px`, right: `${toolboxOffsetEdgeNum}px` };
-//       break;
-//     case 'bottom_right_vertical':
-//       support = { ...V, flexDirection: 'column-reverse', bottom: itemOffsetMainPx, right: itemOffsetEdgePx, alignItems: 'center', overflowX: 'hidden', overflowY: 'auto' };
-//       trigger = { bottom: `${toolboxOffsetMainNum}px`, right: `${toolboxOffsetEdgeNum}px` };
-//       break;
-//     default:
-//       support = { ...H, flexDirection: 'row', top: itemOffsetEdgePx, left: itemOffsetMainPx, alignItems: 'center', overflowX: 'auto', overflowY: 'hidden' };
-//       trigger = { top: `${toolboxOffsetEdgeNum}px`, left: `${toolboxOffsetMainNum}px` };
-//   }
-
-//   // Masque (fondu) sur les 2 bords de toolbox_support
-//   const isHorizontal = dir.includes('horizontal');
-//   const fadePx = Math.max(12, parseFloat(currentTheme.items_spacing) || 20);
-//   const mask = isHorizontal
-//     ? `linear-gradient(to right, transparent 0, black ${fadePx}px, black calc(100% - ${fadePx}px), transparent 100%)`
-//     : `linear-gradient(to bottom, transparent 0, black ${fadePx}px, black calc(100% - ${fadePx}px), transparent 100%)`;
-
-//   if (typeof CSS !== 'undefined' && CSS.supports &&
-//     (CSS.supports('mask-image: linear-gradient(black, transparent)') ||
-//       CSS.supports('-webkit-mask-image: linear-gradient(black, transparent)'))) {
-//     support.webkitMaskImage = mask;
-//     support.maskImage = mask;
-//   }
-
-//   return { toolbox_support: support, toolbox: trigger };
-// }
 calculatedCSS = calculate_positions();
 const width = calculatedCSS.toolbox_support.width;
 const height = calculatedCSS.toolbox_support.height;
@@ -234,7 +157,7 @@ const toolbox_support = {
     position: 'fixed',
     boxShadow: '0px 0px 0px rgba(0,0,0,0)',
     borderRadius: 0,
-    backgroundColor: 'green',
+    backgroundColor: 'transparent',
     gap: currentTheme.items_spacing,
     scrollbarWidth: 'none',
     msOverflowStyle: 'none',
@@ -261,7 +184,7 @@ const toolbox = {
   type: 'toolbox',
   parent: '#intuition',
   css: {
-    backgroundColor: 'red',
+    backgroundColor: currentTheme.tool_bg,
     position: 'fixed',
     display: 'flex',
     alignItems: 'center',
