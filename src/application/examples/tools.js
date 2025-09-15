@@ -41,6 +41,7 @@ const Intuition_theme = {
     tool_bg: "#484747ff",
     tool_bg_active: "#656565ff",
     tool_text: "#8c8b8bff",
+    text_char_max: 5,
     tool_active_bg: "#e0e0e0",
     toolboxOffsetMain: "3px",
     toolboxOffsetEdge: "3px",
@@ -292,23 +293,57 @@ const items_common = {
 };
 
 
+function create_label(cfg) {
+  if (cfg.label) {
+    const rawText = String(cfg.label);
+    const maxChars = parseInt(currentTheme.text_char_max, 10);
+    let displayText = rawText;
+    if (!isNaN(maxChars) && maxChars > 0 && rawText.length > maxChars) {
+      // Réserver 1 caractère pour l'ellipse si possible
+      displayText = maxChars > 1 ? rawText.slice(0, maxChars - 1) + '…' : rawText.slice(0, maxChars);
+    }
+    $('div', {
+      parent: `#${cfg.id}`,
+      text: displayText,
+      attrs: { title: rawText },
+      css: {
+        position: 'absolute',
+        top: '2px',             // à l'intérieur de l'item pour éviter overflow hidden du parent
+        left: '50%',
+        transform: 'translateX(-50%)',
+        fontSize: '11px',
+        lineHeight: '12px',
+        color: currentTheme.tool_text,
+        padding: '0 4px',
+        backgroundColor: 'transparent',
+        whiteSpace: 'nowrap',
+        pointerEvents: 'none',
+        userSelect: 'none'
+      }
+    });
+  }
+}
+
+
 function palette(cfg) {
-  puts(cfg);
   intuitionCommon({ ...cfg, ...items_common });
-  const label = { parent: `#${cfg.id}`, text: cfg.label, css: { position: 'relative', bottom: '2px', width: '90', height: '12px', fontSize: '0px', color: 'white', pointerEvents: 'none' } };
-  intuitionCommon(label);
+  create_label(cfg)
 }
 function tool(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
+  create_label(cfg)
 }
 function particle(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
+  create_label(cfg)
 }
 function option(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
+  create_label(cfg)
 }
 function zonespecial(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
+  create_label(cfg)
 }
 const intuitionAddOn = {
   communication: { label: 'communication', icon: 'communication' }
