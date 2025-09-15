@@ -38,7 +38,6 @@ const Intuition_theme = {
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
     support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
-    overflow_addon: '220px',
     tool_bg: "#484747ff",
     tool_bg_active: "#656565ff",
     tool_text: "#8c8b8bff",
@@ -243,12 +242,16 @@ function reveal_children(parent) {
         console.warn(`Function ${fct_exec} not found`);
       }
     });
+    // Add a green overflow-forcing item when opening the menu
+    addOverflowForcer();
     menuOpen = parent;
   } else {
     methods.forEach(name => {
       const el = grab(`_intuition_${name}`);
       if (el) el.remove();
     });
+    // Remove the overflow-forcing item when closing the menu
+    removeOverflowForcer();
     menuOpen = 'false';
   }
 }
@@ -375,6 +378,39 @@ function apply_layout() {
     ['top', 'right', 'bottom', 'left'].forEach(k => triggerEl.style[k] = 'auto');
     Object.assign(triggerEl.style, calculatedCSS.toolbox);
   }
+}
+
+
+// Isolated methods to add/remove a green item to force overflow
+function addOverflowForcer() {
+  const supportEl = grab('toolbox_support');
+  if (!supportEl) return;
+  if (document.getElementById('_intuition_overflow_forcer')) return;
+
+  // Create a green block matching the item size to extend the scrollable area
+  $('div', {
+    id: '_intuition_overflow_forcer',
+    parent: '#toolbox_support',
+    css: {
+      backgroundColor: 'transparent', // was 'green' for testing
+      width: currentTheme.item_size,
+      height: currentTheme.item_size,
+      borderRadius: currentTheme.item_border_radius,
+      flex: '0 0 auto',
+      pointerEvents: 'none'
+    }
+  });
+
+  // Ensure it's at the very end so it truly forces extra scroll
+  const el = document.getElementById('_intuition_overflow_forcer');
+  if (el && el.parentElement && el.parentElement.lastElementChild !== el) {
+    el.parentElement.appendChild(el);
+  }
+}
+
+function removeOverflowForcer() {
+  const el = document.getElementById('_intuition_overflow_forcer');
+  if (el) el.remove();
 }
 
 
