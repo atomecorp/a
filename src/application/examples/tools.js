@@ -585,6 +585,41 @@ function slideInItems(items) {
   });
 }
 
+// Slide items out toward the support origin corner, then remove them
+function slideOutItemsToOrigin(items, onAllDone) {
+  const els = (items || []).filter(Boolean);
+  if (!els.length) { if (onAllDone) onAllDone(); return; }
+  const origin = getSupportOrigin();
+  if (!origin) { // fallback: remove without anim
+    els.forEach(el => { try { el.remove(); } catch (e) { } });
+    if (onAllDone) onAllDone();
+    return;
+  }
+  const dur = currentTheme.anim_duration_ms || 420;
+  const stagger = currentTheme.anim_stagger_ms || 24;
+  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  let done = 0;
+  els.forEach((el, idx) => {
+    const rect = el.getBoundingClientRect();
+    const dx = origin.ox - rect.left;
+    const dy = origin.oy - rect.top;
+    el.style.willChange = 'transform';
+    const delay = idx * stagger;
+    setTimeout(() => {
+      animate(dur, (tt) => {
+        const t = easeOutBackP(tt, s);
+        // Move from current position to origin with slight overshoot
+        el.style.transform = `translate(${dx * t}px, ${dy * t}px)`;
+      }, () => {
+        try { el.remove(); } catch (e) { }
+        el.style.willChange = '';
+        done++;
+        if (done === els.length && onAllDone) onAllDone();
+      });
+    }, delay);
+  });
+}
+
 
 // Isolated methods to add/remove a green item to force overflow
 function addOverflowForcer() {
@@ -1069,9 +1104,13 @@ function closeEntireMenu() {
     if (ph && ph.parentElement) ph.remove();
     handlePaletteClick.active = null;
   }
-  // Remove all items from support (except none)
+  // Animate all items inside support out toward the origin, then cleanup
   if (supportEl) {
-    Array.from(supportEl.children).forEach(ch => ch.remove());
+    const toRemove = Array.from(supportEl.children).filter(ch => ch.id !== '_intuition_overflow_forcer');
+    slideOutItemsToOrigin(toRemove, () => {
+      // Ensure everything is gone
+      Array.from(supportEl.children).forEach(ch => ch.remove());
+    });
   }
   // Remove overflow forcer explicitly
   removeOverflowForcer();
