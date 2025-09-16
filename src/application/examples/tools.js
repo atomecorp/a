@@ -63,8 +63,8 @@ const Intuition_theme = {
     tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
     tool_bg_active: "#656565ff",
     tool_backDrop_effect: '8px',
-    tool_text: "#8c8b8bff",
-    tool_font: "1.2vw",
+    tool_text: "#ffffffff",
+    tool_font: "0.7vw",
     text_char_max: 6,
     tool_active_bg: "#e0e0e0",
     toolboxOffsetMain: "3px",
@@ -79,8 +79,10 @@ const Intuition_theme = {
     item_border_radius: item_border_radius + 'px',
     // Animation settings for menu open
     anim_duration_ms: 333,
-    anim_stagger_ms: 28,
-    anim_bounce_overshoot: 0.08
+    anim_stagger_ms: 33,
+    anim_bounce_overshoot: 0.09,
+    // Elasticity controls extra rebounds (0 = back easing, 1 = strong elastic)
+    anim_elasticity: 6
   }
 };
 
@@ -534,6 +536,32 @@ function easeOutBackP(t, s) {
   return 1 + c3 * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
 }
 
+// Elastic easing (parametric): s in [0..1] controls strength, 0 -> no elastic, 1 -> strong
+function easeOutElasticP(t, s) {
+  if (t === 0) return 0;
+  if (t === 1) return 1;
+  // Map s to amplitude/duration parameters
+  const p = 0.3 + 0.2 * s; // period
+  const a = 1; // amplitude
+  const c4 = (2 * Math.PI) / p;
+  return a * Math.pow(2, -10 * t) * Math.sin((t - p / 4) * c4) + 1;
+}
+
+function getEasingOpen() {
+  const elastic = Math.max(0, Math.min(1, currentTheme.anim_elasticity || 0));
+  if (elastic > 0) {
+    return (tt) => easeOutElasticP(tt, elastic);
+  }
+  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  return (tt) => easeOutBackP(tt, s);
+}
+
+function getEasingClose() {
+  // For closing, avoid elastic to prevent perceived reversed oscillations
+  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  return (tt) => easeOutBackP(tt, s);
+}
+
 function animate(duration, onUpdate, onDone) {
   const start = (performance && performance.now ? performance.now() : Date.now());
   const tick = () => {
@@ -562,7 +590,7 @@ function slideInItems(items) {
   if (!origin) return;
   const dur = currentTheme.anim_duration_ms || 420;
   const stagger = currentTheme.anim_stagger_ms || 24;
-  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  const easing = getEasingOpen();
   els.forEach((el, idx) => {
     const rect = el.getBoundingClientRect();
     const dx = origin.ox - rect.left;
@@ -573,9 +601,9 @@ function slideInItems(items) {
     const delay = idx * stagger;
     setTimeout(() => {
       animate(dur, (tt) => {
-        const t = easeOutBackP(tt, s);
-        // Back easing overshoots near end; convert to translate from origin to final
-        const f = 1 - t; // goes slightly negative near end for overshoot
+        const t = easing(tt);
+        // Convert to translate from origin to final
+        const f = 1 - t;
         el.style.transform = `translate(${dx * f}px, ${dy * f}px)`;
       }, () => {
         el.style.transform = 'translate(0, 0)';
@@ -597,7 +625,7 @@ function slideOutItemsToOrigin(items, onAllDone) {
   }
   const dur = currentTheme.anim_duration_ms || 420;
   const stagger = currentTheme.anim_stagger_ms || 24;
-  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  const easing = getEasingClose();
   let done = 0;
   els.forEach((el, idx) => {
     const rect = el.getBoundingClientRect();
@@ -607,7 +635,7 @@ function slideOutItemsToOrigin(items, onAllDone) {
     const delay = idx * stagger;
     setTimeout(() => {
       animate(dur, (tt) => {
-        const t = easeOutBackP(tt, s);
+        const t = easing(tt);
         // Move from current position to origin with slight overshoot
         el.style.transform = `translate(${dx * t}px, ${dy * t}px)`;
       }, () => {
@@ -901,11 +929,11 @@ function handlePaletteClick(el, cfg) {
   const dx = targetLeft - phRect.left;
   const dy = targetTop - phRect.top;
   const dur = currentTheme.anim_duration_ms || 333;
-  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  const easing = getEasingOpen();
   el.style.willChange = 'transform';
   el.style.transform = 'translate(0, 0)';
   animate(dur, (tt) => {
-    const t = easeOutBackP(tt, s);
+    const t = easing(tt);
     el.style.transform = `translate(${dx * t}px, ${dy * t}px)`;
   }, () => {
     // Fixer la position finale puis nettoyer la transform
