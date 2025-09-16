@@ -191,7 +191,11 @@ function calculate_positions() {
     support.maskImage = 'none';
   }
 
-  support.pointerEvents = 'none';
+  // iOS native scroll needs the scrollable container to receive touch events
+  // and to have momentum scrolling enabled. Also hint the primary pan axis.
+  support.pointerEvents = 'auto';
+  support.WebkitOverflowScrolling = 'touch';
+  support.touchAction = isHorizontal ? 'pan-x' : 'pan-y';
 
 
   return { toolbox_support: support, toolbox: trigger };
@@ -220,7 +224,12 @@ const toolbox_support = {
     boxShadow: 'none',
     gap: currentTheme.items_spacing,
     scrollbarWidth: 'none',
-    msOverflowStyle: 'none'
+    msOverflowStyle: 'none',
+    WebkitOverflowScrolling: 'touch',
+    // default overflow; calculate_positions will override per direction
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    touchAction: 'manipulation'
   }
 };
 
@@ -625,7 +634,18 @@ function setupToolboxScrollProxy() {
 
   toolboxEl.addEventListener('wheel', onWheel, { passive: false });
   toolboxEl.addEventListener('touchstart', onTouchStart, { passive: true });
-  toolboxEl.addEventListener('touchmove', onTouchMove, { passive: false });
+  // On iOS, let the native scroll handle touchmove on the scrollable support container.
+  // To avoid fighting with native momentum, don't intercept touchmove when the support can scroll.
+  toolboxEl.addEventListener('touchmove', (e) => {
+    const canScrollX = supportEl.scrollWidth > supportEl.clientWidth;
+    const canScrollY = supportEl.scrollHeight > supportEl.clientHeight;
+    if (canScrollX || canScrollY) {
+      // Allow native scroll
+      return;
+    }
+    // Fallback to proxy when no native overflow
+    onTouchMove(e);
+  }, { passive: true });
   toolboxEl._scrollProxyAttached = true;
 }
 
