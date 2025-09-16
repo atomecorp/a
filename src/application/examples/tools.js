@@ -281,7 +281,7 @@ function reveal_children(parent) {
       restorePalette(handlePaletteClick.active);
     }
     // Initialize navigation stack with top-level methods
-    menuStack = [methods.slice()];
+    menuStack = [{ parent, children: methods.slice() }];
     methods.forEach(name => {
       const fct_exec = intuition_content[name]['type'];
       if (typeof fct_exec === 'function') {
@@ -653,17 +653,25 @@ function handlePaletteClick(el, cfg) {
   if (wasActive) {
     // BACK: go up one level in the stack and rebuild
     if (menuStack.length > 1) {
-      const prev = menuStack[menuStack.length - 2].slice();
+      const prevEntry = menuStack[menuStack.length - 2];
       // remove current level
+      const currState = handlePaletteClick.active;
+      const anchorRect = currState && currState.el ? currState.el.getBoundingClientRect() : null;
       menuStack.pop();
-      restorePalette(handlePaletteClick.active);
-      rebuildSupportToNames(prev);
-      el.style.background = 'green';
+      // Restore current popped-out palette back into the menu
+      if (currState) restorePalette(currState);
       handlePaletteClick.active = null;
+      // Rebuild the menu to the previous level's children
+      rebuildSupportToNames(prevEntry.children.slice());
+      // Pop out the previous parent outside (e.g., 'home')
+      popOutPaletteByName(prevEntry.parent, { anchorRect });
     } else {
       // At top level already; just restore palette and ensure top is shown
-      const top = (menuStack[0] || []).slice();
-      restorePalette(handlePaletteClick.active);
+      const top = (menuStack[0] && menuStack[0].children) ? menuStack[0].children.slice() : [];
+      // Remove any external popped item entirely at root
+      if (handlePaletteClick.active) {
+        restorePalette(handlePaletteClick.active);
+      }
       rebuildSupportToNames(top);
       handlePaletteClick.active = null;
     }
@@ -751,13 +759,107 @@ function handlePaletteClick(el, cfg) {
   const desc = intuition_content[paletteName];
   if (desc && Array.isArray(desc.children)) {
     // Push next level into the navigation stack
-    menuStack.push(desc.children.slice());
+    menuStack.push({ parent: paletteName, children: desc.children.slice() });
     rebuildSupportWithChildren(desc.children, el.id);
   }
 }
 
+// Helper to pop out a palette by name without altering the navigation stack
+function popOutPaletteByName(name, opts = {}) {
+  const supportEl = grab('toolbox_support');
+  if (!supportEl || !name) return null;
+  const id = `_intuition_${name}`;
+  let el = grab(id);
+  if (!el) {
+    const def = intuition_content[name];
+    if (!def || typeof def.type !== 'function') return null;
+    const optionalParams = { id, label: name, icon: name, parent: '#toolbox_support' };
+    def.type(optionalParams);
+    el = grab(id);
+    if (!el) return null;
+    applyBackdropStyle(el, currentTheme.tool_backDrop_effect);
+  }
+
+  const { anchorRect } = opts;
+  if (anchorRect) {
+    // Use provided anchor (previous popped element position/size). No placeholder in menu.
+    // If the element is currently in the support, detach it so it won't appear inside the menu.
+    if (el.parentElement === supportEl) {
+      try { el.remove(); } catch (e) { /* ignore */ }
+    }
+    el.style.width = `${anchorRect.width}px`;
+    el.style.height = `${anchorRect.height}px`;
+    el.style.position = 'fixed';
+    try { if (document.body && el.parentElement !== document.body) document.body.appendChild(el); } catch (e) { }
+    el.style.left = `${anchorRect.left}px`;
+    el.style.top = `${anchorRect.top}px`;
+    el.style.margin = '0';
+    el.style.zIndex = '10000004';
+    handlePaletteClick.active = { el, placeholder: null };
+    return el;
+  } else {
+    // Default behavior: create a placeholder at the element's position and extract it
+    const placeholder = document.createElement('div');
+    placeholder.id = `${id}__placeholder`;
+    placeholder.style.width = `${el.offsetWidth}px`;
+    placeholder.style.height = `${el.offsetHeight}px`;
+    placeholder.style.flex = '0 0 auto';
+    placeholder.style.display = 'inline-block';
+    placeholder.style.borderRadius = getComputedStyle(el).borderRadius;
+    supportEl.insertBefore(placeholder, el);
+
+    const phRect = placeholder.getBoundingClientRect();
+    const supportRect = supportEl.getBoundingClientRect();
+
+    el.style.width = `${phRect.width}px`;
+    el.style.height = `${phRect.height}px`;
+    el.style.position = 'fixed';
+    try { if (document.body && el.parentElement !== document.body) document.body.appendChild(el); } catch (e) { }
+    el.style.left = `${phRect.left}px`;
+    el.style.top = `${phRect.top}px`;
+    el.style.margin = '0';
+    el.style.zIndex = '10000004';
+
+    const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
+    const gap = Math.max(8, parseFloat(currentTheme.items_spacing) || 8);
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const elW = el.offsetWidth;
+    const elH = el.offsetHeight;
+
+    if (isHorizontal) {
+      const aboveSpace = supportRect.top;
+      const belowSpace = vh - supportRect.bottom;
+      let placeAbove = !!isTop;
+      if (placeAbove && aboveSpace < elH + gap) placeAbove = false;
+      if (!placeAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
+      const targetTop = placeAbove ? (supportRect.top - elH - gap) : (supportRect.bottom + gap);
+      const clampedTop = Math.max(0, Math.min(vh - elH, targetTop));
+      el.style.top = `${clampedTop}px`;
+      const baseLeft = phRect.left;
+      const clampedLeft = Math.max(0, Math.min(vw - elW, baseLeft));
+      el.style.left = `${clampedLeft}px`;
+    } else {
+      const leftSpace = supportRect.left;
+      const rightSpace = vw - supportRect.right;
+      let placeLeft = !!isLeft;
+      if (placeLeft && leftSpace < elW + gap) placeLeft = false;
+      if (!placeLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
+      const targetLeft = placeLeft ? (supportRect.left - elW - gap) : (supportRect.right + gap);
+      const clampedLeft = Math.max(0, Math.min(vw - elW, targetLeft));
+      el.style.left = `${clampedLeft}px`;
+      const baseTop = phRect.top;
+      const clampedTop = Math.max(0, Math.min(vh - elH, baseTop));
+      el.style.top = `${clampedTop}px`;
+    }
+
+    handlePaletteClick.active = { el, placeholder };
+    return el;
+  }
+}
+
 function restorePalette(state) {
-  if (!state || !state.el || !state.placeholder) return;
+  if (!state || !state.el) return;
   const { el, placeholder } = state;
   // Restaurer positionnement par défaut
   el.style.position = 'relative';
@@ -766,13 +868,13 @@ function restorePalette(state) {
   el.style.zIndex = '';
   el.style.width = '';
   el.style.height = '';
-  // Remettre l'élément dans le flux à la place du placeholder
-  if (placeholder.parentElement) {
+  // Si un placeholder existe, on replace l'élément à sa position
+  if (placeholder && placeholder.parentElement) {
     placeholder.parentElement.replaceChild(el, placeholder);
   } else {
-    // fallback: réattacher à la fin
-    const supportEl = grab('toolbox_support');
-    if (supportEl) supportEl.appendChild(el);
+    // Sinon, l'élément avait été extrait sans placeholder (mode ancré):
+    // on le supprime du DOM pour éviter qu'il apparaisse à la fois dehors et dans le menu.
+    try { el.remove(); } catch (e) { /* ignore */ }
   }
   handlePaletteClick.active = null;
 }
@@ -794,6 +896,8 @@ function rebuildSupportWithChildren(childrenNames, excludeId) {
     const def = intuition_content[name];
     if (!def || typeof def.type !== 'function') return;
     const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
+    // Do not create a duplicate of the currently popped-out item inside the menu
+    if (excludeId && optionalParams.id === excludeId) return;
     def.type(optionalParams);
     // If placeholder is present, place the item BEFORE it so it's aligned toward the toolbox
     const childEl = grab(`_intuition_${name}`);
