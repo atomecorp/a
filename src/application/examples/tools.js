@@ -795,17 +795,21 @@ function rebuildSupportWithChildren(childrenNames, excludeId) {
     if (!def || typeof def.type !== 'function') return;
     const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
     def.type(optionalParams);
-    // Si placeholder présent, on place l'item AVANT pour qu'il soit calé côté toolbox
+    // If placeholder is present, place the item BEFORE it so it's aligned toward the toolbox
+    const childEl = grab(`_intuition_${name}`);
     if (placeholder) {
-      const childEl = grab(`_intuition_${name}`);
       if (childEl && childEl.parentElement === supportEl) {
         supportEl.insertBefore(childEl, placeholder);
       }
     }
+    // Ensure the child uses the current backdrop effect (glass) like top-level items
+    if (childEl) applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
   });
 
   // Aligner le scroll contre la toolbox une fois le layout calculé
   // S'assurer que l'overflow forcer est en toute fin (côté opposé à la toolbox)
+  // Make sure an overflow forcer exists (some rebuild paths rely on it)
+  addOverflowForcer();
   ensureOverflowForcerAtEnd();
   requestAnimationFrame(() => alignSupportToToolboxEdge());
 }
