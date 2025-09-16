@@ -5,22 +5,42 @@ const vieLogo = $('img', {
   id: 'img_test',
   parent: "#view",
   attrs: {
-    src: './assets/images/ballanim.png',
+    src: './assets/images/1.png',
     alt: 'ballanim'
   },
   css: {
     marginLeft: '0',
     color: 'white',
-    left: '90px',
+    left: '0px',
     top: '0px',
     position: 'relative',
-    height: "120px",
-    width: "120px",
+    height: 'auto',
+    width: "100%",
     textAlign: 'center',
     display: 'block'
   }
 });
-vieLogo.addEventListener('click', () => puts('hello!'));
+const images = [
+  './assets/images/1.png',
+  './assets/images/2.png',
+  './assets/images/3.png',
+  './assets/images/ballanim.png',
+  './assets/images/green_planet.png',
+  './assets/images/puydesancy.jpg'
+];
+
+// Index courant
+let currentIndex = 0;
+
+vieLogo.addEventListener('click', () => {
+  puts('hello!');
+
+  // passer à l'image suivante
+  currentIndex = (currentIndex + 1) % images.length;
+
+  // mettre à jour la source
+  vieLogo.src = images[currentIndex];
+});
 
 
 
@@ -37,12 +57,13 @@ const Intuition_theme = {
   light: {
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
-  support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
-  // Translucent gradient for a glassy look
-  tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
+    support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
+    // Translucent gradient for a glassy look
+    tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
     tool_bg_active: "#656565ff",
     tool_backDrop_effect: '8px',
     tool_text: "#8c8b8bff",
+    tool_font: "1.2vw",
     text_char_max: 5,
     tool_active_bg: "#e0e0e0",
     toolboxOffsetMain: "3px",
@@ -189,11 +210,11 @@ const toolbox_support = {
     boxSizing: 'border-box',
     justifyContent: 'flex-start',
     position: 'fixed',
-  // No width/height/posCss here, apply_layout will set them
-  background: 'transparent',
-  // Important: support container must NOT blur
-  backdropFilter: 'none',
-  WebkitBackdropFilter: 'none',
+    // No width/height/posCss here, apply_layout will set them
+    background: 'transparent',
+    // Important: support container must NOT blur
+    backdropFilter: 'none',
+    WebkitBackdropFilter: 'none',
     // Remove any shadow on the support container
     boxShadow: 'none',
     gap: currentTheme.items_spacing,
@@ -210,11 +231,17 @@ const intuition_content = {
   home: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
   find: { type: tool, children: ['filter'] },
   time: { type: particle, children: ['filter'] },
-  view: { type: option, children: ['filter'] },
+  view: { type: option },
   tools: { type: zonespecial, children: ['filter'] },
-  communication: { type: palette, children: ['filter'] },
+  communication: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
   capture: { type: palette, children: ['filter'] },
   edit: { type: palette, children: ['filter'] },
+  filter: { type: tool },
+  quit: { type: tool },
+  user: { type: tool },
+  settings: { type: tool },
+  clear: { type: tool },
+  cleanup: { type: tool },
 };
 
 const toolbox = {
@@ -309,14 +336,7 @@ function intuitionCommon(cfg) {
   return el;
 }
 
-const items_common = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontFamily: 'sans-serif',
-  userSelect: 'none',
 
-};
 
 
 function create_label(cfg) {
@@ -334,10 +354,10 @@ function create_label(cfg) {
       attrs: { title: rawText },
       css: {
         position: 'absolute',
-        top: '2px',             // à l'intérieur de l'item pour éviter overflow hidden du parent
+        top: '9%',             // à l'intérieur de l'item pour éviter overflow hidden du parent
         left: '50%',
         transform: 'translateX(-50%)',
-        fontSize: '11px',
+        fontSize: currentTheme.tool_font,
         lineHeight: '12px',
         color: currentTheme.tool_text,
         padding: '0 4px',
@@ -351,9 +371,31 @@ function create_label(cfg) {
 }
 
 
+const items_common = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontFamily: 'sans-serif',
+  userSelect: 'none',
+
+};
+
 function palette(cfg) {
-  intuitionCommon({ ...cfg, ...items_common });
+  const paletteAddOn = { background: '#a52727ff' };
+  const finalCfg = {
+    ...cfg,
+    css: {
+      ...items_common,
+      ...(cfg.css || {}),
+      ...paletteAddOn
+    }
+  };
+  var el = intuitionCommon(finalCfg);
   create_label(cfg)
+  el.addEventListener('click', () => {
+    puts('cooll');
+  });
+
 }
 function tool(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
@@ -440,7 +482,7 @@ function addOverflowForcer() {
   if (!supportEl) return;
   if (document.getElementById('_intuition_overflow_forcer')) return;
 
-  // Create a green block matching the item size to extend the scrollable area
+  // Create a transparent block matching the item size to extend the scrollable area
   $('div', {
     id: '_intuition_overflow_forcer',
     parent: '#toolbox_support',
@@ -523,8 +565,6 @@ function mountDirectionSelector() {
   });
 }
 mountDirectionSelector();
-
-
 
 
 // Forward wheel/touch interactions on the toolbox to scroll the toolbox_support overflow
