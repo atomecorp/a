@@ -864,6 +864,9 @@ function handlePaletteClick(el, cfg) {
   const elW = el.offsetWidth;
   const elH = el.offsetHeight;
 
+  // Calcul de la cible externe (sans saut visuel, on animera via transform)
+  let targetLeft = phRect.left;
+  let targetTop = phRect.top;
   if (isHorizontal) {
     // axe principal = X; on sort sur Y (au-dessus si possible quand top_*, sinon en dessous)
     const aboveSpace = supportRect.top;
@@ -871,14 +874,13 @@ function handlePaletteClick(el, cfg) {
     let placeAbove = !!isTop;
     if (placeAbove && aboveSpace < elH + gap) placeAbove = false;
     if (!placeAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
-    const targetTop = placeAbove ? (supportRect.top - elH - gap) : (supportRect.bottom + gap);
-    // clamp dans l’écran
-    const clampedTop = Math.max(0, Math.min(vh - elH, targetTop));
-    el.style.top = `${clampedTop}px`;
+    const wantedTop = placeAbove ? (supportRect.top - elH - gap) : (supportRect.bottom + gap);
+    const clampedTop = Math.max(0, Math.min(vh - elH, wantedTop));
+    targetTop = clampedTop;
     // garder l’axe X ancré à la placeholder, mais clamp dans l’écran
     const baseLeft = phRect.left;
     const clampedLeft = Math.max(0, Math.min(vw - elW, baseLeft));
-    el.style.left = `${clampedLeft}px`;
+    targetLeft = clampedLeft;
   } else {
     // axe principal = Y; on sort sur X (à gauche si possible quand *_left, sinon à droite)
     const leftSpace = supportRect.left;
@@ -886,14 +888,32 @@ function handlePaletteClick(el, cfg) {
     let placeLeft = !!isLeft;
     if (placeLeft && leftSpace < elW + gap) placeLeft = false;
     if (!placeLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
-    const targetLeft = placeLeft ? (supportRect.left - elW - gap) : (supportRect.right + gap);
-    const clampedLeft = Math.max(0, Math.min(vw - elW, targetLeft));
-    el.style.left = `${clampedLeft}px`;
+    const wantedLeft = placeLeft ? (supportRect.left - elW - gap) : (supportRect.right + gap);
+    const clampedLeft = Math.max(0, Math.min(vw - elW, wantedLeft));
+    targetLeft = clampedLeft;
     // garder l’axe Y ancré à la placeholder, mais clamp dans l’écran
     const baseTop = phRect.top;
     const clampedTop = Math.max(0, Math.min(vh - elH, baseTop));
-    el.style.top = `${clampedTop}px`;
+    targetTop = clampedTop;
   }
+
+  // Animer le glissement de la position placeholder vers la position externe
+  const dx = targetLeft - phRect.left;
+  const dy = targetTop - phRect.top;
+  const dur = currentTheme.anim_duration_ms || 333;
+  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  el.style.willChange = 'transform';
+  el.style.transform = 'translate(0, 0)';
+  animate(dur, (tt) => {
+    const t = easeOutBackP(tt, s);
+    el.style.transform = `translate(${dx * t}px, ${dy * t}px)`;
+  }, () => {
+    // Fixer la position finale puis nettoyer la transform
+    el.style.left = `${targetLeft}px`;
+    el.style.top = `${targetTop}px`;
+    el.style.transform = '';
+    el.style.willChange = '';
+  });
 
   // Marquer l'état actif et garder les références pour restauration
   handlePaletteClick.active = { el, placeholder };
