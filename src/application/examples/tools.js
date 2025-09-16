@@ -395,6 +395,8 @@ function palette(cfg) {
   var el = intuitionCommon(finalCfg);
   create_label(cfg)
   el.addEventListener('click', (e) => {
+    // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
+    // el.style.width = parseFloat(currentTheme.item_size) * 3 + 'px';
     e.stopPropagation();
     handlePaletteClick(el, finalCfg);
   });
@@ -639,9 +641,13 @@ function getDirMeta() {
 }
 
 function handlePaletteClick(el, cfg) {
+
   // Exclusif: ramener l'ancien palette si présent
   const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
-
+  el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
+  el.style.width = '300px';
+  // el.style.left = '0px';
+  // el.style.right = '0px';
   if (wasActive) {
     // BACK: go up one level in the stack and rebuild
     if (menuStack.length > 1) {
