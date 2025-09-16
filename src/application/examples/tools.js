@@ -239,10 +239,12 @@ const intuition_content = {
   edit: { type: palette, children: ['filter'] },
   filter: { type: palette, children: ['internet', 'local'] },
   quit: { type: tool },
-  user: { type: tool },
+  user: { type: palette, children: ['add', 'remove'] },
   settings: { type: tool },
   clear: { type: tool },
   cleanup: { type: tool },
+  add: { type: tool },
+  remove: { type: tool },
 };
 
 const toolbox = {
