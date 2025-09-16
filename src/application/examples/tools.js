@@ -646,10 +646,9 @@ function handlePaletteClick(el, cfg) {
 
   // Exclusif: ramener l'ancien palette si présent
   const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
-  el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
-  el.style.width = '300px';
-  // el.style.left = '0px';
-  // el.style.right = '0px';
+  // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
+  // el.style.width = '300px';
+
   if (wasActive) {
     // BACK: go up one level in the stack and rebuild
     if (menuStack.length > 1) {
