@@ -65,6 +65,7 @@ const Intuition_theme = {
     tool_backDrop_effect: '8px',
     tool_text: "#ffffffff",
     tool_font: "0.7vw",
+    tool_font_px: 10,
     text_char_max: 6,
     tool_active_bg: "#e0e0e0",
     toolboxOffsetMain: "3px",
@@ -374,19 +375,21 @@ function create_label(cfg) {
     let displayText = rawText;
     if (!isNaN(maxChars) && maxChars > 0 && rawText.length > maxChars) {
       // Réserver 1 caractère pour l'ellipse si possible
-      displayText = maxChars > 1 ? rawText.slice(0, maxChars - 1) + '…' : rawText.slice(0, maxChars);
+      displayText = maxChars > 1 ? rawText.slice(0, maxChars - 1) + '.' : rawText.slice(0, maxChars);
     }
-    $('div', {
+    const labelEl = $('div', {
       parent: `#${cfg.id}`,
       text: displayText,
       attrs: { title: rawText },
+      class: 'intuition-label',
       css: {
         position: 'absolute',
         top: '9%',             // à l'intérieur de l'item pour éviter overflow hidden du parent
         left: '50%',
         transform: 'translateX(-50%)',
-        fontSize: currentTheme.tool_font,
-        lineHeight: '12px',
+        // taille fixe pour être identique dans toutes les divs
+        fontSize: (currentTheme.tool_font_px || 13) + 'px',
+        lineHeight: '1',
         color: currentTheme.tool_text,
         padding: '0 4px',
         backgroundColor: 'transparent',
@@ -395,6 +398,7 @@ function create_label(cfg) {
         userSelect: 'none'
       }
     });
+    // Taille fixée via Intuition_theme.tool_font_px
   }
 }
 
@@ -499,6 +503,7 @@ function apply_layout() {
   // Reposition any popped-out palette on layout changes
   repositionPoppedPalette();
 }
+
 
 // Inject CSS to hide scrollbars for the support container (WebKit/iOS)
 function ensureHiddenScrollbarsStyle() {
