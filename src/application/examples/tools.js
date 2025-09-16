@@ -443,6 +443,8 @@ function init_inituition() {
   const toolboxEl = grab('toolbox');
   if (supportEl) applyBackdropStyle(supportEl, null);
   if (toolboxEl) applyBackdropStyle(toolboxEl, currentTheme.tool_backDrop_effect);
+  // Hide scrollbars on iOS/WebKit (visual only, scrolling still works)
+  ensureHiddenScrollbarsStyle();
 }
 
 function apply_layout() {
@@ -481,6 +483,17 @@ function apply_layout() {
   alignSupportToToolboxEdge();
   // Reposition any popped-out palette on layout changes
   repositionPoppedPalette();
+}
+
+// Inject CSS to hide scrollbars for the support container (WebKit/iOS)
+function ensureHiddenScrollbarsStyle() {
+  if (document.getElementById('intuition-hidden-scrollbar-style')) return;
+  const css = `
+  /* Hide scrollbars at all times for the support container */
+  #toolbox_support { -ms-overflow-style: none; scrollbar-width: none; }
+  #toolbox_support::-webkit-scrollbar { display: none; width: 0 !important; height: 0 !important; background: transparent; }
+  `;
+  $('style', { id: 'intuition-hidden-scrollbar-style', parent: 'head', text: css });
 }
 
 // Helper to set backdrop-filter with WebKit prefix
