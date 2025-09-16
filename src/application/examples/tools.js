@@ -1026,66 +1026,86 @@ function restorePalette(state) {
 function rebuildSupportWithChildren(childrenNames, excludeId) {
   const supportEl = grab('toolbox_support');
   if (!supportEl) return;
-  // Retirer tous les items sauf le placeholder et l'overflow forcer et l'élément exclu
+  // 1) Animer les items existants vers l'origine (sauf placeholder et overflow-forcer et élément exclu)
+  const toRemove = [];
   Array.from(supportEl.children).forEach(ch => {
     if (ch.id === '_intuition_overflow_forcer') return;
     if (excludeId && ch.id === `${excludeId}__placeholder`) return;
-    // on ne supprime pas le placeholder; les autres items sortent
-    if (!excludeId || ch.id !== excludeId) ch.remove();
+    if (excludeId && ch.id === `${excludeId}`) return;
+    toRemove.push(ch);
   });
 
-  // Ajouter les enfants
-  const placeholder = excludeId ? document.getElementById(`${excludeId}__placeholder`) : null;
-  childrenNames.forEach(name => {
-    const def = intuition_content[name];
-    if (!def || typeof def.type !== 'function') return;
-    const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
-    // Do not create a duplicate of the currently popped-out item inside the menu
-    if (excludeId && optionalParams.id === excludeId) return;
-    def.type(optionalParams);
-    // If placeholder is present, place the item BEFORE it so it's aligned toward the toolbox
-    const childEl = grab(`_intuition_${name}`);
-    if (placeholder) {
-      if (childEl && childEl.parentElement === supportEl) {
+  const buildNewChildren = () => {
+    // 2) Ajouter les nouveaux enfants puis les animer depuis l'origine
+    const placeholder = excludeId ? document.getElementById(`${excludeId}__placeholder`) : null;
+    const createdEls = [];
+    childrenNames.forEach(name => {
+      const def = intuition_content[name];
+      if (!def || typeof def.type !== 'function') return;
+      const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
+      if (excludeId && optionalParams.id === excludeId) return; // éviter doublon avec l'élément pop-out
+      def.type(optionalParams);
+      const childEl = grab(`_intuition_${name}`);
+      if (placeholder && childEl && childEl.parentElement === supportEl) {
         supportEl.insertBefore(childEl, placeholder);
       }
-    }
-    // Ensure the child uses the current backdrop effect (glass) like top-level items
-    if (childEl) applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
-  });
+      if (childEl) {
+        applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
+        createdEls.push(childEl);
+      }
+    });
+    addOverflowForcer();
+    ensureOverflowForcerAtEnd();
+    requestAnimationFrame(() => {
+      alignSupportToToolboxEdge();
+      slideInItems(createdEls);
+    });
+  };
 
-  // Aligner le scroll contre la toolbox une fois le layout calculé
-  // S'assurer que l'overflow forcer est en toute fin (côté opposé à la toolbox)
-  // Make sure an overflow forcer exists (some rebuild paths rely on it)
-  addOverflowForcer();
-  ensureOverflowForcerAtEnd();
-  requestAnimationFrame(() => alignSupportToToolboxEdge());
+  if (toRemove.length) {
+    slideOutItemsToOrigin(toRemove, buildNewChildren);
+  } else {
+    buildNewChildren();
+  }
 }
 
 // Rebuild the support with an explicit list of item names (no placeholder logic)
 function rebuildSupportToNames(names) {
   const supportEl = grab('toolbox_support');
   if (!supportEl) return;
-  // Remove all items except the overflow forcer
+  // 1) Animer l'état actuel vers l'origine, puis reconstruire et animer l'état précédent
+  const toRemove = [];
   Array.from(supportEl.children).forEach(ch => {
     if (ch.id === '_intuition_overflow_forcer') return;
-    ch.remove();
+    toRemove.push(ch);
   });
-  // Create new items for the provided names
-  names.forEach(name => {
-    const def = intuition_content[name];
-    if (!def || typeof def.type !== 'function') return;
-    const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
-    def.type(optionalParams);
-    const childEl = grab(`_intuition_${name}`);
-    if (childEl) applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
-  });
-  // Ensure overflow forcer exists
-  addOverflowForcer();
-  // And ensure it's at the end, away from the toolbox side
-  ensureOverflowForcerAtEnd();
-  // Align after layout
-  requestAnimationFrame(() => alignSupportToToolboxEdge());
+
+  const buildNew = () => {
+    const createdEls = [];
+    names.forEach(name => {
+      const def = intuition_content[name];
+      if (!def || typeof def.type !== 'function') return;
+      const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
+      def.type(optionalParams);
+      const childEl = grab(`_intuition_${name}`);
+      if (childEl) {
+        applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
+        createdEls.push(childEl);
+      }
+    });
+    addOverflowForcer();
+    ensureOverflowForcerAtEnd();
+    requestAnimationFrame(() => {
+      alignSupportToToolboxEdge();
+      slideInItems(createdEls);
+    });
+  };
+
+  if (toRemove.length) {
+    slideOutItemsToOrigin(toRemove, buildNew);
+  } else {
+    buildNew();
+  }
 }
 
 function ensureOverflowForcerAtEnd() {
