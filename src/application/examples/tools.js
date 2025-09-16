@@ -50,7 +50,7 @@ const shadowLeft = 0,
   shadowBlur = 12;
 const items_spacing = 6;
 const item_border_radius = 6;
-const item_size = 93;
+const item_size = 54;
 let menuOpen = 'false';
 let menuStack = [];
 
