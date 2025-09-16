@@ -77,6 +77,10 @@ const Intuition_theme = {
     icon_size: "16%",
     item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
     item_border_radius: item_border_radius + 'px',
+    // Animation settings for menu open
+    anim_duration_ms: 333,
+    anim_stagger_ms: 28,
+    anim_bounce_overshoot: 0.08
   }
 };
 
@@ -291,6 +295,7 @@ function reveal_children(parent) {
     }
     // Initialize navigation stack with top-level methods
     menuStack = [{ parent, children: methods.slice() }];
+    const created = [];
     methods.forEach(name => {
       const fct_exec = intuition_content[name]['type'];
       if (typeof fct_exec === 'function') {
@@ -298,13 +303,21 @@ function reveal_children(parent) {
         fct_exec(optionalParams);
         // Apply blur to the newly created item
         const itemEl = grab(`_intuition_${name}`);
-        if (itemEl) applyBackdropStyle(itemEl, currentTheme.tool_backDrop_effect);
+        if (itemEl) {
+          applyBackdropStyle(itemEl, currentTheme.tool_backDrop_effect);
+          created.push(itemEl);
+        }
       } else {
         console.warn(`Function ${fct_exec} not found`);
       }
     });
     // Add a green overflow-forcing item when opening the menu
     addOverflowForcer();
+    ensureOverflowForcerAtEnd();
+    requestAnimationFrame(() => {
+      alignSupportToToolboxEdge();
+      slideInItems(created);
+    });
     menuOpen = parent;
   } else {
     // Full close: close any submenu and restore state
@@ -506,6 +519,70 @@ function applyBackdropStyle(el, blurPx) {
     el.style.setProperty('backdrop-filter', val);
     el.style.setProperty('-webkit-backdrop-filter', val);
   } catch (e) { /* ignore */ }
+}
+
+// ===== Animation helpers (menu open) =====
+function easeOutBack(t) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+// Parametric back easing to tune overshoot based on theme
+function easeOutBackP(t, s) {
+  const c3 = s + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2);
+}
+
+function animate(duration, onUpdate, onDone) {
+  const start = (performance && performance.now ? performance.now() : Date.now());
+  const tick = () => {
+    const now = (performance && performance.now ? performance.now() : Date.now());
+    const t = Math.min(1, (now - start) / duration);
+    onUpdate(t);
+    if (t < 1) requestAnimationFrame(tick); else if (onDone) onDone();
+  };
+  requestAnimationFrame(tick);
+}
+
+function getSupportOrigin() {
+  const supportEl = grab('toolbox_support');
+  if (!supportEl) return null;
+  const r = supportEl.getBoundingClientRect();
+  const { isTop, isBottom, isLeft, isRight } = getDirMeta();
+  const ox = isRight ? r.right : r.left;
+  const oy = isBottom ? r.bottom : r.top;
+  return { ox, oy };
+}
+
+function slideInItems(items) {
+  const els = (items || []).filter(Boolean);
+  if (!els.length) return;
+  const origin = getSupportOrigin();
+  if (!origin) return;
+  const dur = currentTheme.anim_duration_ms || 420;
+  const stagger = currentTheme.anim_stagger_ms || 24;
+  const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+  els.forEach((el, idx) => {
+    const rect = el.getBoundingClientRect();
+    const dx = origin.ox - rect.left;
+    const dy = origin.oy - rect.top;
+    // Start visually at support origin corner
+    el.style.willChange = 'transform';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    const delay = idx * stagger;
+    setTimeout(() => {
+      animate(dur, (tt) => {
+        const t = easeOutBackP(tt, s);
+        // Back easing overshoots near end; convert to translate from origin to final
+        const f = 1 - t; // goes slightly negative near end for overshoot
+        el.style.transform = `translate(${dx * f}px, ${dy * f}px)`;
+      }, () => {
+        el.style.transform = 'translate(0, 0)';
+        el.style.willChange = '';
+      });
+    }, delay);
+  });
 }
 
 
