@@ -385,7 +385,7 @@ const items_common = {
 };
 
 function palette(cfg) {
-  const paletteAddOn = { background: '#a52727ff' };
+  const paletteAddOn = { background: 'rgba(255, 0, 0, 0.5)' };
   const finalCfg = {
     ...cfg,
     css: {
