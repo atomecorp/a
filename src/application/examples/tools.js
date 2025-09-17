@@ -246,7 +246,7 @@ const intuition_content = {
   meta: { namespace: "atome.menu", defaultLocale: "en" },
   toolbox: { children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit'] },
   home: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
-  find: { type: tool, children: ['filter'] },
+  find: { type: tool, children: ['width, height',] },
   time: { type: particle, children: ['filter'] },
   view: { type: option },
   tools: { type: zonespecial, children: ['filter'] },
@@ -526,6 +526,24 @@ function applyBackdropStyle(el, blurPx) {
     el.style.setProperty('backdrop-filter', val);
     el.style.setProperty('-webkit-backdrop-filter', val);
   } catch (e) { /* ignore */ }
+}
+
+// Center label utilities for pop-out state
+function setLabelCentered(el, centered) {
+  if (!el || !el.querySelector) return;
+  const lbl = el.querySelector('.intuition-label');
+  if (!lbl) return;
+  if (centered) {
+    lbl.style.top = '50%';
+    lbl.style.left = '50%';
+    lbl.style.transform = 'translate(-50%, -50%)';
+    lbl.style.textAlign = 'center';
+  } else {
+    lbl.style.top = '9%';
+    lbl.style.left = '50%';
+    lbl.style.transform = 'translateX(-50%)';
+    lbl.style.textAlign = '';
+  }
 }
 
 // ===== Animation helpers (menu open) =====
@@ -824,7 +842,8 @@ function handlePaletteClick(el, cfg) {
 
   // Exclusif: ramener l'ancien palette si présent
   const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
-  // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
+  el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
+
   // el.style.width = '300px';
 
   if (wasActive) {
@@ -888,6 +907,8 @@ function handlePaletteClick(el, cfg) {
   el.style.top = `${phRect.top}px`;
   el.style.margin = '0';
   el.style.zIndex = '10000004';
+  // Center label while outside
+  setLabelCentered(el, true);
 
   // Maintenant déplacer l'élément le long de l'axe transversal pour être totalement hors du support
   const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
@@ -992,6 +1013,8 @@ function popOutPaletteByName(name, opts = {}) {
     el.style.top = `${anchorRect.top}px`;
     el.style.margin = '0';
     el.style.zIndex = '10000004';
+    // Center label while outside (anchored mode)
+    setLabelCentered(el, true);
     handlePaletteClick.active = { el, placeholder: null };
     return el;
   } else {
@@ -1016,6 +1039,8 @@ function popOutPaletteByName(name, opts = {}) {
     el.style.top = `${phRect.top}px`;
     el.style.margin = '0';
     el.style.zIndex = '10000004';
+    // Center label while outside (extracted mode)
+    setLabelCentered(el, true);
 
     const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
     const gap = Math.max(8, parseFloat(currentTheme.items_spacing) || 8);
@@ -1065,6 +1090,8 @@ function restorePalette(state) {
   el.style.zIndex = '';
   el.style.width = '';
   el.style.height = '';
+  // Restore label position inside menu
+  setLabelCentered(el, false);
   // Si un placeholder existe, on replace l'élément à sa position
   if (placeholder && placeholder.parentElement) {
     placeholder.parentElement.replaceChild(el, placeholder);
