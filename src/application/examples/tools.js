@@ -19,6 +19,12 @@ const DIRECTIONS = [
 let menuOpen = 'false';
 let menuStack = [];
 
+const palette = createPalette;
+const tool = createTool;
+const particle = createParticle;
+const option = createOption;
+const zonespecial = createZonespecial;
+
 const Intuition_theme = {
   light: {
     items_spacing: items_spacing + 'px',
@@ -28,20 +34,23 @@ const Intuition_theme = {
     tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
     tool_bg_active: "#656565ff",
     tool_backDrop_effect: '8px',
-    tool_text: "#ffffffff",
+    tool_text: "#cacacaff",
     tool_font: "0.9vw",
     tool_font_px: 10,
     text_char_max: 9,
     tool_active_bg: "#e0e0e0",
-    toolboxOffsetMain: "3px",
-    toolboxOffsetEdge: "3px",
+    toolbox_icon: 'menu',            // false pour masquer, ou 'settings', 'play', etc.
+    toolbox_icon_color: '#cacacaff',
+    toolbox_icon_size: '30%',      // px, %, ou ratio (0..1)
+    toolbox_icon_top: '50%',       // position verticale
+    toolbox_icon_left: '50%',
+    toolboxOffsetMain: "7px",
+    toolboxOffsetEdge: "7px",
     items_offset_main: item_border_radius + items_spacing + 'px',
-    icon_top: "45%",
-    icon_left: "33%",
-    icon_centered_top: "33%",
-    icon_centered_left: "33%",
-    icon_color: "#ffffffff",
-    icon_size: "33%",
+    icon_color: "#cacacaff",
+    icon_size: "39%",
+    icon_top: '60%',       // position verticale
+    icon_left: '50%',
     // Toggle label/icon visibility when a palette is popped out
     palette_icon: false,
     palette_label: true,
@@ -366,6 +375,7 @@ function intuitionCommon(cfg) {
 
 
 function createIcon(cfg) {
+  // puts(cfg.icon_top);
   const parentId = cfg.id;
   const svgId = `${parentId}__icon`;
   // Nettoyer une éventuelle icône précédente
@@ -373,6 +383,9 @@ function createIcon(cfg) {
   if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
   let icon = cfg.icon;
   let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
+  let icon_Left = (cfg.icon_left || currentTheme.icon_left || '10%').trim();
+  let icon_Top = (cfg.icon_top || currentTheme.icon_top || '50%').trim();
+
   dataFetcher(`assets/images/icons/${icon}.svg`)
     .then(svgData => {
       // Injecte le SVG dans le parent
@@ -386,8 +399,8 @@ function createIcon(cfg) {
         svgEl.removeAttribute('width');
         svgEl.removeAttribute('height');
         svgEl.style.position = 'absolute';
-        svgEl.style.left = '50%';
-        svgEl.style.top = '60%';
+        svgEl.style.left = icon_Left;
+        svgEl.style.top = icon_Top;
         svgEl.style.transform = 'translate(-50%, -50%)';
         svgEl.style.display = 'block';
         svgEl.style.pointerEvents = 'none';
@@ -398,7 +411,9 @@ function createIcon(cfg) {
           (parseFloat(currentTheme.item_size) || 54)
         );
 
-        const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
+        // const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
+        const szDefRaw = (cfg.icon_size || currentTheme.icon_size || '16%').trim();
+
         let iconSize = NaN;
         if (szDefRaw.endsWith('%')) {
           const pct = parseFloat(szDefRaw);
@@ -474,7 +489,7 @@ const items_common = {
 
 };
 
-function palette(cfg) {
+function createPalette(cfg) {
   const paletteAddOn = { background: 'rgba(255, 0, 0, 0.5)' };
   const finalCfg = {
     ...cfg,
@@ -495,21 +510,22 @@ function palette(cfg) {
   });
 
 }
-function tool(cfg) {
+function createTool(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
   createLabel(cfg)
   createIcon(cfg)
 }
-function particle(cfg) {
+function createParticle(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
   createLabel(cfg)
   createIcon(cfg)
 }
-function option(cfg) {
+function createOption(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
   createLabel(cfg)
+  createIcon(cfg)
 }
-function zonespecial(cfg) {
+function createZonespecial(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
   createLabel(cfg)
   createIcon(cfg)
@@ -519,16 +535,35 @@ const intuitionAddOn = {
   communication: { label: 'communication', icon: 'communication' }
 };
 
-function init_inituition() {
+function createToolbox() {
   intuitionCommon(toolbox_support);
-  intuitionCommon(toolbox);
+  const toolboxEl = intuitionCommon(toolbox);
   // Ensure scrolling on the toolbox controls the support overflow
   setupToolboxScrollProxy();
   // Apply initial backdrop styles
   const supportEl = grab('toolbox_support');
-  const toolboxEl = grab('toolbox');
   if (supportEl) applyBackdropStyle(supportEl, null);
   if (toolboxEl) applyBackdropStyle(toolboxEl, currentTheme.tool_backDrop_effect);
+
+  // >>> Ajouter l’icône du toolbox (optionnelle via le thème)
+  {
+    const iconName = (currentTheme.toolbox_icon === false) ? null : (currentTheme.toolbox_icon || toolbox.icon);
+
+    if (iconName) {
+      const iconSize = currentTheme.toolbox_icon_size || '30%';
+      const iconTop = currentTheme.toolbox_icon_top || '50%';
+      const iconLeft = currentTheme.toolbox_icon_left || '50%';
+      createIcon({
+        id: 'toolbox',
+        icon: iconName,
+        icon_color: currentTheme.toolbox_icon_color || currentTheme.icon_color,
+        icon_size: iconSize,
+        icon_top: iconTop,
+        icon_left: iconLeft
+      });
+    }
+  }
+
   // Hide scrollbars on iOS/WebKit (visual only, scrolling still works)
   ensureHiddenScrollbarsStyle();
 }
@@ -823,7 +858,7 @@ window.refreshMenu = function (partialTheme = {}) {
     setPaletteVisualState(handlePaletteClick.active.el, true);
   }
 };
-init_inituition();
+createToolbox();
 apply_layout();
 
 
