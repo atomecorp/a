@@ -27,6 +27,8 @@ const zonespecial = createZonespecial;
 
 const Intuition_theme = {
   light: {
+    slider_length: '70%',
+    button_size: '33%',
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
     support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
@@ -118,9 +120,9 @@ const intuition_content = {
   ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
   controller: { type: zonespecial },
   A: { type: particle, helper: 'slider', unit: '%', value: 50, ext: 3 },
-  D: { type: particle, helper: 'slider', unit: '%', value: 30, ext: 3 },
+  D: { type: particle, helper: 'button', unit: '%', value: 30, ext: 3 },
   S: { type: particle, helper: 'slider', unit: '%', value: 0, ext: 3 },
-  R: { type: particle, helper: 'slider', unit: '%', value: 20, ext: 3 },
+  R: { type: particle, unit: '%', value: 20, ext: 3 },
 
 };
 
