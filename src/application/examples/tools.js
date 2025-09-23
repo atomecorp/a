@@ -29,9 +29,9 @@ const Intuition_theme = {
     tool_bg_active: "#656565ff",
     tool_backDrop_effect: '8px',
     tool_text: "#ffffffff",
-    tool_font: "0.7vw",
+    tool_font: "0.9vw",
     tool_font_px: 10,
-    text_char_max: 6,
+    text_char_max: 9,
     tool_active_bg: "#e0e0e0",
     toolboxOffsetMain: "3px",
     toolboxOffsetEdge: "3px",
@@ -41,7 +41,7 @@ const Intuition_theme = {
     icon_centered_top: "33%",
     icon_centered_left: "33%",
     icon_color: "#ffffffff",
-    icon_size: "39%",
+    icon_size: "33%",
     item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
     item_border_radius: item_border_radius + 'px',
     // Animation settings for menu open
@@ -94,7 +94,7 @@ const intuition_content = {
   load: { type: tool, children: ['modules', 'projects'] },
   save: { type: tool },
   volume: { type: particle, icon: 'volume' },
-  ADSR: { label: 'envelope', type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
+  ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
   A: { type: particle },
   D: { type: particle },
   S: { type: particle },
@@ -293,16 +293,17 @@ function openMenu(parent) {
     menuStack = [{ parent, children: methods.slice() }];
     const created = [];
     methods.forEach(name => {
-
-      const label = intuition_content[name]['label'] || name;
-      const icon = intuition_content[name]['icon'] || name;
-      const fct_exec = intuition_content[name]['type'];
+      const def = intuition_content[name] || {};
+      const label = def.label || name;
+      const icon = def.icon || name;
+      const fct_exec = def.type;
       if (typeof fct_exec === 'function') {
-        const optionalParams = { ...{ id: `_intuition_${name}`, label: label, icon: icon, parent: '#toolbox_support' }, ...(intuitionAddOn[name] || {}) };
+        const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support', ...(intuitionAddOn[name] || {}) };
         fct_exec(optionalParams);
         // Apply blur to the newly created item
         const itemEl = grab(`_intuition_${name}`);
         if (itemEl) {
+          try { itemEl.dataset.nameKey = name; } catch (e) { /* ignore */ }
           applyBackdropStyle(itemEl, currentTheme.tool_backDrop_effect);
           created.push(itemEl);
         }
@@ -355,6 +356,11 @@ function intuitionCommon(cfg) {
     });
   }
 
+  // Propagate logical key for reliable lookups regardless of display label
+  if (cfg && cfg.nameKey && el && el.dataset) {
+    try { el.dataset.nameKey = cfg.nameKey; } catch (e) { /* ignore */ }
+  }
+
 
   // Apply or disable blur according to element type
   if (cfg.id === 'toolbox_support') {
@@ -374,7 +380,6 @@ function createIcon(cfg) {
   // Nettoyer une éventuelle icône précédente
   const prev = document.getElementById(svgId);
   if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
-  puts(cfg);
   let icon = cfg.icon;
   let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
   dataFetcher(`assets/images/icons/${icon}.svg`)
@@ -1021,11 +1026,11 @@ function handlePaletteClick(el, cfg) {
   handlePaletteClick.active = { el, placeholder };
 
   // Mettre à jour les items restants avec le contenu du palette
-  const paletteName = (cfg && cfg.label) || (cfg && cfg.id) || '';
-  const desc = intuition_content[paletteName];
+  const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+  const desc = intuition_content[key];
   if (desc && Array.isArray(desc.children)) {
     // Push next level into the navigation stack
-    menuStack.push({ parent: paletteName, children: desc.children.slice() });
+    menuStack.push({ parent: key, children: desc.children.slice() });
     rebuildSupportWithChildren(desc.children, el.id);
   }
 }
@@ -1039,11 +1044,17 @@ function popOutPaletteByName(name, opts = {}) {
   if (!el) {
     const def = intuition_content[name];
     if (!def || typeof def.type !== 'function') return null;
-    const optionalParams = { id, label: name, icon: name, parent: '#toolbox_support' };
+    const label = def.label || name;
+    const icon = def.icon || name;
+    const optionalParams = { id, label, icon, nameKey: name, parent: '#toolbox_support' };
     def.type(optionalParams);
     el = grab(id);
     if (!el) return null;
+    try { el.dataset.nameKey = name; } catch (e) { /* ignore */ }
     applyBackdropStyle(el, currentTheme.tool_backDrop_effect);
+  } else {
+    // Ensure dataset carries the logical key
+    try { if (el && el.dataset && !el.dataset.nameKey) el.dataset.nameKey = name; } catch (e) { /* ignore */ }
   }
 
   const { anchorRect } = opts;
@@ -1172,7 +1183,9 @@ function rebuildSupportWithChildren(childrenNames, excludeId) {
     childrenNames.forEach(name => {
       const def = intuition_content[name];
       if (!def || typeof def.type !== 'function') return;
-      const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
+      const label = def.label || name;
+      const icon = def.icon || name;
+      const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support' };
       if (excludeId && optionalParams.id === excludeId) return; // éviter doublon avec l'élément pop-out
       def.type(optionalParams);
       const childEl = grab(`_intuition_${name}`);
@@ -1180,6 +1193,7 @@ function rebuildSupportWithChildren(childrenNames, excludeId) {
         supportEl.insertBefore(childEl, placeholder);
       }
       if (childEl) {
+        try { childEl.dataset.nameKey = name; } catch (e) { /* ignore */ }
         applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
         createdEls.push(childEl);
       }
@@ -1215,10 +1229,13 @@ function rebuildSupportToNames(names) {
     names.forEach(name => {
       const def = intuition_content[name];
       if (!def || typeof def.type !== 'function') return;
-      const optionalParams = { id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' };
+      const label = def.label || name;
+      const icon = def.icon || name;
+      const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support' };
       def.type(optionalParams);
       const childEl = grab(`_intuition_${name}`);
       if (childEl) {
+        try { childEl.dataset.nameKey = name; } catch (e) { /* ignore */ }
         applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
         createdEls.push(childEl);
       }
