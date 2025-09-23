@@ -1,48 +1,3 @@
-// test
-//click: function (e) { reveal_children('toolbox'); },
-
-const vieLogo = $('img', {
-  id: 'img_test',
-  parent: "#view",
-  attrs: {
-    src: './assets/images/1.png',
-    alt: 'ballanim'
-  },
-  css: {
-    marginLeft: '0',
-    color: 'white',
-    left: '0px',
-    top: '0px',
-    position: 'relative',
-    height: 'auto',
-    width: "100%",
-    textAlign: 'center',
-    display: 'block'
-  }
-});
-const images = [
-  './assets/images/1.png',
-  './assets/images/2.png',
-  './assets/images/3.png',
-  './assets/images/ballanim.png',
-  './assets/images/green_planet.png',
-  './assets/images/puydesancy.jpg'
-];
-
-// Index courant
-let currentIndex = 0;
-
-vieLogo.addEventListener('click', () => {
-  puts('hello!');
-
-  // passer à l'image suivante
-  currentIndex = (currentIndex + 1) % images.length;
-
-  // mettre à jour la source
-  vieLogo.src = images[currentIndex];
-});
-
-
 
 let calculatedCSS = {};
 const shadowLeft = 0,
@@ -51,6 +6,16 @@ const shadowLeft = 0,
 const items_spacing = 6;
 const item_border_radius = 6;
 const item_size = 54;
+const DIRECTIONS = [
+  "top_left_horizontal",
+  "top_right_horizontal",
+  "bottom_left_horizontal",
+  "bottom_right_horizontal",
+  "top_left_vertical",
+  "bottom_left_vertical",
+  "top_right_vertical",
+  "bottom_right_vertical"
+];
 let menuOpen = 'false';
 let menuStack = [];
 
@@ -83,24 +48,15 @@ const Intuition_theme = {
     anim_stagger_ms: 33,
     anim_bounce_overshoot: 0.09,
     // Elasticity controls extra rebounds (0 = back easing, 1 = strong elastic)
-    anim_elasticity: 6
+    anim_elasticity: 6,
+    direction: "top_left_horizontal"
   }
 };
 
 const currentTheme = Intuition_theme.light;
 
-currentTheme.direction = "top_right_horizontal";
 
-const DIRECTIONS = [
-  "top_left_horizontal",
-  "top_right_horizontal",
-  "bottom_left_horizontal",
-  "bottom_right_horizontal",
-  "top_left_vertical",
-  "bottom_left_vertical",
-  "top_right_vertical",
-  "bottom_right_vertical"
-];
+
 
 function calculate_positions() {
   const dir = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
@@ -364,7 +320,6 @@ function intuitionCommon(cfg) {
   }
   return el;
 }
-
 
 
 
@@ -720,47 +675,6 @@ window.refreshMenu = function (partialTheme = {}) {
 init_inituition();
 apply_layout();
 
-
-function mountDirectionSelector() {
-  if (document.getElementById('intuition-direction-select')) return;
-
-  const wrap = $('div', {
-    id: 'intuition-direction-select',
-    parent: '#intuition',
-    css: {
-      position: 'fixed',
-      top: '108px',
-      left: '108px',
-      zIndex: 10000002,
-      backgroundColor: 'transparent',
-      padding: '0'
-    }
-  });
-
-  const select = $('select', {
-    parent: wrap,
-    css: {
-      fontSize: '12px',
-      padding: '2px 6px',
-      color: '#fff',
-      backgroundColor: '#2b2b2b',
-      border: '1px solid #555'
-    }
-  });
-
-  DIRECTIONS.forEach(d => {
-    const opt = $('option', { parent: select, text: d });
-    opt.value = d;
-  });
-
-
-  //test current value
-  select.value = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
-  select.addEventListener('change', (e) => {
-    window.setDirection(e.target.value);
-  });
-}
-mountDirectionSelector();
 
 
 // Forward wheel/touch interactions on the toolbox to scroll the toolbox_support overflow
@@ -1286,3 +1200,89 @@ function alignSupportToToolboxEdge() {
 
 
 
+
+
+// // test
+
+
+// const vieLogo = $('img', {
+//   id: 'img_test',
+//   parent: "#view",
+//   attrs: {
+//     src: './assets/images/1.png',
+//     alt: 'ballanim'
+//   },
+//   css: {
+//     marginLeft: '0',
+//     color: 'white',
+//     left: '0px',
+//     top: '0px',
+//     position: 'relative',
+//     height: 'auto',
+//     width: "100%",
+//     textAlign: 'center',
+//     display: 'block'
+//   }
+// });
+// const images = [
+//   './assets/images/1.png',
+//   './assets/images/2.png',
+//   './assets/images/3.png',
+//   './assets/images/ballanim.png',
+//   './assets/images/green_planet.png',
+//   './assets/images/puydesancy.jpg'
+// ];
+
+// // Index courant
+// let currentIndex = 0;
+
+// vieLogo.addEventListener('click', () => {
+//   puts('hello!');
+
+//   // passer à l'image suivante
+//   currentIndex = (currentIndex + 1) % images.length;
+
+//   // mettre à jour la source
+//   vieLogo.src = images[currentIndex];
+// });
+
+// function mountDirectionSelector() {
+//   if (document.getElementById('intuition-direction-select')) return;
+
+//   const wrap = $('div', {
+//     id: 'intuition-direction-select',
+//     parent: '#intuition',
+//     css: {
+//       position: 'fixed',
+//       top: '108px',
+//       left: '108px',
+//       zIndex: 10000002,
+//       backgroundColor: 'transparent',
+//       padding: '0'
+//     }
+//   });
+
+//   const select = $('select', {
+//     parent: wrap,
+//     css: {
+//       fontSize: '12px',
+//       padding: '2px 6px',
+//       color: '#fff',
+//       backgroundColor: '#2b2b2b',
+//       border: '1px solid #555'
+//     }
+//   });
+
+//   DIRECTIONS.forEach(d => {
+//     const opt = $('option', { parent: select, text: d });
+//     opt.value = d;
+//   });
+
+
+//   //test current value
+//   select.value = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
+//   select.addEventListener('change', (e) => {
+//     window.setDirection(e.target.value);
+//   });
+// }
+// mountDirectionSelector();
