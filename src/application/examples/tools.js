@@ -106,13 +106,13 @@ const intuition_content = {
   load: { type: tool, children: ['modules', 'projects'] },
   save: { type: tool },
   email: { type: option },
-  volume: { type: particle, icon: 'volume' },
+  volume: { type: particle, helper: 'slider' },
   ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
   controller: { type: zonespecial },
-  A: { type: particle },
-  D: { type: particle },
-  S: { type: particle },
-  R: { type: particle, children: ['filter'] },
+  A: { type: particle, helper: 'slider', unit: '%', value: 50 },
+  D: { type: particle, helper: 'slider', unit: '%', value: 30 },
+  S: { type: particle, helper: 'slider', unit: '%', value: 0 },
+  R: { type: particle, helper: 'slider', unit: '%', value: 20 },
 
 };
 
