@@ -40,7 +40,8 @@ const Intuition_theme = {
     icon_left: "33%",
     icon_centered_top: "33%",
     icon_centered_left: "33%",
-    icon_size: "16%",
+    icon_color: "#ffffffff",
+    icon_size: "39%",
     item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
     item_border_radius: item_border_radius + 'px',
     // Animation settings for menu open
@@ -85,18 +86,17 @@ const intuition_content = {
   file: { type: palette, children: ['import', 'load', 'save'] },
   tools: { type: palette, children: ['volume', 'ADSR'] },
   settings: { type: tool },
-  capture: { type: tool },
-  perform: { type: tool, icon: 'play' },
+  capture: { label: 'record', type: tool, icon: 'record' },
+  perform: { label: 'perform', type: tool, icon: 'play' },
 
 
   import: { type: tool, children: ['audio', 'modules', 'projects'] },
   load: { type: tool, children: ['modules', 'projects'] },
   save: { type: tool },
-  volume: { type: particle },
-  ADSR: { type: tool, children: ['A', 'D', 'S', 'R'] },
+  volume: { type: particle, icon: 'volume' },
+  ADSR: { label: 'envelope', type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
   A: { type: particle },
   D: { type: particle },
-
   S: { type: particle },
   R: { type: particle, children: ['filter'] },
 
@@ -293,9 +293,12 @@ function openMenu(parent) {
     menuStack = [{ parent, children: methods.slice() }];
     const created = [];
     methods.forEach(name => {
+
+      const label = intuition_content[name]['label'] || name;
+      const icon = intuition_content[name]['icon'] || name;
       const fct_exec = intuition_content[name]['type'];
       if (typeof fct_exec === 'function') {
-        const optionalParams = { ...{ id: `_intuition_${name}`, label: name, icon: name, parent: '#toolbox_support' }, ...(intuitionAddOn[name] || {}) };
+        const optionalParams = { ...{ id: `_intuition_${name}`, label: label, icon: icon, parent: '#toolbox_support' }, ...(intuitionAddOn[name] || {}) };
         fct_exec(optionalParams);
         // Apply blur to the newly created item
         const itemEl = grab(`_intuition_${name}`);
@@ -366,18 +369,71 @@ function intuitionCommon(cfg) {
 
 
 function createIcon(cfg) {
-  puts(cfg)
-  puts(currentTheme)
-  dataFetcher('assets/images/icons/add.svg')
-    .then(
-      svgData => {
-        render_svg(svgData, 'my_nice_svg', cfg.id, '0px', '0px', '100%', '100%', null, null);
-      }
+  const parentId = cfg.id;
+  const svgId = `${parentId}__icon`;
+  // Nettoyer une éventuelle icône précédente
+  const prev = document.getElementById(svgId);
+  if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
+  puts(cfg);
+  let icon = cfg.icon;
+  let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
+  dataFetcher(`assets/images/icons/${icon}.svg`)
+    .then(svgData => {
+      // Injecte le SVG dans le parent
+      render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
+      // Normalisation et centrage + taille basée sur currentTheme.icon_size
+      requestAnimationFrame(() => {
+        const svgEl = document.getElementById(svgId);
+        const parentEl = document.getElementById(parentId);
+        if (!svgEl || !parentEl) return;
+        // Responsif via CSS (pas d'attributs width/height)
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        svgEl.style.position = 'absolute';
+        svgEl.style.left = '50%';
+        svgEl.style.top = '60%';
+        svgEl.style.transform = 'translate(-50%, -50%)';
+        svgEl.style.display = 'block';
+        svgEl.style.pointerEvents = 'none';
 
-    )
-    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+        // Taille: basée sur currentTheme.icon_size
+        const baseSize = Math.max(1,
+          Math.min(parentEl.clientWidth || 0, parentEl.clientHeight || 0) ||
+          (parseFloat(currentTheme.item_size) || 54)
+        );
+
+        const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
+        let iconSize = NaN;
+        if (szDefRaw.endsWith('%')) {
+          const pct = parseFloat(szDefRaw);
+          if (!isNaN(pct)) iconSize = Math.round((pct / 100) * baseSize);
+        } else if (szDefRaw.endsWith('px')) {
+          const px = parseFloat(szDefRaw);
+          if (!isNaN(px)) iconSize = Math.round(px);
+        } else {
+          const num = parseFloat(szDefRaw);
+          if (!isNaN(num)) {
+            // num < 1 => ratio, sinon px
+            iconSize = num <= 1 ? Math.round(num * baseSize) : Math.round(num);
+          }
+        }
+        if (!isFinite(iconSize) || isNaN(iconSize)) {
+          iconSize = Math.round(0.16 * baseSize); // fallback 16%
+        }
+        iconSize = Math.max(8, iconSize);
+        svgEl.style.width = iconSize + 'px';
+        svgEl.style.height = iconSize + 'px';
+
+        if (!svgEl.getAttribute('viewBox')) {
+          svgEl.setAttribute('viewBox', `0 0 ${iconSize} ${iconSize}`);
+        }
+        if (!svgEl.getAttribute('preserveAspectRatio')) {
+          svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        }
+      });
+    })
+    .catch(err => { console.error('Erreur (createIcon):', err); });
 }
-
 function createLabel(cfg) {
   if (cfg.label) {
     const rawText = String(cfg.label);
