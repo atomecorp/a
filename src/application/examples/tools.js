@@ -42,6 +42,9 @@ const Intuition_theme = {
     icon_centered_left: "33%",
     icon_color: "#ffffffff",
     icon_size: "33%",
+    // Toggle label/icon visibility when a palette is popped out
+    palette_icon: false,
+    palette_label: true,
     item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
     item_border_radius: item_border_radius + 'px',
     // Animation settings for menu open
@@ -578,6 +581,10 @@ function apply_layout() {
   alignSupportToToolboxEdge();
   // Reposition any popped-out palette on layout changes
   repositionPoppedPalette();
+  // If a palette is currently popped out, re-apply icon/label visibility according to theme
+  if (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active && handlePaletteClick.active.el) {
+    setPaletteVisualState(handlePaletteClick.active.el, true);
+  }
 }
 
 
@@ -619,6 +626,20 @@ function setLabelCentered(el, centered) {
     lbl.style.left = '50%';
     lbl.style.transform = 'translateX(-50%)';
     lbl.style.textAlign = '';
+  }
+}
+
+// Control label/icon visibility depending on palette state and theme options
+function setPaletteVisualState(el, isOutside) {
+  if (!el) return;
+  const labelEl = el.querySelector('.intuition-label');
+  const iconEl = document.getElementById(`${el.id}__icon`);
+  if (isOutside) {
+    if (labelEl) labelEl.style.display = (currentTheme.palette_label === false) ? 'none' : '';
+    if (iconEl) iconEl.style.display = (currentTheme.palette_icon === false) ? 'none' : '';
+  } else {
+    if (labelEl) labelEl.style.display = '';
+    if (iconEl) iconEl.style.display = '';
   }
 }
 
@@ -809,6 +830,10 @@ window.setDirection = function (dir) {
 window.refreshMenu = function (partialTheme = {}) {
   Object.assign(currentTheme, partialTheme);
   apply_layout();
+  // Update active popped palette visuals after theme change
+  if (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active && handlePaletteClick.active.el) {
+    setPaletteVisualState(handlePaletteClick.active.el, true);
+  }
 };
 init_inituition();
 apply_layout();
@@ -962,6 +987,8 @@ function handlePaletteClick(el, cfg) {
   el.style.visibility = 'visible';
   // Center label while outside
   setLabelCentered(el, true);
+  // Apply palette icon/label visibility rules while outside
+  setPaletteVisualState(el, true);
 
   // Maintenant déplacer l'élément le long de l'axe transversal pour être totalement hors du support
   const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
@@ -1075,6 +1102,8 @@ function popOutPaletteByName(name, opts = {}) {
     el.style.visibility = 'visible';
     // Center label while outside (anchored mode)
     setLabelCentered(el, true);
+    // Apply palette icon/label visibility while outside
+    setPaletteVisualState(el, true);
     handlePaletteClick.active = { el, placeholder: null };
     return el;
   } else {
@@ -1102,6 +1131,8 @@ function popOutPaletteByName(name, opts = {}) {
     el.style.visibility = 'visible';
     // Center label while outside (extracted mode)
     setLabelCentered(el, true);
+    // Apply palette icon/label visibility while outside
+    setPaletteVisualState(el, true);
 
     const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
     const gap = Math.max(8, parseFloat(currentTheme.items_spacing) || 8);
@@ -1153,6 +1184,8 @@ function restorePalette(state) {
   el.style.height = '';
   // Restore label position inside menu
   setLabelCentered(el, false);
+  // Restore label/icon visibility for in-menu state
+  setPaletteVisualState(el, false);
   // Si un placeholder existe, on replace l'élément à sa position
   if (placeholder && placeholder.parentElement) {
     placeholder.parentElement.replaceChild(el, placeholder);
