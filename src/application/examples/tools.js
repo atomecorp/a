@@ -32,7 +32,7 @@ const Intuition_theme = {
     support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
     // Translucent gradient for a glassy look
     tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
-    tool_bg_active: "#656565ff",
+    tool_bg_active: "#7a7c73ff",
     tool_backDrop_effect: '8px',
     tool_text: "#cacacaff",
     tool_font: "0.9vw",
@@ -522,7 +522,7 @@ function createTool(cfg) {
 function createParticle(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
   createLabel(cfg)
-  createIcon(cfg)
+  // createIcon(cfg)
 }
 function createOption(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
@@ -556,6 +556,8 @@ function expandToolInline(el, cfg) {
       try { toRemove.remove(); } catch (e) { /* ignore */ }
     }
     el.dataset.expanded = 'false';
+    // Restore inactive background when collapsed
+    try { el.style.background = currentTheme.tool_bg; } catch (_) { }
     ensureOverflowForcerAtEnd();
     return;
   }
@@ -592,6 +594,8 @@ function expandToolInline(el, cfg) {
   // Maintain overflow-forcer at the end so layout remains correct
   ensureOverflowForcerAtEnd();
   if (el.dataset) el.dataset.expanded = 'true';
+  // Highlight as active while expanded
+  try { el.style.background = currentTheme.tool_bg_active; } catch (_) { }
 }
 const intuitionAddOn = {
   communication: { label: 'communication', icon: 'communication' }
