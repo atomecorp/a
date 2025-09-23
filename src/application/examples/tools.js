@@ -233,19 +233,14 @@ const toolbox = {
     zIndex: 10000000,
     ...calculatedCSS.toolbox
   },
-  click: function (e) { reveal_children('toolbox'); },
+  click: function (e) { openMenu('toolbox'); },
   label: null,
   icon: 'menu'
 };
 
-function open_menu(name) {
 
-}
-function close_menu(name) {
 
-}
-
-function reveal_children(parent) {
+function openMenu(parent) {
   const methods = (intuition_content[parent] && intuition_content[parent].children) || [];
   if (menuOpen !== parent) {
     // Reset any popped-out palette before rebuilding
@@ -280,7 +275,7 @@ function reveal_children(parent) {
     menuOpen = parent;
   } else {
     // Full close: close any submenu and restore state
-    closeEntireMenu();
+    closeMenu();
   }
 }
 
@@ -1109,7 +1104,7 @@ function ensureOverflowForcerAtEnd() {
   }
 }
 
-function closeEntireMenu() {
+function closeMenu() {
   const supportEl = grab('toolbox_support');
   // Restore popped-out palette and remove its placeholder if any
   if (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active) {
