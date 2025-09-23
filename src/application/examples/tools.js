@@ -571,16 +571,81 @@ function renderParticleValueFromTheme(cfg) {
       lineHeight: '1',
       background: 'transparent',
       color: 'inherit',
-      pointerEvents: 'none',
+      pointerEvents: 'auto',
       userSelect: 'none',
       whiteSpace: 'nowrap'
     }
   });
   const valColor = String(currentTheme.particle_value_color || currentTheme.tool_text || '#fff');
   const unitColor = String(currentTheme.particle_unit_color || currentTheme.tool_text || '#fff');
-  $('span', { parent: wrap, text: valueText, css: { color: valColor } });
+  const valueSpan = $('span', { parent: wrap, text: valueText, css: { color: valColor } });
   if (unit) {
     $('span', { parent: wrap, text: unit, css: { color: unitColor, marginLeft: '2px' } });
+  }
+
+  // Inline edit on double click (value only; unit stays static)
+  const particleEl = document.getElementById(cfg.id);
+  const nameKey = (particleEl && particleEl.dataset && particleEl.dataset.nameKey) || (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+  const beginEdit = () => {
+    if (!nameKey) return;
+    const def = intuition_content[nameKey];
+    if (!def) return;
+    // Hide current value text
+    try { valueSpan.style.display = 'none'; } catch (_) { }
+    const inputId = `${cfg.id}__particle_value_input`;
+    let input = document.getElementById(inputId);
+    if (input) { try { input.remove(); } catch (e) { } }
+    const isNumeric = (typeof def.value === 'number');
+    input = $('input', {
+      id: inputId,
+      parent: wrap,
+      attrs: { type: isNumeric ? 'number' : 'text', step: 'any', inputmode: isNumeric ? 'decimal' : 'text' },
+      css: {
+        position: 'relative',
+        marginLeft: '4px',
+        background: 'transparent',
+        border: 'none',
+        outline: 'none',
+        color: valColor,
+        fontSize: (currentTheme.particle_value_font_px || 11) + 'px',
+        width: 'auto',
+        minWidth: '28px',
+        textAlign: 'center'
+      }
+    });
+    input.value = String(def.value ?? '');
+    // Focus/select
+    try { input.focus(); input.select(); } catch (_) { }
+    const commit = () => {
+      const raw = input.value;
+      let newVal = raw;
+      if (isNumeric) {
+        const n = parseFloat(raw);
+        if (!isNaN(n)) newVal = n;
+      }
+      def.value = newVal;
+      try { input.remove(); } catch (_) { }
+      renderParticleValueFromTheme({ id: cfg.id, nameKey });
+    };
+    const cancel = () => {
+      try { input.remove(); } catch (_) { }
+      try { valueSpan.style.display = ''; } catch (_) { }
+    };
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+      ev.stopPropagation();
+    });
+    input.addEventListener('blur', commit);
+  };
+  // Attach on value text only to avoid accidental edit on unit
+  if (valueSpan && valueSpan.addEventListener) {
+    valueSpan.style.cursor = 'text';
+    valueSpan.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
+  }
+  if (wrap && wrap.addEventListener) {
+    wrap.style.cursor = 'text';
+    wrap.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
   }
 }
 
