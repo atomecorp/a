@@ -54,6 +54,14 @@ const Intuition_theme = {
     // Toggle label/icon visibility when a palette is popped out
     palette_icon: false,
     palette_label: true,
+    // Particle value/unit display (theme-driven)
+    particle_value_unit: '%',
+    particle_value_value: 30,
+    particle_value_decimals: 0,
+    particle_value_font_px: 11,
+    particle_value_bottom: '6%',
+    particle_value_color: '#cacacaff',
+    particle_unit_color: '#9e9e9eff',
     item_shadow: `${shadowLeft}px ${shadowTop}px ${shadowBlur}px rgba(0,0,0,0.69)`,
     item_border_radius: item_border_radius + 'px',
     // Animation settings for menu open
@@ -109,10 +117,10 @@ const intuition_content = {
   volume: { type: particle, helper: 'slider' },
   ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
   controller: { type: zonespecial },
-  A: { type: particle, helper: 'slider', unit: '%', value: 50 },
-  D: { type: particle, helper: 'slider', unit: '%', value: 30 },
-  S: { type: particle, helper: 'slider', unit: '%', value: 0 },
-  R: { type: particle, helper: 'slider', unit: '%', value: 20 },
+  A: { type: particle, helper: 'slider', unit: '%', value: 50, ext: 3 },
+  D: { type: particle, helper: 'slider', unit: '%', value: 30, ext: 3 },
+  S: { type: particle, helper: 'slider', unit: '%', value: 0, ext: 3 },
+  R: { type: particle, helper: 'slider', unit: '%', value: 20, ext: 3 },
 
 };
 
@@ -523,6 +531,7 @@ function createParticle(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
   createLabel(cfg)
   // createIcon(cfg)
+  renderParticleValueFromTheme(cfg);
 }
 function createOption(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
@@ -535,6 +544,59 @@ function createZonespecial(cfg) {
   createIcon(cfg)
 
 }
+// Render particle value + unit at bottom from currentTheme settings (plain text only)
+function renderParticleValueFromTheme(cfg) {
+  if (!cfg || !cfg.id) return;
+  const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+  const def = intuition_content[key];
+  if (!def) return;
+  const unit = def.unit || '';
+  const val = def.value;
+  if (val === undefined || val === null) return;
+  const decimals = Math.max(0, Math.min(6, parseInt(def.ext != null ? def.ext : 0, 10)));
+  const valueText = (typeof val === 'number') ? val.toFixed(decimals) : String(val);
+  const id = `${cfg.id}__particle_value`;
+  const prev = document.getElementById(id);
+  if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
+  const wrap = $('div', {
+    id,
+    parent: `#${cfg.id}`,
+    class: 'particle-value',
+    css: {
+      position: 'absolute',
+      bottom: String(currentTheme.particle_value_bottom || '6%'),
+      left: '50%',
+      transform: 'translateX(-50%)',
+      fontSize: (currentTheme.particle_value_font_px || 11) + 'px',
+      lineHeight: '1',
+      background: 'transparent',
+      color: 'inherit',
+      pointerEvents: 'none',
+      userSelect: 'none',
+      whiteSpace: 'nowrap'
+    }
+  });
+  const valColor = String(currentTheme.particle_value_color || currentTheme.tool_text || '#fff');
+  const unitColor = String(currentTheme.particle_unit_color || currentTheme.tool_text || '#fff');
+  $('span', { parent: wrap, text: valueText, css: { color: valColor } });
+  if (unit) {
+    $('span', { parent: wrap, text: unit, css: { color: unitColor, marginLeft: '2px' } });
+  }
+}
+
+// Update a single particle's value/unit/ext in intuition_content and refresh its display
+window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
+  if (!nameKey || !(nameKey in intuition_content)) return;
+  const def = intuition_content[nameKey];
+  if (!def) return;
+  if (newValue !== undefined) def.value = newValue;
+  if (newUnit !== undefined) def.unit = newUnit;
+  if (newExt !== undefined) def.ext = newExt;
+  const elId = `_intuition_${nameKey}`;
+  const el = document.getElementById(elId);
+  if (!el) return;
+  renderParticleValueFromTheme({ id: elId, nameKey });
+};
 // Toggle an inline expansion of a tool's children right after the clicked tool
 function expandToolInline(el, cfg) {
   if (!el) return;
@@ -923,6 +985,20 @@ window.refreshMenu = function (partialTheme = {}) {
   if (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active && handlePaletteClick.active.el) {
     setPaletteVisualState(handlePaletteClick.active.el, true);
   }
+  // Refresh particle displays from theme without rebuilding the whole menu
+  try {
+    const supportEl = grab('toolbox_support');
+    if (supportEl) {
+      const nodes = supportEl.querySelectorAll('[id^="_intuition_"]');
+      nodes.forEach(node => {
+        if (!node || !node.dataset) return;
+        const key = node.dataset.nameKey || String(node.id).replace(/^_intuition_/, '');
+        const def = intuition_content[key];
+        if (!def || def.type !== particle) return;
+        renderParticleValueFromTheme({ id: node.id, nameKey: key });
+      });
+    }
+  } catch (e) { /* ignore */ }
 };
 createToolbox();
 apply_layout();
