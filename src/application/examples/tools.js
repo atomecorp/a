@@ -87,8 +87,8 @@ const intuition_content = {
   toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
   //
   file: { type: palette, children: ['import', 'load', 'save'] },
-  tools: { type: palette, children: ['volume', 'ADSR'] },
-  settings: { type: tool },
+  tools: { type: palette, children: ['volume', 'ADSR', 'controller'] },
+  settings: { type: palette, children: ['email',] },
   capture: { label: 'record', type: tool, icon: 'record' },
   perform: { label: 'perform', type: tool, icon: 'play' },
 
@@ -96,27 +96,15 @@ const intuition_content = {
   import: { type: tool, children: ['audio', 'modules', 'projects'] },
   load: { type: tool, children: ['modules', 'projects'] },
   save: { type: tool },
+  email: { type: option },
   volume: { type: particle, icon: 'volume' },
   ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
+  controller: { type: zonespecial },
   A: { type: particle },
   D: { type: particle },
   S: { type: particle },
   R: { type: particle, children: ['filter'] },
 
-
-  // view: { type: option },
-  // tools: { type: zonespecial, children: ['filter'] },
-  // communication: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
-  // capture: { type: palette, children: ['filter'] },
-  // edit: { type: palette, children: ['filter'] },
-  // filter: { type: palette, children: ['internet', 'local'] },
-  // quit: { type: tool },
-  // user: { type: palette, children: ['add', 'remove'] },
-  // settings: { type: tool },
-  // clear: { type: tool },
-  // cleanup: { type: tool },
-  // add: { type: tool },
-  // remove: { type: tool },
 };
 
 const currentTheme = Intuition_theme.light;
