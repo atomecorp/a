@@ -511,9 +511,13 @@ function createPalette(cfg) {
 
 }
 function createTool(cfg) {
-  intuitionCommon({ ...cfg, ...items_common });
-  createLabel(cfg)
-  createIcon(cfg)
+  const el = intuitionCommon({ ...cfg, ...items_common });
+  createLabel(cfg);
+  createIcon(cfg);
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    expandToolInline(el, cfg);
+  });
 }
 function createParticle(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
@@ -530,6 +534,64 @@ function createZonespecial(cfg) {
   createLabel(cfg)
   createIcon(cfg)
 
+}
+// Toggle an inline expansion of a tool's children right after the clicked tool
+function expandToolInline(el, cfg) {
+  if (!el) return;
+  const supportEl = grab('toolbox_support');
+  if (!supportEl) return;
+  const key = (el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+  const desc = intuition_content[key];
+  const children = (desc && Array.isArray(desc.children)) ? desc.children : null;
+  if (!children || !children.length) return;
+
+  // If already expanded, collapse the contiguous inline children belonging to this tool
+  if (el.dataset && el.dataset.expanded === 'true') {
+    let node = el.nextSibling;
+    while (node && node.id !== '_intuition_overflow_forcer') {
+      const inlineParent = node && node.dataset ? node.dataset.inlineParent : null;
+      if (inlineParent !== key) break;
+      const toRemove = node;
+      node = node.nextSibling;
+      try { toRemove.remove(); } catch (e) { /* ignore */ }
+    }
+    el.dataset.expanded = 'false';
+    ensureOverflowForcerAtEnd();
+    return;
+  }
+
+  // Expand: create/insert each child right after the tool, in order
+  let insertAfter = el;
+  const created = [];
+  children.forEach((name) => {
+    const def = intuition_content[name];
+    if (!def || typeof def.type !== 'function') return;
+    const id = `_intuition_${name}`;
+    let childEl = document.getElementById(id);
+    if (!childEl) {
+      const label = def.label || name;
+      const icon = def.icon || name;
+      const params = { id, label, icon, nameKey: name, parent: '#toolbox_support' };
+      def.type(params);
+      childEl = document.getElementById(id);
+    }
+    if (!childEl) return;
+    // Mark as inline child of this tool for collapse logic
+    try { if (childEl.dataset) childEl.dataset.inlineParent = key; } catch (_) { }
+    // Ensure it becomes visible even though intuitionCommon hides new menu items until slideIn
+    childEl.style.visibility = 'visible';
+    childEl.style.transform = 'translate3d(0,0,0)';
+    applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
+    // Insert right after the current insertion point
+    if (insertAfter.nextSibling) supportEl.insertBefore(childEl, insertAfter.nextSibling);
+    else supportEl.appendChild(childEl);
+    insertAfter = childEl;
+    created.push(childEl);
+  });
+
+  // Maintain overflow-forcer at the end so layout remains correct
+  ensureOverflowForcerAtEnd();
+  if (el.dataset) el.dataset.expanded = 'true';
 }
 const intuitionAddOn = {
   communication: { label: 'communication', icon: 'communication' }
