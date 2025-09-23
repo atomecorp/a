@@ -53,6 +53,69 @@ const Intuition_theme = {
   }
 };
 
+// const intuition_content = {
+//   version: "1.1",
+//   meta: { namespace: "atome.menu", defaultLocale: "en" },
+//   toolbox: { children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit'] },
+//   home: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
+//   find: { type: tool, children: ['width, height',] },
+//   time: { type: particle, children: ['filter'] },
+//   view: { type: option },
+//   tools: { type: zonespecial, children: ['filter'] },
+//   communication: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
+//   capture: { type: palette, children: ['filter'] },
+//   edit: { type: palette, children: ['filter'] },
+//   filter: { type: palette, children: ['internet', 'local'] },
+//   quit: { type: tool },
+//   user: { type: palette, children: ['add', 'remove'] },
+//   settings: { type: tool },
+//   clear: { type: tool },
+//   cleanup: { type: tool },
+//   add: { type: tool },
+//   remove: { type: tool },
+// };
+
+
+
+const intuition_content = {
+  version: "1.1",
+  meta: { namespace: "vie.menu", defaultLocale: "en" },
+  toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
+  //
+  file: { type: palette, children: ['import', 'load', 'save'] },
+  tools: { type: palette, children: ['volume', 'ADSR'] },
+  settings: { type: tool },
+  capture: { type: tool },
+  perform: { type: tool, icon: 'play' },
+
+
+  import: { type: tool, children: ['audio', 'modules', 'projects'] },
+  load: { type: tool, children: ['modules', 'projects'] },
+  save: { type: tool },
+  volume: { type: particle },
+  ADSR: { type: tool, children: ['A', 'D', 'S', 'R'] },
+  A: { type: particle },
+  D: { type: particle },
+
+  S: { type: particle },
+  R: { type: particle, children: ['filter'] },
+
+
+  // view: { type: option },
+  // tools: { type: zonespecial, children: ['filter'] },
+  // communication: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
+  // capture: { type: palette, children: ['filter'] },
+  // edit: { type: palette, children: ['filter'] },
+  // filter: { type: palette, children: ['internet', 'local'] },
+  // quit: { type: tool },
+  // user: { type: palette, children: ['add', 'remove'] },
+  // settings: { type: tool },
+  // clear: { type: tool },
+  // cleanup: { type: tool },
+  // add: { type: tool },
+  // remove: { type: tool },
+};
+
 const currentTheme = Intuition_theme.light;
 
 
@@ -197,27 +260,6 @@ const toolbox_support = {
 };
 
 
-const intuition_content = {
-  version: "1.1",
-  meta: { namespace: "atome.menu", defaultLocale: "en" },
-  toolbox: { children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit'] },
-  home: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
-  find: { type: tool, children: ['width, height',] },
-  time: { type: particle, children: ['filter'] },
-  view: { type: option },
-  tools: { type: zonespecial, children: ['filter'] },
-  communication: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
-  capture: { type: palette, children: ['filter'] },
-  edit: { type: palette, children: ['filter'] },
-  filter: { type: palette, children: ['internet', 'local'] },
-  quit: { type: tool },
-  user: { type: palette, children: ['add', 'remove'] },
-  settings: { type: tool },
-  clear: { type: tool },
-  cleanup: { type: tool },
-  add: { type: tool },
-  remove: { type: tool },
-};
 
 const toolbox = {
   id: 'toolbox',
@@ -298,6 +340,8 @@ function intuitionCommon(cfg) {
       flex: '0 0 auto',
       pointerEvents: 'auto',        // réactive les events sur l’item
       touchAction: 'manipulation',  // tap/drag mobiles OK
+      // Hide new menu items until slideIn sets their initial transform to avoid visible nudge
+      visibility: (cfg.id && String(cfg.id).startsWith('_intuition_')) ? 'hidden' : 'visible',
       ...(cfg.css || {})
     }
   });
@@ -307,18 +351,34 @@ function intuitionCommon(cfg) {
       try { cfg.click.call(el, e); } catch (err) { console.error(err); }
     });
   }
+
+
   // Apply or disable blur according to element type
   if (cfg.id === 'toolbox_support') {
     applyBackdropStyle(el, null);
   } else if (cfg.id === 'toolbox') {
     applyBackdropStyle(el, currentTheme.tool_backDrop_effect);
   }
+
+
   return el;
 }
 
 
+function createIcon(cfg) {
+  puts(cfg)
+  puts(currentTheme)
+  dataFetcher('assets/images/icons/add.svg')
+    .then(
+      svgData => {
+        render_svg(svgData, 'my_nice_svg', cfg.id, '0px', '0px', '100%', '100%', null, null);
+      }
 
-function create_label(cfg) {
+    )
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+}
+
+function createLabel(cfg) {
   if (cfg.label) {
     const rawText = String(cfg.label);
     const maxChars = parseInt(currentTheme.text_char_max, 10);
@@ -373,7 +433,8 @@ function palette(cfg) {
     }
   };
   var el = intuitionCommon(finalCfg);
-  create_label(cfg)
+  createLabel(cfg)
+  createIcon(cfg)
   el.addEventListener('click', (e) => {
     // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
     // el.style.width = parseFloat(currentTheme.item_size) * 3 + 'px';
@@ -384,19 +445,23 @@ function palette(cfg) {
 }
 function tool(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
-  create_label(cfg)
+  createLabel(cfg)
+  createIcon(cfg)
 }
 function particle(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
-  create_label(cfg)
+  createLabel(cfg)
+  createIcon(cfg)
 }
 function option(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
-  create_label(cfg)
+  createLabel(cfg)
 }
 function zonespecial(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
-  create_label(cfg)
+  createLabel(cfg)
+  createIcon(cfg)
+
 }
 const intuitionAddOn = {
   communication: { label: 'communication', icon: 'communication' }
@@ -564,25 +629,36 @@ function slideInItems(items) {
   const dur = currentTheme.anim_duration_ms || 420;
   const stagger = currentTheme.anim_stagger_ms || 24;
   const easing = getEasingOpen();
+  const { isRight, isBottom, isHorizontal } = getDirMeta();
   els.forEach((el, idx) => {
     const rect = el.getBoundingClientRect();
-    const dx = origin.ox - rect.left;
-    const dy = origin.oy - rect.top;
-    // Start visually at support origin corner
+    // Anchor to the edge matching the origin corner to avoid initial nudge
+    const anchorX = isRight ? rect.right : rect.left;
+    const anchorY = isBottom ? rect.bottom : rect.top;
+    let dx = origin.ox - anchorX;
+    let dy = origin.oy - anchorY;
+    // Avoid cross-axis movement: only animate along main axis
+    if (isHorizontal) dy = 0; else dx = 0;
+    // Start visually at support origin corner. Hide until the transform is in place
     el.style.willChange = 'transform';
-    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.style.visibility = 'hidden';
+    el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
     const delay = idx * stagger;
-    setTimeout(() => {
-      animate(dur, (tt) => {
-        const t = easing(tt);
-        // Convert to translate from origin to final
-        const f = 1 - t;
-        el.style.transform = `translate(${dx * f}px, ${dy * f}px)`;
-      }, () => {
-        el.style.transform = 'translate(0, 0)';
-        el.style.willChange = '';
-      });
-    }, delay);
+    // Ensure the initial position is committed before animating
+    requestAnimationFrame(() => {
+      el.style.visibility = '';
+      setTimeout(() => {
+        animate(dur, (tt) => {
+          const t = easing(tt);
+          // Convert to translate from origin to final
+          const f = 1 - t;
+          el.style.transform = `translate3d(${dx * f}px, ${dy * f}px, 0)`;
+        }, () => {
+          el.style.transform = 'translate3d(0, 0, 0)';
+          el.style.willChange = '';
+        });
+      }, delay);
+    });
   });
 }
 
@@ -599,11 +675,17 @@ function slideOutItemsToOrigin(items, onAllDone) {
   const dur = currentTheme.anim_duration_ms || 420;
   const stagger = currentTheme.anim_stagger_ms || 24;
   const easing = getEasingClose();
+  const { isRight, isBottom, isHorizontal } = getDirMeta();
   let done = 0;
   els.forEach((el, idx) => {
     const rect = el.getBoundingClientRect();
-    const dx = origin.ox - rect.left;
-    const dy = origin.oy - rect.top;
+    // Anchor to the edge matching the origin corner to avoid initial nudge
+    const anchorX = isRight ? rect.right : rect.left;
+    const anchorY = isBottom ? rect.bottom : rect.top;
+    let dx = origin.ox - anchorX;
+    let dy = origin.oy - anchorY;
+    // Avoid cross-axis movement: only animate along main axis
+    if (isHorizontal) dy = 0; else dx = 0;
     el.style.willChange = 'transform';
     const delay = idx * stagger;
     setTimeout(() => {
@@ -816,6 +898,7 @@ function handlePaletteClick(el, cfg) {
   el.style.top = `${phRect.top}px`;
   el.style.margin = '0';
   el.style.zIndex = '10000004';
+  el.style.visibility = 'visible';
   // Center label while outside
   setLabelCentered(el, true);
 
@@ -922,6 +1005,7 @@ function popOutPaletteByName(name, opts = {}) {
     el.style.top = `${anchorRect.top}px`;
     el.style.margin = '0';
     el.style.zIndex = '10000004';
+    el.style.visibility = 'visible';
     // Center label while outside (anchored mode)
     setLabelCentered(el, true);
     handlePaletteClick.active = { el, placeholder: null };
@@ -948,6 +1032,7 @@ function popOutPaletteByName(name, opts = {}) {
     el.style.top = `${phRect.top}px`;
     el.style.margin = '0';
     el.style.zIndex = '10000004';
+    el.style.visibility = 'visible';
     // Center label while outside (extracted mode)
     setLabelCentered(el, true);
 
@@ -1197,87 +1282,89 @@ function alignSupportToToolboxEdge() {
 
 
 
-// // test
+// test
 
 
-// const vieLogo = $('img', {
-//   id: 'img_test',
-//   parent: "#view",
-//   attrs: {
-//     src: './assets/images/1.png',
-//     alt: 'ballanim'
-//   },
-//   css: {
-//     marginLeft: '0',
-//     color: 'white',
-//     left: '0px',
-//     top: '0px',
-//     position: 'relative',
-//     height: 'auto',
-//     width: "100%",
-//     textAlign: 'center',
-//     display: 'block'
-//   }
-// });
-// const images = [
-//   './assets/images/1.png',
-//   './assets/images/2.png',
-//   './assets/images/3.png',
-//   './assets/images/ballanim.png',
-//   './assets/images/green_planet.png',
-//   './assets/images/puydesancy.jpg'
-// ];
+const vieLogo = $('img', {
+  id: 'img_test',
+  parent: "#view",
+  attrs: {
+    src: './assets/images/1.png',
+    alt: 'ballanim'
+  },
+  css: {
+    marginLeft: '0',
+    color: 'white',
+    left: '0px',
+    top: '0px',
+    position: 'relative',
+    height: 'auto',
+    width: "100%",
+    textAlign: 'center',
+    display: 'block'
+  }
+});
+const images = [
+  './assets/images/1.png',
+  './assets/images/2.png',
+  './assets/images/3.png',
+  './assets/images/ballanim.png',
+  './assets/images/green_planet.png',
+  './assets/images/puydesancy.jpg'
+];
 
-// // Index courant
-// let currentIndex = 0;
+// Index courant
+let currentIndex = 0;
 
-// vieLogo.addEventListener('click', () => {
-//   puts('hello!');
+vieLogo.addEventListener('click', () => {
+  puts('hello!');
 
-//   // passer à l'image suivante
-//   currentIndex = (currentIndex + 1) % images.length;
+  // passer à l'image suivante
+  currentIndex = (currentIndex + 1) % images.length;
 
-//   // mettre à jour la source
-//   vieLogo.src = images[currentIndex];
-// });
+  // mettre à jour la source
+  vieLogo.src = images[currentIndex];
+});
 
-// function mountDirectionSelector() {
-//   if (document.getElementById('intuition-direction-select')) return;
+function mountDirectionSelector() {
+  if (document.getElementById('intuition-direction-select')) return;
 
-//   const wrap = $('div', {
-//     id: 'intuition-direction-select',
-//     parent: '#intuition',
-//     css: {
-//       position: 'fixed',
-//       top: '108px',
-//       left: '108px',
-//       zIndex: 10000002,
-//       backgroundColor: 'transparent',
-//       padding: '0'
-//     }
-//   });
+  const wrap = $('div', {
+    id: 'intuition-direction-select',
+    parent: '#intuition',
+    css: {
+      position: 'fixed',
+      top: '108px',
+      left: '108px',
+      zIndex: 10000002,
+      backgroundColor: 'transparent',
+      padding: '0'
+    }
+  });
 
-//   const select = $('select', {
-//     parent: wrap,
-//     css: {
-//       fontSize: '12px',
-//       padding: '2px 6px',
-//       color: '#fff',
-//       backgroundColor: '#2b2b2b',
-//       border: '1px solid #555'
-//     }
-//   });
+  const select = $('select', {
+    parent: wrap,
+    css: {
+      fontSize: '12px',
+      padding: '2px 6px',
+      color: '#fff',
+      backgroundColor: '#2b2b2b',
+      border: '1px solid #555'
+    }
+  });
 
-//   DIRECTIONS.forEach(d => {
-//     const opt = $('option', { parent: select, text: d });
-//     opt.value = d;
-//   });
+  DIRECTIONS.forEach(d => {
+    const opt = $('option', { parent: select, text: d });
+    opt.value = d;
+  });
 
 
-//   //test current value
-//   select.value = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
-//   select.addEventListener('change', (e) => {
-//     window.setDirection(e.target.value);
-//   });
-// }
-// mountDirectionSelector();
+  //test current value
+  select.value = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
+  select.addEventListener('change', (e) => {
+    window.setDirection(e.target.value);
+  });
+}
+mountDirectionSelector();
+
+
