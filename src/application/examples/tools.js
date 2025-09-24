@@ -144,7 +144,7 @@ const intuition_content = {
 
   import: { type: tool, children: ['audio', 'modules', 'projects'] },
   load: { type: tool, children: ['modules', 'projects'], touch_up: function () { puts('Import touch triggered'); } },
-  save: { type: tool },
+  save: { type: tool, touch: function () { puts('Save touch triggered'); } },
   email: { type: option, touch: option_test_touch },
   volume: { type: particle, helper: 'slider', value: 3 },
   ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
