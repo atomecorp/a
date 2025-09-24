@@ -29,6 +29,8 @@ const Intuition_theme = {
   light: {
     slider_length: '70%',
     slider_zoom_length: '100%',
+    slider_length_vertical: '30%',
+    slider_zoom_length_vertical: '80%',
     slider_track_color: 'rgba(241, 139, 49, 1)',
     slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
     handle_color: 'rgba(248, 184, 128, 1)',
