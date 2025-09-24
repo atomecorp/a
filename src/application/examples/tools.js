@@ -29,6 +29,8 @@ const Intuition_theme = {
   light: {
     slider_length: '70%',
     slider_track_color: 'rgba(241, 139, 49, 1)',
+    slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
+    handle_color: 'rgba(248, 184, 128, 1)',
     slider_handle_size: '16%', // relative handle size (%, px, or ratio)
     slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
     button_size: '33%',
@@ -782,6 +784,15 @@ function renderHelperForItem(cfg) {
       let handleEl = null;
       for (const sel of handleSelectors) { handleEl = root.querySelector(sel); if (handleEl) break; }
       if (!handleEl) return;
+      // Colorize track / progression / handle from theme
+      const trackEl = root.querySelector('.hs-slider-track');
+      if (trackEl && currentTheme.slider_track_color) {
+        try { trackEl.style.backgroundColor = currentTheme.slider_track_color; } catch (_) { }
+      }
+      const progEl = root.querySelector('.hs-slider-progression');
+      if (progEl && currentTheme.slider_revealed_track_color) {
+        try { progEl.style.backgroundColor = currentTheme.slider_revealed_track_color; } catch (_) { }
+      }
       handleEl.style.width = pxVal + 'px';
       handleEl.style.height = pxVal + 'px';
       handleEl.style.minWidth = pxVal + 'px';
@@ -789,6 +800,9 @@ function renderHelperForItem(cfg) {
       // Remove default blue border/outline from base slider component
       handleEl.style.border = 'none';
       handleEl.style.outline = 'none';
+      if (currentTheme.handle_color) {
+        try { handleEl.style.backgroundColor = currentTheme.handle_color; } catch (_) { }
+      }
       // Optionally remove box shadow if undesired; comment out if you want to keep it
       // handleEl.style.boxShadow = 'none';
       // Apply radius from theme
