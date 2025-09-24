@@ -757,6 +757,24 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
     } catch (err) { console.error('Tool semantic handler error', err); }
   };
 
+  // Activation simple pour tools sans enfants
+  const toggleChildlessActive = () => {
+    if (!def) return;
+    if (el.dataset.locked === 'true') return; // ne pas toucher si lock actif
+    const hasChildren = def && Array.isArray(def.children) && def.children.length > 0;
+    if (hasChildren) return;
+    const isActive = el.dataset.simpleActive === 'true';
+    if (isActive) {
+      delete el.dataset.simpleActive;
+      try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
+    } else {
+      el.dataset.simpleActive = 'true';
+      // ordre de fallback: tool_bg_active -> tool_active_bg -> tool_bg
+      const bg = currentTheme.tool_bg_active || currentTheme.tool_active_bg || currentTheme.tool_bg || '#444';
+      try { el.style.background = bg; } catch (_) { }
+    }
+  };
+
   switch (kind) {
     case 'touch_down':
       if (def && def.touch_down) exec(def.touch_down);
@@ -767,8 +785,12 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
       break;
     case 'touch':
       if (def && def.touch) exec(def.touch);
-      // Toujours exécuter le comportement historique ensuite
-      try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
+      // Si tool avec enfants -> comportement historique (expand). Sinon toggle actif simple.
+      if (def && Array.isArray(def.children) && def.children.length > 0) {
+        try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
+      } else {
+        toggleChildlessActive();
+      }
       break;
     case 'lock':
       if (def && def.lock) exec(def.lock);
