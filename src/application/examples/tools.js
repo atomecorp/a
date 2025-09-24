@@ -28,7 +28,7 @@ const zonespecial = createZonespecial;
 const Intuition_theme = {
   light: {
     slider_length: '70%',
-    button_size: '33%',
+    button_size: '20%',
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
     support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
@@ -654,6 +654,7 @@ function renderParticleValueFromTheme(cfg) {
 }
 
 // Render a Squirrel helper (Slider/Button) inside an item when def.helper is set
+// ...existing code...
 function renderHelperForItem(cfg) {
   if (!cfg || !cfg.id) return;
   const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
@@ -667,7 +668,10 @@ function renderHelperForItem(cfg) {
   const host = document.getElementById(cfg.id);
   if (!host) return;
 
-  // Centered wrapper to place helper nicely in the item
+  // Taille de l'item (base pour convertir % / ratios)
+  const itemSizeNum = parseFloat(currentTheme.item_size) || host.clientWidth || 54;
+
+  // Wrapper plein cadre pour que les % fonctionnent (sinon % basés sur auto => 0)
   const wrap = $('div', {
     id: wrapId,
     parent: `#${cfg.id}`,
@@ -680,25 +684,41 @@ function renderHelperForItem(cfg) {
       alignItems: 'center',
       justifyContent: 'center',
       pointerEvents: 'auto',
-      background: 'transparent'
+      background: 'transparent',
+      width: '100%',
+      height: '100%'
     }
   });
 
-  // Utility: parse percentage like '70%' to keep percentage; fallback to px based on item size
-  const itemSizeNum = parseFloat(currentTheme.item_size) || (host ? host.clientWidth : 54) || 54;
-  const toSize = (raw, fallbackPct) => {
-    const v = (raw || `${fallbackPct}%`).toString().trim();
-    if (v.endsWith('%') || v.endsWith('px')) return v;
-    const num = parseFloat(v);
-    if (isNaN(num)) return `${fallbackPct}%`;
-    // treat bare number as ratio when <=1, otherwise px
-    return (num <= 1) ? `${Math.round(num * 100)}%` : `${Math.round(num)}px`;
+  // Normalisation d’une définition de taille (%, px, ratio, nombre)
+  const normalizeSize = (raw, fallbackPct) => {
+    let v = (raw == null ? `${fallbackPct}%` : String(raw)).trim();
+    if (v.endsWith('%')) {
+      const pct = parseFloat(v);
+      if (!isNaN(pct)) return Math.max(4, Math.round((pct / 100) * itemSizeNum)) + 'px';
+    } else if (v.endsWith('px')) {
+      const px = parseFloat(v);
+      if (!isNaN(px)) return Math.max(4, px) + 'px';
+    } else {
+      const num = parseFloat(v);
+      if (!isNaN(num)) {
+        if (num <= 1) { // ratio
+          return Math.max(4, Math.round(num * itemSizeNum)) + 'px';
+        }
+        return Math.max(4, Math.round(num)) + 'px';
+      }
+    }
+    return Math.round((fallbackPct / 100) * itemSizeNum) + 'px';
   };
 
   const helper = String(def.helper).toLowerCase();
+
   if (helper === 'slider' && typeof window.Slider === 'function') {
-    const length = toSize(currentTheme.slider_length, 70);
-    const heightPx = Math.max(18, Math.round(itemSizeNum * 0.28));
+    // slider_length du thème : peut être %, px, ratio ou nombre
+    const rawLen = currentTheme.slider_length;
+    const lengthPx = normalizeSize(rawLen, 70);
+    const heightPx = Math.max(10, Math.round(itemSizeNum * 0.28)) + 'px';
+
     const sliderId = `${cfg.id}__helper_slider`;
     const valueNum = (typeof def.value === 'number') ? def.value : parseFloat(def.value) || 0;
     const step = (() => {
@@ -717,11 +737,10 @@ function renderHelperForItem(cfg) {
       step,
       showLabel: false,
       css: {
-        width: length,
-        height: `${heightPx}px`
+        width: lengthPx,
+        height: heightPx
       },
       onInput: (v) => {
-        // update model continuously and reflect in bottom text
         const nv = (typeof v === 'number') ? v : parseFloat(v) || 0;
         if (slider._syncing) return;
         window.updateParticleValue(key, nv);
@@ -732,40 +751,36 @@ function renderHelperForItem(cfg) {
         window.updateParticleValue(key, nv);
       }
     });
-
-    // Keep a weak ref on host for later syncs
     try { host._helperSlider = slider; } catch (_) { }
   } else if (helper === 'button' && typeof window.Button === 'function') {
-    const size = toSize(currentTheme.button_size, 33);
+    const rawBtn = currentTheme.button_size;
+    const sizePx = normalizeSize(rawBtn, 33);
     const btnId = `${cfg.id}__helper_button`;
     const label = def.label || key;
-    const isOn = !!def.value && Number(def.value) !== 0;
     Button({
       id: btnId,
       parent: wrap,
       onText: label,
       offText: label,
       css: {
-        width: size,
-        height: size,
+        width: sizePx,
+        height: sizePx,
         fontSize: `${Math.max(9, Math.round(itemSizeNum * 0.22))}px`
       },
       onAction: () => {
         const cur = intuition_content[key] && intuition_content[key].value;
         const on = !!cur && Number(cur) !== 0;
-        const nv = on ? 0 : 100;
-        window.updateParticleValue(key, nv);
+        window.updateParticleValue(key, on ? 0 : 100);
       },
       offAction: () => {
         const cur = intuition_content[key] && intuition_content[key].value;
         const on = !!cur && Number(cur) !== 0;
-        const nv = on ? 0 : 100;
-        window.updateParticleValue(key, nv);
+        window.updateParticleValue(key, on ? 0 : 100);
       }
     });
   }
 }
-
+// ...existing code...
 // Update a single particle's value/unit/ext in intuition_content and refresh its display
 window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
   if (!nameKey || !(nameKey in intuition_content)) return;
