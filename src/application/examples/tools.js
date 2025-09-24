@@ -3,7 +3,7 @@ let calculatedCSS = {};
 const shadowLeft = 0,
   shadowTop = 0,
   shadowBlur = 12;
-const items_spacing = 6;
+const items_spacing = 3;
 const item_border_radius = 6;
 const item_size = 54;
 const DIRECTIONS = [
@@ -534,6 +534,8 @@ function createParticle(cfg) {
   createLabel(cfg)
   // createIcon(cfg)
   renderParticleValueFromTheme(cfg);
+  // Render helper component (slider/button) if defined for this particle
+  renderHelperForItem(cfg);
 }
 function createOption(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
@@ -651,6 +653,119 @@ function renderParticleValueFromTheme(cfg) {
   }
 }
 
+// Render a Squirrel helper (Slider/Button) inside an item when def.helper is set
+function renderHelperForItem(cfg) {
+  if (!cfg || !cfg.id) return;
+  const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
+  const def = intuition_content[key];
+  if (!def || !def.helper) return;
+
+  const wrapId = `${cfg.id}__helper_wrap`;
+  const prev = document.getElementById(wrapId);
+  if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
+
+  const host = document.getElementById(cfg.id);
+  if (!host) return;
+
+  // Centered wrapper to place helper nicely in the item
+  const wrap = $('div', {
+    id: wrapId,
+    parent: `#${cfg.id}`,
+    css: {
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%, -50%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      pointerEvents: 'auto',
+      background: 'transparent'
+    }
+  });
+
+  // Utility: parse percentage like '70%' to keep percentage; fallback to px based on item size
+  const itemSizeNum = parseFloat(currentTheme.item_size) || (host ? host.clientWidth : 54) || 54;
+  const toSize = (raw, fallbackPct) => {
+    const v = (raw || `${fallbackPct}%`).toString().trim();
+    if (v.endsWith('%') || v.endsWith('px')) return v;
+    const num = parseFloat(v);
+    if (isNaN(num)) return `${fallbackPct}%`;
+    // treat bare number as ratio when <=1, otherwise px
+    return (num <= 1) ? `${Math.round(num * 100)}%` : `${Math.round(num)}px`;
+  };
+
+  const helper = String(def.helper).toLowerCase();
+  if (helper === 'slider' && typeof window.Slider === 'function') {
+    const length = toSize(currentTheme.slider_length, 70);
+    const heightPx = Math.max(18, Math.round(itemSizeNum * 0.28));
+    const sliderId = `${cfg.id}__helper_slider`;
+    const valueNum = (typeof def.value === 'number') ? def.value : parseFloat(def.value) || 0;
+    const step = (() => {
+      const ext = parseInt(def.ext != null ? def.ext : 0, 10);
+      if (!isFinite(ext) || ext <= 0) return 1;
+      return Math.pow(10, -Math.min(3, ext));
+    })();
+
+    const slider = Slider({
+      id: sliderId,
+      parent: wrap,
+      type: 'horizontal',
+      min: 0,
+      max: 100,
+      value: Math.max(0, Math.min(100, valueNum)),
+      step,
+      showLabel: false,
+      css: {
+        width: length,
+        height: `${heightPx}px`
+      },
+      onInput: (v) => {
+        // update model continuously and reflect in bottom text
+        const nv = (typeof v === 'number') ? v : parseFloat(v) || 0;
+        if (slider._syncing) return;
+        window.updateParticleValue(key, nv);
+      },
+      onChange: (v) => {
+        const nv = (typeof v === 'number') ? v : parseFloat(v) || 0;
+        if (slider._syncing) return;
+        window.updateParticleValue(key, nv);
+      }
+    });
+
+    // Keep a weak ref on host for later syncs
+    try { host._helperSlider = slider; } catch (_) { }
+  } else if (helper === 'button' && typeof window.Button === 'function') {
+    const size = toSize(currentTheme.button_size, 33);
+    const btnId = `${cfg.id}__helper_button`;
+    const label = def.label || key;
+    const isOn = !!def.value && Number(def.value) !== 0;
+    Button({
+      id: btnId,
+      parent: wrap,
+      onText: label,
+      offText: label,
+      css: {
+        width: size,
+        height: size,
+        fontSize: `${Math.max(9, Math.round(itemSizeNum * 0.22))}px`
+      },
+      onAction: () => {
+        const cur = intuition_content[key] && intuition_content[key].value;
+        const on = !!cur && Number(cur) !== 0;
+        const nv = on ? 0 : 100;
+        window.updateParticleValue(key, nv);
+      },
+      offAction: () => {
+        const cur = intuition_content[key] && intuition_content[key].value;
+        const on = !!cur && Number(cur) !== 0;
+        const nv = on ? 0 : 100;
+        window.updateParticleValue(key, nv);
+      }
+    });
+  }
+}
+
 // Update a single particle's value/unit/ext in intuition_content and refresh its display
 window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
   if (!nameKey || !(nameKey in intuition_content)) return;
@@ -663,6 +778,11 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
   const el = document.getElementById(elId);
   if (!el) return;
   renderParticleValueFromTheme({ id: elId, nameKey });
+  // Sync helper UI if present (e.g., slider thumb)
+  const sliderEl = document.getElementById(`${elId}__helper_slider`);
+  if (sliderEl && typeof sliderEl.setValue === 'function' && newValue !== undefined) {
+    try { sliderEl._syncing = true; sliderEl.setValue(newValue); } catch (_) { } finally { try { sliderEl._syncing = false; } catch (_) { } }
+  }
 };
 // Toggle an inline expansion of a tool's children right after the clicked tool
 function expandToolInline(el, cfg) {
@@ -1063,6 +1183,8 @@ window.refreshMenu = function (partialTheme = {}) {
         const def = intuition_content[key];
         if (!def || def.type !== particle) return;
         renderParticleValueFromTheme({ id: node.id, nameKey: key });
+        // Refresh helper sizing/placement too
+        renderHelperForItem({ id: node.id, nameKey: key });
       });
     }
   } catch (e) { /* ignore */ }
@@ -1646,9 +1768,10 @@ const images = [
   './assets/images/1.png',
   './assets/images/2.png',
   './assets/images/3.png',
-  './assets/images/ballanim.png',
-  './assets/images/green_planet.png',
-  './assets/images/puydesancy.jpg'
+  './assets/images/4.png',
+  './assets/images/5.png',
+  './assets/images/6.jpg',
+  './assets/images/noise.svg'
 ];
 
 // Index courant
