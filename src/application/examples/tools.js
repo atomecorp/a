@@ -28,7 +28,9 @@ const zonespecial = createZonespecial;
 const Intuition_theme = {
   light: {
     slider_length: '70%',
-    button_size: '20%',
+    button_size: '70%',
+    button_color: 'rgba(72,71,  71,0.85)',
+    button_active_color: "#7a7c73ff",
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
     support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
