@@ -33,8 +33,8 @@ const Intuition_theme = {
     handle_color: 'rgba(248, 184, 128, 1)',
     slider_handle_size: '16%', // relative handle size (%, px, or ratio)
     slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
-    item_zoom: '300%',
-    item_zoom_transition: 'transform 0.15s ease-in-out',
+    item_zoom: '330%',            // width target when pressing a slider item
+    item_zoom_transition: '220ms',// animation duration
     button_size: '33%',
     button_color: 'rgba(72,71,  71,0.85)',
     button_active_color: "#7a7c73ff",
@@ -761,6 +761,47 @@ function renderHelperForItem(cfg) {
       }
     });
     try { host._helperSlider = slider; } catch (_) { }
+
+    // Zoom animation on press / touch
+    (function attachZoom() {
+      const itemEl = host;
+      if (!itemEl || itemEl._zoomAttached) return;
+      itemEl._zoomAttached = true;
+      const zoomRaw = currentTheme.item_zoom;
+      const dur = currentTheme.item_zoom_transition || '200ms';
+      const parseTarget = (raw, base) => {
+        if (!raw) return null;
+        const s = String(raw).trim();
+        if (s.endsWith('%')) { const p = parseFloat(s); if (!isNaN(p)) return base * (p / 100); }
+        else if (s.endsWith('px')) { const px = parseFloat(s); if (!isNaN(px)) return px; }
+        else { const num = parseFloat(s); if (!isNaN(num)) return (num <= 3 ? base * num : num); }
+        return null;
+      };
+      const onDown = (e) => {
+        if (e.type === 'mousedown' && e.button !== 0) return;
+        if (!itemEl._origWidthPx) itemEl._origWidthPx = itemEl.getBoundingClientRect().width;
+        const target = parseTarget(zoomRaw, itemEl._origWidthPx);
+        if (!target || Math.abs(target - itemEl._origWidthPx) < 2) return;
+        itemEl.style.transition = `width ${dur} ease`;
+        itemEl.style.width = target + 'px';
+        itemEl.dataset.zoomed = 'true';
+        const release = () => {
+          if (itemEl.dataset.zoomed) {
+            itemEl.style.transition = `width ${dur} ease`;
+            itemEl.style.width = itemEl._origWidthPx + 'px';
+            delete itemEl.dataset.zoomed;
+          }
+          ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.removeEventListener(ev, release, true));
+        };
+        ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.addEventListener(ev, release, true));
+      };
+      const sliderRoot = document.getElementById(sliderId);
+      if (sliderRoot) {
+        sliderRoot.addEventListener('mousedown', onDown, true);
+        sliderRoot.addEventListener('pointerdown', onDown, true);
+        sliderRoot.addEventListener('touchstart', onDown, { passive: true, capture: true });
+      }
+    })();
     // Apply relative handle size from theme
     requestAnimationFrame(() => {
       const handleSizeRaw = currentTheme.slider_handle_size;
