@@ -36,6 +36,7 @@ const Intuition_theme = {
     slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
     item_zoom: '330%',            // width target when pressing a slider item
     item_zoom_transition: '220ms',// animation duration
+    drag_sensitivity: 0.5, // 1 => dx direct; <1 plus fin; >1 plus rapide
     button_size: '33%',
     button_color: 'rgba(72,71,  71,0.85)',
     button_active_color: "#7a7c73ff",
@@ -820,6 +821,8 @@ function renderHelperForItem(cfg) {
         const hasSliderAlt = !!sliderZoomWidth && sliderRoot;
         const doParentZoom = target && Math.abs(target - itemEl._origWidthPx) >= 2;
         if (!doParentZoom && !hasSliderAlt) return; // rien à faire
+        // Empêche la lib interne d'attraper l'event et de repositionner brutalement le handle
+        try { e.stopPropagation(); e.preventDefault(); } catch (_) { }
         if (doParentZoom) {
           itemEl.style.transition = `width ${dur} ease`;
           itemEl.style.width = target + 'px';
@@ -827,24 +830,55 @@ function renderHelperForItem(cfg) {
         }
         if (hasSliderAlt) {
           if (!sliderRoot._origWidthStyle) sliderRoot._origWidthStyle = sliderRoot.style.width;
-          try { sliderRoot.style.transition = `width ${dur} ease`; } catch(_) {}
+          try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
           if (sliderZoomWidth !== sliderRoot.style.width && sliderZoomWidth) {
             sliderRoot.style.width = sliderZoomWidth;
           }
         }
+        // Mode drag relatif : capture la valeur et la position de départ
+        let baseVal = intuition_content[key] && intuition_content[key].value;
+        if (typeof baseVal !== 'number') baseVal = parseFloat(baseVal) || 0;
+        baseVal = Math.max(0, Math.min(100, baseVal));
+        const startX = (e.touches && e.touches.length) ? e.touches[0].clientX : e.clientX;
+        const widthRef = (sliderRoot || itemEl).getBoundingClientRect().width || 1;
+        const sensitivity = (() => {
+          const s = parseFloat(currentTheme.drag_sensitivity);
+          return (isFinite(s) && s > 0) ? s : 1;
+        })();
+        let dragging = true;
+        const applyDelta = (dx) => {
+          dx = dx * sensitivity; // applique sensibilité
+          let nv = baseVal + (dx / widthRef) * 100;
+          nv = Math.max(0, Math.min(100, nv));
+          if (step && step > 0) {
+            const inv = 1 / step;
+            nv = Math.round(nv * inv) / inv;
+          }
+          window.updateParticleValue(key, nv);
+        };
+        const onMove = (ev) => {
+          if (!dragging) return;
+          const cx = (ev.touches && ev.touches.length) ? ev.touches[0].clientX : ev.clientX;
+          const dx = cx - startX;
+          applyDelta(dx);
+          try { ev.stopPropagation(); ev.preventDefault(); } catch (_) { }
+        };
         const release = () => {
           if (itemEl.dataset.zoomed) {
-            try { itemEl.style.transition = `width ${dur} ease`; } catch(_) {}
+            try { itemEl.style.transition = `width ${dur} ease`; } catch (_) { }
             itemEl.style.width = itemEl._origWidthPx + 'px';
             delete itemEl.dataset.zoomed;
           }
           if (sliderRoot && sliderRoot._origWidthStyle != null) {
-            try { sliderRoot.style.transition = `width ${dur} ease`; } catch(_) {}
+            try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
             sliderRoot.style.width = sliderRoot._origWidthStyle;
           }
+          dragging = false;
+          ['mousemove', 'pointermove', 'touchmove'].forEach(ev => document.removeEventListener(ev, onMove, true));
           ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.removeEventListener(ev, release, true));
         };
         ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.addEventListener(ev, release, true));
+        ['mousemove', 'pointermove', 'touchmove'].forEach(ev => document.addEventListener(ev, onMove, true));
       };
       const sliderRootInit = document.getElementById(sliderId);
       if (sliderRootInit) {
