@@ -667,6 +667,8 @@ function attachToolLockBehavior(el, cfg) {
       el.appendChild(glow);
     }
     el.classList.add('tool-locked');
+    // Tag logique lock
+    el.dataset.lockTag = 'true';
   };
   const clearLockVisual = () => {
     el.classList.remove('tool-locked');
@@ -677,6 +679,7 @@ function attachToolLockBehavior(el, cfg) {
     } else {
       try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
     }
+    delete el.dataset.lockTag;
   };
 
   const enterLock = () => {
@@ -767,11 +770,13 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
     if (isActive) {
       delete el.dataset.simpleActive;
       try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
+      delete el.dataset.activeTag;
     } else {
       el.dataset.simpleActive = 'true';
       // ordre de fallback: tool_bg_active -> tool_active_bg -> tool_bg
       const bg = currentTheme.tool_bg_active || currentTheme.tool_active_bg || currentTheme.tool_bg || '#444';
       try { el.style.background = bg; } catch (_) { }
+      el.dataset.activeTag = 'true';
     }
   };
 
@@ -1368,6 +1373,7 @@ function expandToolInline(el, cfg) {
     el.dataset.expanded = 'false';
     // Restore inactive background when collapsed
     try { el.style.background = currentTheme.tool_bg; } catch (_) { }
+    delete el.dataset.activeTag;
     ensureOverflowForcerAtEnd();
     return;
   }
@@ -1406,6 +1412,7 @@ function expandToolInline(el, cfg) {
   if (el.dataset) el.dataset.expanded = 'true';
   // Highlight as active while expanded
   try { el.style.background = currentTheme.tool_bg_active; } catch (_) { }
+  el.dataset.activeTag = 'true';
 }
 const intuitionAddOn = {
   communication: { label: 'communication', icon: 'communication' }
