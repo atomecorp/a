@@ -28,9 +28,10 @@ const zonespecial = createZonespecial;
 const Intuition_theme = {
   light: {
     slider_length: '70%',
-    button_size: '33%',
+    slider_track_color: 'rgba(241, 139, 49, 1)',
     slider_handle_size: '16%', // relative handle size (%, px, or ratio)
     slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
+    button_size: '33%',
     button_color: 'rgba(72,71,  71,0.85)',
     button_active_color: "#7a7c73ff",
     items_spacing: items_spacing + 'px',
@@ -785,6 +786,11 @@ function renderHelperForItem(cfg) {
       handleEl.style.height = pxVal + 'px';
       handleEl.style.minWidth = pxVal + 'px';
       handleEl.style.minHeight = pxVal + 'px';
+      // Remove default blue border/outline from base slider component
+      handleEl.style.border = 'none';
+      handleEl.style.outline = 'none';
+      // Optionally remove box shadow if undesired; comment out if you want to keep it
+      // handleEl.style.boxShadow = 'none';
       // Apply radius from theme
       const rRaw = currentTheme.slider_handle_radius;
       if (rRaw != null) {
