@@ -30,6 +30,7 @@ const Intuition_theme = {
     slider_length: '70%',
     button_size: '33%',
     slider_handle_size: '16%', // relative handle size (%, px, or ratio)
+    slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
     button_color: 'rgba(72,71,  71,0.85)',
     button_active_color: "#7a7c73ff",
     items_spacing: items_spacing + 'px',
@@ -784,6 +785,22 @@ function renderHelperForItem(cfg) {
       handleEl.style.height = pxVal + 'px';
       handleEl.style.minWidth = pxVal + 'px';
       handleEl.style.minHeight = pxVal + 'px';
+      // Apply radius from theme
+      const rRaw = currentTheme.slider_handle_radius;
+      if (rRaw != null) {
+        const rStr = String(rRaw).trim();
+        if (rStr.endsWith('%') || rStr.endsWith('px')) {
+          handleEl.style.borderRadius = rStr;
+        } else {
+          const rv = parseFloat(rStr);
+          if (!isNaN(rv)) {
+            if (rv <= 1) handleEl.style.borderRadius = (rv * 50) + '%';
+            else handleEl.style.borderRadius = rv + 'px';
+          }
+        }
+      } else {
+        handleEl.style.borderRadius = '50%';
+      }
     });
   } else if (helper === 'button' && typeof window.Button === 'function') {
     const rawBtn = currentTheme.button_size;
