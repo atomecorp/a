@@ -911,6 +911,38 @@ function renderParticleValueFromTheme(cfg) {
   if (valueSpan && valueSpan.addEventListener) {
     valueSpan.style.cursor = 'text';
     valueSpan.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
+    // Mobile double-tap detection
+    (function setupValueMobileTap() {
+      let lastTapTime = 0;
+      let lastX = 0, lastY = 0;
+      const TAP_DELAY = 320; // ms
+      const MAX_DIST = 26;   // px tolerance between taps
+      valueSpan.addEventListener('touchstart', (ev) => {
+        if (!ev.touches || !ev.touches.length) return;
+        const t = ev.touches[0];
+        const now = Date.now();
+        const dx = t.clientX - lastX;
+        const dy = t.clientY - lastY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (now - lastTapTime < TAP_DELAY && dist < MAX_DIST) {
+          ev.stopPropagation();
+          ev.preventDefault();
+          lastTapTime = 0; // reset
+          beginEdit();
+          return;
+        }
+        lastTapTime = now;
+        lastX = t.clientX; lastY = t.clientY;
+      }, { passive: true });
+      // Long press fallback (press & hold ~500ms)
+      let lpTimer = null; let pressed = false;
+      valueSpan.addEventListener('touchstart', (ev) => {
+        pressed = true;
+        if (lpTimer) clearTimeout(lpTimer);
+        lpTimer = setTimeout(() => { if (pressed) { try { ev.stopPropagation(); } catch (_) { } beginEdit(); } }, 520);
+      }, { passive: true });
+      ['touchend', 'touchcancel'].forEach(evName => valueSpan.addEventListener(evName, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
+    })();
   }
   if (wrap && wrap.addEventListener) {
     wrap.style.cursor = 'text';
@@ -918,6 +950,23 @@ function renderParticleValueFromTheme(cfg) {
     wrap.addEventListener('mousedown', (e) => { e.stopPropagation(); });
     wrap.addEventListener('click', (e) => { e.stopPropagation(); });
     wrap.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
+    // Same mobile support on the whole wrap (in case value span is small)
+    (function setupWrapMobileTap() {
+      let lastTapTime = 0; let lastX = 0, lastY = 0; const TAP_DELAY = 320; const MAX_DIST = 28;
+      wrap.addEventListener('touchstart', (ev) => {
+        if (!ev.touches || !ev.touches.length) return;
+        const t = ev.touches[0];
+        const now = Date.now();
+        const dx = t.clientX - lastX; const dy = t.clientY - lastY; const dist = Math.sqrt(dx * dx + dy * dy);
+        if (now - lastTapTime < TAP_DELAY && dist < MAX_DIST) {
+          ev.stopPropagation(); ev.preventDefault(); lastTapTime = 0; beginEdit(); return;
+        }
+        lastTapTime = now; lastX = t.clientX; lastY = t.clientY;
+      }, { passive: true });
+      let lpTimer = null; let pressed = false;
+      wrap.addEventListener('touchstart', (ev) => { pressed = true; if (lpTimer) clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (pressed) { try { ev.stopPropagation(); } catch (_) { } beginEdit(); } }, 520); }, { passive: true });
+      ['touchend', 'touchcancel'].forEach(n => wrap.addEventListener(n, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
+    })();
   }
 }
 
