@@ -30,7 +30,7 @@ const Intuition_theme = {
     slider_length: '70%',
     slider_zoom_length: '100%',
     slider_length_vertical: '30%',
-    slider_zoom_length_vertical: '70%',
+    slider_zoom_length_vertical: '69%',
     slider_track_color: 'rgba(241, 139, 49, 1)',
     slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
     handle_color: 'rgba(248, 184, 128, 1)',
@@ -1103,7 +1103,8 @@ function renderHelperForItem(cfg) {
         const onMove = (ev) => {
           if (!dragging) return;
           const cPos = (ev.touches && ev.touches.length) ? (isVertical ? ev.touches[0].clientY : ev.touches[0].clientX) : (isVertical ? ev.clientY : ev.clientX);
-          const d = cPos - startPos;
+          const dRaw = cPos - startPos;
+          const d = isVertical ? -dRaw : dRaw; // Inversion verticale: monter augmente, descendre diminue
           applyDelta(d);
           try { ev.stopPropagation(); ev.preventDefault(); } catch (_) { }
         };
