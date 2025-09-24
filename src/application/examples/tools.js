@@ -125,7 +125,7 @@ const intuition_content = {
   load: { type: tool, children: ['modules', 'projects'] },
   save: { type: tool },
   email: { type: option },
-  volume: { type: particle, helper: 'slider' },
+  volume: { type: particle, helper: 'slider', value: 3 },
   ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
   controller: { type: zonespecial },
   A: { type: particle, helper: 'slider', unit: '%', value: 50, ext: 3 },
@@ -724,8 +724,15 @@ function renderHelperForItem(cfg) {
 
   if (helper === 'slider' && typeof window.Slider === 'function') {
     // slider_length du thème : peut être %, px, ratio ou nombre
+    // Si c'est un pourcentage, on le conserve tel quel pour que le slider grandisse
+    // proportionnellement avec le parent (notamment pendant le zoom animé).
     const rawLen = currentTheme.slider_length;
-    const lengthPx = normalizeSize(rawLen, 70);
+    let sliderWidth;
+    if (rawLen && typeof rawLen === 'string' && rawLen.trim().endsWith('%')) {
+      sliderWidth = rawLen.trim(); // conserve le %
+    } else {
+      sliderWidth = normalizeSize(rawLen, 70); // calcule une largeur fixe (px) sinon
+    }
     const heightPx = Math.max(10, Math.round(itemSizeNum * 0.28)) + 'px';
 
     const sliderId = `${cfg.id}__helper_slider`;
@@ -746,7 +753,7 @@ function renderHelperForItem(cfg) {
       step,
       showLabel: false,
       css: {
-        width: lengthPx,
+        width: sliderWidth,
         height: heightPx
       },
       onInput: (v) => {
@@ -797,6 +804,10 @@ function renderHelperForItem(cfg) {
       };
       const sliderRoot = document.getElementById(sliderId);
       if (sliderRoot) {
+        // Assure une transition douce du slider lui-même si largeur en %
+        if (String(sliderRoot.style.width).endsWith('%')) {
+          try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
+        }
         sliderRoot.addEventListener('mousedown', onDown, true);
         sliderRoot.addEventListener('pointerdown', onDown, true);
         sliderRoot.addEventListener('touchstart', onDown, { passive: true, capture: true });
