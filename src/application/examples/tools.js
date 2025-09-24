@@ -975,9 +975,22 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
   if (host && host._helperButton) {
     const btn = host._helperButton;
     try {
-      if (btn && btn.el && btn.el.style) {
-        btn.el.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color;
-        btn.el.style.boxShadow = currentTheme.item_shadow;
+      // Récupère le node style cible (certaines implémentations exposent .el, d'autres .root ou rien)
+      let targetEl = null;
+      if (btn) {
+        if (btn.el) targetEl = btn.el;
+        else if (btn.root) targetEl = btn.root;
+        else if (typeof btn.getElement === 'function') targetEl = btn.getElement();
+      }
+      if (!targetEl) {
+        // Fallback via id
+        targetEl = document.getElementById(`${elId}__helper_button`);
+      }
+      if (targetEl && targetEl.style) {
+        targetEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color;
+        targetEl.style.boxShadow = currentTheme.item_shadow;
+        targetEl.style.border = 'none';
+        targetEl.style.outline = 'none';
       }
     } catch (_) { }
   } else {
