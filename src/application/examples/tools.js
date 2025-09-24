@@ -28,7 +28,7 @@ const zonespecial = createZonespecial;
 const Intuition_theme = {
   light: {
     slider_length: '70%',
-    button_size: '70%',
+    button_size: '33%',
     button_color: 'rgba(72,71,  71,0.85)',
     button_active_color: "#7a7c73ff",
     items_spacing: items_spacing + 'px',
@@ -758,26 +758,37 @@ function renderHelperForItem(cfg) {
     const rawBtn = currentTheme.button_size;
     const sizePx = normalizeSize(rawBtn, 33);
     const btnId = `${cfg.id}__helper_button`;
-    const label = def.label || key;
+    const curVal = intuition_content[key] && intuition_content[key].value;
+    const isOn = !!curVal && Number(curVal) !== 0;
     Button({
       id: btnId,
       parent: wrap,
-      onText: label,
-      offText: label,
+      onText: '', // pas de label
+      offText: '',
       css: {
         width: sizePx,
         height: sizePx,
-        fontSize: `${Math.max(9, Math.round(itemSizeNum * 0.22))}px`
+        fontSize: `${Math.max(9, Math.round(itemSizeNum * 0.22))}px`,
+        backgroundColor: isOn ? currentTheme.button_active_color : currentTheme.button_color,
+        boxShadow: currentTheme.item_shadow,
+        border: 'none',
+        outline: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0'
       },
       onAction: () => {
         const cur = intuition_content[key] && intuition_content[key].value;
         const on = !!cur && Number(cur) !== 0;
-        window.updateParticleValue(key, on ? 0 : 100);
+        const next = on ? 0 : 100;
+        window.updateParticleValue(key, next);
       },
       offAction: () => {
         const cur = intuition_content[key] && intuition_content[key].value;
         const on = !!cur && Number(cur) !== 0;
-        window.updateParticleValue(key, on ? 0 : 100);
+        const next = on ? 0 : 100;
+        window.updateParticleValue(key, next);
       }
     });
   }
@@ -799,6 +810,14 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
   const sliderEl = document.getElementById(`${elId}__helper_slider`);
   if (sliderEl && typeof sliderEl.setValue === 'function' && newValue !== undefined) {
     try { sliderEl._syncing = true; sliderEl.setValue(newValue); } catch (_) { } finally { try { sliderEl._syncing = false; } catch (_) { } }
+  }
+  // Sync helper button color if present
+  const btnEl = document.getElementById(`${elId}__helper_button`);
+  if (btnEl) {
+    const v = def.value;
+    const active = !!v && Number(v) !== 0;
+    try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch (_) { }
+    try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
   }
 };
 // Toggle an inline expansion of a tool's children right after the clicked tool
