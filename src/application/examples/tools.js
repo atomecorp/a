@@ -33,6 +33,8 @@ const Intuition_theme = {
     handle_color: 'rgba(248, 184, 128, 1)',
     slider_handle_size: '16%', // relative handle size (%, px, or ratio)
     slider_handle_radius: '25%', // border-radius for handle (%, px, or ratio 0..1)
+    item_zoom: '300%',
+    item_zoom_transition: 'transform 0.15s ease-in-out',
     button_size: '33%',
     button_color: 'rgba(72,71,  71,0.85)',
     button_active_color: "#7a7c73ff",
