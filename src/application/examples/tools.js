@@ -30,7 +30,7 @@ const Intuition_theme = {
     slider_length: '70%',
     slider_zoom_length: '100%',
     slider_length_vertical: '30%',
-    slider_zoom_length_vertical: '80%',
+    slider_zoom_length_vertical: '70%',
     slider_track_color: 'rgba(241, 139, 49, 1)',
     slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
     handle_color: 'rgba(248, 184, 128, 1)',
@@ -957,27 +957,29 @@ function renderHelperForItem(cfg) {
   const helper = String(def.helper).toLowerCase();
 
   if (helper === 'slider' && typeof window.Slider === 'function') {
-    // slider_length du thème : peut être %, px, ratio ou nombre
-    // Si c'est un pourcentage, on le conserve tel quel pour que le slider grandisse
-    // proportionnellement avec le parent (notamment pendant le zoom animé).
-    const rawLen = currentTheme.slider_length;
-    let sliderWidth;
+    const dir = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
+    const isVertical = dir.includes('vertical');
+    // Choix des clefs selon orientation
+    const rawLen = isVertical ? currentTheme.slider_length_vertical : currentTheme.slider_length;
+    const rawZoomLen = isVertical ? currentTheme.slider_zoom_length_vertical : currentTheme.slider_zoom_length;
+    // Taille principale (width si horizontal, height si vertical)
+    let mainSize;
     if (rawLen && typeof rawLen === 'string' && rawLen.trim().endsWith('%')) {
-      sliderWidth = rawLen.trim(); // conserve le %
+      mainSize = rawLen.trim();
     } else {
-      sliderWidth = normalizeSize(rawLen, 70); // calcule une largeur fixe (px) sinon
+      mainSize = normalizeSize(rawLen, isVertical ? 30 : 70); // fallback 30% vertical, 70% horizontal
     }
-    // Longueur alternative pendant zoom (optionnelle)
-    let sliderZoomWidth = null;
-    const rawZoomLen = currentTheme.slider_zoom_length;
+    // Longueur alternative pendant zoom
+    let zoomMainSize = null;
     if (rawZoomLen != null) {
       if (typeof rawZoomLen === 'string' && rawZoomLen.trim().endsWith('%')) {
-        sliderZoomWidth = rawZoomLen.trim();
+        zoomMainSize = rawZoomLen.trim();
       } else {
-        sliderZoomWidth = normalizeSize(rawZoomLen, 70);
+        zoomMainSize = normalizeSize(rawZoomLen, isVertical ? 80 : 70);
       }
     }
-    const heightPx = Math.max(10, Math.round(itemSizeNum * 0.28)) + 'px';
+    // Taille secondaire (épaisseur du slider)
+    const thicknessPx = Math.max(10, Math.round(itemSizeNum * 0.28)) + 'px';
 
     const sliderId = `${cfg.id}__helper_slider`;
     const valueNum = (typeof def.value === 'number') ? def.value : parseFloat(def.value) || 0;
@@ -990,15 +992,15 @@ function renderHelperForItem(cfg) {
     const slider = Slider({
       id: sliderId,
       parent: wrap,
-      type: 'horizontal',
+      type: isVertical ? 'vertical' : 'horizontal',
       min: 0,
       max: 100,
       value: Math.max(0, Math.min(100, valueNum)),
       step,
       showLabel: false,
       css: {
-        width: sliderWidth,
-        height: heightPx,
+        width: isVertical ? thicknessPx : mainSize,
+        height: isVertical ? mainSize : thicknessPx,
         pointerEvents: 'auto'
       },
       onInput: (v) => {
@@ -1019,7 +1021,7 @@ function renderHelperForItem(cfg) {
       const itemEl = host;
       if (!itemEl || itemEl._zoomAttached) return;
       itemEl._zoomAttached = true;
-      const zoomRaw = currentTheme.item_zoom;
+      const zoomRaw = currentTheme.item_zoom; // réutilisé pour width (horizontal) ou height (vertical)
       const dur = currentTheme.item_zoom_transition || '200ms';
       const parseTarget = (raw, base) => {
         if (!raw) return null;
@@ -1031,46 +1033,65 @@ function renderHelperForItem(cfg) {
       };
       const onDown = (e) => {
         if (e.type === 'mousedown' && e.button !== 0) return;
-        if (!itemEl._origWidthPx) itemEl._origWidthPx = itemEl.getBoundingClientRect().width;
-        const target = parseTarget(zoomRaw, itemEl._origWidthPx);
+        if (isVertical) {
+          if (!itemEl._origHeightPx) itemEl._origHeightPx = itemEl.getBoundingClientRect().height;
+        } else {
+          if (!itemEl._origWidthPx) itemEl._origWidthPx = itemEl.getBoundingClientRect().width;
+        }
+        const baseDim = isVertical ? itemEl._origHeightPx : itemEl._origWidthPx;
+        const target = parseTarget(zoomRaw, baseDim);
         const sliderRoot = document.getElementById(sliderId);
-        const hasSliderAlt = !!sliderZoomWidth && sliderRoot;
-        const doParentZoom = target && Math.abs(target - itemEl._origWidthPx) >= 2;
+        const hasSliderAlt = !!zoomMainSize && sliderRoot;
+        const doParentZoom = target && Math.abs(target - baseDim) >= 2;
         if (!doParentZoom && !hasSliderAlt) return; // rien à faire
         // Empêche la lib interne d'attraper l'event et de repositionner brutalement le handle
         try { e.stopPropagation(); e.preventDefault(); } catch (_) { }
         if (doParentZoom) {
-          itemEl.style.transition = `width ${dur} ease`;
-          itemEl.style.width = target + 'px';
+          if (isVertical) {
+            itemEl.style.transition = `height ${dur} ease`;
+            itemEl.style.height = target + 'px';
+          } else {
+            itemEl.style.transition = `width ${dur} ease`;
+            itemEl.style.width = target + 'px';
+          }
           itemEl.dataset.zoomed = 'true';
         }
         if (hasSliderAlt) {
-          if (!sliderRoot._origWidthStyle) sliderRoot._origWidthStyle = sliderRoot.style.width;
-          try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
-          if (sliderZoomWidth !== sliderRoot.style.width && sliderZoomWidth) {
-            sliderRoot.style.width = sliderZoomWidth;
+          if (isVertical) {
+            if (!sliderRoot._origHeightStyle) sliderRoot._origHeightStyle = sliderRoot.style.height;
+            try { sliderRoot.style.transition = `height ${dur} ease`; } catch (_) { }
+            if (zoomMainSize !== sliderRoot.style.height && zoomMainSize) {
+              sliderRoot.style.height = zoomMainSize;
+            }
+          } else {
+            if (!sliderRoot._origWidthStyle) sliderRoot._origWidthStyle = sliderRoot.style.width;
+            try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
+            if (zoomMainSize !== sliderRoot.style.width && zoomMainSize) {
+              sliderRoot.style.width = zoomMainSize;
+            }
           }
         }
         // Mode drag relatif : capture la valeur et la position de départ
         let baseVal = intuition_content[key] && intuition_content[key].value;
         if (typeof baseVal !== 'number') baseVal = parseFloat(baseVal) || 0;
         baseVal = Math.max(0, Math.min(100, baseVal));
-        const startX = (e.touches && e.touches.length) ? e.touches[0].clientX : e.clientX;
-        const widthRef = (sliderRoot || itemEl).getBoundingClientRect().width || 1;
+        const startPos = (e.touches && e.touches.length) ? (isVertical ? e.touches[0].clientY : e.touches[0].clientX) : (isVertical ? e.clientY : e.clientX);
+        const rect = (sliderRoot || itemEl).getBoundingClientRect();
+        const spanRef = isVertical ? rect.height : rect.width;
         const sensitivity = (() => {
           const s = parseFloat(currentTheme.drag_sensitivity);
           return (isFinite(s) && s > 0) ? s : 1;
         })();
         let dragging = true;
         const dragMode = currentTheme.drag_mode || 'unit';
-        const applyDelta = (dx) => {
-          dx = dx * sensitivity; // applique sensibilité
+        const applyDelta = (d) => {
+          d = d * sensitivity; // applique sensibilité
           let nv;
           if (dragMode === 'percent') {
-            nv = baseVal + (dx / widthRef) * 100; // ancien mode
+            nv = baseVal + (d / spanRef) * 100; // ancien mode
           } else {
             // unit: 1px = 1 unité de valeur
-            nv = baseVal + dx;
+            nv = baseVal + d;
           }
           nv = Math.max(0, Math.min(100, nv));
           if (step && step > 0) {
@@ -1081,20 +1102,29 @@ function renderHelperForItem(cfg) {
         };
         const onMove = (ev) => {
           if (!dragging) return;
-          const cx = (ev.touches && ev.touches.length) ? ev.touches[0].clientX : ev.clientX;
-          const dx = cx - startX;
-          applyDelta(dx);
+          const cPos = (ev.touches && ev.touches.length) ? (isVertical ? ev.touches[0].clientY : ev.touches[0].clientX) : (isVertical ? ev.clientY : ev.clientX);
+          const d = cPos - startPos;
+          applyDelta(d);
           try { ev.stopPropagation(); ev.preventDefault(); } catch (_) { }
         };
         const release = () => {
           if (itemEl.dataset.zoomed) {
-            try { itemEl.style.transition = `width ${dur} ease`; } catch (_) { }
-            itemEl.style.width = itemEl._origWidthPx + 'px';
+            try { itemEl.style.transition = `${isVertical ? 'height' : 'width'} ${dur} ease`; } catch (_) { }
+            if (isVertical) {
+              itemEl.style.height = itemEl._origHeightPx + 'px';
+            } else {
+              itemEl.style.width = itemEl._origWidthPx + 'px';
+            }
             delete itemEl.dataset.zoomed;
           }
-          if (sliderRoot && sliderRoot._origWidthStyle != null) {
-            try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
-            sliderRoot.style.width = sliderRoot._origWidthStyle;
+          if (sliderRoot) {
+            if (isVertical && sliderRoot._origHeightStyle != null) {
+              try { sliderRoot.style.transition = `height ${dur} ease`; } catch (_) { }
+              sliderRoot.style.height = sliderRoot._origHeightStyle;
+            } else if (!isVertical && sliderRoot._origWidthStyle != null) {
+              try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
+              sliderRoot.style.width = sliderRoot._origWidthStyle;
+            }
           }
           dragging = false;
           ['mousemove', 'pointermove', 'touchmove'].forEach(ev => document.removeEventListener(ev, onMove, true));
@@ -1105,12 +1135,21 @@ function renderHelperForItem(cfg) {
       };
       const sliderRootInit = document.getElementById(sliderId);
       if (sliderRootInit) {
-        if (String(sliderRootInit.style.width).endsWith('%')) {
-          try { sliderRootInit.style.transition = `width ${dur} ease`; } catch (_) { }
+        if (isVertical) {
+          if (String(sliderRootInit.style.height).endsWith('%')) {
+            try { sliderRootInit.style.transition = `height ${dur} ease`; } catch (_) { }
+          }
+          sliderRootInit.addEventListener('mousedown', onDown, true);
+          sliderRootInit.addEventListener('pointerdown', onDown, true);
+          sliderRootInit.addEventListener('touchstart', onDown, { passive: true, capture: true });
+        } else {
+          if (String(sliderRootInit.style.width).endsWith('%')) {
+            try { sliderRootInit.style.transition = `width ${dur} ease`; } catch (_) { }
+          }
+          sliderRootInit.addEventListener('mousedown', onDown, true);
+          sliderRootInit.addEventListener('pointerdown', onDown, true);
+          sliderRootInit.addEventListener('touchstart', onDown, { passive: true, capture: true });
         }
-        sliderRootInit.addEventListener('mousedown', onDown, true);
-        sliderRootInit.addEventListener('pointerdown', onDown, true);
-        sliderRootInit.addEventListener('touchstart', onDown, { passive: true, capture: true });
       }
     })();
     // Apply relative handle size from theme
