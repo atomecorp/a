@@ -53,6 +53,10 @@ const Intuition_theme = {
     tool_font_px: 10,
     text_char_max: 9,
     tool_active_bg: "#e0e0e0",
+    tool_lock_bg: '#ff5555', // couleur lock
+    tool_lock_pulse_duration: '1400ms', // durée animation clignotement doux
+    tool_lock_toggle_mode: 'long', // 'long' (par défaut) ou 'click' pour permettre le clic simple de sortir
+    tool_lock_bg: "#b22929ff",
     toolbox_icon: 'menu',            // false pour masquer, ou 'settings', 'play', etc.
     toolbox_icon_color: '#cacacaff',
     toolbox_icon_size: '30%',      // px, %, ou ratio (0..1)
@@ -540,6 +544,7 @@ function createTool(cfg) {
     e.stopPropagation();
     expandToolInline(el, cfg);
   });
+  attachToolLockBehavior(el, cfg);
 }
 function createParticle(cfg) {
   intuitionCommon({ ...cfg, ...items_common });
@@ -559,6 +564,110 @@ function createZonespecial(cfg) {
   createLabel(cfg)
   createIcon(cfg)
 
+}
+
+// Gestion du mode lock (long press) pour les tools
+function attachToolLockBehavior(el, cfg) {
+  if (!el) return;
+  const longPressDelay = 450; // ms
+  let pressTimer = null;
+  let locking = false;
+  const activeColor = currentTheme.tool_active_bg || '#e0e0e0';
+  const lockColor = currentTheme.tool_lock_bg || '#ff5555';
+  const iconId = `${cfg.id}__icon`;
+  let previousBg = '';
+  let suppressNextClick = false; // évite de sortir du lock immédiatement après long press
+  let pressActive = false; // vrai tant que la pression est maintenue
+
+  // Injection d'un style global (une seule fois)
+  if (!document.getElementById('intuition_tool_lock_style')) {
+    const styleTag = document.createElement('style');
+    styleTag.id = 'intuition_tool_lock_style';
+    styleTag.textContent = `@keyframes intuitionToolLockPulse {0%{background: var(--tool-lock-color-a);}45%{background: var(--tool-lock-color-b);}55%{background: var(--tool-lock-color-b);}100%{background: var(--tool-lock-color-a);}}
+    .tool-locked{animation: intuitionToolLockPulse var(--tool-lock-pulse-duration,1200ms) ease-in-out infinite; position:relative;}
+    .tool-locked .lock-glow{pointer-events:none; position:absolute; inset:0; border-radius:inherit; box-shadow:0 0 6px 2px rgba(255,255,255,0.35); mix-blend-mode:screen; animation: lockGlowPulse 1600ms ease-in-out infinite; opacity:0.9;}
+    @keyframes lockGlowPulse {0%,100%{opacity:0.25; filter:blur(1px);}50%{opacity:0.75; filter:blur(2px);}}`;
+    document.head.appendChild(styleTag);
+  }
+
+  const applyLockVisual = () => {
+    el.style.setProperty('--tool-lock-color-a', activeColor);
+    el.style.setProperty('--tool-lock-color-b', lockColor);
+    el.style.setProperty('--tool-lock-pulse-duration', currentTheme.tool_lock_pulse_duration || '1400ms');
+    previousBg = el.style.background;
+    // Ajoute un calque glow si pas déjà
+    if (!el.querySelector('.lock-glow')) {
+      const glow = document.createElement('div');
+      glow.className = 'lock-glow';
+      el.appendChild(glow);
+    }
+    el.classList.add('tool-locked');
+  };
+  const clearLockVisual = () => {
+    el.classList.remove('tool-locked');
+    const glow = el.querySelector('.lock-glow');
+    if (glow) try { glow.remove(); } catch (_) { }
+    if (previousBg) {
+      try { el.style.background = previousBg; } catch (_) { }
+    } else {
+      try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
+    }
+  };
+
+  const enterLock = () => {
+    if (locking) return;
+    locking = true;
+    el.dataset.locked = 'true';
+    applyLockVisual();
+    suppressNextClick = true; // le clic qui suit le long press ne doit pas quitter le lock
+  };
+  const exitLock = () => {
+    if (!locking) return;
+    locking = false;
+    delete el.dataset.locked;
+    clearLockVisual();
+  };
+
+  // Toggle par simple clic si déjà en lock
+  // Clic simple : ouvre/ferme menu via handler existant + sort du lock si actif (après suppression synthétique)
+  el.addEventListener('click', (ev) => {
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+      return; // n'ouvre pas le menu pour le clic synthétique post long press
+    }
+    if (locking) {
+      // Sort du lock mais laisse remonter l'event pour expansion/fermeture
+      exitLock();
+    }
+  }, true);
+
+  const startPress = (ev) => {
+    // Ignore second pointer if already tracking
+    pressActive = true;
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      if (!pressActive) return; // relâché avant délai => ne rien faire
+      if (locking) {
+        exitLock();
+        suppressNextClick = true; // supprime le clic synthétique post long press (sortie)
+      } else {
+        enterLock(); // définit suppressNextClick pour ignorer le clic synthétique (entrée)
+      }
+    }, longPressDelay);
+  };
+  const cancelPress = () => {
+    // Annule la détection si on a relâché avant d'atteindre le délai
+    if (pressActive && !locking) {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    }
+    pressActive = false;
+  };
+
+  ['mousedown', 'pointerdown', 'touchstart'].forEach(ev => el.addEventListener(ev, startPress, { passive: true }));
+  ['mouseleave', 'touchcancel', 'pointercancel', 'mouseup', 'pointerup', 'touchend'].forEach(ev => el.addEventListener(ev, cancelPress));
+  // On ne retire plus le lock au mouseup/pointerup/touchend pour que l'animation persiste
 }
 // Render particle value + unit at bottom from currentTheme settings (plain text only)
 function renderParticleValueFromTheme(cfg) {
