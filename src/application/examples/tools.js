@@ -115,16 +115,16 @@ const Intuition_theme = {
 // };
 
 
-function tools_test_actions() {
-  puts('Tools test action triggered');
+function tools_test_touch() {
+  puts('Tools test touch triggered');
 }
 
-function tools_lock_test_actions() {
-  puts('Tools lock test action triggered!!!');
+function tools_lock_test_touch() {
+  puts('Tools lock test touch triggered!!!');
 }
 
-function option_test_actions() {
-  puts('Option test action triggered');
+function option_test_touch() {
+  puts('Option test touch triggered');
 }
 
 
@@ -133,20 +133,20 @@ const intuition_content = {
   meta: { namespace: "vie.menu", defaultLocale: "en" },
   toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
   //
-  file: { type: palette, children: ['import', 'load', 'save'], action: function () { puts('Import action triggered'); } },
-  tools: { type: palette, children: ['volume', 'ADSR', 'controller'], actions: tools_test_actions },
+  file: { type: palette, children: ['import', 'load', 'save'] },
+  tools: { type: palette, children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
   settings: { type: palette, children: ['email',] },
   capture: { label: 'record', type: tool, icon: 'record' },
   perform: { label: 'perform', type: tool, icon: 'play' },
 
 
   import: { type: tool, children: ['audio', 'modules', 'projects'] },
-  load: { type: tool, children: ['modules', 'projects'] },
+  load: { type: tool, children: ['modules', 'projects'], touch_up: function () { puts('Import touch triggered'); } },
   save: { type: tool },
-  email: { type: option, action: option_test_actions },
+  email: { type: option, touch: option_test_touch },
   volume: { type: particle, helper: 'slider', value: 3 },
-  ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope', actions: tools_test_actions, lock: tools_lock_test_actions },
-  controller: { type: zonespecial, action: function () { puts('Controller action triggered'); } },
+  ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
+  controller: { type: zonespecial, touch: function () { puts('Controller touch triggered'); } },
   A: { type: particle, helper: 'slider', unit: '%', value: 50, ext: 3, },
   D: { type: particle, helper: 'button', unit: '%', value: 0, ext: 3 },
   S: { type: particle, helper: 'slider', unit: '%', value: 0, ext: 3 },
@@ -259,7 +259,7 @@ function calculate_positions() {
   // and to have momentum scrolling enabled. Also hint the primary pan axis.
   support.pointerEvents = 'auto';
   support.WebkitOverflowScrolling = 'touch';
-  support.touchAction = isHorizontal ? 'pan-x' : 'pan-y';
+  support.touchtouch = isHorizontal ? 'pan-x' : 'pan-y';
 
 
   return { toolbox_support: support, toolbox: trigger };
@@ -293,7 +293,7 @@ const toolbox_support = {
     // default overflow; calculate_positions will override per direction
     overflowX: 'auto',
     overflowY: 'hidden',
-    touchAction: 'manipulation'
+    touchtouch: 'manipulation'
   }
 };
 
@@ -381,7 +381,7 @@ function intuitionCommon(cfg) {
       position: 'relative',
       flex: '0 0 auto',
       pointerEvents: 'auto',        // réactive les events sur l’item
-      touchAction: 'manipulation',  // tap/drag mobiles OK
+      touchtouch: 'manipulation',  // tap/drag mobiles OK
       // Hide new menu items until slideIn sets their initial transform to avoid visible nudge
       visibility: (cfg.id && String(cfg.id).startsWith('_intuition_')) ? 'hidden' : 'visible',
       ...(cfg.css || {})
@@ -552,9 +552,25 @@ function createTool(cfg) {
   const el = intuitionCommon({ ...cfg, ...items_common });
   createLabel(cfg);
   createIcon(cfg);
+  const nameKey = cfg.nameKey;
+  const def = nameKey ? intuition_content[nameKey] : null;
+
+  // Base click: behaves as 'touch' semantic event
   el.addEventListener('click', (e) => {
     e.stopPropagation();
-    expandToolInline(el, cfg);
+    handleToolSemanticEvent('touch', el, def, e);
+  });
+  // Pointer/touch down
+  ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
+    el.addEventListener(ev, (e) => {
+      handleToolSemanticEvent('touch_down', el, def, e);
+    }, { passive: true });
+  });
+  // Pointer/touch up (use capture to ensure firing even if propagation canceled in children)
+  ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
+    el.addEventListener(ev, (e) => {
+      handleToolSemanticEvent('touch_up', el, def, e);
+    }, true);
   });
   attachToolLockBehavior(el, cfg);
 }
@@ -632,12 +648,16 @@ function attachToolLockBehavior(el, cfg) {
     el.dataset.locked = 'true';
     applyLockVisual();
     suppressNextClick = true; // le clic qui suit le long press ne doit pas quitter le lock
+    // Appel handler 'lock' (entrée)
+    try { handleToolSemanticEvent('lock', el, intuition_content[el.dataset.nameKey], { phase: 'enter' }); } catch (_) { }
   };
   const exitLock = () => {
     if (!locking) return;
     locking = false;
     delete el.dataset.locked;
     clearLockVisual();
+    // Appel handler 'lock' (sortie)
+    try { handleToolSemanticEvent('lock', el, intuition_content[el.dataset.nameKey], { phase: 'exit' }); } catch (_) { }
   };
 
   // Toggle par simple clic si déjà en lock
@@ -680,6 +700,43 @@ function attachToolLockBehavior(el, cfg) {
   ['mousedown', 'pointerdown', 'touchstart'].forEach(ev => el.addEventListener(ev, startPress, { passive: true }));
   ['mouseleave', 'touchcancel', 'pointercancel', 'mouseup', 'pointerup', 'touchend'].forEach(ev => el.addEventListener(ev, cancelPress));
   // On ne retire plus le lock au mouseup/pointerup/touchend pour que l'animation persiste
+}
+
+// --- Semantic tool event dispatcher ---
+function handleToolSemanticEvent(kind, el, def, rawEvent) {
+  if (!el) return;
+  const nameKey = el.dataset && el.dataset.nameKey;
+  if (!def && nameKey) {
+    try { def = intuition_content[nameKey]; } catch (_) { }
+  }
+  const exec = (code) => {
+    try {
+      if (typeof code === 'function') { code({ el, event: rawEvent, kind, nameKey }); return; }
+      if (typeof code === 'string') {
+        // Provide limited sandbox context
+        const fn = new Function('el', 'event', 'kind', 'nameKey', 'update', 'theme', code);
+        fn(el, rawEvent, kind, nameKey, window.updateParticleValue, currentTheme);
+      }
+    } catch (err) { console.error('Tool semantic handler error', err); }
+  };
+
+  switch (kind) {
+    case 'touch_down':
+      if (def && def.touch_down) exec(def.touch_down);
+      // Ne bloque pas comportement par défaut (mais rien à faire ici encore)
+      break;
+    case 'touch_up':
+      if (def && def.touch_up) exec(def.touch_up);
+      break;
+    case 'touch':
+      if (def && def.touch) exec(def.touch);
+      // Toujours exécuter le comportement historique ensuite
+      try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
+      break;
+    case 'lock':
+      if (def && def.lock) exec(def.lock);
+      break;
+  }
 }
 // Render particle value + unit at bottom from currentTheme settings (plain text only)
 function renderParticleValueFromTheme(cfg) {
@@ -1107,13 +1164,13 @@ function renderHelperForItem(cfg) {
         padding: '0',
         pointerEvents: 'auto'
       },
-      onAction: () => {
+      ontouch: () => {
         const cur = intuition_content[key] && intuition_content[key].value;
         const on = !!cur && Number(cur) !== 0;
         const next = on ? 0 : 100;
         window.updateParticleValue(key, next);
       },
-      offAction: () => {
+      offtouch: () => {
         const cur = intuition_content[key] && intuition_content[key].value;
         const on = !!cur && Number(cur) !== 0;
         const next = on ? 0 : 100;
@@ -1599,7 +1656,7 @@ apply_layout();
 
 
 
-// Forward wheel/touch interactions on the toolbox to scroll the toolbox_support overflow
+// Forward wheel/touch intertouch on the toolbox to scroll the toolbox_support overflow
 function setupToolboxScrollProxy() {
   const toolboxEl = grab('toolbox');
   const supportEl = grab('toolbox_support');
