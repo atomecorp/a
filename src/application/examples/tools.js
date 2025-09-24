@@ -583,14 +583,49 @@ function createParticle(cfg) {
   renderHelperForItem(cfg);
 }
 function createOption(cfg) {
-  intuitionCommon({ ...cfg, ...items_common });
-  createLabel(cfg)
-  createIcon(cfg)
+  const el = intuitionCommon({ ...cfg, ...items_common });
+  createLabel(cfg);
+  createIcon(cfg);
+  const nameKey = cfg.nameKey;
+  const def = nameKey ? intuition_content[nameKey] : null;
+  // Click behaves like semantic 'touch'
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleToolSemanticEvent('touch', el, def, e);
+  });
+  // Pointer/touch down
+  ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
+    el.addEventListener(ev, (e) => {
+      handleToolSemanticEvent('touch_down', el, def, e);
+    }, { passive: true });
+  });
+  // Pointer/touch up
+  ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
+    el.addEventListener(ev, (e) => {
+      handleToolSemanticEvent('touch_up', el, def, e);
+    }, true);
+  });
 }
 function createZonespecial(cfg) {
-  intuitionCommon({ ...cfg, ...items_common });
-  createLabel(cfg)
-  createIcon(cfg)
+  const el = intuitionCommon({ ...cfg, ...items_common });
+  createLabel(cfg);
+  createIcon(cfg);
+  const nameKey = cfg.nameKey;
+  const def = nameKey ? intuition_content[nameKey] : null;
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleToolSemanticEvent('touch', el, def, e);
+  });
+  ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
+    el.addEventListener(ev, (e) => {
+      handleToolSemanticEvent('touch_down', el, def, e);
+    }, { passive: true });
+  });
+  ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
+    el.addEventListener(ev, (e) => {
+      handleToolSemanticEvent('touch_up', el, def, e);
+    }, true);
+  });
 
 }
 
