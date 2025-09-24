@@ -750,6 +750,16 @@ function renderHelperForItem(cfg) {
     } else {
       sliderWidth = normalizeSize(rawLen, 70); // calcule une largeur fixe (px) sinon
     }
+    // Longueur alternative pendant zoom (optionnelle)
+    let sliderZoomWidth = null;
+    const rawZoomLen = currentTheme.slider_zoom_length;
+    if (rawZoomLen != null) {
+      if (typeof rawZoomLen === 'string' && rawZoomLen.trim().endsWith('%')) {
+        sliderZoomWidth = rawZoomLen.trim();
+      } else {
+        sliderZoomWidth = normalizeSize(rawZoomLen, 70);
+      }
+    }
     const heightPx = Math.max(10, Math.round(itemSizeNum * 0.28)) + 'px';
 
     const sliderId = `${cfg.id}__helper_slider`;
@@ -787,7 +797,7 @@ function renderHelperForItem(cfg) {
     });
     try { host._helperSlider = slider; } catch (_) { }
 
-    // Zoom animation on press / touch
+    // Zoom animation on press / touch (parent + option slider width)
     (function attachZoom() {
       const itemEl = host;
       if (!itemEl || itemEl._zoomAttached) return;
@@ -806,29 +816,44 @@ function renderHelperForItem(cfg) {
         if (e.type === 'mousedown' && e.button !== 0) return;
         if (!itemEl._origWidthPx) itemEl._origWidthPx = itemEl.getBoundingClientRect().width;
         const target = parseTarget(zoomRaw, itemEl._origWidthPx);
-        if (!target || Math.abs(target - itemEl._origWidthPx) < 2) return;
-        itemEl.style.transition = `width ${dur} ease`;
-        itemEl.style.width = target + 'px';
-        itemEl.dataset.zoomed = 'true';
+        const sliderRoot = document.getElementById(sliderId);
+        const hasSliderAlt = !!sliderZoomWidth && sliderRoot;
+        const doParentZoom = target && Math.abs(target - itemEl._origWidthPx) >= 2;
+        if (!doParentZoom && !hasSliderAlt) return; // rien à faire
+        if (doParentZoom) {
+          itemEl.style.transition = `width ${dur} ease`;
+          itemEl.style.width = target + 'px';
+          itemEl.dataset.zoomed = 'true';
+        }
+        if (hasSliderAlt) {
+          if (!sliderRoot._origWidthStyle) sliderRoot._origWidthStyle = sliderRoot.style.width;
+          try { sliderRoot.style.transition = `width ${dur} ease`; } catch(_) {}
+          if (sliderZoomWidth !== sliderRoot.style.width && sliderZoomWidth) {
+            sliderRoot.style.width = sliderZoomWidth;
+          }
+        }
         const release = () => {
           if (itemEl.dataset.zoomed) {
-            itemEl.style.transition = `width ${dur} ease`;
+            try { itemEl.style.transition = `width ${dur} ease`; } catch(_) {}
             itemEl.style.width = itemEl._origWidthPx + 'px';
             delete itemEl.dataset.zoomed;
+          }
+          if (sliderRoot && sliderRoot._origWidthStyle != null) {
+            try { sliderRoot.style.transition = `width ${dur} ease`; } catch(_) {}
+            sliderRoot.style.width = sliderRoot._origWidthStyle;
           }
           ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.removeEventListener(ev, release, true));
         };
         ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.addEventListener(ev, release, true));
       };
-      const sliderRoot = document.getElementById(sliderId);
-      if (sliderRoot) {
-        // Assure une transition douce du slider lui-même si largeur en %
-        if (String(sliderRoot.style.width).endsWith('%')) {
-          try { sliderRoot.style.transition = `width ${dur} ease`; } catch (_) { }
+      const sliderRootInit = document.getElementById(sliderId);
+      if (sliderRootInit) {
+        if (String(sliderRootInit.style.width).endsWith('%')) {
+          try { sliderRootInit.style.transition = `width ${dur} ease`; } catch (_) { }
         }
-        sliderRoot.addEventListener('mousedown', onDown, true);
-        sliderRoot.addEventListener('pointerdown', onDown, true);
-        sliderRoot.addEventListener('touchstart', onDown, { passive: true, capture: true });
+        sliderRootInit.addEventListener('mousedown', onDown, true);
+        sliderRootInit.addEventListener('pointerdown', onDown, true);
+        sliderRootInit.addEventListener('touchstart', onDown, { passive: true, capture: true });
       }
     })();
     // Apply relative handle size from theme
