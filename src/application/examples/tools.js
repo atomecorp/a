@@ -29,6 +29,7 @@ const Intuition_theme = {
   light: {
     slider_length: '70%',
     button_size: '33%',
+    slider_handle_size: '16%', // relative handle size (%, px, or ratio)
     button_color: 'rgba(72,71,  71,0.85)',
     button_active_color: "#7a7c73ff",
     items_spacing: items_spacing + 'px',
@@ -122,7 +123,7 @@ const intuition_content = {
   ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope' },
   controller: { type: zonespecial },
   A: { type: particle, helper: 'slider', unit: '%', value: 50, ext: 3 },
-  D: { type: particle, helper: 'button', unit: '%', value: 30, ext: 3 },
+  D: { type: particle, helper: 'button', unit: '%', value: 0, ext: 3 },
   S: { type: particle, helper: 'slider', unit: '%', value: 0, ext: 3 },
   R: { type: particle, unit: '%', value: 20, ext: 3 },
 
@@ -754,6 +755,36 @@ function renderHelperForItem(cfg) {
       }
     });
     try { host._helperSlider = slider; } catch (_) { }
+    // Apply relative handle size from theme
+    requestAnimationFrame(() => {
+      const handleSizeRaw = currentTheme.slider_handle_size;
+      if (!handleSizeRaw) return;
+      let pxVal = null;
+      const norm = String(handleSizeRaw).trim();
+      if (norm.endsWith('%')) {
+        const pct = parseFloat(norm);
+        if (!isNaN(pct)) pxVal = Math.max(4, Math.round(itemSizeNum * (pct / 100)));
+      } else if (norm.endsWith('px')) {
+        const n = parseFloat(norm); if (!isNaN(n)) pxVal = Math.max(4, n);
+      } else {
+        const n = parseFloat(norm);
+        if (!isNaN(n)) {
+          // treat <=1 as ratio
+          pxVal = n <= 1 ? Math.max(4, Math.round(itemSizeNum * n)) : Math.max(4, Math.round(n));
+        }
+      }
+      if (pxVal == null) return;
+      const root = document.getElementById(sliderId);
+      if (!root) return;
+      const handleSelectors = ['.hs-slider-handle', '.slider-handle', '.slider_handle', '.handle'];
+      let handleEl = null;
+      for (const sel of handleSelectors) { handleEl = root.querySelector(sel); if (handleEl) break; }
+      if (!handleEl) return;
+      handleEl.style.width = pxVal + 'px';
+      handleEl.style.height = pxVal + 'px';
+      handleEl.style.minWidth = pxVal + 'px';
+      handleEl.style.minHeight = pxVal + 'px';
+    });
   } else if (helper === 'button' && typeof window.Button === 'function') {
     const rawBtn = currentTheme.button_size;
     const sizePx = normalizeSize(rawBtn, 33);
