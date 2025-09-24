@@ -600,7 +600,7 @@ function renderParticleValueFromTheme(cfg) {
 
   // Empêche le parent d'intercepter le premier clic pour permettre le double‑clic immédiat
   if (valueSpan) {
-    ['mousedown','click'].forEach(ev => {
+    ['mousedown', 'click'].forEach(ev => {
       valueSpan.addEventListener(ev, (e) => { e.stopPropagation(); });
     });
   }
@@ -932,7 +932,7 @@ function renderHelperForItem(cfg) {
         window.updateParticleValue(key, next);
       }
     });
-    try { host._helperButton = buttonObj; } catch(_) {}
+    try { host._helperButton = buttonObj; } catch (_) { }
   }
 }
 // ...existing code...
@@ -954,12 +954,12 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
   if (host && host._helperSlider) {
     const comp = host._helperSlider;
     if (typeof comp.setValue === 'function') {
-      try { comp._syncing = true; comp.setValue(currentVal); } catch(_) {} finally { try { comp._syncing = false; } catch(_) {} }
+      try { comp._syncing = true; comp.setValue(currentVal); } catch (_) { } finally { try { comp._syncing = false; } catch (_) { } }
     }
   } else {
     const sliderEl = document.getElementById(`${elId}__helper_slider`);
     if (sliderEl && typeof sliderEl.setValue === 'function') {
-      try { sliderEl._syncing = true; sliderEl.setValue(currentVal); } catch(_) {} finally { try { sliderEl._syncing = false; } catch(_) {} }
+      try { sliderEl._syncing = true; sliderEl.setValue(currentVal); } catch (_) { } finally { try { sliderEl._syncing = false; } catch (_) { } }
     }
   }
   // Ensure visual progression update (some slider libs only update on input events)
@@ -969,7 +969,7 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
       const prog = root.querySelector('.hs-slider-progression');
       if (prog) prog.style.width = Math.max(0, Math.min(100, parseFloat(currentVal))) + '%';
     }
-  } catch(_) {}
+  } catch (_) { }
   // Sync helper button color/state
   const active = !!currentVal && Number(currentVal) !== 0;
   if (host && host._helperButton) {
@@ -979,12 +979,12 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
         btn.el.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color;
         btn.el.style.boxShadow = currentTheme.item_shadow;
       }
-    } catch(_) {}
+    } catch (_) { }
   } else {
     const btnEl = document.getElementById(`${elId}__helper_button`);
     if (btnEl) {
-      try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch(_) {}
-      try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch(_) {}
+      try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch (_) { }
+      try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
     }
   }
 };
