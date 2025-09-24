@@ -28,6 +28,7 @@ const zonespecial = createZonespecial;
 const Intuition_theme = {
   light: {
     slider_length: '70%',
+    slider_zoom_length: '100%',
     slider_track_color: 'rgba(241, 139, 49, 1)',
     slider_revealed_track_color: 'rgba(241, 139, 49, 1)',
     handle_color: 'rgba(248, 184, 128, 1)',
@@ -586,7 +587,8 @@ function renderParticleValueFromTheme(cfg) {
       color: 'inherit',
       pointerEvents: 'auto',
       userSelect: 'none',
-      whiteSpace: 'nowrap'
+      whiteSpace: 'nowrap',
+      zIndex: 30 // au-dessus du helper slider (qui est ajouté après et recouvrait le double‑clic)
     }
   });
   const valColor = String(currentTheme.particle_value_color || currentTheme.tool_text || '#fff');
@@ -594,6 +596,13 @@ function renderParticleValueFromTheme(cfg) {
   const valueSpan = $('span', { parent: wrap, text: valueText, css: { color: valColor } });
   if (unit) {
     $('span', { parent: wrap, text: unit, css: { color: unitColor, marginLeft: '2px' } });
+  }
+
+  // Empêche le parent d'intercepter le premier clic pour permettre le double‑clic immédiat
+  if (valueSpan) {
+    ['mousedown','click'].forEach(ev => {
+      valueSpan.addEventListener(ev, (e) => { e.stopPropagation(); });
+    });
   }
 
   // Inline edit on double click (value only; unit stays static)
@@ -634,11 +643,14 @@ function renderParticleValueFromTheme(cfg) {
       let newVal = raw;
       if (isNumeric) {
         const n = parseFloat(raw);
-        if (!isNaN(n)) newVal = n;
+        if (!isNaN(n)) {
+          // Clamp 0..100 for helper coherence (slider domain)
+          newVal = Math.max(0, Math.min(100, n));
+        }
       }
-      def.value = newVal;
+      // Utilise updateParticleValue pour forcer la synchronisation helpers
       try { input.remove(); } catch (_) { }
-      renderParticleValueFromTheme({ id: cfg.id, nameKey });
+      window.updateParticleValue(nameKey, newVal);
     };
     const cancel = () => {
       try { input.remove(); } catch (_) { }
@@ -658,6 +670,9 @@ function renderParticleValueFromTheme(cfg) {
   }
   if (wrap && wrap.addEventListener) {
     wrap.style.cursor = 'text';
+    // Stop simple clic pour ne pas déclencher une expansion avant le double‑clic
+    wrap.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+    wrap.addEventListener('click', (e) => { e.stopPropagation(); });
     wrap.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
   }
 }
@@ -692,10 +707,12 @@ function renderHelperForItem(cfg) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      pointerEvents: 'auto',
+      // Laisse passer les événements hors des éléments interactifs internes
+      pointerEvents: 'none',
       background: 'transparent',
       width: '100%',
-      height: '100%'
+      height: '100%',
+      zIndex: 10
     }
   });
 
@@ -754,7 +771,8 @@ function renderHelperForItem(cfg) {
       showLabel: false,
       css: {
         width: sliderWidth,
-        height: heightPx
+        height: heightPx,
+        pointerEvents: 'auto'
       },
       onInput: (v) => {
         const nv = (typeof v === 'number') ? v : parseFloat(v) || 0;
@@ -882,7 +900,7 @@ function renderHelperForItem(cfg) {
     const btnId = `${cfg.id}__helper_button`;
     const curVal = intuition_content[key] && intuition_content[key].value;
     const isOn = !!curVal && Number(curVal) !== 0;
-    Button({
+    const buttonObj = Button({
       id: btnId,
       parent: wrap,
       onText: '', // pas de label
@@ -898,7 +916,8 @@ function renderHelperForItem(cfg) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '0'
+        padding: '0',
+        pointerEvents: 'auto'
       },
       onAction: () => {
         const cur = intuition_content[key] && intuition_content[key].value;
@@ -913,6 +932,7 @@ function renderHelperForItem(cfg) {
         window.updateParticleValue(key, next);
       }
     });
+    try { host._helperButton = buttonObj; } catch(_) {}
   }
 }
 // ...existing code...
@@ -928,18 +948,44 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
   const el = document.getElementById(elId);
   if (!el) return;
   renderParticleValueFromTheme({ id: elId, nameKey });
-  // Sync helper UI if present (e.g., slider thumb)
-  const sliderEl = document.getElementById(`${elId}__helper_slider`);
-  if (sliderEl && typeof sliderEl.setValue === 'function' && newValue !== undefined) {
-    try { sliderEl._syncing = true; sliderEl.setValue(newValue); } catch (_) { } finally { try { sliderEl._syncing = false; } catch (_) { } }
+  // Sync helper slider (use stored reference if any)
+  const host = el;
+  const currentVal = def.value;
+  if (host && host._helperSlider) {
+    const comp = host._helperSlider;
+    if (typeof comp.setValue === 'function') {
+      try { comp._syncing = true; comp.setValue(currentVal); } catch(_) {} finally { try { comp._syncing = false; } catch(_) {} }
+    }
+  } else {
+    const sliderEl = document.getElementById(`${elId}__helper_slider`);
+    if (sliderEl && typeof sliderEl.setValue === 'function') {
+      try { sliderEl._syncing = true; sliderEl.setValue(currentVal); } catch(_) {} finally { try { sliderEl._syncing = false; } catch(_) {} }
+    }
   }
-  // Sync helper button color if present
-  const btnEl = document.getElementById(`${elId}__helper_button`);
-  if (btnEl) {
-    const v = def.value;
-    const active = !!v && Number(v) !== 0;
-    try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch (_) { }
-    try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
+  // Ensure visual progression update (some slider libs only update on input events)
+  try {
+    const root = document.getElementById(`${elId}__helper_slider`);
+    if (root) {
+      const prog = root.querySelector('.hs-slider-progression');
+      if (prog) prog.style.width = Math.max(0, Math.min(100, parseFloat(currentVal))) + '%';
+    }
+  } catch(_) {}
+  // Sync helper button color/state
+  const active = !!currentVal && Number(currentVal) !== 0;
+  if (host && host._helperButton) {
+    const btn = host._helperButton;
+    try {
+      if (btn && btn.el && btn.el.style) {
+        btn.el.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color;
+        btn.el.style.boxShadow = currentTheme.item_shadow;
+      }
+    } catch(_) {}
+  } else {
+    const btnEl = document.getElementById(`${elId}__helper_button`);
+    if (btnEl) {
+      try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch(_) {}
+      try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch(_) {}
+    }
   }
 };
 // Toggle an inline expansion of a tool's children right after the clicked tool
