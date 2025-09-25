@@ -1,6 +1,18 @@
 #!/bin/bash
+set -euo pipefail
 
-echo "🖥️ Démarrage de Tauri..."
+# Resolve script & project root so the script works from anywhere
+SOURCE="${BASH_SOURCE[0]:-$0}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Always operate from project root
+cd "$PROJECT_ROOT"
 
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
@@ -39,14 +51,19 @@ echo "📦 NPM: $(npm --version)"
 echo ""
 
 # Vérifier si les dépendances sont installées ou si elles ont besoin d'être mises à jour
+if $FORCE_DEPS; then
+    echo "⚠️  Forçage de la réinstallation des dépendances (--force)"
+    rm -f node_modules/.install_complete
+fi
+
 if [ ! -d "node_modules" ] || [ ! -f "node_modules/.install_complete" ]; then
     echo "📥 Installation/mise à jour des dépendances Squirrel Framework..."
     
     # Rendre le script exécutable s'il ne l'est pas
-    chmod +x scripts_utils/install_dependencies.sh
+    chmod +x "$SCRIPT_DIR/install_dependencies.sh"
     
     # Lancer l'installation en mode non-interactif
-    ./scripts_utils/install_dependencies.sh --non-interactive
+    "$SCRIPT_DIR/install_dependencies.sh" --non-interactive
     
     # Créer un marqueur pour éviter les installations répétées
     touch node_modules/.install_complete
@@ -56,5 +73,11 @@ else
     echo ""
 fi
 
-# Lancer Tauri
-npm run tauri:dev
+# Scanner les composants Squirrel
+echo "🔍 Scan des composants Squirrel..."
+npm run scan:components
+echo ""
+
+# Démarrer le serveur
+echo "🎯 Lancement du serveur..."
+cd server && node server.js
