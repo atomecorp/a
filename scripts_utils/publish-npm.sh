@@ -1,31 +1,34 @@
 #!/bin/zsh
 # NPM publication script + unpkg
-# Usage: ./publish-npm.sh
+# Usage: ./scripts_utils/publish-npm.sh
 
 set -e
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+
 # 1. Build with rollup (config in ./scripts_utils/rollup.config.npm.js)
-./node_modules/.bin/rollup -c ./scripts_utils/rollup.config.npm.js
+"$PROJECT_ROOT/node_modules/.bin/rollup" -c "$SCRIPT_DIR/rollup.config.npm.js"
 
 # 2. (Optional) Minification
 if command -v terser > /dev/null; then
-  terser ./dist/squirrel.js -o ./dist/squirrel.min.js --compress --mangle
+  terser "$PROJECT_ROOT/dist/squirrel.js" -o "$PROJECT_ROOT/dist/squirrel.min.js" --compress --mangle
 else
   echo "terser not found, minification skipped. Install it with: npm i -g terser"
 fi
 
 # 3. Copy CSS to dist
-cp ./src/css/squirrel.css ./dist/squirrel.css
+cp "$PROJECT_ROOT/src/css/squirrel.css" "$PROJECT_ROOT/dist/squirrel.css"
 
 echo "Build complete. Files generated in ./dist:"
-ls -lh ./dist/squirrel*.js ./dist/squirrel.css
+ls -lh "$PROJECT_ROOT"/dist/squirrel*.js "$PROJECT_ROOT"/dist/squirrel.css
 
 echo ""
 read "REPLY?Publish to NPM and unpkg now? (y/N): "
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-  npm publish --access public
-  PKG_NAME=$(node -p "require('./package.json').name")
-  PKG_VERSION=$(node -p "require('./package.json').version")
+  (cd "$PROJECT_ROOT" && npm publish --access public)
+  PKG_NAME=$(node -p "require('$PROJECT_ROOT/package.json').name")
+  PKG_VERSION=$(node -p "require('$PROJECT_ROOT/package.json').version")
   echo "\nUnpkg ready:"
   echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.js"
   echo "https://unpkg.com/$PKG_NAME@$PKG_VERSION/dist/squirrel.min.js"

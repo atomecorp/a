@@ -4,7 +4,7 @@ import Squirrel from '../src/squirrel/squirrel.js';
 import Slider from '../src/squirrel/components/slider_builder.js';
 import Badge from '../src/squirrel/components/badge_builder.js';
 import Button from '../src/squirrel/components/button_builder.js';
-import Draggable, { makeDraggableWithDrop, makeDropZone } from '../src/squirrel/components/draggable_builder.js';
+import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from '../src/squirrel/components/draggable_builder.js';
 import List from '../src/squirrel/components/List_builder.js';
 import Matrix from '../src/squirrel/components/matrix_builder.js';
 import Menu from '../src/squirrel/components/menu_builder.js';
@@ -20,6 +20,9 @@ Squirrel.components = {
   Badge,
   Button,
   Draggable,
+  makeDraggable,
+  makeDraggableWithDrop,
+  makeDropZone,
   List,
   Matrix,
   Menu,
@@ -32,19 +35,21 @@ Squirrel.components = {
 
 // Expose drag&drop helpers as soon as possible for local and CDN builds
 if (typeof window !== 'undefined') {
+  window.makeDraggable = makeDraggable;
   window.makeDraggableWithDrop = makeDraggableWithDrop;
   window.makeDropZone = makeDropZone;
   // Empêche le tree-shaking de Rollup
-  window.__forceKeep = [makeDraggableWithDrop, makeDropZone];
+  window.__forceKeep = [makeDraggable, makeDraggableWithDrop, makeDropZone];
 }
 
 // Expose Squirrel globals immediately for both CDN and NPM builds
 if (typeof window !== 'undefined') {
+  window.Squirrel = window.Squirrel || {};
+
   // Expose Squirrel globals and bare component names immediately
   window.Squirrel.Apis = Apis;
-window.Apis = Apis;
+  window.Apis = Apis;
   window.$ = Squirrel.$;
-  window.Squirrel = window.Squirrel || {};
   window.Squirrel.$ = Squirrel.$;
   window.Squirrel.define = Squirrel.define;
   window.Squirrel.batch = Squirrel.batch;
@@ -53,7 +58,9 @@ window.Apis = Apis;
   window.Squirrel.Badge = Badge;
   window.Squirrel.Button = Button;
   window.Squirrel.Draggable = Draggable;
-  window.makeDraggable = Draggable.makeDraggable;
+  window.Squirrel.makeDraggable = makeDraggable;
+  window.Squirrel.makeDraggableWithDrop = makeDraggableWithDrop;
+  window.Squirrel.makeDropZone = makeDropZone;
   window.Squirrel.List = List;
   window.Squirrel.Matrix = Matrix;
   window.Squirrel.Menu = Menu;
@@ -101,3 +108,23 @@ window.Apis = Apis;
 }
 
 export default Squirrel;
+
+export {
+  Squirrel,
+  Apis,
+  Slider,
+  Badge,
+  Button,
+  Draggable,
+  makeDraggable,
+  makeDraggableWithDrop,
+  makeDropZone,
+  List,
+  Matrix,
+  Menu,
+  Minimal,
+  Table,
+  Template,
+  Tooltip,
+  Unit
+};
