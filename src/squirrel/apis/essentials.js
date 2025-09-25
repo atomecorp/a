@@ -5,98 +5,98 @@
 
 // Add the puts method to display in the console
 window.puts = function puts(val) {
-    console.log(val);
+  console.log(val);
 };
 
 // Add the print method to display in the console without newline (Ruby-like)
 window.print = function print(val) {
-    // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
-    console.log('[PRINT]', val);
+  // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
+  console.log('[PRINT]', val);
 };
 
 // Add the grab method to retrieve DOM elements
 window.grab = (function () {
-    // Cache for recent results
-    const domCache = new Map();
+  // Cache for recent results
+  const domCache = new Map();
 
-    return function (id) {
-        if (!id) return null;
+  return function (id) {
+    if (!id) return null;
 
-        // Check the registry first (fast path)
-        const instance = _registry[id];
-        if (instance) return instance;
+    // Check the registry first (fast path)
+    const instance = _registry[id];
+    if (instance) return instance;
 
-        // Check the DOM cache
-        if (domCache.has(id)) {
-            const cached = domCache.get(id);
-            // Check if the element is still in the DOM
-            if (cached && cached.isConnected) {
-                return cached;
-            } else {
-                // Remove obsolete entry
-                domCache.delete(id);
-            }
-        }
+    // Check the DOM cache
+    if (domCache.has(id)) {
+      const cached = domCache.get(id);
+      // Check if the element is still in the DOM
+      if (cached && cached.isConnected) {
+        return cached;
+      } else {
+        // Remove obsolete entry
+        domCache.delete(id);
+      }
+    }
 
-        // Search in the DOM
-        const element = document.getElementById(id);
-        if (!element) return null;
+    // Search in the DOM
+    const element = document.getElementById(id);
+    if (!element) return null;
 
-        // Add useful methods – only once!
-        if (!element._enhanced) {
-            // Mark as enhanced to avoid duplicates
-            element._enhanced = true;
+    // Add useful methods – only once!
+    if (!element._enhanced) {
+      // Mark as enhanced to avoid duplicates
+      element._enhanced = true;
 
-            const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
-            cssProperties.forEach(prop => {
-                const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
+      const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
+      cssProperties.forEach(prop => {
+        const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
 
-                element[prop] = function (value) {
-                    if (arguments.length === 0) {
-                        return getComputedStyle(this)[styleProp];
-                    }
+        element[prop] = function (value) {
+          if (arguments.length === 0) {
+            return getComputedStyle(this)[styleProp];
+          }
 
-                    this.style[styleProp] = window._isNumber && window._isNumber(value) ? 
-                        window._formatSize(value) : value;
-                    return this;
-                };
-            });
-        }
+          this.style[styleProp] = window._isNumber && window._isNumber(value) ?
+            window._formatSize(value) : value;
+          return this;
+        };
+      });
+    }
 
-        // Store in the cache for future calls
-        domCache.set(id, element);
+    // Store in the cache for future calls
+    domCache.set(id, element);
 
-        return element;
-    };
+    return element;
+  };
 })();
 
 // Add extensions to native JavaScript objects (similar to Ruby)
 // Use non-enumerable properties to avoid contaminating for...in loops
 Object.defineProperty(Object.prototype, 'define_method', {
-    value: function (name, fn) {
-        this[name] = fn;
-        return this;
-    },
-    enumerable: false,    // Crucial: ne pas apparaître dans for...in
-    writable: false,
-    configurable: false
+  value: function (name, fn) {
+    this[name] = fn;
+    return this;
+  },
+  enumerable: false,    // Crucial: ne pas apparaître dans for...in
+  writable: false,
+  configurable: false
 });
 
 // Add methods to Array to mimic Ruby behavior
 Array.prototype.each = function (callback) {
-    this.forEach(callback);
-    return this;
+  this.forEach(callback);
+  return this;
 };
 
 // Extend the Object class to allow inspection  
 // Use non-enumerable property to avoid contaminating for...in loops
 Object.defineProperty(Object.prototype, 'inspect', {
-    value: function () {
-        return AJS.inspect(this);
-    },
-    enumerable: false,    // Crucial: ne pas apparaître dans for...in
-    writable: false,
-    configurable: false
+  value: function () {
+    return AJS.inspect(this);
+  },
+  enumerable: false,    // Crucial: ne pas apparaître dans for...in
+  writable: false,
+  configurable: false
 });
 
 // Add a wait function for delays (promisified version is more modern)
@@ -121,23 +121,23 @@ window._registry = window._registry || {};
 
 // AJS object for inspect method
 window.AJS = window.AJS || {
-    inspect: function(obj) {
-        return JSON.stringify(obj, null, 2);
-    }
+  inspect: function (obj) {
+    return JSON.stringify(obj, null, 2);
+  }
 };
 
 
 // Function to completely clear the screen
 window.clearScreen = function () {
   const viewContainer = document.getElementById('view');
-  
+
   if (viewContainer) {
     // 1. Clean all events from children recursively
     cleanupElementEvents(viewContainer);
-    
+
     // 2. Empty the container
     viewContainer.innerHTML = '';
-    
+
     // 3. Clean global variables if needed
     cleanupGlobalVariables();
   }
@@ -153,7 +153,7 @@ function cleanupElementEvents(element) {
     const clone = element.cloneNode(false);
     // Note: this method removes events but we'll rather use a manual approach
   }
-  
+
   // Recursively clean all children
   Array.from(element.children).forEach(child => {
     cleanupElementEvents(child);
@@ -167,13 +167,13 @@ function cleanupGlobalVariables() {
     gsap.killTweensOf("*");
     gsap.globalTimeline.clear();
   }
-  
+
   // Clear timers
   if (window.rotationAnimation) {
     cancelAnimationFrame(window.rotationAnimation);
     window.rotationAnimation = null;
   }
-  
+
   // Clear deformation variables
   if (window.deformTweens) {
     window.deformTweens.forEach(tween => {
@@ -186,4 +186,4 @@ function cleanupGlobalVariables() {
 
 
 // Export for ES6 modules
-export { };
+export { wait };

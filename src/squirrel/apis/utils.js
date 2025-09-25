@@ -22,9 +22,9 @@ function current_platform() {
 
     // AUv3 bridge heuristics (extended)
     let hasAUv3Bridge = false;
-  // Fast explicit flag (injected by Swift) or query param (?auv3=1 / ?mode=auv3)
-  const explicitAUv3 = !!(window.__AUV3_MODE__ || window.__AUV3__ || (typeof location !== 'undefined' && /[?&](auv3=1|mode=auv3)(?:&|$)/i.test(location.search)));
-  if (explicitAUv3 && isIOS) return 'ios_auv3';
+    // Fast explicit flag (injected by Swift) or query param (?auv3=1 / ?mode=auv3)
+    const explicitAUv3 = !!(window.__AUV3_MODE__ || window.__AUV3__ || (typeof location !== 'undefined' && /[?&](auv3=1|mode=auv3)(?:&|$)/i.test(location.search)));
+    if (explicitAUv3 && isIOS) return 'ios_auv3';
     if (isIOS && window.webkit && window.webkit.messageHandlers) {
       try {
         const mh = window.webkit.messageHandlers;
@@ -38,7 +38,7 @@ function current_platform() {
             hasAUv3Bridge = true;
           }
         }
-      } catch(_) {}
+      } catch (_) { }
     }
     if (window.forceAUv3Mode === true) hasAUv3Bridge = true;
     if (hasAUv3Bridge) return 'ios_auv3';
@@ -59,4 +59,6 @@ function current_platform() {
 
 // expose globally
 if (typeof window !== 'undefined') { window.current_platform = current_platform; }
+
+export { current_platform };
 

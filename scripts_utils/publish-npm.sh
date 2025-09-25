@@ -23,6 +23,13 @@ cp "$PROJECT_ROOT/src/css/squirrel.css" "$PROJECT_ROOT/dist/squirrel.css"
 echo "Build complete. Files generated in ./dist:"
 ls -lh "$PROJECT_ROOT"/dist/squirrel*.js "$PROJECT_ROOT"/dist/squirrel.css
 
+if ! (cd "$PROJECT_ROOT" && npm whoami > /dev/null 2>&1); then
+  echo "\n⚠️  Aucun compte npm connecté sur cette machine."
+  echo "Exécutez 'npm login' (ou 'npm adduser') puis relancez la publication."
+  echo "Étape NPM/unpkg ignorée, les artefacts sont prêts dans ./dist."
+  exit 0
+fi
+
 echo ""
 read "REPLY?Publish to NPM and unpkg now? (y/N): "
 if [[ $REPLY =~ ^[Yy]$ ]]; then

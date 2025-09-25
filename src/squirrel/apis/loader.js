@@ -1,14 +1,14 @@
 // --- Port persistence (survive refresh) -------------------------------------------------
-(function persistLocalPort(){
+(function persistLocalPort() {
   if (typeof window === 'undefined') return;
   const k = '__ATOME_LOCAL_HTTP_PORT__';
   // Restore if lost after refresh
   if (!window[k]) {
-    try { const saved = localStorage.getItem(k); if (saved) window[k] = parseInt(saved,10); } catch(_){ }
+    try { const saved = localStorage.getItem(k); if (saved) window[k] = parseInt(saved, 10); } catch (_) { }
   }
   // Save if present
   if (window[k]) {
-    try { localStorage.setItem(k, String(window[k])); } catch(_){ }
+    try { localStorage.setItem(k, String(window[k])); } catch (_) { }
   }
 })();
 
@@ -25,25 +25,25 @@ let __localServerReady = true;
 const __inflightData = {};
 function dataFetcher(path, opts = {}) {
   const mode = (opts.mode || 'auto').toLowerCase();
-  const key = path + '::' + mode + '::' + (opts.preview||'');
+  const key = path + '::' + mode + '::' + (opts.preview || '');
   if (__dataCache[key]) return Promise.resolve(__dataCache[key]);
   if (__inflightData[key]) return __inflightData[key];
   if (typeof fetch !== 'function') return Promise.reject(new Error('fetch indisponible'));
 
   const p = (async () => {
-  // Normalize path: remove leading './' or '/', but keep first segment intact
-  let cleanPath = (path || '').trim();
-  // Remove any leading ./ sequences
-  cleanPath = cleanPath.replace(/^(?:\.\/)+/, '');
-  // Then strip remaining leading slashes
-  cleanPath = cleanPath.replace(/^\/+/, '');
-  // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
+    // Normalize path: remove leading './' or '/', but keep first segment intact
+    let cleanPath = (path || '').trim();
+    // Remove any leading ./ sequences
+    cleanPath = cleanPath.replace(/^(?:\.\/)+/, '');
+    // Then strip remaining leading slashes
+    cleanPath = cleanPath.replace(/^\/+/, '');
+    // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
     if (!cleanPath) throw new Error('Chemin vide');
-  const filename = cleanPath.split('/').pop();
-  const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
-  const looksSvg = ext === 'svg';
-  const hasSpace = cleanPath.includes(' ');
-  const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+    const filename = cleanPath.split('/').pop();
+    const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+    const looksSvg = ext === 'svg';
+    const hasSpace = cleanPath.includes(' ');
+    const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
 
     const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
     const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
@@ -53,7 +53,7 @@ function dataFetcher(path, opts = {}) {
     const looksAudio = audioExt.test(ext);
     const looksBinary = binPreferred.test(ext) || looksAudio; // kept for future branching
 
-  const serverCandidates = [];
+    const serverCandidates = [];
     if (port) {
       serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
       if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
@@ -65,7 +65,7 @@ function dataFetcher(path, opts = {}) {
 
     let assetPath = cleanPath;
     if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
-  const assetCandidates = [assetPath];
+    const assetCandidates = [assetPath];
     const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
     if (altAsset !== assetPath) assetCandidates.push(altAsset);
 
@@ -73,11 +73,11 @@ function dataFetcher(path, opts = {}) {
 
     // Helper: detect HTML fallback (index.html returned instead of asset)
     const isHtmlFallback = (txt) => {
-      if (!txt) return false; const t = txt.slice(0,120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
+      if (!txt) return false; const t = txt.slice(0, 120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
     };
 
     // Helper: attempt direct Tauri FS read for svg with space (server often rewrites to index)
-    async function tryTauriSvgSpace(fsRelPath){
+    async function tryTauriSvgSpace(fsRelPath) {
       if (!(looksSvg && hasSpace)) return null;
       if (typeof window === 'undefined' || !window.__TAURI__ || !window.__TAURI__.fs) return null;
       const fs = window.__TAURI__.fs;
@@ -88,9 +88,9 @@ function dataFetcher(path, opts = {}) {
       }
       for (const c of candidates) {
         try {
-          const txt = await fs.readTextFile(c).catch(()=>null);
+          const txt = await fs.readTextFile(c).catch(() => null);
           if (txt && /^<svg[\s>]/i.test(txt.trim()) && !isHtmlFallback(txt)) return { txt, path: c };
-        } catch(_) {}
+        } catch (_) { }
       }
       return null;
     }
@@ -98,25 +98,25 @@ function dataFetcher(path, opts = {}) {
     // 1) Direct FS read first for svg with space (most robust after refresh)
     const directFs = await tryTauriSvgSpace(cleanPath);
     if (directFs) {
-      if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0,max)); }
+      if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0, max)); }
       return done(directFs.txt);
     }
 
     // Immediate asset try if no port yet
-  if (!port) {
+    if (!port) {
       for (const u of assetCandidates) {
         try {
           if (looksText || mode === 'text' || mode === 'preview') {
             const r = await fetch(u); if (!r.ok) continue;
             const txt = await r.text();
-      if (looksSvg && isHtmlFallback(txt)) { continue; }
-            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+            if (looksSvg && isHtmlFallback(txt)) { continue; }
+            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
             return done(txt);
           }
           if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
           if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
           const r = await fetch(u); if (!r.ok) continue; return done(u);
-        } catch(_) {}
+        } catch (_) { }
       }
     }
 
@@ -135,13 +135,13 @@ function dataFetcher(path, opts = {}) {
           const txt = await r.text();
           if (looksSvg && isHtmlFallback(txt)) { continue; }
           if (mode === 'preview' || opts.preview) {
-            const max = opts.preview || 120; return done(txt.slice(0,max));
+            const max = opts.preview || 120; return done(txt.slice(0, max));
           }
-            return done(txt);
+          return done(txt);
         }
         if (looksAudio && mode === 'auto') return done(u); // streaming URL path
         return done(u);
-      } catch(_) {}
+      } catch (_) { }
     }
 
     for (const u of assetCandidates) {
@@ -150,13 +150,13 @@ function dataFetcher(path, opts = {}) {
           const r = await fetch(u); if (!r.ok) continue;
           const txt = await r.text();
           if (looksSvg && isHtmlFallback(txt)) { continue; }
-          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+          if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
           return done(txt);
         }
         if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
         if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
         return done(u);
-      } catch(_) {}
+      } catch (_) { }
     }
 
     delete __inflightData[key];
@@ -179,7 +179,7 @@ function sanitizeSVG(raw) { return raw; }
 // Signature étendue: sizeMode (dernier param) peut valoir:
 //   null / undefined  => comportement fixe (taille px)
 //   'responsive' ou '%' => width/height 100%, suit le parent
-function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null, sizeMode=null) {
+function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left = '0px', width = '100px', height = '100px', color = null, path_color = null, sizeMode = null) {
   const parent = document.getElementById(parent_id);
   if (!parent || !svgcontent) return null;
   const tmp = document.createElement('div');
@@ -187,7 +187,7 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
   const svgEl = tmp.querySelector('svg');
   if (!svgEl) return null;
   const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
-  try { svgEl.id = finalId; } catch(_) {}
+  try { svgEl.id = finalId; } catch (_) { }
   svgEl.style.position = 'absolute';
   svgEl.style.top = top; svgEl.style.left = left;
   const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
@@ -203,7 +203,7 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
       svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
     }
     if (!svgEl.getAttribute('preserveAspectRatio')) {
-      svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
+      svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     }
     if (responsive) {
       // Mode responsive: largeur/hauteur 100%, parent contrôle la taille
@@ -211,39 +211,39 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
       if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
       svgEl.style.width = '100%';
       svgEl.style.height = '100%';
-      try { svgEl.dataset.intuitionResponsive = '1'; } catch(_) {}
+      try { svgEl.dataset.intuitionResponsive = '1'; } catch (_) { }
     } else {
       // Mode fixe: on applique aussi en attribut pour compat rétro + calculs getAttribute
-      try { svgEl.setAttribute('width', String(targetW)); } catch(_) {}
-      try { svgEl.setAttribute('height', String(targetH)); } catch(_) {}
+      try { svgEl.setAttribute('width', String(targetW)); } catch (_) { }
+      try { svgEl.setAttribute('height', String(targetH)); } catch (_) { }
       svgEl.style.width = targetW + 'px';
       svgEl.style.height = targetH + 'px';
     }
-  svgEl.style.overflow = 'visible';
+    svgEl.style.overflow = 'visible';
     svgEl.style.display = 'block';
-  } catch(_) {}
+  } catch (_) { }
   if (color || path_color) {
     const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
     shapes.forEach(node => {
       if (path_color) {
-        try { if (node.style) node.style.stroke = path_color; } catch(_) {}
+        try { if (node.style) node.style.stroke = path_color; } catch (_) { }
         node.setAttribute('stroke', path_color);
       }
       if (color) {
         // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
-        try { if (node.style) node.style.fill = color; } catch(_) {}
+        try { if (node.style) node.style.fill = color; } catch (_) { }
         const f = node.getAttribute('fill');
         if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
         // Remove gradient/URL fill if we want solid override
-        if (/^url\(/i.test(f||'')) node.removeAttribute('fill');
+        if (/^url\(/i.test(f || '')) node.removeAttribute('fill');
       }
     });
     if (color) {
-      try { if (svgEl.style) svgEl.style.fill = color; } catch(_) {}
+      try { if (svgEl.style) svgEl.style.fill = color; } catch (_) { }
       if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
     }
     if (path_color) {
-      try { if (svgEl.style) svgEl.style.stroke = path_color; } catch(_) {}
+      try { if (svgEl.style) svgEl.style.stroke = path_color; } catch (_) { }
       if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
     }
   }
@@ -255,13 +255,13 @@ function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', wid
 // fetch_and_render_svg: convenience wrapper specialized for SVG paths.
 // Param order kept for existing calls: (path, id, parent_id, left, top, width, height, fill, stroke)
 // Note: render_svg expects (top, left) order, so we swap when forwarding.
-function fetch_and_render_svg(path, id, parent_id='view', left='0px', top='0px', width='100px', height='100px', fill=null, stroke=null, sizeMode=null) {
+function fetch_and_render_svg(path, id, parent_id = 'view', left = '0px', top = '0px', width = '100px', height = '100px', fill = null, stroke = null, sizeMode = null) {
   return dataFetcher(path, { mode: 'text' })
     .then(svgData => {
       // Remove prior element with same id to avoid duplicates
       const prev = document.getElementById(id);
       if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
-  return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
+      return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
     })
     .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
 }
@@ -388,10 +388,10 @@ function strokeColor(id, color) {
     if (!el.getAttribute('stroke')) el.setAttribute('stroke', color);
   } catch (_) { return false; }
   return true;
-}   
+}
 
 
-function fillColor(id, color) {     
+function fillColor(id, color) {
   let el = document.getElementById(id);
   if (!el) return false;
   if (!(el instanceof SVGElement)) {
@@ -407,7 +407,7 @@ function fillColor(id, color) {
     if (!el.getAttribute('fill')) el.setAttribute('fill', color);
   } catch (_) { return false; }
   return true;
-}     
+}
 
 window.dataFetcher = dataFetcher;
 window.render_svg = render_svg;
@@ -415,3 +415,13 @@ window.fetch_and_render_svg = fetch_and_render_svg;
 window.resize = resize;
 window.strokeColor = strokeColor;
 window.fillColor = fillColor;
+
+export {
+  dataFetcher,
+  render_svg,
+  fetch_and_render_svg,
+  resize,
+  strokeColor,
+  fillColor,
+  sanitizeSVG,
+};
