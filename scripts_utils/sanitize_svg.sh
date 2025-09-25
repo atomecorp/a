@@ -8,12 +8,24 @@
 #   ./sanitize-all-128fit.sh
 set -euo pipefail
 
+# Resolve script directory robustly (works with bash/sh, symlinks, arbitrary launch dirs)
+SOURCE="${BASH_SOURCE[0]:-$0}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  case "$SOURCE" in
+    /*) ;;
+    *) SOURCE="$DIR/$SOURCE" ;;
+  esac
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 DIRS=(
-  "src/assets/images/icons"
-  "src/assets/images/logos"
+  "$PROJECT_ROOT/src/assets/images/icons"
+  "$PROJECT_ROOT/src/assets/images/logos"
 )
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SANITIZER="$SCRIPT_DIR/sanitize-svgs-128fit.cjs"
 
 if [ ! -f "$SANITIZER" ]; then

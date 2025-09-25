@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // Database imports
-import { knex } from '../database/db.js';
+import { knex, DB_PATH } from '../database/db.js';
 import User from '../database/User.js';
 import Project from '../database/Project.js';
 import Atome from '../database/Atome.js';
@@ -206,8 +206,8 @@ async function startServer() {
           database: 'SQLite',
           tables: tableRows.map(row => row.name),
           connection: {
-            type: 'sqlite3',
-            file: './eDen.db'
+            type: knex.client.config.client || 'sqlite3',
+            file: DB_PATH
           },
           timestamp: new Date().toISOString()
         };      } catch (error) {
