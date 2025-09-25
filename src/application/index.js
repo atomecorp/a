@@ -63,8 +63,8 @@
 // File editor helpers (create/rename + iOS keyboard + trash icon fix)
 // import('./examples/a_svg.js');
 
-
-import('./examples/tools.js');
+import('./examples/basic.js');
+// import('./examples/tools.js');
 // import('./examples/svg_fetch_usage.js');
 // import('./examples/svg_animate.js');
 // import('./examples/testSVGSize.js');

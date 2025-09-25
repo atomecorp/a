@@ -5,6 +5,7 @@ Welcome to Squirrel.js! This guide is for developers who want to use and extend 
 ---
 
 ## Table of Contents
+
 1. [Introduction](#introduction)
 2. [Installation](#installation)
 3. [Quick Start Example](#quick-start-example)
@@ -22,6 +23,7 @@ Welcome to Squirrel.js! This guide is for developers who want to use and extend 
 ---
 
 ## Introduction
+
 Squirrel.js is a minimal, modular JavaScript framework for building modern web interfaces. It is designed for speed, flexibility, and easy integration with both browser and system environments (Node.js, Tauri, etc.).
 
 ---
@@ -29,17 +31,21 @@ Squirrel.js is a minimal, modular JavaScript framework for building modern web i
 ## Installation
 
 ### CDN (Recommended for Quick Start)
+
 ```html
 <script src="https://cdn.jsdelivr.net/gh/atomecorp/a@latest/dist/squirrel.min.js"></script>
 ```
 
 ### NPM (For Node.js or Bundler Projects)
+
 ```bash
 npm install squirreljs
 ```
 
 ### Local (Development)
+
 Download or clone the repo, then include the built file:
+
 ```html
 <script src="./dist/squirrel.js"></script>
 ```
@@ -75,6 +81,7 @@ Download or clone the repo, then include the built file:
 ---
 
 ## Core Concepts
+
 - **$**: The main function to create and update DOM elements.
 - **Components**: Reusable UI elements (Slider, Button, Table, etc.) available via `Squirrel.Slider`, `Squirrel.Button`, etc.
 - **Templates**: Define reusable element blueprints.
@@ -88,10 +95,13 @@ Download or clone the repo, then include the built file:
 When using the `children` property in Squirrel.js, always provide an array, even if there is only one child. Passing a single element (not in an array) will cause a runtime error.
 
 **Correct:**
+
 ```js
 children: [Squirrel.$('span', { text: 'Child' })]
 ```
+
 **Incorrect:**
+
 ```js
 children: Squirrel.$('span', { text: 'Child' })
 ```
@@ -101,6 +111,7 @@ children: Squirrel.$('span', { text: 'Child' })
 ## Beginner Tutorial
 
 ### 1. Creating Elements
+
 ```js
 Squirrel.$('div', {
   id: 'myDiv',
@@ -111,6 +122,7 @@ Squirrel.$('div', {
 ```
 
 ### 2. Using Built-in Components
+
 ```js
 const slider = Squirrel.Slider({
   parent: '#view',
@@ -122,6 +134,7 @@ const slider = Squirrel.Slider({
 ```
 
 ### 3. Handling Events
+
 ```js
 Squirrel.$('button', {
   parent: '#view',
@@ -135,6 +148,7 @@ Squirrel.$('button', {
 ## Advanced Usage
 
 ### Dynamic Templates
+
 ```js
 Squirrel.define('fancy-box', {
   tag: 'div',
@@ -145,6 +159,7 @@ Squirrel.$('fancy-box', { parent: '#view', text: 'Reusable box!' });
 ```
 
 ### Batch DOM Updates
+
 ```js
 Squirrel.batch(
   () => Squirrel.$('div', { id: 'a', parent: '#view', text: 'A' }),
@@ -153,6 +168,7 @@ Squirrel.batch(
 ```
 
 ### Observing Mutations
+
 ```js
 Squirrel.observeMutations(document.getElementById('view'), mutation => {
   console.log('DOM changed:', mutation);
@@ -164,6 +180,7 @@ Squirrel.observeMutations(document.getElementById('view'), mutation => {
 ## Component System
 
 Squirrel.js comes with many ready-to-use components:
+
 - `Squirrel.Slider`
 - `Squirrel.Button`
 - `Squirrel.Table`
@@ -172,6 +189,7 @@ Squirrel.js comes with many ready-to-use components:
 - ...and more!
 
 ### Example: Customizing a Slider
+
 ```js
 const slider = Squirrel.Slider({
   parent: '#view',
@@ -191,6 +209,7 @@ const slider = Squirrel.Slider({
 ## Custom Components
 
 You can create your own components by defining templates and logic:
+
 ```js
 Squirrel.define('my-card', {
   tag: 'div',
@@ -205,6 +224,7 @@ Squirrel.$('my-card', { parent: '#view', text: 'Custom card!' });
 ## System Abstraction
 
 Squirrel.js provides a unified API for running shell/system commands (Node.js, Tauri, browser):
+
 ```js
 // Example: runShellCommand abstraction
 runShellCommand('echo Hello').then(result => {
@@ -215,6 +235,7 @@ runShellCommand('echo Hello').then(result => {
 ---
 
 ## Performance Tips
+
 - Use batching (`Squirrel.batch`) for multiple DOM updates.
 - Minimize reflows by grouping style changes.
 - Use CDN or minified builds for production.
@@ -222,12 +243,14 @@ runShellCommand('echo Hello').then(result => {
 ---
 
 ## Internationalization
+
 - All core and documentation is available in English.
 - You can localize your UI by setting `text` and other properties.
 
 ---
 
 ## FAQ
+
 **Q: How do I access a component from the CDN?**
 A: Use `window.Squirrel.ComponentName`, e.g., `window.Squirrel.Slider`.
 
@@ -240,11 +263,14 @@ A: Fork the repo, make your changes, and submit a pull request!
 ---
 
 ## Resources
+
 - [GitHub Repository](https://github.com/atomecorp/a)
 - [CDN on jsDelivr](https://cdn.jsdelivr.net/gh/atomecorp/a@latest/dist/squirrel.min.js)
 - [NPM Package](https://www.npmjs.com/package/squirreljs)
 - [API Reference](./Core-API.md)
 
 ---
+
+All comments and documentations must always be written in English.
 
 Happy coding with Squirrel.js! 🐿️

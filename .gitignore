@@ -2,8 +2,8 @@
 node_modules/
 
 # Build outputs
-src/svelte/build/
 src-Auv3/build/
+packages/
 
 # Development files
 package-lock.json

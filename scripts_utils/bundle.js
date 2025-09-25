@@ -54,6 +54,9 @@ if (typeof window !== 'undefined') {
   window.Squirrel.define = Squirrel.define;
   window.Squirrel.batch = Squirrel.batch;
   window.Squirrel.observeMutations = Squirrel.observeMutations;
+  window.define = Squirrel.define;
+  window.batch = Squirrel.batch;
+  window.observeMutations = Squirrel.observeMutations;
   window.Squirrel.Slider = Slider;
   window.Squirrel.Badge = Badge;
   window.Squirrel.Button = Button;

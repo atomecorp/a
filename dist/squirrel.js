@@ -7835,6 +7835,9 @@
     window.Squirrel.define = Squirrel.define;
     window.Squirrel.batch = Squirrel.batch;
     window.Squirrel.observeMutations = Squirrel.observeMutations;
+    window.define = Squirrel.define;
+    window.batch = Squirrel.batch;
+    window.observeMutations = Squirrel.observeMutations;
     window.Squirrel.Slider = createSlider;
     window.Squirrel.Badge = createBadge;
     window.Squirrel.Button = createButton;
