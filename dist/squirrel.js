@@ -189,8 +189,616 @@
     }
   }
 
-  var Apis = /*#__PURE__*/Object.freeze({
-    __proto__: null
+  function current_platform() {
+    try {
+      if (typeof window === 'undefined') return 'serveur';
+      const ua = navigator.userAgent || '';
+      const vendor = navigator.vendor || '';
+      const lowerUA = ua.toLowerCase();
+      const isAppleVendor = /apple/i.test(vendor);
+      const touchCapable = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+
+      const isTrueIOSUA = /iPad|iPhone|iPod/.test(ua);
+      // iPadOS 13+ can present itself as Mac; detect via touch + Apple vendor + 'Mac' in UA
+      const isIPadDesktopMode = (!isTrueIOSUA && isAppleVendor && touchCapable && /macintosh/i.test(ua));
+      const isIOS = isTrueIOSUA || isIPadDesktopMode;
+
+      const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
+      if (isTauri) {
+        if (/Macintosh|Mac OS X/.test(ua)) return 'Tauri Mac';
+        if (/Windows/.test(ua)) return 'Taur Windows';
+        if (/Linux/.test(ua)) return 'Tauri Unix';
+        return 'Tauri';
+      }
+
+      // AUv3 bridge heuristics (extended)
+      let hasAUv3Bridge = false;
+    // Fast explicit flag (injected by Swift) or query param (?auv3=1 / ?mode=auv3)
+    const explicitAUv3 = !!(window.__AUV3_MODE__ || window.__AUV3__ || (typeof location !== 'undefined' && /[?&](auv3=1|mode=auv3)(?:&|$)/i.test(location.search)));
+    if (explicitAUv3 && isIOS) return 'ios_auv3';
+      if (isIOS && window.webkit && window.webkit.messageHandlers) {
+        try {
+          const mh = window.webkit.messageHandlers;
+          const names = Object.keys(mh);
+          if (names.length) {
+            // match typical naming patterns
+            const pattern = /(auv3|plug|audio|swift|host|bridge|atome)/i;
+            if (names.some(n => pattern.test(n))) hasAUv3Bridge = true;
+            // fallback: if running from file:// or embedded context with any handlers
+            if (!hasAUv3Bridge && (location.protocol === 'file:' || names.length > 1)) {
+              hasAUv3Bridge = true;
+            }
+          }
+        } catch(_) {}
+      }
+      if (window.forceAUv3Mode === true) hasAUv3Bridge = true;
+      if (hasAUv3Bridge) return 'ios_auv3';
+      if (isIOS) return 'ios';
+
+      // Distinguish Safari (desktop) from generic desktop Mac
+      const isSafari = isAppleVendor && /safari/i.test(ua) && !/chrome|crios|chromium|edg|opr|firefox|fxios|tauri|electron/i.test(lowerUA);
+
+      if (/Macintosh|Mac OS X/.test(ua)) return isSafari ? 'safari_mac' : 'desktop_mac';
+      if (/Windows/.test(ua)) return 'desktop_windows';
+      if (/Linux/.test(ua)) return 'desktop_linux';
+
+      return 'web';
+    } catch (_) {
+      return 'inconnu';
+    }
+  }
+
+  // expose globally
+  if (typeof window !== 'undefined') { window.current_platform = current_platform; }
+
+  // Minimal keyboard shortcut utility
+  // Usage:
+  //   const myFct = function atest(key){ console.log('you press: ' + key); };
+  //   shortcut('cmd-a', myFct);
+
+  (function(){
+  	const ORDER = ['ctrl','alt','shift','meta'];
+  	const MOD_SYNONYMS = new Map([
+  		['cmd','meta'], ['command','meta'], ['win','meta'], ['super','meta'],
+  		['ctl','ctrl'], ['control','ctrl'],
+  		['opt','alt'], ['option','alt']
+  	]);
+
+  	const registry = new Map(); // combo -> Set<callback>
+
+  	function normToken(tok){
+  		if (!tok) return '';
+  		tok = String(tok).trim().toLowerCase();
+  		if (MOD_SYNONYMS.has(tok)) tok = MOD_SYNONYMS.get(tok);
+  		// Normalize common key names
+  		if (tok === 'space' || tok === ' ') tok = 'space';
+  		if (tok === 'arrowup' || tok === 'up') tok = 'arrowup';
+  		if (tok === 'arrowdown' || tok === 'down') tok = 'arrowdown';
+  		if (tok === 'arrowleft' || tok === 'left') tok = 'arrowleft';
+  		if (tok === 'arrowright' || tok === 'right') tok = 'arrowright';
+  		return tok;
+  	}
+
+  	function normalizeCombo(input){
+  		if (!input) return '';
+  		const rawParts = String(input).split(/[-+]/).map(s => String(s).trim()).filter(Boolean);
+  		const mods = new Set();
+  		let key = '';
+  		let wantsShiftFromUpper = false;
+  		for (const raw of rawParts) {
+  			const p = normToken(raw);
+  			if (ORDER.includes(p)) {
+  				mods.add(p);
+  			} else {
+  				// Preserve intent for uppercase letter by translating to shift+lowercase
+  				if (/^[A-Z]$/.test(raw)) {
+  					wantsShiftFromUpper = true;
+  					key = raw.toLowerCase();
+  				} else {
+  					key = p; // last non-mod wins
+  				}
+  			}
+  		}
+  		if (wantsShiftFromUpper) mods.add('shift');
+  		const sortedMods = ORDER.filter(m => mods.has(m));
+  		return [...sortedMods, key].filter(Boolean).join('+');
+  	}
+
+  	function eventToCombo(e){
+  		// Build mods in canonical ORDER to match normalizeCombo
+  		const mods = [];
+  		if (e.ctrlKey) mods.push('ctrl');
+  		if (e.altKey) mods.push('alt');
+  		if (e.shiftKey) mods.push('shift');
+  		if (e.metaKey) mods.push('meta');
+
+  		let k = '';
+  		const code = e.code || '';
+  		// Prefer physical key for letters/digits so Alt/Option layout changes don't break matching
+  		if (/^Key[A-Z]$/.test(code)) {
+  			k = code.slice(3).toLowerCase(); // KeyB -> 'b'
+  		} else if (/^Digit[0-9]$/.test(code)) {
+  			k = code.slice(5); // Digit3 -> '3'
+  		} else {
+  			k = (e.key || '').toLowerCase();
+  			if (k === ' ') k = 'space';
+  			if (/^arrow(Up|Down|Left|Right)$/i.test(e.key)) k = e.key.toLowerCase();
+  		}
+
+  		return [...mods, k].filter(Boolean).join('+');
+  	}
+
+  	function addHandler(){
+  		if (addHandler._installed) return;
+  		window.addEventListener('keydown', (e) => {
+  			const combo = eventToCombo(e);
+  			const cbs = registry.get(combo);
+  			if (!cbs || cbs.size === 0) return;
+  			// Call all callbacks with the normalized combo and the event
+  			for (const cb of cbs) {
+  				try { cb(combo, e); } catch(_) {}
+  			}
+  		}, true);
+  		addHandler._installed = true;
+  	}
+
+  	function shortcut(key_cmb, fctToCall){
+  		const combo = normalizeCombo(key_cmb);
+  		if (!combo || typeof fctToCall !== 'function') return () => {};
+  		addHandler();
+  		let set = registry.get(combo);
+  		if (!set) { set = new Set(); registry.set(combo, set); }
+  		set.add(fctToCall);
+  		// return an unsubscribe function
+  		return function unsubscribe(){
+  			const s = registry.get(combo);
+  			if (!s) return;
+  			s.delete(fctToCall);
+  			if (s.size === 0) registry.delete(combo);
+  		};
+  	}
+
+  	// expose globally
+  	window.shortcut = shortcut;
+  })();
+
+  // --- Port persistence (survive refresh) -------------------------------------------------
+  (function persistLocalPort(){
+    if (typeof window === 'undefined') return;
+    const k = '__ATOME_LOCAL_HTTP_PORT__';
+    // Restore if lost after refresh
+    if (!window[k]) {
+      try { const saved = localStorage.getItem(k); if (saved) window[k] = parseInt(saved,10); } catch(_){ }
+    }
+    // Save if present
+    if (window[k]) {
+      try { localStorage.setItem(k, String(window[k])); } catch(_){ }
+    }
+  })();
+
+  const __dataCache = {};
+
+  // Minimal placeholder to avoid ReferenceError if user keeps catch handlers with span
+  if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
+    window.span = { textContent: '' };
+  }
+
+  const __inflightData = {};
+  function dataFetcher(path, opts = {}) {
+    const mode = (opts.mode || 'auto').toLowerCase();
+    const key = path + '::' + mode + '::' + (opts.preview||'');
+    if (__dataCache[key]) return Promise.resolve(__dataCache[key]);
+    if (__inflightData[key]) return __inflightData[key];
+    if (typeof fetch !== 'function') return Promise.reject(new Error('fetch indisponible'));
+
+    const p = (async () => {
+    // Normalize path: remove leading './' or '/', but keep first segment intact
+    let cleanPath = (path || '').trim();
+    // Remove any leading ./ sequences
+    cleanPath = cleanPath.replace(/^(?:\.\/)+/, '');
+    // Then strip remaining leading slashes
+    cleanPath = cleanPath.replace(/^\/+/, '');
+    // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
+      if (!cleanPath) throw new Error('Chemin vide');
+    const filename = cleanPath.split('/').pop();
+    const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+    const looksSvg = ext === 'svg';
+    const hasSpace = cleanPath.includes(' ');
+    const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+
+      const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
+      const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
+
+      const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
+      const looksAudio = audioExt.test(ext);
+
+    const serverCandidates = [];
+      if (port) {
+        serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
+        if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
+        if (looksAudio) {
+          serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
+          serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
+        }
+      }
+
+      let assetPath = cleanPath;
+      if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
+    const assetCandidates = [assetPath];
+      const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
+      if (altAsset !== assetPath) assetCandidates.push(altAsset);
+
+      const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
+
+      // Helper: detect HTML fallback (index.html returned instead of asset)
+      const isHtmlFallback = (txt) => {
+        if (!txt) return false; const t = txt.slice(0,120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
+      };
+
+      // Helper: attempt direct Tauri FS read for svg with space (server often rewrites to index)
+      async function tryTauriSvgSpace(fsRelPath){
+        if (!(looksSvg && hasSpace)) return null;
+        if (typeof window === 'undefined' || !window.__TAURI__ || !window.__TAURI__.fs) return null;
+        const fs = window.__TAURI__.fs;
+        // Prefer original path; if starts with assets/ also try src/assets equivalent
+        const candidates = [fsRelPath];
+        if (/^assets\//.test(fsRelPath) && !/^src\/assets\//.test(fsRelPath)) {
+          candidates.unshift('src/' + fsRelPath);
+        }
+        for (const c of candidates) {
+          try {
+            const txt = await fs.readTextFile(c).catch(()=>null);
+            if (txt && /^<svg[\s>]/i.test(txt.trim()) && !isHtmlFallback(txt)) return { txt, path: c };
+          } catch(_) {}
+        }
+        return null;
+      }
+
+      // 1) Direct FS read first for svg with space (most robust after refresh)
+      const directFs = await tryTauriSvgSpace(cleanPath);
+      if (directFs) {
+        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0,max)); }
+        return done(directFs.txt);
+      }
+
+      // Immediate asset try if no port yet
+    if (!port) {
+        for (const u of assetCandidates) {
+          try {
+            if (looksText || mode === 'text' || mode === 'preview') {
+              const r = await fetch(u); if (!r.ok) continue;
+              const txt = await r.text();
+        if (looksSvg && isHtmlFallback(txt)) { continue; }
+              if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+              return done(txt);
+            }
+            if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+            if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+            const r = await fetch(u); if (!r.ok) continue; return done(u);
+          } catch(_) {}
+        }
+      }
+
+      if (mode === 'url') {
+        const out = serverCandidates[0] || assetCandidates[0];
+        return done(out);
+      }
+
+      for (const u of serverCandidates) {
+        try {
+          const r = await fetch(u);
+          if (!r.ok) continue;
+          if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+          if (mode === 'blob') return done(await r.blob());
+          if (looksText || mode === 'text' || mode === 'preview') {
+            const txt = await r.text();
+            if (looksSvg && isHtmlFallback(txt)) { continue; }
+            if (mode === 'preview' || opts.preview) {
+              const max = opts.preview || 120; return done(txt.slice(0,max));
+            }
+              return done(txt);
+          }
+          if (looksAudio && mode === 'auto') return done(u); // streaming URL path
+          return done(u);
+        } catch(_) {}
+      }
+
+      for (const u of assetCandidates) {
+        try {
+          if (looksText || mode === 'text' || mode === 'preview') {
+            const r = await fetch(u); if (!r.ok) continue;
+            const txt = await r.text();
+            if (looksSvg && isHtmlFallback(txt)) { continue; }
+            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0,max)); }
+            return done(txt);
+          }
+          if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+          if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+          return done(u);
+        } catch(_) {}
+      }
+
+      delete __inflightData[key];
+      throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+    })();
+    __inflightData[key] = p;
+    return p;
+  }
+
+  // --- SVG Sanitizer ---------------------------------------------------------
+  // Lightweight whitelisting sanitizer (no external deps) to clean incoming SVG code
+  // before insertion. Removes dangerous elements/attributes and optionally normalizes
+  // width/height so our internal scaling logic can operate consistently.
+  // Sanitizer removed for performance: kept as identity to avoid ReferenceErrors.
+  function sanitizeSVG(raw) { return raw; }
+
+
+  //svg creator
+  // render_svg: inserts an SVG string.
+  // Signature étendue: sizeMode (dernier param) peut valoir:
+  //   null / undefined  => comportement fixe (taille px)
+  //   'responsive' ou '%' => width/height 100%, suit le parent
+  function render_svg(svgcontent, id, parent_id='view', top='0px', left='0px', width='100px', height='100px', color=null, path_color=null, sizeMode=null) {
+    const parent = document.getElementById(parent_id);
+    if (!parent || !svgcontent) return null;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(svgcontent).trim();
+    const svgEl = tmp.querySelector('svg');
+    if (!svgEl) return null;
+    const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
+    try { svgEl.id = finalId; } catch(_) {}
+    svgEl.style.position = 'absolute';
+    svgEl.style.top = top; svgEl.style.left = left;
+    const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
+    const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
+    const responsive = (sizeMode === 'responsive' || sizeMode === '%');
+    try {
+      const existingViewBox = svgEl.getAttribute('viewBox');
+      const attrW = parseFloat(svgEl.getAttribute('width')) || null;
+      const attrH = parseFloat(svgEl.getAttribute('height')) || null;
+      if (!existingViewBox) {
+        const vbW = (attrW && attrW > 0) ? attrW : targetW;
+        const vbH = (attrH && attrH > 0) ? attrH : targetH;
+        svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+      }
+      if (!svgEl.getAttribute('preserveAspectRatio')) {
+        svgEl.setAttribute('preserveAspectRatio','xMidYMid meet');
+      }
+      if (responsive) {
+        // Mode responsive: largeur/hauteur 100%, parent contrôle la taille
+        if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
+        if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
+        svgEl.style.width = '100%';
+        svgEl.style.height = '100%';
+        try { svgEl.dataset.intuitionResponsive = '1'; } catch(_) {}
+      } else {
+        // Mode fixe: on applique aussi en attribut pour compat rétro + calculs getAttribute
+        try { svgEl.setAttribute('width', String(targetW)); } catch(_) {}
+        try { svgEl.setAttribute('height', String(targetH)); } catch(_) {}
+        svgEl.style.width = targetW + 'px';
+        svgEl.style.height = targetH + 'px';
+      }
+    svgEl.style.overflow = 'visible';
+      svgEl.style.display = 'block';
+    } catch(_) {}
+    if (color || path_color) {
+      const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
+      shapes.forEach(node => {
+        if (path_color) {
+          try { if (node.style) node.style.stroke = path_color; } catch(_) {}
+          node.setAttribute('stroke', path_color);
+        }
+        if (color) {
+          // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
+          try { if (node.style) node.style.fill = color; } catch(_) {}
+          const f = node.getAttribute('fill');
+          if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
+          // Remove gradient/URL fill if we want solid override
+          if (/^url\(/i.test(f||'')) node.removeAttribute('fill');
+        }
+      });
+      if (color) {
+        try { if (svgEl.style) svgEl.style.fill = color; } catch(_) {}
+        if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
+      }
+      if (path_color) {
+        try { if (svgEl.style) svgEl.style.stroke = path_color; } catch(_) {}
+        if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+      }
+    }
+    parent.appendChild(svgEl);
+    return svgEl.id;
+  }
+
+
+  // fetch_and_render_svg: convenience wrapper specialized for SVG paths.
+  // Param order kept for existing calls: (path, id, parent_id, left, top, width, height, fill, stroke)
+  // Note: render_svg expects (top, left) order, so we swap when forwarding.
+  function fetch_and_render_svg(path, id, parent_id='view', left='0px', top='0px', width='100px', height='100px', fill=null, stroke=null, sizeMode=null) {
+    return dataFetcher(path, { mode: 'text' })
+      .then(svgData => {
+        // Remove prior element with same id to avoid duplicates
+        const prev = document.getElementById(id);
+        if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
+      })
+      .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
+  }
+
+
+
+
+
+  function resize(id, newWidth, newHeight, durationSec = 0, easing = 'ease') {
+    let el = document.getElementById(id);
+    if (!el) return false;
+    if (!(el instanceof SVGElement)) {
+      el = el.querySelector ? el.querySelector('svg') : null;
+    }
+    if (!el) return false;
+
+    const w = typeof newWidth === 'number' ? newWidth : parseFloat(newWidth);
+    const h = (newHeight == null) ? w : (typeof newHeight === 'number' ? newHeight : parseFloat(newHeight));
+    if (!isFinite(w) || !isFinite(h)) return false;
+
+    const ms = Math.max(0, (typeof durationSec === 'number' ? durationSec : parseFloat(durationSec)) * 1000);
+    // Special easings using WAAPI for bounce/elastic effects when available
+    if (ms && (easing === 'bounce' || easing === 'elastic') && typeof el.animate === 'function') {
+      const cs = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(el) : null;
+      const currentW = (cs ? parseFloat(cs.width) : 0) || parseFloat(el.getAttribute('width')) || w;
+      const currentH = (cs ? parseFloat(cs.height) : 0) || parseFloat(el.getAttribute('height')) || h;
+
+      let keyframes;
+      if (easing === 'bounce') {
+        keyframes = [
+          { offset: 0, width: `${currentW}px`, height: `${currentH}px` },
+          { offset: 0.6, width: `${w * 1.10}px`, height: `${h * 1.10}px` },
+          { offset: 0.8, width: `${w * 0.94}px`, height: `${h * 0.94}px` },
+          { offset: 0.92, width: `${w * 1.03}px`, height: `${h * 1.03}px` },
+          { offset: 1, width: `${w}px`, height: `${h}px` },
+        ];
+      } else { // elastic
+        keyframes = [
+          { offset: 0, width: `${currentW}px`, height: `${currentH}px` },
+          { offset: 0.5, width: `${w * 1.25}px`, height: `${h * 1.25}px` },
+          { offset: 0.7, width: `${w * 0.90}px`, height: `${h * 0.90}px` },
+          { offset: 0.85, width: `${w * 1.05}px`, height: `${h * 1.05}px` },
+          { offset: 1, width: `${w}px`, height: `${h}px` },
+        ];
+      }
+
+      const anim = el.animate(keyframes, { duration: ms, easing: 'linear', fill: 'forwards' });
+      const done = () => {
+        el.setAttribute('width', String(w));
+        el.setAttribute('height', String(h));
+        el.style.width = `${w}px`;
+        el.style.height = `${h}px`;
+      };
+      try {
+        // Some engines support addEventListener on Animation, others use onfinish
+        if (typeof anim.addEventListener === 'function') {
+          anim.addEventListener('finish', done, { once: true });
+        } else {
+          anim.onfinish = done;
+        }
+        setTimeout(done, ms + 50);
+      } catch (_) {
+        anim.onfinish = done;
+        setTimeout(done, ms + 50);
+      }
+      return true;
+    }
+    if (!ms) {
+      // instant resize
+      el.setAttribute('width', String(w));
+      el.setAttribute('height', String(h));
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+      return true;
+    }
+
+    const prevTransition = el.style.transition;
+    // Animate CSS width/height; attributes updated at the end to keep them in sync
+    el.style.transition = `width ${ms}ms ${easing}, height ${ms}ms ${easing}`;
+    // Force reflow to ensure transition takes effect
+    void el.offsetWidth; // eslint-disable-line no-unused-expressions
+
+    // Apply target sizes via CSS to animate
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+
+    const done = () => {
+      // Sync SVG attributes and cleanup transition
+      el.setAttribute('width', String(w));
+      el.setAttribute('height', String(h));
+      el.style.transition = prevTransition || '';
+    };
+
+    try {
+      el.addEventListener('transitionend', function handler(ev) {
+        if (ev.propertyName === 'width' || ev.propertyName === 'height') {
+          el.removeEventListener('transitionend', handler);
+          done();
+        }
+      });
+      // Safety timeout in case transitionend doesn't fire
+      setTimeout(done, ms + 50);
+    } catch (_) {
+      // Fallback: apply instantly if events not supported
+      done();
+    }
+    return true;
+  }
+
+
+  function strokeColor(id, color) {
+    let el = document.getElementById(id);
+    if (!el) return false;
+    if (!(el instanceof SVGElement)) {
+      el = el.querySelector ? el.querySelector('svg') : null;
+    }
+    if (!el) return false;
+    try {
+      const shapes = el.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+      shapes.forEach(node => {
+        node.setAttribute('stroke', color);
+      });
+      // Optionally set default stroke on root if shapes missing
+      if (!el.getAttribute('stroke')) el.setAttribute('stroke', color);
+    } catch (_) { return false; }
+    return true;
+  }   
+
+
+  function fillColor(id, color) {     
+    let el = document.getElementById(id);
+    if (!el) return false;
+    if (!(el instanceof SVGElement)) {
+      el = el.querySelector ? el.querySelector('svg') : null;
+    }
+    if (!el) return false;
+    try {
+      const shapes = el.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+      shapes.forEach(node => {
+        node.setAttribute('fill', color);
+      });
+      // Optionally set default fill on root if shapes missing
+      if (!el.getAttribute('fill')) el.setAttribute('fill', color);
+    } catch (_) { return false; }
+    return true;
+  }     
+
+  window.dataFetcher = dataFetcher;
+  window.render_svg = render_svg;
+  window.fetch_and_render_svg = fetch_and_render_svg;
+  window.resize = resize;
+  window.strokeColor = strokeColor;
+  window.fillColor = fillColor;
+
+  const Apis = {
+    wait,
+    current_platform,
+    dataFetcher,
+    render_svg,
+    fetch_and_render_svg,
+    resize,
+    strokeColor,
+    fillColor,
+    sanitizeSVG,
+  };
+
+  var Apis$1 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    current_platform: current_platform,
+    dataFetcher: dataFetcher,
+    default: Apis,
+    fetch_and_render_svg: fetch_and_render_svg,
+    fillColor: fillColor,
+    render_svg: render_svg,
+    resize: resize,
+    sanitizeSVG: sanitizeSVG,
+    strokeColor: strokeColor,
+    wait: wait
   });
 
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
@@ -1582,15 +2190,32 @@
       });
 
       button.addEventListener('mouseleave', () => {
-        // Retourner au style de base
         const currentState = button.getState ? button.getState() : null;
+        const preserveSize = () => {
+          const css = {};
+          if (button && /_toggle$/.test(button.id)) {
+            let masterScale = 1;
+            try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+              const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+              if (baseSize) {
+                const scaled = Math.round(baseSize * masterScale) + 'px';
+                css.width = scaled;
+                css.height = scaled;
+              } else {
+                if (button.style.width) css.width = button.style.width;
+                if (button.style.height) css.height = button.style.height;
+              }
+            if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+          }
+          return css;
+        };
         if (currentState !== null) {
-          // Mode toggle - appliquer le style selon l'état
           const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-          button.$({ css: { ...template.css, ...stateStyle } });
+          const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+          button.$({ css: merged });
         } else {
-          // Mode normal - retourner au style de base
-          button.$({ css: template.css });
+          const baseCss = { ...template.css, ...preserveSize() };
+          button.$({ css: baseCss });
         }
       });
     }
@@ -1602,11 +2227,31 @@
 
       button.addEventListener('mouseup', () => {
         const currentState = button.getState ? button.getState() : null;
+        const preserveSize = () => {
+          const css = {};
+          if (button && /_toggle$/.test(button.id)) {
+            let masterScale = 1;
+            try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+            const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+            if (baseSize) {
+              const scaled = Math.round(baseSize * masterScale) + 'px';
+              css.width = scaled;
+              css.height = scaled;
+            } else {
+              if (button.style.width) css.width = button.style.width;
+              if (button.style.height) css.height = button.style.height;
+            }
+            if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+          }
+          return css;
+        };
         if (currentState !== null) {
           const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-          button.$({ css: { ...template.css, ...stateStyle } });
+          const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+          button.$({ css: merged });
         } else {
-          button.$({ css: template.css });
+          const baseCss = { ...template.css, ...preserveSize() };
+          button.$({ css: baseCss });
         }
       });
     }
@@ -1618,14 +2263,15 @@
   define('button-container', {
     tag: 'button',
     class: 'hs-button',
-    text: 'hello',
+    text: '',
     css: {
       position: 'relative',
       display: 'inline-flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '8px 16px',
-      border: '1px solid #ccc',
+    // remove default contour
+    border: 'none',
       borderRadius: '4px',
       // backgroundColor: '#f8f9fa', // ❌ Retiré pour éviter les conflits
       // color: '#333', // ❌ Retiré pour éviter les conflits
@@ -1792,7 +2438,8 @@
    */
   const createButton = (config = {}) => {
     const {
-      text = 'Button',
+      // default to empty text: components will show no label unless explicitly provided
+      text = '',
       icon,
       badge,
       variant = 'default',
@@ -1836,7 +2483,16 @@
     }
 
     // Déterminer le mode de fonctionnement
-    const isToggleMode = onText !== undefined || offText !== undefined;
+    // Toggle mode if any of: onText/offText, onStyle/offStyle, onAction/offAction, or explicit toggle flag
+    const isToggleMode = (
+      onText !== undefined ||
+      offText !== undefined ||
+      (onStyle && Object.keys(onStyle).length > 0) ||
+      (offStyle && Object.keys(offStyle).length > 0) ||
+      typeof onAction === 'function' ||
+      typeof offAction === 'function' ||
+      processedConfig.toggle === true
+    );
     const isMultiStateMode = states && states.length > 0;
     
     // État interne pour le toggle
@@ -1899,6 +2555,12 @@
       if (userStateStyles && Object.keys(userStateStyles).length > 0) {
         containerStyles = { ...containerStyles, ...userStateStyles };
       }
+    } else if (isToggleMode) {
+      // Apply user-provided state styles even without a template
+      const userStateStylesOnly = currentToggleState ? (processedConfig.onStyle || {}) : (processedConfig.offStyle || {});
+      if (Object.keys(userStateStylesOnly).length > 0) {
+        containerStyles = { ...containerStyles, ...userStateStylesOnly };
+      }
     } else if (Object.keys(finalStyles).length > 0) {
       // Pour les modes non-toggle, appliquer finalStyles
       containerStyles = { ...containerStyles, ...finalStyles };
@@ -1909,6 +2571,44 @@
       containerStyles.opacity = '0.6';
       containerStyles.cursor = 'not-allowed';
       containerStyles.pointerEvents = 'none';
+    }
+
+    // Respect explicit small width/height: if the developer provided small dimensions
+    // prefer an icon-only compact button (no padding/minWidth that would expand it).
+    const parsePx = (v) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === 'number') return v;
+      const m = String(v).match(/^(-?\d+(?:\.\d+)?)(px)?$/);
+      return m ? Number(m[1]) : null;
+    };
+
+    const explicitW = parsePx(containerStyles.width || processedConfig.width || processedConfig.css && processedConfig.css.width);
+    const explicitH = parsePx(containerStyles.height || processedConfig.height || processedConfig.css && processedConfig.css.height);
+    const smallThreshold = 32; // px — consider buttons <= this size as icon-only
+    const isSmall = (explicitW !== null && explicitW <= smallThreshold) || (explicitH !== null && explicitH <= smallThreshold);
+
+    if (isSmall) {
+      // Force compact rendering by overriding template defaults so explicit sizes are respected
+      containerStyles.boxSizing = 'border-box';
+      containerStyles.padding = '0';
+      containerStyles.minWidth = '0';
+      containerStyles.minHeight = '0';
+      // ensure explicit width/height remain as provided (if numeric, add px)
+      if (explicitW !== null) containerStyles.width = String(explicitW) + 'px';
+      if (explicitH !== null) containerStyles.height = String(explicitH) + 'px';
+      // hide any text when small unless explicitly forced
+      if (!processedConfig.forceText) {
+        // this will make later checks like `if (finalText)` fail and avoid adding text nodes
+        finalText = '';
+      }
+      // reduce font-size influence
+      containerStyles.fontSize = '0px';
+      // make overflow hidden so inner content doesn't push size
+      containerStyles.overflow = 'hidden';
+      // ensure inline-flex alignment centers icon
+      containerStyles.display = 'inline-flex';
+      containerStyles.alignItems = 'center';
+      containerStyles.justifyContent = 'center';
     }
 
     // Fonction de gestion du clic
@@ -1938,12 +2638,35 @@
         
         // ✅ Fusionner les styles: template base + template state + user state + user css
         const templateBase = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
+        // Compose so state styles override base CSS. Base = template + user css; State = template state + user state.
         const finalStyles = {
-          ...templateBase,        // 1. Template base styles
-          ...templateStateStyles, // 2. Template state styles (onStyle/offStyle from template)
-          ...userStateStyles,     // 3. User state styles (onStyle/offStyle from config)
-          ...processedConfig.css  // 4. User CSS overrides (highest priority)
+          ...templateBase,        // 1) Template base styles
+          ...processedConfig.css, // 2) User base CSS
+          ...templateStateStyles, // 3) Template state styles
+          ...userStateStyles      // 4) User state styles (highest priority)
         };
+
+        // --- Preserve externally imposed size (e.g. Intuition master scale) ---
+        // If the button already has inline width/height coming from another system (and caller didn't explicitly set new ones in finalStyles), keep them.
+        if (button && button.id && /_toggle$/.test(button.id)) {
+          // Recompute width/height from stored base size * external master scale if available
+          const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+          let masterScale = 1;
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+          if (baseSize) {
+            const scaled = Math.round(baseSize * masterScale) + 'px';
+            finalStyles.width = scaled;
+            finalStyles.height = scaled;
+          } else {
+            const existingW = button.style.width;
+            const existingH = button.style.height;
+            if (existingW && finalStyles.width === undefined) finalStyles.width = existingW;
+            if (existingH && finalStyles.height === undefined) finalStyles.height = existingH;
+          }
+          // Also ensure borderRadius kept if externally scaled
+          const existingBR = button.style.borderRadius;
+          if (existingBR && finalStyles.borderRadius === undefined) finalStyles.borderRadius = existingBR;
+        }
         
         button.$({ css: finalStyles });
         
@@ -2028,6 +2751,15 @@
     // Empêcher la sélection/drag native pour que tout le bouton soit la cible
     button.addEventListener('dragstart', (e) => e.preventDefault());
     button.addEventListener('selectstart', (e) => e.preventDefault());
+
+    // Ensure no default outline/border remains (some templates or UA styles may inject them)
+    try {
+      // remove possible outline and border set later
+      button.style.setProperty('outline', 'none');
+      button.style.setProperty('border', 'none');
+    } catch (e) {
+      // ignore
+    }
 
     // ✅ FORCER TOUS les styles critiques manuellement
     Object.keys(cleanStyles).forEach(key => {
@@ -7069,6 +7801,9 @@
     Badge: createBadge,
     Button: createButton,
     Draggable: draggable,
+    makeDraggable,
+    makeDraggableWithDrop,
+    makeDropZone,
     List: createList,
     Matrix: createMatrix,
     Menu: createMenu,
@@ -7081,19 +7816,21 @@
 
   // Expose drag&drop helpers as soon as possible for local and CDN builds
   if (typeof window !== 'undefined') {
+    window.makeDraggable = makeDraggable;
     window.makeDraggableWithDrop = makeDraggableWithDrop;
     window.makeDropZone = makeDropZone;
     // Empêche le tree-shaking de Rollup
-    window.__forceKeep = [makeDraggableWithDrop, makeDropZone];
+    window.__forceKeep = [makeDraggable, makeDraggableWithDrop, makeDropZone];
   }
 
   // Expose Squirrel globals immediately for both CDN and NPM builds
   if (typeof window !== 'undefined') {
-    // Expose Squirrel globals and bare component names immediately
-    window.Squirrel.Apis = Apis;
-  window.Apis = Apis;
-    window.$ = Squirrel.$;
     window.Squirrel = window.Squirrel || {};
+
+    // Expose Squirrel globals and bare component names immediately
+    window.Squirrel.Apis = Apis$1;
+    window.Apis = Apis$1;
+    window.$ = Squirrel.$;
     window.Squirrel.$ = Squirrel.$;
     window.Squirrel.define = Squirrel.define;
     window.Squirrel.batch = Squirrel.batch;
@@ -7102,7 +7839,9 @@
     window.Squirrel.Badge = createBadge;
     window.Squirrel.Button = createButton;
     window.Squirrel.Draggable = draggable;
-    window.makeDraggable = draggable.makeDraggable;
+    window.Squirrel.makeDraggable = makeDraggable;
+    window.Squirrel.makeDraggableWithDrop = makeDraggableWithDrop;
+    window.Squirrel.makeDropZone = makeDropZone;
     window.Squirrel.List = createList;
     window.Squirrel.Matrix = createMatrix;
     window.Squirrel.Menu = createMenu;
@@ -7149,7 +7888,24 @@
     });
   }
 
+  exports.Apis = Apis$1;
+  exports.Badge = createBadge;
+  exports.Button = createButton;
+  exports.Draggable = draggable;
+  exports.List = createList;
+  exports.Matrix = createMatrix;
+  exports.Menu = createMenu;
+  exports.Minimal = createMinimal;
+  exports.Slider = createSlider;
+  exports.Squirrel = Squirrel;
+  exports.Table = createTable;
+  exports.Template = createTemplate;
+  exports.Tooltip = createTooltip;
+  exports.Unit = createUnit;
   exports.default = Squirrel;
+  exports.makeDraggable = makeDraggable;
+  exports.makeDraggableWithDrop = makeDraggableWithDrop;
+  exports.makeDropZone = makeDropZone;
 
   Object.defineProperty(exports, '__esModule', { value: true });
 
