@@ -12,6 +12,7 @@ set -euo pipefail
 MODE="stable"          # stable | latest
 SKIP_TAURI=false
 SKIP_FASTIFY=false
+SKIP_IPLUG=false
 
 show_help() {
   cat <<'EOF'
@@ -21,8 +22,9 @@ Options:
   -m, --mode <stable|latest>   Select update mode (default: stable)
   -s, --stable                 Shortcut for --mode stable
   -l, --latest                 Shortcut for --mode latest
-      --skip-tauri             Skip updating @tauri-apps/cli
-      --skip-fastify           Skip updating Fastify and related plugins
+  --skip-tauri             Skip updating @tauri-apps/cli
+  --skip-fastify           Skip updating Fastify and related plugins
+  --skip-iplug             Skip refreshing iPlug2 (tools/update_iplug2.sh)
   -h, --help                   Show this help message
 
 Examples:
@@ -55,6 +57,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_FASTIFY=true
       shift
       ;;
+    --skip-iplug)
+      SKIP_IPLUG=true
+      shift
+      ;;
     --help|-h)
       show_help
       exit 0
@@ -81,7 +87,11 @@ while [ -h "$SOURCE" ]; do
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [[ -f "$SCRIPT_DIR/package.json" ]]; then
+  PROJECT_ROOT="$SCRIPT_DIR"
+else
+  PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+fi
 JS_DIR="$PROJECT_ROOT/src/js"
 mkdir -p "$JS_DIR"
 
@@ -289,6 +299,51 @@ update_fastify_stack() {
   log_ok "✅ Fastify stack bumped to latest"
 }
 
+reinstall_project_dependencies() {
+  local installer="$PROJECT_ROOT/scripts_utils/install_dependencies.sh"
+  if [ ! -f "$installer" ]; then
+    log_warn "⚠️  Dependency installer not found at $installer (skipping full dependency refresh)"
+    return
+  fi
+
+  if [ ! -x "$installer" ]; then
+    chmod +x "$installer"
+  fi
+
+  log_info "📦 Reinstalling project dependencies (this may take a while)"
+  if (cd "$PROJECT_ROOT" && "$installer" --non-interactive --force); then
+    log_ok "✅ Project dependencies refreshed"
+  else
+    log_error "❌ Dependency reinstallation failed"
+    return 1
+  fi
+}
+
+update_iplug2() {
+  if [ "$SKIP_IPLUG" = true ]; then
+    log_warn "⏭️  Skipping iPlug2 update (--skip-iplug)"
+    return
+  fi
+
+  local updater="$PROJECT_ROOT/tools/update_iplug2.sh"
+  if [ ! -f "$updater" ]; then
+    log_error "❌ iPlug2 updater not found at $updater"
+    return 1
+  fi
+
+  if [ ! -x "$updater" ]; then
+    chmod +x "$updater"
+  fi
+
+  log_info "🎛  Updating iPlug2 dependency"
+  if (cd "$PROJECT_ROOT" && "$updater"); then
+    log_ok "✅ iPlug2 refreshed"
+  else
+    log_error "❌ iPlug2 update failed"
+    return 1
+  fi
+}
+
 # --- Stable mode -----------------------------------------------------------
 run_stable_updates() {
   log_info "🔄 Updating libraries to pinned stable versions"
@@ -423,4 +478,6 @@ esac
 
 update_tauri_cli
 update_fastify_stack
+reinstall_project_dependencies
+update_iplug2
 log_ok "✅ All updates complete"

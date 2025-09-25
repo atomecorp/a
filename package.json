@@ -64,9 +64,10 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "update:libs": "cd scripts_utils && ./update_all_libraries.sh --mode latest",
-    "update:libs:basic": "cd scripts_utils && ./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify",
-    "update:libs:stable": "cd scripts_utils && ./update_all_libraries.sh --mode stable"
+    "update:libs": "./update_all_libraries.sh --mode latest",
+    "update:libs:no-iplug": "./update_all_libraries.sh --mode latest --skip-iplug",
+    "update:libs:basic": "./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify",
+    "update:libs:stable": "./update_all_libraries.sh --mode stable"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",

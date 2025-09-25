@@ -43,7 +43,7 @@ src/js/
 ```bash
 npm run update:libs
 # ou directement
-./scripts_utils/update_all_libraries.sh --mode latest
+./update_all_libraries.sh --mode latest
 ```
 
 **Fonctionnalités :**
@@ -53,15 +53,21 @@ npm run update:libs
 - ✅ Sauvegarde + rollback automatiques en cas de problème
 - ✅ Génère des fichiers `.version` pour chaque asset téléchargé
 - ✅ Met à jour @tauri-apps/cli et la stack Fastify (désactivables avec `--skip-tauri` / `--skip-fastify`)
+- ✅ Rafraîchit aussi iPlug2 (exécute `tools/update_iplug2.sh`)
+- ✅ Réinstalle toutes les dépendances npm via `scripts_utils/install_dependencies.sh`
+
+> ➖ Pour ignorer iPlug2 : `npm run update:libs:no-iplug`, `npm run update:libs -- --skip-iplug` ou `./update_all_libraries.sh --mode latest --skip-iplug`
 
 > ℹ️ Le mode `latest` s'appuie sur `jq`. Installez-le via `brew install jq` (macOS) ou votre gestionnaire de paquets.
+
+> ⏱️ Attendez-vous à une exécution plus longue : la réinstallation complète des dépendances peut prendre plusieurs minutes.
 
 ### 2. Mise à jour basique (sans outils serveurs)
 
 ```bash
 npm run update:libs:basic
 # ou directement
-./scripts_utils/update_all_libraries.sh --mode latest --skip-tauri --skip-fastify
+./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify
 ```
 
 **Fonctionnalités :**
@@ -69,19 +75,24 @@ npm run update:libs:basic
 - ✅ Télécharge uniquement les librairies front
 - ✅ Conserve les sauvegardes/rollback et les fichiers `.version`
 - ✅ Idéal quand vous ne souhaitez pas toucher au CLI Tauri ou à Fastify
+- ℹ️ Inclut iPlug2 par défaut ; ajoutez `--skip-iplug` pour éviter le téléchargement
+
+> ➖ Exemple : `./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify --skip-iplug`
 
 ### 3. Mode stable (versions validées)
 
 ```bash
 npm run update:libs:stable
 # ou directement
-./scripts_utils/update_all_libraries.sh --mode stable
+./update_all_libraries.sh --mode stable
 ```
 
 **Fonctionnalités :**
 
 - ✅ Applique le set de versions épinglées et testées
 - ✅ Pratique pour figer les builds de production
+
+> ➖ `./update_all_libraries.sh --mode stable --skip-iplug` évitera la mise à jour iPlug2
 
 ## 🔧 Utilisation dans le HTML
 
@@ -164,7 +175,7 @@ npm run build:all
 
 Pour ajouter une nouvelle librairie au système :
 
-1. **Mettre à jour `scripts_utils/update_all_libraries.sh`**
+1. **Mettre à jour `update_all_libraries.sh`**
 
    - Dans `run_latest_updates`, utilisez `download_latest_asset` (et, si besoin, `download_wavesurfer_plugins_latest`) pour récupérer la librairie et créer son fichier `.version`.
    - Dans `run_stable_updates`, ajoutez l'URL épinglée correspondante si vous souhaitez proposer une version fallback.
@@ -187,7 +198,7 @@ curl -I https://registry.npmjs.org/gsap/latest
 
 # Utiliser la version basique en fallback
 npm run update:libs:basic
-# ou ./scripts_utils/update_all_libraries.sh --mode latest --skip-tauri --skip-fastify
+# ou ./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify
 ```
 
 ### Fichier corrompu
@@ -201,7 +212,7 @@ cp src/js/gsap.min.js.backup src/js/gsap.min.js
 ### Permissions d'exécution
 
 ```bash
-chmod +x scripts_utils/*.sh
+chmod +x update_all_libraries.sh tools/update_iplug2.sh scripts_utils/*.sh
 ```
 
 ## 📈 Monitoring des Versions
