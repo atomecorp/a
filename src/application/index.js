@@ -65,7 +65,10 @@
 
 // import('./examples/basic.js');
 // import('./examples/tools.js');
-import('./examples/file_drop.js');
+import('./examples/tools_examples.js');
+
+// import('./examples/file_drop.js');
+// import('./examples/file_drop.js');
 // import('./examples/svg_fetch_usage.js');
 // import('./examples/svg_animate.js');
 // import('./examples/testSVGSize.js');
