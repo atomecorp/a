@@ -38,7 +38,7 @@ const nativeAnimate = HTMLElement.prototype.animate;
 // Fonction utilitaire pour ajouter des classes (évite la duplication de code)
 const addClasses = (element, classes) => {
   if (!classes) return;
-  
+
   if (typeof classes === 'string') {
     // Éviter split si une seule classe
     if (classes.indexOf(' ') === -1) {
@@ -59,10 +59,10 @@ const addClasses = (element, classes) => {
 const $ = (id, props = {}) => {
   const config = templateRegistry.get(id) || {};
   const element = createElement(config.tag || props.tag || id || 'div');
-  
+
   // 🔧 FIX: Merge CSS intelligent
   const merged = { ...config, ...props };
-  
+
   // CSS merge corrigé
   if (config.css || props.css) {
     if (typeof config.css === 'string' && typeof props.css === 'string') {
@@ -73,20 +73,20 @@ const $ = (id, props = {}) => {
       merged.css = props.css || config.css;
     }
   }
-  
+
   // 🔧 FIX: Attrs merge corrigé
   if (config.attrs || props.attrs) {
     merged.attrs = { ...(config.attrs || {}), ...(props.attrs || {}) };
   }
-  
+
   // Marquage optionnel
   if (merged.mark) element.setAttribute('data-hyperfactory', 'true');
-  
+
   // Attributs basiques
   merged.id && (element.id = merged.id);
   merged.text && (element.textContent = merged.text);
   merged.innerHTML && (element.innerHTML = merged.innerHTML);
-  
+
   // Chargement SVG depuis fichier
   if (merged.svgSrc) {
     fetch(merged.svgSrc)
@@ -98,10 +98,10 @@ const $ = (id, props = {}) => {
         console.error(`Erreur lors du chargement du SVG ${merged.svgSrc}:`, error);
       });
   }
-  
+
   // Classes via classList (optimisé)
   addClasses(element, merged.class);
-  
+
   // Attributs personnalisés
   if (merged.attrs) {
     for (const [key, value] of Object.entries(merged.attrs)) {
@@ -114,7 +114,7 @@ const $ = (id, props = {}) => {
       }
     }
   }
-  
+
   // Styles CSS
   if (merged.css) {
     if (typeof merged.css === 'string') {
@@ -124,14 +124,14 @@ const $ = (id, props = {}) => {
         if (merged.css.hasOwnProperty(key)) {
           const value = merged.css[key];
           const kebabKey = toKebabCase(key);
-          value == null 
+          value == null
             ? element.style.removeProperty(kebabKey)
             : element.style.setProperty(kebabKey, value);
         }
       }
     }
   }
-  
+
   // Événements avec addEventListener
   eventRegistry.set(element, {});
   for (const key in merged) {
@@ -142,7 +142,7 @@ const $ = (id, props = {}) => {
       eventRegistry.get(element)[eventName] = handler;
     }
   }
-  
+
   // Enfants imbriqués
   if (merged.children) {
     merged.children.forEach(childConfig => {
@@ -150,12 +150,12 @@ const $ = (id, props = {}) => {
       element.appendChild(child);
     });
   }
-  
+
   // Méthode de mise à jour
   element.$ = updateProps => {
     if ('text' in updateProps) element.textContent = updateProps.text;
     if ('innerHTML' in updateProps) element.innerHTML = updateProps.innerHTML;
-    
+
     // Mise à jour SVG depuis fichier
     if ('svgSrc' in updateProps) {
       fetch(updateProps.svgSrc)
@@ -167,11 +167,11 @@ const $ = (id, props = {}) => {
           console.error(`Erreur lors du chargement du SVG ${updateProps.svgSrc}:`, error);
         });
     }
-    
+
     if (updateProps.class) {
       addClasses(element, updateProps.class);
     }
-    
+
     if (updateProps.css) {
       if (typeof updateProps.css === 'string') {
         element.style.cssText = updateProps.css;
@@ -180,14 +180,14 @@ const $ = (id, props = {}) => {
           if (updateProps.css.hasOwnProperty(key)) {
             const value = updateProps.css[key];
             const kebabKey = toKebabCase(key);
-            value == null 
+            value == null
               ? element.style.removeProperty(kebabKey)
               : element.style.setProperty(kebabKey, value);
           }
         }
       }
     }
-    
+
     if (updateProps.attrs) {
       for (const key in updateProps.attrs) {
         if (updateProps.attrs.hasOwnProperty(key)) {
@@ -202,47 +202,90 @@ const $ = (id, props = {}) => {
         }
       }
     }
-    
+
     // Mise à jour des événements
     const currentListeners = eventRegistry.get(element);
     for (const key in updateProps) {
       if (isEventHandler(key) && typeof updateProps[key] === 'function') {
         const eventName = key.slice(2).toLowerCase();
         const newHandler = updateProps[key];
-        
+
         if (currentListeners[eventName]) {
           element.removeEventListener(eventName, currentListeners[eventName]);
         }
-        
+
         element.addEventListener(eventName, newHandler);
         currentListeners[eventName] = newHandler;
       }
     }
-    
+
     return element;
   };
-  
+
   // Alias pour le style
   element._ = element.style;
-  
+
   // Parent (support des sélecteurs)
   const parent = merged.parent || '#view';
-  const appendToParent = () => {
-    if (typeof parent === 'string') {
+  const parentIsSelector = typeof parent === 'string';
+
+  const tryAppendToParent = () => {
+    if (parentIsSelector) {
       const target = document.querySelector(parent);
-      if (target) target.appendChild(element);
-      else console.warn(`Parent selector "${parent}" not found`);
-    } else {
-      parent.appendChild(element);
+      if (target) {
+        target.appendChild(element);
+        element._parentAttachPending = false;
+        if (element._parentAttachRaf) {
+          cancelAnimationFrame(element._parentAttachRaf);
+          element._parentAttachRaf = null;
+        }
+        return true;
+      }
+      return false;
     }
+    parent.appendChild(element);
+    element._parentAttachPending = false;
+    return true;
+  };
+
+  const scheduleParentRetry = () => {
+    if (!parentIsSelector) return;
+    if (element._parentAttachPending) return;
+    element._parentAttachPending = true;
+    let attempts = 0;
+    const retry = () => {
+      if (tryAppendToParent()) {
+        window.removeEventListener('squirrel:ready', retry, true);
+        document.removeEventListener('DOMContentLoaded', retry, true);
+        return;
+      }
+      attempts += 1;
+      if (attempts >= 120) {
+        console.warn(`Parent selector "${parent}" not found`);
+        element._parentAttachPending = false;
+        window.removeEventListener('squirrel:ready', retry, true);
+        document.removeEventListener('DOMContentLoaded', retry, true);
+        element._parentAttachRaf = null;
+        return;
+      }
+      element._parentAttachRaf = requestAnimationFrame(retry);
+    };
+    window.addEventListener('squirrel:ready', retry, true);
+    document.addEventListener('DOMContentLoaded', retry, true);
+    element._parentAttachRaf = requestAnimationFrame(retry);
+  };
+
+  const ensureParentAttachment = () => {
+    if (tryAppendToParent()) return;
+    scheduleParentRetry();
   };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', appendToParent);
+    document.addEventListener('DOMContentLoaded', ensureParentAttachment, { once: true, capture: true });
   } else {
-    appendToParent();
+    ensureParentAttachment();
   }
-  
+
   // 🔧 FIX: Animation native intégrée
   element.animate = (keyframes, options = {}) => {
     const animation = nativeAnimate.call(element, keyframes, {
@@ -252,7 +295,7 @@ const $ = (id, props = {}) => {
     });
     return animation.finished;
   };
-  
+
   // 🔧 FIX: Cleanup des observers
   element.remove = () => {
     // Nettoyer les observers
@@ -261,7 +304,7 @@ const $ = (id, props = {}) => {
       observers.forEach(observer => observer.disconnect());
       mutationRegistry.delete(element);
     }
-    
+
     // Nettoyer les events
     const events = eventRegistry.get(element);
     if (events) {
@@ -272,10 +315,10 @@ const $ = (id, props = {}) => {
       }
       eventRegistry.delete(element);
     }
-    
+
     element.parentNode?.removeChild(element);
   };
-  
+
   return element;
 };
 
@@ -316,14 +359,14 @@ const observeMutations = (element, callback, options = {}) => {
   const observer = new MutationObserver((mutations) => {
     mutations.forEach(mutation => callback(mutation));
   });
-  
+
   observer.observe(element, {
     attributes: true,
     childList: true,
     subtree: true,
     ...options
   });
-  
+
   // Stocker l'observateur pour le nettoyage
   if (!mutationRegistry.has(element)) mutationRegistry.set(element, []);
   mutationRegistry.get(element).push(observer);
