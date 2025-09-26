@@ -9,6 +9,13 @@ const item_size = 54;
 
 const light_theme = {
   themeName: "light",
+  button_color: 'rgba(204, 35, 35, 0.85)',
+  button_active_color: "#bbeb0eff",
+  palette_bg: '#804901ff',
+  tool_bg: 'linear-gradient(180deg, rgba(32, 190, 48, 0.85) 0%, rgba(72,71,71,0.35) 100%)',
+  particle_bg: '#4a4a4aff',
+  option_bg: '#c40fdfff',
+  zonespecial_bg: '#4a4a4aff',
   slider_length: '70%',
   slider_zoom_length: '100%',
   slider_length_vertical: '30%',
@@ -23,8 +30,7 @@ const light_theme = {
   drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
   drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
   button_size: '33%',
-  button_color: 'rgba(72,71,  71,0.85)',
-  button_active_color: "#7a7c73ff",
+
   items_spacing: items_spacing + 'px',
   item_size: item_size + 'px',
   support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
@@ -32,7 +38,7 @@ const light_theme = {
   tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
   tool_bg_active: "#7a7c73ff",
   tool_backDrop_effect: '8px',
-  tool_text: "#f7f491ff",
+  tool_text: "#cacacaff",
   tool_font: "0.9vw",
   tool_font_px: 10,
   text_char_max: 9,
@@ -77,35 +83,44 @@ const light_theme = {
 };
 Intuition.addTheme(light_theme)
 
+function tools_test_touch() {
+  puts('Tools test touch triggered');
+}
+
+function tools_lock_test_touch() {
+  puts('Tools lock test touch triggered!!!');
+}
+
+function option_test_touch() {
+  puts('Option test touch triggered');
+}
+
+
 const intuition_content = {
   version: "1.1",
-  meta: { namespace: "atome.menu", defaultLocale: "en" },
-  toolbox: { children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit'] },
-  home: { type: 'palette', children: ['quit', 'user', 'settings', 'clear', 'cleanup'], icon: false },
-  find: { type: 'tool', children: ['width_height'], touch_up: testFct, icon: null },
-  time: { type: 'particle', children: ['filter'] },
-  view: { type: 'option', icon: null },
-  tools: { type: 'zonespecial', children: ['filter'] },
-  communication: { type: 'palette', children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
-  capture: { type: 'palette', children: ['filter'], icon: null },
-  edit: { type: 'palette', children: ['filter'] },
-  filter: { type: 'palette', children: ['internet', 'local'] },
-  quit: { type: 'tool', icon: null },
-  user: { type: 'palette', children: ['add', 'remove'], icon: null },
-  settings: { type: 'tool' },
-  clear: { type: 'tool' },
-  cleanup: { type: 'tool', icon: null },
-  add: { type: 'tool' },
-  remove: { type: 'tool' },
-  width_height: { type: 'tool', label: 'Width & Height' },
-  internet: { type: 'tool' },
-  local: { type: 'tool' }
+  meta: { namespace: "vie.menu", defaultLocale: "en" },
+  toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
+  //
+  file: { type: 'palette', children: ['import', 'load', 'save'] },
+  tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
+  settings: { type: 'palette', children: ['email',], icon: false },
+  capture: { label: 'record', type: 'tool', icon: 'record' },
+  perform: { label: 'perform', type: 'tool', icon: null },
+
+
+  import: { type: 'tool', children: ['audio', 'modules', 'projects'] },
+  load: { type: 'tool', children: ['modules', 'projects'], touch_up: function () { puts('Import touch triggered'); } },
+  save: { type: 'tool', touch: function () { puts('Save touch triggered'); } },
+  email: { type: 'option', touch: option_test_touch },
+  volume: { type: 'particle', helper: 'slider', value: 3 },
+  ADSR: { type: 'tool', children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
+  controller: { type: 'zonespecial', touch: function () { puts('Controller touch triggered'); } },
+  A: { type: 'particle', helper: 'slider', unit: '%', value: 50, ext: 3, },
+  D: { type: 'particle', helper: 'button', unit: '%', value: 0, ext: 3 },
+  S: { type: 'particle', helper: 'slider', unit: '%', value: 0, ext: 3 },
+  R: { type: 'particle', unit: '%', value: 20, ext: 3 },
+
 };
-
-
-function testFct() {
-  puts('ok');
-}
 
 Intuition({ name: 'newMenu', theme: 'light', content: intuition_content });
 
