@@ -1,5 +1,42 @@
 # Toolbox Menu: Usage & Development Guide (English)
 
+## Quick Start: Build a Toolbox Menu
+
+1. **Pick or extend a theme**. The `Intuition_theme` object drives layout, backgrounds, icon sizing, slider behavior, and more. Each item type now has its own background key, so you can skin them independently:
+
+  | Theme key | Applies to |
+  |-----------|------------|
+  | `palette_bg` | Palette entries (top-level sections)|
+  | `tool_bg` / `tool_bg_active` | Tools + their active highlight|
+  | `particle_bg` | Particle tiles|
+  | `option_bg` | Options|
+  | `zonespecial_bg` | Zone-special tiles|
+  | `toolbox_icon`, `icon_*` | Toolbox trigger icon position/color|
+
+1. **Describe your content** inside `intuition_content`. Each key represents a logical item. Reference factory helpers (`palette`, `tool`, `particle`, `option`, `zonespecial`) from `intuition_builder.js`:
+
+  ```javascript
+  const intuition_content = {
+    toolbox: { children: ['file', 'tools'] },
+    file: { type: palette, children: ['import', 'save'] },
+    import: { type: tool, icon: 'download', children: ['audio', 'projects'] },
+    audio: { type: option, touch: ({kind}) => console.log('Import audio via', kind) },
+    volume: { type: particle, helper: 'slider', value: 50, unit: '%', icon: 'volume' }
+  };
+  ```
+
+  **Hierarchy** is defined through the `children` array. Top-level palettes sit under the special `toolbox` definition.
+
+  **Icons** accept a string key, use `null`/`false` to skip SVG loading, or provide custom `icon_*` overrides per item.
+
+  **Callbacks** (`touch`, `touch_down`, `touch_up`, `lock`) receive `{ el, event, kind, nameKey, update, theme }`.
+
+1. **Bootstrap the UI** by calling `createToolbox()` (or the broader `createIntuition()` wrapper if you are using the legacy boot sequence). The component waits for its parent container and applies the theme-defined layout.
+
+1. **Navigate** by clicking the toolbox trigger (`#toolbox`). The system builds menu items on demand, animates them in, and keeps a navigation stack so you can drill into children and pop back out.
+
+Use the following sections as a reference for advanced customization, navigation, and behavior.
+
 ## Part 1. Using the Toolbox Menu (Functional / User Perspective)
 
 ### 1. Overview
@@ -16,12 +53,13 @@ The toolbox is a dynamic, theme‑driven ribbon or vertical stack of interactive
 
 ### 2. Item Types (Runtime Behavior)
 
-| Type        | Description | Typical Behavior |
-|-------------|-------------|------------------|
-| Tool        | May have children; expands inline when activated | If no children: toggles active state |
-| Option      | Simple actionable item (like a tool without expansion) | Fires semantic handlers |
-| Zonespecial | Specialised container or action surface | Fires semantic handlers |
-| Particle    | Displays a value + unit; can expose helper (slider/button) | Double‑click to edit value |
+| Type        | Description | Typical Behavior | Default Background |
+|-------------|-------------|------------------|--------------------|
+| Tool        | May have children; expands inline when activated | If no children: toggles active state | `currentTheme.tool_bg` |
+| Option      | Simple actionable item (like a tool without expansion) | Fires semantic handlers | `currentTheme.option_bg` |
+| Zonespecial | Specialised container or action surface | Fires semantic handlers | `currentTheme.zonespecial_bg` |
+| Particle    | Displays a value + unit; can expose helper (slider/button) | Double‑click to edit value | `currentTheme.particle_bg` |
+| Palette     | Top-level category tile | Opens nested tools | `currentTheme.palette_bg` |
 
 ### 3. Interaction Model
 
@@ -35,7 +73,7 @@ The toolbox is a dynamic, theme‑driven ribbon or vertical stack of interactive
 - **Slider drag (zoom press)**: Pressing on the slider area can animate parent size (using `item_zoom`). If in vertical direction the slider grows in height; horizontal → width.
 - **Relative drag**: While zoomed press sequence begins, pointer movement adjusts value without having to hit the handle precisely.
 
-### 4. Semantic Event Hooks
+### 4. Semantic Event Hooks & Navigation Callbacks
 
 Each interactive item can declare handlers inside `intuition_content`:
 
@@ -43,7 +81,8 @@ Each interactive item can declare handlers inside `intuition_content`:
 - `touch`
 - `touch_up`
 - `lock` (invoked automatically on enter/exit with `{ phase: 'enter' | 'exit' }` context)
-Handlers can be functions or strings (evaluated inside a controlled `new Function` sandbox with: `el, event, kind, nameKey, update, theme`).
+
+Handlers can be functions or strings (evaluated inside a controlled `new Function` sandbox with: `el, event, kind, nameKey, update, theme`). While handlers run, the navigation system takes care of expanding children, toggling states, and managing the `menuStack`. You can layer navigation logic (e.g., breadcrumbs) by observing `menuStack` or the data attributes described below.
 
 ### 5. Data Attributes (State Tags)
 
@@ -68,6 +107,8 @@ You may use these in CSS (or logic) for custom skinning. Example selectors:
 
 ### 6. Theme Keys (User-Relevant)
 
+In addition to the per-type backgrounds listed earlier, the theme governs layout, icon sizing, helper behavior, and the toolbox trigger itself.
+
 | Key | Purpose | Notes |
 |-----|---------|-------|
 | `direction` | Layout + orientation | e.g. `top_left_horizontal`, `bottom_right_vertical` |
@@ -85,10 +126,11 @@ You may use these in CSS (or logic) for custom skinning. Example selectors:
 | `handle_color` | Handle fill color | |
 | `drag_sensitivity` | Pixel multiplier for relative drag | `1` → 1px = 1 unit |
 | `drag_mode` | `unit` or `percent` | `unit` = px→value mapping |
-| `tool_bg`, `tool_bg_active` | Base + active backgrounds | Fallback ordering is used |
+| `tool_bg`, `tool_bg_active` | Base + active backgrounds for tools/options/zonespecial | Fallback ordering is used |
 | `tool_active_bg` | Legacy active alternative | Used if `tool_bg_active` missing |
 | `tool_lock_bg` | Second color for lock pulse | |
 | `tool_lock_pulse_duration` | Animation duration | ms string |
+| `particle_bg`, `option_bg`, `zonespecial_bg` | Backgrounds for respective types | Used when no per-item override provided |
 | `particle_value_*` | Font & positioning for value display | bottom, font size, colors |
 
 ### 7. Editing Particle Values
@@ -265,19 +307,41 @@ When adding a new key, follow the pattern:
 | Lock never engages | Long press duration: verify no premature pointerup/cancel |
 | Active state not styling | Inspect element → ensure dataset attributes present |
 
-### 14. Minimal Example (Adding a New Particle with Slider)
+### 14. Minimal Example (Palette with Hierarchy & Slider Particle)
 
 ```javascript
-intuition_content.resonance = {
-  type: particle,
-  label: 'Res',
-  helper: 'slider',
-  value: 25,
-  ext: 0,
-  unit: '%',
-  touch: ({ el }) => { /* optional custom tap */ }
+Intuition_theme.basic = {
+  ...Intuition_theme.basic,
+  palette_bg: '#3e3e3ecc',
+  tool_bg: 'linear-gradient(180deg, #565656 0%, #2f2f2f 100%)',
+  option_bg: '#454545cc',
+  particle_bg: '#3a3a3acc',
+  zonespecial_bg: '#353535cc'
 };
-// Re-render toolbox (depends on integration; if dynamic loader exists) 
+
+Object.assign(intuition_content, {
+  toolbox: { children: ['sound'] },
+  sound: { type: palette, children: ['filter', 'mod'] },
+  filter: { type: tool, icon: 'filter', children: ['cutoff', 'resonance'] },
+  cutoff: { type: particle, helper: 'slider', value: 42, unit: '%', icon: 'cutoff' },
+  resonance: {
+    type: particle,
+    label: 'Res',
+    helper: 'slider',
+    value: 25,
+    ext: 0,
+    unit: '%',
+    touch: ({ el }) => { /* optional custom tap */ }
+  },
+  mod: {
+    type: zonespecial,
+    label: 'Mod Wheel',
+    icon: null,
+    touch: () => console.log('Open modulation zone')
+  }
+});
+
+createToolbox();
 ```
 
 ### 15. Style Strategy
