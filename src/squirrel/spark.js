@@ -8,6 +8,7 @@ import './apis/essentials.js';
 import './apis/utils.js';
 import './apis/loader.js';
 import './apis/shortcut.js';
+import DragDrop from './apis/dragdrop.js';
 import { $, define, observeMutations } from './squirrel.js';
 
 // === COMPONENT IMPORTS ===
@@ -18,15 +19,15 @@ import Matrix from './components/matrix_builder.js';
 import List from './components/List_builder.js';
 import Menu from './components/menu_builder.js';
 import Console from './components/console_builder.js';
-import Unit, { 
-  selectUnits, 
-  getSelectedUnits, 
-  deleteUnit, 
-  connectUnits, 
-  disconnectUnits, 
+import Unit, {
+  selectUnits,
+  getSelectedUnits,
+  deleteUnit,
+  connectUnits,
+  disconnectUnits,
   getAllConnections,
   getUnit,
-  getAllUnits 
+  getAllUnits
 } from './components/unit_builder.js';
 import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from './components/draggable_builder.js';
 import Badge from './components/badge_builder.js';
@@ -91,6 +92,8 @@ window.Squirrel.Template = Template;
 window.Squirrel.Minimal = Minimal;
 window.Squirrel.Slice = Slice;
 window.Squirrel.createSlice = createSlice;
+window.DragDrop = DragDrop;
+window.Squirrel.DragDrop = DragDrop;
 
 // === ADD STATIC METHODS TO UNIT FOR COMPATIBILITY ===
 Unit.selectUnits = selectUnits;
@@ -106,7 +109,7 @@ Unit.getAllUnits = getAllUnits;
 // === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
   // Toggle iPlug Web integration here (enabled by default). Comment to disable.
-  try { initIPlugWeb(); } catch(e) { console.warn('iPlug init failed', e); }
+  try { initIPlugWeb(); } catch (e) { console.warn('iPlug init failed', e); }
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
 });
