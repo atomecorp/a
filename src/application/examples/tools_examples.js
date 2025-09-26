@@ -32,7 +32,7 @@ const light_theme = {
   tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
   tool_bg_active: "#7a7c73ff",
   tool_backDrop_effect: '8px',
-  tool_text: "#cacacaff",
+  tool_text: "#f7f491ff",
   tool_font: "0.9vw",
   tool_font_px: 10,
   text_char_max: 9,

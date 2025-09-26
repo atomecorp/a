@@ -1821,7 +1821,7 @@ const bootstrapIntuition = () => {
     } else {
         apply_layout();
     }
-    ensureLegacyDemoArtifacts();
+
     window.removeEventListener('squirrel:ready', bootstrapIntuition, true);
     document.removeEventListener('DOMContentLoaded', bootstrapIntuition, true);
 };
@@ -2380,93 +2380,6 @@ function alignSupportToToolboxEdge() {
 
 
 
-
-
-let vieLogo = null;
-const images = [
-    './assets/images/1.png',
-    './assets/images/2.png',
-    './assets/images/3.png',
-    './assets/images/4.png',
-    './assets/images/5.png',
-    './assets/images/6.jpg',
-    './assets/images/noise.svg'
-];
-
-let currentIndex = 0;
-
-function ensureLegacyDemoArtifacts() {
-    const viewRoot = document.getElementById('view');
-    const intuitionRoot = document.getElementById('intuition');
-    if (!viewRoot || !intuitionRoot) return;
-    if (!vieLogo || !document.getElementById('img_test')) {
-        vieLogo = $('img', {
-            id: 'img_test',
-            parent: "#view",
-            attrs: {
-                src: './assets/images/1.png',
-                alt: 'ballanim'
-            },
-            css: {
-                marginLeft: '0',
-                color: 'white',
-                left: '0px',
-                top: '0px',
-                position: 'relative',
-                height: 'auto',
-                width: "100%",
-                textAlign: 'center',
-                display: 'block'
-            }
-        });
-        vieLogo.addEventListener('click', () => {
-            puts('hello!');
-            currentIndex = (currentIndex + 1) % images.length;
-            vieLogo.src = images[currentIndex];
-        });
-    }
-}
-
-function mountDirectionSelector() {
-    if (document.getElementById('intuition-direction-select')) return;
-
-    const wrap = $('div', {
-        id: 'intuition-direction-select',
-        parent: '#intuition',
-        css: {
-            position: 'fixed',
-            top: '108px',
-            left: '108px',
-            zIndex: 10000002,
-            backgroundColor: 'transparent',
-            padding: '0'
-        }
-    });
-
-    const select = $('select', {
-        parent: wrap,
-        css: {
-            fontSize: '12px',
-            padding: '2px 6px',
-            color: '#fff',
-            backgroundColor: '#2b2b2b',
-            border: '1px solid #555'
-        }
-    });
-
-    DIRECTIONS.forEach(d => {
-        const opt = $('option', { parent: select, text: d });
-        opt.value = d;
-    });
-
-
-    //test current value
-    select.value = (currentTheme?.direction || 'top_left_horizontal').toLowerCase();
-    select.addEventListener('change', (e) => {
-        window.setDirection(e.target.value);
-    });
-}
-mountDirectionSelector();
 
 
 
