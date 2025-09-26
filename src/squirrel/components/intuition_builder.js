@@ -27,7 +27,14 @@ const option = createOption;
 const zonespecial = createZonespecial;
 
 const Intuition_theme = {
-    light: {
+    basic: {
+        button_color: 'rgba(72,71,  71,0.85)',
+        button_active_color: "#7a7c73ff",
+        palette_bg: '#4a4a4aff',
+        tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
+        particle_bg: '#4a4a4aff',
+        option_bg: '#4a4a4aff',
+        zonespecial_bg: '#4a4a4aff',
         slider_length: '70%',
         slider_zoom_length: '100%',
         slider_length_vertical: '30%',
@@ -42,8 +49,7 @@ const Intuition_theme = {
         drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
         drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
         button_size: '33%',
-        button_color: 'rgba(72,71,  71,0.85)',
-        button_active_color: "#7a7c73ff",
+
         items_spacing: items_spacing + 'px',
         item_size: item_size + 'px',
         support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
@@ -95,27 +101,6 @@ const Intuition_theme = {
     }
 };
 
-// const intuition_content = {
-//   version: "1.1",
-//   meta: { namespace: "atome.menu", defaultLocale: "en" },
-//   toolbox: { children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit'] },
-//   home: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
-//   find: { type: tool, children: ['width, height',] },
-//   time: { type: particle, children: ['filter'] },
-//   view: { type: option },
-//   tools: { type: zonespecial, children: ['filter'] },
-//   communication: { type: palette, children: ['quit', 'user', 'settings', 'clear', 'cleanup'] },
-//   capture: { type: palette, children: ['filter'] },
-//   edit: { type: palette, children: ['filter'] },
-//   filter: { type: palette, children: ['internet', 'local'] },
-//   quit: { type: tool },
-//   user: { type: palette, children: ['add', 'remove'] },
-//   settings: { type: tool },
-//   clear: { type: tool },
-//   cleanup: { type: tool },
-//   add: { type: tool },
-//   remove: { type: tool },
-// };
 
 
 function tools_test_touch() {
@@ -157,7 +142,7 @@ const intuition_content = {
 
 };
 
-const currentTheme = Intuition_theme.light;
+const currentTheme = Intuition_theme.basic;
 
 
 
@@ -534,7 +519,7 @@ const items_common = {
 };
 
 function createPalette(cfg) {
-    const paletteAddOn = { background: 'rgba(255, 0, 0, 0.5)' };
+    const paletteAddOn = { background: currentTheme.palette_bg || '#4a4a4aff' };
     const finalCfg = {
         ...cfg,
         css: {
