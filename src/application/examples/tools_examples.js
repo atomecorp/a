@@ -136,12 +136,6 @@ Intuition({ name: 'newMenu', theme: 'light', content: intuition_content, orienta
 
 
 
-
-
-
-
-
-
 // test selector 
 
 
