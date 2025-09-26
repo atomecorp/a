@@ -2448,8 +2448,9 @@ function applyContentOption(contentOption) {
 const Intuition = function Intuition(options = {}) {
     applyThemeOption(options.theme);
     applyContentOption(options.content);
-    if (options.direction) {
-        window.setDirection(options.direction);
+    const requestedDirection = options && (options.orientation || options.direction);
+    if (requestedDirection) {
+        window.setDirection(requestedDirection);
     }
     if (typeof options.open === 'boolean') {
         if (options.open) {
