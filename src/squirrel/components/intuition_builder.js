@@ -336,7 +336,7 @@ function openMenu(parent) {
         methods.forEach(name => {
             const def = intuition_content[name] || {};
             const label = def.label || name;
-            const icon = def.icon || name;
+            const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
             const fct_exec = def.type;
             if (typeof fct_exec === 'function') {
                 const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support', ...(intuitionAddOn[name] || {}) };
@@ -422,7 +422,10 @@ function createIcon(cfg) {
     // Nettoyer une éventuelle icône précédente
     const prev = document.getElementById(svgId);
     if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
-    let icon = cfg.icon;
+    const icon = cfg.icon;
+    if (icon === null || icon === false || (typeof icon === 'string' && icon.trim() === '')) {
+        return;
+    }
     let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
     let icon_Left = (cfg.icon_left || currentTheme.icon_left || '10%').trim();
     let icon_Top = (cfg.icon_top || currentTheme.icon_top || '50%').trim();
@@ -1438,7 +1441,7 @@ function expandToolInline(el, cfg) {
         let childEl = document.getElementById(id);
         if (!childEl) {
             const label = def.label || name;
-            const icon = def.icon || name;
+            const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
             const params = { id, label, icon, nameKey: name, parent: '#toolbox_support' };
             def.type(params);
             childEl = document.getElementById(id);
@@ -2064,7 +2067,7 @@ function popOutPaletteByName(name, opts = {}) {
         const def = intuition_content[name];
         if (!def || typeof def.type !== 'function') return null;
         const label = def.label || name;
-        const icon = def.icon || name;
+        const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
         const optionalParams = { id, label, icon, nameKey: name, parent: '#toolbox_support' };
         def.type(optionalParams);
         el = grab(id);
@@ -2209,7 +2212,7 @@ function rebuildSupportWithChildren(childrenNames, excludeId) {
             const def = intuition_content[name];
             if (!def || typeof def.type !== 'function') return;
             const label = def.label || name;
-            const icon = def.icon || name;
+            const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
             const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support' };
             if (excludeId && optionalParams.id === excludeId) return; // éviter doublon avec l'élément pop-out
             def.type(optionalParams);
@@ -2255,7 +2258,7 @@ function rebuildSupportToNames(names) {
             const def = intuition_content[name];
             if (!def || typeof def.type !== 'function') return;
             const label = def.label || name;
-            const icon = def.icon || name;
+            const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
             const optionalParams = { id: `_intuition_${name}`, label, icon, nameKey: name, parent: '#toolbox_support' };
             def.type(optionalParams);
             const childEl = grab(`_intuition_${name}`);
