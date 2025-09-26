@@ -6,6 +6,16 @@ const shadowLeft = 0,
 const items_spacing = 3;
 const item_border_radius = 6;
 const item_size = 54;
+const DIRECTIONS = [
+  "top_left_horizontal",
+  "top_right_horizontal",
+  "bottom_left_horizontal",
+  "bottom_right_horizontal",
+  "top_left_vertical",
+  "bottom_left_vertical",
+  "top_right_vertical",
+  "bottom_right_vertical"
+];
 
 const light_theme = {
   themeName: "light",
@@ -130,3 +140,52 @@ Intuition({ name: 'newMenu', theme: 'light', content: intuition_content, orienta
 
 
 
+
+
+// test selector 
+
+
+
+function mountDirectionSelector() {
+  if (document.getElementById('intuition-direction-select')) return;
+
+  const wrap = $('div', {
+    id: 'intuition-direction-select',
+    parent: '#intuition',
+    css: {
+      position: 'fixed',
+      top: '108px',
+      left: '108px',
+      zIndex: 10000002,
+      backgroundColor: 'transparent',
+      padding: '0'
+    }
+  });
+
+  const select = $('select', {
+    parent: wrap,
+    css: {
+      fontSize: '12px',
+      padding: '2px 6px',
+      color: '#fff',
+      backgroundColor: '#2b2b2b',
+      border: '1px solid #555'
+    }
+  });
+
+  DIRECTIONS.forEach(d => {
+    const opt = $('option', { parent: select, text: d });
+    opt.value = d;
+  });
+
+
+  //test current value
+  const liveTheme = (typeof Intuition !== 'undefined' && typeof Intuition.getTheme === 'function')
+    ? Intuition.getTheme('current')
+    : null;
+  select.value = (liveTheme?.direction || 'top_left_horizontal').toLowerCase();
+  select.addEventListener('change', (e) => {
+    window.setDirection(e.target.value);
+  });
+}
+mountDirectionSelector();
