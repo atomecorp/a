@@ -28,12 +28,12 @@ const zonespecial = createZonespecial;
 
 const Intuition_theme = {
     basic: {
-        button_color: 'rgba(72,71,  71,0.85)',
-        button_active_color: "#7a7c73ff",
-        palette_bg: '#4a4a4aff',
-        tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
+        button_color: 'rgba(204, 35, 35, 0.85)',
+        button_active_color: "#bbeb0eff",
+        palette_bg: '#2d25d0ff',
+        tool_bg: 'linear-gradient(180deg, rgba(32, 190, 48, 0.85) 0%, rgba(72,71,71,0.35) 100%)',
         particle_bg: '#4a4a4aff',
-        option_bg: '#4a4a4aff',
+        option_bg: '#c40fdfff',
         zonespecial_bg: '#4a4a4aff',
         slider_length: '70%',
         slider_zoom_length: '100%',
@@ -519,18 +519,14 @@ const items_common = {
 };
 
 function createPalette(cfg) {
-    const paletteAddOn = { background: currentTheme.palette_bg || '#4a4a4aff' };
-    const finalCfg = {
-        ...cfg,
-        css: {
-            ...items_common,
-            ...(cfg.css || {}),
-            ...paletteAddOn
-        }
-    };
+    const finalCss = { ...items_common, ...(cfg?.css || {}) };
+    if (finalCss.background == null) {
+        finalCss.background = currentTheme.palette_bg || '#4a4a4aff';
+    }
+    const finalCfg = { ...cfg, css: finalCss };
     var el = intuitionCommon(finalCfg);
-    createLabel(cfg)
-    createIcon(cfg)
+    createLabel(finalCfg);
+    createIcon(finalCfg);
     el.addEventListener('click', (e) => {
         // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
         // el.style.width = parseFloat(currentTheme.item_size) * 3 + 'px';
@@ -540,10 +536,15 @@ function createPalette(cfg) {
 
 }
 function createTool(cfg) {
-    const el = intuitionCommon({ ...cfg, ...items_common });
-    createLabel(cfg);
-    createIcon(cfg);
-    const nameKey = cfg.nameKey;
+    const finalCss = { ...items_common, ...(cfg?.css || {}) };
+    if (finalCss.background == null) {
+        finalCss.background = currentTheme.tool_bg || '#4a4a4aff';
+    }
+    const finalCfg = { ...cfg, css: finalCss };
+    const el = intuitionCommon(finalCfg);
+    createLabel(finalCfg);
+    createIcon(finalCfg);
+    const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
 
     // Base click: behaves as 'touch' semantic event
@@ -566,18 +567,28 @@ function createTool(cfg) {
     attachToolLockBehavior(el, cfg);
 }
 function createParticle(cfg) {
-    intuitionCommon({ ...cfg, ...items_common });
-    createLabel(cfg)
-    // createIcon(cfg)
-    renderParticleValueFromTheme(cfg);
+    const finalCss = { ...items_common, ...(cfg?.css || {}) };
+    if (finalCss.background == null) {
+        finalCss.background = currentTheme.particle_bg || currentTheme.tool_bg || '#4a4a4aff';
+    }
+    const finalCfg = { ...cfg, css: finalCss };
+    intuitionCommon(finalCfg);
+    createLabel(finalCfg);
+    // createIcon(finalCfg)
+    renderParticleValueFromTheme(finalCfg);
     // Render helper component (slider/button) if defined for this particle
-    renderHelperForItem(cfg);
+    renderHelperForItem(finalCfg);
 }
 function createOption(cfg) {
-    const el = intuitionCommon({ ...cfg, ...items_common });
-    createLabel(cfg);
-    createIcon(cfg);
-    const nameKey = cfg.nameKey;
+    const finalCss = { ...items_common, ...(cfg?.css || {}) };
+    if (finalCss.background == null) {
+        finalCss.background = currentTheme.option_bg || currentTheme.tool_bg || '#4a4a4aff';
+    }
+    const finalCfg = { ...cfg, css: finalCss };
+    const el = intuitionCommon(finalCfg);
+    createLabel(finalCfg);
+    createIcon(finalCfg);
+    const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
     // Click behaves like semantic 'touch'
     el.addEventListener('click', (e) => {
@@ -598,10 +609,15 @@ function createOption(cfg) {
     });
 }
 function createZonespecial(cfg) {
-    const el = intuitionCommon({ ...cfg, ...items_common });
-    createLabel(cfg);
-    createIcon(cfg);
-    const nameKey = cfg.nameKey;
+    const finalCss = { ...items_common, ...(cfg?.css || {}) };
+    if (finalCss.background == null) {
+        finalCss.background = currentTheme.zonespecial_bg || currentTheme.tool_bg || '#4a4a4aff';
+    }
+    const finalCfg = { ...cfg, css: finalCss };
+    const el = intuitionCommon(finalCfg);
+    createLabel(finalCfg);
+    createIcon(finalCfg);
+    const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
     el.addEventListener('click', (e) => {
         e.stopPropagation();
