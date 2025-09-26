@@ -80,4 +80,13 @@ echo ""
 
 # Démarrer le serveur
 echo "🎯 Lancement du serveur..."
+
+# Libérer le port 3001 si un ancien process est encore actif
+EXISTING_PIDS="$(lsof -ti:3001 || true)"
+if [[ -n "${EXISTING_PIDS}" ]]; then
+    echo "⚠️  Port 3001 déjà utilisé par: ${EXISTING_PIDS}. Arrêt des processus..."
+    echo "${EXISTING_PIDS}" | xargs kill -9 2>/dev/null || true
+    sleep 1
+fi
+
 cd server && node server.js

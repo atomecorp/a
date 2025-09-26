@@ -11,10 +11,15 @@ const DB_FILENAME = 'eDen.db';
 const DB_DIR = path.resolve(__dirname, '../src');
 const DB_PATH = path.join(DB_DIR, DB_FILENAME);
 const LEGACY_DB_PATH = path.resolve(__dirname, '../eDen.db');
+const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
 // Ensure the target directory exists (should already, but safeguard)
 if (!fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(MIGRATIONS_DIR)) {
+  fs.mkdirSync(MIGRATIONS_DIR, { recursive: true });
 }
 
 // Migrate an existing legacy database at project root without overwriting
@@ -34,7 +39,7 @@ const knexConfig = {
   },
   useNullAsDefault: true,
   migrations: {
-    directory: '../database/migrations'
+    directory: MIGRATIONS_DIR
   }
 };
 

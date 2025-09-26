@@ -1,11 +1,13 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod server;
+use std::net::TcpStream;
 use std::process::Command;
+use std::time::Duration;
 use tauri::Manager; // pour get_webview_window
 
 fn main() {
-let static_dir = std::path::PathBuf::from("../src");
+    let static_dir = std::path::PathBuf::from("../src");
     tauri::Builder::default()
         .setup(move |app| {
             let static_dir_clone = static_dir.clone();
@@ -34,18 +36,21 @@ let static_dir = std::path::PathBuf::from("../src");
 
             // Serveur Fastify en arrière-plan
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                let output = Command::new("node")
+                std::thread::sleep(Duration::from_secs(2));
+
+                if TcpStream::connect("127.0.0.1:3001").is_ok() {
+                    println!("Serveur Fastify déjà actif sur le port 3001; lancement ignoré");
+                    return;
+                }
+
+                match Command::new("node")
                     .current_dir("../")
                     .arg("server/server.js")
-                    .output();
-
-                match output {
-                    Ok(o) => {
-                        if !o.status.success() {
-                            println!("Erreur serveur Fastify: {}", String::from_utf8_lossy(&o.stderr));
-                        }
-                    },
+                    .spawn()
+                {
+                    Ok(child) => {
+                        println!("Serveur Fastify lancé depuis Tauri (PID {})", child.id());
+                    }
                     Err(e) => println!("Erreur lancement Fastify: {}", e),
                 }
             });
