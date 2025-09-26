@@ -1807,21 +1807,28 @@ window.refreshMenu = function (partialTheme = {}) {
         }
     } catch (e) { /* ignore */ }
 };
-if (document.getElementById('intuition')) {
-    createToolbox();
-    apply_layout();
-} else {
-    const attemptBootstrap = () => {
-        if (!document.getElementById('intuition')) return;
+const bootstrapIntuition = () => {
+    const intuitionRoot = document.getElementById('intuition');
+    const viewRoot = document.getElementById('view');
+    if (!intuitionRoot || !viewRoot) return;
+    if (!bootstrapIntuition._initialized) {
         createToolbox();
         apply_layout();
-        window.removeEventListener('squirrel:ready', attemptBootstrap, true);
-        document.removeEventListener('DOMContentLoaded', attemptBootstrap, true);
-    };
-    window.addEventListener('squirrel:ready', attemptBootstrap, true);
-    document.addEventListener('DOMContentLoaded', attemptBootstrap, true);
-    requestAnimationFrame(attemptBootstrap);
+        bootstrapIntuition._initialized = true;
+    } else {
+        apply_layout();
+    }
+    ensureLegacyDemoArtifacts();
+    window.removeEventListener('squirrel:ready', bootstrapIntuition, true);
+    document.removeEventListener('DOMContentLoaded', bootstrapIntuition, true);
+};
+
+if (document.readyState !== 'loading') {
+    bootstrapIntuition();
 }
+window.addEventListener('squirrel:ready', bootstrapIntuition, true);
+document.addEventListener('DOMContentLoaded', bootstrapIntuition, true);
+requestAnimationFrame(bootstrapIntuition);
 
 
 
@@ -2372,29 +2379,7 @@ function alignSupportToToolboxEdge() {
 
 
 
-
-// test
-
-
-const vieLogo = $('img', {
-    id: 'img_test',
-    parent: "#view",
-    attrs: {
-        src: './assets/images/1.png',
-        alt: 'ballanim'
-    },
-    css: {
-        marginLeft: '0',
-        color: 'white',
-        left: '0px',
-        top: '0px',
-        position: 'relative',
-        height: 'auto',
-        width: "100%",
-        textAlign: 'center',
-        display: 'block'
-    }
-});
+let vieLogo = null;
 const images = [
     './assets/images/1.png',
     './assets/images/2.png',
@@ -2405,18 +2390,39 @@ const images = [
     './assets/images/noise.svg'
 ];
 
-// Index courant
 let currentIndex = 0;
 
-vieLogo.addEventListener('click', () => {
-    puts('hello!');
-
-    // passer à l'image suivante
-    currentIndex = (currentIndex + 1) % images.length;
-
-    // mettre à jour la source
-    vieLogo.src = images[currentIndex];
-});
+function ensureLegacyDemoArtifacts() {
+    const viewRoot = document.getElementById('view');
+    const intuitionRoot = document.getElementById('intuition');
+    if (!viewRoot || !intuitionRoot) return;
+    if (!vieLogo || !document.getElementById('img_test')) {
+        vieLogo = $('img', {
+            id: 'img_test',
+            parent: "#view",
+            attrs: {
+                src: './assets/images/1.png',
+                alt: 'ballanim'
+            },
+            css: {
+                marginLeft: '0',
+                color: 'white',
+                left: '0px',
+                top: '0px',
+                position: 'relative',
+                height: 'auto',
+                width: "100%",
+                textAlign: 'center',
+                display: 'block'
+            }
+        });
+        vieLogo.addEventListener('click', () => {
+            puts('hello!');
+            currentIndex = (currentIndex + 1) % images.length;
+            vieLogo.src = images[currentIndex];
+        });
+    }
+}
 
 function mountDirectionSelector() {
     if (document.getElementById('intuition-direction-select')) return;
