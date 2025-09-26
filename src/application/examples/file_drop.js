@@ -19,12 +19,11 @@ $('div', {
     text: 'Drop files here'
 });
 
+
+
 // Hook the drop zone using the global DragDrop exposed by src/squirrel/spark.js
 // import DragDrop from '../../squirrel/apis/dragdrop.js';
 const DragDrop = window.DragDrop;
-if (!DragDrop) {
-    console.warn('DragDrop API is not available. Ensure spark.js has been loaded before this script.');
-}
 
 const dz = DragDrop?.createDropZone('#drop-test', {
     // Accept any file type for the demo; adjust to ['image/*', '.wav', '.mp3'] to filter
@@ -93,67 +92,62 @@ const formatBytes = (bytes) => {
     return `${normalized.toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
 };
 
-if (DragDrop) {
-    DragDrop.registerGlobalDrop({
-        accept: '*',
-        multiple: true,
-        onDrop: (files, event) => {
-            const localDropZone = document.querySelector('#drop-test');
-            if (localDropZone) {
-                const path = typeof event?.composedPath === 'function' ? event.composedPath() : null;
-                const target = event?.target;
-                const isInsideLocal = (path && path.includes(localDropZone)) || (target instanceof Element && localDropZone.contains(target));
-                if (isInsideLocal) return;
-            }
 
-            if (!files.length) return;
-            const dropTarget = document.querySelector('#view') || document.body;
-            const baseX = event?.clientX ?? window.innerWidth / 2;
-            const baseY = event?.clientY ?? window.innerHeight / 2;
-
-            files.forEach((file, index) => {
-                const card = $('div', {
-                    parent: dropTarget,
-                    css: {
-                        position: 'absolute',
-                        left: `${Math.max(12, baseX + index * 24 - 140)}px`,
-                        top: `${Math.max(12, baseY + index * 24 - 80)}px`,
-                        minWidth: '240px',
-                        maxWidth: '320px',
-                        padding: '18px 22px',
-                        backgroundColor: 'rgba(20, 20, 20, 0.92)',
-                        borderRadius: '20px',
-                        border: '1px solid rgba(255, 255, 255, 0.12)',
-                        color: 'white',
-                        fontSize: '14px',
-                        lineHeight: '1.45',
-                        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45)',
-                        backdropFilter: 'blur(8px)',
-                        pointerEvents: 'none',
-                        zIndex: 9999
-                    },
-                    innerHTML: [
-                        '<strong>Fichier déposé</strong>',
-                        `Nom : ${file.name}`,
-                        `Type : ${file.type || 'inconnu'}`,
-                        `Taille : ${formatBytes(file.size)}`,
-                        file.path ? `Chemin : ${file.path}` : file.fullPath ? `Chemin (virtual) : ${file.fullPath}` : ''
-                    ].filter(Boolean).join('<br>')
-                });
-
-                // Auto-fade after 6 seconds
-                setTimeout(() => {
-                    card.style.transition = 'opacity 400ms ease, transform 400ms ease';
-                    card.style.opacity = '0';
-                    card.style.transform = 'translateY(-12px)';
-                    setTimeout(() => card.remove(), 420);
-                }, 6000);
-            });
+DragDrop.registerGlobalDrop({
+    accept: '*',
+    multiple: true,
+    onDrop: (files, event) => {
+        const localDropZone = document.querySelector('#drop-test');
+        if (localDropZone) {
+            const path = typeof event?.composedPath === 'function' ? event.composedPath() : null;
+            const target = event?.target;
+            const isInsideLocal = (path && path.includes(localDropZone)) || (target instanceof Element && localDropZone.contains(target));
+            if (isInsideLocal) return;
         }
-    });
-} else {
-    console.warn('DragDrop global API indisponible : impossible de configurer le drop global.');
-}
 
-// Optional: destroy when not needed
-// dz.destroy();
+        if (!files.length) return;
+        const dropTarget = document.querySelector('#view') || document.body;
+        const baseX = event?.clientX ?? window.innerWidth / 2;
+        const baseY = event?.clientY ?? window.innerHeight / 2;
+
+        files.forEach((file, index) => {
+            const card = $('div', {
+                parent: dropTarget,
+                css: {
+                    position: 'absolute',
+                    left: `${Math.max(12, baseX + index * 24 - 140)}px`,
+                    top: `${Math.max(12, baseY + index * 24 - 80)}px`,
+                    minWidth: '240px',
+                    maxWidth: '320px',
+                    padding: '18px 22px',
+                    backgroundColor: 'rgba(20, 20, 20, 0.92)',
+                    borderRadius: '20px',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    color: 'white',
+                    fontSize: '14px',
+                    lineHeight: '1.45',
+                    boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45)',
+                    backdropFilter: 'blur(8px)',
+                    pointerEvents: 'none',
+                    zIndex: 9999
+                },
+                innerHTML: [
+                    '<strong>Fichier déposé</strong>',
+                    `Nom : ${file.name}`,
+                    `Type : ${file.type || 'inconnu'}`,
+                    `Taille : ${formatBytes(file.size)}`,
+                    file.path ? `Chemin : ${file.path}` : file.fullPath ? `Chemin (virtual) : ${file.fullPath}` : ''
+                ].filter(Boolean).join('<br>')
+            });
+
+            // Auto-fade after 6 seconds
+            setTimeout(() => {
+                card.style.transition = 'opacity 400ms ease, transform 400ms ease';
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(-12px)';
+                setTimeout(() => card.remove(), 420);
+            }, 6000);
+        });
+    }
+});
+
