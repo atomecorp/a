@@ -93,12 +93,15 @@ const light_theme = {
 Intuition.addTheme(light_theme)
 
 
+
+
+
 const intuition_content = {
     version: "1.1",
     meta: { namespace: "atome.menu", defaultLocale: "en" },
     toolbox: { children: ['home', 'find', 'time', 'view', 'tools', 'communication', 'capture', 'edit'] },
     home: { type: 'palette', children: ['quit', 'user', 'settings', 'clear', 'cleanup'], icon: null },
-    find: { type: 'tool', children: ['width, height',], icon: null },
+    find: { type: 'tool', children: ['width, height',], icon: null, touch: tools_test_touch },
     time: { type: 'particle', children: ['filter'] },
     view: { type: 'option', icon: null },
     tools: { type: 'zonespecial', children: ['filter'] },
@@ -115,5 +118,28 @@ const intuition_content = {
     remove: { type: 'tool', icon: null },
 };
 
+
+function tools_test_touch() {
+    $('div', {
+        css: {
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '20px',
+            borderRadius: '10px',
+            zIndex: 1000
+        },
+        text: 'Tools touch activated! 🎉'
+    });
+    setTimeout(() => {
+        const existingDiv = document.querySelector('div[style*="position: absolute"]');
+        if (existingDiv) {
+            existingDiv.remove();
+        }
+    }, 2000); // Disparaît après 2 secondes
+}
 
 Intuition({ name: 'newMenu', theme: 'light', content: intuition_content, orientation: 'bottom_right_horizontal' });
