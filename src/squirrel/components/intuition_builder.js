@@ -103,44 +103,9 @@ const Intuition_theme = {
 
 
 
-function tools_test_touch() {
-    puts('Tools test touch triggered');
-}
-
-function tools_lock_test_touch() {
-    puts('Tools lock test touch triggered!!!');
-}
-
-function option_test_touch() {
-    puts('Option test touch triggered');
-}
 
 
-const intuition_content = {
-    version: "1.1",
-    meta: { namespace: "vie.menu", defaultLocale: "en" },
-    toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
-    //
-    file: { type: palette, children: ['import', 'load', 'save'] },
-    tools: { type: palette, children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
-    settings: { type: palette, children: ['email',] },
-    capture: { label: 'record', type: tool, icon: 'record' },
-    perform: { label: 'perform', type: tool, icon: 'play' },
-
-
-    import: { type: tool, children: ['audio', 'modules', 'projects'] },
-    load: { type: tool, children: ['modules', 'projects'], touch_up: function () { puts('Import touch triggered'); } },
-    save: { type: tool, touch: function () { puts('Save touch triggered'); } },
-    email: { type: option, touch: option_test_touch },
-    volume: { type: particle, helper: 'slider', value: 3 },
-    ADSR: { type: tool, children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
-    controller: { type: zonespecial, touch: function () { puts('Controller touch triggered'); } },
-    A: { type: particle, helper: 'slider', unit: '%', value: 50, ext: 3, },
-    D: { type: particle, helper: 'button', unit: '%', value: 0, ext: 3 },
-    S: { type: particle, helper: 'slider', unit: '%', value: 0, ext: 3 },
-    R: { type: particle, unit: '%', value: 20, ext: 3 },
-
-};
+const intuition_content = {};
 
 const currentTheme = Intuition_theme.basic;
 
