@@ -210,7 +210,7 @@ function calculate_positions() {
 
     // iOS native scroll needs the scrollable container to receive touch events
     // and to have momentum scrolling enabled. Also hint the primary pan axis.
-    support.pointerEvents = 'auto';
+    support.pointerEvents = 'none';
     support.WebkitOverflowScrolling = 'touch';
     support.touchtouch = isHorizontal ? 'pan-x' : 'pan-y';
 
@@ -246,6 +246,7 @@ const toolbox_support = {
         // default overflow; calculate_positions will override per direction
         overflowX: 'auto',
         overflowY: 'hidden',
+        pointerEvents: 'none',       // let background interactions pass through; real items stay interactive
         touchtouch: 'manipulation'
     }
 };
@@ -1467,6 +1468,7 @@ function createToolbox() {
     const toolboxEl = intuitionCommon(toolbox);
     // Ensure scrolling on the toolbox controls the support overflow
     setupToolboxScrollProxy();
+    enforceSupportHitThrough();
     // Apply initial backdrop styles
     const supportEl = grab('toolbox_support');
     if (supportEl) applyBackdropStyle(supportEl, null);
@@ -1517,6 +1519,7 @@ function apply_layout() {
     }
     // Re-ensure scroll proxy after layout updates
     setupToolboxScrollProxy();
+    enforceSupportHitThrough();
     // Re-apply backdrop styles (layout may reset style props)
     if (supportEl) applyBackdropStyle(supportEl, null);
     if (triggerEl) applyBackdropStyle(triggerEl, currentTheme.tool_backDrop_effect);
@@ -1766,6 +1769,12 @@ function addOverflowForcer() {
 function removeOverflowForcer() {
     const el = document.getElementById('_intuition_overflow_forcer');
     if (el) el.remove();
+}
+
+function enforceSupportHitThrough() {
+    const supportEl = grab('toolbox_support');
+    if (!supportEl) return;
+    supportEl.style.pointerEvents = 'none';
 }
 
 
