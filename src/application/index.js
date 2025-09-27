@@ -26,7 +26,7 @@
 // import('./test/component_test.js');
 // import('./examples/image.js');
 
-// import('./vie/vie.js');
+import('./vie/vie.js');
 // import('./examples/svg.js');
 // import('./examples/platform.js');
 // import('./examples/anim_svg.js');
@@ -64,8 +64,8 @@
 // import('./examples/a_svg.js');
 
 // import('./examples/basic.js');
-// import('./examples/tools.js');
-import('./examples/intuition.js');
+import('./examples/tools.js');
+// import('./examples/intuition.js');
 
 // import('./examples/file_drop.js');
 // import('./examples/file_drop.js');

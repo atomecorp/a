@@ -1437,6 +1437,31 @@ const intuitionAddOn = {
     communication: { label: 'communication', icon: 'communication' }
 };
 
+function ensureIntuitionLayerRoot() {
+    if (typeof document === 'undefined') return null;
+    let root = document.getElementById('intuition');
+    if (root) return root;
+    const parent = document.body || document.documentElement;
+    if (!parent) return null;
+    root = $('div', {
+        id: 'intuition',
+        class: 'atome',
+        parent,
+        css: {
+            zIndex: 9999999,
+            background: 'transparent',
+            color: 'lightgray',
+            left: '0px',
+            top: '0px',
+            position: 'absolute',
+            width: '0px',
+            height: '0px',
+            overflow: 'visible'
+        }
+    });
+    return root;
+}
+
 function createToolbox() {
     intuitionCommon(toolbox_support);
     const toolboxEl = intuitionCommon(toolbox);
@@ -2446,6 +2471,8 @@ function applyContentOption(contentOption) {
 }
 
 const Intuition = function Intuition(options = {}) {
+    const intuitionRoot = ensureIntuitionLayerRoot();
+    const shouldBootstrap = intuitionRoot && !bootstrapIntuition._initialized;
     applyThemeOption(options.theme);
     applyContentOption(options.content);
     const requestedDirection = options && (options.orientation || options.direction);
@@ -2459,7 +2486,11 @@ const Intuition = function Intuition(options = {}) {
             closeMenu();
         }
     }
-    apply_layout();
+    if (shouldBootstrap) {
+        bootstrapIntuition();
+    } else if (intuitionRoot) {
+        apply_layout();
+    }
     return {
         open: () => openMenu('toolbox'),
         close: () => closeMenu(),

@@ -40,28 +40,28 @@ function initKickstart() {
 
   });
   // 1. Basic template for the intuition layer
-  window.define('intuition', {
-    tag: 'div',
-    class: 'atome',
-    id: 'intuition',
-    css: {
-      zIndex: 9999999,
-      background: 'transparent',
-      color: 'lightgray',
-      left: '0px',
-      top: '0px',
-      position: 'absolute',
-      width: '0px',
-      height: '0px',
-      overflow: 'visible',
-    }
-  });
+  // window.define('intuition', {
+  //   tag: 'div',
+  //   class: 'atome',
+  //   id: 'intuition',
+  //   css: {
+  //     zIndex: 9999999,
+  //     background: 'transparent',
+  //     color: 'lightgray',
+  //     left: '0px',
+  //     top: '0px',
+  //     position: 'absolute',
+  //     width: '0px',
+  //     height: '0px',
+  //     overflow: 'visible',
+  //   }
+  // });
 
-  // 2. Create the view element
-  window.$('intuition', {
-    parent: document.body,
+  // 2. Intuition layer will now be created lazily when Intuition() is invoked
+  // window.$('intuition', {
+  //   parent: document.body,
 
-  });
+  // });
 
   // console.log('✅ Kickstart demo initialized');
 
