@@ -2367,14 +2367,22 @@ function alignSupportToToolboxEdge() {
     const supportEl = grab('toolbox_support');
     if (!supportEl) return;
     const { isHorizontal, isReverse } = getDirMeta();
+    const items = Array.from(supportEl.children || []).filter((ch) => ch && ch.id !== '_intuition_overflow_forcer');
+    if (items.length) {
+        const target = isReverse ? items[items.length - 1] : items[0];
+        if (target && typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({
+                behavior: 'auto',
+                block: isHorizontal ? 'nearest' : (isReverse ? 'end' : 'start'),
+                inline: isHorizontal ? (isReverse ? 'end' : 'start') : 'nearest'
+            });
+            return;
+        }
+    }
     if (isHorizontal) {
-        supportEl.scrollLeft = isReverse
-            ? (supportEl.scrollWidth - supportEl.clientWidth)
-            : 0;
+        supportEl.scrollLeft = isReverse ? Math.max(0, supportEl.scrollWidth - supportEl.clientWidth) : 0;
     } else {
-        supportEl.scrollTop = isReverse
-            ? (supportEl.scrollHeight - supportEl.clientHeight)
-            : 0;
+        supportEl.scrollTop = isReverse ? Math.max(0, supportEl.scrollHeight - supportEl.clientHeight) : 0;
     }
 }
 
