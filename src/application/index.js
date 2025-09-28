@@ -49,7 +49,7 @@
 //  import('./examples/audio_basic.js');
 ////////////////////
 // import('./vie/vie.js');
-import('./lyrix/index.js');
+// import('./lyrix/index.js');
 // import('./examples/iOS_app_launcher.js');
 // import('./examples/ios_audio_bridge.js');
 // import('./examples/iplug_ios.js');
@@ -66,7 +66,7 @@ import('./lyrix/index.js');
 // import('./examples/a_svg.js');
 
 // import('./examples/basic.js');
-// import('./examples/tools.js');
+import('./examples/tools.js');
 // import('./examples/intuition.js');
 
 // import('./examples/file_drop.js');

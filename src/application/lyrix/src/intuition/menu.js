@@ -51,5 +51,17 @@ const intuition_content = {
 
 };
 
-Intuition({ name: 'newMenu', theme: 'light', content: intuition_content, orientation: 'top_left_horizontal' });
+Intuition({
+    name: 'newMenu',
+    theme: {
+        tool_bg: 'linear-gradient(180deg, #ff7000 0%, #994400 100%)',
+        option_bg: '#442200cc',
+        item_size: '64px',
+        anim_duration_ms: 200,
+        toolboxOffsetMain: "7px",
+        toolboxOffsetEdge: "69px",
+    },
+    content: intuition_content,
+    orientation: 'top_left_horizontal'
+});
 
