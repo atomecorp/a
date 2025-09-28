@@ -742,12 +742,14 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             delete el.dataset.simpleActive;
             try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
             delete el.dataset.activeTag;
+            if (def && def.inactive) exec(def.inactive);
         } else {
             el.dataset.simpleActive = 'true';
             // ordre de fallback: tool_bg_active -> tool_active_bg -> tool_bg
             const bg = currentTheme.tool_bg_active || currentTheme.tool_active_bg || currentTheme.tool_bg || '#444';
             try { el.style.background = bg; } catch (_) { }
             el.dataset.activeTag = 'true';
+            if (def && def.active) exec(def.active);
         }
     };
 
@@ -769,7 +771,15 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             }
             break;
         case 'lock':
-            if (def && def.lock) exec(def.lock);
+            {
+                const phase = rawEvent && rawEvent.phase;
+                if (phase === 'exit') {
+                    if (def && def.unlock) exec(def.unlock);
+                    else if (def && def.lock) exec(def.lock);
+                } else {
+                    if (def && def.lock) exec(def.lock);
+                }
+            }
             break;
     }
 }

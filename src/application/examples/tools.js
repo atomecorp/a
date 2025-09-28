@@ -105,6 +105,17 @@ function option_test_touch() {
   puts('Option test touch triggered');
 }
 
+function performing() {
+  $('div', { text: 'Performing...', id: 'performingDiv', css: { width: '200px', height: '100px' } });
+}
+function stopPerforming() {
+
+  grab('performingDiv').remove();
+}
+
+function stop_lock_test_touch() {
+  puts('Tools lock test unlock triggered!!!');
+}
 
 const intuition_content = {
   version: "1.1",
@@ -115,7 +126,7 @@ const intuition_content = {
   tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
   settings: { type: 'palette', children: ['email',], icon: false },
   capture: { label: 'record', type: 'tool', icon: 'record' },
-  perform: { label: 'perform', type: 'tool', icon: null },
+  perform: { label: 'perform', type: 'tool', icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
   import: { type: 'tool', children: ['audio', 'modules', 'projects'] },

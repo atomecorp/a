@@ -26,7 +26,8 @@
 // import('./test/component_test.js');
 // import('./examples/image.js');
 
-import('./vie/vie.js');
+
+
 // import('./examples/svg.js');
 // import('./examples/platform.js');
 // import('./examples/anim_svg.js');
@@ -47,6 +48,7 @@ import('./vie/vie.js');
 
 //  import('./examples/audio_basic.js');
 ////////////////////
+// import('./vie/vie.js');
 // import('./lyrix/index.js');
 // import('./examples/iOS_app_launcher.js');
 // import('./examples/ios_audio_bridge.js');
