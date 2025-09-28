@@ -2007,12 +2007,13 @@ function handlePaletteClick(el, cfg) {
     let targetLeft = phRect.left;
     let targetTop = phRect.top;
     if (isHorizontal) {
-        // axe principal = X; on sort sur Y (au-dessus si possible quand top_*, sinon en dessous)
+        // axe principal = X; on sort sur Y (préférence inverse de l'ancre top/bottom)
         const aboveSpace = supportRect.top;
         const belowSpace = vh - supportRect.bottom;
-        let placeAbove = !!isTop;
+        const preferAbove = !!isBottom;
+        let placeAbove = preferAbove;
         if (placeAbove && aboveSpace < elH + gap) placeAbove = false;
-        if (!placeAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
+        if (!placeAbove && !preferAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
         const wantedTop = placeAbove ? (supportRect.top - elH - gap) : (supportRect.bottom + gap);
         const clampedTop = Math.max(0, Math.min(vh - elH, wantedTop));
         targetTop = clampedTop;
@@ -2021,12 +2022,13 @@ function handlePaletteClick(el, cfg) {
         const clampedLeft = Math.max(0, Math.min(vw - elW, baseLeft));
         targetLeft = clampedLeft;
     } else {
-        // axe principal = Y; on sort sur X (à gauche si possible quand *_left, sinon à droite)
+        // axe principal = Y; on sort sur X (préférence inverse de l'ancre left/right)
         const leftSpace = supportRect.left;
         const rightSpace = vw - supportRect.right;
-        let placeLeft = !!isLeft;
+        const preferLeft = !!isRight;
+        let placeLeft = preferLeft;
         if (placeLeft && leftSpace < elW + gap) placeLeft = false;
-        if (!placeLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
+        if (!placeLeft && !preferLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
         const wantedLeft = placeLeft ? (supportRect.left - elW - gap) : (supportRect.right + gap);
         const clampedLeft = Math.max(0, Math.min(vw - elW, wantedLeft));
         targetLeft = clampedLeft;
@@ -2349,9 +2351,10 @@ function repositionPoppedPalette() {
     if (isHorizontal) {
         const aboveSpace = supportRect.top;
         const belowSpace = vh - supportRect.bottom;
-        let placeAbove = !!isTop;
+        const preferAbove = !!isBottom;
+        let placeAbove = preferAbove;
         if (placeAbove && aboveSpace < elH + gap) placeAbove = false;
-        if (!placeAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
+        if (!placeAbove && !preferAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
         const targetTop = placeAbove ? (supportRect.top - elH - gap) : (supportRect.bottom + gap);
         const clampedTop = Math.max(0, Math.min(vh - elH, targetTop));
         state.el.style.top = `${clampedTop}px`;
@@ -2361,9 +2364,10 @@ function repositionPoppedPalette() {
     } else {
         const leftSpace = supportRect.left;
         const rightSpace = vw - supportRect.right;
-        let placeLeft = !!isLeft;
+        const preferLeft = !!isRight;
+        let placeLeft = preferLeft;
         if (placeLeft && leftSpace < elW + gap) placeLeft = false;
-        if (!placeLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
+        if (!placeLeft && !preferLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
         const targetLeft = placeLeft ? (supportRect.left - elW - gap) : (supportRect.right + gap);
         const clampedLeft = Math.max(0, Math.min(vw - elW, targetLeft));
         state.el.style.left = `${clampedLeft}px`;
