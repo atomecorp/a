@@ -146,9 +146,7 @@ const intuition_content = {
 Intuition({ name: 'newMenu', theme: 'light', content: intuition_content, orientation: 'bottom_right_horizontal' });
 
 
-
 // test selector 
-
 
 
 function mountDirectionSelector() {
