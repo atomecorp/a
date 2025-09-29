@@ -11,14 +11,17 @@ function dropDown(config) {
     value,
     theme = 'light',
     placeholder = '',
-  openDirection = 'up', // 'up' | 'down' (will auto-flip if no space)
+    openDirection = 'up', // 'up' | 'down' (will auto-flip if no space)
     css = {},
     listCss = {},
     itemCss = {},
     textCss = {},
-  onChange,
-  onHover
+    onChange,
+    onHover,
+    showSelectedLabel = true
   } = config || {};
+
+  const placeholderText = placeholder != null ? String(placeholder) : '';
 
   // Normalize options to { label, value }
   const opts = options.map((opt) => {
@@ -58,10 +61,13 @@ function dropDown(config) {
       MozUserSelect: 'none'
     }, css)
   });
+  if (root && root.dataset) {
+    root.dataset.dropdownOpen = 'false';
+  }
 
   const display = $('div', {
     parent: root,
-    text: (opts[selectedIndex] ? opts[selectedIndex].label : placeholder),
+    text: '',
     css: Object.assign({
       position: 'absolute',
       left: 0,
@@ -76,6 +82,9 @@ function dropDown(config) {
       pointerEvents: 'none'
     }, textCss)
   });
+  if (!showSelectedLabel && display && display.style) {
+    display.style.display = 'none';
+  }
 
   const menu = $('div', {
     parent: root,
@@ -86,12 +95,30 @@ function dropDown(config) {
       maxHeight: '140px',
       overflowY: 'auto',
       display: 'none',
-      zIndex: 1000,
+      zIndex: 10000061,
       backgroundColor: themeObj["tool-bg"] || '#222',
       boxShadow: themeObj["item-shadow"] || '0 2px 6px rgba(0,0,0,0.3)',
       borderRadius: themeObj["item-border-radius"] || '3px'
     }, listCss)
   });
+
+  let isOpen = false;
+
+  const updateDisplayText = () => {
+    if (!showSelectedLabel) {
+      if (display) {
+        display.textContent = '';
+        display.innerText = '';
+      }
+      return;
+    }
+    const current = opts[selectedIndex];
+    const label = showSelectedLabel ? (current ? current.label : placeholderText) : placeholderText;
+    display.textContent = label;
+    display.innerText = label;
+  };
+
+  updateDisplayText();
 
   // Dynamic placement to avoid leaving the viewport
   const placeMenu = () => {
@@ -136,9 +163,6 @@ function dropDown(config) {
     const opt = opts[i];
     const label = opt.label;
     const value = opt.value;
-    // Update display text robustly (some webviews are picky)
-    display.textContent = label;
-    display.innerText = label;
     root.value = value;
     root.label = label;
     // aria selection
@@ -146,11 +170,10 @@ function dropDown(config) {
       if (!el) return;
       el.setAttribute('aria-selected', idx === i ? 'true' : 'false');
     });
+    updateDisplayText();
     // Close menu if user picked it
     if (userInitiated) {
-      menu.style.display = 'none';
-      window.removeEventListener('resize', placeMenu);
-      window.removeEventListener('scroll', placeMenu, true);
+      hideMenu();
     }
     // Fire callback
     if (typeof onChange === 'function') {
@@ -158,7 +181,7 @@ function dropDown(config) {
     }
     // Fire DOM event for external listeners
     try {
-      root.dispatchEvent(new CustomEvent('change', { detail: { value, label, index: i }}));
+      root.dispatchEvent(new CustomEvent('change', { detail: { value, label, index: i } }));
     } catch (err) {
       // Some very old environments may lack CustomEvent constructor (unlikely here)
     }
@@ -186,7 +209,7 @@ function dropDown(config) {
       e.currentTarget.style.backgroundColor = themeObj["tool-bg-active"] || '#444';
       if (typeof onHover === 'function') {
         const opt = opts[i];
-        try { onHover(opt.value, opt.label, i); } catch(err){ console.error('dropDown onHover error', err); }
+        try { onHover(opt.value, opt.label, i); } catch (err) { console.error('dropDown onHover error', err); }
       }
     });
     item.addEventListener('mouseleave', (e) => {
@@ -213,28 +236,48 @@ function dropDown(config) {
     items.push(item);
   });
 
-  const toggleMenu = (e) => {
-    e.stopPropagation();
-    const showing = menu.style.display !== 'none';
-    if (showing) {
-      menu.style.display = 'none';
+  const showMenu = () => {
+    if (isOpen) return;
+    isOpen = true;
+    root.dataset.dropdownOpen = 'true';
+    menu.style.display = 'block';
+    placeMenu();
+    window.addEventListener('resize', placeMenu);
+    window.addEventListener('scroll', placeMenu, true);
+  };
+
+  const hideMenu = () => {
+    if (!isOpen && menu.style.display === 'none') {
+      if (root && root.dataset) root.dataset.dropdownOpen = 'false';
+      return;
+    }
+    menu.style.display = 'none';
+    if (isOpen) {
       window.removeEventListener('resize', placeMenu);
       window.removeEventListener('scroll', placeMenu, true);
-    } else {
-      menu.style.display = 'block';
-      placeMenu();
-      window.addEventListener('resize', placeMenu);
-      window.addEventListener('scroll', placeMenu, true);
     }
+    isOpen = false;
+    root.dataset.dropdownOpen = 'false';
+  };
+
+  const hideMenuAndRemoveListeners = () => {
+    menu.style.display = 'none';
+    window.removeEventListener('resize', placeMenu);
+    window.removeEventListener('scroll', placeMenu, true);
+    isOpen = false;
+    root.dataset.dropdownOpen = 'false';
+  };
+
+  const toggleMenu = (e) => {
+    if (e) e.stopPropagation();
+    if (isOpen) hideMenu(); else showMenu();
   };
 
   root.addEventListener('click', toggleMenu);
 
   const outsideClose = (ev) => {
     if (!root.contains(ev.target)) {
-      menu.style.display = 'none';
-  window.removeEventListener('resize', placeMenu);
-  window.removeEventListener('scroll', placeMenu, true);
+      hideMenu();
     }
   };
   document.addEventListener('mousedown', outsideClose);
@@ -249,10 +292,19 @@ function dropDown(config) {
       commitSelection(idx, false);
     }
   };
+  root.openDropDown = () => {
+    showMenu();
+  };
+  root.closeDropDown = () => {
+    hideMenu();
+  };
+  root.toggleDropDown = () => {
+    if (isOpen) hideMenu(); else showMenu();
+  };
+  root.isDropDownOpen = () => isOpen;
   root.destroyDropDown = () => {
     document.removeEventListener('mousedown', outsideClose);
-  window.removeEventListener('resize', placeMenu);
-  window.removeEventListener('scroll', placeMenu, true);
+    hideMenuAndRemoveListeners();
   };
 
   // Initialize public data

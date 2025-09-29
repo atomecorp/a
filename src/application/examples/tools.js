@@ -164,7 +164,7 @@ const intuition_content = {
   A: {
     type: 'particle',
     helper: 'slider',
-    unit: '%',
+    unit: ['%', 'px', 'em', 'rem', 'vw'],
     value: 50,
     ext: 1,
     touch: sliderAStart,
@@ -174,7 +174,7 @@ const intuition_content = {
   D: {
     type: 'particle',
     helper: 'button',
-    unit: '%',
+    unit: ['%', 'px', 'em', 'rem', 'vw'],
     value: 0,
     ext: 3,
     touch: buttonDTouch,
@@ -182,8 +182,8 @@ const intuition_content = {
     inactive: buttonDInactive,
     change: ({ value }) => puts(`Button D value -> ${Math.round(value ?? 0)}`)
   },
-  S: { type: 'particle', helper: 'slider', unit: '%', value: 0, ext: 3 },
-  R: { type: 'particle', unit: '%', value: 20, ext: 3 },
+  S: { type: 'particle', helper: 'slider', unit: ['%', 'px', 'em', 'rem', 'vw'], value: 0, ext: 3 },
+  R: { type: 'particle', unit: ['%', 'px', 'em', 'rem', 'vw'], value: 20, ext: 3 },
 
 };
 

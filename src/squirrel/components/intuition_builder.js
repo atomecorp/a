@@ -1,4 +1,5 @@
 import { $ } from '../squirrel.js';
+import dropDown from './dropDown_builder.js';
 
 let calculatedCSS = {};
 const shadowLeft = 0,
@@ -19,6 +20,7 @@ const DIRECTIONS = [
 ];
 let menuOpen = 'false';
 let menuStack = [];
+const unitDropdownRegistry = new Map();
 
 const palette = createPalette;
 const tool = createTool;
@@ -810,7 +812,22 @@ function renderParticleValueFromTheme(cfg) {
     const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
     const def = intuition_content[key];
     if (!def) return;
-    const unit = def.unit || '';
+    const rawUnit = def.unit;
+    let unitOptions = null;
+    if (Array.isArray(rawUnit)) {
+        const normalized = rawUnit.map(u => String(u));
+        def._unitChoices = normalized;
+        if (!def._unitSelected || !normalized.includes(def._unitSelected)) {
+            def._unitSelected = normalized[0] || '';
+        }
+        unitOptions = normalized;
+    } else {
+        def._unitChoices = null;
+        if (typeof rawUnit === 'string') {
+            def._unitSelected = rawUnit;
+        }
+    }
+    const unit = def._unitSelected || (typeof rawUnit === 'string' ? rawUnit : '');
     const val = def.value;
     if (val === undefined || val === null) return;
     const decimals = Math.max(0, Math.min(6, parseInt(def.ext != null ? def.ext : 0, 10)));
@@ -840,8 +857,60 @@ function renderParticleValueFromTheme(cfg) {
     const valColor = String(currentTheme.particle_value_color || currentTheme.tool_text || '#fff');
     const unitColor = String(currentTheme.particle_unit_color || currentTheme.tool_text || '#fff');
     const valueSpan = $('span', { parent: wrap, text: valueText, css: { color: valColor } });
+    let unitSpan = null;
     if (unit) {
-        $('span', { parent: wrap, text: unit, css: { color: unitColor, marginLeft: '2px' } });
+        unitSpan = $('span', {
+            parent: wrap,
+            text: unit,
+            css: {
+                color: unitColor,
+                marginLeft: '2px',
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                userSelect: 'none',
+                display: 'inline-flex',
+                alignItems: 'center'
+            }
+        });
+        if (unitSpan && unitSpan.addEventListener) {
+            const openDropdown = (ev) => {
+                if (ev) {
+                    try { ev.preventDefault(); } catch (_) { }
+                    try { ev.stopPropagation(); } catch (_) { }
+                }
+                let entry = unitDropdownRegistry.get(key);
+                if (!entry || !entry.wrap || !entry.dropdown) {
+                    renderParticleValueFromTheme({ id: cfg.id, nameKey: key });
+                    entry = unitDropdownRegistry.get(key);
+                }
+                if (!entry || !entry.wrap || !entry.dropdown) return;
+                const toggle = () => {
+                    const dropdown = entry.dropdown;
+                    const isOpen = dropdown && typeof dropdown.isDropDownOpen === 'function'
+                        ? dropdown.isDropDownOpen()
+                        : false;
+                    if (!isOpen) {
+                        try { positionUnitDropdownEntry(entry); } catch (_) { }
+                    }
+                    if (dropdown && typeof dropdown.toggleDropDown === 'function') {
+                        dropdown.toggleDropDown();
+                    } else if (entry.wrap) {
+                        try { entry.wrap.click(); } catch (_) { }
+                    }
+                };
+                if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+                    window.requestAnimationFrame(toggle);
+                } else {
+                    toggle();
+                }
+            };
+            const events = window.PointerEvent ? ['pointerdown'] : ['mousedown', 'click'];
+            events.forEach(evtName => {
+                const opts = (evtName === 'pointerdown' || evtName === 'mousedown') ? { passive: false } : false;
+                unitSpan.addEventListener(evtName, openDropdown, opts);
+            });
+            unitSpan.addEventListener('touchstart', openDropdown, { passive: false });
+        }
     }
 
     // Empêche le parent d'intercepter le premier clic pour permettre le double‑clic immédiat
@@ -969,6 +1038,90 @@ function renderParticleValueFromTheme(cfg) {
             wrap.addEventListener('touchstart', (ev) => { pressed = true; if (lpTimer) clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (pressed) { try { ev.stopPropagation(); } catch (_) { } beginEdit(); } }, 520); }, { passive: true });
             ['touchend', 'touchcancel'].forEach(n => wrap.addEventListener(n, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
         })();
+    }
+
+    removeUnitDropdown(key);
+    if (unitOptions && unitOptions.length && typeof window !== 'undefined') {
+        const dropDownCtor = (typeof window.dropDown === 'function') ? window.dropDown : (typeof dropDown === 'function' ? dropDown : null);
+        if (dropDownCtor && particleEl) {
+            const wrapId = `${cfg.id}__unit_dropdown_wrap`;
+            const existingWrap = document.getElementById(wrapId);
+            if (existingWrap && existingWrap.parentElement) {
+                try { existingWrap.parentElement.removeChild(existingWrap); } catch (_) { /* ignore */ }
+            }
+            const wrapEl = document.createElement('div');
+            wrapEl.id = wrapId;
+            wrapEl.dataset.unitDropdown = 'true';
+            wrapEl.style.position = 'fixed';
+            wrapEl.style.display = 'flex';
+            wrapEl.style.alignItems = 'center';
+            wrapEl.style.justifyContent = 'center';
+            wrapEl.style.pointerEvents = 'auto';
+            wrapEl.style.zIndex = '10000060';
+            const fontSizeCss = resolveToolFontSizeCss();
+            const heightCss = computeDropdownHeight(fontSizeCss);
+            const widthCss = resolveItemSizeCss();
+            wrapEl.style.width = widthCss;
+            wrapEl.style.height = heightCss;
+            document.body.appendChild(wrapEl);
+
+            const entry = { wrap: wrapEl, host: particleEl, dropdown: null, openDirection: 'down' };
+            positionUnitDropdownEntry(entry);
+
+            const dropdownRoot = dropDownCtor({
+                parent: wrapEl,
+                id: `${cfg.id}__unit_dropdown`,
+                options: unitOptions.map(opt => ({ label: opt, value: opt })),
+                value: unit,
+                placeholder: '',
+                openDirection: entry.openDirection || 'down',
+                showSelectedLabel: false,
+                css: {
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'transparent',
+                    color: currentTheme.tool_text,
+                    boxShadow: 'none',
+                    borderRadius: currentTheme.item_border_radius,
+                    fontSize: fontSizeCss,
+                    fontFamily: currentTheme.tool_font_family || 'system-ui',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: '10000060'
+                },
+                textCss: {
+                    color: currentTheme.tool_text,
+                    fontSize: fontSizeCss,
+                    fontFamily: currentTheme.tool_font_family || 'system-ui',
+                    pointerEvents: 'none'
+                },
+                listCss: {
+                    backgroundColor: currentTheme.tool_bg,
+                    boxShadow: currentTheme.item_shadow,
+                    color: currentTheme.tool_text,
+                    borderRadius: currentTheme.item_border_radius,
+                    zIndex: '10000061'
+                },
+                itemCss: {
+                    color: currentTheme.tool_text,
+                    fontSize: fontSizeCss,
+                    fontFamily: currentTheme.tool_font_family || 'system-ui',
+                    textAlign: 'center'
+                },
+                onChange: (val) => {
+                    if (!val || val === def._unitSelected) return;
+                    def._unitSelected = val;
+                    if (Array.isArray(def._unitChoices) && !def._unitChoices.includes(val)) {
+                        def._unitChoices.push(val);
+                    }
+                    window.updateParticleValue(key, def.value, val);
+                }
+            });
+
+            entry.dropdown = dropdownRoot;
+            unitDropdownRegistry.set(key, entry);
+        }
     }
 }
 
@@ -1380,6 +1533,117 @@ function renderHelperForItem(cfg) {
     }
 }
 // ...existing code...
+function removeUnitDropdown(nameKey) {
+    if (!nameKey) return;
+    const entry = unitDropdownRegistry.get(nameKey);
+    if (!entry) return;
+    try {
+        if (entry.dropdown && typeof entry.dropdown.destroyDropDown === 'function') {
+            entry.dropdown.destroyDropDown();
+        }
+    } catch (e) { /* ignore */ }
+    try {
+        if (entry.wrap && entry.wrap.parentElement) {
+            entry.wrap.parentElement.removeChild(entry.wrap);
+        }
+    } catch (e) { /* ignore */ }
+    unitDropdownRegistry.delete(nameKey);
+}
+
+function removeAllUnitDropdowns() {
+    Array.from(unitDropdownRegistry.keys()).forEach(removeUnitDropdown);
+}
+
+function resolveToolFontSizeCss() {
+    if (currentTheme && currentTheme.tool_font) {
+        return String(currentTheme.tool_font);
+    }
+    if (currentTheme && currentTheme.tool_font_px != null) {
+        return `${currentTheme.tool_font_px}px`;
+    }
+    return '12px';
+}
+
+function computeDropdownHeight(fontSizeCss) {
+    if (!fontSizeCss) return '32px';
+    const match = String(fontSizeCss).trim().match(/^([0-9]*\.?[0-9]+)(px|rem|em|vw|vh|vmin|vmax|%)$/i);
+    if (match) {
+        const value = parseFloat(match[1]) || 0;
+        const unit = match[2].toLowerCase();
+        if (unit === 'px') {
+            return Math.max(18, Math.round(value * 2.2)) + 'px';
+        }
+        return `calc(${match[0]} * 2.2)`;
+    }
+    if (currentTheme && currentTheme.tool_font_px) {
+        return Math.max(18, Math.round(currentTheme.tool_font_px * 2.2)) + 'px';
+    }
+    return '32px';
+}
+
+function resolveItemSizeCss() {
+    if (currentTheme && currentTheme.item_size) {
+        return String(currentTheme.item_size);
+    }
+    return '54px';
+}
+
+function positionUnitDropdownEntry(entry) {
+    if (!entry || !entry.wrap || !entry.host) return;
+    const wrapEl = entry.wrap;
+    const hostEl = entry.host;
+    const supportEl = grab('toolbox_support');
+    if (!supportEl) return;
+    const hostRect = hostEl.getBoundingClientRect();
+    const supportRect = supportEl.getBoundingClientRect();
+    const { isHorizontal, isBottom, isRight } = getDirMeta();
+    const gap = getSatelliteOffset();
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const wrapWidth = wrapEl.offsetWidth || wrapEl.getBoundingClientRect().width || 0;
+    const wrapHeight = wrapEl.offsetHeight || wrapEl.getBoundingClientRect().height || 0;
+
+    let targetLeft = hostRect.left;
+    let targetTop = hostRect.top;
+    let openDir = 'down';
+
+    if (isHorizontal) {
+        const aboveSpace = supportRect.top;
+        const belowSpace = vh - supportRect.bottom;
+        const preferAbove = !!isBottom;
+        let placeAbove = preferAbove;
+        if (placeAbove && aboveSpace < wrapHeight + gap) placeAbove = false;
+        if (!placeAbove && !preferAbove && belowSpace < wrapHeight + gap && aboveSpace >= wrapHeight + gap) placeAbove = true;
+        const desiredTop = placeAbove ? (supportRect.top - wrapHeight - gap) : (supportRect.bottom + gap);
+        targetTop = Math.max(0, Math.min(vh - wrapHeight, desiredTop));
+        const baseLeft = hostRect.left;
+        targetLeft = Math.max(0, Math.min(vw - wrapWidth, baseLeft));
+        openDir = placeAbove ? 'down' : 'up';
+    } else {
+        const leftSpace = supportRect.left;
+        const rightSpace = vw - supportRect.right;
+        const preferLeft = !!isRight;
+        let placeLeft = preferLeft;
+        if (placeLeft && leftSpace < wrapWidth + gap) placeLeft = false;
+        if (!placeLeft && !preferLeft && rightSpace < wrapWidth + gap && leftSpace >= wrapWidth + gap) placeLeft = true;
+        const desiredLeft = placeLeft ? (supportRect.left - wrapWidth - gap) : (supportRect.right + gap);
+        targetLeft = Math.max(0, Math.min(vw - wrapWidth, desiredLeft));
+        const baseTop = hostRect.top;
+        targetTop = Math.max(0, Math.min(vh - wrapHeight, baseTop));
+        openDir = 'down';
+    }
+
+    wrapEl.style.left = `${targetLeft}px`;
+    wrapEl.style.top = `${targetTop}px`;
+    entry.openDirection = openDir;
+}
+
+function repositionUnitDropdowns() {
+    unitDropdownRegistry.forEach((entry) => {
+        if (!entry || !entry.wrap || !entry.host) return;
+        positionUnitDropdownEntry(entry);
+    });
+}
 // Update a single particle's value/unit/ext in intuition_content and refresh its display
 window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
     if (!nameKey || !(nameKey in intuition_content)) return;
@@ -1388,7 +1652,14 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
     const prevValue = def.value;
     const prevActive = !!prevValue && Number(prevValue) !== 0;
     if (newValue !== undefined) def.value = newValue;
-    if (newUnit !== undefined) def.unit = newUnit;
+    if (newUnit !== undefined) {
+        if (Array.isArray(def._unitChoices)) {
+            def._unitSelected = newUnit;
+        }
+        if (!Array.isArray(def.unit)) {
+            def.unit = newUnit;
+        }
+    }
     if (newExt !== undefined) def.ext = newExt;
     const elId = `_intuition_${nameKey}`;
     const el = document.getElementById(elId);
@@ -1632,6 +1903,7 @@ function apply_layout() {
     if (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active && handlePaletteClick.active.el) {
         setPaletteVisualState(handlePaletteClick.active.el, true);
     }
+    repositionUnitDropdowns();
 }
 
 
@@ -1876,6 +2148,7 @@ function enforceSupportHitThrough() {
 window.addEventListener('resize', apply_layout);
 window.setDirection = function (dir) {
     currentTheme.direction = String(dir).toLowerCase();
+    removeAllUnitDropdowns();
     apply_layout();
     try {
         const supportEl = grab('toolbox_support');
@@ -1886,6 +2159,7 @@ window.setDirection = function (dir) {
                 const key = node.dataset.nameKey || String(node.id).replace(/^_intuition_/, '');
                 const def = intuition_content[key];
                 if (!def || def.type !== particle) return;
+                renderParticleValueFromTheme({ id: node.id, nameKey: key });
                 renderHelperForItem({ id: node.id, nameKey: key });
             });
         }
