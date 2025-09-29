@@ -44,7 +44,8 @@ function dropDown(config) {
   const bgColor = css.backgroundColor !== undefined ? css.backgroundColor : 'transparent';
   const fontFamily = css.fontFamily || 'Roboto';
   const fontSize = css.fontSize || (themeObj["global-label-font-size"] || themeObj["tool-font-size"] || '10px');
-  const height = css.height || '18px';
+  const baseHeight = css.height || '18px';
+  const controlHeight = showSelectedLabel ? baseHeight : '0px';
 
   const root = $('div', {
     parent: parent,
@@ -52,7 +53,7 @@ function dropDown(config) {
     css: Object.assign({
       position: 'relative',
       width: css.width || '100%',
-      height: height,
+      height: controlHeight,
       backgroundColor: bgColor,
       color: labelColor,
       cursor: 'pointer',
@@ -64,6 +65,14 @@ function dropDown(config) {
   if (root && root.dataset) {
     root.dataset.dropdownOpen = 'false';
   }
+  if (!showSelectedLabel) {
+    try {
+      root.style.minHeight = '0px';
+      root.style.pointerEvents = 'auto';
+      root.style.margin = '0';
+      root.style.padding = '0';
+    } catch (_) { /* ignore */ }
+  }
 
   const display = $('div', {
     parent: root,
@@ -74,7 +83,7 @@ function dropDown(config) {
       top: 0,
       width: '100%',
       height: '100%',
-      lineHeight: height,
+      lineHeight: controlHeight,
       textAlign: 'center',
       fontFamily,
       fontSize,
@@ -140,11 +149,11 @@ function dropDown(config) {
 
     // Apply placement
     if (dir === 'down') {
-      menu.style.top = height;
+      menu.style.top = controlHeight;
       menu.style.bottom = 'auto';
       menu.style.maxHeight = Math.max(18, Math.floor(below)).toString() + 'px';
     } else {
-      menu.style.bottom = height;
+      menu.style.bottom = controlHeight;
       menu.style.top = 'auto';
       menu.style.maxHeight = Math.max(18, Math.floor(above)).toString() + 'px';
     }
@@ -154,6 +163,65 @@ function dropDown(config) {
 
   // Build items
   const items = [];
+  let highlightedIndex = selectedIndex;
+  const highlightColor = themeObj["tool-bg-active"] || listCss.backgroundColor || '#444';
+
+  const updateHighlight = () => {
+    items.forEach((el, idx) => {
+      if (!el) return;
+      const isHighlighted = idx === highlightedIndex;
+      el.setAttribute('data-highlighted', isHighlighted ? 'true' : 'false');
+      el.style.backgroundColor = isHighlighted ? highlightColor : 'transparent';
+    });
+  };
+
+  const ensureHighlightVisible = () => {
+    const item = items[highlightedIndex];
+    if (item && typeof item.scrollIntoView === 'function') {
+      try {
+        item.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      } catch (_) { /* ignore */ }
+    }
+  };
+
+  const handleKeyDown = (ev) => {
+    if (!isOpen) return;
+    if (!opts.length) return;
+    const key = ev.key;
+    const isArrowDown = key === 'ArrowDown';
+    const isArrowUp = key === 'ArrowUp';
+    if (isArrowDown || isArrowUp) {
+      ev.preventDefault();
+      const delta = isArrowDown ? 1 : -1;
+      highlightedIndex = (highlightedIndex + delta + opts.length) % opts.length;
+      updateHighlight();
+      ensureHighlightVisible();
+      return;
+    }
+    if (key === 'Home') {
+      ev.preventDefault();
+      highlightedIndex = 0;
+      updateHighlight();
+      ensureHighlightVisible();
+      return;
+    }
+    if (key === 'End') {
+      ev.preventDefault();
+      highlightedIndex = opts.length - 1;
+      updateHighlight();
+      ensureHighlightVisible();
+      return;
+    }
+    if (key === 'Enter' || key === ' ') {
+      ev.preventDefault();
+      commitSelection(highlightedIndex, true);
+      return;
+    }
+    if (key === 'Escape') {
+      ev.preventDefault();
+      hideMenu();
+    }
+  };
 
   // Centralized selection logic
   const commitSelection = (i, userInitiated = true) => {
@@ -165,6 +233,11 @@ function dropDown(config) {
     const value = opt.value;
     root.value = value;
     root.label = label;
+    highlightedIndex = selectedIndex;
+    if (isOpen) {
+      updateHighlight();
+      ensureHighlightVisible();
+    }
     // aria selection
     items.forEach((el, idx) => {
       if (!el) return;
@@ -205,15 +278,13 @@ function dropDown(config) {
     item.setAttribute('aria-selected', i === selectedIndex ? 'true' : 'false');
 
     // Hover (desktop)
-    item.addEventListener('mouseenter', (e) => {
-      e.currentTarget.style.backgroundColor = themeObj["tool-bg-active"] || '#444';
+    item.addEventListener('mouseenter', () => {
+      highlightedIndex = i;
+      updateHighlight();
       if (typeof onHover === 'function') {
         const opt = opts[i];
         try { onHover(opt.value, opt.label, i); } catch (err) { console.error('dropDown onHover error', err); }
       }
-    });
-    item.addEventListener('mouseleave', (e) => {
-      e.currentTarget.style.backgroundColor = 'transparent';
     });
 
     // Selection handlers: pointer > touch > click fallbacks
@@ -235,6 +306,7 @@ function dropDown(config) {
 
     items.push(item);
   });
+  updateHighlight();
 
   const showMenu = () => {
     if (isOpen) return;
@@ -242,8 +314,12 @@ function dropDown(config) {
     root.dataset.dropdownOpen = 'true';
     menu.style.display = 'block';
     placeMenu();
+    highlightedIndex = selectedIndex;
+    updateHighlight();
+    ensureHighlightVisible();
     window.addEventListener('resize', placeMenu);
     window.addEventListener('scroll', placeMenu, true);
+    window.addEventListener('keydown', handleKeyDown, true);
   };
 
   const hideMenu = () => {
@@ -255,6 +331,7 @@ function dropDown(config) {
     if (isOpen) {
       window.removeEventListener('resize', placeMenu);
       window.removeEventListener('scroll', placeMenu, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
     }
     isOpen = false;
     root.dataset.dropdownOpen = 'false';
@@ -264,6 +341,7 @@ function dropDown(config) {
     menu.style.display = 'none';
     window.removeEventListener('resize', placeMenu);
     window.removeEventListener('scroll', placeMenu, true);
+    window.removeEventListener('keydown', handleKeyDown, true);
     isOpen = false;
     root.dataset.dropdownOpen = 'false';
   };
