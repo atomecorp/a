@@ -131,6 +131,7 @@ In addition to the per-type backgrounds listed earlier, the theme governs layout
 | `tool_lock_bg` | Second color for lock pulse | |
 | `tool_lock_pulse_duration` | Animation duration | ms string |
 | `particle_bg`, `option_bg`, `zonespecial_bg` | Backgrounds for respective types | Used when no per-item override provided |
+| `satellite_offset` | Distance (px) between the toolbox edge and any popped-out palette | Falls back to `max(8, items_spacing)` when omitted |
 | `particle_value_*` | Font & positioning for value display | bottom, font size, colors |
 
 ### 7. Editing Particle Values

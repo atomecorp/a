@@ -1908,6 +1908,19 @@ function setupToolboxScrollProxy() {
 }
 
 // ===== Palette pop-out logic =====
+function getSatelliteOffset() {
+    const raw = currentTheme && currentTheme.satellite_offset;
+    if (raw != null) {
+        const val = (typeof raw === 'number') ? raw : parseFloat(String(raw));
+        if (Number.isFinite(val)) {
+            return Math.max(0, val);
+        }
+    }
+    const spacing = parseFloat(currentTheme && currentTheme.items_spacing);
+    const fallback = Number.isFinite(spacing) ? spacing : 8;
+    return Math.max(8, fallback);
+}
+
 function getDirMeta() {
     const dir = (currentTheme?.direction || '').toLowerCase();
     const isHorizontal = dir.includes('horizontal');
@@ -1997,7 +2010,7 @@ function handlePaletteClick(el, cfg) {
 
     // Maintenant déplacer l'élément le long de l'axe transversal pour être totalement hors du support
     const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
-    const gap = Math.max(8, parseFloat(currentTheme.items_spacing) || 8);
+    const gap = getSatelliteOffset();
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const elW = el.offsetWidth;
@@ -2142,7 +2155,7 @@ function popOutPaletteByName(name, opts = {}) {
         setPaletteVisualState(el, true);
 
         const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
-        const gap = Math.max(8, parseFloat(currentTheme.items_spacing) || 8);
+        const gap = getSatelliteOffset();
         const vw = window.innerWidth || document.documentElement.clientWidth;
         const vh = window.innerHeight || document.documentElement.clientHeight;
         const elW = el.offsetWidth;
@@ -2344,7 +2357,7 @@ function repositionPoppedPalette() {
 
     // Puis re-déporter transversalement hors du support
     const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
-    const gap = Math.max(8, parseFloat(currentTheme.items_spacing) || 8);
+    const gap = getSatelliteOffset();
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const elW = state.el.offsetWidth;

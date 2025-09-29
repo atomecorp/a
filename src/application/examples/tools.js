@@ -64,6 +64,7 @@ const light_theme = {
   toolbox_icon_left: '50%',
   toolboxOffsetMain: "7px",
   toolboxOffsetEdge: "19px",
+  satellite_offset: '0px',
   items_offset_main: item_border_radius + items_spacing + 'px',
   icon_color: "#cacacaff",
   icon_size: "39%",
