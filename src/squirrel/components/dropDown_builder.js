@@ -164,14 +164,30 @@ function dropDown(config) {
   // Build items
   const items = [];
   let highlightedIndex = selectedIndex;
-  const highlightColor = themeObj["tool-bg-active"] || listCss.backgroundColor || '#444';
+  let highlightTone = themeObj["tool-bg-active"] || themeObj["tool_bg_active"] || '#444';
+  if (typeof highlightTone !== 'string' || !highlightTone.trim()) {
+    highlightTone = '#444';
+  } else if (highlightTone.toLowerCase().includes('gradient')) {
+    highlightTone = '#444';
+  }
+  const highlightTextColor = themeObj["tool-text-active"] || themeObj["tool_text_active"] || '#ffffff';
 
   const updateHighlight = () => {
     items.forEach((el, idx) => {
       if (!el) return;
       const isHighlighted = idx === highlightedIndex;
       el.setAttribute('data-highlighted', isHighlighted ? 'true' : 'false');
-      el.style.backgroundColor = isHighlighted ? highlightColor : 'transparent';
+      if (isHighlighted) {
+        el.style.background = highlightTone;
+        el.style.backgroundColor = highlightTone;
+        el.style.color = highlightTextColor || labelColor;
+        el.style.fontWeight = '600';
+      } else {
+        el.style.background = 'transparent';
+        el.style.backgroundColor = 'transparent';
+        el.style.color = labelColor;
+        el.style.fontWeight = itemCss.fontWeight || 'normal';
+      }
     });
   };
 
