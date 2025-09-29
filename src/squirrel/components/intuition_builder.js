@@ -281,7 +281,6 @@ function openMenu(parent) {
         if (typeof handlePaletteClick !== 'undefined' && handlePaletteClick.active) {
             restorePalette(handlePaletteClick.active);
         }
-        // Initialize navigation stack with top-level methods
         menuStack = [{ parent, children: methods.slice() }];
         const created = [];
         methods.forEach(name => {
@@ -714,22 +713,39 @@ function attachToolLockBehavior(el, cfg) {
 }
 
 // --- Semantic tool event dispatcher ---
+function runContentHandler(def, handlerName, payload = {}) {
+    if (!def || !handlerName) return;
+    const code = def[handlerName];
+    if (!code) return;
+    const { el = null, event = null, nameKey = null } = payload;
+    const kind = payload.kind || handlerName;
+    const context = {
+        el,
+        event,
+        kind,
+        nameKey,
+        update: window.updateParticleValue,
+        theme: currentTheme,
+        value: payload.value
+    };
+    try {
+        if (typeof code === 'function') {
+            code(context);
+        } else if (typeof code === 'string') {
+            const fn = new Function('el', 'event', 'kind', 'nameKey', 'update', 'theme', 'value', code);
+            fn(el, event, kind, nameKey, window.updateParticleValue, currentTheme, payload.value);
+        }
+    } catch (err) {
+        console.error('Intuition content handler error', err);
+    }
+}
+
 function handleToolSemanticEvent(kind, el, def, rawEvent) {
     if (!el) return;
     const nameKey = el.dataset && el.dataset.nameKey;
     if (!def && nameKey) {
         try { def = intuition_content[nameKey]; } catch (_) { }
     }
-    const exec = (code) => {
-        try {
-            if (typeof code === 'function') { code({ el, event: rawEvent, kind, nameKey }); return; }
-            if (typeof code === 'string') {
-                // Provide limited sandbox context
-                const fn = new Function('el', 'event', 'kind', 'nameKey', 'update', 'theme', code);
-                fn(el, rawEvent, kind, nameKey, window.updateParticleValue, currentTheme);
-            }
-        } catch (err) { console.error('Tool semantic handler error', err); }
-    };
 
     // Activation simple pour tools sans enfants
     const toggleChildlessActive = () => {
@@ -742,27 +758,29 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             delete el.dataset.simpleActive;
             try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
             delete el.dataset.activeTag;
-            if (def && def.inactive) exec(def.inactive);
+            runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
         } else {
             el.dataset.simpleActive = 'true';
             // ordre de fallback: tool_bg_active -> tool_active_bg -> tool_bg
             const bg = currentTheme.tool_bg_active || currentTheme.tool_active_bg || currentTheme.tool_bg || '#444';
             try { el.style.background = bg; } catch (_) { }
             el.dataset.activeTag = 'true';
-            if (def && def.active) exec(def.active);
+            runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
         }
     };
 
+    const basePayload = { el, event: rawEvent, nameKey };
+
     switch (kind) {
         case 'touch_down':
-            if (def && def.touch_down) exec(def.touch_down);
+            runContentHandler(def, 'touch_down', { ...basePayload, kind: 'touch_down' });
             // Ne bloque pas comportement par défaut (mais rien à faire ici encore)
             break;
         case 'touch_up':
-            if (def && def.touch_up) exec(def.touch_up);
+            runContentHandler(def, 'touch_up', { ...basePayload, kind: 'touch_up' });
             break;
         case 'touch':
-            if (def && def.touch) exec(def.touch);
+            runContentHandler(def, 'touch', { ...basePayload, kind: 'touch' });
             // Si tool avec enfants -> comportement historique (expand). Sinon toggle actif simple.
             if (def && Array.isArray(def.children) && def.children.length > 0) {
                 try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
@@ -774,10 +792,13 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             {
                 const phase = rawEvent && rawEvent.phase;
                 if (phase === 'exit') {
-                    if (def && def.unlock) exec(def.unlock);
-                    else if (def && def.lock) exec(def.lock);
+                    if (def && def.unlock) {
+                        runContentHandler(def, 'unlock', { ...basePayload, kind: 'unlock' });
+                    } else {
+                        runContentHandler(def, 'lock', { ...basePayload, kind: 'lock' });
+                    }
                 } else {
-                    if (def && def.lock) exec(def.lock);
+                    runContentHandler(def, 'lock', { ...basePayload, kind: 'lock' });
                 }
             }
             break;
@@ -966,6 +987,10 @@ function renderHelperForItem(cfg) {
     const host = document.getElementById(cfg.id);
     if (!host) return;
 
+    const fire = (handlerName, extra = {}) => {
+        runContentHandler(def, handlerName, { el: host, nameKey: key, ...extra });
+    };
+
     // Taille de l'item (base pour convertir % / ratios)
     const itemSizeNum = parseFloat(currentTheme.item_size) || host.clientWidth || 54;
 
@@ -1046,6 +1071,7 @@ function renderHelperForItem(cfg) {
             return Math.pow(10, -Math.min(3, ext));
         })();
 
+        let lastPointerEvent = null;
         const slider = Slider({
             id: sliderId,
             parent: wrap,
@@ -1090,6 +1116,10 @@ function renderHelperForItem(cfg) {
             };
             const onDown = (e) => {
                 if (e.type === 'mousedown' && e.button !== 0) return;
+                lastPointerEvent = e;
+                const currentValue = intuition_content[key] ? intuition_content[key].value : undefined;
+                fire('touch_down', { event: e, kind: 'touch_down', value: currentValue });
+                fire('touch', { event: e, kind: 'touch', value: currentValue });
                 if (isVertical) {
                     if (!itemEl._origHeightPx) itemEl._origHeightPx = itemEl.getBoundingClientRect().height;
                 } else {
@@ -1159,13 +1189,15 @@ function renderHelperForItem(cfg) {
                 };
                 const onMove = (ev) => {
                     if (!dragging) return;
+                    lastPointerEvent = ev;
                     const cPos = (ev.touches && ev.touches.length) ? (isVertical ? ev.touches[0].clientY : ev.touches[0].clientX) : (isVertical ? ev.clientY : ev.clientX);
                     const dRaw = cPos - startPos;
                     const d = isVertical ? -dRaw : dRaw; // Inversion verticale: monter augmente, descendre diminue
                     applyDelta(d);
                     try { ev.stopPropagation(); ev.preventDefault(); } catch (_) { }
                 };
-                const release = () => {
+                const release = (ev) => {
+                    if (!dragging) return;
                     if (itemEl.dataset.zoomed) {
                         try { itemEl.style.transition = `${isVertical ? 'height' : 'width'} ${dur} ease`; } catch (_) { }
                         if (isVertical) {
@@ -1187,6 +1219,9 @@ function renderHelperForItem(cfg) {
                     dragging = false;
                     ['mousemove', 'pointermove', 'touchmove'].forEach(ev => document.removeEventListener(ev, onMove, true));
                     ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.removeEventListener(ev, release, true));
+                    const upValue = intuition_content[key] ? intuition_content[key].value : undefined;
+                    fire('touch_up', { event: ev || lastPointerEvent, kind: 'touch_up', value: upValue });
+                    lastPointerEvent = null;
                 };
                 ['mouseup', 'pointerup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => document.addEventListener(ev, release, true));
                 ['mousemove', 'pointermove', 'touchmove'].forEach(ev => document.addEventListener(ev, onMove, true));
@@ -1279,16 +1314,29 @@ function renderHelperForItem(cfg) {
         const btnId = `${cfg.id}__helper_button`;
         const curVal = intuition_content[key] && intuition_content[key].value;
         const isOn = !!curVal && Number(curVal) !== 0;
-        const buttonObj = Button({
+
+        let buttonObj = null;
+        const pushValue = (nextVal) => {
+            if (buttonObj) buttonObj._internalToggleSync = true;
+            try {
+                window.updateParticleValue(key, nextVal);
+            } finally {
+                if (buttonObj) buttonObj._internalToggleSync = false;
+            }
+        };
+
+        buttonObj = Button({
             id: btnId,
             parent: wrap,
+            toggle: true,
+            initialState: isOn,
             onText: '', // pas de label
             offText: '',
             css: {
                 width: sizePx,
                 height: sizePx,
                 fontSize: `${Math.max(9, Math.round(itemSizeNum * 0.22))}px`,
-                backgroundColor: isOn ? currentTheme.button_active_color : currentTheme.button_color,
+                backgroundColor: isOn ? currentTheme.button_active_color || currentTheme.button_color : currentTheme.button_color,
                 boxShadow: currentTheme.item_shadow,
                 border: 'none',
                 outline: 'none',
@@ -1298,20 +1346,37 @@ function renderHelperForItem(cfg) {
                 padding: '0',
                 pointerEvents: 'auto'
             },
-            ontouch: () => {
-                const cur = intuition_content[key] && intuition_content[key].value;
-                const on = !!cur && Number(cur) !== 0;
-                const next = on ? 0 : 100;
-                window.updateParticleValue(key, next);
+            onStyle: {
+                backgroundColor: currentTheme.button_active_color || currentTheme.button_color,
+                boxShadow: currentTheme.item_shadow,
+                border: 'none',
+                outline: 'none'
             },
-            offtouch: () => {
-                const cur = intuition_content[key] && intuition_content[key].value;
-                const on = !!cur && Number(cur) !== 0;
-                const next = on ? 0 : 100;
-                window.updateParticleValue(key, next);
-            }
+            offStyle: {
+                backgroundColor: currentTheme.button_color,
+                boxShadow: currentTheme.item_shadow,
+                border: 'none',
+                outline: 'none'
+            },
+            onAction: () => pushValue(100),
+            offAction: () => pushValue(0)
         });
+
+        if (buttonObj) {
+            try {
+                buttonObj.dataset.baseToggleSize = parseFloat(sizePx);
+            } catch (_) { /* ignore */ }
+        }
+
         try { host._helperButton = buttonObj; } catch (_) { }
+
+        requestAnimationFrame(() => {
+            const buttonNode = document.getElementById(btnId);
+            if (!buttonNode) return;
+            buttonNode.addEventListener('pointerdown', (e) => fire('touch_down', { event: e, kind: 'touch_down', value: intuition_content[key] ? intuition_content[key].value : undefined }), true);
+            buttonNode.addEventListener('pointerup', (e) => fire('touch_up', { event: e, kind: 'touch_up', value: intuition_content[key] ? intuition_content[key].value : undefined }), true);
+            buttonNode.addEventListener('click', (e) => fire('touch', { event: e, kind: 'touch', value: intuition_content[key] ? intuition_content[key].value : undefined }), true);
+        });
     }
 }
 // ...existing code...
@@ -1320,6 +1385,8 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
     if (!nameKey || !(nameKey in intuition_content)) return;
     const def = intuition_content[nameKey];
     if (!def) return;
+    const prevValue = def.value;
+    const prevActive = !!prevValue && Number(prevValue) !== 0;
     if (newValue !== undefined) def.value = newValue;
     if (newUnit !== undefined) def.unit = newUnit;
     if (newExt !== undefined) def.ext = newExt;
@@ -1354,6 +1421,16 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
     if (host && host._helperButton) {
         const btn = host._helperButton;
         try {
+            if (btn && typeof btn.getState === 'function' && !btn._internalToggleSync) {
+                const btnState = !!btn.getState();
+                if (btnState !== active) {
+                    if (active && typeof btn.setOnState === 'function') {
+                        btn.setOnState();
+                    } else if (!active && typeof btn.setOffState === 'function') {
+                        btn.setOffState();
+                    }
+                }
+            }
             // Récupère le node style cible (certaines implémentations exposent .el, d'autres .root ou rien)
             let targetEl = null;
             if (btn) {
@@ -1378,6 +1455,13 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
             try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch (_) { }
             try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
         }
+    }
+    const valueChanged = newValue !== undefined && prevValue !== currentVal;
+    if (valueChanged) {
+        runContentHandler(def, 'change', { el, nameKey, kind: 'change', value: currentVal });
+    }
+    if (prevActive !== active) {
+        runContentHandler(def, active ? 'active' : 'inactive', { el, nameKey, kind: active ? 'active' : 'inactive', value: currentVal });
     }
 };
 // Toggle an inline expansion of a tool's children right after the clicked tool
@@ -1793,6 +1877,19 @@ window.addEventListener('resize', apply_layout);
 window.setDirection = function (dir) {
     currentTheme.direction = String(dir).toLowerCase();
     apply_layout();
+    try {
+        const supportEl = grab('toolbox_support');
+        if (supportEl) {
+            const nodes = supportEl.querySelectorAll('[id^="_intuition_"]');
+            nodes.forEach(node => {
+                if (!node || !node.dataset) return;
+                const key = node.dataset.nameKey || String(node.id).replace(/^_intuition_/, '');
+                const def = intuition_content[key];
+                if (!def || def.type !== particle) return;
+                renderHelperForItem({ id: node.id, nameKey: key });
+            });
+        }
+    } catch (e) { /* ignore */ }
 };
 
 // Helper to recalculate after theme/value changes

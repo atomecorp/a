@@ -19,8 +19,8 @@ const DIRECTIONS = [
 
 const light_theme = {
   themeName: "light",
-  button_color: 'rgba(204, 35, 35, 0.85)',
-  button_active_color: "#bbeb0eff",
+  button_color: 'rgba(48, 188, 55, 0.85)',
+  button_active_color: "#b70fd5ff",
   palette_bg: '#804901ff',
   tool_bg: 'linear-gradient(180deg, rgba(32, 190, 48, 0.85) 0%, rgba(72,71,71,0.35) 100%)',
   particle_bg: '#4a4a4aff',
@@ -118,6 +118,30 @@ function stop_lock_test_touch() {
   puts('Tools lock test unlock triggered!!!');
 }
 
+function sliderAStart({ value }) {
+  puts(`Slider A touch start (value: ${Math.round(value ?? 0)})`);
+}
+
+function sliderAChange({ value }) {
+  puts(`Slider A changed to ${Math.round(value ?? 0)}`);
+}
+
+function sliderARelease({ value }) {
+  puts(`Slider A released at ${Math.round(value ?? 0)}`);
+}
+
+function buttonDTouch() {
+  puts('Button D pressed');
+}
+
+function buttonDActive() {
+  puts('Button D ON');
+}
+
+function buttonDInactive() {
+  puts('Button D OFF');
+}
+
 const intuition_content = {
   version: "1.1",
   meta: { namespace: "vie.menu", defaultLocale: "en" },
@@ -137,8 +161,27 @@ const intuition_content = {
   volume: { type: 'particle', helper: 'slider', value: 3 },
   ADSR: { type: 'tool', children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
   controller: { type: 'zonespecial', touch: function () { puts('Controller touch triggered'); } },
-  A: { type: 'particle', helper: 'slider', unit: '%', value: 50, ext: 3, },
-  D: { type: 'particle', helper: 'button', unit: '%', value: 0, ext: 3 },
+  A: {
+    type: 'particle',
+    helper: 'slider',
+    unit: '%',
+    value: 50,
+    ext: 1,
+    touch: sliderAStart,
+    change: sliderAChange,
+    touch_up: sliderARelease
+  },
+  D: {
+    type: 'particle',
+    helper: 'button',
+    unit: '%',
+    value: 0,
+    ext: 3,
+    touch: buttonDTouch,
+    active: buttonDActive,
+    inactive: buttonDInactive,
+    change: ({ value }) => puts(`Button D value -> ${Math.round(value ?? 0)}`)
+  },
   S: { type: 'particle', helper: 'slider', unit: '%', value: 0, ext: 3 },
   R: { type: 'particle', unit: '%', value: 20, ext: 3 },
 

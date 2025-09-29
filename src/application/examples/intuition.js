@@ -39,7 +39,6 @@ const light_theme = {
     drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
     drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
     button_size: '33%',
-
     items_spacing: items_spacing + 'px',
     item_size: item_size + 'px',
     support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',

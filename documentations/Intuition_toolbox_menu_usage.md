@@ -80,6 +80,7 @@ Each interactive item can declare handlers inside `intuition_content`:
 - `touch_down`
 - `touch`
 - `touch_up`
+- `change` (particles & helpers when value toggles)
 - `lock` (invoked automatically on enter/exit with `{ phase: 'enter' | 'exit' }` context)
 
 Handlers can be functions or strings (evaluated inside a controlled `new Function` sandbox with: `el, event, kind, nameKey, update, theme`). While handlers run, the navigation system takes care of expanding children, toggling states, and managing the `menuStack`. You can layer navigation logic (e.g., breadcrumbs) by observing `menuStack` or the data attributes described below.
