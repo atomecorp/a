@@ -7,15 +7,32 @@ const items_spacing = 3;
 const item_border_radius = 6;
 const item_size = 54;
 const DIRECTIONS = [
-  "top_left_horizontal",
-  "top_right_horizontal",
-  "bottom_left_horizontal",
-  "bottom_right_horizontal",
-  "top_left_vertical",
-  "bottom_left_vertical",
-  "top_right_vertical",
-  "bottom_right_vertical"
+  "TLH",
+  "TRH",
+  "BLH",
+  "BRH",
+  "TLV",
+  "BLV",
+  "TRV",
+  "BRV"
 ];
+
+const DIRECTION_LABEL_TO_VALUE = {
+  TLH: "top_left_horizontal",
+  TRH: "top_right_horizontal",
+  BLH: "bottom_left_horizontal",
+  BRH: "bottom_right_horizontal",
+  TLV: "top_left_vertical",
+  BLV: "bottom_left_vertical",
+  TRV: "top_right_vertical",
+  BRV: "bottom_right_vertical"
+};
+
+const DIRECTION_VALUES = DIRECTIONS.map(code => DIRECTION_LABEL_TO_VALUE[code]);
+const DIRECTION_VALUE_TO_LABEL = DIRECTION_VALUES.reduce((acc, value, index) => {
+  acc[value] = DIRECTIONS[index];
+  return acc;
+}, {});
 
 const light_theme = {
   themeName: "light",
@@ -170,7 +187,7 @@ const intuition_content = {
   orientation: {
     type: 'particle',
     label: 'orientation',
-    unit: [...DIRECTIONS],
+    unit: [...DIRECTION_VALUES],
     value: DEFAULT_ORIENTATION,
     ext: 0,
     orientationControl: true,
@@ -178,6 +195,7 @@ const intuition_content = {
     hideUnitLabel: true,
     openUnitDropdownOnItem: true,
     syncValueWithUnit: true,
+    unitLabelMap: DIRECTION_VALUE_TO_LABEL,
     change: orientationChanged
   },
   volume: { type: 'particle', helper: 'slider', value: 3 },
@@ -211,50 +229,3 @@ const intuition_content = {
 
 Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
 
-
-// test selector 
-
-
-// function mountDirectionSelector() {
-//   if (document.getElementById('intuition-direction-select')) return;
-
-//   const wrap = $('div', {
-//     id: 'intuition-direction-select',
-//     parent: '#intuition',
-//     css: {
-//       position: 'fixed',
-//       top: '108px',
-//       left: '108px',
-//       zIndex: 10000002,
-//       backgroundColor: 'transparent',
-//       padding: '0'
-//     }
-//   });
-
-//   const select = $('select', {
-//     parent: wrap,
-//     css: {
-//       fontSize: '12px',
-//       padding: '2px 6px',
-//       color: '#fff',
-//       backgroundColor: '#2b2b2b',
-//       border: '1px solid #555'
-//     }
-//   });
-
-//   DIRECTIONS.forEach(d => {
-//     const opt = $('option', { parent: select, text: d });
-//     opt.value = d;
-//   });
-
-
-//   //test current value
-//   const liveTheme = (typeof Intuition !== 'undefined' && typeof Intuition.getTheme === 'function')
-//     ? Intuition.getTheme('current')
-//     : null;
-//   select.value = (liveTheme?.direction || 'top_left_horizontal').toLowerCase();
-//   select.addEventListener('change', (e) => {
-//     window.setDirection(e.target.value);
-//   });
-// }
-// mountDirectionSelector();

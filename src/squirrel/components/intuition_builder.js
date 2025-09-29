@@ -826,6 +826,7 @@ function renderParticleValueFromTheme(cfg) {
     def._showUnitLabel = showUnitLabel;
     def._triggerDropdownOnItem = triggerDropdownOnItem;
     def._syncValueWithUnit = syncValueWithUnit;
+    const aliasMap = (def && typeof def.unitLabelMap === 'object') ? def.unitLabelMap : null;
     let unitOptions = null;
     if (Array.isArray(rawUnit)) {
         const normalized = rawUnit.map(u => String(u));
@@ -860,6 +861,7 @@ function renderParticleValueFromTheme(cfg) {
     if (val === undefined || val === null) return;
     const decimals = Math.max(0, Math.min(6, parseInt(def.ext != null ? def.ext : 0, 10)));
     const valueText = (typeof val === 'number') ? val.toFixed(decimals) : String(val);
+    const displayText = (aliasMap && typeof aliasMap[val] === 'string') ? aliasMap[val] : valueText;
     const id = `${cfg.id}__particle_value`;
     const prev = document.getElementById(id);
     if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
@@ -884,7 +886,7 @@ function renderParticleValueFromTheme(cfg) {
     });
     const valColor = String(currentTheme.particle_value_color || currentTheme.tool_text || '#fff');
     const unitColor = String(currentTheme.particle_unit_color || currentTheme.tool_text || '#fff');
-    const valueSpan = $('span', { parent: wrap, text: valueText, css: { color: valColor } });
+    const valueSpan = $('span', { parent: wrap, text: displayText, css: { color: valColor } });
     const triggerEvents = window.PointerEvent ? ['pointerdown'] : ['mousedown', 'click'];
     const toggleUnitDropdown = (ev) => {
         if (ev) {
@@ -1109,7 +1111,7 @@ function renderParticleValueFromTheme(cfg) {
             const dropdownRoot = dropDownCtor({
                 parent: wrapEl,
                 id: `${cfg.id}__unit_dropdown`,
-                options: unitOptions.map(opt => ({ label: opt, value: opt })),
+                options: unitOptions.map(opt => ({ label: (aliasMap && typeof aliasMap[opt] === 'string') ? aliasMap[opt] : opt, value: opt })),
                 value: unit,
                 placeholder: '',
                 openDirection: entry.openDirection || 'down',
