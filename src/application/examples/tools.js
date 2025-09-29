@@ -63,7 +63,7 @@ const light_theme = {
   toolbox_icon_top: '50%',       // position verticale
   toolbox_icon_left: '50%',
   toolboxOffsetMain: "7px",
-  toolboxOffsetEdge: "9px",
+  toolboxOffsetEdge: "19px",
   items_offset_main: item_border_radius + items_spacing + 'px',
   icon_color: "#cacacaff",
   icon_size: "39%",

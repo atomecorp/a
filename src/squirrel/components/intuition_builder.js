@@ -2151,9 +2151,10 @@ function popOutPaletteByName(name, opts = {}) {
         if (isHorizontal) {
             const aboveSpace = supportRect.top;
             const belowSpace = vh - supportRect.bottom;
-            let placeAbove = !!isTop;
+            const preferAbove = !!isBottom;
+            let placeAbove = preferAbove;
             if (placeAbove && aboveSpace < elH + gap) placeAbove = false;
-            if (!placeAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
+            if (!placeAbove && !preferAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
             const targetTop = placeAbove ? (supportRect.top - elH - gap) : (supportRect.bottom + gap);
             const clampedTop = Math.max(0, Math.min(vh - elH, targetTop));
             el.style.top = `${clampedTop}px`;
@@ -2163,9 +2164,10 @@ function popOutPaletteByName(name, opts = {}) {
         } else {
             const leftSpace = supportRect.left;
             const rightSpace = vw - supportRect.right;
-            let placeLeft = !!isLeft;
+            const preferLeft = !!isRight;
+            let placeLeft = preferLeft;
             if (placeLeft && leftSpace < elW + gap) placeLeft = false;
-            if (!placeLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
+            if (!placeLeft && !preferLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
             const targetLeft = placeLeft ? (supportRect.left - elW - gap) : (supportRect.right + gap);
             const clampedLeft = Math.max(0, Math.min(vw - elW, targetLeft));
             el.style.left = `${clampedLeft}px`;
