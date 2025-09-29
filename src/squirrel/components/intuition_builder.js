@@ -813,6 +813,19 @@ function renderParticleValueFromTheme(cfg) {
     const def = intuition_content[key];
     if (!def) return;
     const rawUnit = def.unit;
+    const orientationControl = !!def && !!def.orientationControl;
+    if (orientationControl && typeof def.value === 'string') {
+        def._unitSelected = String(def.value).toLowerCase();
+    }
+    const allowInlineEdit = (def.allowInlineEdit !== false) && !orientationControl;
+    const showUnitLabel = !orientationControl && def.hideUnitLabel !== true;
+    const triggerDropdownOnItem = orientationControl || def.openUnitDropdownOnItem === true;
+    const syncValueWithUnit = orientationControl || def.syncValueWithUnit === true;
+    def._orientationControl = orientationControl;
+    def._allowInlineEdit = allowInlineEdit;
+    def._showUnitLabel = showUnitLabel;
+    def._triggerDropdownOnItem = triggerDropdownOnItem;
+    def._syncValueWithUnit = syncValueWithUnit;
     let unitOptions = null;
     if (Array.isArray(rawUnit)) {
         const normalized = rawUnit.map(u => String(u));
@@ -825,6 +838,21 @@ function renderParticleValueFromTheme(cfg) {
         def._unitChoices = null;
         if (typeof rawUnit === 'string') {
             def._unitSelected = rawUnit;
+        }
+    }
+    if (orientationControl) {
+        if (!def._unitSelected && currentTheme && typeof currentTheme.direction === 'string') {
+            const themeDir = String(currentTheme.direction).toLowerCase();
+            if (unitOptions && unitOptions.includes(themeDir)) {
+                def._unitSelected = themeDir;
+            }
+        }
+        if (syncValueWithUnit) {
+            if (def._unitSelected) {
+                def.value = def._unitSelected;
+            } else if (currentTheme && typeof currentTheme.direction === 'string') {
+                def.value = String(currentTheme.direction).toLowerCase();
+            }
         }
     }
     const unit = def._unitSelected || (typeof rawUnit === 'string' ? rawUnit : '');
@@ -857,8 +885,41 @@ function renderParticleValueFromTheme(cfg) {
     const valColor = String(currentTheme.particle_value_color || currentTheme.tool_text || '#fff');
     const unitColor = String(currentTheme.particle_unit_color || currentTheme.tool_text || '#fff');
     const valueSpan = $('span', { parent: wrap, text: valueText, css: { color: valColor } });
+    const triggerEvents = window.PointerEvent ? ['pointerdown'] : ['mousedown', 'click'];
+    const toggleUnitDropdown = (ev) => {
+        if (ev) {
+            try { ev.preventDefault(); } catch (_) { }
+            try { ev.stopPropagation(); } catch (_) { }
+        }
+        let entry = unitDropdownRegistry.get(key);
+        if (!entry || !entry.wrap || !entry.dropdown) {
+            renderParticleValueFromTheme({ id: cfg.id, nameKey: key });
+            entry = unitDropdownRegistry.get(key);
+        }
+        if (!entry || !entry.wrap || !entry.dropdown) return;
+        const dropdown = entry.dropdown;
+        const isOpen = dropdown && typeof dropdown.isDropDownOpen === 'function'
+            ? dropdown.isDropDownOpen()
+            : false;
+        if (!isOpen) {
+            try { positionUnitDropdownEntry(entry); } catch (_) { }
+        }
+        if (dropdown && typeof dropdown.toggleDropDown === 'function') {
+            dropdown.toggleDropDown();
+        } else if (entry.wrap) {
+            try { entry.wrap.click(); } catch (_) { }
+        }
+    };
+    const attachDropdownTrigger = (target) => {
+        if (!target || !target.addEventListener) return;
+        triggerEvents.forEach(evtName => {
+            const opts = (evtName === 'pointerdown' || evtName === 'mousedown') ? { passive: false } : false;
+            target.addEventListener(evtName, toggleUnitDropdown, opts);
+        });
+        target.addEventListener('touchstart', toggleUnitDropdown, { passive: false });
+    };
     let unitSpan = null;
-    if (unit) {
+    if (unit && showUnitLabel) {
         unitSpan = $('span', {
             parent: wrap,
             text: unit,
@@ -872,52 +933,22 @@ function renderParticleValueFromTheme(cfg) {
                 alignItems: 'center'
             }
         });
-        if (unitSpan && unitSpan.addEventListener) {
-            const openDropdown = (ev) => {
-                if (ev) {
-                    try { ev.preventDefault(); } catch (_) { }
-                    try { ev.stopPropagation(); } catch (_) { }
-                }
-                let entry = unitDropdownRegistry.get(key);
-                if (!entry || !entry.wrap || !entry.dropdown) {
-                    renderParticleValueFromTheme({ id: cfg.id, nameKey: key });
-                    entry = unitDropdownRegistry.get(key);
-                }
-                if (!entry || !entry.wrap || !entry.dropdown) return;
-                const toggle = () => {
-                    const dropdown = entry.dropdown;
-                    const isOpen = dropdown && typeof dropdown.isDropDownOpen === 'function'
-                        ? dropdown.isDropDownOpen()
-                        : false;
-                    if (!isOpen) {
-                        try { positionUnitDropdownEntry(entry); } catch (_) { }
-                    }
-                    if (dropdown && typeof dropdown.toggleDropDown === 'function') {
-                        dropdown.toggleDropDown();
-                    } else if (entry.wrap) {
-                        try { entry.wrap.click(); } catch (_) { }
-                    }
-                };
-                if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-                    window.requestAnimationFrame(toggle);
-                } else {
-                    toggle();
-                }
-            };
-            const events = window.PointerEvent ? ['pointerdown'] : ['mousedown', 'click'];
-            events.forEach(evtName => {
-                const opts = (evtName === 'pointerdown' || evtName === 'mousedown') ? { passive: false } : false;
-                unitSpan.addEventListener(evtName, openDropdown, opts);
-            });
-            unitSpan.addEventListener('touchstart', openDropdown, { passive: false });
-        }
+        attachDropdownTrigger(unitSpan);
     }
 
-    // Empêche le parent d'intercepter le premier clic pour permettre le double‑clic immédiat
-    if (valueSpan) {
+    if (valueSpan && allowInlineEdit) {
         ['mousedown', 'click'].forEach(ev => {
             valueSpan.addEventListener(ev, (e) => { e.stopPropagation(); });
         });
+    }
+
+    if (triggerDropdownOnItem) {
+        if (valueSpan && !allowInlineEdit) {
+            attachDropdownTrigger(valueSpan);
+        }
+        if (!allowInlineEdit && wrap) {
+            attachDropdownTrigger(wrap);
+        }
     }
 
     // Inline edit on double click (value only; unit stays static)
@@ -979,7 +1010,7 @@ function renderParticleValueFromTheme(cfg) {
         input.addEventListener('blur', commit);
     };
     // Attach on value text only to avoid accidental edit on unit
-    if (valueSpan && valueSpan.addEventListener) {
+    if (valueSpan && valueSpan.addEventListener && allowInlineEdit) {
         valueSpan.style.cursor = 'text';
         valueSpan.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
         // Mobile double-tap detection
@@ -1015,29 +1046,36 @@ function renderParticleValueFromTheme(cfg) {
             ['touchend', 'touchcancel'].forEach(evName => valueSpan.addEventListener(evName, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
         })();
     }
+    if (valueSpan && valueSpan.style && !allowInlineEdit) {
+        valueSpan.style.cursor = triggerDropdownOnItem ? 'pointer' : 'default';
+    }
     if (wrap && wrap.addEventListener) {
-        wrap.style.cursor = 'text';
-        // Stop simple clic pour ne pas déclencher une expansion avant le double‑clic
-        wrap.addEventListener('mousedown', (e) => { e.stopPropagation(); });
-        wrap.addEventListener('click', (e) => { e.stopPropagation(); });
-        wrap.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
-        // Same mobile support on the whole wrap (in case value span is small)
-        (function setupWrapMobileTap() {
-            let lastTapTime = 0; let lastX = 0, lastY = 0; const TAP_DELAY = 320; const MAX_DIST = 28;
-            wrap.addEventListener('touchstart', (ev) => {
-                if (!ev.touches || !ev.touches.length) return;
-                const t = ev.touches[0];
-                const now = Date.now();
-                const dx = t.clientX - lastX; const dy = t.clientY - lastY; const dist = Math.sqrt(dx * dx + dy * dy);
-                if (now - lastTapTime < TAP_DELAY && dist < MAX_DIST) {
-                    ev.stopPropagation(); ev.preventDefault(); lastTapTime = 0; beginEdit(); return;
-                }
-                lastTapTime = now; lastX = t.clientX; lastY = t.clientY;
-            }, { passive: true });
-            let lpTimer = null; let pressed = false;
-            wrap.addEventListener('touchstart', (ev) => { pressed = true; if (lpTimer) clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (pressed) { try { ev.stopPropagation(); } catch (_) { } beginEdit(); } }, 520); }, { passive: true });
-            ['touchend', 'touchcancel'].forEach(n => wrap.addEventListener(n, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
-        })();
+        if (allowInlineEdit) {
+            wrap.style.cursor = 'text';
+            // Stop simple clic pour ne pas déclencher une expansion avant le double‑clic
+            wrap.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+            wrap.addEventListener('click', (e) => { e.stopPropagation(); });
+            wrap.addEventListener('dblclick', (e) => { e.stopPropagation(); beginEdit(); });
+            // Same mobile support on the whole wrap (in case value span is small)
+            (function setupWrapMobileTap() {
+                let lastTapTime = 0; let lastX = 0, lastY = 0; const TAP_DELAY = 320; const MAX_DIST = 28;
+                wrap.addEventListener('touchstart', (ev) => {
+                    if (!ev.touches || !ev.touches.length) return;
+                    const t = ev.touches[0];
+                    const now = Date.now();
+                    const dx = t.clientX - lastX; const dy = t.clientY - lastY; const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (now - lastTapTime < TAP_DELAY && dist < MAX_DIST) {
+                        ev.stopPropagation(); ev.preventDefault(); lastTapTime = 0; beginEdit(); return;
+                    }
+                    lastTapTime = now; lastX = t.clientX; lastY = t.clientY;
+                }, { passive: true });
+                let lpTimer = null; let pressed = false;
+                wrap.addEventListener('touchstart', (ev) => { pressed = true; if (lpTimer) clearTimeout(lpTimer); lpTimer = setTimeout(() => { if (pressed) { try { ev.stopPropagation(); } catch (_) { } beginEdit(); } }, 520); }, { passive: true });
+                ['touchend', 'touchcancel'].forEach(n => wrap.addEventListener(n, () => { pressed = false; if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } }));
+            })();
+        } else {
+            wrap.style.cursor = triggerDropdownOnItem ? 'pointer' : 'default';
+        }
     }
 
     removeUnitDropdown(key);
@@ -1115,7 +1153,11 @@ function renderParticleValueFromTheme(cfg) {
                     if (Array.isArray(def._unitChoices) && !def._unitChoices.includes(val)) {
                         def._unitChoices.push(val);
                     }
-                    window.updateParticleValue(key, def.value, val);
+                    if (syncValueWithUnit) {
+                        window.updateParticleValue(key, val, val);
+                    } else {
+                        window.updateParticleValue(key, def.value, val);
+                    }
                 }
             });
 
@@ -1663,10 +1705,11 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
     if (newExt !== undefined) def.ext = newExt;
     const elId = `_intuition_${nameKey}`;
     const el = document.getElementById(elId);
-    if (!el) return;
-    renderParticleValueFromTheme({ id: elId, nameKey });
+    if (el) {
+        renderParticleValueFromTheme({ id: elId, nameKey });
+    }
     // Sync helper slider (use stored reference if any)
-    const host = el;
+    const host = el || null;
     const currentVal = def.value;
     if (host && host._helperSlider) {
         const comp = host._helperSlider;
@@ -1727,12 +1770,13 @@ window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
             try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
         }
     }
-    const valueChanged = newValue !== undefined && prevValue !== currentVal;
+    const handlerValue = newValue !== undefined ? newValue : currentVal;
+    const valueChanged = newValue !== undefined ? prevValue !== newValue : prevValue !== currentVal;
     if (valueChanged) {
-        runContentHandler(def, 'change', { el, nameKey, kind: 'change', value: currentVal });
+        runContentHandler(def, 'change', { el: host, nameKey, kind: 'change', value: handlerValue });
     }
     if (prevActive !== active) {
-        runContentHandler(def, active ? 'active' : 'inactive', { el, nameKey, kind: active ? 'active' : 'inactive', value: currentVal });
+        runContentHandler(def, active ? 'active' : 'inactive', { el: host, nameKey, kind: active ? 'active' : 'inactive', value: currentVal });
     }
 };
 // Toggle an inline expansion of a tool's children right after the clicked tool
@@ -2147,7 +2191,18 @@ function enforceSupportHitThrough() {
 
 window.addEventListener('resize', apply_layout);
 window.setDirection = function (dir) {
-    currentTheme.direction = String(dir).toLowerCase();
+    const nextDir = String(dir).toLowerCase();
+    currentTheme.direction = nextDir;
+    Object.keys(intuition_content || {}).forEach((nameKey) => {
+        const def = intuition_content[nameKey];
+        if (!def || !def.unit) return;
+        if (def.orientationControl) {
+            def._unitSelected = nextDir;
+            if (def.syncValueWithUnit || def._syncValueWithUnit) {
+                def.value = nextDir;
+            }
+        }
+    });
     removeAllUnitDropdowns();
     apply_layout();
     try {
