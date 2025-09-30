@@ -21,6 +21,816 @@ const DIRECTIONS = [
 let menuOpen = 'false';
 let menuStack = [];
 const unitDropdownRegistry = new Map();
+const floatingRegistry = new Map();
+let floatingCounter = 0;
+let floatingHierarchyCounter = 0;
+const editModeState = {
+    active: false,
+    pulseTimer: null,
+    dragContext: null,
+    suppressToolboxClick: false
+};
+const EDIT_DRAG_THRESHOLD = 16;
+
+function isEditModeActive() {
+    return !!editModeState.active;
+}
+
+function getEditModeColor() {
+    const fallback = '#ff6f61';
+    const themeColor = currentTheme && currentTheme.edit_mode_color;
+    if (themeColor && typeof themeColor === 'string' && themeColor.trim() !== '') {
+        return themeColor;
+    }
+    return fallback;
+}
+
+function ensureEditModeStyle() {
+    if (document.getElementById('intuition-edit-mode-style')) return;
+    const styleText = `
+        @keyframes intuition-edit-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35); }
+            50% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+
+        #toolbox.intuition-edit-mode {
+            animation: intuition-edit-pulse 1.4s ease-in-out infinite;
+            border: 2px solid var(--intuition-edit-color, ${getEditModeColor()});
+        }
+
+        .intuition-floating {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+            background: rgba(32, 32, 32, 0.55);
+            border-radius: 12px;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+            z-index: 10000020;
+        }
+
+        .intuition-floating[data-collapsed="true"] .intuition-floating-body {
+            display: none;
+        }
+
+        .intuition-floating-grip {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.45);
+            color: #ffffff;
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: grab;
+            user-select: none;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .intuition-floating-grip:active {
+            cursor: grabbing;
+        }
+
+        .intuition-floating-delete {
+            position: absolute;
+            top: 4px;
+            left: 8px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff3b30;
+            border: 2px solid rgba(255,255,255,0.85);
+            box-shadow: 0 0 6px rgba(0,0,0,0.35);
+            display: none;
+            pointer-events: auto;
+        }
+
+        .intuition-floating[data-edit="true"] .intuition-floating-delete {
+            display: block;
+        }
+
+        .intuition-floating-body {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            gap: 6px;
+        }
+    `;
+    $('style', { id: 'intuition-edit-mode-style', parent: 'head', text: styleText });
+}
+
+function applyToolboxPulse(enabled) {
+    const toolboxEl = grab('toolbox');
+    if (!toolboxEl) return;
+    if (enabled) {
+        ensureEditModeStyle();
+        toolboxEl.classList.add('intuition-edit-mode');
+        toolboxEl.style.setProperty('--intuition-edit-color', getEditModeColor());
+    } else {
+        toolboxEl.classList.remove('intuition-edit-mode');
+        toolboxEl.style.removeProperty('--intuition-edit-color');
+    }
+}
+
+function setFloatingEditMode(enabled) {
+    floatingRegistry.forEach((info) => {
+        if (!info || !info.container) return;
+        info.container.dataset.edit = enabled ? 'true' : 'false';
+        if (info.grip) {
+            info.grip.style.cursor = enabled ? 'grab' : 'pointer';
+        }
+    });
+}
+
+function suppressInteractionDuringEdit(ev) {
+    if (!isEditModeActive()) return false;
+    if (ev) {
+        if (ev.cancelable && typeof ev.preventDefault === 'function') {
+            try { ev.preventDefault(); } catch (_) { }
+        }
+        if (typeof ev.stopPropagation === 'function') {
+            try { ev.stopPropagation(); } catch (_) { }
+        }
+    }
+    return true;
+}
+
+function enterEditMode() {
+    if (editModeState.active) return;
+    editModeState.active = true;
+    applyToolboxPulse(true);
+    const supportEl = grab('toolbox_support');
+    if (supportEl) {
+        supportEl.dataset.editMode = 'true';
+    }
+    setFloatingEditMode(true);
+}
+
+function exitEditMode() {
+    if (!editModeState.active) return;
+    editModeState.active = false;
+    applyToolboxPulse(false);
+    const supportEl = grab('toolbox_support');
+    if (supportEl) {
+        delete supportEl.dataset.editMode;
+    }
+    setFloatingEditMode(false);
+    editModeState.dragContext = null;
+    editModeState.suppressToolboxClick = false;
+}
+
+function toggleEditMode(force) {
+    if (typeof force === 'boolean') {
+        if (force) enterEditMode(); else exitEditMode();
+        return;
+    }
+    if (isEditModeActive()) exitEditMode(); else enterEditMode();
+}
+
+function ensureFloatingLayer() {
+    let layer = document.getElementById('intuition-floating-layer');
+    if (layer) return layer;
+    ensureEditModeStyle();
+    layer = $('div', {
+        id: 'intuition-floating-layer',
+        parent: 'body',
+        css: {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            width: '100vw',
+            height: '100vh',
+            pointerEvents: 'none',
+            zIndex: 10000010
+        }
+    });
+    return layer;
+}
+
+function resolveItemSizePx() {
+    const size = currentTheme && currentTheme.item_size;
+    if (size == null) return 54;
+    if (typeof size === 'number') return size;
+    const parsed = parseFloat(size);
+    return Number.isFinite(parsed) ? parsed : 54;
+}
+
+function updateFloatingGripLayout() {
+    const { isHorizontal } = getDirMeta();
+    const itemSize = resolveItemSizePx();
+    floatingRegistry.forEach((info) => {
+        if (!info || !info.grip) return;
+        const grip = info.grip;
+        const heightPx = isHorizontal ? itemSize : Math.max(18, Math.round(itemSize / 2));
+        const widthPx = isHorizontal ? Math.max(18, Math.round(itemSize / 2)) : itemSize;
+        grip.style.height = `${heightPx}px`;
+        grip.style.minHeight = `${heightPx}px`;
+        grip.style.lineHeight = `${heightPx}px`;
+        grip.style.width = `${widthPx}px`;
+        grip.style.minWidth = `${widthPx}px`;
+        grip.style.display = 'flex';
+        grip.style.alignItems = 'center';
+        grip.style.justifyContent = 'center';
+        const spacing = currentTheme && currentTheme.items_spacing ? String(currentTheme.items_spacing) : '6px';
+        if (isHorizontal) {
+            grip.style.marginRight = spacing;
+            grip.style.marginBottom = '0';
+        } else {
+            grip.style.marginRight = '0';
+            grip.style.marginBottom = spacing;
+        }
+        if (info.container) {
+            info.container.style.display = 'flex';
+            info.container.style.flexDirection = isHorizontal ? 'row' : 'column';
+            info.container.style.alignItems = isHorizontal ? 'center' : 'stretch';
+        }
+        if (info.body) {
+            info.body.style.display = 'flex';
+            info.body.style.flexDirection = isHorizontal ? 'row' : 'column';
+            info.body.style.alignItems = isHorizontal ? 'center' : 'stretch';
+            info.body.style.justifyContent = 'flex-start';
+            info.body.style.padding = spacing;
+            info.body.style.gap = spacing;
+            info.body.style.margin = '0';
+        }
+        if (Array.isArray(info.sections)) {
+            info.sections.forEach((sectionId) => {
+                const sectionEl = document.getElementById(sectionId);
+                if (!sectionEl) return;
+                sectionEl.style.flexDirection = isHorizontal ? 'row' : 'column';
+                sectionEl.style.alignItems = isHorizontal ? 'center' : 'stretch';
+            });
+        }
+    });
+}
+
+function moveFloatingTo(info, left, top) {
+    if (!info || !info.container) return;
+    info.container.style.left = `${left}px`;
+    info.container.style.top = `${top}px`;
+}
+
+function clampFloatingToViewport(info) {
+    if (!info || !info.container) return;
+    const rect = info.container.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth || 1280;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 720;
+    let left = rect.left;
+    let top = rect.top;
+    if (left + rect.width > vw) left = Math.max(0, vw - rect.width - 12);
+    if (top + rect.height > vh) top = Math.max(0, vh - rect.height - 12);
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+    moveFloatingTo(info, left, top);
+}
+
+function toggleFloatingCollapse(id, force) {
+    const info = floatingRegistry.get(id);
+    if (!info || !info.container) return;
+    const collapsed = typeof force === 'boolean' ? force : !info.collapsed;
+    info.collapsed = collapsed;
+    info.container.dataset.collapsed = collapsed ? 'true' : 'false';
+}
+
+function removeFloating(id) {
+    const info = typeof id === 'string' ? floatingRegistry.get(id) : id;
+    if (!info) return;
+    if (info.container && info.container.parentElement) {
+        try { info.container.parentElement.removeChild(info.container); } catch (_) { }
+    }
+    floatingRegistry.delete(info.id || id);
+}
+
+function attachFloatingGripInteractions(info) {
+    if (!info || !info.grip) return;
+    const grip = info.grip;
+    if (!grip._floatingInteractionsAttached) {
+        grip.addEventListener('pointerdown', (e) => {
+            if (!isEditModeActive()) return;
+            e.preventDefault();
+            e.stopPropagation();
+            beginFloatingMove(e, info);
+        });
+        grip.addEventListener('click', (e) => {
+            if (isEditModeActive()) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            toggleFloatingCollapse(info.id);
+        });
+        grip._floatingInteractionsAttached = true;
+    }
+    if (info.deleteBtn && !info.deleteBtn._floatingDeleteAttached) {
+        info.deleteBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isEditModeActive()) return;
+            removeFloating(info);
+        });
+        info.deleteBtn._floatingDeleteAttached = true;
+    }
+}
+
+function createFloatingHost(opts = {}) {
+    const layer = ensureFloatingLayer();
+    const itemSize = resolveItemSizePx();
+    const id = `intuition-floating-${++floatingCounter}`;
+    const left = Math.max(0, (opts.x != null ? opts.x : 0) - itemSize / 2);
+    const top = Math.max(0, (opts.y != null ? opts.y : 0) - itemSize / 2);
+    const container = $('div', {
+        id,
+        parent: '#intuition-floating-layer',
+        class: 'intuition-floating',
+        css: {
+            left: `${left}px`,
+            top: `${top}px`,
+            pointerEvents: 'auto'
+        }
+    });
+    container.dataset.type = opts.type || 'item';
+    container.dataset.collapsed = 'false';
+
+    const grip = $('div', {
+        id: `${id}__grip`,
+        parent: `#${id}`,
+        class: 'intuition-floating-grip',
+        text: (opts.title || 'item').toUpperCase()
+    });
+
+    const deleteBtn = $('div', {
+        id: `${id}__delete`,
+        parent: `#${id}__grip`,
+        class: 'intuition-floating-delete'
+    });
+
+    const body = $('div', {
+        id: `${id}__body`,
+        parent: `#${id}`,
+        class: 'intuition-floating-body'
+    });
+
+    const info = {
+        id,
+        container,
+        grip,
+        deleteBtn,
+        body,
+        title: opts.title || 'item',
+        type: opts.type || 'item',
+        nameKeys: [],
+        collapsed: false
+    };
+    floatingRegistry.set(id, info);
+    attachFloatingGripInteractions(info);
+    updateFloatingGripLayout();
+    setFloatingEditMode(isEditModeActive());
+    return info;
+}
+
+function inferDefinitionType(def) {
+    if (!def || typeof def !== 'object') return 'item';
+    if (def.type === palette) return 'palette';
+    if (def.type === tool) return 'tool';
+    if (def.type === particle) return 'particle';
+    if (def.type === option) return 'option';
+    if (def.type === zonespecial) return 'zonespecial';
+    return 'item';
+}
+
+function setupEditModeDrag(el, meta = {}) {
+    if (!el || el._editDragAttached) return;
+    const handler = (ev) => {
+        if (!isEditModeActive()) return;
+        if (editModeState.dragContext) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const nameKey = meta.nameKey || (el.dataset ? el.dataset.nameKey : null);
+        if (!nameKey) return;
+        const capturePointerId = (typeof ev.pointerId === 'number') ? ev.pointerId : null;
+        if (capturePointerId != null && typeof el.setPointerCapture === 'function') {
+            try { el.setPointerCapture(capturePointerId); } catch (_) { }
+        }
+        beginMenuItemDrag(ev, {
+            el,
+            nameKey,
+            label: meta.label || el.getAttribute('data-label') || nameKey,
+            typeName: meta.typeName || inferDefinitionType(intuition_content[nameKey]),
+            capturePointerId
+        });
+    };
+    ['pointerdown'].forEach(evt => el.addEventListener(evt, handler, true));
+    el._editDragAttached = true;
+}
+
+function addFloatingEntry(info, nameKey, target, opts = {}) {
+    if (!info || !nameKey) return null;
+    const host = target || info.body;
+    if (!host) return null;
+    const def = opts.definition || intuition_content[nameKey];
+    if (!def || typeof def.type !== 'function') return null;
+    if (!host.id) {
+        host.id = `${info.id}__host_${++floatingHierarchyCounter}`;
+    }
+    const typeName = inferDefinitionType(def);
+    const datasetNameKey = opts.datasetNameKey || nameKey;
+    const idPrefix = opts.idPrefix || `${info.id}__floating`;
+    const uniqueId = opts.customId || `${idPrefix}_${info.nameKeys.length}_${nameKey}`;
+    const params = {
+        id: uniqueId,
+        label: def.label || nameKey,
+        icon: Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : nameKey,
+        nameKey: datasetNameKey,
+        parent: `#${host.id}`
+    };
+    if (opts.extraParams && typeof opts.extraParams === 'object') {
+        Object.assign(params, opts.extraParams);
+    }
+    def.type(params);
+    const created = document.getElementById(uniqueId);
+    if (created) {
+        try { created.dataset.nameKey = datasetNameKey; } catch (_) { }
+        created.dataset.floating = 'true';
+        const makeVisible = opts.forceVisible !== false;
+        if (makeVisible) {
+            created.style.visibility = 'visible';
+            created.style.opacity = '1';
+            created.style.transform = 'translate3d(0,0,0)';
+        }
+        created.style.flex = '0 0 auto';
+        created.style.alignSelf = 'stretch';
+        applyBackdropStyle(created, currentTheme.tool_backDrop_effect);
+        setupEditModeDrag(created, { nameKey: datasetNameKey, label: def.label || nameKey, typeName });
+    }
+    info.nameKeys.push(datasetNameKey);
+    return created;
+}
+
+function spawnFloatingFromMenuItem(nameKey, opts = {}) {
+    const def = intuition_content[nameKey];
+    if (!def) return null;
+    const info = createFloatingHost({
+        title: opts.label || def.label || nameKey,
+        type: inferDefinitionType(def),
+        x: opts.x,
+        y: opts.y
+    });
+    const spacing = currentTheme && currentTheme.items_spacing ? String(currentTheme.items_spacing) : '6px';
+    const { isHorizontal } = getDirMeta();
+    info.body.innerHTML = '';
+    info.body.style.display = 'flex';
+    info.body.style.flexDirection = isHorizontal ? 'row' : 'column';
+    info.body.style.alignItems = 'center';
+    info.body.style.justifyContent = 'flex-start';
+    info.body.style.gap = spacing;
+    info.body.style.padding = '0';
+    info.body.style.pointerEvents = 'auto';
+
+    addFloatingEntry(info, nameKey, info.body, { forceVisible: true });
+    if (nameKey !== 'settings' && intuition_content.settings && typeof intuition_content.settings.type === 'function') {
+        addFloatingEntry(info, 'settings', info.body, { forceVisible: true });
+    }
+
+    clampFloatingToViewport(info);
+    return info;
+}
+
+function getVisibleMenuEntries() {
+    const supportEl = grab('toolbox_support');
+    if (!supportEl) return [];
+    const entries = [];
+    Array.from(supportEl.children || []).forEach((child) => {
+        if (!child || child.id === '_intuition_overflow_forcer') return;
+        const key = child.dataset ? child.dataset.nameKey : null;
+        if (key) entries.push(key);
+    });
+    return entries;
+}
+
+function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
+    if (!nameKeys || !nameKeys.length) return null;
+    const info = createFloatingHost({
+        title: opts.title || 'palette',
+        type: 'palette',
+        x: opts.x,
+        y: opts.y
+    });
+    const spacing = currentTheme && currentTheme.items_spacing ? String(currentTheme.items_spacing) : '6px';
+    const { isHorizontal } = getDirMeta();
+    info.body.style.flexDirection = isHorizontal ? 'row' : 'column';
+    info.body.style.flexWrap = 'nowrap';
+    info.body.style.gap = spacing;
+    info.body.style.justifyContent = 'flex-start';
+    info.body.style.alignItems = isHorizontal ? 'center' : 'stretch';
+    info.body.style.alignContent = 'flex-start';
+    info.body.style.overflowX = isHorizontal ? 'auto' : 'hidden';
+    info.body.style.overflowY = isHorizontal ? 'hidden' : 'auto';
+
+    nameKeys.forEach((key) => {
+        const def = intuition_content[key];
+        if (!def) return;
+        addFloatingEntry(info, key);
+    });
+
+    clampFloatingToViewport(info);
+    return info;
+}
+
+function ensureFloatingElementId(el, info) {
+    if (!el) return null;
+    if (!el.id || !el.id.length) {
+        el.id = `${info.id}__auto_${++floatingHierarchyCounter}`;
+    }
+    return el.id;
+}
+
+function populateFloatingHierarchy(info, nameKey, parentEl, depth = 0, options = {}) {
+    if (!info || !parentEl) return null;
+    const def = intuition_content[nameKey];
+    if (!def) return null;
+    ensureFloatingElementId(parentEl, info);
+    const entry = addFloatingEntry(info, nameKey, parentEl, {
+        datasetNameKey: nameKey,
+        forceVisible: true,
+        idPrefix: `${info.id}__floating_entry`
+    });
+    if (!entry) return null;
+    entry.dataset.floatingDepth = String(depth);
+    entry.style.flex = '0 0 auto';
+    entry.style.alignSelf = options.isHorizontal ? 'center' : 'flex-start';
+    const indentStep = options.indent || 12;
+    const maxIndentDepth = options.maxIndentDepth != null ? options.maxIndentDepth : 4;
+    const appliedDepth = Math.min(depth, maxIndentDepth);
+    if (appliedDepth > 0) {
+        const indentPx = `${appliedDepth * indentStep}px`;
+        if (options.isHorizontal) {
+            entry.style.marginTop = indentPx;
+        } else {
+            entry.style.marginLeft = indentPx;
+        }
+    }
+    const children = Array.isArray(def.children) ? def.children : [];
+    if (!children.length) return entry;
+    const childWrapId = `${entry.id}__children_${++floatingHierarchyCounter}`;
+    const nextDepth = depth + 1;
+    const childIndentDepth = Math.min(nextDepth, maxIndentDepth);
+    const childIndentPx = `${childIndentDepth * indentStep}px`;
+    const childWrap = $('div', {
+        id: childWrapId,
+        parent: `#${parentEl.id}`,
+        class: 'intuition-floating-children',
+        css: {
+            display: 'flex',
+            flexDirection: options.isHorizontal ? 'row' : 'column',
+            flexWrap: 'wrap',
+            gap: options.spacing || '6px',
+            alignItems: options.isHorizontal ? 'center' : 'stretch',
+            width: '100%',
+            boxSizing: 'border-box',
+            paddingLeft: options.isHorizontal ? '0' : childIndentPx,
+            paddingTop: options.isHorizontal ? childIndentPx : '0',
+            pointerEvents: 'auto'
+        }
+    });
+    childWrap.dataset.parent = nameKey;
+    children.forEach((childKey) => {
+        populateFloatingHierarchy(info, childKey, childWrap, nextDepth, options);
+    });
+    return entry;
+}
+
+function beginToolboxDrag(ev) {
+    if (!isEditModeActive()) return;
+    if (editModeState.dragContext) return;
+    const entries = getVisibleMenuEntries();
+    const pointerId = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const ctx = {
+        kind: 'toolbox',
+        pointerId,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        entries,
+        floatingInfo: null
+    };
+    ctx.moveHandler = (e) => handleToolboxDragMove(e, ctx);
+    ctx.upHandler = (e) => finishToolboxDrag(e, ctx);
+    document.addEventListener('pointermove', ctx.moveHandler, true);
+    document.addEventListener('pointerup', ctx.upHandler, true);
+    document.addEventListener('pointercancel', ctx.upHandler, true);
+    document.addEventListener('pointerleave', ctx.upHandler, true);
+    editModeState.dragContext = ctx;
+    ev.preventDefault();
+    ev.stopPropagation();
+}
+
+function handleToolboxDragMove(e, ctx) {
+    if (editModeState.dragContext !== ctx) return;
+    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    if (!ctx.floatingInfo) {
+        const dist = Math.hypot(x - ctx.startX, y - ctx.startY);
+        if (dist < EDIT_DRAG_THRESHOLD) return;
+        if (!ctx.entries || !ctx.entries.length) {
+            cleanupDragContext(ctx);
+            return;
+        }
+        ctx.floatingInfo = spawnFloatingPaletteFromSupport(ctx.entries, {
+            title: 'toolbox',
+            x,
+            y
+        });
+        if (!ctx.floatingInfo) {
+            cleanupDragContext(ctx);
+            return;
+        }
+        const rect = ctx.floatingInfo.container.getBoundingClientRect();
+        ctx.offsetX = rect.width / 2;
+        ctx.offsetY = rect.height / 2;
+    }
+    const left = x - (ctx.offsetX || 0);
+    const top = y - (ctx.offsetY || 0);
+    moveFloatingTo(ctx.floatingInfo, left, top);
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function finishToolboxDrag(e, ctx) {
+    if (editModeState.dragContext !== ctx) return;
+    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    if (ctx.floatingInfo) clampFloatingToViewport(ctx.floatingInfo);
+    cleanupDragContext(ctx);
+}
+
+function cleanupDragContext(ctx) {
+    if (!ctx) return;
+    if (ctx.originEl && typeof ctx.originEl.releasePointerCapture === 'function' && ctx.capturePointerId != null) {
+        try { ctx.originEl.releasePointerCapture(ctx.capturePointerId); } catch (_) { }
+    }
+    if (ctx.moveHandler) {
+        document.removeEventListener('pointermove', ctx.moveHandler, true);
+        document.removeEventListener('pointerup', ctx.upHandler, true);
+        document.removeEventListener('pointercancel', ctx.upHandler, true);
+        document.removeEventListener('pointerleave', ctx.upHandler, true);
+    }
+    editModeState.dragContext = null;
+}
+
+function beginMenuItemDrag(ev, meta) {
+    const pointerKey = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const ctx = {
+        kind: 'menu-item',
+        pointerId: pointerKey,
+        nameKey: meta.nameKey,
+        label: meta.label,
+        typeName: meta.typeName,
+        startX: ev.clientX,
+        startY: ev.clientY,
+        floatingInfo: null,
+        originEl: meta.el || meta.originEl || null,
+        capturePointerId: (typeof meta.capturePointerId === 'number') ? meta.capturePointerId : (typeof pointerKey === 'number' ? pointerKey : null)
+    };
+    ctx.moveHandler = (e) => handleMenuItemDragMove(e, ctx);
+    ctx.upHandler = (e) => finishMenuItemDrag(e, ctx);
+    document.addEventListener('pointermove', ctx.moveHandler, true);
+    document.addEventListener('pointerup', ctx.upHandler, true);
+    document.addEventListener('pointercancel', ctx.upHandler, true);
+    document.addEventListener('pointerleave', ctx.upHandler, true);
+    editModeState.dragContext = ctx;
+}
+
+function handleMenuItemDragMove(e, ctx) {
+    if (editModeState.dragContext !== ctx) return;
+    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    const x = e.clientX;
+    const y = e.clientY;
+    if (!ctx.floatingInfo) {
+        const dist = Math.hypot(x - ctx.startX, y - ctx.startY);
+        if (dist < EDIT_DRAG_THRESHOLD) return;
+        ctx.floatingInfo = spawnFloatingFromMenuItem(ctx.nameKey, { label: ctx.label, typeName: ctx.typeName, x: x, y: y });
+        if (!ctx.floatingInfo) {
+            cleanupDragContext(ctx);
+            return;
+        }
+        const rect = ctx.floatingInfo.container.getBoundingClientRect();
+        ctx.offsetX = rect.width / 2;
+        ctx.offsetY = rect.height / 2;
+    }
+    const left = x - (ctx.offsetX || 0);
+    const top = y - (ctx.offsetY || 0);
+    moveFloatingTo(ctx.floatingInfo, left, top);
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function finishMenuItemDrag(e, ctx) {
+    if (editModeState.dragContext !== ctx) return;
+    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    if (ctx.floatingInfo) {
+        clampFloatingToViewport(ctx.floatingInfo);
+    }
+    cleanupDragContext(ctx);
+}
+
+function beginFloatingMove(ev, info) {
+    if (!info || !info.container) return;
+    const rect = info.container.getBoundingClientRect();
+    const pointerId = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const ctx = {
+        kind: 'floating-move',
+        pointerId,
+        floatingInfo: info,
+        offsetX: ev.clientX - rect.left,
+        offsetY: ev.clientY - rect.top
+    };
+    ctx.moveHandler = (e) => handleFloatingMove(e, ctx);
+    ctx.upHandler = (e) => finishFloatingMove(e, ctx);
+    document.addEventListener('pointermove', ctx.moveHandler, true);
+    document.addEventListener('pointerup', ctx.upHandler, true);
+    document.addEventListener('pointercancel', ctx.upHandler, true);
+    document.addEventListener('pointerleave', ctx.upHandler, true);
+    editModeState.dragContext = ctx;
+}
+
+function handleFloatingMove(e, ctx) {
+    if (editModeState.dragContext !== ctx) return;
+    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    const left = e.clientX - (ctx.offsetX || 0);
+    const top = e.clientY - (ctx.offsetY || 0);
+    moveFloatingTo(ctx.floatingInfo, left, top);
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function finishFloatingMove(e, ctx) {
+    if (editModeState.dragContext !== ctx) return;
+    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    if (ctx.floatingInfo) clampFloatingToViewport(ctx.floatingInfo);
+    cleanupDragContext(ctx);
+}
+
+function attachToolboxEditBehavior(toolboxEl) {
+    if (!toolboxEl || toolboxEl._editBehaviorAttached) return;
+    const longPressDelay = 600;
+    let longPressTimer = null;
+    let pointerId = null;
+    let startX = 0;
+    let startY = 0;
+
+    const clearTimer = () => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+    };
+
+    const onPointerDown = (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        startX = e.clientX;
+        startY = e.clientY;
+        pointerId = e.pointerId != null ? e.pointerId : 'mouse';
+        if (isEditModeActive()) {
+            beginToolboxDrag(e);
+            return;
+        }
+        clearTimer();
+        longPressTimer = setTimeout(() => {
+            enterEditMode();
+            editModeState.suppressToolboxClick = true;
+        }, longPressDelay);
+        try { toolboxEl.setPointerCapture(pointerId); } catch (_) { }
+    };
+
+    const onPointerMove = (e) => {
+        if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
+        if (longPressTimer) {
+            const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+            if (dist > 14) {
+                clearTimer();
+            }
+        }
+    };
+
+    const finalize = (e) => {
+        if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
+        clearTimer();
+        try { toolboxEl.releasePointerCapture(pointerId); } catch (_) { }
+        pointerId = null;
+    };
+
+    toolboxEl.addEventListener('pointerdown', onPointerDown);
+    toolboxEl.addEventListener('pointermove', onPointerMove);
+    toolboxEl.addEventListener('pointerup', finalize);
+    toolboxEl.addEventListener('pointercancel', finalize);
+    toolboxEl._editBehaviorAttached = true;
+}
 
 const palette = createPalette;
 const tool = createTool;
@@ -99,7 +909,8 @@ const Intuition_theme = {
         anim_bounce_overshoot: 0.09,
         // Elasticity controls extra rebounds (0 = back easing, 1 = strong elastic)
         anim_elasticity: 6,
-        direction: "top_left_horizontal"
+        direction: "top_left_horizontal",
+        edit_mode_color: '#ff6f61'
     }
 };
 
@@ -269,7 +1080,21 @@ const toolbox = {
         zIndex: 10000000,
         ...calculatedCSS.toolbox
     },
-    click: function (e) { openMenu('toolbox'); },
+    click: function (e) {
+        if (editModeState.suppressToolboxClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            editModeState.suppressToolboxClick = false;
+            return;
+        }
+        if (isEditModeActive()) {
+            e.preventDefault();
+            e.stopPropagation();
+            exitEditMode();
+            return;
+        }
+        openMenu('toolbox');
+    },
     label: null,
     icon: 'menu'
 };
@@ -298,6 +1123,7 @@ function openMenu(parent) {
                 if (itemEl) {
                     try { itemEl.dataset.nameKey = name; } catch (e) { /* ignore */ }
                     applyBackdropStyle(itemEl, currentTheme.tool_backDrop_effect);
+                    setupEditModeDrag(itemEl, { nameKey: name, label, typeName: inferDefinitionType(def) });
                     created.push(itemEl);
                 }
             } else {
@@ -495,6 +1321,7 @@ function createPalette(cfg) {
     createLabel(finalCfg);
     createIcon(finalCfg);
     el.addEventListener('click', (e) => {
+        if (suppressInteractionDuringEdit(e)) return;
         // el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
         // el.style.width = parseFloat(currentTheme.item_size) * 3 + 'px';
         e.stopPropagation();
@@ -516,18 +1343,21 @@ function createTool(cfg) {
 
     // Base click: behaves as 'touch' semantic event
     el.addEventListener('click', (e) => {
+        if (suppressInteractionDuringEdit(e)) return;
         e.stopPropagation();
         handleToolSemanticEvent('touch', el, def, e);
     });
     // Pointer/touch down
     ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
         el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
             handleToolSemanticEvent('touch_down', el, def, e);
-        }, { passive: true });
+        }, { passive: false });
     });
     // Pointer/touch up (use capture to ensure firing even if propagation canceled in children)
     ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
         el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
             handleToolSemanticEvent('touch_up', el, def, e);
         }, true);
     });
@@ -559,18 +1389,21 @@ function createOption(cfg) {
     const def = nameKey ? intuition_content[nameKey] : null;
     // Click behaves like semantic 'touch'
     el.addEventListener('click', (e) => {
+        if (suppressInteractionDuringEdit(e)) return;
         e.stopPropagation();
         handleToolSemanticEvent('touch', el, def, e);
     });
     // Pointer/touch down
     ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
         el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
             handleToolSemanticEvent('touch_down', el, def, e);
-        }, { passive: true });
+        }, { passive: false });
     });
     // Pointer/touch up
     ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
         el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
             handleToolSemanticEvent('touch_up', el, def, e);
         }, true);
     });
@@ -587,16 +1420,19 @@ function createZonespecial(cfg) {
     const nameKey = finalCfg.nameKey;
     const def = nameKey ? intuition_content[nameKey] : null;
     el.addEventListener('click', (e) => {
+        if (suppressInteractionDuringEdit(e)) return;
         e.stopPropagation();
         handleToolSemanticEvent('touch', el, def, e);
     });
     ['pointerdown', 'mousedown', 'touchstart'].forEach(ev => {
         el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
             handleToolSemanticEvent('touch_down', el, def, e);
-        }, { passive: true });
+        }, { passive: false });
     });
     ['pointerup', 'mouseup', 'touchend', 'touchcancel', 'pointercancel'].forEach(ev => {
         el.addEventListener(ev, (e) => {
+            if (suppressInteractionDuringEdit(e)) return;
             handleToolSemanticEvent('touch_up', el, def, e);
         }, true);
     });
@@ -681,6 +1517,7 @@ function attachToolLockBehavior(el, cfg) {
             ev.preventDefault();
             return; // n'ouvre pas le menu pour le clic synthétique post long press
         }
+        if (suppressInteractionDuringEdit(ev)) return;
         if (locking) {
             // Sort du lock mais laisse remonter l'event pour expansion/fermeture
             exitLock();
@@ -688,6 +1525,7 @@ function attachToolLockBehavior(el, cfg) {
     }, true);
 
     const startPress = (ev) => {
+        if (suppressInteractionDuringEdit(ev)) return;
         // Ignore second pointer if already tracking
         pressActive = true;
         if (pressTimer) clearTimeout(pressTimer);
@@ -744,6 +1582,7 @@ function runContentHandler(def, handlerName, payload = {}) {
 
 function handleToolSemanticEvent(kind, el, def, rawEvent) {
     if (!el) return;
+    if (isEditModeActive()) return;
     const nameKey = el.dataset && el.dataset.nameKey;
     if (!def && nameKey) {
         try { def = intuition_content[nameKey]; } catch (_) { }
@@ -1877,6 +2716,7 @@ function ensureIntuitionLayerRoot() {
 function createToolbox() {
     intuitionCommon(toolbox_support);
     const toolboxEl = intuitionCommon(toolbox);
+    attachToolboxEditBehavior(toolboxEl);
     // Ensure scrolling on the toolbox controls the support overflow
     setupToolboxScrollProxy();
     enforceSupportHitThrough();
@@ -2362,6 +3202,7 @@ function getDirMeta() {
 }
 
 function handlePaletteClick(el, cfg) {
+    if (isEditModeActive()) return;
 
     // Exclusif: ramener l'ancien palette si présent
     const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
@@ -2515,21 +3356,24 @@ function popOutPaletteByName(name, opts = {}) {
     const supportEl = grab('toolbox_support');
     if (!supportEl || !name) return null;
     const id = `_intuition_${name}`;
+    const def = intuition_content[name];
+    if (!def || typeof def.type !== 'function') return null;
+    const label = def.label || name;
+    const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
     let el = grab(id);
     if (!el) {
-        const def = intuition_content[name];
-        if (!def || typeof def.type !== 'function') return null;
-        const label = def.label || name;
-        const icon = Object.prototype.hasOwnProperty.call(def, 'icon') ? def.icon : name;
         const optionalParams = { id, label, icon, nameKey: name, parent: '#toolbox_support' };
         def.type(optionalParams);
         el = grab(id);
         if (!el) return null;
-        try { el.dataset.nameKey = name; } catch (e) { /* ignore */ }
-        applyBackdropStyle(el, currentTheme.tool_backDrop_effect);
     } else {
         // Ensure dataset carries the logical key
         try { if (el && el.dataset && !el.dataset.nameKey) el.dataset.nameKey = name; } catch (e) { /* ignore */ }
+    }
+    if (el) {
+        try { el.dataset.nameKey = name; } catch (e) { /* ignore */ }
+        applyBackdropStyle(el, currentTheme.tool_backDrop_effect);
+        setupEditModeDrag(el, { nameKey: name, label, typeName: inferDefinitionType(def) });
     }
 
     const { anchorRect } = opts;
@@ -2678,6 +3522,7 @@ function rebuildSupportWithChildren(childrenNames, excludeId) {
             if (childEl) {
                 try { childEl.dataset.nameKey = name; } catch (e) { /* ignore */ }
                 applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
+                setupEditModeDrag(childEl, { nameKey: name, label, typeName: inferDefinitionType(def) });
                 createdEls.push(childEl);
             }
         });
@@ -2720,6 +3565,7 @@ function rebuildSupportToNames(names) {
             if (childEl) {
                 try { childEl.dataset.nameKey = name; } catch (e) { /* ignore */ }
                 applyBackdropStyle(childEl, currentTheme.tool_backDrop_effect);
+                setupEditModeDrag(childEl, { nameKey: name, label, typeName: inferDefinitionType(def) });
                 createdEls.push(childEl);
             }
         });

@@ -79,6 +79,7 @@ const light_theme = {
   toolbox_icon_size: '30%',      // px, %, ou ratio (0..1)
   toolbox_icon_top: '50%',       // position verticale
   toolbox_icon_left: '50%',
+  edit_mode_color: '#ff6f61',
   toolboxOffsetMain: "7px",
   toolboxOffsetEdge: "19px",
   satellite_offset: '0px',
@@ -175,7 +176,7 @@ const intuition_content = {
   //
   file: { type: 'palette', children: ['import', 'load', 'save'] },
   tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
-  settings: { type: 'palette', children: ['orientation', 'email'], icon: false },
+  settings: { type: 'palette', children: ['orientation'], icon: false },
   capture: { label: 'record', type: 'tool', icon: 'record' },
   perform: { label: 'perform', type: 'tool', icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
