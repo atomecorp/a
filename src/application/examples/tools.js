@@ -175,7 +175,7 @@ const intuition_content = {
   toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
   //
   file: { type: 'palette', children: ['import', 'load', 'save'] },
-  tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
+  tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch, floatingMenuKey: 'record_child_tools' },
   settings: { type: 'palette', children: ['orientation'], icon: false },
   capture: { label: 'record', type: 'tool', icon: 'record' },
   perform: { label: 'perform', type: 'tool', icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
@@ -227,6 +227,37 @@ const intuition_content = {
   R: { type: 'particle', unit: ['%', 'px', 'em', 'rem', 'vw'], value: 20, ext: 3 },
 
 };
+
+function cloneContentEntry(name, overrides = {}) {
+  const source = intuition_content[name];
+  if (!source || typeof source !== 'object') {
+    return { ...overrides };
+  }
+  const clone = { ...source };
+  if (Array.isArray(source.children)) {
+    clone.children = source.children.slice();
+  }
+  if (Array.isArray(source.unit)) {
+    clone.unit = source.unit.slice();
+  }
+  if (source.unitLabelMap && typeof source.unitLabelMap === 'object') {
+    clone.unitLabelMap = { ...source.unitLabelMap };
+  }
+  return { ...clone, ...overrides };
+}
+
+const record_child_content = {
+  record_child_tools: cloneContentEntry('tools', {
+    children: ['record_child_volume', 'record_child_ADSR', 'record_child_controller']
+  }),
+  record_child_volume: cloneContentEntry('volume'),
+  record_child_ADSR: cloneContentEntry('ADSR'),
+  record_child_controller: cloneContentEntry('controller')
+};
+
+delete record_child_content.record_child_tools.floatingMenuKey;
+
+Intuition({ name: 'newMenu_record_child', theme: light_theme, content: record_child_content, orientation: DEFAULT_ORIENTATION, merge: true });
 
 Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
 

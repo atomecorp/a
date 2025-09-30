@@ -302,8 +302,69 @@ function toggleFloatingCollapse(id, force) {
 function removeFloating(id) {
     const info = typeof id === 'string' ? floatingRegistry.get(id) : id;
     if (!info) return;
-    if (info.container && info.container.parentElement) {
-        try { info.container.parentElement.removeChild(info.container); } catch (_) { }
+    if (info.dependents && info.dependents.size) {
+        Array.from(info.dependents).forEach((depId) => {
+            if (!depId || depId === info.id) return;
+            removeFloating(depId);
+        });
+        info.dependents.clear();
+    }
+
+    if (info.activeSatellites instanceof Map && info.activeSatellites.size) {
+        Array.from(info.activeSatellites.entries()).forEach(([satKey, satState]) => {
+            disposeFloatingSatelliteState(info, satKey, satState, { preventCascade: true, skipDelete: true });
+        });
+        info.activeSatellites.clear();
+    }
+
+    if (info.parentFloatingId) {
+        const parentInfo = floatingRegistry.get(info.parentFloatingId);
+        if (parentInfo && parentInfo.dependents) {
+            parentInfo.dependents.delete(info.id);
+        }
+        if (parentInfo) {
+            const sourceKey = info.sourcePaletteKey
+                || (info.container && info.container.dataset && info.container.dataset.sourcePalette)
+                || null;
+            if (sourceKey) {
+                if (parentInfo.activeSatellites instanceof Map && parentInfo.activeSatellites.has(sourceKey)) {
+                    const satState = parentInfo.activeSatellites.get(sourceKey);
+                    disposeFloatingSatelliteState(parentInfo, sourceKey, satState, { preventCascade: true });
+                }
+                if (Array.isArray(parentInfo.menuStack) && parentInfo.menuStack.length) {
+                    const idx = parentInfo.menuStack.findIndex((entry) => entry && entry.parent === sourceKey);
+                    if (idx >= 0) {
+                        parentInfo.menuStack.splice(idx);
+                    }
+                }
+                const topEntry = parentInfo.menuStack && parentInfo.menuStack[parentInfo.menuStack.length - 1];
+                const fallbackKeys = topEntry && Array.isArray(topEntry.children)
+                    ? topEntry.children.slice()
+                    : (Array.isArray(parentInfo.rootChildren) && parentInfo.rootChildren.length
+                        ? parentInfo.rootChildren.slice()
+                        : parentInfo.nameKeys.slice());
+                if (parentInfo.body && parentInfo.container && floatingRegistry.has(parentInfo.id)) {
+                    ensureFloatingStackRoot(parentInfo);
+                    renderFloatingBody(parentInfo, fallbackKeys);
+                }
+            }
+        }
+    }
+
+    if (info.container) {
+        const linkedPalettes = typeof document !== 'undefined'
+            ? document.querySelectorAll(`[data-floating-satellite-id="${info.id}"]`)
+            : [];
+        if (linkedPalettes && linkedPalettes.length) {
+            linkedPalettes.forEach((node) => {
+                if (!node || !node.dataset) return;
+                delete node.dataset.floatingSatelliteId;
+                setPaletteVisualState(node, false);
+            });
+        }
+        if (info.container.parentElement) {
+            try { info.container.parentElement.removeChild(info.container); } catch (_) { }
+        }
     }
     floatingRegistry.delete(info.id || id);
 }
@@ -356,6 +417,9 @@ function createFloatingHost(opts = {}) {
         }
     });
     container.dataset.type = opts.type || 'item';
+    if (opts.role) {
+        container.dataset.role = opts.role;
+    }
     container.dataset.collapsed = 'false';
 
     const grip = $('div', {
@@ -386,13 +450,44 @@ function createFloatingHost(opts = {}) {
         title: opts.title || 'item',
         type: opts.type || 'item',
         nameKeys: [],
-        collapsed: false
+        collapsed: false,
+        parentFloatingId: opts.parentFloatingId || null,
+        dependents: new Set(),
+        rootChildren: [],
+        menuStack: [],
+        activeSatellites: new Map(),
+        sourcePaletteKey: opts.sourcePalette || null
     };
     floatingRegistry.set(id, info);
+    if (info.parentFloatingId && floatingRegistry.has(info.parentFloatingId)) {
+        const parentInfo = floatingRegistry.get(info.parentFloatingId);
+        if (parentInfo) {
+            if (!parentInfo.dependents) parentInfo.dependents = new Set();
+            parentInfo.dependents.add(info.id);
+        }
+        container.dataset.parentFloatingId = info.parentFloatingId;
+    }
     attachFloatingGripInteractions(info);
     updateFloatingGripLayout();
     setFloatingEditMode(isEditModeActive());
     return info;
+}
+
+function resolveFloatingInfoFromElement(el) {
+    if (!el) return null;
+    if (typeof el.closest === 'function') {
+        const container = el.closest('.intuition-floating');
+        if (container && floatingRegistry.has(container.id)) {
+            return floatingRegistry.get(container.id) || null;
+        }
+    }
+    const hostId = el.dataset
+        ? (el.dataset.floatingHostId || el.dataset.parentFloatingId || el.dataset.sourceFloatingHost)
+        : null;
+    if (hostId && floatingRegistry.has(hostId)) {
+        return floatingRegistry.get(hostId) || null;
+    }
+    return null;
 }
 
 function inferDefinitionType(def) {
@@ -441,8 +536,9 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
     }
     const typeName = inferDefinitionType(def);
     const datasetNameKey = opts.datasetNameKey || nameKey;
-    const idPrefix = opts.idPrefix || `${info.id}__floating`;
-    const uniqueId = opts.customId || `${idPrefix}_${info.nameKeys.length}_${nameKey}`;
+    const safeKey = String(nameKey).replace(/[^a-z0-9_-]/gi, '_');
+    const idPrefix = opts.idPrefix || `${info.id}__floating_${safeKey}`;
+    const uniqueId = opts.customId || `${idPrefix}_${info.nameKeys.length}`;
     const params = {
         id: uniqueId,
         label: def.label || nameKey,
@@ -458,6 +554,12 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
     if (created) {
         try { created.dataset.nameKey = datasetNameKey; } catch (_) { }
         created.dataset.floating = 'true';
+        try { created.dataset.floatingHostId = info.id; } catch (_) { }
+        if (info.parentFloatingId) {
+            try { created.dataset.parentFloatingId = info.parentFloatingId; } catch (_) { }
+        } else if (created.dataset && created.dataset.parentFloatingId) {
+            delete created.dataset.parentFloatingId;
+        }
         const makeVisible = opts.forceVisible !== false;
         if (makeVisible) {
             created.style.visibility = 'visible';
@@ -514,13 +616,45 @@ function getVisibleMenuEntries() {
     return entries;
 }
 
+function renderFloatingBody(info, nameKeys) {
+    if (!info || !info.body) return;
+    const keys = Array.isArray(nameKeys) ? nameKeys.filter(Boolean) : [];
+    info.nameKeys = [];
+    while (info.body.firstChild) {
+        try { info.body.removeChild(info.body.firstChild); } catch (_) { break; }
+    }
+    keys.forEach((key) => {
+        const entry = addFloatingEntry(info, key, info.body, { forceVisible: true });
+        if (entry && entry.dataset && entry.dataset.floatingSatelliteId) {
+            delete entry.dataset.floatingSatelliteId;
+        }
+        if (entry && info.activeSatellites instanceof Map && info.activeSatellites.has(key)) {
+            const activeState = info.activeSatellites.get(key);
+            const activeId = (activeState && typeof activeState === 'object') ? activeState.id : activeState;
+            if (activeId && entry.dataset) {
+                entry.dataset.floatingSatelliteId = activeId;
+                entry.dataset.floating = 'true';
+                entry.dataset.floatingHostId = info.id;
+            }
+            setPaletteVisualState(entry, true);
+        }
+    });
+    if (info.body) {
+        info.body.scrollTop = 0;
+        info.body.scrollLeft = 0;
+    }
+}
+
 function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
     if (!nameKeys || !nameKeys.length) return null;
     const info = createFloatingHost({
         title: opts.title || 'palette',
         type: 'palette',
         x: opts.x,
-        y: opts.y
+        y: opts.y,
+        parentFloatingId: opts.parentFloatingId || null,
+        role: opts.role || 'palette',
+        sourcePalette: opts.sourcePalette || null
     });
     const spacing = currentTheme && currentTheme.items_spacing ? String(currentTheme.items_spacing) : '6px';
     const { isHorizontal } = getDirMeta();
@@ -532,12 +666,10 @@ function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
     info.body.style.alignContent = 'flex-start';
     info.body.style.overflowX = isHorizontal ? 'auto' : 'hidden';
     info.body.style.overflowY = isHorizontal ? 'hidden' : 'auto';
-
-    nameKeys.forEach((key) => {
-        const def = intuition_content[key];
-        if (!def) return;
-        addFloatingEntry(info, key);
-    });
+    const normalizedKeys = Array.isArray(nameKeys) ? nameKeys.filter(Boolean) : [];
+    info.rootChildren = normalizedKeys.slice();
+    info.menuStack = [{ parent: opts.sourcePalette || null, children: info.rootChildren.slice(), title: opts.title || 'palette' }];
+    renderFloatingBody(info, info.rootChildren);
 
     clampFloatingToViewport(info);
     return info;
@@ -3201,8 +3333,157 @@ function getDirMeta() {
     return { isHorizontal, isTop, isBottom, isLeft, isRight, isReverse, dir };
 }
 
+function computeFloatingSatelliteOrigin(anchorRect) {
+    const gap = getSatelliteOffset();
+    const { isHorizontal, isBottom, isTop, isLeft, isRight } = getDirMeta();
+    const centerX = anchorRect.left + (anchorRect.width || 0) / 2;
+    const centerY = anchorRect.top + (anchorRect.height || 0) / 2;
+    let x = centerX;
+    let y = centerY;
+    if (isHorizontal) {
+        if (isBottom) {
+            y = anchorRect.bottom + gap;
+        } else if (isTop) {
+            y = anchorRect.top - gap;
+        } else {
+            y = centerY + (anchorRect.height || 0) / 2 + gap;
+        }
+    } else {
+        if (isRight) {
+            x = anchorRect.right + gap;
+        } else if (isLeft) {
+            x = anchorRect.left - gap;
+        } else {
+            x = centerX + (anchorRect.width || 0) / 2 + gap;
+        }
+    }
+    return { x, y };
+}
+
+function ensureFloatingStackRoot(info) {
+    if (!info) return;
+    if (!Array.isArray(info.rootChildren) || !info.rootChildren.length) {
+        info.rootChildren = Array.isArray(info.nameKeys) ? info.nameKeys.slice() : [];
+    }
+    if (!Array.isArray(info.menuStack) || !info.menuStack.length) {
+        const baseChildren = info.rootChildren && info.rootChildren.length
+            ? info.rootChildren.slice()
+            : (Array.isArray(info.nameKeys) ? info.nameKeys.slice() : []);
+        info.menuStack = [{ parent: null, children: baseChildren, title: info.title || 'palette' }];
+    }
+}
+
+function getFloatingFallbackKeys(info) {
+    if (!info) return [];
+    const stack = Array.isArray(info.menuStack) ? info.menuStack : [];
+    const top = stack[stack.length - 1];
+    if (top && Array.isArray(top.children)) {
+        return top.children.slice();
+    }
+    if (Array.isArray(info.rootChildren) && info.rootChildren.length) {
+        return info.rootChildren.slice();
+    }
+    return Array.isArray(info.nameKeys) ? info.nameKeys.slice() : [];
+}
+
+function disposeFloatingSatelliteState(hostInfo, nameKey, state, opts = {}) {
+    if (!state) return;
+    if (typeof state === 'object' && state.el) {
+        try { setLabelCentered(state.el, false); } catch (_) { }
+        try { setPaletteVisualState(state.el, false); } catch (_) { }
+        if (state.el.dataset) {
+            delete state.el.dataset.floatingSatellite;
+            delete state.el.dataset.floatingSatelliteId;
+            delete state.el.dataset.floatingHostId;
+            delete state.el.dataset.floatingNameKey;
+            delete state.el.dataset.floatingPaletteTitle;
+            delete state.el.dataset.sourcePalette;
+        }
+        try { state.el.remove(); } catch (_) { }
+        if (state.placeholder && state.placeholder.parentElement) {
+            try { state.placeholder.parentElement.removeChild(state.placeholder); } catch (_) { }
+        }
+    } else if (typeof state === 'string' && floatingRegistry.has(state) && !opts.preventCascade) {
+        removeFloating(state);
+    }
+    if (!opts.skipDelete && hostInfo && hostInfo.activeSatellites instanceof Map) {
+        hostInfo.activeSatellites.delete(nameKey);
+    }
+}
+
+function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle) {
+    if (!hostInfo || !el) return null;
+    const rect = el.getBoundingClientRect();
+    const width = rect.width || el.offsetWidth || resolveItemSizePx();
+    const height = rect.height || el.offsetHeight || resolveItemSizePx();
+    const origin = computeFloatingSatelliteOrigin(rect);
+    const satelliteId = ensureFloatingElementId(el, hostInfo);
+    if (!satelliteId) return null;
+
+    if (el.parentElement) {
+        try { el.parentElement.removeChild(el); } catch (_) { }
+    }
+    if (typeof document !== 'undefined' && document.body && el.parentElement !== document.body) {
+        try { document.body.appendChild(el); } catch (_) { }
+    }
+
+    if (el.dataset) {
+        el.dataset.floatingHostId = hostInfo.id;
+        el.dataset.floatingSatellite = 'true';
+        el.dataset.sourcePalette = nameKey;
+        el.dataset.floatingNameKey = nameKey;
+        el.dataset.floatingSatelliteId = satelliteId;
+        if (paletteTitle) {
+            el.dataset.floatingPaletteTitle = paletteTitle;
+        } else if (el.dataset.floatingPaletteTitle) {
+            delete el.dataset.floatingPaletteTitle;
+        }
+    }
+
+    const vw = window.innerWidth || document.documentElement.clientWidth || 1280;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 720;
+    let left = origin.x - width / 2;
+    let top = origin.y - height / 2;
+    if (left + width > vw) left = Math.max(0, vw - width - 12);
+    if (top + height > vh) top = Math.max(0, vh - height - 12);
+    if (left < 0) left = 0;
+    if (top < 0) top = 0;
+
+    el.style.position = 'fixed';
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
+    el.style.margin = '0';
+    el.style.zIndex = '10000005';
+    el.style.visibility = 'visible';
+    el.style.opacity = '1';
+    el.style.transform = 'translate3d(0,0,0)';
+
+    setLabelCentered(el, true);
+    setPaletteVisualState(el, true);
+
+    return {
+        type: 'element',
+        id: satelliteId,
+        el,
+        hostId: hostInfo.id,
+        nameKey,
+        paletteTitle: paletteTitle || null,
+        width,
+        height,
+        anchor: rect,
+        top,
+        left
+    };
+}
+
 function handlePaletteClick(el, cfg) {
     if (isEditModeActive()) return;
+    if (el && el.dataset && el.dataset.floating === 'true') {
+        handleFloatingPaletteClick(el, cfg);
+        return;
+    }
 
     // Exclusif: ramener l'ancien palette si présent
     const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
@@ -3349,6 +3630,106 @@ function handlePaletteClick(el, cfg) {
         menuStack.push({ parent: key, children: desc.children.slice() });
         rebuildSupportWithChildren(desc.children, el.id);
     }
+}
+
+function handleFloatingPaletteClick(el, cfg) {
+    if (!el) return;
+    const nameKey = (el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    if (!nameKey) return;
+    const def = intuition_content[nameKey];
+    if (!def) return;
+    const hostInfo = resolveFloatingInfoFromElement(el);
+    if (!hostInfo) return;
+    if (!(hostInfo.activeSatellites instanceof Map)) {
+        hostInfo.activeSatellites = new Map();
+    }
+    const activeMap = hostInfo.activeSatellites;
+    const existingState = activeMap.get(nameKey);
+    if (existingState) {
+        if (Array.isArray(hostInfo.menuStack) && hostInfo.menuStack.length) {
+            const idx = hostInfo.menuStack.findIndex((entry) => entry && entry.parent === nameKey);
+            if (idx >= 0) {
+                hostInfo.menuStack.splice(idx);
+            }
+            if (!hostInfo.menuStack.length) {
+                ensureFloatingStackRoot(hostInfo);
+            }
+        }
+        const fallbackKeys = getFloatingFallbackKeys(hostInfo);
+        disposeFloatingSatelliteState(hostInfo, nameKey, existingState);
+        renderFloatingBody(hostInfo, fallbackKeys);
+        return;
+    }
+
+    const floatingMenuKey = def && def.floatingMenuKey;
+    const floatingDef = floatingMenuKey ? intuition_content[floatingMenuKey] : null;
+    let children = [];
+    let paletteTitle = def.label || nameKey;
+    if (floatingDef && Array.isArray(floatingDef.children)) {
+        children = floatingDef.children.filter(Boolean);
+        if (floatingDef.label) {
+            paletteTitle = floatingDef.label;
+        }
+    }
+    if (!children.length) {
+        children = Array.isArray(def.children) ? def.children.filter(Boolean) : [];
+    }
+    if (!children.length) {
+        setPaletteVisualState(el, false);
+        return;
+    }
+
+    ensureFloatingStackRoot(hostInfo);
+
+    const placeholder = document.createElement('div');
+    placeholder.id = `${el.id || `${hostInfo.id}__${nameKey}`}__placeholder`;
+    placeholder.style.width = `${el.offsetWidth}px`;
+    placeholder.style.height = `${el.offsetHeight}px`;
+    placeholder.style.flex = '0 0 auto';
+    placeholder.style.display = 'inline-block';
+    placeholder.style.borderRadius = getComputedStyle(el).borderRadius;
+    if (el.parentElement) {
+        try { el.parentElement.insertBefore(placeholder, el); } catch (_) { }
+    }
+
+    const satelliteState = createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle);
+    if (!satelliteState) {
+        try { placeholder.remove(); } catch (_) { }
+        return;
+    }
+
+    satelliteState.placeholder = placeholder;
+    activeMap.set(nameKey, satelliteState);
+    hostInfo.menuStack.push({ parent: nameKey, children: children.slice(), title: paletteTitle });
+    renderFloatingBody(hostInfo, children);
+
+    const bodyEls = Array.from(hostInfo.body ? hostInfo.body.children : []);
+    bodyEls.forEach((childEl) => {
+        if (!childEl || !childEl.dataset) return;
+        childEl.dataset.floating = 'true';
+        childEl.dataset.floatingHostId = hostInfo.id;
+        childEl.dataset.parentFloatingId = hostInfo.parentFloatingId || hostInfo.id;
+        const childKey = childEl.dataset.nameKey;
+        const isBackItem = childKey && childKey === nameKey && childEl.id && childEl.id.endsWith('__placeholder');
+        if (childKey && childKey !== nameKey && hostInfo.menuStack.length > 1) {
+            childEl.dataset.floatingBack = 'true';
+            childEl.addEventListener('click', (evt) => {
+                if (isEditModeActive()) return;
+                evt.preventDefault();
+                evt.stopPropagation();
+                const stack = hostInfo.menuStack;
+                if (!Array.isArray(stack) || stack.length < 2) return;
+                const lastEntry = stack.pop();
+                if (!lastEntry) return;
+                if (hostInfo.activeSatellites instanceof Map && hostInfo.activeSatellites.has(lastEntry.parent)) {
+                    const prevState = hostInfo.activeSatellites.get(lastEntry.parent);
+                    disposeFloatingSatelliteState(hostInfo, lastEntry.parent, prevState);
+                }
+                const fallback = getFloatingFallbackKeys(hostInfo);
+                renderFloatingBody(hostInfo, fallback);
+            }, { once: true });
+        }
+    });
 }
 
 // Helper to pop out a palette by name without altering the navigation stack
@@ -3790,26 +4171,56 @@ function applyContentOption(contentOption) {
     }
 }
 
+function mergeContentOption(contentOption) {
+    if (!contentOption || typeof contentOption !== 'object') return;
+    if (contentOption.version !== undefined) {
+        intuition_content.version = contentOption.version;
+    }
+    if (contentOption.meta !== undefined) {
+        const metaSnapshot = clonePlainIntuitionValue(contentOption.meta);
+        if (!intuition_content.meta || typeof intuition_content.meta !== 'object') {
+            intuition_content.meta = metaSnapshot;
+        } else {
+            Object.assign(intuition_content.meta, metaSnapshot);
+        }
+    }
+    Object.keys(contentOption).forEach((key) => {
+        if (key === 'version' || key === 'meta') return;
+        intuition_content[key] = normalizeContentEntry(contentOption[key]);
+    });
+}
+
 const Intuition = function Intuition(options = {}) {
     const intuitionRoot = ensureIntuitionLayerRoot();
     const shouldBootstrap = intuitionRoot && !bootstrapIntuition._initialized;
+    const mergeContent = options && (options.merge === true || options.mergeContent === true);
     applyThemeOption(options.theme);
-    applyContentOption(options.content);
-    const requestedDirection = options && (options.orientation || options.direction);
-    if (requestedDirection) {
-        window.setDirection(requestedDirection);
+    if (options.content) {
+        if (mergeContent) {
+            mergeContentOption(options.content);
+        } else {
+            applyContentOption(options.content);
+        }
     }
-    if (typeof options.open === 'boolean') {
+    const requestedDirection = options && (options.orientation || options.direction);
+    if (requestedDirection && !mergeContent) {
+        window.setDirection(requestedDirection);
+    } else if (requestedDirection && mergeContent) {
+        currentTheme.direction = String(requestedDirection).toLowerCase();
+    }
+    if (!mergeContent && typeof options.open === 'boolean') {
         if (options.open) {
             openMenu('toolbox');
         } else {
             closeMenu();
         }
     }
-    if (shouldBootstrap) {
-        bootstrapIntuition();
-    } else if (intuitionRoot) {
-        apply_layout();
+    if (!mergeContent) {
+        if (shouldBootstrap) {
+            bootstrapIntuition();
+        } else if (intuitionRoot) {
+            apply_layout();
+        }
     }
     return {
         open: () => openMenu('toolbox'),
