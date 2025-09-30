@@ -289,6 +289,7 @@ function clampFloatingToViewport(info) {
     if (left < 0) left = 0;
     if (top < 0) top = 0;
     moveFloatingTo(info, left, top);
+    repositionActiveSatellites(info);
 }
 
 function toggleFloatingCollapse(id, force) {
@@ -897,6 +898,7 @@ function handleFloatingMove(e, ctx) {
     const left = e.clientX - (ctx.offsetX || 0);
     const top = e.clientY - (ctx.offsetY || 0);
     moveFloatingTo(ctx.floatingInfo, left, top);
+    repositionActiveSatellites(ctx.floatingInfo);
     e.preventDefault();
     e.stopPropagation();
 }
@@ -904,7 +906,10 @@ function handleFloatingMove(e, ctx) {
 function finishFloatingMove(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
     if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
-    if (ctx.floatingInfo) clampFloatingToViewport(ctx.floatingInfo);
+    if (ctx.floatingInfo) {
+        clampFloatingToViewport(ctx.floatingInfo);
+        repositionActiveSatellites(ctx.floatingInfo);
+    }
     cleanupDragContext(ctx);
 }
 
@@ -3455,18 +3460,110 @@ function disposeFloatingSatelliteState(hostInfo, nameKey, state, opts = {}) {
     }
 }
 
+function repositionActiveSatellites(info) {
+    if (!info || !(info.activeSatellites instanceof Map) || !info.activeSatellites.size) return;
+    const hostRectRaw = info.body && typeof info.body.getBoundingClientRect === 'function'
+        ? info.body.getBoundingClientRect()
+        : (info.container && typeof info.container.getBoundingClientRect === 'function'
+            ? info.container.getBoundingClientRect()
+            : null);
+    if (!hostRectRaw) return;
+    const hostRect = {
+        left: hostRectRaw.left,
+        top: hostRectRaw.top,
+        width: hostRectRaw.width,
+        height: hostRectRaw.height,
+        right: hostRectRaw.right != null ? hostRectRaw.right : (hostRectRaw.left + hostRectRaw.width),
+        bottom: hostRectRaw.bottom != null ? hostRectRaw.bottom : (hostRectRaw.top + hostRectRaw.height)
+    };
+    info.activeSatellites.forEach((state, key) => {
+        if (!state || state.type !== 'element' || !state.el) return;
+        const anchor = state.anchor || null;
+        const offset = state.offsetFromHost || (anchor && hostRect
+            ? {
+                x: anchor.left - hostRect.left,
+                y: anchor.top - hostRect.top
+            }
+            : { x: 0, y: 0 });
+        const width = Math.max(1, state.width || state.el.offsetWidth || resolveItemSizePx());
+        const height = Math.max(1, state.height || state.el.offsetHeight || resolveItemSizePx());
+        const placeholderRect = anchor
+            ? {
+                left: hostRect.left + offset.x,
+                top: hostRect.top + offset.y,
+                width: anchor.width,
+                height: anchor.height,
+                right: hostRect.left + offset.x + anchor.width,
+                bottom: hostRect.top + offset.y + anchor.height
+            }
+            : {
+                left: hostRect.left,
+                top: hostRect.top,
+                width,
+                height: height * 2,
+                right: hostRect.left + width,
+                bottom: hostRect.top + height * 2
+            };
+        const targetPos = computeExtractedPaletteTarget(placeholderRect, hostRect, width, height);
+        state.left = targetPos.left;
+        state.top = targetPos.top;
+        state.anchor = {
+            left: placeholderRect.left,
+            top: placeholderRect.top,
+            width: placeholderRect.width,
+            height: placeholderRect.height,
+            right: placeholderRect.right,
+            bottom: placeholderRect.bottom
+        };
+        state.offsetFromHost = offset;
+        state.width = width;
+        state.height = height;
+        state.el.style.left = `${targetPos.left}px`;
+        state.el.style.top = `${targetPos.top}px`;
+        state.el.style.width = `${width}px`;
+        state.el.style.height = `${height}px`;
+    });
+}
+
 function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder) {
     if (!hostInfo || !el) return null;
     const placeholderRect = placeholder && typeof placeholder.getBoundingClientRect === 'function'
         ? placeholder.getBoundingClientRect()
         : el.getBoundingClientRect();
-    const hostRect = hostInfo.body && typeof hostInfo.body.getBoundingClientRect === 'function'
+    const hostRectRaw = hostInfo.body && typeof hostInfo.body.getBoundingClientRect === 'function'
         ? hostInfo.body.getBoundingClientRect()
         : (hostInfo.container && typeof hostInfo.container.getBoundingClientRect === 'function'
             ? hostInfo.container.getBoundingClientRect()
-            : placeholderRect);
-    const width = Math.max(1, (placeholderRect && placeholderRect.width) || el.offsetWidth || resolveItemSizePx());
-    const height = Math.max(1, (placeholderRect && placeholderRect.height) || el.offsetHeight || resolveItemSizePx());
+            : null);
+    const anchorSnapshot = placeholderRect
+        ? {
+            left: placeholderRect.left,
+            top: placeholderRect.top,
+            width: placeholderRect.width,
+            height: placeholderRect.height,
+            right: placeholderRect.right != null ? placeholderRect.right : (placeholderRect.left + placeholderRect.width),
+            bottom: placeholderRect.bottom != null ? placeholderRect.bottom : (placeholderRect.top + placeholderRect.height)
+        }
+        : null;
+    const hostRect = hostRectRaw
+        ? {
+            left: hostRectRaw.left,
+            top: hostRectRaw.top,
+            width: hostRectRaw.width,
+            height: hostRectRaw.height,
+            right: hostRectRaw.right != null ? hostRectRaw.right : (hostRectRaw.left + hostRectRaw.width),
+            bottom: hostRectRaw.bottom != null ? hostRectRaw.bottom : (hostRectRaw.top + hostRectRaw.height)
+        }
+        : null;
+    const offsetFromHost = (anchorSnapshot && hostRect)
+        ? {
+            x: anchorSnapshot.left - hostRect.left,
+            y: anchorSnapshot.top - hostRect.top
+        }
+        : { x: 0, y: 0 };
+    const width = Math.max(1, (anchorSnapshot && anchorSnapshot.width) || el.offsetWidth || resolveItemSizePx());
+    const rawHeight = Math.max(1, (anchorSnapshot && anchorSnapshot.height) || el.offsetHeight || resolveItemSizePx());
+    const targetHeight = Math.max(1, rawHeight / 2);
     const satelliteId = ensureFloatingElementId(el, hostInfo);
     if (!satelliteId) return null;
 
@@ -3490,7 +3587,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
         }
     }
 
-    const targetPos = computeExtractedPaletteTarget(placeholderRect, hostRect, width, height);
+    const targetPos = computeExtractedPaletteTarget(anchorSnapshot || hostRect, hostRect, width, targetHeight);
     const left = targetPos.left;
     const top = targetPos.top;
 
@@ -3498,7 +3595,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
     el.style.width = `${width}px`;
-    el.style.height = `${height}px`;
+    el.style.height = `${targetHeight}px`;
     el.style.margin = '0';
     el.style.zIndex = '10000004';
     el.style.visibility = 'visible';
@@ -3516,8 +3613,9 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
         nameKey,
         paletteTitle: paletteTitle || null,
         width,
-        height,
-        anchor: placeholderRect,
+        height: targetHeight,
+        anchor: anchorSnapshot,
+        offsetFromHost,
         top,
         left
     };
@@ -3532,7 +3630,7 @@ function handlePaletteClick(el, cfg) {
 
     // Exclusif: ramener l'ancien palette si présent
     const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
-    el.style.height = parseFloat(currentTheme.item_size) / 3 + 'px';
+    el.style.height = parseFloat(currentTheme.item_size) / 2 + 'px';
 
     // el.style.width = '300px';
 
