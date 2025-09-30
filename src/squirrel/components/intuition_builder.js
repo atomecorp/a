@@ -3360,6 +3360,50 @@ function computeFloatingSatelliteOrigin(anchorRect) {
     return { x, y };
 }
 
+function computeExtractedPaletteTarget(placeholderRect, supportRect, width, height) {
+    const vw = window.innerWidth || document.documentElement.clientWidth || 1280;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 720;
+    const { isHorizontal, isBottom, isTop, isLeft, isRight } = getDirMeta();
+    const gap = getSatelliteOffset();
+    const fallbackSupport = supportRect || placeholderRect;
+    if (!placeholderRect) {
+        return {
+            left: Math.max(0, Math.min(vw - width, 0)),
+            top: Math.max(0, Math.min(vh - height, 0))
+        };
+    }
+
+    if (isHorizontal) {
+        const aboveSpace = fallbackSupport ? fallbackSupport.top : placeholderRect.top;
+        const belowSpace = fallbackSupport ? (vh - fallbackSupport.bottom) : (vh - placeholderRect.bottom);
+        const preferAbove = !!isBottom;
+        let placeAbove = preferAbove;
+        if (placeAbove && aboveSpace < height + gap) placeAbove = false;
+        if (!placeAbove && !preferAbove && belowSpace < height + gap && aboveSpace >= height + gap) placeAbove = true;
+        const supportEdgeTop = fallbackSupport ? fallbackSupport.top : placeholderRect.top;
+        const supportEdgeBottom = fallbackSupport ? fallbackSupport.bottom : placeholderRect.bottom;
+        const targetTop = placeAbove ? (supportEdgeTop - height - gap) : (supportEdgeBottom + gap);
+        const clampedTop = Math.max(0, Math.min(vh - height, targetTop));
+        const baseLeft = placeholderRect.left;
+        const clampedLeft = Math.max(0, Math.min(vw - width, baseLeft));
+        return { left: clampedLeft, top: clampedTop };
+    }
+
+    const leftSpace = fallbackSupport ? fallbackSupport.left : placeholderRect.left;
+    const rightSpace = fallbackSupport ? (vw - fallbackSupport.right) : (vw - placeholderRect.right);
+    const preferLeft = !!isRight;
+    let placeLeft = preferLeft;
+    if (placeLeft && leftSpace < width + gap) placeLeft = false;
+    if (!placeLeft && !preferLeft && rightSpace < width + gap && leftSpace >= width + gap) placeLeft = true;
+    const supportEdgeLeft = fallbackSupport ? fallbackSupport.left : placeholderRect.left;
+    const supportEdgeRight = fallbackSupport ? fallbackSupport.right : placeholderRect.right;
+    const targetLeft = placeLeft ? (supportEdgeLeft - width - gap) : (supportEdgeRight + gap);
+    const clampedLeft = Math.max(0, Math.min(vw - width, targetLeft));
+    const baseTop = placeholderRect.top;
+    const clampedTop = Math.max(0, Math.min(vh - height, baseTop));
+    return { left: clampedLeft, top: clampedTop };
+}
+
 function ensureFloatingStackRoot(info) {
     if (!info) return;
     if (!Array.isArray(info.rootChildren) || !info.rootChildren.length) {
@@ -3411,12 +3455,18 @@ function disposeFloatingSatelliteState(hostInfo, nameKey, state, opts = {}) {
     }
 }
 
-function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle) {
+function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder) {
     if (!hostInfo || !el) return null;
-    const rect = el.getBoundingClientRect();
-    const width = rect.width || el.offsetWidth || resolveItemSizePx();
-    const height = rect.height || el.offsetHeight || resolveItemSizePx();
-    const origin = computeFloatingSatelliteOrigin(rect);
+    const placeholderRect = placeholder && typeof placeholder.getBoundingClientRect === 'function'
+        ? placeholder.getBoundingClientRect()
+        : el.getBoundingClientRect();
+    const hostRect = hostInfo.body && typeof hostInfo.body.getBoundingClientRect === 'function'
+        ? hostInfo.body.getBoundingClientRect()
+        : (hostInfo.container && typeof hostInfo.container.getBoundingClientRect === 'function'
+            ? hostInfo.container.getBoundingClientRect()
+            : placeholderRect);
+    const width = Math.max(1, (placeholderRect && placeholderRect.width) || el.offsetWidth || resolveItemSizePx());
+    const height = Math.max(1, (placeholderRect && placeholderRect.height) || el.offsetHeight || resolveItemSizePx());
     const satelliteId = ensureFloatingElementId(el, hostInfo);
     if (!satelliteId) return null;
 
@@ -3440,14 +3490,9 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle) {
         }
     }
 
-    const vw = window.innerWidth || document.documentElement.clientWidth || 1280;
-    const vh = window.innerHeight || document.documentElement.clientHeight || 720;
-    let left = origin.x - width / 2;
-    let top = origin.y - height / 2;
-    if (left + width > vw) left = Math.max(0, vw - width - 12);
-    if (top + height > vh) top = Math.max(0, vh - height - 12);
-    if (left < 0) left = 0;
-    if (top < 0) top = 0;
+    const targetPos = computeExtractedPaletteTarget(placeholderRect, hostRect, width, height);
+    const left = targetPos.left;
+    const top = targetPos.top;
 
     el.style.position = 'fixed';
     el.style.left = `${left}px`;
@@ -3455,7 +3500,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle) {
     el.style.width = `${width}px`;
     el.style.height = `${height}px`;
     el.style.margin = '0';
-    el.style.zIndex = '10000005';
+    el.style.zIndex = '10000004';
     el.style.visibility = 'visible';
     el.style.opacity = '1';
     el.style.transform = 'translate3d(0,0,0)';
@@ -3472,7 +3517,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle) {
         paletteTitle: paletteTitle || null,
         width,
         height,
-        anchor: rect,
+        anchor: placeholderRect,
         top,
         left
     };
@@ -3558,48 +3603,12 @@ function handlePaletteClick(el, cfg) {
     // Apply palette icon/label visibility rules while outside
     setPaletteVisualState(el, true);
 
-    // Maintenant déplacer l'élément le long de l'axe transversal pour être totalement hors du support
-    const { isHorizontal, isTop, isBottom, isLeft, isRight } = getDirMeta();
-    const gap = getSatelliteOffset();
-    const vw = window.innerWidth || document.documentElement.clientWidth;
-    const vh = window.innerHeight || document.documentElement.clientHeight;
+    // Calculer la cible externe en réutilisant la même logique que le menu principal
     const elW = el.offsetWidth;
     const elH = el.offsetHeight;
-
-    // Calcul de la cible externe (sans saut visuel, on animera via transform)
-    let targetLeft = phRect.left;
-    let targetTop = phRect.top;
-    if (isHorizontal) {
-        // axe principal = X; on sort sur Y (préférence inverse de l'ancre top/bottom)
-        const aboveSpace = supportRect.top;
-        const belowSpace = vh - supportRect.bottom;
-        const preferAbove = !!isBottom;
-        let placeAbove = preferAbove;
-        if (placeAbove && aboveSpace < elH + gap) placeAbove = false;
-        if (!placeAbove && !preferAbove && belowSpace < elH + gap && aboveSpace >= elH + gap) placeAbove = true;
-        const wantedTop = placeAbove ? (supportRect.top - elH - gap) : (supportRect.bottom + gap);
-        const clampedTop = Math.max(0, Math.min(vh - elH, wantedTop));
-        targetTop = clampedTop;
-        // garder l’axe X ancré à la placeholder, mais clamp dans l’écran
-        const baseLeft = phRect.left;
-        const clampedLeft = Math.max(0, Math.min(vw - elW, baseLeft));
-        targetLeft = clampedLeft;
-    } else {
-        // axe principal = Y; on sort sur X (préférence inverse de l'ancre left/right)
-        const leftSpace = supportRect.left;
-        const rightSpace = vw - supportRect.right;
-        const preferLeft = !!isRight;
-        let placeLeft = preferLeft;
-        if (placeLeft && leftSpace < elW + gap) placeLeft = false;
-        if (!placeLeft && !preferLeft && rightSpace < elW + gap && leftSpace >= elW + gap) placeLeft = true;
-        const wantedLeft = placeLeft ? (supportRect.left - elW - gap) : (supportRect.right + gap);
-        const clampedLeft = Math.max(0, Math.min(vw - elW, wantedLeft));
-        targetLeft = clampedLeft;
-        // garder l’axe Y ancré à la placeholder, mais clamp dans l’écran
-        const baseTop = phRect.top;
-        const clampedTop = Math.max(0, Math.min(vh - elH, baseTop));
-        targetTop = clampedTop;
-    }
+    const targetPos = computeExtractedPaletteTarget(phRect, supportRect, elW, elH);
+    const targetLeft = targetPos.left;
+    const targetTop = targetPos.top;
 
     // Animer le glissement de la position placeholder vers la position externe
     const dx = targetLeft - phRect.left;
@@ -3692,7 +3701,7 @@ function handleFloatingPaletteClick(el, cfg) {
         try { el.parentElement.insertBefore(placeholder, el); } catch (_) { }
     }
 
-    const satelliteState = createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle);
+    const satelliteState = createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder);
     if (!satelliteState) {
         try { placeholder.remove(); } catch (_) { }
         return;
@@ -3702,34 +3711,6 @@ function handleFloatingPaletteClick(el, cfg) {
     activeMap.set(nameKey, satelliteState);
     hostInfo.menuStack.push({ parent: nameKey, children: children.slice(), title: paletteTitle });
     renderFloatingBody(hostInfo, children);
-
-    const bodyEls = Array.from(hostInfo.body ? hostInfo.body.children : []);
-    bodyEls.forEach((childEl) => {
-        if (!childEl || !childEl.dataset) return;
-        childEl.dataset.floating = 'true';
-        childEl.dataset.floatingHostId = hostInfo.id;
-        childEl.dataset.parentFloatingId = hostInfo.parentFloatingId || hostInfo.id;
-        const childKey = childEl.dataset.nameKey;
-        const isBackItem = childKey && childKey === nameKey && childEl.id && childEl.id.endsWith('__placeholder');
-        if (childKey && childKey !== nameKey && hostInfo.menuStack.length > 1) {
-            childEl.dataset.floatingBack = 'true';
-            childEl.addEventListener('click', (evt) => {
-                if (isEditModeActive()) return;
-                evt.preventDefault();
-                evt.stopPropagation();
-                const stack = hostInfo.menuStack;
-                if (!Array.isArray(stack) || stack.length < 2) return;
-                const lastEntry = stack.pop();
-                if (!lastEntry) return;
-                if (hostInfo.activeSatellites instanceof Map && hostInfo.activeSatellites.has(lastEntry.parent)) {
-                    const prevState = hostInfo.activeSatellites.get(lastEntry.parent);
-                    disposeFloatingSatelliteState(hostInfo, lastEntry.parent, prevState);
-                }
-                const fallback = getFloatingFallbackKeys(hostInfo);
-                renderFloatingBody(hostInfo, fallback);
-            }, { once: true });
-        }
-    });
 }
 
 // Helper to pop out a palette by name without altering the navigation stack
