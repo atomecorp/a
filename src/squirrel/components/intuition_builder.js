@@ -22,6 +22,7 @@ let menuOpen = 'false';
 let menuStack = [];
 const unitDropdownRegistry = new Map();
 const floatingRegistry = new Map();
+const floatingPersistence = new Map();
 let floatingCounter = 0;
 let floatingHierarchyCounter = 0;
 const editModeState = {
@@ -31,6 +32,126 @@ const editModeState = {
     suppressToolboxClick: false
 };
 const EDIT_DRAG_THRESHOLD = 16;
+
+function getFloatingPersistenceStore(info) {
+    if (!info || !info.id) return null;
+    if (info.persistedExtracted instanceof Map) {
+        return info.persistedExtracted;
+    }
+    const existing = floatingPersistence.get(info.id);
+    if (existing instanceof Map) {
+        info.persistedExtracted = existing;
+        return existing;
+    }
+    return null;
+}
+
+function ensureFloatingPersistenceStore(info) {
+    const store = getFloatingPersistenceStore(info);
+    if (store) return store;
+    if (!info || !info.id) return null;
+    const bucket = new Map();
+    floatingPersistence.set(info.id, bucket);
+    info.persistedExtracted = bucket;
+    return bucket;
+}
+
+function resolveOrientationValue(theme) {
+    const dir = theme && typeof theme.direction === 'string' ? theme.direction.trim() : '';
+    if (dir) {
+        return dir.toLowerCase();
+    }
+    return 'top_left_horizontal';
+}
+
+function normalizeOffsetToNumber(raw) {
+    if (raw == null) return 0;
+    if (typeof raw === 'number') {
+        return Number.isFinite(raw) ? raw : 0;
+    }
+    const parsed = parseFloat(String(raw));
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function persistFloatingSatelliteRecord(info, nameKey, theme, metadata = {}) {
+    if (!info || !nameKey) return null;
+    const store = ensureFloatingPersistenceStore(info);
+    if (!store) return null;
+    const existing = store.get(nameKey);
+    const metaPosition = metadata && typeof metadata === 'object' ? metadata.position : null;
+    const hasLeftMeta = metaPosition && metaPosition.left != null;
+    const hasTopMeta = metaPosition && metaPosition.top != null;
+    const fallbackPosition = existing && existing.position && typeof existing.position === 'object'
+        ? existing.position
+        : null;
+    const resolvedLeft = hasLeftMeta
+        ? normalizeOffsetToNumber(metaPosition.left)
+        : (fallbackPosition && fallbackPosition.left != null
+            ? normalizeOffsetToNumber(fallbackPosition.left)
+            : null);
+    const resolvedTop = hasTopMeta
+        ? normalizeOffsetToNumber(metaPosition.top)
+        : (fallbackPosition && fallbackPosition.top != null
+            ? normalizeOffsetToNumber(fallbackPosition.top)
+            : null);
+    const record = {
+        reference: metadata.reference || (existing && existing.reference) || info.id,
+        content: {
+            key: nameKey,
+            title: metadata.paletteTitle || (existing && existing.content && existing.content.title) || null,
+            children: Array.isArray(metadata.children)
+                ? metadata.children.slice()
+                : (existing && existing.content && Array.isArray(existing.content.children)
+                    ? existing.content.children.slice()
+                    : [])
+        },
+        orientation: resolveOrientationValue(theme),
+        toolboxOffsetMain: normalizeOffsetToNumber(theme && theme.toolboxOffsetMain),
+        toolboxOffsetEdge: normalizeOffsetToNumber(theme && theme.toolboxOffsetEdge),
+        position: {
+            left: resolvedLeft,
+            top: resolvedTop
+        }
+    };
+    store.set(nameKey, record);
+
+    return record;
+}
+
+function updatePersistedFloatingSatellitePosition(info, nameKey, left, top) {
+    if (!info || !nameKey) return;
+    const store = getFloatingPersistenceStore(info);
+    if (!store || !store.has(nameKey)) return;
+    const record = store.get(nameKey);
+    if (!record || typeof record !== 'object') return;
+    const nextLeft = normalizeOffsetToNumber(left);
+    const nextTop = normalizeOffsetToNumber(top);
+    if (!record.position || typeof record.position !== 'object') {
+        record.position = { left: nextLeft, top: nextTop };
+    }
+    const prevLeft = record.position.left;
+    const prevTop = record.position.top;
+    if (prevLeft === nextLeft && prevTop === nextTop) return;
+    record.position.left = nextLeft;
+    record.position.top = nextTop;
+
+}
+
+function removePersistedFloatingSatellite(info, nameKey) {
+    if (!info || !nameKey) return;
+    const store = getFloatingPersistenceStore(info);
+    if (!store) return;
+    store.delete(nameKey);
+}
+
+function clearPersistedFloatingSatelliteStore(infoOrId) {
+    const id = typeof infoOrId === 'string' ? infoOrId : (infoOrId && infoOrId.id);
+    if (!id) return;
+    floatingPersistence.delete(id);
+    if (infoOrId && typeof infoOrId === 'object' && infoOrId.persistedExtracted instanceof Map) {
+        infoOrId.persistedExtracted.clear();
+    }
+}
 
 function isEditModeActive() {
     return !!editModeState.active;
@@ -368,6 +489,7 @@ function removeFloating(id) {
             try { info.container.parentElement.removeChild(info.container); } catch (_) { }
         }
     }
+    clearPersistedFloatingSatelliteStore(info);
     floatingRegistry.delete(info.id || id);
 }
 
@@ -459,9 +581,11 @@ function createFloatingHost(opts = {}) {
         menuStack: [],
         activeSatellites: new Map(),
         sourcePaletteKey: opts.sourcePalette || null,
-        theme: opts.theme || currentTheme
+        theme: opts.theme || currentTheme,
+        persistedExtracted: null
     };
     floatingRegistry.set(id, info);
+    ensureFloatingPersistenceStore(info);
     if (info.parentFloatingId && floatingRegistry.has(info.parentFloatingId)) {
         const parentInfo = floatingRegistry.get(info.parentFloatingId);
         if (parentInfo) {
@@ -867,6 +991,21 @@ function beginMenuItemDrag(ev, meta) {
         originEl: meta.el || meta.originEl || null,
         capturePointerId: (typeof meta.capturePointerId === 'number') ? meta.capturePointerId : (typeof pointerKey === 'number' ? pointerKey : null)
     };
+    const dragDef = meta.nameKey ? intuition_content[meta.nameKey] : null;
+    if (meta.nameKey) {
+        const dragMeta = {
+            reference: 'drag:start',
+            content: {
+                key: meta.nameKey,
+                title: (dragDef && dragDef.label) || meta.label || meta.nameKey,
+                children: Array.isArray(dragDef && dragDef.children) ? dragDef.children.slice() : []
+            },
+            orientation: resolveOrientationValue(currentTheme),
+            toolboxOffsetMain: normalizeOffsetToNumber(currentTheme && currentTheme.toolboxOffsetMain),
+            toolboxOffsetEdge: normalizeOffsetToNumber(currentTheme && currentTheme.toolboxOffsetEdge)
+        };
+
+    }
     ctx.moveHandler = (e) => handleMenuItemDragMove(e, ctx);
     ctx.upHandler = (e) => finishMenuItemDrag(e, ctx);
     document.addEventListener('pointermove', ctx.moveHandler, true);
@@ -3503,6 +3642,9 @@ function disposeFloatingSatelliteState(hostInfo, nameKey, state, opts = {}) {
     } else if (typeof state === 'string' && floatingRegistry.has(state) && !opts.preventCascade) {
         removeFloating(state);
     }
+    if (hostInfo) {
+        removePersistedFloatingSatellite(hostInfo, nameKey);
+    }
     if (!opts.skipDelete && hostInfo && hostInfo.activeSatellites instanceof Map) {
         hostInfo.activeSatellites.delete(nameKey);
     }
@@ -3571,10 +3713,11 @@ function repositionActiveSatellites(info) {
         state.el.style.top = `${targetPos.top}px`;
         state.el.style.width = `${width}px`;
         state.el.style.height = `${height}px`;
+        updatePersistedFloatingSatellitePosition(info, key, targetPos.left, targetPos.top);
     });
 }
 
-function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder) {
+function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder, options = {}) {
     if (!hostInfo || !el) return null;
     const placeholderRect = placeholder && typeof placeholder.getBoundingClientRect === 'function'
         ? placeholder.getBoundingClientRect()
@@ -3637,6 +3780,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     }
 
     const themeRef = hostInfo && hostInfo.theme ? hostInfo.theme : currentTheme;
+    const childrenSnapshot = Array.isArray(options.children) ? options.children.slice() : [];
     const targetPos = computeExtractedPaletteTarget(anchorSnapshot || hostRect, hostRect, width, targetHeight, themeRef);
     const left = targetPos.left;
     const top = targetPos.top;
@@ -3655,7 +3799,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     setLabelCentered(el, true);
     setPaletteVisualState(el, true);
 
-    return {
+    const satelliteState = {
         type: 'element',
         id: satelliteId,
         el,
@@ -3669,6 +3813,27 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
         top,
         left
     };
+
+    const persistenceRecord = persistFloatingSatelliteRecord(hostInfo, nameKey, themeRef, {
+        paletteTitle: paletteTitle || null,
+        children: childrenSnapshot,
+        position: {
+            left,
+            top
+        }
+    });
+    if (persistenceRecord) {
+        satelliteState.persistence = persistenceRecord;
+        satelliteState.orientation = persistenceRecord.orientation;
+        satelliteState.toolboxOffsetMain = persistenceRecord.toolboxOffsetMain;
+        satelliteState.toolboxOffsetEdge = persistenceRecord.toolboxOffsetEdge;
+    } else {
+        satelliteState.orientation = resolveOrientationValue(themeRef);
+        satelliteState.toolboxOffsetMain = normalizeOffsetToNumber(themeRef && themeRef.toolboxOffsetMain);
+        satelliteState.toolboxOffsetEdge = normalizeOffsetToNumber(themeRef && themeRef.toolboxOffsetEdge);
+    }
+
+    return satelliteState;
 }
 
 function handlePaletteClick(el, cfg) {
@@ -3757,6 +3922,8 @@ function handlePaletteClick(el, cfg) {
     const targetPos = computeExtractedPaletteTarget(phRect, supportRect, elW, elH, currentTheme);
     const targetLeft = targetPos.left;
     const targetTop = targetPos.top;
+    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const desc = intuition_content[key];
 
     // Animer le glissement de la position placeholder vers la position externe
     const dx = targetLeft - phRect.left;
@@ -3779,9 +3946,26 @@ function handlePaletteClick(el, cfg) {
     // Marquer l'état actif et garder les références pour restauration
     handlePaletteClick.active = { el, placeholder };
 
+    if (key) {
+        const extractedMeta = {
+            reference: 'toolbox',
+            content: {
+                key,
+                title: (desc && desc.label) || key,
+                children: Array.isArray(desc && desc.children) ? desc.children.slice() : []
+            },
+            orientation: resolveOrientationValue(currentTheme),
+            toolboxOffsetMain: normalizeOffsetToNumber(currentTheme && currentTheme.toolboxOffsetMain),
+            toolboxOffsetEdge: normalizeOffsetToNumber(currentTheme && currentTheme.toolboxOffsetEdge),
+            position: {
+                left: targetLeft,
+                top: targetTop
+            }
+        };
+
+    }
+
     // Mettre à jour les items restants avec le contenu du palette
-    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
-    const desc = intuition_content[key];
     if (desc && Array.isArray(desc.children)) {
         // Push next level into the navigation stack
         menuStack.push({ parent: key, children: desc.children.slice() });
@@ -3849,7 +4033,7 @@ function handleFloatingPaletteClick(el, cfg) {
         try { el.parentElement.insertBefore(placeholder, el); } catch (_) { }
     }
 
-    const satelliteState = createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder);
+    const satelliteState = createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, placeholder, { children });
     if (!satelliteState) {
         try { placeholder.remove(); } catch (_) { }
         return;
@@ -4204,6 +4388,88 @@ function alignSupportToToolboxEdge() {
 
 
 
+
+function cloneFloatingPersistenceRecord(record) {
+    if (!record || typeof record !== 'object') return null;
+    const content = record.content && typeof record.content === 'object'
+        ? {
+            key: record.content.key || null,
+            title: record.content.title || null,
+            children: Array.isArray(record.content.children) ? record.content.children.slice() : []
+        }
+        : {
+            key: record.content != null ? record.content : null,
+            title: null,
+            children: []
+        };
+    return {
+        reference: record.reference || null,
+        content,
+        orientation: record.orientation || 'top_left_horizontal',
+        toolboxOffsetMain: normalizeOffsetToNumber(record.toolboxOffsetMain),
+        toolboxOffsetEdge: normalizeOffsetToNumber(record.toolboxOffsetEdge),
+        position: {
+            left: record.position && record.position.left != null
+                ? normalizeOffsetToNumber(record.position.left)
+                : null,
+            top: record.position && record.position.top != null
+                ? normalizeOffsetToNumber(record.position.top)
+                : null
+        }
+    };
+}
+
+function snapshotFloatingPersistence(hostId) {
+    if (hostId) {
+        const store = floatingPersistence.get(hostId);
+        if (!(store instanceof Map)) return [];
+        return Array.from(store.values()).map((record) => cloneFloatingPersistenceRecord(record)).filter(Boolean);
+    }
+    const snapshot = {};
+    floatingPersistence.forEach((store, id) => {
+        if (!(store instanceof Map)) return;
+        snapshot[id] = Array.from(store.values()).map((record) => cloneFloatingPersistenceRecord(record)).filter(Boolean);
+    });
+    return snapshot;
+}
+
+function applyFloatingPersistenceSnapshot(hostId, records = []) {
+    if (!hostId) return;
+    const bucket = new Map();
+    if (Array.isArray(records)) {
+        records.forEach((raw) => {
+            const record = cloneFloatingPersistenceRecord(raw);
+            if (!record || !record.content || !record.content.key) return;
+            bucket.set(record.content.key, record);
+        });
+    }
+    floatingPersistence.set(hostId, bucket);
+    const info = floatingRegistry.get(hostId);
+    if (info) {
+        info.persistedExtracted = bucket;
+    }
+}
+
+window.getFloatingPalettePersistenceSnapshot = function getFloatingPalettePersistenceSnapshot(hostId) {
+    return clonePlainIntuitionValue(snapshotFloatingPersistence(hostId));
+};
+
+window.setFloatingPalettePersistenceSnapshot = function setFloatingPalettePersistenceSnapshot(hostId, records = []) {
+    applyFloatingPersistenceSnapshot(hostId, records);
+};
+
+window.clearFloatingPalettePersistenceSnapshot = function clearFloatingPalettePersistenceSnapshot(hostId) {
+    if (hostId) {
+        clearPersistedFloatingSatelliteStore(hostId);
+    } else {
+        floatingPersistence.clear();
+        floatingRegistry.forEach((info) => {
+            if (info && info.persistedExtracted instanceof Map) {
+                info.persistedExtracted.clear();
+            }
+        });
+    }
+};
 
 const INTUITION_TYPE_MAP = {
     palette,

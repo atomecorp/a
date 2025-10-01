@@ -66,7 +66,8 @@
 // import('./examples/a_svg.js');
 
 // import('./examples/basic.js');
-import('./examples/tools.js');
+// import('./examples/tools.js');
+import('./examples/events.js');
 // import('./examples/intuition.js');
 
 // import('./examples/file_drop.js');

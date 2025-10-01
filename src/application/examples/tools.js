@@ -230,3 +230,27 @@ const intuition_content = {
 
 Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
 
+$('span', {
+  // pas besoin de 'tag'
+  id: 'checker',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block',
+    left: '50%',
+    top: '50%',
+    position: 'relative',
+    transform: 'translateX(-50%)'
+  },
+  text: 'intuition content'
+});
+const checker = grab('checker');
+
+
+checker.on('click', function (e) {
+  console.log('Clic sur carte à:');
+
+});
