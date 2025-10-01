@@ -245,12 +245,18 @@ $('span', {
     position: 'relative',
     transform: 'translateX(-50%)'
   },
-  text: 'intuition content'
+  text: 'intuition content',
+  onclick: () => {
+    const snapshot = typeof window.getFloatingPalettePersistenceSnapshot === 'function'
+      ? window.getFloatingPalettePersistenceSnapshot()
+      : null;
+    if (snapshot && typeof snapshot === 'object') {
+      console.log('📦 Extracted palette metadata snapshot:', snapshot);
+    } else {
+      console.log('⚠️ Aucun extrait enregistré pour le moment (snapshot indisponible).');
+    }
+  },
 });
-const checker = grab('checker');
 
 
-checker.on('click', function (e) {
-  console.log('Clic sur carte à:');
 
-});
