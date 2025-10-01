@@ -635,7 +635,27 @@ function attachFloatingGripInteractions(info) {
 function createFloatingHost(opts = {}) {
     const layer = ensureFloatingLayer();
     const itemSize = resolveItemSizePx();
-    const id = `intuition-floating-${++floatingCounter}`;
+    const desiredId = (opts.id && typeof opts.id === 'string') ? opts.id.trim() : null;
+    let id;
+    if (desiredId) {
+        id = desiredId;
+        const numericMatch = id.match(/(\d+)$/);
+        if (numericMatch) {
+            const parsed = parseInt(numericMatch[1], 10);
+            if (Number.isFinite(parsed)) {
+                floatingCounter = Math.max(floatingCounter, parsed);
+            }
+        }
+        if (floatingRegistry.has(id)) {
+            removeFloating(id);
+        }
+        const existingNode = (typeof document !== 'undefined') ? document.getElementById(id) : null;
+        if (existingNode && existingNode.parentElement) {
+            try { existingNode.parentElement.removeChild(existingNode); } catch (_) { }
+        }
+    } else {
+        id = `intuition-floating-${++floatingCounter}`;
+    }
     const left = Math.max(0, (opts.x != null ? opts.x : 0) - itemSize / 2);
     const top = Math.max(0, (opts.y != null ? opts.y : 0) - itemSize / 2);
     const container = $('div', {
@@ -4631,7 +4651,6 @@ function cloneFloatingHostRecord(record, fallbackId = null) {
     return {
         id,
         reference: record.reference != null ? record.reference : null,
-        parent: record.parent != null ? record.parent : null,
         orientation,
         toolboxOffsetMain: normalizeOffsetToNumber(record.toolboxOffsetMain),
         toolboxOffsetEdge: normalizeOffsetToNumber(record.toolboxOffsetEdge),
@@ -4653,7 +4672,6 @@ function cloneFloatingSatelliteRecord(record, fallbackKey = null) {
         id: record.id || null,
         hostId: record.hostId || null,
         reference: record.reference != null ? record.reference : null,
-        parent: record.parent != null ? record.parent : null,
         orientation,
         toolboxOffsetMain: normalizeOffsetToNumber(record.toolboxOffsetMain),
         toolboxOffsetEdge: normalizeOffsetToNumber(record.toolboxOffsetEdge),
@@ -4741,6 +4759,112 @@ function applyFloatingPersistenceSnapshot(hostId, payload = null) {
     if (info) {
         info.persistedExtracted = store;
     }
+}
+
+function restoreExtractedFloatingElement(options = {}) {
+    const rawPayload = options && (options.content != null ? options.content : options.record);
+    if (!rawPayload) return null;
+
+    const ensureBootstrap = () => {
+        const root = ensureIntuitionLayerRoot();
+        if (root && !bootstrapIntuition._initialized) {
+            bootstrapIntuition();
+        }
+    };
+
+    ensureBootstrap();
+
+    const restoreOne = (entry) => {
+        if (!entry || typeof entry !== 'object') return null;
+        const hostPayload = entry.host ? entry.host : entry;
+        const satPayload = entry.host ? entry.satellites : entry.satellites;
+        const hostRecord = cloneFloatingHostRecord(hostPayload, hostPayload && hostPayload.id ? hostPayload.id : null);
+        if (!hostRecord) return null;
+        const children = Array.isArray(hostRecord.content.children)
+            ? hostRecord.content.children.filter(Boolean)
+            : [];
+        const title = hostRecord.content.title || hostRecord.content.key || 'palette';
+        const hostTheme = { ...currentTheme };
+        if (hostRecord.orientation) {
+            hostTheme.direction = hostRecord.orientation;
+        }
+        const info = createFloatingHost({
+            id: hostRecord.id || undefined,
+            title,
+            type: 'palette',
+            role: 'palette',
+            reference: hostRecord.reference || 'toolbox',
+            theme: hostTheme,
+            initialChildren: children
+        });
+        if (!info) return null;
+
+        info.rootChildren = children.slice();
+        info.menuStack = [{ parent: hostRecord.content.key || null, children: info.rootChildren.slice(), title }];
+        renderFloatingBody(info, info.rootChildren);
+
+        ensureFloatingHostRecord(info, hostTheme, {
+            reference: hostRecord.reference || 'toolbox',
+            position: hostRecord.position,
+            content: {
+                key: hostRecord.content.key || null,
+                title,
+                children: info.rootChildren.slice()
+            }
+        });
+
+        if (hostRecord.position && (hostRecord.position.left != null || hostRecord.position.top != null)) {
+            const baseLeft = info.container && typeof info.container.style.left === 'string'
+                ? normalizeOffsetToNumber(parseFloat(info.container.style.left))
+                : 0;
+            const baseTop = info.container && typeof info.container.style.top === 'string'
+                ? normalizeOffsetToNumber(parseFloat(info.container.style.top))
+                : 0;
+            const left = hostRecord.position.left != null ? normalizeOffsetToNumber(hostRecord.position.left) : baseLeft;
+            const top = hostRecord.position.top != null ? normalizeOffsetToNumber(hostRecord.position.top) : baseTop;
+            moveFloatingTo(info, left, top);
+            hostRecord.position = { left, top };
+        }
+        clampFloatingToViewport(info);
+
+        hostRecord.id = info.id;
+
+        const satellitesPayload = {};
+        if (satPayload && typeof satPayload === 'object') {
+            Object.keys(satPayload).forEach((key) => {
+                const satRecord = cloneFloatingSatelliteRecord(satPayload[key], key);
+                if (satRecord && satRecord.content && satRecord.content.key) {
+                    satellitesPayload[satRecord.content.key] = satRecord;
+                }
+            });
+        }
+
+        applyFloatingPersistenceSnapshot(info.id, {
+            host: hostRecord,
+            satellites: satellitesPayload
+        });
+
+        return info;
+    };
+
+    if (Array.isArray(rawPayload)) {
+        return rawPayload.map((entry) => restoreOne(entry)).filter(Boolean);
+    }
+    if (rawPayload && typeof rawPayload === 'object' && !rawPayload.id && !rawPayload.host && !rawPayload.content && !rawPayload.reference && !rawPayload.toolboxOffsetMain && !rawPayload.toolboxOffsetEdge && !rawPayload.position) {
+        const restored = [];
+        Object.keys(rawPayload).forEach((key) => {
+            const entry = rawPayload[key];
+            if (!entry) return;
+            const composite = entry && entry.host ? entry : { ...entry, id: entry.id || key };
+            if (!composite.id) composite.id = key;
+            const info = restoreOne(composite);
+            if (info) {
+                restored.push(info);
+            }
+        });
+        return restored;
+    }
+    return restoreOne(rawPayload);
 }
 
 window.getFloatingPalettePersistenceSnapshot = function getFloatingPalettePersistenceSnapshot(hostId) {
@@ -4886,6 +5010,9 @@ function mergeContentOption(contentOption) {
 }
 
 const Intuition = function Intuition(options = {}) {
+    if (options && options.type === 'extract') {
+        return restoreExtractedFloatingElement(options);
+    }
     const intuitionRoot = ensureIntuitionLayerRoot();
     const shouldBootstrap = intuitionRoot && !bootstrapIntuition._initialized;
     const mergeContent = options && (options.merge === true || options.mergeContent === true);

@@ -260,3 +260,25 @@ $('span', {
 
 
 
+setTimeout(() => {
+  const test_elem = {
+    content: { key: "capture", title: "record", children: ["capture", "settings"] },
+
+    id: "intuition-floating-1",
+
+    orientation: "top_left_horizontal",
+
+
+    position: { left: 489.5, top: 483 },
+
+    reference: "toolbox",
+
+    toolboxOffsetEdge: 19,
+
+    toolboxOffsetMain: 7
+  }
+
+  Intuition({ type: 'extract', content: test_elem });
+  puts('restore extract in 5s')
+}
+  , 5000); 
