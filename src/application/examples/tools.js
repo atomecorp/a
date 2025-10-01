@@ -228,36 +228,5 @@ const intuition_content = {
 
 };
 
-function cloneContentEntry(name, overrides = {}) {
-  const source = intuition_content[name];
-  if (!source || typeof source !== 'object') {
-    return { ...overrides };
-  }
-  const clone = { ...source };
-  if (Array.isArray(source.children)) {
-    clone.children = source.children.slice();
-  }
-  if (Array.isArray(source.unit)) {
-    clone.unit = source.unit.slice();
-  }
-  if (source.unitLabelMap && typeof source.unitLabelMap === 'object') {
-    clone.unitLabelMap = { ...source.unitLabelMap };
-  }
-  return { ...clone, ...overrides };
-}
-
-const record_child_content = {
-  record_child_tools: cloneContentEntry('tools', {
-    children: ['record_child_volume', 'record_child_ADSR', 'record_child_controller']
-  }),
-  record_child_volume: cloneContentEntry('volume'),
-  record_child_ADSR: cloneContentEntry('ADSR'),
-  record_child_controller: cloneContentEntry('controller')
-};
-
-delete record_child_content.record_child_tools.floatingMenuKey;
-
-Intuition({ name: 'newMenu_record_child', theme: light_theme, content: record_child_content, orientation: DEFAULT_ORIENTATION, merge: true });
-
 Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
 

@@ -223,10 +223,11 @@ function resolveItemSizePx() {
 }
 
 function updateFloatingGripLayout() {
-    const { isHorizontal } = getDirMeta();
     const itemSize = resolveItemSizePx();
     floatingRegistry.forEach((info) => {
         if (!info || !info.grip) return;
+        const themeRef = info && info.theme ? info.theme : currentTheme;
+        const { isHorizontal } = getDirMeta(themeRef);
         const grip = info.grip;
         const heightPx = isHorizontal ? itemSize : Math.max(18, Math.round(itemSize / 2));
         const widthPx = isHorizontal ? Math.max(18, Math.round(itemSize / 2)) : itemSize;
@@ -238,7 +239,7 @@ function updateFloatingGripLayout() {
         grip.style.display = 'flex';
         grip.style.alignItems = 'center';
         grip.style.justifyContent = 'center';
-        const spacing = currentTheme && currentTheme.items_spacing ? String(currentTheme.items_spacing) : '6px';
+        const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
         if (isHorizontal) {
             grip.style.marginRight = spacing;
             grip.style.marginBottom = '0';
@@ -457,7 +458,8 @@ function createFloatingHost(opts = {}) {
         rootChildren: [],
         menuStack: [],
         activeSatellites: new Map(),
-        sourcePaletteKey: opts.sourcePalette || null
+        sourcePaletteKey: opts.sourcePalette || null,
+        theme: opts.theme || currentTheme
     };
     floatingRegistry.set(id, info);
     if (info.parentFloatingId && floatingRegistry.has(info.parentFloatingId)) {
@@ -583,14 +585,16 @@ function spawnFloatingFromMenuItem(nameKey, opts = {}) {
         title: opts.label || def.label || nameKey,
         type: inferDefinitionType(def),
         x: opts.x,
-        y: opts.y
+        y: opts.y,
+        theme: opts.theme || currentTheme
     });
-    const spacing = currentTheme && currentTheme.items_spacing ? String(currentTheme.items_spacing) : '6px';
-    const { isHorizontal } = getDirMeta();
+    const themeRef = info && info.theme ? info.theme : currentTheme;
+    const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
+    const { isHorizontal } = getDirMeta(themeRef);
     info.body.innerHTML = '';
     info.body.style.display = 'flex';
     info.body.style.flexDirection = isHorizontal ? 'row' : 'column';
-    info.body.style.alignItems = 'center';
+    info.body.style.alignItems = isHorizontal ? 'center' : 'stretch';
     info.body.style.justifyContent = 'flex-start';
     info.body.style.gap = spacing;
     info.body.style.padding = '0';
@@ -619,30 +623,60 @@ function getVisibleMenuEntries() {
 
 function renderFloatingBody(info, nameKeys) {
     if (!info || !info.body) return;
+    const themeRef = info && info.theme ? info.theme : currentTheme;
+    const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
+    const { isHorizontal } = getDirMeta(themeRef);
     const keys = Array.isArray(nameKeys) ? nameKeys.filter(Boolean) : [];
-    info.nameKeys = [];
-    while (info.body.firstChild) {
-        try { info.body.removeChild(info.body.firstChild); } catch (_) { break; }
-    }
-    keys.forEach((key) => {
-        const entry = addFloatingEntry(info, key, info.body, { forceVisible: true });
-        if (entry && entry.dataset && entry.dataset.floatingSatelliteId) {
-            delete entry.dataset.floatingSatelliteId;
-        }
-        if (entry && info.activeSatellites instanceof Map && info.activeSatellites.has(key)) {
-            const activeState = info.activeSatellites.get(key);
-            const activeId = (activeState && typeof activeState === 'object') ? activeState.id : activeState;
-            if (activeId && entry.dataset) {
-                entry.dataset.floatingSatelliteId = activeId;
-                entry.dataset.floating = 'true';
-                entry.dataset.floatingHostId = info.id;
+    info.body.style.display = 'flex';
+    info.body.style.flexDirection = isHorizontal ? 'row' : 'column';
+    info.body.style.flexWrap = 'nowrap';
+    info.body.style.gap = spacing;
+    info.body.style.justifyContent = 'flex-start';
+    info.body.style.alignItems = isHorizontal ? 'center' : 'stretch';
+    info.body.style.alignContent = 'flex-start';
+    info.body.style.overflowX = isHorizontal ? 'auto' : 'hidden';
+    info.body.style.overflowY = isHorizontal ? 'hidden' : 'auto';
+    const existingChildren = Array.from(info.body.children || []).filter(Boolean);
+    const buildFreshContent = () => {
+        info.nameKeys = [];
+        info.body.innerHTML = '';
+        const createdEls = [];
+        keys.forEach((key) => {
+            const entry = addFloatingEntry(info, key, info.body, { forceVisible: true });
+            if (!entry) return;
+            if (entry.dataset && entry.dataset.floatingSatelliteId) {
+                delete entry.dataset.floatingSatelliteId;
             }
-            setPaletteVisualState(entry, true);
+            if (info.activeSatellites instanceof Map && info.activeSatellites.has(key)) {
+                const activeState = info.activeSatellites.get(key);
+                const activeId = (activeState && typeof activeState === 'object') ? activeState.id : activeState;
+                if (activeId && entry.dataset) {
+                    entry.dataset.floatingSatelliteId = activeId;
+                    entry.dataset.floating = 'true';
+                    entry.dataset.floatingHostId = info.id;
+                }
+                setPaletteVisualState(entry, true);
+            }
+            createdEls.push(entry);
+        });
+        if (info.body) {
+            info.body.scrollTop = 0;
+            info.body.scrollLeft = 0;
         }
-    });
-    if (info.body) {
-        info.body.scrollTop = 0;
-        info.body.scrollLeft = 0;
+        const animEls = createdEls.filter(Boolean);
+        if (animEls.length) {
+            requestAnimationFrame(() => {
+                slideInItems(animEls, { theme: themeRef, origin: getFloatingBodyOrigin(info, themeRef) });
+            });
+        }
+    };
+
+    if (existingChildren.length) {
+        slideOutItemsToOrigin(existingChildren, () => {
+            buildFreshContent();
+        }, { theme: themeRef, origin: getFloatingBodyOrigin(info, themeRef) });
+    } else {
+        buildFreshContent();
     }
 }
 
@@ -655,10 +689,12 @@ function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
         y: opts.y,
         parentFloatingId: opts.parentFloatingId || null,
         role: opts.role || 'palette',
-        sourcePalette: opts.sourcePalette || null
+        sourcePalette: opts.sourcePalette || null,
+        theme: opts.theme || currentTheme
     });
-    const spacing = currentTheme && currentTheme.items_spacing ? String(currentTheme.items_spacing) : '6px';
-    const { isHorizontal } = getDirMeta();
+    const themeRef = info && info.theme ? info.theme : currentTheme;
+    const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
+    const { isHorizontal } = getDirMeta(themeRef);
     info.body.style.flexDirection = isHorizontal ? 'row' : 'column';
     info.body.style.flexWrap = 'nowrap';
     info.body.style.gap = spacing;
@@ -778,7 +814,8 @@ function handleToolboxDragMove(e, ctx) {
         ctx.floatingInfo = spawnFloatingPaletteFromSupport(ctx.entries, {
             title: 'toolbox',
             x,
-            y
+            y,
+            theme: currentTheme
         });
         if (!ctx.floatingInfo) {
             cleanupDragContext(ctx);
@@ -847,7 +884,7 @@ function handleMenuItemDragMove(e, ctx) {
     if (!ctx.floatingInfo) {
         const dist = Math.hypot(x - ctx.startX, y - ctx.startY);
         if (dist < EDIT_DRAG_THRESHOLD) return;
-        ctx.floatingInfo = spawnFloatingFromMenuItem(ctx.nameKey, { label: ctx.label, typeName: ctx.typeName, x: x, y: y });
+        ctx.floatingInfo = spawnFloatingFromMenuItem(ctx.nameKey, { label: ctx.label, typeName: ctx.typeName, x: x, y: y, theme: currentTheme });
         if (!ctx.floatingInfo) {
             cleanupDragContext(ctx);
             return;
@@ -3009,18 +3046,18 @@ function easeOutElasticP(t, s) {
     return a * Math.pow(2, -10 * t) * Math.sin((t - p / 4) * c4) + 1;
 }
 
-function getEasingOpen() {
-    const elastic = Math.max(0, Math.min(1, currentTheme.anim_elasticity || 0));
+function getEasingOpen(theme = currentTheme) {
+    const elastic = Math.max(0, Math.min(1, (theme && theme.anim_elasticity) || 0));
     if (elastic > 0) {
         return (tt) => easeOutElasticP(tt, elastic);
     }
-    const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+    const s = 1.70158 + (((theme && theme.anim_bounce_overshoot) || 0.08) * 3);
     return (tt) => easeOutBackP(tt, s);
 }
 
-function getEasingClose() {
+function getEasingClose(theme = currentTheme) {
     // For closing, avoid elastic to prevent perceived reversed oscillations
-    const s = 1.70158 + ((currentTheme.anim_bounce_overshoot || 0.08) * 3);
+    const s = 1.70158 + (((theme && theme.anim_bounce_overshoot) || 0.08) * 3);
     return (tt) => easeOutBackP(tt, s);
 }
 
@@ -3035,25 +3072,35 @@ function animate(duration, onUpdate, onDone) {
     requestAnimationFrame(tick);
 }
 
-function getSupportOrigin() {
-    const supportEl = grab('toolbox_support');
-    if (!supportEl) return null;
-    const r = supportEl.getBoundingClientRect();
-    const { isTop, isBottom, isLeft, isRight } = getDirMeta();
-    const ox = isRight ? r.right : r.left;
-    const oy = isBottom ? r.bottom : r.top;
+function computeOriginFromRect(rect, theme = currentTheme) {
+    if (!rect) return null;
+    const { isTop, isBottom, isLeft, isRight } = getDirMeta(theme);
+    const ox = isRight ? rect.right : rect.left;
+    const oy = isBottom ? rect.bottom : rect.top;
     return { ox, oy };
 }
 
-function slideInItems(items) {
+function getSupportOrigin(theme = currentTheme) {
+    const supportEl = grab('toolbox_support');
+    if (!supportEl) return null;
+    return computeOriginFromRect(supportEl.getBoundingClientRect(), theme);
+}
+
+function getFloatingBodyOrigin(info, theme = currentTheme) {
+    if (!info || !info.body || typeof info.body.getBoundingClientRect !== 'function') return null;
+    return computeOriginFromRect(info.body.getBoundingClientRect(), theme);
+}
+
+function slideInItems(items, opts = {}) {
     const els = (items || []).filter(Boolean);
     if (!els.length) return;
-    const origin = getSupportOrigin();
+    const theme = opts.theme || currentTheme;
+    const origin = opts.origin || getSupportOrigin(theme);
     if (!origin) return;
-    const dur = currentTheme.anim_duration_ms || 420;
-    const stagger = currentTheme.anim_stagger_ms || 24;
-    const easing = getEasingOpen();
-    const { isRight, isBottom, isHorizontal } = getDirMeta();
+    const dur = (theme && theme.anim_duration_ms) || 420;
+    const stagger = (theme && theme.anim_stagger_ms) || 24;
+    const easing = getEasingOpen(theme);
+    const { isRight, isBottom, isHorizontal } = getDirMeta(theme);
     els.forEach((el, idx) => {
         const rect = el.getBoundingClientRect();
         // Anchor to the edge matching the origin corner to avoid initial nudge
@@ -3087,19 +3134,20 @@ function slideInItems(items) {
 }
 
 // Slide items out toward the support origin corner, then remove them
-function slideOutItemsToOrigin(items, onAllDone) {
+function slideOutItemsToOrigin(items, onAllDone, opts = {}) {
     const els = (items || []).filter(Boolean);
     if (!els.length) { if (onAllDone) onAllDone(); return; }
-    const origin = getSupportOrigin();
+    const theme = opts.theme || currentTheme;
+    const origin = opts.origin || getSupportOrigin(theme);
     if (!origin) { // fallback: remove without anim
         els.forEach(el => { try { el.remove(); } catch (e) { } });
         if (onAllDone) onAllDone();
         return;
     }
-    const dur = currentTheme.anim_duration_ms || 420;
-    const stagger = currentTheme.anim_stagger_ms || 24;
-    const easing = getEasingClose();
-    const { isRight, isBottom, isHorizontal } = getDirMeta();
+    const dur = (theme && theme.anim_duration_ms) || 420;
+    const stagger = (theme && theme.anim_stagger_ms) || 24;
+    const easing = getEasingClose(theme);
+    const { isRight, isBottom, isHorizontal } = getDirMeta(theme);
     let done = 0;
     els.forEach((el, idx) => {
         const rect = el.getBoundingClientRect();
@@ -3313,21 +3361,21 @@ function setupToolboxScrollProxy() {
 }
 
 // ===== Palette pop-out logic =====
-function getSatelliteOffset() {
-    const raw = currentTheme && currentTheme.satellite_offset;
+function getSatelliteOffset(theme = currentTheme) {
+    const raw = theme && theme.satellite_offset;
     if (raw != null) {
         const val = (typeof raw === 'number') ? raw : parseFloat(String(raw));
         if (Number.isFinite(val)) {
             return Math.max(0, val);
         }
     }
-    const spacing = parseFloat(currentTheme && currentTheme.items_spacing);
+    const spacing = parseFloat(theme && theme.items_spacing);
     const fallback = Number.isFinite(spacing) ? spacing : 8;
     return Math.max(8, fallback);
 }
 
-function getDirMeta() {
-    const dir = (currentTheme?.direction || '').toLowerCase();
+function getDirMeta(theme = currentTheme) {
+    const dir = ((theme && theme.direction) || '').toLowerCase();
     const isHorizontal = dir.includes('horizontal');
     const isTop = dir.includes('top');
     const isBottom = dir.includes('bottom');
@@ -3338,9 +3386,9 @@ function getDirMeta() {
     return { isHorizontal, isTop, isBottom, isLeft, isRight, isReverse, dir };
 }
 
-function computeFloatingSatelliteOrigin(anchorRect) {
-    const gap = getSatelliteOffset();
-    const { isHorizontal, isBottom, isTop, isLeft, isRight } = getDirMeta();
+function computeFloatingSatelliteOrigin(anchorRect, theme = currentTheme) {
+    const gap = getSatelliteOffset(theme);
+    const { isHorizontal, isBottom, isTop, isLeft, isRight } = getDirMeta(theme);
     const centerX = anchorRect.left + (anchorRect.width || 0) / 2;
     const centerY = anchorRect.top + (anchorRect.height || 0) / 2;
     let x = centerX;
@@ -3365,11 +3413,11 @@ function computeFloatingSatelliteOrigin(anchorRect) {
     return { x, y };
 }
 
-function computeExtractedPaletteTarget(placeholderRect, supportRect, width, height) {
+function computeExtractedPaletteTarget(placeholderRect, supportRect, width, height, theme = currentTheme) {
     const vw = window.innerWidth || document.documentElement.clientWidth || 1280;
     const vh = window.innerHeight || document.documentElement.clientHeight || 720;
-    const { isHorizontal, isBottom, isTop, isLeft, isRight } = getDirMeta();
-    const gap = getSatelliteOffset();
+    const { isHorizontal, isBottom, isTop, isLeft, isRight } = getDirMeta(theme);
+    const gap = getSatelliteOffset(theme);
     const fallbackSupport = supportRect || placeholderRect;
     if (!placeholderRect) {
         return {
@@ -3504,7 +3552,8 @@ function repositionActiveSatellites(info) {
                 right: hostRect.left + width,
                 bottom: hostRect.top + height * 2
             };
-        const targetPos = computeExtractedPaletteTarget(placeholderRect, hostRect, width, height);
+        const themeRef = info && info.theme ? info.theme : currentTheme;
+        const targetPos = computeExtractedPaletteTarget(placeholderRect, hostRect, width, height, themeRef);
         state.left = targetPos.left;
         state.top = targetPos.top;
         state.anchor = {
@@ -3587,7 +3636,8 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
         }
     }
 
-    const targetPos = computeExtractedPaletteTarget(anchorSnapshot || hostRect, hostRect, width, targetHeight);
+    const themeRef = hostInfo && hostInfo.theme ? hostInfo.theme : currentTheme;
+    const targetPos = computeExtractedPaletteTarget(anchorSnapshot || hostRect, hostRect, width, targetHeight, themeRef);
     const left = targetPos.left;
     const top = targetPos.top;
 
@@ -3704,7 +3754,7 @@ function handlePaletteClick(el, cfg) {
     // Calculer la cible externe en réutilisant la même logique que le menu principal
     const elW = el.offsetWidth;
     const elH = el.offsetHeight;
-    const targetPos = computeExtractedPaletteTarget(phRect, supportRect, elW, elH);
+    const targetPos = computeExtractedPaletteTarget(phRect, supportRect, elW, elH, currentTheme);
     const targetLeft = targetPos.left;
     const targetTop = targetPos.top;
 
