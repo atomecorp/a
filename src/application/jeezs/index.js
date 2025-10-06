@@ -522,6 +522,377 @@ function buildBaseStyleRules(helpers) {
                 background: token('calendar-accent-bg'),
                 boxShadow: '0 0 0 1px rgba(56, 189, 248, 0.25)'
             }
+        },
+        {
+            selectors: [selector('audio')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '28px'
+            }
+        },
+        {
+            selectors: [selector('audio__subtitle')],
+            declarations: {
+                color: token('muted-color'),
+                fontSize: '0.95rem',
+                lineHeight: '1.65'
+            }
+        },
+        {
+            selectors: [selector('audio__list')],
+            declarations: {
+                display: 'grid',
+                gap: '18px',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))'
+            }
+        },
+        {
+            selectors: [selector('audio__card')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '18px',
+                padding: '22px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, rgba(15,23,42,0.85) 0%, rgba(30,41,59,0.55) 100%)',
+                border: '1px solid rgba(148, 163, 184, 0.2)',
+                boxShadow: '0 24px 54px rgba(2, 6, 23, 0.45)',
+                position: 'relative',
+                overflow: 'hidden'
+            }
+        },
+        {
+            selectors: [selector('audio__meta')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px'
+            }
+        },
+        {
+            selectors: [selector('audio__title')],
+            declarations: {
+                fontSize: '1.05rem',
+                fontWeight: '600',
+                color: token('text-color'),
+                margin: '0'
+            }
+        },
+        {
+            selectors: [selector('audio__artist')],
+            declarations: {
+                color: token('muted-color'),
+                fontSize: '0.85rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em'
+            }
+        },
+        {
+            selectors: [selector('audio__wave')],
+            declarations: {
+                position: 'relative',
+                height: '148px',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                background: 'linear-gradient(180deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.25) 100%)',
+                border: '1px solid rgba(148, 163, 184, 0.12)'
+            }
+        },
+        {
+            selectors: [selector('audio__canvas')],
+            declarations: {
+                width: '100%',
+                height: '100%',
+                display: 'block'
+            }
+        },
+        {
+            selectors: [selector('audio__progress')],
+            declarations: {
+                position: 'absolute',
+                left: '0',
+                top: '0',
+                bottom: '0',
+                width: '0%',
+                background: 'linear-gradient(90deg, rgba(56,189,248,0.25) 0%, rgba(125,211,252,0.1) 100%)',
+                pointerEvents: 'none'
+            }
+        },
+        {
+            selectors: [selector('audio__wave-message')],
+            declarations: {
+                position: 'absolute',
+                inset: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.85rem',
+                color: token('muted-color'),
+                padding: '0 16px',
+                textAlign: 'center'
+            }
+        },
+        {
+            selectors: [selector('audio__controls')],
+            declarations: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                marginTop: '4px'
+            }
+        },
+        {
+            selectors: [selector('audio__button')],
+            declarations: {
+                padding: '10px 22px',
+                borderRadius: '999px',
+                border: '1px solid transparent',
+                background: token('accent-color'),
+                color: '#020617',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'transform 160ms ease, box-shadow 160ms ease'
+            }
+        },
+        {
+            selectors: [selector('audio__button') + ':hover'],
+            declarations: {
+                transform: 'translateY(-1px)',
+                boxShadow: '0 12px 24px rgba(56, 189, 248, 0.28)'
+            }
+        },
+        {
+            selectors: [selector('audio__button') + '--ghost'],
+            declarations: {
+                background: 'transparent',
+                color: token('muted-color'),
+                borderColor: 'rgba(148,163,184,0.25)',
+                padding: '10px 20px'
+            }
+        },
+        {
+            selectors: [selector('audio__time')],
+            declarations: {
+                marginLeft: 'auto',
+                fontSize: '0.85rem',
+                color: token('muted-color')
+            }
+        },
+        {
+            selectors: [selector('audio__error')],
+            declarations: {
+                fontSize: '0.8rem',
+                color: '#fca5a5',
+                marginTop: '6px'
+            }
+        },
+        {
+            selectors: [selector('video')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px'
+            }
+        },
+        {
+            selectors: [selector('video__subtitle')],
+            declarations: {
+                color: token('muted-color'),
+                fontSize: '0.95rem',
+                lineHeight: '1.6'
+            }
+        },
+        {
+            selectors: [selector('video__list')],
+            declarations: {
+                display: 'grid',
+                gap: '18px',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))'
+            }
+        },
+        {
+            selectors: [selector('video__card')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '18px',
+                borderRadius: '18px',
+                background: 'rgba(15, 23, 42, 0.55)',
+                border: '1px solid rgba(148, 163, 184, 0.16)',
+                boxShadow: 'inset 0 0 0 1px rgba(15, 23, 42, 0.25)'
+            }
+        },
+        {
+            selectors: [selector('video__media')],
+            declarations: {
+                width: '100%',
+                borderRadius: '14px',
+                border: '1px solid rgba(148, 163, 184, 0.12)',
+                background: 'black'
+            }
+        },
+        {
+            selectors: [selector('video__title')],
+            declarations: {
+                fontSize: '1.05rem',
+                fontWeight: '600',
+                color: token('text-color'),
+                margin: '0'
+            }
+        },
+        {
+            selectors: [selector('video__description')],
+            declarations: {
+                color: token('muted-color'),
+                fontSize: '0.9rem',
+                lineHeight: '1.5'
+            }
+        },
+        {
+            selectors: [selector('contact')],
+            declarations: {
+                display: 'grid',
+                gap: '20px'
+            }
+        },
+        {
+            selectors: [selector('contact__subtitle')],
+            declarations: {
+                color: token('muted-color'),
+                fontSize: '0.95rem',
+                lineHeight: '1.6'
+            }
+        },
+        {
+            selectors: [selector('contact__form')],
+            declarations: {
+                display: 'grid',
+                gap: '16px'
+            }
+        },
+        {
+            selectors: [selector('contact__row')],
+            declarations: {
+                display: 'grid',
+                gap: '16px',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'
+            }
+        },
+        {
+            selectors: [selector('contact__field')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+            }
+        },
+        {
+            selectors: [selector('contact__label')],
+            declarations: {
+                fontSize: '0.85rem',
+                color: token('muted-color'),
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase'
+            }
+        },
+        {
+            selectors: [selector('contact__input'), selector('contact__textarea')],
+            declarations: {
+                padding: '12px 14px',
+                borderRadius: '12px',
+                border: '1px solid rgba(148, 163, 184, 0.18)',
+                background: 'rgba(15, 23, 42, 0.6)',
+                color: token('text-color'),
+                fontSize: '0.95rem'
+            }
+        },
+        {
+            selectors: [selector('contact__textarea')],
+            declarations: {
+                minHeight: '160px',
+                resize: 'vertical'
+            }
+        },
+        {
+            selectors: [selector('contact__submit')],
+            declarations: {
+                justifySelf: 'flex-start',
+                padding: '12px 24px',
+                borderRadius: '999px',
+                border: 'none',
+                background: token('accent-color'),
+                color: '#020617',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'transform 160ms ease, box-shadow 160ms ease'
+            }
+        },
+        {
+            selectors: [selector('contact__submit') + ':hover'],
+            declarations: {
+                transform: 'translateY(-1px)',
+                boxShadow: '0 12px 24px rgba(56, 189, 248, 0.28)'
+            }
+        },
+        {
+            selectors: [selector('contact__message')],
+            declarations: {
+                fontSize: '0.9rem',
+                color: token('muted-color')
+            }
+        },
+        {
+            selectors: [selector('faq')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+            }
+        },
+        {
+            selectors: [selector('faq__item')],
+            declarations: {
+                borderRadius: '16px',
+                background: 'rgba(15, 23, 42, 0.55)',
+                border: '1px solid rgba(148, 163, 184, 0.16)',
+                padding: '18px 22px',
+                cursor: 'pointer',
+                transition: 'border-color 160ms ease, box-shadow 160ms ease'
+            }
+        },
+        {
+            selectors: [selector('faq__item') + '.is-open'],
+            declarations: {
+                borderColor: token('accent-color'),
+                boxShadow: '0 18px 32px rgba(56, 189, 248, 0.12)'
+            }
+        },
+        {
+            selectors: [selector('faq__question')],
+            declarations: {
+                margin: '0',
+                fontSize: '1.05rem',
+                fontWeight: '600',
+                color: token('text-color')
+            }
+        },
+        {
+            selectors: [selector('faq__answer')],
+            declarations: {
+                marginTop: '10px',
+                fontSize: '0.95rem',
+                color: token('muted-color'),
+                lineHeight: '1.6',
+                display: 'none'
+            }
+        },
+        {
+            selectors: [selector('faq__answer') + '.is-open'],
+            declarations: {
+                display: 'block'
+            }
         }
     ];
 }
@@ -573,6 +944,18 @@ function buildMediaStyleRules(helpers) {
                     declarations: {
                         width: '100%'
                     }
+                },
+                {
+                    selectors: [selector('audio__list')],
+                    declarations: {
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'
+                    }
+                },
+                {
+                    selectors: [selector('video__list')],
+                    declarations: {
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))'
+                    }
                 }
             ]
         },
@@ -596,6 +979,24 @@ function buildMediaStyleRules(helpers) {
                     declarations: {
                         minHeight: '80px',
                         padding: '10px'
+                    }
+                },
+                {
+                    selectors: [selector('audio__list')],
+                    declarations: {
+                        gridTemplateColumns: '1fr'
+                    }
+                },
+                {
+                    selectors: [selector('video__list')],
+                    declarations: {
+                        gridTemplateColumns: '1fr'
+                    }
+                },
+                {
+                    selectors: [selector('contact__row')],
+                    declarations: {
+                        gridTemplateColumns: '1fr'
                     }
                 }
             ]
@@ -1165,10 +1566,643 @@ function renderCalendar({ container, data, context }) {
     return block;
 }
 
+const AUDIO_CONTEXT_REF = { instance: null };
+
+function getSharedAudioContext() {
+    if (AUDIO_CONTEXT_REF.instance) return AUDIO_CONTEXT_REF.instance;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    AUDIO_CONTEXT_REF.instance = new Ctx();
+    return AUDIO_CONTEXT_REF.instance;
+}
+
+function extractWaveformSamples(buffer, width) {
+    const channel = buffer.getChannelData(0);
+    const blockSize = Math.max(1, Math.floor(channel.length / width));
+    const samples = new Float32Array(width);
+    for (let i = 0; i < width; i += 1) {
+        const start = i * blockSize;
+        let max = 0;
+        for (let j = 0; j < blockSize; j += 1) {
+            const sampleIndex = start + j;
+            if (sampleIndex >= channel.length) break;
+            const value = Math.abs(channel[sampleIndex]);
+            if (value > max) max = value;
+        }
+        samples[i] = max;
+    }
+    return samples;
+}
+
+function decodeAudioBuffer(context, arrayBuffer) {
+    return new Promise((resolve, reject) => {
+        try {
+            const legacy = context.decodeAudioData(
+                arrayBuffer,
+                (decoded) => resolve(decoded),
+                (error) => reject(error)
+            );
+            if (legacy && typeof legacy.then === 'function') {
+                legacy.then(resolve, reject);
+            }
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+function drawWaveform(canvas, samples, color) {
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = color;
+    const middle = height / 2;
+    for (let x = 0; x < width; x += 1) {
+        const amplitude = samples[x] ?? 0;
+        const barHeight = Math.max(1, amplitude * height * 0.9);
+        ctx.fillRect(x, middle - barHeight / 2, 1, barHeight);
+    }
+}
+
+function setupAudioCardWaveform({
+    card,
+    waveWrapper,
+    canvas,
+    progressBar,
+    audioEl,
+    track,
+    context
+}) {
+    const resize = () => {
+        const wrapperWidth = Math.max(1, canvas.parentElement.clientWidth);
+        const deviceRatio = window.devicePixelRatio || 1;
+        canvas.width = wrapperWidth * deviceRatio;
+        canvas.height = 140 * deviceRatio;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        return canvas.width;
+    };
+
+    let currentSamples = null;
+    let isDrawing = false;
+
+    const accentColor = getComputedStyle(card).getPropertyValue(`--${context.namespace}-accent-color`).trim() || '#38bdf8';
+
+    const renderWave = (samples) => {
+        if (!samples) return;
+        const drawWidth = resize();
+        if (samples.length !== drawWidth) {
+            const resampled = new Float32Array(drawWidth);
+            const scale = samples.length / drawWidth;
+            for (let i = 0; i < drawWidth; i += 1) {
+                resampled[i] = samples[Math.min(samples.length - 1, Math.floor(i * scale))] || 0;
+            }
+            currentSamples = resampled;
+        } else {
+            currentSamples = samples;
+        }
+        drawWaveform(canvas, currentSamples, accentColor);
+        isDrawing = false;
+    };
+
+    const showFallback = (message) => {
+        const messageClass = context.className('audio__wave-message');
+        canvas.style.display = 'none';
+        progressBar.style.display = 'none';
+        if (!waveWrapper.querySelector(`.${messageClass}`)) {
+            $('div', {
+                class: messageClass,
+                parent: waveWrapper,
+                text: message || 'Waveform indisponible sur ce navigateur.'
+            });
+        }
+    };
+
+    const analyze = async () => {
+        if (isDrawing || currentSamples) return;
+        const audioCtx = getSharedAudioContext();
+        if (!audioCtx) {
+            showFallback('Aperçu visuel non supporté par ce navigateur.');
+            return;
+        }
+        isDrawing = true;
+        try {
+            const response = await fetch(track.src, {
+                mode: track.fetchMode || 'same-origin'
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} ${response.statusText}`);
+            }
+            const arrayBuffer = await response.arrayBuffer();
+            const buffer = await decodeAudioBuffer(audioCtx, arrayBuffer);
+            const width = resize();
+            const samples = extractWaveformSamples(buffer, width);
+            currentSamples = samples;
+            drawWaveform(canvas, samples, accentColor);
+        } catch (error) {
+            console.warn('[ModularBlocks] Impossible de dessiner la waveform', error);
+            showFallback('Waveform non disponible (format ou navigateur non supporté).');
+            isDrawing = false;
+        }
+    };
+
+    const target = canvas.parentElement;
+    let observer = null;
+    if (window.ResizeObserver) {
+        observer = new ResizeObserver(() => renderWave(currentSamples));
+        observer.observe(target);
+    }
+
+    analyze();
+
+    canvas.addEventListener('click', (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        if (audioEl.duration) {
+            audioEl.currentTime = ratio * audioEl.duration;
+        }
+    });
+
+    const updateProgress = () => {
+        if (!audioEl.duration) {
+            progressBar.style.width = '0%';
+            return;
+        }
+        progressBar.style.width = `${(audioEl.currentTime / audioEl.duration) * 100}%`;
+    };
+
+    audioEl.addEventListener('timeupdate', updateProgress);
+    audioEl.addEventListener('ended', updateProgress);
+
+    return {
+        teardown() {
+            audioEl.removeEventListener('timeupdate', updateProgress);
+            audioEl.removeEventListener('ended', updateProgress);
+            if (observer && observer.unobserve) {
+                observer.unobserve(target);
+            }
+        }
+    };
+}
+
+function formatTime(value) {
+    if (!Number.isFinite(value)) return '0:00';
+    const minutes = Math.floor(value / 60);
+    const seconds = Math.floor(value % 60).toString().padStart(2, '0');
+    return `${minutes}:${seconds}`;
+}
+
+function renderAudioWave({ container, data, context }) {
+    const { className, mediaRegistry } = context;
+    const block = createBlockWrapper('audio', container, className, data.css || undefined);
+
+    if (data.title) {
+        $('h2', {
+            class: className('audio__title'),
+            parent: block,
+            text: data.title
+        });
+    }
+
+    if (data.subtitle) {
+        $('p', {
+            class: className('audio__subtitle'),
+            parent: block,
+            text: data.subtitle
+        });
+    }
+
+    const tracks = Array.isArray(data.tracks) ? data.tracks : [];
+    if (!tracks.length) {
+        $('p', {
+            class: className('audio__subtitle'),
+            parent: block,
+            text: 'Aucun fichier audio à afficher pour le moment.'
+        });
+        return block;
+    }
+
+    const list = $('div', {
+        class: className('audio__list'),
+        parent: block
+    });
+
+    tracks.forEach((track, index) => {
+        if (!track || !track.src) return;
+        const card = $('div', {
+            class: className('audio__card'),
+            parent: list
+        });
+
+        const meta = $('div', {
+            class: className('audio__meta'),
+            parent: card
+        });
+
+        $('h3', {
+            class: className('audio__title'),
+            parent: meta,
+            text: track.title || `Piste ${index + 1}`
+        });
+
+        if (track.artist || track.description) {
+            $('span', {
+                class: className('audio__artist'),
+                parent: meta,
+                text: track.artist || track.description
+            });
+        }
+
+        const waveWrapper = $('div', {
+            class: className('audio__wave'),
+            parent: card
+        });
+
+        const canvas = $('canvas', {
+            class: className('audio__canvas'),
+            parent: waveWrapper,
+            attrs: { width: 600, height: 140 }
+        });
+
+        const progressBar = $('div', {
+            class: className('audio__progress'),
+            parent: waveWrapper
+        });
+
+        const controls = $('div', {
+            class: className('audio__controls'),
+            parent: card
+        });
+
+        const audioEl = $('audio', {
+            parent: controls,
+            attrs: {
+                src: track.src,
+                preload: track.preload || 'metadata'
+            }
+        });
+        audioEl.style.display = 'none';
+
+        const timeLabel = $('span', {
+            class: className('audio__time'),
+            parent: controls,
+            text: '0:00'
+        });
+
+        const updateTimeLabel = () => {
+            timeLabel.textContent = `${formatTime(audioEl.currentTime)} / ${formatTime(audioEl.duration || 0)}`;
+        };
+
+        audioEl.addEventListener('timeupdate', updateTimeLabel);
+        audioEl.addEventListener('loadedmetadata', updateTimeLabel);
+        audioEl.addEventListener('ended', () => {
+            updateTimeLabel();
+            playBtn.textContent = 'Lecture';
+        });
+
+        const playBtn = $('button', {
+            class: className('audio__button'),
+            parent: controls,
+            text: 'Lecture'
+        });
+
+        const stopBtn = $('button', {
+            class: `${className('audio__button')} ${className('audio__button')}--ghost`,
+            parent: controls,
+            text: 'Stop'
+        });
+
+        controls.insertBefore(playBtn, timeLabel);
+        controls.insertBefore(stopBtn, timeLabel);
+
+        const errorLabel = $('span', {
+            class: className('audio__error'),
+            parent: card,
+            text: ''
+        });
+
+        const teardown = setupAudioCardWaveform({
+            card,
+            waveWrapper,
+            canvas,
+            progressBar,
+            audioEl,
+            track,
+            context
+        });
+
+        const entry = { audioEl, playBtn, stopBtn, teardown };
+        mediaRegistry.audios.add(entry);
+
+        const pauseAllOthers = () => {
+            mediaRegistry.audios.forEach((item) => {
+                if (item === entry) return;
+                item.audioEl.pause();
+                item.playBtn.textContent = 'Lecture';
+            });
+        };
+
+        playBtn.addEventListener('click', async () => {
+            pauseAllOthers();
+            errorLabel.textContent = '';
+            const audioCtx = getSharedAudioContext();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                try { await audioCtx.resume(); } catch (resumeError) { console.warn(resumeError); }
+            }
+            if (audioEl.paused) {
+                try {
+                    await audioEl.play();
+                    playBtn.textContent = 'Pause';
+                } catch (error) {
+                    console.warn('[ModularBlocks][Audio] play error', error);
+                    if (error && error.name === 'NotSupportedError') {
+                        errorLabel.textContent = 'Lecture impossible : format non supporté par ce navigateur.';
+                    } else {
+                        errorLabel.textContent = 'Lecture impossible. Vérifiez le format du fichier.';
+                    }
+                }
+            } else {
+                audioEl.pause();
+                playBtn.textContent = 'Lecture';
+            }
+        });
+
+        stopBtn.addEventListener('click', () => {
+            audioEl.pause();
+            audioEl.currentTime = 0;
+            playBtn.textContent = 'Lecture';
+        });
+    });
+
+    return block;
+}
+
+function renderVideoPlayer({ container, data, context }) {
+    const { className, mediaRegistry } = context;
+    const block = createBlockWrapper('video', container, className, data.css || undefined);
+
+    if (data.title) {
+        $('h2', {
+            class: className('video__title'),
+            parent: block,
+            text: data.title
+        });
+    }
+
+    if (data.subtitle) {
+        $('p', {
+            class: className('video__subtitle'),
+            parent: block,
+            text: data.subtitle
+        });
+    }
+
+    const videos = Array.isArray(data.videos) ? data.videos : [];
+    if (!videos.length) {
+        $('p', {
+            class: className('video__subtitle'),
+            parent: block,
+            text: 'Aucune vidéo disponible pour le moment.'
+        });
+        return block;
+    }
+
+    const list = $('div', {
+        class: className('video__list'),
+        parent: block
+    });
+
+    videos.forEach((item, index) => {
+        if (!item || !item.src) return;
+        const card = $('div', {
+            class: className('video__card'),
+            parent: list
+        });
+
+        const videoEl = $('video', {
+            class: className('video__media'),
+            parent: card,
+            attrs: {
+                src: item.src,
+                preload: item.preload || 'metadata',
+                poster: item.poster || undefined,
+                controls: '',
+                playsinline: '',
+                crossorigin: item.crossOrigin || undefined
+            }
+        });
+
+        if (item.title || item.description) {
+            $('h3', {
+                class: className('video__title'),
+                parent: card,
+                text: item.title || `Vidéo ${index + 1}`
+            });
+        }
+
+        if (item.description) {
+            $('p', {
+                class: className('video__description'),
+                parent: card,
+                text: item.description
+            });
+        }
+
+        const errorNote = $('p', {
+            class: className('audio__error'),
+            parent: card,
+            text: ''
+        });
+
+        const entry = { videoEl };
+        mediaRegistry.videos.add(entry);
+
+        videoEl.addEventListener('play', () => {
+            mediaRegistry.videos.forEach((other) => {
+                if (other.videoEl !== videoEl) {
+                    other.videoEl.pause();
+                }
+            });
+        });
+
+        videoEl.addEventListener('error', () => {
+            errorNote.textContent = "Lecture vidéo indisponible (format ou codec non supporté).";
+        });
+    });
+
+    return block;
+}
+
+function renderContactModule({ container, data, context }) {
+    const { className } = context;
+    const block = createBlockWrapper('contact', container, className, data.css || undefined);
+
+    if (data.title) {
+        $('h2', {
+            class: className('video__title'),
+            parent: block,
+            text: data.title
+        });
+    }
+
+    if (data.subtitle) {
+        $('p', {
+            class: className('contact__subtitle'),
+            parent: block,
+            text: data.subtitle
+        });
+    }
+
+    let messageLabel = null;
+
+    const form = $('form', {
+        class: className('contact__form'),
+        parent: block,
+        onSubmit: (event) => {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const payload = Object.fromEntries(formData.entries());
+            if (typeof data.onSubmit === 'function') {
+                data.onSubmit(payload);
+            } else {
+                console.log('[ModularBlocks][Contact]', payload);
+            }
+            if (messageLabel) {
+                messageLabel.textContent = data.successMessage || 'Merci pour votre message !';
+            }
+            event.target.reset();
+        }
+    });
+
+    const row = $('div', {
+        class: className('contact__row'),
+        parent: form
+    });
+
+    const addField = (parentNode, field) => {
+        const wrapper = $('label', {
+            class: className('contact__field'),
+            parent: parentNode
+        });
+
+        $('span', {
+            class: className('contact__label'),
+            parent: wrapper,
+            text: field.label
+        });
+
+        $(field.type === 'textarea' ? 'textarea' : 'input', {
+            class: field.type === 'textarea' ? className('contact__textarea') : className('contact__input'),
+            parent: wrapper,
+            attrs: {
+                name: field.name,
+                type: field.type === 'textarea' ? undefined : (field.inputType || 'text'),
+                placeholder: field.placeholder || undefined,
+                required: field.required ? 'true' : undefined,
+                rows: field.rows || undefined
+            }
+        });
+    };
+
+    const defaultFields = [
+        { label: 'Nom', name: 'name', required: true, placeholder: 'Votre nom' },
+        { label: 'Email', name: 'email', inputType: 'email', required: true, placeholder: 'vous@domaine.com' },
+        { label: 'Message', name: 'message', type: 'textarea', required: true, placeholder: 'Parlez-nous de votre projet', rows: 6, fullWidth: true }
+    ];
+
+    const fields = Array.isArray(data.fields) && data.fields.length ? data.fields : defaultFields;
+
+    fields.forEach((field) => {
+        const targetParent = field.fullWidth ? form : row;
+        addField(targetParent, field);
+    });
+
+    if (!row.childNodes.length) {
+        row.remove();
+    }
+
+    $('button', {
+        class: className('contact__submit'),
+        parent: form,
+        text: data.submitLabel || 'Envoyer'
+    });
+
+    messageLabel = $('p', {
+        class: className('contact__message'),
+        parent: block,
+        text: data.helperText || ''
+    });
+
+    return block;
+}
+
+function renderFAQModule({ container, data, context }) {
+    const { className } = context;
+    const block = createBlockWrapper('faq', container, className, data.css || undefined);
+
+    if (data.title) {
+        $('h2', {
+            class: className('video__title'),
+            parent: block,
+            text: data.title
+        });
+    }
+
+    if (data.subtitle) {
+        $('p', {
+            class: className('contact__subtitle'),
+            parent: block,
+            text: data.subtitle
+        });
+    }
+
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+        $('p', {
+            class: className('contact__subtitle'),
+            parent: block,
+            text: 'Ajoutez des questions / réponses pour alimenter la FAQ.'
+        });
+        return block;
+    }
+
+    items.forEach((item) => {
+        if (!item || !item.question) return;
+        let isOpen = Boolean(item.open);
+        const wrapper = $('div', {
+            class: `${className('faq__item')}${isOpen ? ' is-open' : ''}`,
+            parent: block,
+            onClick: () => {
+                isOpen = !isOpen;
+                wrapper.classList.toggle('is-open', isOpen);
+                answer.classList.toggle('is-open', isOpen);
+            }
+        });
+
+        $('h3', {
+            class: className('faq__question'),
+            parent: wrapper,
+            text: item.question
+        });
+
+        const answer = $('p', {
+            class: `${className('faq__answer')}${isOpen ? ' is-open' : ''}`,
+            parent: wrapper,
+            text: item.answer || ''
+        });
+    });
+
+    return block;
+}
+
 registerBlockType('banner', renderBanner);
 registerBlockType('image', renderImage);
 registerBlockType('rich-text', renderRichText);
 registerBlockType('calendar', renderCalendar);
+registerBlockType('audio-wave', renderAudioWave);
+registerBlockType('video-player', renderVideoPlayer);
+registerBlockType('contact', renderContactModule);
+registerBlockType('faq', renderFAQModule);
 
 function createModularBlocks(options = {}) {
     const helpers = createHelpers(options.namespace || DEFAULT_NAMESPACE);
@@ -1198,12 +2232,18 @@ function createModularBlocks(options = {}) {
 
     const blocks = Array.isArray(options.blocks) ? options.blocks : [];
 
+    const mediaRegistry = {
+        audios: new Set(),
+        videos: new Set()
+    };
+
     const context = {
         root: container,
         grid,
         namespace: helpers.namespace,
         className: helpers.className,
-        token: helpers.token
+        token: helpers.token,
+        mediaRegistry
     };
 
     blocks.forEach((definition) => renderBlock(grid, definition, theme, context));

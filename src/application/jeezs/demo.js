@@ -1,5 +1,8 @@
 import createModularBlocks, { DEFAULT_THEME } from './index.js';
 
+const riffAudio = '../assets/audios/riff.m4a';
+const demoVideo = '../assets/videos/superman.mp4';
+
 const JEEZS_DEMO_BLOCKS = [
   {
     type: 'banner',
@@ -66,6 +69,72 @@ const JEEZS_DEMO_BLOCKS = [
       ],
       legend: [
         { label: 'Événement confirmé' }
+      ]
+    }
+  },
+  {
+    type: 'audio-wave',
+    data: {
+      title: 'Sessions audio',
+      subtitle: 'Écoute des extraits préparatoires et repère visuellement l’énergie du morceau.',
+      tracks: [
+        {
+          src: riffAudio,
+          title: 'Riff futuriste',
+          artist: 'Jeezs',
+          description: 'Démo studio — guitares & synths',
+          preload: 'auto'
+        }
+      ]
+    }
+  },
+  {
+    type: 'video-player',
+    data: {
+      title: 'Captations vidéo',
+      subtitle: 'Un aperçu brut des répétitions et du setup scénique.',
+      videos: [
+        {
+          src: demoVideo,
+          title: 'Live rehearsal',
+          description: 'Extrait caméra fixe — work in progress',
+          preload: 'metadata'
+        }
+      ]
+    }
+  },
+  {
+    type: 'contact',
+    data: {
+      title: 'Discutons de votre projet',
+      subtitle: 'Booking, production ou simple prise de contact : laissez-nous un message et on revient vers vous rapidement.',
+      submitLabel: 'Envoyer la demande',
+      successMessage: 'Votre message est bien envoyé. À très vite !',
+      helperText: 'Nous lisons chaque message avec attention.',
+      onSubmit: (payload) => {
+        console.log('[Jeezs Demo][Contact]', payload);
+      }
+    }
+  },
+  {
+    type: 'faq',
+    data: {
+      title: 'Questions fréquentes',
+      subtitle: 'Quelques réponses rapides pour cadrer votre projet.',
+      items: [
+        {
+          question: 'Peut-on personnaliser chaque bloc ?',
+          answer: 'Oui, chaque module est skinnable via le thème et extensible en déclarant un nouveau renderer.'
+        },
+        {
+          question: 'Intégrez-vous vos contenus audio/vidéo préférés ?',
+          answer: 'Les blocs acceptent des sources locales ou distantes. Il suffit de fournir l’URL du média et nous gérons la mise en page.',
+          open: true
+        },
+        {
+          question: 'Comment déclencher une action après envoi du formulaire ?',
+          answer: 'Passe une fonction onSubmit dans les données du bloc contact pour relier ton propre backend ou automatisation.'
+        }
       ]
     }
   }
