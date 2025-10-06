@@ -1,717 +1,1200 @@
-// Jeezs – Page de présentation (Rock Electro Pop Metal)
-// Syntaxe Squirrel + DOM classique
-// ----------------------------------------------------
-// Hypothèses:
-// 1. Les fichiers audio seront placés dans: src/assets/audios/
-// 2. Les images de fond / concerts dans:   src/assets/images/
-// 3. Squirrel (spark.js) déjà chargé globalement (window.Squirrel, List, Button ...)
-// 4. Élément #view existant comme root principal
-// ----------------------------------------------------
+const DEFAULT_NAMESPACE = 'modblocks';
+const STYLE_PREFIX = 'modblocks-style';
+const STYLE_REGISTRY = new Map();
 
-// Si besoin on peut forcer l'import (décommenter si non auto-chargé)
-// import '../../squirrel/spark.js';
+export const DEFAULT_THEME = {
+    pageBackground: 'linear-gradient(135deg, #0b1020 0%, #111827 60%, #1f2937 100%)',
+    textColor: '#f8fafc',
+    fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    sectionGap: '48px',
+    gridGap: '32px',
+    maxWidth: '1200px',
+    minColumnWidth: '280px',
+    blockBackground: 'rgba(17, 25, 40, 0.72)',
+    blockPadding: 'clamp(24px, 3vw, 36px)',
+    blockRadius: '24px',
+    blockBorder: '1px solid rgba(148, 163, 184, 0.18)',
+    blockShadow: '0 28px 60px -22px rgba(15, 23, 42, 0.65)',
+    blockBlur: '18px',
+    blockContentGap: '20px',
+    mutedColor: 'rgba(148, 163, 184, 0.85)',
+    accentColor: '#38bdf8',
+    bannerBackground: 'linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(14, 165, 233, 0.45))',
+    bannerTextColor: '#f8fafc',
+    bannerOverlay: 'rgba(15, 23, 42, 0.28)',
+    ctaBackground: '#38bdf8',
+    ctaColor: '#0f172a',
+    imageRadius: '20px',
+    calendarGridColor: 'rgba(148, 163, 184, 0.35)',
+    calendarAccentBackground: 'rgba(56, 189, 248, 0.16)',
+    calendarAccentColor: '#38bdf8'
+};
 
-(function initWhenReady() {
-    if (window.Squirrel) {
-        buildJeezsPage();
-    } else {
-        window.addEventListener('squirrel:ready', buildJeezsPage, { once: true });
-    }
-})();
+const BLOCK_RENDERERS = new Map();
 
-function buildJeezsPage() {
-    const root = document.querySelector('#view') || document.body;
+function createHelpers(namespace = DEFAULT_NAMESPACE) {
+    const normalized = (typeof namespace === 'string' && namespace.trim()) || DEFAULT_NAMESPACE;
+    const className = (name = '') => `${normalized}-${name}`;
+    const selector = (name = '') => `.${className(name)}`;
+    const token = (name = '') => `var(--${normalized}-${name})`;
+    return { namespace: normalized, className, selector, token };
+}
 
-    injectBaseStyles();
-
-    // === HERO / HEADER ======================================================
-    const hero = createEl('section', 'jeezs-hero');
-    hero.innerHTML = `
-		<div class="hero-overlay">
-			<h1 class="band-name">JEEZS</h1>
-			<h2 class="tagline">Rock • Electro • Pop • Metal Fusion</h2>
-			<div class="contact-bar">
-				<a href="tel:0652575517">📞 06 52 57 55 17</a>
-				<a href="mailto:contact@jeezs.eu">✉️ contact@jeezs.eu</a>
-				<a href="https://www.jeezs.eu" target="_blank" rel="noopener">🌐 www.jeezs.eu</a>
-			</div>
-			<div class="cta-row">
-				<button id="playAllBtn" class="glow-btn primary">Lecture Continue</button>
-				<button id="randomBtn" class="glow-btn">Lecture Aléatoire</button>
-			</div>
-		</div>`;
-    root.appendChild(hero);
-
-    // === CONTENEUR PRINCIPAL ================================================
-    const layout = createEl('div', 'jeezs-layout');
-    root.appendChild(layout);
-
-    // Colonnes: Playlist | Visual | Galerie
-    const colPlaylist = createEl('div', 'col playlist-col');
-    colPlaylist.id = 'playlist-col';
-    const colVisual = createEl('div', 'col visual-col');
-    const colGallery = createEl('div', 'col gallery-col');
-    layout.append(colPlaylist, colVisual, colGallery);
-
-    // === PLAYLIST ===========================================================
-    const playlistHeader = createSectionTitle('PLAYLIST');
-    colPlaylist.appendChild(playlistHeader);
-    // Bouton stop additionnel en haut de la playlist (optionnel si déjà dans hero)
-    const topStopBtn = createEl('button', 'mini util-btn');
-    topStopBtn.textContent = 'Stop';
-    topStopBtn.style.margin = '0 0 14px';
-    colPlaylist.appendChild(topStopBtn);
-
-    // Pistes réelles fournies (durations chargées dynamiquement)
-    const TRACKS = [
-        { title: 'Last chances', file: 'Last chances.m4a', duration: null },
-        { title: 'Runaway', file: 'Runaway.m4a', duration: null },
-        { title: 'Social Smiles', file: 'Social Smiles.m4a', duration: null },
-        { title: 'Ices From Hells', file: 'Ices From Hells.m4a', duration: null },
-        { title: 'After The War', file: 'After The War.m4a', duration: null },
-        { title: 'Big Brother', file: 'Big Brother.m4a', duration: null },
-        { title: 'Change the world', file: 'Change the world.m4a', duration: null },
-        { title: 'Evolutions', file: 'Evolutions.m4a', duration: null },
-        { title: 'GhostBox', file: 'GhostBox.m4a', duration: null },
-        { title: 'Vampire', file: 'Vampire.m4a', duration: null },
-        { title: 'Alive', file: 'Alive.m4a', duration: null },
-        { title: 'wWw', file: 'wWw.m4a', duration: null },
+function buildBaseStyleRules(helpers) {
+    const { selector, token } = helpers;
+    return [
+        {
+            selectors: [selector('page')],
+            declarations: {
+                minHeight: '100vh',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: token('section-gap'),
+                background: token('page-bg'),
+                color: token('text-color'),
+                fontFamily: token('font-family'),
+                padding: 'clamp(28px, 5vw, 72px) clamp(18px, 6vw, 88px)',
+                boxSizing: 'border-box'
+            }
+        },
+        {
+            selectors: [
+                `${selector('page')} h1`,
+                `${selector('page')} h2`,
+                `${selector('page')} h3`,
+                `${selector('page')} h4`
+            ],
+            declarations: {
+                color: token('text-color')
+            }
+        },
+        {
+            selectors: [selector('page') + ' p'],
+            declarations: {
+                margin: '0'
+            }
+        },
+        {
+            selectors: [selector('grid')],
+            declarations: {
+                width: 'min(' + token('max-width') + ', 100%)',
+                margin: '0 auto',
+                display: 'grid',
+                gap: token('grid-gap'),
+                gridTemplateColumns: 'repeat(auto-fit, minmax(' + token('min-column') + ', 1fr))'
+            }
+        },
+        {
+            selectors: [selector('block')],
+            declarations: {
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: token('block-gap'),
+                padding: token('block-padding'),
+                borderRadius: token('block-radius'),
+                background: token('block-bg'),
+                border: token('block-border'),
+                boxShadow: token('block-shadow'),
+                backdropFilter: 'blur(' + token('block-blur') + ')',
+                overflow: 'hidden'
+            }
+        },
+        {
+            selectors: [selector('block--banner')],
+            declarations: {
+                padding: 'clamp(36px, 5vw, 56px)',
+                background: token('banner-gradient'),
+                color: token('banner-text')
+            }
+        },
+        {
+            selectors: [`${selector('block--banner')}::after`],
+            declarations: {
+                content: "''",
+                position: 'absolute',
+                inset: '0',
+                background: token('banner-overlay'),
+                pointerEvents: 'none'
+            }
+        },
+        {
+            selectors: [`${selector('block--banner')} > *`],
+            declarations: {
+                position: 'relative',
+                zIndex: '1'
+            }
+        },
+        {
+            selectors: [selector('banner__layout')],
+            declarations: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'clamp(32px, 6vw, 96px)',
+                flexWrap: 'wrap'
+            }
+        },
+        {
+            selectors: [selector('banner__copy')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                maxWidth: '520px'
+            }
+        },
+        {
+            selectors: [selector('banner__eyebrow')],
+            declarations: {
+                fontSize: '0.85rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.2em',
+                color: token('accent-color'),
+                fontWeight: '600'
+            }
+        },
+        {
+            selectors: [selector('banner__title')],
+            declarations: {
+                fontSize: 'clamp(2.6rem, 5vw, 3.6rem)',
+                lineHeight: '1.05',
+                fontWeight: '700',
+                margin: '0'
+            }
+        },
+        {
+            selectors: [selector('banner__subtitle')],
+            declarations: {
+                color: token('banner-text'),
+                opacity: '0.88',
+                fontSize: 'clamp(1rem, 2.4vw, 1.2rem)',
+                lineHeight: '1.7'
+            }
+        },
+        {
+            selectors: [selector('banner__actions')],
+            declarations: {
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '12px'
+            }
+        },
+        {
+            selectors: [selector('banner__cta')],
+            declarations: {
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                padding: '14px 28px',
+                borderRadius: '999px',
+                background: token('cta-background'),
+                color: token('cta-color'),
+                fontWeight: '600',
+                textDecoration: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 16px 32px rgba(56, 189, 248, 0.28)',
+                transition: 'transform 160ms ease, box-shadow 160ms ease'
+            }
+        },
+        {
+            selectors: [`${selector('banner__cta')}:hover`],
+            declarations: {
+                transform: 'translateY(-2px)',
+                boxShadow: '0 20px 34px rgba(56, 189, 248, 0.35)'
+            }
+        },
+        {
+            selectors: [selector('banner__media')],
+            declarations: {
+                position: 'relative',
+                minWidth: 'min(320px, 100%)',
+                width: 'min(420px, 100%)',
+                minHeight: '260px',
+                borderRadius: 'clamp(20px, 4vw, 32px)',
+                overflow: 'hidden',
+                background: 'radial-gradient(circle at 30% 20%, rgba(56,189,248,0.35), rgba(14,165,233,0.05))',
+                boxShadow: 'inset 0 0 0 1px rgba(56, 189, 248, 0.18)'
+            }
+        },
+        {
+            selectors: [`${selector('banner__media')} img`],
+            declarations: {
+                position: 'absolute',
+                inset: '0',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+            }
+        },
+        {
+            selectors: [selector('banner__media-fallback')],
+            declarations: {
+                position: 'absolute',
+                inset: '0',
+                background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.24), rgba(14, 165, 233, 0.05))'
+            }
+        },
+        {
+            selectors: [selector('image')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+            }
+        },
+        {
+            selectors: [selector('image__frame')],
+            declarations: {
+                position: 'relative',
+                width: '100%',
+                paddingTop: '62%',
+                borderRadius: token('image-radius'),
+                overflow: 'hidden',
+                background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.65), rgba(56, 189, 248, 0.12))',
+                boxShadow: 'inset 0 0 0 1px rgba(148, 163, 184, 0.16)'
+            }
+        },
+        {
+            selectors: [`${selector('image__frame')} img`],
+            declarations: {
+                position: 'absolute',
+                inset: '0',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+            }
+        },
+        {
+            selectors: [selector('image__label')],
+            declarations: {
+                fontSize: '0.75rem',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: token('muted-color')
+            }
+        },
+        {
+            selectors: [selector('image__caption')],
+            declarations: {
+                color: token('muted-color'),
+                lineHeight: '1.6',
+                fontSize: '0.95rem'
+            }
+        },
+        {
+            selectors: [selector('image__credit')],
+            declarations: {
+                fontSize: '0.78rem',
+                color: 'rgba(148, 163, 184, 0.7)'
+            }
+        },
+        {
+            selectors: [selector('rich-text')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '18px'
+            }
+        },
+        {
+            selectors: [selector('rich-text__badge')],
+            declarations: {
+                alignSelf: 'flex-start',
+                padding: '6px 14px',
+                borderRadius: '999px',
+                background: 'rgba(56, 189, 248, 0.18)',
+                color: token('accent-color'),
+                fontSize: '0.75rem',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                fontWeight: '600'
+            }
+        },
+        {
+            selectors: [selector('rich-text__title')],
+            declarations: {
+                margin: '0',
+                fontSize: 'clamp(1.6rem, 3vw, 2.2rem)',
+                fontWeight: '600',
+                lineHeight: '1.25'
+            }
+        },
+        {
+            selectors: [selector('rich-text__lead')],
+            declarations: {
+                fontSize: 'clamp(1rem, 2.2vw, 1.2rem)',
+                color: token('muted-color'),
+                lineHeight: '1.7'
+            }
+        },
+        {
+            selectors: [selector('rich-text__body')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                color: token('muted-color'),
+                lineHeight: '1.7',
+                fontSize: '1rem'
+            }
+        },
+        {
+            selectors: [`${selector('rich-text__body')} p`],
+            declarations: {
+                margin: '0'
+            }
+        },
+        {
+            selectors: [selector('rich-text__list')],
+            declarations: {
+                margin: '4px 0 0',
+                paddingLeft: '1.2rem',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                color: token('muted-color')
+            }
+        },
+        {
+            selectors: [selector('rich-text__quote')],
+            declarations: {
+                margin: '8px 0 0',
+                padding: '20px 24px',
+                borderLeft: '3px solid ' + token('accent-color'),
+                background: 'rgba(15, 23, 42, 0.4)',
+                borderRadius: '16px',
+                fontStyle: 'italic',
+                color: token('text-color')
+            }
+        },
+        {
+            selectors: [selector('rich-text__quote-author')],
+            declarations: {
+                display: 'block',
+                marginTop: '12px',
+                color: token('muted-color'),
+                fontStyle: 'normal',
+                fontSize: '0.9rem'
+            }
+        },
+        {
+            selectors: [selector('rich-text__actions')],
+            declarations: {
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '12px'
+            }
+        },
+        {
+            selectors: [selector('calendar')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px'
+            }
+        },
+        {
+            selectors: [selector('calendar__header')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+            }
+        },
+        {
+            selectors: [selector('calendar__month')],
+            declarations: {
+                margin: '0',
+                fontSize: 'clamp(1.4rem, 2.4vw, 1.8rem)',
+                fontWeight: '600'
+            }
+        },
+        {
+            selectors: [selector('calendar__description')],
+            declarations: {
+                color: token('muted-color'),
+                fontSize: '0.95rem'
+            }
+        },
+        {
+            selectors: [selector('calendar__weekdays'), selector('calendar__days')],
+            declarations: {
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+                gap: '12px'
+            }
+        },
+        {
+            selectors: [selector('calendar__weekday')],
+            declarations: {
+                fontSize: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.12em',
+                textAlign: 'center',
+                color: token('muted-color'),
+                padding: '8px 0'
+            }
+        },
+        {
+            selectors: [selector('calendar__day')],
+            declarations: {
+                minHeight: '92px',
+                borderRadius: '18px',
+                border: '1px solid rgba(148, 163, 184, 0.14)',
+                background: 'rgba(15, 23, 42, 0.4)',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                boxShadow: 'inset 0 0 0 1px rgba(15, 23, 42, 0.2)'
+            }
+        },
+        {
+            selectors: [`${selector('calendar__day')}.is-empty`],
+            declarations: {
+                background: 'transparent',
+                border: '1px dashed rgba(148, 163, 184, 0.16)',
+                boxShadow: 'none'
+            }
+        },
+        {
+            selectors: [`${selector('calendar__day')}.has-event`],
+            declarations: {
+                background: token('calendar-accent-bg'),
+                borderColor: 'transparent',
+                boxShadow: 'inset 0 0 0 1px rgba(56, 189, 248, 0.25)'
+            }
+        },
+        {
+            selectors: [selector('calendar__day-number')],
+            declarations: {
+                fontWeight: '600',
+                fontSize: '1rem',
+                color: token('text-color')
+            }
+        },
+        {
+            selectors: [`${selector('calendar__day')}.has-event ${selector('calendar__day-number')}`],
+            declarations: {
+                color: token('calendar-accent-color')
+            }
+        },
+        {
+            selectors: [selector('calendar__event')],
+            declarations: {
+                fontSize: '0.85rem',
+                color: token('muted-color'),
+                lineHeight: '1.4'
+            }
+        },
+        {
+            selectors: [selector('calendar__legend')],
+            declarations: {
+                display: 'flex',
+                gap: '16px',
+                flexWrap: 'wrap',
+                color: token('muted-color'),
+                fontSize: '0.85rem'
+            }
+        },
+        {
+            selectors: [selector('calendar__legend') + ' span'],
+            declarations: {
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+            }
+        },
+        {
+            selectors: [selector('calendar__legend-dot')],
+            declarations: {
+                width: '12px',
+                height: '12px',
+                borderRadius: '999px',
+                background: token('calendar-accent-bg'),
+                boxShadow: '0 0 0 1px rgba(56, 189, 248, 0.25)'
+            }
+        }
     ];
-    let activeTracks = [...TRACKS];
-    window.JeezsTracks = TRACKS;
-    window.JeezsActiveTracks = activeTracks;
+}
 
-    // Filtrage dynamique des pistes existantes (optionnel: test rapide de chargement)
-    // On garde simple: on n’écarte pas les fichiers manquants, le player gérera l’erreur.
-
-    function buildListItems(arr) {
-        return arr.map((t, idx) => ({ content: `${idx + 1}. ${t.title} (${t.duration ? t.duration : '··:··'})` }));
-    }
-    let listItems = buildListItems(activeTracks);
-
-    // Barre outils playlist
-    // (Filtre retiré à la demande : suppression de l'input et du bouton reset)
-
-    let squirrelListInstance = null;
-    let listRenderGeneration = 0; // incrémente à chaque reconstruction
-
-    function cleanupDuplicateLists() {
-        const all = colPlaylist.querySelectorAll('#jeezs-tracks');
-        if (all.length > 1) {
-            // Conserve le plus récent (dernier ajouté)
-            const keep = all[all.length - 1];
-            all.forEach(el => { if (el !== keep) el.remove(); });
-        }
-        // Si Squirrel actif, supprimer fallback résiduel
-        if (squirrelListInstance) {
-            const fallbacks = colPlaylist.querySelectorAll('ul.fallback-playlist');
-            fallbacks.forEach(fb => fb.remove());
-        }
-    }
-    function mountList() {
-        listRenderGeneration++;
-        try {
-            const oldList = document.querySelector('#jeezs-tracks');
-            if (oldList) oldList.remove();
-            // Supprime aussi d'éventuels anciens fallback restés sans id
-            const oldFallbacks = colPlaylist.querySelectorAll('ul.fallback-playlist');
-            oldFallbacks.forEach(fb => fb.remove());
-            if (typeof List !== 'function') throw new Error('Squirrel List indisponible');
-            squirrelListInstance = new List({
-                id: 'jeezs-tracks',
-                position: { x: 0, y: 0 },
-                size: { width: 360, height: 420 },
-                attach: '#playlist-col',
-                spacing: { vertical: 6, itemPadding: 14, marginTop: 4, marginBottom: 4 },
-                itemStyle: {
-                    fontSize: '13px',
-                    fontWeight: '500',
-                    lineHeight: '1.3',
-                    textColor: '#d6d6d6',
-                    backgroundColor: 'rgba(255,255,255,0.02)',
-                    borderRadius: '10px'
-                },
-                containerStyle: {
-                    background: 'linear-gradient(145deg, rgba(30,30,35,0.65), rgba(10,10,12,0.4))',
-                    backdropFilter: 'blur(12px)',
-                    border: '1px solid rgba(255,255,255,0.05)',
-                    borderRadius: '18px'
-                },
-                states: {
-                    hover: {
-                        backgroundColor: 'rgba(255,255,255,0.06)',
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 4px 14px -2px rgba(0,0,0,0.6)'
-                    },
-                    selected: {
-                        backgroundColor: 'linear-gradient(90deg,#ff0066,#8a2be2)',
-                        color: '#fff',
-                        boxShadow: '0 6px 22px -4px rgba(255,0,102,0.6)'
+function buildMediaStyleRules(helpers) {
+    const { selector, token } = helpers;
+    return [
+        {
+            query: '(max-width: 860px)',
+            rules: [
+                {
+                    selectors: [selector('banner__layout')],
+                    declarations: {
+                        flexDirection: 'column',
+                        alignItems: 'flex-start'
                     }
                 },
-                elevation: 4,
-                items: listItems,
-                onItemClick: (item, idx) => playTrack(idx)
-            });
-            enhanceTrackListDom();
-            queueMicrotask(() => { cleanupDuplicateLists(); adjustListHeightForMobile(); });
-        } catch (e) {
-            // Fallback: donner le même id pour permettre remplacement propre et éviter doublons
-            const ul = createEl('ul', 'fallback-playlist');
-            ul.id = 'jeezs-tracks';
-            // Nettoyer anciens fallback potentiels
-            const oldFallbacks = colPlaylist.querySelectorAll('ul.fallback-playlist');
-            oldFallbacks.forEach(fb => { if (fb !== ul) fb.remove(); });
-            listItems.forEach((li, idx) => {
-                const liEl = createEl('li');
-                liEl.innerHTML = li.content;
-                liEl.addEventListener('click', () => playTrack(idx));
-                ul.appendChild(liEl);
-            });
-            colPlaylist.appendChild(ul);
-            queueMicrotask(() => { cleanupDuplicateLists(); adjustListHeightForMobile(); });
-        }
-    }
-    mountList();
-
-    // Bouton de téléchargement global supprimé
-
-    // Lecteur audio + contrôles
-    const playerBox = createEl('div', 'player-box glass');
-    playerBox.innerHTML = `
-		<div class="now-playing">Aucune lecture</div>
-		<audio id="jeezsAudio" preload="metadata" crossorigin="anonymous"></audio>
-		<div class="controls">
-			<button class="mini" id="prevBtn">⏮</button>
-			<button class="mini" id="playPauseBtn">▶️</button>
-			<button class="mini" id="nextBtn">⏭</button>
-			<button class="mini" id="muteBtn">🔇</button>
-		</div>
-		<div class="progress-row">
-			<span id="currentTime">0:00</span>
-			<input id="seekBar" type="range" min="0" max="100" value="0" />
-			<span id="totalTime">0:00</span>
-		</div>`;
-    colPlaylist.appendChild(playerBox);
-
-    // === SECTION VISUELLE : photo puis visualizer en dessous (inversé) ===
-    const visualPhotoWrap = createEl('div', 'visual-photo-wrap');
-    colVisual.appendChild(visualPhotoWrap);
-    const visualImg = new Image();
-    visualImg.src = 'assets/images/jeezs.JPG';
-    visualImg.loading = 'lazy';
-    visualImg.alt = 'Jeezs';
-    visualImg.className = 'visual-photo';
-    visualImg.onerror = () => { visualPhotoWrap.remove(); };
-    visualPhotoWrap.appendChild(visualImg);
-
-    const canvasWrap = createEl('div', 'visualizer-wrap glass');
-    const canvas = createEl('canvas', 'visualizer');
-    canvas.width = 520; canvas.height = 240;
-    canvasWrap.appendChild(canvas);
-    colVisual.appendChild(canvasWrap);
-    // Pleine largeur dans sa colonne; on synchronise la photo sur la largeur réelle une fois posée
-    function syncVisualMediaWidth() {
-        // En desktop : le visualizer prend toute la largeur disponible (pas besoin d'ajuster)
-        // En mobile (où tout est en colonne), la largeur s'adapte naturellement.
-    }
-    window.addEventListener('resize', syncVisualMediaWidth);
-    requestAnimationFrame(syncVisualMediaWidth);
-
-    // === AUDIO & VISUALIZER LOGIQUE ========================================
-    const audio = playerBox.querySelector('#jeezsAudio');
-    const nowPlayingEl = playerBox.querySelector('.now-playing');
-    const playPauseBtn = playerBox.querySelector('#playPauseBtn');
-    const prevBtn = playerBox.querySelector('#prevBtn');
-    const nextBtn = playerBox.querySelector('#nextBtn');
-    const muteBtn = playerBox.querySelector('#muteBtn');
-    const seekBar = playerBox.querySelector('#seekBar');
-    const curTime = playerBox.querySelector('#currentTime');
-    const totalTime = playerBox.querySelector('#totalTime');
-    const playAllBtn = document.querySelector('#playAllBtn');
-    const randomBtn = document.querySelector('#randomBtn');
-    // const stopAllBtn = document.querySelector('#stopAllBtn');
-    // const stopAllBtnTop = document.querySelector('#stopAllBtnTop');
-
-    let currentIndex = 0;
-    let randomMode = false;
-    let userSeeking = false;
-    let waveformMode = false;
-
-    let ctx;
-    try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { console.warn('AudioContext init deferred', e); }
-    let analyser = ctx ? ctx.createAnalyser() : null;
-    if (analyser) analyser.fftSize = 256;
-    let dataArray = analyser ? new Uint8Array(analyser.frequencyBinCount) : new Uint8Array(0);
-    let source;
-    function ensureAudioGraph() {
-        if (!ctx) {
-            try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
-        }
-        if (!analyser) { analyser = ctx.createAnalyser(); analyser.fftSize = 256; dataArray = new Uint8Array(analyser.frequencyBinCount); }
-        if (!source) {
-            try { source = ctx.createMediaElementSource(audio); } catch (e) { /* Already created? */ }
-        }
-        if (source && analyser) { try { source.connect(analyser); analyser.connect(ctx.destination); } catch (e) { /* ignore duplicate */ } }
-    }
-
-    // Recrée le graphe au premier play
-    audio.addEventListener('play', () => {
-        ensureAudioGraph();
-        if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => { });
-    });
-
-    const resolvedCache = new Map(); // fileName -> {url, dir}
-    // Logging supprimé (désactivation complète des traces audio)
-    function logAudio() { /* no-op */ }
-    let loadToken = 0;
-    function playTrack(index) {
-        if (index < 0 || index >= activeTracks.length) return;
-        currentIndex = index;
-        const track = activeTracks[index];
-        loadToken++;
-        const myToken = loadToken;
-        logAudio('playTrack request', { index, title: track.title, file: track.file });
-        audio.pause();
-        setNowPlayingStatus('loading');
-        updateNowPlaying(track.title);
-        highlightSelected(index);
-        setAudioSourceWithFallback(track.file, ['assets/audios', 'src/assets/audios'], (success) => {
-            if (myToken !== loadToken) return;
-            if (!success) { setNowPlayingStatus('error'); return; }
-            // Attendre canplay ou fallback timeout
-            let started = false;
-            const startPlay = () => {
-                if (started) return; started = true;
-                const p = audio.play();
-                if (p && p.catch) p.catch(err => { logAudio('play() rejected', err); });
-            };
-            const canPlayHandler = () => { startPlay(); cleanup(); };
-            const errorHandler = () => { cleanup(); setNowPlayingStatus('error'); };
-            const timeout = setTimeout(() => { startPlay(); cleanup(); }, 2500);
-            function cleanup() { audio.removeEventListener('canplaythrough', canPlayHandler); audio.removeEventListener('error', errorHandler); clearTimeout(timeout); }
-            audio.addEventListener('canplaythrough', canPlayHandler, { once: true });
-            audio.addEventListener('error', errorHandler, { once: true });
-        });
-    }
-
-    function setAudioSourceWithFallback(fileName, candidateDirs, onReady) {
-        const base = fileName.replace(/\.(m4a|M4A)$/, '').trim();
-        const exts = ['.m4a', '.M4A'];
-        const rawVariants = [];
-        exts.forEach(ext => {
-            rawVariants.push(base + ext);
-            rawVariants.push(base.replace(/ /g, '%20') + ext);
-            rawVariants.push(base.replace(/ /g, '_') + ext);
-            rawVariants.push(base.replace(/ /g, '-') + ext);
-        });
-        const variants = rawVariants.filter((v, i, a) => a.indexOf(v) === i);
-        let dirIndex = 0; let variantIndex = 0; let aborted = false;
-        function cleanup() { audio.onerror = null; audio.onloadeddata = null; }
-        // Cache direct si déjà résolu
-        const cached = resolvedCache.get(fileName);
-        if (cached) {
-            logAudio('cache hit', cached.url);
-            audio.src = cached.url;
-            audio.load();
-            setNowPlayingStatus('playing');
-            onReady && onReady(true);
-            return () => { };
-        }
-        let failTimer;
-        function armFailTimer() { clearTimeout(failTimer); failTimer = setTimeout(() => { logAudio('timeout -> next variant'); tryNext(); }, 1400); }
-        function tryNext() {
-            if (aborted) return;
-            if (dirIndex >= candidateDirs.length) { setNowPlayingStatus('error'); cleanup(); onReady && onReady(false); return; }
-            if (variantIndex >= variants.length) { variantIndex = 0; dirIndex++; return tryNext(); }
-            const dir = candidateDirs[dirIndex];
-            const variant = variants[variantIndex++];
-            const encoded = variant.split('/').map(seg => encodeURIComponent(seg)).join('/');
-            const url = `${dir}/${encoded}`;
-            logAudio('try variant', { dir, variant, url });
-            audio.onerror = () => { logAudio('variant error', url); armFailTimer(); };
-            audio.onloadeddata = () => { if (aborted) return; clearTimeout(failTimer); setNowPlayingStatus('playing'); cleanup(); resolvedCache.set(fileName, { url, dir }); logAudio('loaded', url); onReady && onReady(true); };
-            audio.src = url;
-            audio.load();
-            armFailTimer();
-        }
-        tryNext();
-        return () => { aborted = true; cleanup(); };
-    }
-
-    function setNowPlayingStatus(state) {
-        nowPlayingEl.dataset.state = state;
-    }
-
-    function updateNowPlaying(title) {
-        nowPlayingEl.textContent = '▶ ' + title;
-    }
-
-    function highlightSelected(idx) {
-        if (squirrelListInstance) {
-            // Squirrel List gère un state selected -> on simule
-            const items = document.querySelectorAll('#jeezs-tracks .list-item');
-            items.forEach((el, i) => {
-                if (i === idx) el.classList.add('selected'); else el.classList.remove('selected');
-            });
-        } else {
-            const items = document.querySelectorAll('.fallback-playlist li');
-            items.forEach((el, i) => {
-                el.classList.toggle('active', i === idx);
-            });
-        }
-    }
-
-    // Contrôles
-    playPauseBtn.addEventListener('click', () => {
-        if (audio.paused) { logAudio('manual resume click'); audio.play().then(() => { playPauseBtn.textContent = '⏸'; }).catch(e => logAudio('resume failed', e)); }
-        else { logAudio('manual pause'); audio.pause(); playPauseBtn.textContent = '▶️'; }
-    });
-    prevBtn.addEventListener('click', () => playTrack((currentIndex - 1 + activeTracks.length) % activeTracks.length));
-    nextBtn.addEventListener('click', () => nextTrack());
-    muteBtn.addEventListener('click', () => { audio.muted = !audio.muted; muteBtn.textContent = audio.muted ? '🔊' : '🔇'; });
-    playAllBtn.addEventListener('click', () => { randomMode = false; playTrack(0); });
-    randomBtn.addEventListener('click', () => { randomMode = true; playTrack(randIndex()); });
-    let jeezsStopToken = 0;
-    function stopPlayback() {
-        // Invalide toute séquence de lecture en cours
-        jeezsStopToken++;
-        try { audio.pause(); } catch (_) { }
-        try { audio.removeAttribute('src'); } catch (_) { }
-        audio.src = '';
-        try { audio.load(); } catch (_) { }
-        audio.currentTime = 0;
-        currentIndex = -1; // empêche nextTrack()
-        randomMode = false;
-        nowPlayingEl.textContent = 'Arrêté';
-        nowPlayingEl.dataset.state = '';
-        highlightSelected(-1);
-    }
-    // Activation du bouton Stop existant (sélection par texte)
-    document.addEventListener('click', (e) => {
-        const t = e.target;
-        if (t && t.tagName === 'BUTTON' && /stop/i.test(t.textContent.trim())) {
-            stopPlayback();
-        }
-    }, true);
-
-    function nextTrack() {
-        if (currentIndex === -1) return; // arrêté manuellement
-        if (randomMode) return playTrack(randIndex());
-        playTrack((currentIndex + 1) % activeTracks.length);
-    }
-    function randIndex() {
-        if (activeTracks.length <= 1) return 0; let r; do { r = Math.floor(Math.random() * activeTracks.length); } while (r === currentIndex); return r;
-    }
-
-    audio.addEventListener('ended', nextTrack);
-    audio.addEventListener('loadedmetadata', () => { totalTime.textContent = formatTime(audio.duration); });
-    audio.addEventListener('timeupdate', () => {
-        if (!userSeeking && audio.duration) {
-            seekBar.value = (audio.currentTime / audio.duration) * 100;
-            curTime.textContent = formatTime(audio.currentTime);
-        }
-    });
-    seekBar.addEventListener('input', () => { userSeeking = true; });
-    seekBar.addEventListener('change', () => {
-        if (audio.duration) { audio.currentTime = (seekBar.value / 100) * audio.duration; }
-        userSeeking = false;
-    });
-
-    if (!window.formatTime) {
-        window.formatTime = function (sec) {
-            if (isNaN(sec)) return '0:00';
-            const m = Math.floor(sec / 60); const s = Math.floor(sec % 60).toString().padStart(2, '0');
-            return `${m}:${s}`;
-        };
-    }
-    const formatTime = window.formatTime;
-
-    // Visualizer draw loop
-    const ctx2d = canvas.getContext('2d');
-    const timeArray = analyser ? new Uint8Array(analyser.fftSize) : new Uint8Array(0);
-    function draw() {
-        requestAnimationFrame(draw);
-        ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-        const gradient = ctx2d.createLinearGradient(0, 0, canvas.width, 0);
-        gradient.addColorStop(0, '#ff0066');
-        gradient.addColorStop(0.5, '#8a2be2');
-        gradient.addColorStop(1, '#00eaff');
-        if (!analyser) return; // pas prêt encore
-        if (!waveformMode) {
-            analyser.getByteFrequencyData(dataArray);
-            const barWidth = (canvas.width / dataArray.length) * 1.4;
-            let x = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-                const v = dataArray[i] / 255;
-                const h = v * canvas.height * 0.9;
-                ctx2d.fillStyle = gradient;
-                roundRect(ctx2d, x, canvas.height - h, barWidth * 0.8, h, 6);
-                x += barWidth + 1;
-            }
-        } else {
-            analyser.getByteTimeDomainData(timeArray);
-            ctx2d.lineWidth = 2;
-            ctx2d.strokeStyle = gradient;
-            ctx2d.beginPath();
-            const sliceWidth = canvas.width / timeArray.length;
-            let x = 0;
-            for (let i = 0; i < timeArray.length; i++) {
-                const v = timeArray[i] / 128.0 - 1.0;
-                const y = (canvas.height / 2) + v * (canvas.height * 0.4);
-                if (i === 0) ctx2d.moveTo(x, y); else ctx2d.lineTo(x, y);
-                x += sliceWidth;
-            }
-            ctx2d.stroke();
-        }
-    }
-    draw();
-    const visualToggle = createEl('button', 'mode-toggle');
-    visualToggle.textContent = 'Waveform';
-    visualToggle.addEventListener('click', () => { waveformMode = !waveformMode; visualToggle.textContent = waveformMode ? 'Spectrum' : 'Waveform'; });
-    canvasWrap.appendChild(visualToggle);
-
-    function roundRect(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    // Précharge des durées
-    preloadTrackDurations(TRACKS, () => {
-        listItems = buildListItems(activeTracks);
-        // Remonte la liste seulement si la génération courante correspond encore (évite double re-rendu simultané)
-        mountList();
-        queueMicrotask(() => { cleanupDuplicateLists(); adjustListHeightForMobile(); });
-    });
-    // Ajustement dynamique de la hauteur de la liste en mode mobile pour éviter chevauchements
-    function adjustListHeightForMobile() {
-        const listEl = document.getElementById('jeezs-tracks');
-        if (!listEl) return;
-        if (window.innerWidth > 900) {
-            // Reset sur desktop pour laisser le layout naturel fonctionner
-            listEl.style.height = '';
-            listEl.style.position = '';
-            return;
-        }
-        // Récupère les items visibles
-        const items = listEl.querySelectorAll('.list-item');
-        let maxBottom = 0;
-        items.forEach(it => {
-            const r = it.getBoundingClientRect();
-            if (r.bottom > maxBottom) maxBottom = r.bottom;
-        });
-        const listRect = listEl.getBoundingClientRect();
-        const needed = Math.ceil((maxBottom - listRect.top) + 18);
-        if (needed > 0 && isFinite(needed)) {
-            listEl.style.height = needed + 'px';
-            listEl.style.position = 'relative';
-        }
-    }
-    window.addEventListener('resize', () => { adjustListHeightForMobile(); });
-    window.addEventListener('orientationchange', () => { setTimeout(adjustListHeightForMobile, 120); });
-    // Sécurité: réajuste après un petit délai (images / fonts)
-    setTimeout(adjustListHeightForMobile, 400);
-    setTimeout(adjustListHeightForMobile, 1200);
-
-    // Bio section
-    const bio = createEl('section', 'bio-section glass');
-    bio.innerHTML = `
-        <h3 class="section-title">BIO</h3>
-        <p class="bio-text">JEEZS fusionne l'énergie métallique, les textures électro, la pulsation pop et une dimension narrative immersive. Chaque titre est pensé comme une scène: tension, montée, impact et rémanence émotionnelle.</p>
-       `;
-    root.appendChild(bio);
-    // Démarrage automatique (optionnel)
-    // playTrack(0);
-}
-
-// Construit la structure DOM interne des items après génération Squirrel
-function enhanceTrackListDom() {
-    const items = document.querySelectorAll('#jeezs-tracks .list-item');
-    if (!items.length) return;
-    items.forEach((el, i) => {
-        // Si déjà enrichi on saute
-        if (el.querySelector('.track-line')) return;
-        const trackText = el.textContent || '';
-        // Efface le texte brut
-        el.textContent = '';
-        // Récup info depuis TRACKS global via closure indirecte (on retrouve buildJeezsPage scope) => on fallback sur parsing
-        // Plus simple: on stock sur dataset lors de la création plus tard si besoin.
-        // Ici on reparse approximate: "N. mood title (dur)"
-        // Nouveau format: "N. Title (dur)"
-        const match = trackText.match(/^(\d+)\.\s+(.+)\s+\(([^)]+)\)$/);
-        let title = ''; let duration = ''; let index = i + 1;
-        if (match) { index = match[1]; title = match[2].replace(`(${match[3]})`, '').trim(); duration = match[3]; }
-        const line = createEl('div', 'track-line');
-        const idxSpan = createEl('span', 'index'); idxSpan.textContent = index;
-        const titleSpan = createEl('span', 'title'); titleSpan.textContent = title;
-        const durSpan = createEl('span', 'duration'); durSpan.textContent = duration;
-        // Zone actions (téléchargement supprimé)
-        line.append(idxSpan, titleSpan, durSpan);
-        el.appendChild(line);
-    });
-}
-
-function preloadTrackDurations(TRACKS, cb) {
-    const promises = [];
-    TRACKS.forEach((track, idx) => {
-        const probe = new Audio();
-        probe.preload = 'metadata';
-        probe.src = encodeURI(`assets/audios/${track.file}`);
-        promises.push(new Promise(resolve => {
-            probe.addEventListener('loadedmetadata', () => {
-                if (!isNaN(probe.duration) && probe.duration) {
-                    track.duration = formatTime(probe.duration);
+                {
+                    selectors: [selector('banner__media')],
+                    declarations: {
+                        width: '100%'
+                    }
                 }
-                resolve();
-            });
-            probe.addEventListener('error', () => resolve());
-        }));
+            ]
+        },
+        {
+            query: '(max-width: 640px)',
+            rules: [
+                {
+                    selectors: [selector('page')],
+                    declarations: {
+                        padding: 'clamp(20px, 6vw, 40px)'
+                    }
+                },
+                {
+                    selectors: [selector('calendar__weekdays'), selector('calendar__days')],
+                    declarations: {
+                        gap: '8px'
+                    }
+                },
+                {
+                    selectors: [selector('calendar__day')],
+                    declarations: {
+                        minHeight: '80px',
+                        padding: '10px'
+                    }
+                }
+            ]
+        }
+    ];
+}
+
+function camelToKebab(input) {
+    return input.replace(/[A-Z]/g, (letter) => '-' + letter.toLowerCase());
+}
+
+function declarationsToString(declarations) {
+    return Object.entries(declarations)
+        .map(([property, value]) => `${camelToKebab(property)}: ${value};`)
+        .join('');
+}
+
+function buildCssText(helpers) {
+    const baseRules = buildBaseStyleRules(helpers).map((rule) => {
+        const selector = rule.selectors.join(',');
+        return `${selector}{${declarationsToString(rule.declarations)}}`;
+    }).join('');
+
+    const mediaRules = buildMediaStyleRules(helpers).map((media) => {
+        const content = media.rules.map((rule) => {
+            const selector = rule.selectors.join(',');
+            return `${selector}{${declarationsToString(rule.declarations)}}`;
+        }).join('');
+        return `@media ${media.query}{${content}}`;
+    }).join('');
+
+    return baseRules + mediaRules;
+}
+
+function ensureStyles(namespace) {
+    const helpers = createHelpers(namespace);
+    if (STYLE_REGISTRY.has(helpers.namespace)) return;
+
+    const styleId = `${STYLE_PREFIX}-${helpers.namespace}`;
+    if (document.getElementById(styleId)) {
+        STYLE_REGISTRY.set(helpers.namespace, true);
+        return;
+    }
+
+    const parent = document.head || document.getElementsByTagName('head')[0] || 'head';
+    $('style', {
+        id: styleId,
+        parent,
+        text: buildCssText(helpers)
     });
-    Promise.all(promises).then(() => {
-        // Met à jour l'affichage si la liste est rendue
-        enhanceTrackListDom();
-        // Mets à jour les durées remplacées
-        const lines = document.querySelectorAll('#jeezs-tracks .track-line');
-        lines.forEach((line, i) => {
-            const d = TRACKS[i] && TRACKS[i].duration;
-            if (d) {
-                const durEl = line.querySelector('.duration');
-                if (durEl) durEl.textContent = d;
+
+    STYLE_REGISTRY.set(helpers.namespace, true);
+}
+
+function themeToCssVars(theme, namespace) {
+    return {
+        [`--${namespace}-page-bg`]: theme.pageBackground,
+        [`--${namespace}-text-color`]: theme.textColor,
+        [`--${namespace}-font-family`]: theme.fontFamily,
+        [`--${namespace}-section-gap`]: theme.sectionGap,
+        [`--${namespace}-grid-gap`]: theme.gridGap,
+        [`--${namespace}-max-width`]: theme.maxWidth,
+        [`--${namespace}-min-column`]: theme.minColumnWidth,
+        [`--${namespace}-block-bg`]: theme.blockBackground,
+        [`--${namespace}-block-padding`]: theme.blockPadding,
+        [`--${namespace}-block-radius`]: theme.blockRadius,
+        [`--${namespace}-block-border`]: theme.blockBorder,
+        [`--${namespace}-block-shadow`]: theme.blockShadow,
+        [`--${namespace}-block-blur`]: theme.blockBlur,
+        [`--${namespace}-block-gap`]: theme.blockContentGap,
+        [`--${namespace}-muted-color`]: theme.mutedColor,
+        [`--${namespace}-accent-color`]: theme.accentColor,
+        [`--${namespace}-banner-gradient`]: theme.bannerBackground,
+        [`--${namespace}-banner-text`]: theme.bannerTextColor,
+        [`--${namespace}-banner-overlay`]: theme.bannerOverlay,
+        [`--${namespace}-cta-background`]: theme.ctaBackground,
+        [`--${namespace}-cta-color`]: theme.ctaColor,
+        [`--${namespace}-image-radius`]: theme.imageRadius,
+        [`--${namespace}-calendar-grid`]: theme.calendarGridColor,
+        [`--${namespace}-calendar-accent-bg`]: theme.calendarAccentBackground,
+        [`--${namespace}-calendar-accent-color`]: theme.calendarAccentColor
+    };
+}
+
+function applyThemeVars(node, theme, namespace) {
+    const vars = themeToCssVars(theme, namespace);
+    Object.keys(vars).forEach((key) => {
+        const value = vars[key];
+        if (value != null) {
+            node.style.setProperty(key, value);
+        }
+    });
+}
+
+function createBlockWrapper(type, container, classNameFn, css = {}) {
+    return $('article', {
+        class: `${classNameFn('block')} ${classNameFn(`block--${type}`)}`,
+        parent: container,
+        css
+    });
+}
+
+function registerBlockType(type, renderer) {
+    if (typeof type !== 'string' || !type.trim() || typeof renderer !== 'function') {
+        console.warn('[ModularBlocks] Impossible de créer le type "' + type + '"');
+        return;
+    }
+    BLOCK_RENDERERS.set(type.trim(), renderer);
+}
+
+function renderBlock(container, definition, theme, context) {
+    if (!definition || !definition.type) return null;
+    const renderer = BLOCK_RENDERERS.get(definition.type);
+    if (!renderer) {
+        console.warn('[ModularBlocks] Type de bloc inconnu:', definition.type);
+        return null;
+    }
+    return renderer({
+        container,
+        data: definition.data || {},
+        theme,
+        definition,
+        context
+    });
+}
+
+function renderBanner({ container, data, context }) {
+    const { className } = context;
+    const css = {};
+    if (data.background) css.background = data.background;
+    if (data.textColor) css.color = data.textColor;
+    const block = createBlockWrapper('banner', container, className, css);
+
+    const layout = $('div', {
+        class: className('banner__layout'),
+        parent: block
+    });
+
+    const copy = $('div', {
+        class: className('banner__copy'),
+        parent: layout
+    });
+
+    if (data.eyebrow) {
+        $('span', {
+            class: className('banner__eyebrow'),
+            parent: copy,
+            text: data.eyebrow
+        });
+    }
+
+    if (data.title) {
+        $('h1', {
+            class: className('banner__title'),
+            parent: copy,
+            text: data.title
+        });
+    }
+
+    if (data.subtitle) {
+        $('p', {
+            class: className('banner__subtitle'),
+            parent: copy,
+            text: data.subtitle
+        });
+    }
+
+    const actions = Array.isArray(data.actions)
+        ? data.actions
+        : data.cta
+            ? [data.cta]
+            : [];
+
+    if (actions.length) {
+        const actionsRow = $('div', {
+            class: className('banner__actions'),
+            parent: copy
+        });
+
+        actions.forEach((action) => {
+            if (!action || !action.label) return;
+            const tag = action.href ? 'a' : 'button';
+            const attrs = action.href
+                ? { href: action.href, target: action.target || '_self', rel: action.rel || undefined }
+                : { type: 'button' };
+
+            const button = $(tag, {
+                class: className('banner__cta'),
+                parent: actionsRow,
+                text: action.label,
+                attrs,
+                onClick: typeof action.onClick === 'function' ? action.onClick : undefined,
+                css: action.css || undefined
+            });
+
+            if (action.icon) {
+                $('span', {
+                    parent: button,
+                    text: action.icon,
+                    css: {
+                        fontSize: '1.1rem'
+                    }
+                });
             }
         });
-        if (typeof cb === 'function') cb();
+    }
+
+    if (data.media !== false) {
+        const mediaWrapper = $('div', {
+            class: className('banner__media'),
+            parent: layout,
+            css: data.mediaCss || undefined
+        });
+
+        const media = data.media || data.image;
+        if (media && media.src) {
+            $('img', {
+                parent: mediaWrapper,
+                attrs: {
+                    src: media.src,
+                    alt: media.alt || ''
+                }
+            });
+        } else {
+            $('div', {
+                class: className('banner__media-fallback'),
+                parent: mediaWrapper
+            });
+        }
+    }
+
+    return block;
+}
+
+function renderImage({ container, data, context }) {
+    const { className } = context;
+    const block = createBlockWrapper('image', container, className, data.css || undefined);
+
+    if (data.label) {
+        $('span', {
+            class: className('image__label'),
+            parent: block,
+            text: data.label
+        });
+    }
+
+    const aspectRatio = typeof data.aspectRatio === 'number'
+        ? data.aspectRatio + '%'
+        : data.aspectRatio || data.ratio || '62%';
+
+    const frame = $('div', {
+        class: className('image__frame'),
+        parent: block,
+        css: {
+            paddingTop: aspectRatio
+        }
     });
+
+    if (data.src) {
+        $('img', {
+            parent: frame,
+            attrs: {
+                src: data.src,
+                alt: data.alt || ''
+            }
+        });
+    } else {
+        $('div', {
+            class: className('banner__media-fallback'),
+            parent: frame
+        });
+    }
+
+    if (data.caption) {
+        $('p', {
+            class: className('image__caption'),
+            parent: block,
+            text: data.caption
+        });
+    }
+
+    if (data.credit) {
+        $('span', {
+            class: className('image__credit'),
+            parent: block,
+            text: data.credit
+        });
+    }
+
+    return block;
 }
 
-// ===================== OUTILS & STYLES =====================================
-function createEl(tag, cls) { const el = document.createElement(tag); if (cls) el.className = cls; return el; }
-function createSectionTitle(txt) { const t = createEl('h3', 'section-title'); t.textContent = txt; return t; }
+function renderRichText({ container, data, context }) {
+    const { className } = context;
+    const block = createBlockWrapper('rich-text', container, className, data.css || undefined);
 
-function injectBaseStyles() {
-    if (document.getElementById('jeezs-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'jeezs-styles';
-    style.textContent = `
-        :root { --accent1:#ff1e1e; --accent2:#a30022; --accent3:#ff4d3d; --bg:#09090b; --panel:#151117; --accentGlow:rgba(255,40,40,0.55); font-family: 'Inter', 'Roboto', system-ui, sans-serif; }
-        body { background: radial-gradient(circle at 20% 18%, #241014 0%, #0d0b0c 55%, #070607 90%); color:#e9e9e9; margin:0; }
-        .jeezs-hero { position:relative; min-height:60vh; display:flex; align-items:center; justify-content:center; text-align:center; background:
-            linear-gradient(165deg, rgba(40,6,10,0.82) 0%, rgba(25,6,8,0.78) 42%, rgba(15,10,12,0.9) 80%),
-            url('assets/images/jeezs_2.JPG');
-        background-size:cover; background-position:center top; background-repeat:no-repeat; background-attachment:scroll; overflow:hidden; }
-        .jeezs-hero::after { content:''; position:absolute; left:0; right:0; bottom:-1px; height:140px; background:linear-gradient(to bottom, rgba(12,6,8,0) 0%, rgba(14,8,10,0.55) 55%, #09090b 95%); pointer-events:none; }
-        .jeezs-hero .hero-overlay { padding:70px 30px 50px; }
-        .band-name { font-size: clamp(3.1rem, 7.5vw, 5.8rem); letter-spacing:0.18em; margin:0 0 14px; background: linear-gradient(95deg,var(--accent1),var(--accent2),var(--accent3)); -webkit-background-clip:text; color:transparent; text-shadow:0 0 34px rgba(255,40,40,0.35); }
-        .tagline { margin:0 0 30px; font-weight:300; letter-spacing:0.32em; font-size: clamp(0.85rem, 2vw, 1.05rem); text-transform:uppercase; opacity:0.78; }
-        .contact-bar { display:flex; gap:26px; flex-wrap:wrap; justify-content:center; font-size:0.95rem; margin-bottom:30px; }
-        .contact-bar a { color:#f1f1f1; text-decoration:none; position:relative; }
-        .contact-bar a::after { content:''; position:absolute; left:0; bottom:-4px; width:0; height:2px; background:linear-gradient(90deg,var(--accent1),var(--accent2)); transition:width .4s; }
-        .contact-bar a:hover::after { width:100%; }
-        .cta-row { display:flex; gap:18px; justify-content:center; flex-wrap:wrap; }
-        .glow-btn { background:linear-gradient(100deg,#1d1416,#23171a); border:1px solid rgba(255,255,255,0.07); color:#fff; padding:13px 30px; border-radius:44px; cursor:pointer; font-size:0.78rem; letter-spacing:0.22em; text-transform:uppercase; position:relative; overflow:hidden; transition:all .45s; }
-        .glow-btn.primary { background:linear-gradient(90deg,var(--accent1), var(--accent2)); box-shadow:0 0 0 var(--accentGlow); }
-        .glow-btn:hover { transform:translateY(-4px); box-shadow:0 10px 34px -8px rgba(0,0,0,0.7); }
-        .glow-btn.primary:hover { box-shadow:0 8px 38px -6px rgba(255,40,40,0.55); }
-        .jeezs-layout { display:grid; grid-template-columns: 380px 1fr 380px; gap:44px; padding:40px clamp(20px,5vw,70px) 110px; }
-        @media (max-width:1500px){ .jeezs-layout { grid-template-columns: 360px 1fr 340px; gap:34px; }}
-        @media (max-width:1200px){ .jeezs-layout { grid-template-columns: 360px 1fr; } .gallery-col { order:3; grid-column:1 / -1; } }
-        @media (max-width:900px){ .jeezs-layout { grid-template-columns: 1fr; } .playlist-col, .visual-col, .gallery-col { grid-column:1; } }
-        .section-title { font-size:0.7rem; letter-spacing:0.5em; font-weight:600; margin:0 0 22px; opacity:0.5; text-transform:uppercase; }
-        .playlist-col, .visual-col, .gallery-col { position:relative; }
-        #jeezs-tracks .list-item { cursor:pointer; transition:all .45s cubic-bezier(.25,.8,.25,1); }
-        #jeezs-tracks .list-item.selected { color:#fff; }
-    #jeezs-tracks { display:block; position:relative; margin-bottom:40px; }
-    .playlist-col { display:flex; flex-direction:column; }
-    .track-line { display:grid; grid-template-columns: 40px 1fr 70px; align-items:center; gap:14px; font-size:0.7rem; letter-spacing:.14em; text-transform:uppercase; }
-        .track-line .index { font-weight:600; opacity:.45; }
-        .track-line .title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .track-line .duration { font-variant-numeric: tabular-nums; opacity:.7; font-weight:500; }
-    /* Actions & download supprimés */
-        .playlist-tools { display:flex; gap:10px; align-items:center; margin:0 0 16px; }
-        .filter-input { flex:1; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:#fff; padding:9px 12px; border-radius:9px; font-size:0.66rem; letter-spacing:.14em; }
-        .filter-input:focus { outline:1px solid var(--accent1); box-shadow:0 0 0 3px rgba(255,40,40,0.25); }
-        .util-btn { background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:#fff; border-radius:9px; padding:9px 12px; cursor:pointer; font-size:0.65rem; letter-spacing:.15em; }
-        .util-btn:hover { background:linear-gradient(90deg,var(--accent1),var(--accent2)); }
-        .mode-toggle { position:absolute; top:10px; right:10px; background:rgba(20,10,12,0.55); border:1px solid rgba(255,60,60,0.25); color:#fff; padding:7px 14px; font-size:0.6rem; letter-spacing:.22em; text-transform:uppercase; border-radius:30px; cursor:pointer; backdrop-filter:blur(8px); transition:.4s; }
-        .mode-toggle:hover { background:linear-gradient(90deg,var(--accent1),var(--accent2)); box-shadow:0 6px 22px -6px rgba(255,40,40,0.45); }
-    .player-box { margin-top:24px; padding:22px 24px 30px; border-radius:26px; display:none !important; }
-        .glass { background:linear-gradient(155deg, rgba(255,255,255,0.07), rgba(255,255,255,0.015)); backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,0.05); box-shadow: 0 14px 42px -14px rgba(0,0,0,0.65); }
-        .now-playing { font-size:.68rem; letter-spacing:.32em; margin-bottom:12px; opacity:.82; text-transform:uppercase; }
-        .now-playing[data-state='loading'] { opacity:0.95; animation:pulse 1.1s infinite ease-in-out; }
-        .now-playing[data-state='error'] { color:#ff4d5b; text-shadow:0 0 7px rgba(255,77,91,0.35); }
-        @keyframes pulse { 0% { filter:brightness(1); } 50% { filter:brightness(1.55); } 100% { filter:brightness(1); } }
-        .controls { display:flex; gap:12px; margin-bottom:16px; }
-        .controls .mini { flex:1; background:#1d1416; border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:11px 0; color:#fff; cursor:pointer; font-size:0.8rem; transition:.35s; }
-        .controls .mini:hover { background:#261a1c; }
-        .progress-row { display:grid; grid-template-columns:44px 1fr 48px; gap:14px; align-items:center; font-size:0.64rem; letter-spacing:.18em; }
-        #seekBar { width:100%; -webkit-appearance:none; height:6px; border-radius:4px; background:linear-gradient(90deg,var(--accent1),var(--accent2)); outline:none; cursor:pointer; box-shadow:0 0 0 1px rgba(255,0,0,0.15); }
-        #seekBar::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 0 0 5px rgba(255,30,30,0.4); border:none; transition:.25s; }
-        #seekBar::-webkit-slider-thumb:hover { transform:scale(1.18); }
-    .visualizer-wrap { padding:20px 22px 26px; border-radius:32px; position:relative; overflow:hidden; width:100%; }
-        .visualizer { width:100%; height:auto; display:block; }
-            /* Image unique sous le visualizer */
-            .visual-photo-wrap { margin:0 auto 60px; display:flex; justify-content:flex-end; position:relative; }
-            .visual-photo { width:100%; display:block; height:auto; border-radius:26px; object-fit:cover; box-shadow:0 18px 48px -16px rgba(0,0,0,0.65); transition:transform .55s cubic-bezier(.22,.75,.25,1), box-shadow .55s; }
-            .visual-photo:hover { transform:scale(1.035); box-shadow:0 26px 70px -20px rgba(0,0,0,0.7); }
-            @media (max-width:900px){ .visual-photo { border-radius:20px; } }
-        .fallback-playlist { list-style:none; margin:0 0 22px; padding:0; display:flex; flex-direction:column; gap:8px; }
-        .fallback-playlist li { background:rgba(255,255,255,0.04); padding:13px 18px; border-radius:12px; cursor:pointer; transition:.35s; }
-        .fallback-playlist li:hover { background:rgba(255,255,255,0.08); }
-        .fallback-playlist li.active { background:linear-gradient(90deg,var(--accent1),var(--accent2)); }
-    .bio-section { margin:10px clamp(20px,6vw,120px) 70px; padding:50px clamp(24px,4vw,82px); border-radius:40px; position:relative; }
-        .bio-text { line-height:1.55; font-size:0.92rem; max-width:900px; }
-        .bio-highlights { list-style:none; margin:30px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:16px; }
-        .bio-highlights li { background:rgba(255,255,255,0.06); border:1px solid rgba(255,80,80,0.25); padding:11px 18px; border-radius:28px; font-size:0.58rem; letter-spacing:.22em; text-transform:uppercase; }
-        /* Scrollbars */
-        ::-webkit-scrollbar { width:10px; }
-        ::-webkit-scrollbar-track { background:rgba(255,255,255,0.04); }
-        ::-webkit-scrollbar-thumb { background:linear-gradient(var(--accent1), var(--accent2)); border-radius:50px; }
-        /* ================== RESPONSIVE EMPILAGE MOBILE ================== */
-        @media (max-width:900px){
-            .jeezs-layout { display:flex; flex-direction:column; gap:70px; padding:34px 16px 120px; }
-            #jeezs-tracks { width:100% !important; max-width:100% !important; }
-            #jeezs-tracks .list-item { width:100% !important; }
-            .player-box, .visualizer-wrap, .visual-photo-wrap { width:100% !important; }
-            /* Séparation nette entre blocs */
-            .playlist-col > *, .visual-col > *, .gallery-col > * { display:block; position:relative; }
-            #jeezs-tracks { margin-bottom:54px !important; padding-bottom:10px; }
-            .player-box { margin-top:28px; }
-            /* Spacing mobile: on garde l'ordre DOM (photo puis visualizer) et on espace via la marge de la photo */
-            .visual-photo-wrap { margin:0 0 48px !important; }
-            .visualizer-wrap { margin:0 0 0 !important; }
-            /* Empêche les overlaps via z-index neutres */
-            .playlist-col, .visual-col, .gallery-col { position:relative; z-index:0; }
-            .visualizer-wrap, .visual-photo-wrap, .player-box { z-index:1; }
+    if (data.badge) {
+        $('span', {
+            class: className('rich-text__badge'),
+            parent: block,
+            text: data.badge
+        });
+    }
+
+    if (data.title) {
+        const headingTag = data.headingTag && typeof data.headingTag === 'string'
+            ? data.headingTag
+            : 'h2';
+
+        $(headingTag, {
+            class: className('rich-text__title'),
+            parent: block,
+            text: data.title
+        });
+    }
+
+    if (data.lead) {
+        $('p', {
+            class: className('rich-text__lead'),
+            parent: block,
+            text: data.lead
+        });
+    }
+
+    const paragraphs = Array.isArray(data.body)
+        ? data.body
+        : data.body
+            ? [data.body]
+            : [];
+
+    if (paragraphs.length) {
+        const body = $('div', {
+            class: className('rich-text__body'),
+            parent: block
+        });
+
+        paragraphs.forEach((text) => {
+            if (typeof text !== 'string') return;
+            $('p', {
+                parent: body,
+                text
+            });
+        });
+    }
+
+    if (Array.isArray(data.listItems) && data.listItems.length) {
+        const list = $('ul', {
+            class: className('rich-text__list'),
+            parent: block
+        });
+
+        data.listItems.forEach((item) => {
+            if (!item) return;
+            $('li', {
+                parent: list,
+                text: typeof item === 'string' ? item : String(item)
+            });
+        });
+    }
+
+    if (data.quote) {
+        const quoteText = typeof data.quote === 'string' ? data.quote : data.quote.text;
+        if (quoteText) {
+            const quote = $('blockquote', {
+                class: className('rich-text__quote'),
+                parent: block,
+                text: quoteText
+            });
+
+            if (data.quote.author) {
+                $('cite', {
+                    class: className('rich-text__quote-author'),
+                    parent: quote,
+                    text: data.quote.author
+                });
+            }
         }
-        @media (max-width:560px){
-            .track-line { grid-template-columns:30px 1fr 58px; gap:8px; font-size:0.64rem; }
-            .track-line .duration { text-align:right; }
-            .band-name { letter-spacing:0.12em; }
-            .glow-btn { padding:11px 22px; font-size:0.7rem; }
-            /* Cache le player sur téléphone (mode iPhone) */
-            .player-box { display:none !important; }
-            #jeezs-tracks { margin-bottom:60px !important; }
-            /* Plus d'espace entre visualizer et photo */
-            .visual-photo-wrap { margin:0 0 52px !important; }
-            .visualizer-wrap { margin:0 0 0 !important; }
-        }
-        @media (max-width:420px){
-            .track-line { grid-template-columns:26px 1fr 54px; font-size:0.6rem; gap:6px; }
-            .visual-photo { border-radius:18px; }
-            .visualizer-wrap { padding:16px 16px 22px; }
-            .visual-photo-wrap { order:2; margin:20px 0 0; }
-            .visualizer-wrap { order:1; }
-        }
-    `;
-    document.head.appendChild(style);
+    }
+
+    const actions = Array.isArray(data.actions) ? data.actions : [];
+    if (actions.length) {
+        const actionsRow = $('div', {
+            class: className('rich-text__actions'),
+            parent: block
+        });
+
+        actions.forEach((action) => {
+            if (!action || !action.label) return;
+            const tag = action.href ? 'a' : 'button';
+            const attrs = action.href
+                ? { href: action.href, target: action.target || '_self', rel: action.rel || undefined }
+                : { type: 'button' };
+
+            $(tag, {
+                class: className('banner__cta'),
+                parent: actionsRow,
+                text: action.label,
+                attrs,
+                onClick: typeof action.onClick === 'function' ? action.onClick : undefined,
+                css: action.css || undefined
+            });
+        });
+    }
+
+    return block;
 }
 
+function buildCalendarDays(config = {}) {
+    const totalDays = Number.isFinite(config.totalDays) ? config.totalDays : 30;
+    const startOffset = Number.isFinite(config.startOffset) ? config.startOffset : 0;
+    const days = [];
+    const eventMap = new Map();
+
+    if (Array.isArray(config.events)) {
+        config.events.forEach((event) => {
+            if (!event || !Number.isFinite(event.day)) return;
+            eventMap.set(event.day, event);
+        });
+    }
+
+    for (let i = 0; i < startOffset; i += 1) {
+        days.push({ empty: true });
+    }
+
+    for (let day = 1; day <= totalDays; day += 1) {
+        const event = eventMap.get(day);
+        days.push({
+            day,
+            label: String(day),
+            event
+        });
+    }
+
+    return days;
+}
+
+function renderCalendar({ container, data, context }) {
+    const { className } = context;
+    const block = createBlockWrapper('calendar', container, className, data.css || undefined);
+
+    const header = $('div', {
+        class: className('calendar__header'),
+        parent: block
+    });
+
+    if (data.month) {
+        $('h3', {
+            class: className('calendar__month'),
+            parent: header,
+            text: data.month
+        });
+    }
+
+    if (data.description) {
+        $('p', {
+            class: className('calendar__description'),
+            parent: header,
+            text: data.description
+        });
+    }
+
+    const weekdays = Array.isArray(data.weekdays) && data.weekdays.length === 7
+        ? data.weekdays
+        : ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+    const weekdaysRow = $('div', {
+        class: className('calendar__weekdays'),
+        parent: block
+    });
+
+    weekdays.forEach((dayLabel) => {
+        $('div', {
+            class: className('calendar__weekday'),
+            parent: weekdaysRow,
+            text: dayLabel
+        });
+    });
+
+    const daysRow = $('div', {
+        class: className('calendar__days'),
+        parent: block
+    });
+
+    const days = Array.isArray(data.days) && data.days.length
+        ? data.days
+        : buildCalendarDays({
+            totalDays: data.totalDays,
+            startOffset: data.startOffset,
+            events: data.events
+        });
+
+    days.forEach((dayInfo) => {
+        if (!dayInfo) return;
+        const isEmpty = dayInfo.empty || (!dayInfo.label && !Number.isFinite(dayInfo.day));
+        const hasEvent = Boolean(dayInfo.event);
+        const label = dayInfo.label || (Number.isFinite(dayInfo.day) ? String(dayInfo.day) : '');
+
+        const cell = $('div', {
+            class: `${className('calendar__day')}${isEmpty ? ' is-empty' : ''}${hasEvent ? ' has-event' : ''}`,
+            parent: daysRow,
+            css: dayInfo.css || undefined
+        });
+
+        if (isEmpty) return;
+
+        $('span', {
+            class: className('calendar__day-number'),
+            parent: cell,
+            text: label
+        });
+
+        const event = dayInfo.event;
+        if (event) {
+            const pieces = [];
+            if (event.time) pieces.push(event.time);
+            if (event.title || event.label) pieces.push(event.title || event.label);
+            if (event.location) pieces.push(event.location);
+            const eventText = pieces.join(' • ');
+
+            if (eventText) {
+                $('span', {
+                    class: className('calendar__event'),
+                    parent: cell,
+                    text: eventText
+                });
+            }
+        } else if (dayInfo.note) {
+            $('span', {
+                class: className('calendar__event'),
+                parent: cell,
+                text: dayInfo.note
+            });
+        }
+    });
+
+    if (Array.isArray(data.legend) && data.legend.length) {
+        const legend = $('div', {
+            class: className('calendar__legend'),
+            parent: block
+        });
+
+        data.legend.forEach((item) => {
+            if (!item || !item.label) return;
+            const entry = $('span', {
+                parent: legend
+            });
+
+            $('span', {
+                class: className('calendar__legend-dot'),
+                parent: entry,
+                css: item.dotCss || undefined
+            });
+
+            $('span', {
+                parent: entry,
+                text: item.label
+            });
+        });
+    }
+
+    return block;
+}
+
+registerBlockType('banner', renderBanner);
+registerBlockType('image', renderImage);
+registerBlockType('rich-text', renderRichText);
+registerBlockType('calendar', renderCalendar);
+
+function createModularBlocks(options = {}) {
+    const helpers = createHelpers(options.namespace || DEFAULT_NAMESPACE);
+    ensureStyles(helpers.namespace);
+
+    const parent = options.parent || '#view';
+    const tag = options.tag || 'section';
+    const id = options.id || `${helpers.namespace}-blocks`;
+
+    const theme = { ...DEFAULT_THEME, ...(options.theme || {}) };
+
+    const cssVars = themeToCssVars(theme, helpers.namespace);
+    const containerCss = { ...cssVars, ...(options.css || {}) };
+
+    const container = $(tag, {
+        id,
+        class: helpers.className('page'),
+        parent,
+        css: containerCss
+    });
+
+    const grid = $('div', {
+        class: helpers.className('grid'),
+        parent: container,
+        css: options.gridCss || undefined
+    });
+
+    const blocks = Array.isArray(options.blocks) ? options.blocks : [];
+
+    const context = {
+        root: container,
+        grid,
+        namespace: helpers.namespace,
+        className: helpers.className,
+        token: helpers.token
+    };
+
+    blocks.forEach((definition) => renderBlock(grid, definition, theme, context));
+
+    let currentTheme = theme;
+
+    return {
+        root: container,
+        grid,
+        namespace: helpers.namespace,
+        get theme() {
+            return { ...currentTheme };
+        },
+        addBlock(blockDefinition) {
+            if (!blockDefinition) return null;
+            return renderBlock(grid, blockDefinition, currentTheme, context);
+        },
+        updateTheme(nextTheme = {}) {
+            currentTheme = { ...currentTheme, ...nextTheme };
+            applyThemeVars(container, currentTheme, helpers.namespace);
+        }
+    };
+}
+
+createModularBlocks.registerType = registerBlockType;
+createModularBlocks.defaults = {
+    theme: DEFAULT_THEME,
+    namespace: DEFAULT_NAMESPACE,
+    blocks: []
+};
+
+window.ModularBlocks = createModularBlocks;
+
+export default createModularBlocks;
