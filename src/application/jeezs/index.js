@@ -27,7 +27,9 @@ export const DEFAULT_THEME = {
     imageRadius: '20px',
     calendarGridColor: 'rgba(148, 163, 184, 0.35)',
     calendarAccentBackground: 'rgba(56, 189, 248, 0.16)',
-    calendarAccentColor: '#38bdf8'
+    calendarAccentColor: '#38bdf8',
+    calendarMaxWidth: '960px',
+    calendarCardMinWidth: '180px'
 };
 
 const BLOCK_RENDERERS = new Map();
@@ -393,7 +395,10 @@ function buildBaseStyleRules(helpers) {
             declarations: {
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '20px'
+                gap: '20px',
+                width: '100%',
+                maxWidth: token('calendar-max-width'),
+                margin: '0 auto'
             }
         },
         {
@@ -525,6 +530,35 @@ function buildMediaStyleRules(helpers) {
     const { selector, token } = helpers;
     return [
         {
+            query: '(max-width: 1024px)',
+            rules: [
+                {
+                    selectors: [selector('calendar__weekdays')],
+                    declarations: {
+                        display: 'none'
+                    }
+                },
+                {
+                    selectors: [selector('calendar__days')],
+                    declarations: {
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(' + token('calendar-card-min-width') + ', 1fr))'
+                    }
+                },
+                {
+                    selectors: [selector('calendar__day')],
+                    declarations: {
+                        minHeight: '120px'
+                    }
+                },
+                {
+                    selectors: [`${selector('calendar__day')}.is-empty`],
+                    declarations: {
+                        display: 'none'
+                    }
+                }
+            ]
+        },
+        {
             query: '(max-width: 860px)',
             rules: [
                 {
@@ -642,7 +676,9 @@ function themeToCssVars(theme, namespace) {
         [`--${namespace}-image-radius`]: theme.imageRadius,
         [`--${namespace}-calendar-grid`]: theme.calendarGridColor,
         [`--${namespace}-calendar-accent-bg`]: theme.calendarAccentBackground,
-        [`--${namespace}-calendar-accent-color`]: theme.calendarAccentColor
+        [`--${namespace}-calendar-accent-color`]: theme.calendarAccentColor,
+        [`--${namespace}-calendar-max-width`]: theme.calendarMaxWidth,
+        [`--${namespace}-calendar-card-min-width`]: theme.calendarCardMinWidth
     };
 }
 
@@ -1001,6 +1037,10 @@ function buildCalendarDays(config = {}) {
 function renderCalendar({ container, data, context }) {
     const { className } = context;
     const block = createBlockWrapper('calendar', container, className, data.css || undefined);
+
+    if (data.fullWidth !== false) {
+        block.style.gridColumn = '1 / -1';
+    }
 
     const header = $('div', {
         class: className('calendar__header'),
