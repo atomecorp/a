@@ -751,6 +751,55 @@ function buildBaseStyleRules(helpers) {
             }
         },
         {
+            selectors: [selector('video-youtube')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+            }
+        },
+        {
+            selectors: [selector('video-youtube__list')],
+            declarations: {
+                display: 'grid',
+                gap: '18px',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))'
+            }
+        },
+        {
+            selectors: [selector('video-youtube__card')],
+            declarations: {
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '18px',
+                borderRadius: '18px',
+                background: 'rgba(15, 23, 42, 0.55)',
+                border: '1px solid rgba(148, 163, 184, 0.16)',
+                boxShadow: 'inset 0 0 0 1px rgba(15, 23, 42, 0.25)'
+            }
+        },
+        {
+            selectors: [selector('video-youtube__frame')],
+            declarations: {
+                position: 'relative',
+                paddingBottom: '56.25%',
+                borderRadius: '14px',
+                overflow: 'hidden',
+                background: 'black'
+            }
+        },
+        {
+            selectors: [selector('video-youtube__iframe')],
+            declarations: {
+                position: 'absolute',
+                inset: '0',
+                width: '100%',
+                height: '100%',
+                border: '0'
+            }
+        },
+        {
             selectors: [selector('contact')],
             declarations: {
                 display: 'grid',
@@ -2195,12 +2244,114 @@ function renderFAQModule({ container, data, context }) {
     return block;
 }
 
+function extractYouTubeId(url) {
+    if (typeof url !== 'string') return null;
+    try {
+        const trimmed = url.trim();
+        if (!trimmed) return null;
+        const pattern = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\//i;
+        if (!pattern.test(trimmed)) return null;
+        const parsed = new URL(trimmed, 'https://youtube.com');
+        if (parsed.hostname.includes('youtu.be')) {
+            return parsed.pathname.replace(/^\//, '') || null;
+        }
+        const id = parsed.searchParams.get('v');
+        if (id) return id;
+        const match = parsed.pathname.match(/\/embed\/([^/]+)/);
+        return match ? match[1] : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function renderYouTube({ container, data, context }) {
+    const { className } = context;
+    const block = createBlockWrapper('video-youtube', container, className, data.css || undefined);
+
+    if (data.title) {
+        $('h2', {
+            class: className('video__title'),
+            parent: block,
+            text: data.title
+        });
+    }
+
+    if (data.subtitle) {
+        $('p', {
+            class: className('video__subtitle'),
+            parent: block,
+            text: data.subtitle
+        });
+    }
+
+    const videos = Array.isArray(data.videos) ? data.videos : [];
+    if (!videos.length) {
+        $('p', {
+            class: className('video__subtitle'),
+            parent: block,
+            text: 'Aucune vidéo YouTube disponible pour le moment.'
+        });
+        return block;
+    }
+
+    const list = $('div', {
+        class: className('video-youtube__list'),
+        parent: block
+    });
+
+    videos.forEach((video, index) => {
+        if (!video || !video.url) return;
+        const videoId = extractYouTubeId(video.url);
+        if (!videoId) return;
+
+        const card = $('div', {
+            class: className('video-youtube__card'),
+            parent: list
+        });
+
+        const frame = $('div', {
+            class: className('video-youtube__frame'),
+            parent: card
+        });
+
+        $('iframe', {
+            class: className('video-youtube__iframe'),
+            parent: frame,
+            attrs: {
+                src: 'https://www.youtube.com/embed/' + videoId,
+                title: video.title || 'YouTube video ' + (index + 1),
+                allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
+                allowfullscreen: 'true'
+            }
+        });
+
+        if (video.title) {
+            $('h3', {
+                class: className('video__title'),
+                parent: card,
+                text: video.title
+            });
+        }
+
+        if (video.description) {
+            $('p', {
+                class: className('video__description'),
+                parent: card,
+                text: video.description
+            });
+        }
+    });
+
+    return block;
+}
+
 registerBlockType('banner', renderBanner);
 registerBlockType('image', renderImage);
 registerBlockType('rich-text', renderRichText);
 registerBlockType('calendar', renderCalendar);
 registerBlockType('audio-wave', renderAudioWave);
 registerBlockType('video-player', renderVideoPlayer);
+registerBlockType('youtube', renderYouTube);
 registerBlockType('contact', renderContactModule);
 registerBlockType('faq', renderFAQModule);
 

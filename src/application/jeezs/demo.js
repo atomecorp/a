@@ -138,6 +138,20 @@ const JEEZS_DEMO_BLOCKS = [
     }
   },
   {
+    type: 'youtube',
+    data: {
+      title: 'Live stream YouTube',
+      subtitle: 'Retrouve les dernières captations en ligne.',
+      videos: [
+        {
+          url: 'https://www.youtube.com/watch?v=QapkGK-6G90&list=RDGMEM_v2KDBP3d4f8uT-ilrs8fQVMQapkGK-6G90',
+          title: 'Demo YouTube Embed',
+          description: 'Player responsive intégré via Squirrel.'
+        }
+      ]
+    }
+  },
+  {
     type: 'faq',
     data: {
       title: 'Questions fréquentes',
