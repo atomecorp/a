@@ -528,7 +528,7 @@ function buildBaseStyleRules(helpers) {
             declarations: {
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '28px'
+                gap: '20px'
             }
         },
         {
@@ -543,31 +543,33 @@ function buildBaseStyleRules(helpers) {
             selectors: [selector('audio__list')],
             declarations: {
                 display: 'grid',
-                gap: '18px',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))'
+                gap: '14px',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))'
             }
         },
         {
             selectors: [selector('audio__card')],
             declarations: {
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '18px',
-                padding: '22px',
-                borderRadius: '20px',
-                background: 'linear-gradient(135deg, rgba(15,23,42,0.85) 0%, rgba(30,41,59,0.55) 100%)',
-                border: '1px solid rgba(148, 163, 184, 0.2)',
-                boxShadow: '0 24px 54px rgba(2, 6, 23, 0.45)',
-                position: 'relative',
-                overflow: 'hidden'
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                gridTemplateRows: 'auto auto',
+                gap: '4px 10px',
+                padding: '8px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, rgba(17,24,39,0.95) 0%, rgba(30,41,59,0.58) 100%)',
+                border: '1px solid rgba(148, 163, 184, 0.12)',
+                boxShadow: '0 10px 20px rgba(2, 6, 23, 0.24)',
+                alignItems: 'center'
             }
         },
         {
             selectors: [selector('audio__meta')],
             declarations: {
+                gridColumn: '1 / 2',
+                gridRow: '1 / 2',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '4px'
+                gap: '2px'
             }
         },
         {
@@ -591,12 +593,14 @@ function buildBaseStyleRules(helpers) {
         {
             selectors: [selector('audio__wave')],
             declarations: {
+                gridColumn: '1 / 2',
+                gridRow: '2 / 3',
                 position: 'relative',
-                height: '148px',
-                borderRadius: '16px',
+                height: '50px',
+                borderRadius: '10px',
                 overflow: 'hidden',
-                background: 'linear-gradient(180deg, rgba(15,23,42,0.65) 0%, rgba(15,23,42,0.25) 100%)',
-                border: '1px solid rgba(148, 163, 184, 0.12)'
+                background: 'linear-gradient(180deg, rgba(15,23,42,0.58) 0%, rgba(15,23,42,0.2) 100%)',
+                border: '1px solid rgba(148, 163, 184, 0.1)'
             }
         },
         {
@@ -636,17 +640,20 @@ function buildBaseStyleRules(helpers) {
         {
             selectors: [selector('audio__controls')],
             declarations: {
+                gridColumn: '2 / 3',
+                gridRow: '1 / 3',
                 display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                marginTop: '4px'
+                flexDirection: 'column',
+                gap: '7px',
+                alignItems: 'stretch',
+                minWidth: '84px'
             }
         },
         {
             selectors: [selector('audio__button')],
             declarations: {
-                padding: '10px 22px',
-                borderRadius: '999px',
+                padding: '6px 0',
+                borderRadius: '10px',
                 border: '1px solid transparent',
                 background: token('accent-color'),
                 color: '#020617',
@@ -656,27 +663,20 @@ function buildBaseStyleRules(helpers) {
             }
         },
         {
-            selectors: [selector('audio__button') + ':hover'],
-            declarations: {
-                transform: 'translateY(-1px)',
-                boxShadow: '0 12px 24px rgba(56, 189, 248, 0.28)'
-            }
-        },
-        {
             selectors: [selector('audio__button') + '--ghost'],
             declarations: {
                 background: 'transparent',
                 color: token('muted-color'),
                 borderColor: 'rgba(148,163,184,0.25)',
-                padding: '10px 20px'
+                padding: '6px 0'
             }
         },
         {
             selectors: [selector('audio__time')],
             declarations: {
-                marginLeft: 'auto',
-                fontSize: '0.85rem',
-                color: token('muted-color')
+                fontSize: '0.78rem',
+                color: token('muted-color'),
+                textAlign: 'center'
             }
         },
         {
@@ -684,7 +684,7 @@ function buildBaseStyleRules(helpers) {
             declarations: {
                 fontSize: '0.8rem',
                 color: '#fca5a5',
-                marginTop: '6px'
+                marginTop: '0'
             }
         },
         {

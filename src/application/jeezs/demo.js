@@ -84,6 +84,27 @@ const JEEZS_DEMO_BLOCKS = [
           artist: 'Jeezs',
           description: 'Démo studio — guitares & synths',
           preload: 'auto'
+        },
+        {
+          src: encodeURI('../assets/audios/After The War.m4a'),
+          title: 'After The War',
+          artist: 'Jeezs',
+          description: 'Atmosphère épique — build orchestral',
+          preload: 'auto'
+        },
+        {
+          src: encodeURI('../assets/audios/Alive.m4a'),
+          title: 'Alive',
+          artist: 'Jeezs',
+          description: 'Groove pop — voix lead',
+          preload: 'auto'
+        },
+        {
+          src: encodeURI('../assets/audios/Big Brother.m4a'),
+          title: 'Big Brother',
+          artist: 'Jeezs',
+          description: 'Riff heavy — section rythmique',
+          preload: 'auto'
         }
       ]
     }
