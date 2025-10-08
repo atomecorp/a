@@ -1,5 +1,25 @@
 import createModularBlocks, { DEFAULT_THEME } from './index.js';
 
+
+const menu_content = {
+  version: "1.1",
+  meta: { namespace: "vie.menu", defaultLocale: "en" },
+  toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
+  //
+  file: { type: 'tool' },
+  tools: { type: 'tool' },
+  settings: { type: 'tool', icon: false },
+  capture: { label: 'record', type: 'tool', icon: 'record' },
+  perform: { label: 'perform', type: 'tool', icon: null },
+
+
+};
+
+
+Intuition({ name: 'menu_test', content: menu_content });
+
+
+
 const riffAudio = '../assets/audios/riff.m4a';
 const demoVideo = '../assets/videos/superman.mp4';
 
