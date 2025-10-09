@@ -67,11 +67,12 @@
 
 // import('./examples/basic.js');
 // import('./examples/tools.js');
-import('./jeezs/demo.js');
+// import('./jeezs/demo.js');
+// import('./examples/!test_taurie-path.js');
+import('./vie/index.js');
 // import('./examples/events.js');
 // import('./examples/intuition.js');
 
-// import('./examples/file_drop.js');
 // import('./examples/file_drop.js');
 // import('./examples/svg_fetch_usage.js');
 // import('./examples/svg_animate.js');
