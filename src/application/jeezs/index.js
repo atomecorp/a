@@ -34,6 +34,178 @@ export const DEFAULT_THEME = {
 
 const BLOCK_RENDERERS = new Map();
 
+const I18N_TOKEN_FLAG = '__modblocks_i18n__';
+
+function isPlainObject(value) {
+    if (!value || typeof value !== 'object') return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+}
+
+function isI18nToken(value) {
+    return Boolean(value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, I18N_TOKEN_FLAG));
+}
+
+function defaultFormatTemplate(template, params = {}) {
+    if (typeof template !== 'string') return template;
+    if (!params || typeof params !== 'object') return template;
+    return template.replace(/\{([^{}]+)\}/g, (match, token) => {
+        const key = String(token).trim();
+        return Object.prototype.hasOwnProperty.call(params, key) ? params[key] : match;
+    });
+}
+
+function buildLocaleCandidates(locale) {
+    if (!locale) return [];
+    const normalized = String(locale);
+    const candidates = [normalized];
+    const lower = normalized.toLowerCase();
+    if (lower !== normalized) candidates.push(lower);
+    if (lower.includes('-') || lower.includes('_')) {
+        const base = lower.split(/[-_]/)[0];
+        if (base && !candidates.includes(base)) candidates.push(base);
+    }
+    return candidates;
+}
+
+function resolveLocaleBucket(messages = {}, locale) {
+    const candidates = buildLocaleCandidates(locale);
+    for (let index = 0; index < candidates.length; index += 1) {
+        const candidate = candidates[index];
+        if (candidate && Object.prototype.hasOwnProperty.call(messages, candidate)) {
+            return messages[candidate];
+        }
+    }
+    return undefined;
+}
+
+function lookupMessage(messages = {}, locale, key) {
+    if (!locale || !key) return undefined;
+    const bucket = resolveLocaleBucket(messages, locale);
+    if (!bucket) return undefined;
+    const parts = Array.isArray(key) ? key : String(key).split('.');
+    let cursor = bucket;
+    for (let index = 0; index < parts.length; index += 1) {
+        const part = parts[index];
+        if (cursor && typeof cursor === 'object' && Object.prototype.hasOwnProperty.call(cursor, part)) {
+            cursor = cursor[part];
+        } else {
+            return undefined;
+        }
+    }
+    return cursor;
+}
+
+function resolveI18nTokens(value, translate) {
+    if (Array.isArray(value)) {
+        let mutated = false;
+        const next = value.map((item) => {
+            const resolved = resolveI18nTokens(item, translate);
+            if (resolved !== item) mutated = true;
+            return resolved;
+        });
+        return mutated ? next : value;
+    }
+    if (!value || typeof value !== 'object') return value;
+    if (typeof value === 'function') return value;
+    if (isI18nToken(value)) {
+        const { key, fallback, params } = value;
+        return translate(key, params || undefined, fallback);
+    }
+    if (!isPlainObject(value)) return value;
+    let mutated = false;
+    const output = {};
+    Object.keys(value).forEach((prop) => {
+        const original = value[prop];
+        const resolved = resolveI18nTokens(original, translate);
+        output[prop] = resolved;
+        if (resolved !== original) mutated = true;
+    });
+    return mutated ? output : value;
+}
+
+export function i18nText(key, fallback, params = {}) {
+    const token = {
+        [I18N_TOKEN_FLAG]: true,
+        key: String(key)
+    };
+    if (fallback !== undefined) token.fallback = fallback;
+    if (params && typeof params === 'object' && Object.keys(params).length) {
+        token.params = params;
+    }
+    return token;
+}
+
+export function createI18n(options = {}) {
+    const messages = options && typeof options.messages === 'object' ? options.messages : {};
+    const locale = (options && typeof options.locale === 'string' && options.locale) ||
+        (options && typeof options.defaultLocale === 'string' && options.defaultLocale) ||
+        'en';
+    const fallbackLocale = (options && typeof options.fallbackLocale === 'string' && options.fallbackLocale) ||
+        (options && typeof options.defaultLocale === 'string' && options.defaultLocale) ||
+        locale;
+    const formatter = typeof (options && options.formatter) === 'function' ? options.formatter : defaultFormatTemplate;
+
+    const translate = (key, paramsOrFallback, maybeFallback) => {
+        if (!key) return '';
+        let params;
+        let fallback;
+
+        if (typeof paramsOrFallback === 'string' || paramsOrFallback === undefined) {
+            fallback = paramsOrFallback;
+        } else if (paramsOrFallback && typeof paramsOrFallback === 'object') {
+            params = paramsOrFallback;
+        }
+
+        if (maybeFallback !== undefined) {
+            if (typeof maybeFallback === 'string') {
+                fallback = maybeFallback;
+            } else if (!params && maybeFallback && typeof maybeFallback === 'object') {
+                params = maybeFallback;
+            }
+        }
+
+        let message = lookupMessage(messages, locale, key);
+        if (message === undefined && fallbackLocale && fallbackLocale !== locale) {
+            message = lookupMessage(messages, fallbackLocale, key);
+        }
+
+        let base = message;
+        if (base === undefined) {
+            base = fallback !== undefined ? fallback : key;
+        }
+
+        if (typeof base === 'function') {
+            return base(params || {}, { key, locale, fallback });
+        }
+
+        if (typeof base === 'string') {
+            return formatter(base, params || {}, { key, locale, fallback });
+        }
+
+        return base;
+    };
+
+    const resolve = (value) => resolveI18nTokens(value, translate);
+
+    return {
+        locale,
+        fallbackLocale,
+        messages,
+        formatter,
+        t: translate,
+        translate,
+        resolve
+    };
+}
+
+function ensureI18nEngine(option) {
+    if (option && typeof option === 'object' && typeof option.resolve === 'function' && typeof option.t === 'function') {
+        return option;
+    }
+    return createI18n(option);
+}
+
 function createHelpers(namespace = DEFAULT_NAMESPACE) {
     const normalized = (typeof namespace === 'string' && namespace.trim()) || DEFAULT_NAMESPACE;
     const className = (name = '') => `${normalized}-${name}`;
@@ -2382,6 +2554,7 @@ function createModularBlocks(options = {}) {
     });
 
     const blocks = Array.isArray(options.blocks) ? options.blocks : [];
+    const i18n = ensureI18nEngine(options.i18n);
 
     const mediaRegistry = {
         audios: new Set(),
@@ -2394,10 +2567,17 @@ function createModularBlocks(options = {}) {
         namespace: helpers.namespace,
         className: helpers.className,
         token: helpers.token,
-        mediaRegistry
+        mediaRegistry,
+        i18n,
+        t: i18n.t
     };
 
-    blocks.forEach((definition) => renderBlock(grid, definition, theme, context));
+    const normalizeBlockDefinition = (definition) => i18n.resolve(definition);
+
+    blocks.forEach((definition) => {
+        const resolved = normalizeBlockDefinition(definition);
+        renderBlock(grid, resolved, theme, context);
+    });
 
     let currentTheme = theme;
 
@@ -2410,12 +2590,14 @@ function createModularBlocks(options = {}) {
         },
         addBlock(blockDefinition) {
             if (!blockDefinition) return null;
-            return renderBlock(grid, blockDefinition, currentTheme, context);
+            const resolved = normalizeBlockDefinition(blockDefinition);
+            return renderBlock(grid, resolved, currentTheme, context);
         },
         updateTheme(nextTheme = {}) {
             currentTheme = { ...currentTheme, ...nextTheme };
             applyThemeVars(container, currentTheme, helpers.namespace);
-        }
+        },
+        i18n
     };
 }
 
@@ -2423,8 +2605,11 @@ createModularBlocks.registerType = registerBlockType;
 createModularBlocks.defaults = {
     theme: DEFAULT_THEME,
     namespace: DEFAULT_NAMESPACE,
-    blocks: []
+    blocks: [],
+    i18n: null
 };
+createModularBlocks.createI18n = createI18n;
+createModularBlocks.i18nText = i18nText;
 
 window.ModularBlocks = createModularBlocks;
 
