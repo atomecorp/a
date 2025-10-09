@@ -34,7 +34,7 @@ function create_audio_obejct(f, target) {
     attrs: {
       controls: 'controls',
       src: URL.createObjectURL(f.file),
-      autoplay: false
+      // autoplay: false
     },
     css: {
       width: '100%'
@@ -177,3 +177,44 @@ DragDrop.registerGlobalDrop({
 });
 
 
+
+
+$('div', {
+
+  id: 'test1',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    padding: '10px',
+    width: '300px',
+    height: '200px',
+    left: '50%',
+    top: '50%',
+    position: 'absolute',
+    transform: 'translate(-50%, -50%  )',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'Je laisse passer des fichiers ici !'
+});
+
+
+const basicDrag = Draggable('draggable-box', {
+  content: '🔴 Basic',
+  css: {
+    left: '100px',
+    top: '100px',
+    width: '170px',
+    height: '170px',
+    borderRadius: '12px',
+    backgroundColor: '#e74c3c'
+  },
+  text: 'Je laisse aussi passer des fichiers ici !',
+  onDragStart: (el) => {
+    console.log('🔴 Début drag basique');
+  },
+  onDragEnd: (el) => {
+    console.log('🔴 Fin drag basique');
+  }
+});
