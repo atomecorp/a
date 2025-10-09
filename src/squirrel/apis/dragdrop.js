@@ -78,7 +78,13 @@ export function createDropZone(target, options = {}) {
     const el = typeof target === 'string' ? document.querySelector(target) : target || document.body;
     if (!el) throw new Error('createDropZone: target element not found');
 
-    const opts = Object.assign({ accept: null, multiple: true, maxSize: Infinity, allowedDropId: null }, options);
+    const opts = Object.assign({
+        accept: null,
+        multiple: true,
+        maxSize: Infinity,
+        allowedDropId: null,
+        event: null // 'stop', 'kill', 'prevent', or null
+    }, options);
 
     const onDragOver = (e) => {
         e.preventDefault();
@@ -103,6 +109,14 @@ export function createDropZone(target, options = {}) {
 
     const onDrop = async (e) => {
         e.preventDefault();
+
+        // Gestion de la propagation selon l'option 'event'
+        if (opts.event === 'stop') {
+            e.stopPropagation();
+        } else if (opts.event === 'kill' || opts.event === 'killed') {
+            e.stopImmediatePropagation();
+        }
+
         el.classList && el.classList.remove('dd-over');
 
         if (!matchesAllowedId(e)) return;
@@ -159,7 +173,6 @@ export function createDropZone(target, options = {}) {
         }
     };
 }
-
 // Convenience: register a global drop zone (document.body) but allow restricting to an element id
 export function registerGlobalDrop(options = {}) {
     return createDropZone(document.body, options);

@@ -1,12 +1,16 @@
 
+const formatBytes = (bytes) => {
+  if (typeof bytes !== 'number' || Number.isNaN(bytes)) return 'taille inconnue';
+  if (bytes === 0) return '0 o';
+  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  const index = Math.floor(Math.log(bytes) / Math.log(1024));
+  const normalized = bytes / Math.pow(1024, index);
+  return `${normalized.toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
+};
+
+
 function file_drop_anywhere(files, event) {
-  const localDropZone = document.querySelector('#isolation_test_zone');
-  if (localDropZone) {
-    const path = typeof event?.composedPath === 'function' ? event.composedPath() : null;
-    const target = event?.target;
-    const isInsideLocal = (path && path.includes(localDropZone)) || (target instanceof Element && localDropZone.contains(target));
-    if (isInsideLocal) return;
-  }
+
 
   if (!files.length) return;
   const dropTarget = document.querySelector('#view') || document.body;
@@ -52,68 +56,6 @@ function file_drop_anywhere(files, event) {
     }, 6000);
   });
 }
-function file_drop_on_drop_zone(files) {
-
-  console.log('Files dropped:', files.map(f => ({ name: f.name, type: f.type, size: f.size, path: f.path || f.fullPath })))
-
-  // Ensure we have a container within the drop zone to list results
-  let list = document.querySelector('#drop-list');
-  if (!list) {
-    list = $('div', {
-      id: 'drop-list',
-      parent: '#isolation_test_zone',
-      css: {
-        marginTop: '10px',
-        color: 'white',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px'
-      }
-    });
-  }
-
-  // Clear previous entries
-  list.innerHTML = '';
-
-  if (!files.length) {
-    $('div', {
-      parent: list,
-      css: {
-        padding: '8px',
-        borderRadius: '6px',
-        backgroundColor: 'rgba(231, 76, 60, 0.35)',
-        border: '1px solid rgba(231, 76, 60, 0.45)'
-      },
-      text: 'Aucun fichier accepté (vérifiez les extensions autorisées)'
-    });
-    return;
-  }
-
-  files.forEach((f, index) => {
-    $('div', {
-      parent: list,
-      id: `drop-item-${index}`,
-      css: {
-        padding: '8px',
-        borderRadius: '6px',
-        backgroundColor: 'rgba(0, 0, 255, 0.35)',
-        border: '1px solid rgba(255, 255, 255, 0.2)'
-      },
-      text: `${f.name} — ${f.type || 'type inconnu'} — ${f.size ?? 'taille ?'} bytes`
-    });
-  });
-}
-
-
-
-const formatBytes = (bytes) => {
-  if (typeof bytes !== 'number' || Number.isNaN(bytes)) return 'taille inconnue';
-  if (bytes === 0) return '0 o';
-  const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
-  const index = Math.floor(Math.log(bytes) / Math.log(1024));
-  const normalized = bytes / Math.pow(1024, index);
-  return `${normalized.toFixed(index === 0 ? 0 : 2)} ${units[index]}`;
-};
 
 
 
@@ -135,18 +77,59 @@ $('div', {
 });
 
 
+
 const dz = DragDrop?.createDropZone('#isolation_test_zone', {
   accept: '*',
   multiple: true,
+  event: 'kill', //  event: 'stop', 'kill' //prevent event bubbling
   allowedDropId: 'isolation_test_zone',
+  onDrop: (files, event) => {
+    puts('DropZone local déclenché');
+    puts(`Nombre de fichiers: ${files.length}`);
+    files.forEach((f, index) => {
+      puts(`Fichier ${index + 1}:`);
+      puts(`  - Nom: ${f.name}`);
+      puts(`  - Type: ${f.type || 'inconnu'}`);
+      puts(`  - Taille: ${formatBytes(f.size)}`);
+      puts(`  - Chemin: ${f.path || f.fullPath || 'non disponible'}`);
+    });
+  }
 }) || null;
 
 
 DragDrop.registerGlobalDrop({
   accept: '*',
   multiple: true,
+  onDragEnter: (event) => {
+    const target = event.target;
+
+  },
+  onDragLeave: (event) => {
+    const target = event.target;
+
+  },
   onDrop: (files, event) => {
+    // Restaurer la couleur après le drop
+    const target = event.target;
+    puts('file drop on ' + target.id)
     file_drop_anywhere(files, event)
   }
 });
 
+
+$('div', {
+  // pas besoin de 'tag'
+  id: 'check_me',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    width: '120px',
+    height: '120px',
+    padding: '10px',
+    color: 'white',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+});
