@@ -6,13 +6,14 @@ function formatBytes(bytes, decimals = 2) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
-function create_audio_obejct(f, target) {
+function create_audio_object(f, target) {
   const panel = $('section', {
     parent: target,
+    id: 'file_audio_' + f.name,
     css: {
-      id: 'file_audio_' + f.name,
-      width: '69px',
-      height: '69px',
+
+      width: '39px',
+      height: '39px',
       padding: '24px',
       backgroundColor: '#333',
       borderRadius: '12px',
@@ -28,7 +29,7 @@ function create_audio_obejct(f, target) {
     }
   });
 
-  // Créer l'élément audio avec Squirrel
+
   $('audio', {
     parent: panel,
     attrs: {
@@ -47,12 +48,12 @@ function create_audio_obejct(f, target) {
 function file_drop_analysis(f, target, index) {
   const extension = f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : null;
 
-  puts(`Fichier ${index + 1}:`);
-  puts(`  - Nom: ${f.name}`);
-  puts(`  - Extension: ${extension}`);
-  puts(`  - Type: ${f.type || 'inconnu'}`);
-  puts(`  - Taille: ${formatBytes(f.size)}`);
-  puts(`  - Chemin: ${f.path || f.fullPath || 'non disponible'}`);
+  // puts(`Fichier ${index + 1}:`);
+  // puts(`  - Nom: ${f.name}`);
+  // puts(`  - Extension: ${extension}`);
+  // puts(`  - Type: ${f.type || 'inconnu'}`);
+  // puts(`  - Taille: ${formatBytes(f.size)}`);
+  // puts(`  - Chemin: ${f.path || f.fullPath || 'non disponible'}`);
 
   let category = '';
 
@@ -85,8 +86,8 @@ function file_drop_analysis(f, target, index) {
       puts('Audio/Vidéo');
       break;
     case 'm4a':
-      create_audio_obejct(f, target);
-      puts('Audio');
+      create_audio_object(f, target);
+      // puts('Audio');
       break;
     case 'flac':
       puts('Audio');
@@ -112,9 +113,8 @@ function file_drop_analysis(f, target, index) {
 
 function mainfile_drop(files, event) {
   const target = event.target;
-  puts('drop on object with id : ' + target.id)
-
   files.forEach((f, index) => {
+    puts('  - Fichier: ' + f.name);
     file_drop_analysis(f, target, index)
 
   });

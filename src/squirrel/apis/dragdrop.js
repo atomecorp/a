@@ -38,6 +38,7 @@ async function _collectFilesFromDataTransfer(dt) {
 
     if (dt.items && dt.items.length) {
         // Prefer items: may allow directory traversal
+        const promises = [];
         for (let i = 0; i < dt.items.length; i++) {
             const item = dt.items[i];
             if (item.kind !== 'file') continue;
@@ -45,14 +46,21 @@ async function _collectFilesFromDataTransfer(dt) {
             // webkitGetAsEntry is available in Chromium-based browsers
             const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
             if (entry) {
-                const fileList = await _entryToFiles(entry);
-                if (fileList.length) fileList.forEach((f) => files.push(f));
+                promises.push(_entryToFiles(entry));
                 continue;
             }
 
             const file = item.getAsFile ? item.getAsFile() : null;
             if (file) files.push(file);
         }
+
+        // Attendre toutes les promesses avant de continuer
+        const results = await Promise.all(promises);
+        results.forEach(fileList => {
+            if (fileList && fileList.length) {
+                fileList.forEach((f) => files.push(f));
+            }
+        });
     } else if (dt.files && dt.files.length) {
         // Fallback: use DataTransfer.files
         for (let i = 0; i < dt.files.length; i++) files.push(dt.files[i]);
