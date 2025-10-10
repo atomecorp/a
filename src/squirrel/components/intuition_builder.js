@@ -1407,7 +1407,7 @@ const Intuition_theme = {
         drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
         drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
         button_size: '33%',
-
+        satellite_offset: '0px',
         items_spacing: items_spacing + 'px',
         item_size: item_size + 'px',
         support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
@@ -1426,7 +1426,7 @@ const Intuition_theme = {
         tool_lock_bg: "#b22929ff",
         toolbox_icon: 'menu',            // false pour masquer, ou 'settings', 'play', etc.
         toolbox_icon_color: '#cacacaff',
-        toolbox_icon_size: '30%',      // px, %, ou ratio (0..1)
+        toolbox_icon_size: '39%',      // px, %, ou ratio (0..1)
         toolbox_icon_top: '50%',       // position verticale
         toolbox_icon_left: '50%',
         toolboxOffsetMain: "7px",
@@ -1434,7 +1434,7 @@ const Intuition_theme = {
         items_offset_main: item_border_radius + items_spacing + 'px',
         icon_color: "#cacacaff",
         icon_size: "39%",
-        icon_top: '60%',       // position verticale
+        icon_top: '63%',       // position verticale
         icon_left: '50%',
         // Toggle label/icon visibility when a palette is popped out
         palette_icon: false,
