@@ -450,6 +450,74 @@ function resolveItemSizePx() {
     return Number.isFinite(parsed) ? parsed : 54;
 }
 
+function resolveFloatingGripIconInfo(opts = {}) {
+    const themeRef = (opts && opts.theme) || currentTheme;
+    const info = {
+        icon: undefined,
+        iconColor: opts ? (opts.iconColor || opts.icon_color) : undefined,
+        iconTop: opts ? (opts.iconTop || opts.icon_top) : undefined,
+        iconLeft: opts ? (opts.iconLeft || opts.icon_left) : undefined,
+        iconSize: opts ? (opts.iconSize || opts.icon_size) : undefined,
+        theme: themeRef
+    };
+    if (opts && Object.prototype.hasOwnProperty.call(opts, 'icon')) {
+        info.icon = opts.icon;
+        return info;
+    }
+    const sourceKey = opts && (opts.sourcePalette || (opts.content && opts.content.key) || opts.referencePalette);
+    if (!sourceKey) {
+        return info;
+    }
+    const def = (typeof intuition_content !== 'undefined' && intuition_content)
+        ? intuition_content[sourceKey]
+        : undefined;
+    if (def && typeof def === 'object') {
+        if (Object.prototype.hasOwnProperty.call(def, 'icon')) {
+            info.icon = def.icon;
+        } else {
+            info.icon = sourceKey;
+        }
+        info.iconColor = info.iconColor || def.icon_color || def.iconColor;
+        info.iconTop = info.iconTop || def.icon_top || def.iconTop;
+        info.iconLeft = info.iconLeft || def.icon_left || def.iconLeft;
+        info.iconSize = info.iconSize || def.icon_size || def.iconSize;
+    } else {
+        info.icon = sourceKey;
+    }
+    return info;
+}
+
+function renderFloatingGripBadge(grip, opts = {}) {
+    if (!grip) return;
+    grip.textContent = '';
+    const iconInfo = resolveFloatingGripIconInfo(opts);
+    const themeRef = iconInfo.theme || currentTheme;
+    const fallbackColor = (themeRef && themeRef.icon_color) || (currentTheme && currentTheme.icon_color);
+    const fallbackTop = (themeRef && themeRef.icon_top) || (currentTheme && currentTheme.icon_top) || '50%';
+    const fallbackLeft = (themeRef && themeRef.icon_left) || (currentTheme && currentTheme.icon_left) || '50%';
+    const fallbackSize = (themeRef && themeRef.icon_size) || (currentTheme && currentTheme.icon_size);
+    const iconName = iconInfo.icon;
+    if (iconName !== undefined && iconName !== null && iconName !== false && String(iconName).trim() !== '') {
+        createIcon({
+            id: grip.id,
+            icon: iconName,
+            icon_color: iconInfo.iconColor || fallbackColor,
+            icon_top: iconInfo.iconTop || fallbackTop,
+            icon_left: iconInfo.iconLeft || fallbackLeft,
+            icon_size: iconInfo.iconSize || fallbackSize
+        });
+        grip.dataset.hasIcon = 'true';
+        return iconName;
+    }
+    grip.dataset.hasIcon = 'false';
+    if (opts && opts.title) {
+        grip.textContent = String(opts.title).toUpperCase();
+    } else {
+        grip.textContent = 'MENU';
+    }
+    return null;
+}
+
 function updateFloatingGripLayout() {
     const itemSize = resolveItemSizePx();
     floatingRegistry.forEach((info) => {
@@ -677,9 +745,9 @@ function createFloatingHost(opts = {}) {
     const grip = $('div', {
         id: `${id}__grip`,
         parent: `#${id}`,
-        class: 'intuition-floating-grip',
-        text: (opts.title || 'item').toUpperCase()
+        class: 'intuition-floating-grip'
     });
+    const appliedGripIcon = renderFloatingGripBadge(grip, opts);
 
     const deleteBtn = $('div', {
         id: `${id}__delete`,
@@ -704,6 +772,7 @@ function createFloatingHost(opts = {}) {
         body,
         title: opts.title || 'item',
         type: opts.type || 'item',
+        gripIcon: appliedGripIcon || null,
         nameKeys: [],
         collapsed: false,
         parentFloatingId: opts.parentFloatingId || null,
@@ -846,6 +915,20 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
 function spawnFloatingFromMenuItem(nameKey, opts = {}) {
     const def = intuition_content[nameKey];
     if (!def) return null;
+    let icon = nameKey;
+    let iconColor;
+    let iconTop;
+    let iconLeft;
+    let iconSize;
+    if (def && typeof def === 'object') {
+        if (Object.prototype.hasOwnProperty.call(def, 'icon')) {
+            icon = def.icon;
+        }
+        iconColor = def.icon_color || def.iconColor;
+        iconTop = def.icon_top || def.iconTop;
+        iconLeft = def.icon_left || def.iconLeft;
+        iconSize = def.icon_size || def.iconSize;
+    }
     const info = createFloatingHost({
         title: opts.label || def.label || nameKey,
         type: inferDefinitionType(def),
@@ -854,7 +937,12 @@ function spawnFloatingFromMenuItem(nameKey, opts = {}) {
         theme: opts.theme || currentTheme,
         sourcePalette: nameKey,
         reference: opts.reference != null ? opts.reference : 'toolbox',
-        parentFloatingId: opts.parentFloatingId || null
+        parentFloatingId: opts.parentFloatingId || null,
+        icon,
+        iconColor,
+        iconTop,
+        iconLeft,
+        iconSize
     });
     const themeRef = info && info.theme ? info.theme : currentTheme;
     const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
@@ -1010,6 +1098,28 @@ function renderFloatingBody(info, nameKeys) {
 
 function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
     if (!nameKeys || !nameKeys.length) return null;
+    let icon;
+    let iconColor;
+    let iconTop;
+    let iconLeft;
+    let iconSize;
+    const sourceKey = opts && opts.sourcePalette;
+    if (sourceKey) {
+        const def = intuition_content[sourceKey];
+        if (def && typeof def === 'object') {
+            if (Object.prototype.hasOwnProperty.call(def, 'icon')) {
+                icon = def.icon;
+            } else {
+                icon = sourceKey;
+            }
+            iconColor = def.icon_color || def.iconColor;
+            iconTop = def.icon_top || def.iconTop;
+            iconLeft = def.icon_left || def.iconLeft;
+            iconSize = def.icon_size || def.iconSize;
+        } else {
+            icon = sourceKey;
+        }
+    }
     const info = createFloatingHost({
         title: opts.title || 'palette',
         type: 'palette',
@@ -1022,7 +1132,12 @@ function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
         reference: opts.reference != null
             ? opts.reference
             : (opts.parentFloatingId || 'toolbox'),
-        initialChildren: Array.isArray(nameKeys) ? nameKeys.filter(Boolean) : []
+        initialChildren: Array.isArray(nameKeys) ? nameKeys.filter(Boolean) : [],
+        icon,
+        iconColor,
+        iconTop,
+        iconLeft,
+        iconSize
     });
     const themeRef = info && info.theme ? info.theme : currentTheme;
     const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
@@ -4788,6 +4903,24 @@ function restoreExtractedFloatingElement(options = {}) {
         if (hostRecord.orientation) {
             hostTheme.direction = hostRecord.orientation;
         }
+        const sourceKey = hostRecord.content && hostRecord.content.key ? hostRecord.content.key : null;
+        let icon = sourceKey || undefined;
+        let iconColor;
+        let iconTop;
+        let iconLeft;
+        let iconSize;
+        if (sourceKey) {
+            const def = intuition_content[sourceKey];
+            if (def && typeof def === 'object') {
+                if (Object.prototype.hasOwnProperty.call(def, 'icon')) {
+                    icon = def.icon;
+                }
+                iconColor = def.icon_color || def.iconColor;
+                iconTop = def.icon_top || def.iconTop;
+                iconLeft = def.icon_left || def.iconLeft;
+                iconSize = def.icon_size || def.iconSize;
+            }
+        }
         const info = createFloatingHost({
             id: hostRecord.id || undefined,
             title,
@@ -4795,7 +4928,13 @@ function restoreExtractedFloatingElement(options = {}) {
             role: 'palette',
             reference: hostRecord.reference || 'toolbox',
             theme: hostTheme,
-            initialChildren: children
+            initialChildren: children,
+            sourcePalette: sourceKey,
+            icon,
+            iconColor,
+            iconTop,
+            iconLeft,
+            iconSize
         });
         if (!info) return null;
 
