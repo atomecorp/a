@@ -493,8 +493,8 @@ function renderFloatingGripBadge(grip, opts = {}) {
     const iconInfo = resolveFloatingGripIconInfo(opts);
     const themeRef = iconInfo.theme || currentTheme;
     const fallbackColor = (themeRef && themeRef.icon_color) || (currentTheme && currentTheme.icon_color);
-    const fallbackTop = (themeRef && themeRef.icon_top) || (currentTheme && currentTheme.icon_top) || '50%';
-    const fallbackLeft = (themeRef && themeRef.icon_left) || (currentTheme && currentTheme.icon_left) || '50%';
+    const centeredTop = '50%';
+    const centeredLeft = '50%';
     const fallbackSize = (themeRef && themeRef.icon_size) || (currentTheme && currentTheme.icon_size);
     const iconName = iconInfo.icon;
     if (iconName !== undefined && iconName !== null && iconName !== false && String(iconName).trim() !== '') {
@@ -502,9 +502,25 @@ function renderFloatingGripBadge(grip, opts = {}) {
             id: grip.id,
             icon: iconName,
             icon_color: iconInfo.iconColor || fallbackColor,
-            icon_top: iconInfo.iconTop || fallbackTop,
-            icon_left: iconInfo.iconLeft || fallbackLeft,
+            icon_top: centeredTop,
+            icon_left: centeredLeft,
             icon_size: iconInfo.iconSize || fallbackSize
+        });
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const gripIconEl = document.getElementById(`${grip.id}__icon`);
+                if (gripIconEl && gripIconEl.style) {
+                    gripIconEl.style.position = 'absolute';
+                    gripIconEl.style.top = centeredTop;
+                    gripIconEl.style.left = centeredLeft;
+                    gripIconEl.style.transform = 'translate(-50%, -50%)';
+                    gripIconEl.style.margin = '0';
+                    gripIconEl.style.maxWidth = '80%';
+                    gripIconEl.style.maxHeight = '80%';
+                    gripIconEl.style.minWidth = '0';
+                    gripIconEl.style.minHeight = '0';
+                }
+            });
         });
         grip.dataset.hasIcon = 'true';
         return iconName;
