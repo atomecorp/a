@@ -608,10 +608,69 @@ function clampFloatingToViewport(info) {
 
 function toggleFloatingCollapse(id, force) {
     const info = floatingRegistry.get(id);
-    if (!info || !info.container) return;
-    const collapsed = typeof force === 'boolean' ? force : !info.collapsed;
-    info.collapsed = collapsed;
-    info.container.dataset.collapsed = collapsed ? 'true' : 'false';
+    if (!info || !info.container || !info.body) return;
+    const target = typeof force === 'boolean' ? force : !info.collapsed;
+    if (info._collapseAnimation) {
+        info._pendingCollapse = target;
+        return;
+    }
+    const themeRef = info.theme || currentTheme;
+    if (target) {
+        if (info.collapsed && info.container.dataset.collapsed === 'true') {
+            info._pendingCollapse = null;
+            return;
+        }
+        const children = Array.from(info.body.children || []).filter(Boolean);
+        if (!children.length) {
+            info.collapsed = true;
+            info.container.dataset.collapsed = 'true';
+            return;
+        }
+        info._collapseAnimation = true;
+        info.visibleKeysSnapshot = (info.nameKeys && info.nameKeys.length)
+            ? info.nameKeys.slice()
+            : (info.visibleKeysSnapshot || []);
+        slideOutItemsToOrigin(children, () => {
+            info.body.innerHTML = '';
+            info.container.dataset.collapsed = 'true';
+            info.collapsed = true;
+            info._collapseAnimation = false;
+            if (info._pendingCollapse != null) {
+                const pending = info._pendingCollapse;
+                info._pendingCollapse = null;
+                if (pending !== info.collapsed) {
+                    toggleFloatingCollapse(id, pending);
+                }
+            }
+        }, { theme: themeRef, origin: getFloatingBodyOrigin(info, themeRef) });
+    } else {
+        if (!info.collapsed && info.container.dataset.collapsed === 'false') {
+            info._pendingCollapse = null;
+            return;
+        }
+        const keysToRender = (info.visibleKeysSnapshot && info.visibleKeysSnapshot.length)
+            ? info.visibleKeysSnapshot.slice()
+            : (info.nameKeys && info.nameKeys.length
+                ? info.nameKeys.slice()
+                : (Array.isArray(info.rootChildren) && info.rootChildren.length
+                    ? info.rootChildren.slice()
+                    : []));
+        info.container.dataset.collapsed = 'false';
+        info.collapsed = false;
+        info._collapseAnimation = true;
+        requestAnimationFrame(() => {
+            renderFloatingBody(info, keysToRender);
+            info.visibleKeysSnapshot = info.nameKeys.slice();
+            info._collapseAnimation = false;
+            if (info._pendingCollapse != null) {
+                const pending = info._pendingCollapse;
+                info._pendingCollapse = null;
+                if (pending !== info.collapsed) {
+                    toggleFloatingCollapse(id, pending);
+                }
+            }
+        });
+    }
 }
 
 function removeFloating(id) {
@@ -689,13 +748,88 @@ function attachFloatingGripInteractions(info) {
     if (!info || !info.grip) return;
     const grip = info.grip;
     if (!grip._floatingInteractionsAttached) {
-        grip.addEventListener('pointerdown', (e) => {
-            if (!isEditModeActive()) return;
-            e.preventDefault();
-            e.stopPropagation();
-            beginFloatingMove(e, info);
+        const longPressDelay = 600;
+        const cancelThreshold = 14;
+        let longPressTimer = null;
+        let pointerId = null;
+        let startX = 0;
+        let startY = 0;
+        let suppressNextClick = false;
+
+        const clearLongPressTimer = () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+        };
+
+        const releasePointerCapture = () => {
+            if (pointerId != null && typeof grip.releasePointerCapture === 'function') {
+                try { grip.releasePointerCapture(pointerId); } catch (_) { }
+            }
+            pointerId = null;
+        };
+
+        const onPointerDown = (e) => {
+            if (e.button !== undefined && e.button !== 0) return;
+            startX = e.clientX;
+            startY = e.clientY;
+            pointerId = (typeof e.pointerId === 'number') ? e.pointerId : null;
+            clearLongPressTimer();
+            longPressTimer = setTimeout(() => {
+                longPressTimer = null;
+                suppressNextClick = true;
+                if (isEditModeActive()) {
+                    if (editModeState.dragContext) {
+                        cleanupDragContext(editModeState.dragContext);
+                    }
+                    exitEditMode();
+                } else {
+                    enterEditMode();
+                }
+                releasePointerCapture();
+            }, longPressDelay);
+            if (pointerId != null && typeof grip.setPointerCapture === 'function') {
+                try { grip.setPointerCapture(pointerId); } catch (_) { }
+            }
+            if (isEditModeActive()) {
+                e.preventDefault();
+                e.stopPropagation();
+                beginFloatingMove(e, info);
+            }
+        };
+
+        const onPointerMove = (e) => {
+            if (!longPressTimer) return;
+            if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
+            const dist = Math.hypot(e.clientX - startX, e.clientY - startY);
+            if (dist > cancelThreshold) {
+                clearLongPressTimer();
+            }
+        };
+
+        const onPointerEnd = (e) => {
+            if (pointerId != null && e.pointerId != null && e.pointerId !== pointerId) return;
+            clearLongPressTimer();
+            if (e.type !== 'pointerup') {
+                suppressNextClick = false;
+            }
+            releasePointerCapture();
+        };
+
+        grip.addEventListener('pointerdown', onPointerDown);
+        grip.addEventListener('pointermove', onPointerMove);
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach((evt) => {
+            grip.addEventListener(evt, onPointerEnd);
         });
+
         grip.addEventListener('click', (e) => {
+            if (suppressNextClick) {
+                suppressNextClick = false;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
             if (isEditModeActive()) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -799,7 +933,10 @@ function createFloatingHost(opts = {}) {
         sourcePaletteKey: opts.sourcePalette || null,
         theme: opts.theme || currentTheme,
         persistedExtracted: null,
-        reference
+        reference,
+        visibleKeysSnapshot: [],
+        _collapseAnimation: false,
+        _pendingCollapse: null
     };
     floatingRegistry.set(id, info);
     ensureFloatingPersistenceStore(info);
@@ -1091,6 +1228,7 @@ function renderFloatingBody(info, nameKeys) {
             }
             createdEls.push(entry);
         });
+        info.visibleKeysSnapshot = info.nameKeys.slice();
         if (info.body) {
             info.body.scrollTop = 0;
             info.body.scrollLeft = 0;
