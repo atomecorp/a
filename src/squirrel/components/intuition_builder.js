@@ -3738,7 +3738,7 @@ function getSatelliteOffset(theme = currentTheme) {
     if (raw != null) {
         const val = (typeof raw === 'number') ? raw : parseFloat(String(raw));
         if (Number.isFinite(val)) {
-            return Math.max(0, val);
+            return val;
         }
     }
     const spacing = parseFloat(theme && theme.items_spacing);
