@@ -1415,13 +1415,20 @@ function finishMenuItemDrag(e, ctx) {
 function beginFloatingMove(ev, info) {
     if (!info || !info.container) return;
     const rect = info.container.getBoundingClientRect();
-    const pointerId = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const pointerKey = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const originEl = ev.currentTarget || ev.target || info.grip || info.container;
+    const capturePointerId = (typeof ev.pointerId === 'number') ? ev.pointerId : null;
+    if (capturePointerId != null && originEl && typeof originEl.setPointerCapture === 'function') {
+        try { originEl.setPointerCapture(capturePointerId); } catch (_) { /* ignore */ }
+    }
     const ctx = {
         kind: 'floating-move',
-        pointerId,
+        pointerId: pointerKey,
         floatingInfo: info,
         offsetX: ev.clientX - rect.left,
-        offsetY: ev.clientY - rect.top
+        offsetY: ev.clientY - rect.top,
+        originEl,
+        capturePointerId
     };
     ctx.moveHandler = (e) => handleFloatingMove(e, ctx);
     ctx.upHandler = (e) => finishFloatingMove(e, ctx);
