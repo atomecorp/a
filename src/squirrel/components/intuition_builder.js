@@ -26,7 +26,6 @@ const floatingPersistence = new Map();
 let floatingCounter = 0;
 let floatingHierarchyCounter = 0;
 let intuition_drag_active = false;
-console.log('[Intuition] drag active initialized:', intuition_drag_active);
 const editModeState = {
     active: false,
     pulseTimer: null,
@@ -782,7 +781,6 @@ function attachFloatingGripInteractions(info) {
             longPressTimer = setTimeout(() => {
                 longPressTimer = null;
                 if (intuition_drag_active) {
-                    console.log('[Intuition] drag active (long press skipped):', intuition_drag_active);
                     suppressNextClick = false;
                     releasePointerCapture();
                     return;
@@ -797,7 +795,6 @@ function attachFloatingGripInteractions(info) {
                     enterEditMode();
                 }
                 intuition_drag_active = false;
-                console.log('[Intuition] drag active (long press reset):', intuition_drag_active);
                 releasePointerCapture();
             }, longPressDelay);
             if (pointerId != null && typeof grip.setPointerCapture === 'function') {
@@ -1084,17 +1081,34 @@ function spawnFloatingFromMenuItem(nameKey, opts = {}) {
     let iconTop;
     let iconLeft;
     let iconSize;
+    let hostTitle = opts.label || (def && def.label) || nameKey;
+    const themeDefaultIcon = (currentTheme && currentTheme.toolbox_icon) || 'menu';
+    const themeDefaultIconColor = (currentTheme && currentTheme.toolbox_icon_color)
+        || (currentTheme && currentTheme.icon_color)
+        || iconColor;
+    const iconValue = def && typeof def === 'object' ? def.icon : undefined;
+    const hasExplicitIcon = typeof iconValue === 'string' && iconValue.trim() !== '';
     if (def && typeof def === 'object') {
-        if (Object.prototype.hasOwnProperty.call(def, 'icon')) {
+        if (hasExplicitIcon) {
             icon = def.icon;
+        } else {
+            icon = themeDefaultIcon;
+            hostTitle = null;
+            iconColor = themeDefaultIconColor;
         }
-        iconColor = def.icon_color || def.iconColor;
+        iconColor = iconColor || def.icon_color || def.iconColor || themeDefaultIconColor;
         iconTop = def.icon_top || def.iconTop;
         iconLeft = def.icon_left || def.iconLeft;
         iconSize = def.icon_size || def.iconSize;
+    } else {
+        if (!hasExplicitIcon) {
+            icon = themeDefaultIcon;
+            hostTitle = null;
+            iconColor = themeDefaultIconColor;
+        }
     }
     const info = createFloatingHost({
-        title: opts.label || def.label || nameKey,
+        title: hostTitle,
         type: inferDefinitionType(def),
         x: opts.x,
         y: opts.y,
@@ -1131,7 +1145,7 @@ function spawnFloatingFromMenuItem(nameKey, opts = {}) {
         parent: opts.parentFloatingId || null,
         content: {
             key: nameKey,
-            title: opts.label || def.label || nameKey,
+            title: hostTitle,
             children: info.rootChildren.slice()
         }
     });
@@ -1477,7 +1491,6 @@ function cleanupDragContext(ctx) {
         document.removeEventListener('pointerleave', ctx.upHandler, true);
     }
     intuition_drag_active = false;
-    console.log('[Intuition] drag active (cleanup):', intuition_drag_active);
     editModeState.dragContext = null;
 }
 
