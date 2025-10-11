@@ -25,6 +25,8 @@ const floatingRegistry = new Map();
 const floatingPersistence = new Map();
 let floatingCounter = 0;
 let floatingHierarchyCounter = 0;
+let intuition_drag_active = false;
+console.log('[Intuition] drag active initialized:', intuition_drag_active);
 const editModeState = {
     active: false,
     pulseTimer: null,
@@ -778,6 +780,12 @@ function attachFloatingGripInteractions(info) {
             clearLongPressTimer();
             longPressTimer = setTimeout(() => {
                 longPressTimer = null;
+                if (intuition_drag_active) {
+                    console.log('[Intuition] drag active (long press skipped):', intuition_drag_active);
+                    suppressNextClick = false;
+                    releasePointerCapture();
+                    return;
+                }
                 suppressNextClick = true;
                 if (isEditModeActive()) {
                     if (editModeState.dragContext) {
@@ -787,6 +795,8 @@ function attachFloatingGripInteractions(info) {
                 } else {
                     enterEditMode();
                 }
+                intuition_drag_active = false;
+                console.log('[Intuition] drag active (long press reset):', intuition_drag_active);
                 releasePointerCapture();
             }, longPressDelay);
             if (pointerId != null && typeof grip.setPointerCapture === 'function') {
@@ -1465,6 +1475,8 @@ function cleanupDragContext(ctx) {
         document.removeEventListener('pointercancel', ctx.upHandler, true);
         document.removeEventListener('pointerleave', ctx.upHandler, true);
     }
+    intuition_drag_active = false;
+    console.log('[Intuition] drag active (cleanup):', intuition_drag_active);
     editModeState.dragContext = null;
 }
 
@@ -1566,7 +1578,10 @@ function beginFloatingMove(ev, info) {
         offsetX: ev.clientX - rect.left,
         offsetY: ev.clientY - rect.top,
         originEl,
-        capturePointerId
+        capturePointerId,
+        initialClientX: ev.clientX,
+        initialClientY: ev.clientY,
+        dragActivated: false
     };
     ctx.moveHandler = (e) => handleFloatingMove(e, ctx);
     ctx.upHandler = (e) => finishFloatingMove(e, ctx);
@@ -1580,6 +1595,17 @@ function beginFloatingMove(ev, info) {
 function handleFloatingMove(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
     if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    if (!ctx.dragActivated) {
+        const dist = Math.hypot(
+            e.clientX - (ctx.initialClientX || 0),
+            e.clientY - (ctx.initialClientY || 0)
+        );
+        if (dist > 0.5) {
+            intuition_drag_active = true;
+            ctx.dragActivated = true;
+            console.log('[Intuition] drag active (floating move start):', intuition_drag_active);
+        }
+    }
     const left = e.clientX - (ctx.offsetX || 0);
     const top = e.clientY - (ctx.offsetY || 0);
     moveFloatingTo(ctx.floatingInfo, left, top);
@@ -1595,6 +1621,8 @@ function finishFloatingMove(e, ctx) {
         clampFloatingToViewport(ctx.floatingInfo);
         repositionActiveSatellites(ctx.floatingInfo);
     }
+    intuition_drag_active = false;
+    console.log('[Intuition] drag active (floating move end):', intuition_drag_active);
     cleanupDragContext(ctx);
 }
 
