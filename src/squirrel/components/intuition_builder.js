@@ -34,6 +34,7 @@ const editModeState = {
     suppressToolboxClick: false
 };
 const EDIT_DRAG_THRESHOLD = 16;
+const FLOATING_DRAG_ACTIVATION_THRESHOLD = 2;
 
 function ensureFloatingPersistenceBucket(info) {
     if (!info || !info.id) return null;
@@ -1600,11 +1601,22 @@ function handleFloatingMove(e, ctx) {
             e.clientX - (ctx.initialClientX || 0),
             e.clientY - (ctx.initialClientY || 0)
         );
-        if (dist > 0.5) {
+        if (dist >= FLOATING_DRAG_ACTIVATION_THRESHOLD) {
             intuition_drag_active = true;
             ctx.dragActivated = true;
-            console.log('[Intuition] drag active (floating move start):', intuition_drag_active);
         }
+    }
+    if (
+        ctx.capturePointerId != null &&
+        ctx.originEl &&
+        typeof ctx.originEl.hasPointerCapture === 'function' &&
+        typeof ctx.originEl.setPointerCapture === 'function'
+    ) {
+        try {
+            if (!ctx.originEl.hasPointerCapture(ctx.capturePointerId)) {
+                ctx.originEl.setPointerCapture(ctx.capturePointerId);
+            }
+        } catch (_) { /* ignore */ }
     }
     const left = e.clientX - (ctx.offsetX || 0);
     const top = e.clientY - (ctx.offsetY || 0);
@@ -1622,7 +1634,6 @@ function finishFloatingMove(e, ctx) {
         repositionActiveSatellites(ctx.floatingInfo);
     }
     intuition_drag_active = false;
-    console.log('[Intuition] drag active (floating move end):', intuition_drag_active);
     cleanupDragContext(ctx);
 }
 
