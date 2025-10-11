@@ -2612,6 +2612,10 @@ function renderParticleValueFromTheme(cfg) {
             entry = unitDropdownRegistry.get(key);
         }
         if (!entry || !entry.wrap || !entry.dropdown) return;
+        // ensure dropdown tracks the current host (toolbox or floating extract)
+        if (particleEl && particleEl !== entry.host) {
+            entry.host = particleEl;
+        }
         const dropdown = entry.dropdown;
         const isOpen = dropdown && typeof dropdown.isDropDownOpen === 'function'
             ? dropdown.isDropDownOpen()
@@ -3349,12 +3353,16 @@ function positionUnitDropdownEntry(entry) {
     if (!entry || !entry.wrap || !entry.host) return;
     const wrapEl = entry.wrap;
     const hostEl = entry.host;
+    const floatingInfo = resolveFloatingInfoFromElement(hostEl);
+    const themeRef = (floatingInfo && floatingInfo.theme) || currentTheme;
     const supportEl = grab('toolbox_support');
-    if (!supportEl) return;
+    if (!floatingInfo && !supportEl) return;
     const hostRect = hostEl.getBoundingClientRect();
-    const supportRect = supportEl.getBoundingClientRect();
-    const { isHorizontal, isBottom, isRight } = getDirMeta();
-    const gap = getSatelliteOffset();
+    const anchorRect = floatingInfo && floatingInfo.container
+        ? floatingInfo.container.getBoundingClientRect()
+        : (supportEl ? supportEl.getBoundingClientRect() : hostRect);
+    const { isHorizontal, isBottom, isRight } = getDirMeta(themeRef);
+    const gap = getSatelliteOffset(themeRef);
     const vw = window.innerWidth || document.documentElement.clientWidth;
     const vh = window.innerHeight || document.documentElement.clientHeight;
     const wrapWidth = wrapEl.offsetWidth || wrapEl.getBoundingClientRect().width || 0;
@@ -3364,30 +3372,41 @@ function positionUnitDropdownEntry(entry) {
     let targetTop = hostRect.top;
     let openDir = 'down';
 
+    const aboveSpace = hostRect.top;
+    const belowSpace = vh - hostRect.bottom;
+    let placeAbove = !!isBottom;
+    if (placeAbove && aboveSpace < wrapHeight + gap) placeAbove = false;
+    if (!placeAbove && belowSpace < wrapHeight + gap && aboveSpace >= wrapHeight + gap) {
+        placeAbove = true;
+    }
+
     if (isHorizontal) {
-        const aboveSpace = supportRect.top;
-        const belowSpace = vh - supportRect.bottom;
         const preferAbove = !!isBottom;
-        let placeAbove = preferAbove;
-        if (placeAbove && aboveSpace < wrapHeight + gap) placeAbove = false;
-        if (!placeAbove && !preferAbove && belowSpace < wrapHeight + gap && aboveSpace >= wrapHeight + gap) placeAbove = true;
-        const desiredTop = placeAbove ? (supportRect.top - wrapHeight - gap) : (supportRect.bottom + gap);
+        const desiredTop = placeAbove
+            ? (hostRect.top - wrapHeight - gap)
+            : (hostRect.bottom + gap);
         targetTop = Math.max(0, Math.min(vh - wrapHeight, desiredTop));
         const baseLeft = hostRect.left;
         targetLeft = Math.max(0, Math.min(vw - wrapWidth, baseLeft));
         openDir = placeAbove ? 'down' : 'up';
     } else {
-        const leftSpace = supportRect.left;
-        const rightSpace = vw - supportRect.right;
+        const leftSpace = anchorRect.left;
+        const rightSpace = vw - anchorRect.right;
         const preferLeft = !!isRight;
         let placeLeft = preferLeft;
         if (placeLeft && leftSpace < wrapWidth + gap) placeLeft = false;
-        if (!placeLeft && !preferLeft && rightSpace < wrapWidth + gap && leftSpace >= wrapWidth + gap) placeLeft = true;
-        const desiredLeft = placeLeft ? (supportRect.left - wrapWidth - gap) : (supportRect.right + gap);
+        if (!placeLeft && !preferLeft && rightSpace < wrapWidth + gap && leftSpace >= wrapWidth + gap) {
+            placeLeft = true;
+        }
+        const desiredLeft = placeLeft
+            ? (hostRect.left - wrapWidth - gap)
+            : (hostRect.right + gap);
         targetLeft = Math.max(0, Math.min(vw - wrapWidth, desiredLeft));
-        const baseTop = hostRect.top;
-        targetTop = Math.max(0, Math.min(vh - wrapHeight, baseTop));
-        openDir = 'down';
+        const desiredTop = placeAbove
+            ? (hostRect.top - wrapHeight - gap)
+            : (hostRect.bottom + gap);
+        targetTop = Math.max(0, Math.min(vh - wrapHeight, desiredTop));
+        openDir = placeAbove ? 'down' : 'up';
     }
 
     wrapEl.style.left = `${targetLeft}px`;
