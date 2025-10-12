@@ -81,7 +81,7 @@ const light_theme = {
   // Translucent gradient for a glassy look
   tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
   tool_bg_active: "#7a7c73ff",
-  tool_backDrop_effect: '8px',
+  tool_backDrop_effect: '9px',
   tool_text: "#cacacaff",
   tool_font: "0.9vw",
   tool_font_px: 10,
