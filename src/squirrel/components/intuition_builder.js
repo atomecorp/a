@@ -585,6 +585,8 @@ function updateFloatingGripLayout() {
             info.body.style.padding = resolveFloatingBodyPadding(themeRef, spacing);
             info.body.style.gap = spacing;
             info.body.style.margin = '0';
+            info.body.style.overflowX = 'visible';
+            info.body.style.overflowY = 'visible';
         }
         if (Array.isArray(info.sections)) {
             info.sections.forEach((sectionId) => {
@@ -1257,8 +1259,8 @@ function renderFloatingBody(info, nameKeys) {
     info.body.style.justifyContent = 'flex-start';
     info.body.style.alignItems = isHorizontal ? 'center' : 'stretch';
     info.body.style.alignContent = 'flex-start';
-    info.body.style.overflowX = isHorizontal ? 'auto' : 'hidden';
-    info.body.style.overflowY = isHorizontal ? 'hidden' : 'auto';
+    info.body.style.overflowX = 'visible';
+    info.body.style.overflowY = 'visible';
     const existingChildren = Array.from(info.body.children || []).filter(Boolean);
     const buildFreshContent = () => {
         info.nameKeys = [];
@@ -1356,8 +1358,8 @@ function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
     info.body.style.justifyContent = 'flex-start';
     info.body.style.alignItems = isHorizontal ? 'center' : 'stretch';
     info.body.style.alignContent = 'flex-start';
-    info.body.style.overflowX = isHorizontal ? 'auto' : 'hidden';
-    info.body.style.overflowY = isHorizontal ? 'hidden' : 'auto';
+    info.body.style.overflowX = 'visible';
+    info.body.style.overflowY = 'visible';
     const normalizedKeys = Array.isArray(nameKeys) ? nameKeys.filter(Boolean) : [];
     info.rootChildren = normalizedKeys.slice();
     info.menuStack = [{ parent: opts.sourcePalette || null, children: info.rootChildren.slice(), title: opts.title || 'palette' }];
