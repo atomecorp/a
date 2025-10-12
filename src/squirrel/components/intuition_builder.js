@@ -1801,7 +1801,7 @@ const Intuition_theme = {
         palette_icon: false,
         palette_label: true,
         dropdown_text_color: '#ffff00',
-        dropdown_background_color: 'rgba(255, 0, 0, 0.36)',
+        dropdown_background_color: 'yellow',
         floating_host_bg: 'transparent',
         floating_host_shadow: 'none',
         // Particle value/unit display (theme-driven)
