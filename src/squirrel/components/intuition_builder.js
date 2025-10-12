@@ -622,16 +622,25 @@ function toggleFloatingCollapse(id, force) {
             info._pendingCollapse = null;
             return;
         }
+        closeUnitDropdownsForHost(info);
+        dismissActiveSatellites(info);
+        const fallbackKeys = getFloatingFallbackKeys(info);
+        const snapshotKeys = fallbackKeys.length
+            ? fallbackKeys.slice()
+            : ((info.nameKeys && info.nameKeys.length)
+                ? info.nameKeys.slice()
+                : (info.visibleKeysSnapshot || []));
         const children = Array.from(info.body.children || []).filter(Boolean);
         if (!children.length) {
+            info.visibleKeysSnapshot = snapshotKeys;
+            info.nameKeys = snapshotKeys.slice();
             info.collapsed = true;
             info.container.dataset.collapsed = 'true';
             return;
         }
         info._collapseAnimation = true;
-        info.visibleKeysSnapshot = (info.nameKeys && info.nameKeys.length)
-            ? info.nameKeys.slice()
-            : (info.visibleKeysSnapshot || []);
+        info.visibleKeysSnapshot = snapshotKeys;
+        info.nameKeys = snapshotKeys.slice();
         slideOutItemsToOrigin(children, () => {
             info.body.innerHTML = '';
             info.container.dataset.collapsed = 'true';
@@ -3325,6 +3334,69 @@ function removeUnitDropdown(nameKey) {
 
 function removeAllUnitDropdowns() {
     Array.from(unitDropdownRegistry.keys()).forEach(removeUnitDropdown);
+}
+
+function closeUnitDropdownsForHost(info) {
+    if (!info) return;
+    const keysToRemove = [];
+    unitDropdownRegistry.forEach((entry, key) => {
+        if (!entry) return;
+        const hostEl = entry.host;
+        if (!hostEl) return;
+        const ownerInfo = resolveFloatingInfoFromElement(hostEl);
+        let matchesHost = ownerInfo && ownerInfo.id === info.id;
+        if (!matchesHost && hostEl.dataset) {
+            const datasetHostId = hostEl.dataset.floatingHostId
+                || hostEl.dataset.parentFloatingId
+                || hostEl.dataset.sourceFloatingHost;
+            matchesHost = datasetHostId === info.id;
+        }
+        if (!matchesHost) return;
+        try {
+            if (entry.dropdown && typeof entry.dropdown.closeDropDown === 'function') {
+                entry.dropdown.closeDropDown();
+            }
+        } catch (_) { /* ignore */ }
+        keysToRemove.push(key);
+    });
+    if (keysToRemove.length) {
+        keysToRemove.forEach((key) => removeUnitDropdown(key));
+    }
+}
+
+function resetFloatingNavigationToRoot(info) {
+    if (!info) return;
+    info.menuStack = [];
+    ensureFloatingStackRoot(info);
+    if (Array.isArray(info.menuStack) && info.menuStack.length) {
+        const rootEntry = info.menuStack[0];
+        if (rootEntry && Array.isArray(info.rootChildren)) {
+            rootEntry.children = info.rootChildren.slice();
+        }
+        if (rootEntry && !rootEntry.title) {
+            rootEntry.title = info.title || 'palette';
+        }
+    }
+}
+
+function dismissActiveSatellites(info) {
+    if (!info || !(info.activeSatellites instanceof Map) || !info.activeSatellites.size) {
+        return false;
+    }
+    const entries = Array.from(info.activeSatellites.entries());
+    let dismissed = false;
+    entries.forEach(([satKey, satState]) => {
+        if (!satState) return;
+        dismissed = true;
+        disposeFloatingSatelliteState(info, satKey, satState);
+    });
+    if (dismissed) {
+        if (info.activeSatellites instanceof Map) {
+            info.activeSatellites.clear();
+        }
+        resetFloatingNavigationToRoot(info);
+    }
+    return dismissed;
 }
 
 function resolveToolFontSizeCss() {
