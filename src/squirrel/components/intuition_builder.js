@@ -559,6 +559,8 @@ function updateFloatingGripLayout() {
         } else {
             grip.style.boxShadow = '';
         }
+        const gripRadius = themeRef && themeRef.item_border_radius ? String(themeRef.item_border_radius) : '12px';
+        grip.style.borderRadius = gripRadius;
         const gripBlur = resolveFloatingGripBlur(themeRef, gripBackground);
         applyBackdropStyle(grip, gripBlur);
         const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
@@ -1762,7 +1764,7 @@ const Intuition_theme = {
         // Translucent gradient for a glassy look
         tool_bg: 'linear-gradient(180deg, rgba(72,71,71,0.85) 0%, rgba(72,71,71,0.35) 100%)',
         tool_bg_active: "#7a7c73ff",
-        tool_backDrop_effect: '8px',
+        tool_backDrop_effect: '0px',
         tool_text: "#cacacaff",
         tool_font: "0.9vw",
         tool_font_px: 10,
@@ -1790,6 +1792,7 @@ const Intuition_theme = {
         dropdown_text_color: '#ffff00',
         dropdown_background_color: 'rgba(255, 0, 0, 0.36)',
         floating_host_bg: 'transparent',
+        floating_host_shadow: 'none',
         // Particle value/unit display (theme-driven)
         particle_value_unit: '%',
         particle_value_value: 30,
@@ -3480,8 +3483,13 @@ function applyThemeToFloatingHost(info, theme) {
         if (themeRef && themeRef.item_border_radius) {
             container.style.borderRadius = themeRef.item_border_radius;
         }
-        if (themeRef && themeRef.item_shadow) {
+        if (themeRef && Object.prototype.hasOwnProperty.call(themeRef, 'floating_host_shadow')) {
+            const hostShadow = themeRef.floating_host_shadow;
+            container.style.boxShadow = hostShadow ? String(hostShadow) : 'none';
+        } else if (themeRef && themeRef.item_shadow) {
             container.style.boxShadow = themeRef.item_shadow;
+        } else {
+            container.style.boxShadow = '';
         }
         const blur = resolveFloatingHostBlur(themeRef, background);
         applyBackdropStyle(container, blur);
