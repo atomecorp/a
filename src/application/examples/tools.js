@@ -22,8 +22,8 @@ const shadowLeft = 0,
   shadowTop = 0,
   shadowBlur = 12;
 const items_spacing = 3;
-const item_border_radius = 66;
-const item_size = 123;
+const item_border_radius = 3;
+const item_size = 69;
 const DIRECTIONS = [
   "TLH",
   "TRH",
