@@ -1767,6 +1767,8 @@ const Intuition_theme = {
         // Toggle label/icon visibility when a palette is popped out
         palette_icon: false,
         palette_label: true,
+        dropdown_text_color: '#ffff00',
+        dropdown_background_color: 'rgba(255, 0, 0, 0.36)',
         // Particle value/unit display (theme-driven)
         particle_value_unit: '%',
         particle_value_value: 30,
@@ -2815,6 +2817,14 @@ function renderParticleValueFromTheme(cfg) {
             wrapEl.style.justifyContent = 'center';
             wrapEl.style.pointerEvents = 'auto';
             wrapEl.style.zIndex = '10000060';
+            const dropdownBackdropBlur = currentTheme && currentTheme.tool_backDrop_effect;
+            const dropdownBackdropBg = (currentTheme && currentTheme.dropdown_background_color) || (currentTheme && currentTheme.tool_bg);
+            if (dropdownBackdropBg && typeof dropdownBackdropBg === 'string') {
+                wrapEl.style.background = dropdownBackdropBg;
+            }
+            if (dropdownBackdropBlur) {
+                applyBackdropStyle(wrapEl, dropdownBackdropBlur);
+            }
             const fontSizeCss = resolveToolFontSizeCss();
             const heightCss = computeDropdownHeight(fontSizeCss);
             const widthCss = resolveItemSizeCss();
@@ -2837,7 +2847,7 @@ function renderParticleValueFromTheme(cfg) {
                     width: '100%',
                     height: '100%',
                     backgroundColor: 'transparent',
-                    color: currentTheme.tool_text,
+                    color: currentTheme.dropdown_text_color || currentTheme.tool_text,
                     boxShadow: 'none',
                     borderRadius: currentTheme.item_border_radius,
                     fontSize: fontSizeCss,
@@ -2848,24 +2858,26 @@ function renderParticleValueFromTheme(cfg) {
                     zIndex: '10000060'
                 },
                 textCss: {
-                    color: currentTheme.tool_text,
+                    color: currentTheme.dropdown_text_color || currentTheme.tool_text,
                     fontSize: fontSizeCss,
                     fontFamily: currentTheme.tool_font_family || 'system-ui',
                     pointerEvents: 'none'
                 },
                 listCss: {
-                    backgroundColor: currentTheme.tool_bg,
+                    backgroundColor: currentTheme.dropdown_background_color || currentTheme.tool_bg,
                     boxShadow: currentTheme.item_shadow,
-                    color: currentTheme.tool_text,
+                    color: currentTheme.dropdown_text_color || currentTheme.tool_text,
                     borderRadius: currentTheme.item_border_radius,
                     zIndex: '10000061'
                 },
                 itemCss: {
-                    color: currentTheme.tool_text,
+                    color: currentTheme.dropdown_text_color || currentTheme.tool_text,
                     fontSize: fontSizeCss,
                     fontFamily: currentTheme.tool_font_family || 'system-ui',
                     textAlign: 'center'
                 },
+                backdropBlur: dropdownBackdropBlur,
+                backdropBackground: dropdownBackdropBg,
                 onChange: (val) => {
                     if (!val || val === def._unitSelected) return;
                     def._unitSelected = val;

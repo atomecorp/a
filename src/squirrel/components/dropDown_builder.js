@@ -18,7 +18,9 @@ function dropDown(config) {
     textCss = {},
     onChange,
     onHover,
-    showSelectedLabel = true
+    showSelectedLabel = true,
+    backdropBlur,
+    backdropBackground
   } = config || {};
 
   const placeholderText = placeholder != null ? String(placeholder) : '';
@@ -112,6 +114,23 @@ function dropDown(config) {
   });
 
   let isOpen = false;
+
+  const applyBackdrop = (el, { includeBackground = true } = {}) => {
+    if (!el || !el.style || !backdropBlur) return;
+    if (includeBackground && typeof backdropBackground === 'string' && backdropBackground.trim()) {
+      el.style.background = backdropBackground;
+    }
+    const blurVal = String(backdropBlur).includes('blur(')
+      ? backdropBlur
+      : `blur(${backdropBlur})`;
+    el.style.backdropFilter = blurVal;
+    el.style.WebkitBackdropFilter = blurVal;
+    el.style.setProperty('backdrop-filter', blurVal);
+    el.style.setProperty('-webkit-backdrop-filter', blurVal);
+  };
+
+  applyBackdrop(root);
+  applyBackdrop(menu);
 
   const updateDisplayText = () => {
     if (!showSelectedLabel) {
@@ -290,6 +309,7 @@ function dropDown(config) {
         cursor: 'pointer'
       }, itemCss)
     });
+    applyBackdrop(item, { includeBackground: false });
     item.setAttribute('role', 'option');
     item.setAttribute('aria-selected', i === selectedIndex ? 'true' : 'false');
 
