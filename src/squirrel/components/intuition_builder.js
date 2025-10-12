@@ -1521,6 +1521,7 @@ function cleanupDragContext(ctx) {
         document.removeEventListener('pointercancel', ctx.upHandler, true);
         document.removeEventListener('pointerleave', ctx.upHandler, true);
     }
+    disposeFloatingDragGhost(ctx);
     intuition_drag_active = false;
     editModeState.dragContext = null;
 }
@@ -1540,7 +1541,11 @@ function beginMenuItemDrag(ev, meta) {
         originEl: meta.el || meta.originEl || null,
         capturePointerId: (typeof meta.capturePointerId === 'number') ? meta.capturePointerId : (typeof pointerKey === 'number' ? pointerKey : null),
         supportReference: supportCtx.reference,
-        supportParentId: supportCtx.parentFloatingId || null
+        supportParentId: supportCtx.parentFloatingId || null,
+        dragActivated: false,
+        ghostEl: null,
+        lastClientX: ev.clientX,
+        lastClientY: ev.clientY
     };
     const dragDef = meta.nameKey ? intuition_content[meta.nameKey] : null;
     if (meta.nameKey) {
@@ -1571,38 +1576,56 @@ function handleMenuItemDragMove(e, ctx) {
     if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
     const x = e.clientX;
     const y = e.clientY;
-    if (!ctx.floatingInfo) {
+    ctx.lastClientX = x;
+    ctx.lastClientY = y;
+    if (!ctx.dragActivated) {
         const dist = Math.hypot(x - ctx.startX, y - ctx.startY);
         if (dist < EDIT_DRAG_THRESHOLD) return;
-        ctx.floatingInfo = spawnFloatingFromMenuItem(ctx.nameKey, {
-            label: ctx.label,
-            typeName: ctx.typeName,
-            x,
-            y,
-            theme: currentTheme,
-            reference: ctx.supportReference,
-            parentFloatingId: ctx.supportParentId || null
-        });
-        if (!ctx.floatingInfo) {
-            cleanupDragContext(ctx);
-            return;
+        ctx.dragActivated = true;
+        intuition_drag_active = true;
+        if (!ctx.ghostEl) {
+            ctx.ghostEl = createFloatingDragGhost({
+                label: ctx.label,
+                theme: currentTheme,
+                typeName: ctx.typeName
+            });
+            if (ctx.ghostEl && typeof document !== 'undefined' && document.body) {
+                document.body.appendChild(ctx.ghostEl);
+            }
         }
-        const rect = ctx.floatingInfo.container.getBoundingClientRect();
-        ctx.offsetX = rect.width / 2;
-        ctx.offsetY = rect.height / 2;
     }
-    const left = x - (ctx.offsetX || 0);
-    const top = y - (ctx.offsetY || 0);
-    moveFloatingTo(ctx.floatingInfo, left, top);
-    e.preventDefault();
-    e.stopPropagation();
+    if (ctx.dragActivated && ctx.ghostEl) {
+        updateFloatingDragGhostPosition(ctx.ghostEl, x, y);
+    }
+    if (ctx.dragActivated) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
 }
 
 function finishMenuItemDrag(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
     if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
-    if (ctx.floatingInfo) {
-        clampFloatingToViewport(ctx.floatingInfo);
+    const eventType = e && e.type;
+    const isDropEvent = !eventType || eventType === 'pointerup' || eventType === 'mouseup' || eventType === 'touchend';
+    if (ctx.dragActivated && isDropEvent) {
+        const dropX = (e && typeof e.clientX === 'number') ? e.clientX : ctx.lastClientX;
+        const dropY = (e && typeof e.clientY === 'number') ? e.clientY : ctx.lastClientY;
+        const spawnX = Number.isFinite(dropX) ? dropX : ctx.startX;
+        const spawnY = Number.isFinite(dropY) ? dropY : ctx.startY;
+        const info = spawnFloatingFromMenuItem(ctx.nameKey, {
+            label: ctx.label,
+            typeName: ctx.typeName,
+            x: spawnX,
+            y: spawnY,
+            theme: currentTheme,
+            reference: ctx.supportReference,
+            parentFloatingId: ctx.supportParentId || null
+        });
+        if (info) {
+            clampFloatingToViewport(info);
+            repositionActiveSatellites(info);
+        }
     }
     cleanupDragContext(ctx);
 }
@@ -3683,6 +3706,50 @@ function resolveItemSizeCss() {
         return String(currentTheme.item_size);
     }
     return '54px';
+}
+
+function createFloatingDragGhost(opts = {}) {
+    if (typeof document === 'undefined') return null;
+    const themeRef = opts.theme || currentTheme;
+    const sizeCss = resolveThemeItemSizeCss(themeRef);
+    const sizeNum = parseFloat(sizeCss) || parseFloat(themeRef && themeRef.item_size) || item_size;
+    const ghost = document.createElement('div');
+    ghost.className = 'intuition-floating-ghost';
+    ghost.style.position = 'fixed';
+    ghost.style.width = `${Math.max(24, Math.round(sizeNum))}px`;
+    ghost.style.height = `${Math.max(24, Math.round(sizeNum))}px`;
+    ghost.style.left = '0px';
+    ghost.style.top = '0px';
+    ghost.style.transform = 'translate(-50%, -50%)';
+    ghost.style.display = 'flex';
+    ghost.style.alignItems = 'center';
+    ghost.style.justifyContent = 'center';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.zIndex = '10000055';
+    ghost.style.borderRadius = themeRef && themeRef.item_border_radius ? String(themeRef.item_border_radius) : '12px';
+    ghost.style.background = resolveFloatingHostBackground(themeRef, opts.typeName || 'tool');
+    ghost.style.boxShadow = themeRef && themeRef.item_shadow ? String(themeRef.item_shadow) : 'none';
+    ghost.style.color = themeRef && themeRef.tool_text ? String(themeRef.tool_text) : '#cacacaff';
+    ghost.style.fontSize = themeRef && themeRef.tool_font_px ? `${themeRef.tool_font_px}px` : '10px';
+    ghost.style.fontFamily = (themeRef && themeRef.tool_font_family) || 'system-ui, sans-serif';
+    ghost.textContent = (opts.label && String(opts.label).trim()) || '';
+    return ghost;
+}
+
+function updateFloatingDragGhostPosition(ghost, x, y) {
+    if (!ghost) return;
+    ghost.style.left = `${x}px`;
+    ghost.style.top = `${y}px`;
+}
+
+function disposeFloatingDragGhost(ctx) {
+    if (!ctx || !ctx.ghostEl) return;
+    try {
+        if (ctx.ghostEl.parentElement) {
+            ctx.ghostEl.parentElement.removeChild(ctx.ghostEl);
+        }
+    } catch (_) { /* ignore */ }
+    ctx.ghostEl = null;
 }
 
 function showUnitDropdownEntry(entry, hostOverride) {
