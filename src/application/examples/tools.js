@@ -1,11 +1,29 @@
-
+const vieLogo = $('img', {
+  id: 'img_test',
+  parent: "#view",
+  attrs: {
+    src: './assets/images/2.png',
+    alt: 'ballanim'
+  },
+  css: {
+    marginLeft: '0',
+    color: 'white',
+    left: '0px',
+    top: '0px',
+    position: 'relative',
+    height: "100%",
+    width: "100%",
+    textAlign: 'center',
+    display: 'block'
+  }
+});
 
 const shadowLeft = 0,
   shadowTop = 0,
   shadowBlur = 12;
 const items_spacing = 3;
 const item_border_radius = 6;
-const item_size = 54;
+const item_size = 123;
 const DIRECTIONS = [
   "TLH",
   "TRH",
@@ -38,11 +56,11 @@ const light_theme = {
   themeName: "light",
   button_color: 'rgba(48, 188, 55, 0.85)',
   button_active_color: "#b70fd5ff",
-  palette_bg: '#804901ff',
-  tool_bg: 'linear-gradient(180deg, rgba(32, 190, 48, 0.85) 0%, rgba(72,71,71,0.35) 100%)',
-  particle_bg: '#4a4a4aff',
-  option_bg: '#c40fdfff',
-  zonespecial_bg: '#4a4a4aff',
+  // palette_bg: '#804901ff',
+  // tool_bg: 'linear-gradient(180deg, rgba(32, 190, 48, 0.85) 0%, rgba(72,71,71,0.35) 100%)',
+  // particle_bg: '#4a4a4aff',
+  // option_bg: '#c40fdfff',
+  // zonespecial_bg: '#4a4a4aff',
   slider_length: '70%',
   slider_zoom_length: '100%',
   slider_length_vertical: '30%',
@@ -57,7 +75,6 @@ const light_theme = {
   drag_sensitivity: 0.5, // 0.5 => dx direct; <0.5 plus fin; >0.5 plus rapide
   drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
   button_size: '33%',
-
   items_spacing: items_spacing + 'px',
   item_size: item_size + 'px',
   support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
@@ -107,7 +124,14 @@ const light_theme = {
   anim_bounce_overshoot: 0.09,
   // Elasticity controls extra rebounds (0 = back easing, 1 = strong elastic)
   anim_elasticity: 6,
-  direction: "top_left_horizontal"
+  direction: "top_left_horizontal",
+  button_color: 'rgba(204, 35, 35, 0.85)',
+  button_active_color: "rgba(72,71,71,0.15) 100%)",
+  palette_bg: 'rgba(72,71,71,0)',
+  tool_bg: 'rgba(72,71,71,0)',
+  particle_bg: 'rgba(72,71,71)',
+  option_bg: 'rgba(72,71,71,0)',
+  zonespecial_bg: 'rgba(72,71,71,0)',
 
 };
 Intuition.addTheme(light_theme)

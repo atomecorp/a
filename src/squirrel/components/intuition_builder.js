@@ -312,7 +312,7 @@ function ensureEditModeStyle() {
             display: flex;
             align-items: center;
             justify-content: center;
-            background: rgba(0,0,0,0.45);
+            background: rgba(0,0,0,0);
             color: #ffffff;
             font-size: 11px;
             letter-spacing: 0.12em;
@@ -330,8 +330,8 @@ function ensureEditModeStyle() {
             position: absolute;
             top: 4px;
             left: 8px;
-            width: 12px;
-            height: 12px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
             background: #ff3b30;
             border: 2px solid rgba(255,255,255,0.85);
@@ -553,6 +553,8 @@ function updateFloatingGripLayout() {
         grip.style.display = 'flex';
         grip.style.alignItems = 'center';
         grip.style.justifyContent = 'center';
+        grip.style.flex = '0 0 auto';
+        grip.style.flexShrink = '0';
         const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
         if (isHorizontal) {
             grip.style.marginRight = spacing;
@@ -565,13 +567,14 @@ function updateFloatingGripLayout() {
             info.container.style.display = 'flex';
             info.container.style.flexDirection = isHorizontal ? 'row' : 'column';
             info.container.style.alignItems = isHorizontal ? 'center' : 'stretch';
+            applyThemeToFloatingHost(info, themeRef);
         }
         if (info.body) {
             info.body.style.display = 'flex';
             info.body.style.flexDirection = isHorizontal ? 'row' : 'column';
             info.body.style.alignItems = isHorizontal ? 'center' : 'stretch';
             info.body.style.justifyContent = 'flex-start';
-            info.body.style.padding = spacing;
+            info.body.style.padding = resolveFloatingBodyPadding(themeRef, spacing);
             info.body.style.gap = spacing;
             info.body.style.margin = '0';
         }
@@ -1059,6 +1062,7 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
     def.type(params);
     const created = document.getElementById(uniqueId);
     if (created) {
+        const themeRef = info && info.theme ? info.theme : currentTheme;
         try { created.dataset.nameKey = datasetNameKey; } catch (_) { }
         created.dataset.floating = 'true';
         try { created.dataset.floatingHostId = info.id; } catch (_) { }
@@ -1075,7 +1079,8 @@ function addFloatingEntry(info, nameKey, target, opts = {}) {
         }
         created.style.flex = '0 0 auto';
         created.style.alignSelf = 'stretch';
-        applyBackdropStyle(created, currentTheme.tool_backDrop_effect);
+        applyBackdropStyle(created, themeRef && themeRef.tool_backDrop_effect);
+        applyThemeToFloatingEntry(created, themeRef, typeName);
         setupEditModeDrag(created, { nameKey: datasetNameKey, label: def.label || nameKey, typeName });
     }
     info.nameKeys.push(datasetNameKey);
@@ -1724,12 +1729,12 @@ const zonespecial = createZonespecial;
 const Intuition_theme = {
     basic: {
         button_color: 'rgba(204, 35, 35, 0.85)',
-        button_active_color: "#bbeb0eff",
-        palette_bg: '#2d25d0ff',
-        tool_bg: 'linear-gradient(180deg, rgba(32, 190, 48, 0.85) 0%, rgba(72,71,71,0.35) 100%)',
-        particle_bg: '#4a4a4aff',
-        option_bg: '#c40fdfff',
-        zonespecial_bg: '#4a4a4aff',
+        button_active_color: "rgba(72,71,71,0.15) 100%)",
+        palette_bg: 'rgba(72,71,71,0)',
+        tool_bg: 'rgba(72,71,71,0)',
+        particle_bg: 'rgba(72,71,71)',
+        option_bg: 'rgba(72,71,71,0)',
+        zonespecial_bg: 'rgba(72,71,71,0)',
         slider_length: '70%',
         slider_zoom_length: '100%',
         slider_length_vertical: '30%',
@@ -3336,6 +3341,181 @@ function removeAllUnitDropdowns() {
     Array.from(unitDropdownRegistry.keys()).forEach(removeUnitDropdown);
 }
 
+function resolveThemeItemSizeCss(theme) {
+    if (!theme) return `${item_size}px`;
+    const raw = theme.item_size;
+    if (raw == null) {
+        return `${item_size}px`;
+    }
+    if (typeof raw === 'number') {
+        return `${raw}px`;
+    }
+    const str = String(raw).trim();
+    if (!str) {
+        return `${item_size}px`;
+    }
+    if (/^[0-9.]+$/.test(str)) {
+        return `${str}px`;
+    }
+    return str;
+}
+
+function resolveFloatingEntryBackground(theme, typeName) {
+    const fallback = (theme && theme.tool_bg != null) ? theme.tool_bg : 'transparent';
+    if (!theme) return fallback;
+    switch (typeName) {
+        case 'palette':
+            return theme.palette_bg != null ? theme.palette_bg : fallback;
+        case 'particle':
+            return theme.particle_bg != null ? theme.particle_bg : fallback;
+        case 'option':
+            return theme.option_bg != null ? theme.option_bg : fallback;
+        case 'zonespecial':
+            return theme.zonespecial_bg != null ? theme.zonespecial_bg : fallback;
+        default:
+            return fallback;
+    }
+}
+
+function resolveFloatingBodyPadding(theme, spacingFallback = '0') {
+    const defaultPadding = '0';
+    const hasThemeValue = theme && Object.prototype.hasOwnProperty.call(theme, 'floating_body_padding');
+    if (!hasThemeValue) {
+        return defaultPadding;
+    }
+    const raw = theme.floating_body_padding;
+    if (raw == null) {
+        return defaultPadding;
+    }
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+        return `${raw}px`;
+    }
+    const str = String(raw).trim();
+    if (!str) {
+        return defaultPadding;
+    }
+    if (str === 'spacing') {
+        return spacingFallback;
+    }
+    return str;
+}
+
+function resolveFloatingHostBackground(theme, infoType) {
+    if (!theme) return 'transparent';
+    if (Object.prototype.hasOwnProperty.call(theme, 'floating_host_bg')) {
+        const raw = theme.floating_host_bg;
+        if (raw === null || raw === undefined || raw === '') {
+            return 'transparent';
+        }
+        return String(raw);
+    }
+    if (infoType === 'palette') {
+        return theme.palette_bg != null ? theme.palette_bg : 'transparent';
+    }
+    if (infoType === 'tool' || infoType === 'particle' || infoType === 'option' || infoType === 'zonespecial') {
+        return theme.tool_bg != null ? theme.tool_bg : 'transparent';
+    }
+    return 'transparent';
+}
+
+function resolveFloatingHostBlur(theme, background) {
+    if (!theme) return null;
+    if (Object.prototype.hasOwnProperty.call(theme, 'floating_host_blur')) {
+        const raw = theme.floating_host_blur;
+        if (raw === null || raw === undefined || raw === '' || raw === false) {
+            return null;
+        }
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+            return `${raw}px`;
+        }
+        const str = String(raw).trim();
+        if (!str) {
+            return null;
+        }
+        return str;
+    }
+    if (!background || background === 'transparent' || background === 'none') {
+        return null;
+    }
+    return theme.tool_backDrop_effect || null;
+}
+
+function applyThemeToFloatingHost(info, theme) {
+    if (!info) return;
+    const themeRef = theme || currentTheme;
+    const container = info.container;
+    if (container && container.style) {
+        const background = resolveFloatingHostBackground(themeRef, info.type);
+        container.style.background = background || 'transparent';
+        if (themeRef && themeRef.item_border_radius) {
+            container.style.borderRadius = themeRef.item_border_radius;
+        }
+        if (themeRef && themeRef.item_shadow) {
+            container.style.boxShadow = themeRef.item_shadow;
+        }
+        const blur = resolveFloatingHostBlur(themeRef, background);
+        applyBackdropStyle(container, blur);
+    }
+    if (info.body && info.body.style) {
+        info.body.style.background = 'transparent';
+        const bodyBlur = themeRef && Object.prototype.hasOwnProperty.call(themeRef, 'floating_body_blur')
+            ? themeRef.floating_body_blur
+            : null;
+        applyBackdropStyle(info.body, bodyBlur);
+    }
+}
+
+function applyThemeToFloatingEntry(entryEl, theme, typeName) {
+    if (!entryEl || !entryEl.style) return;
+    const resolvedTheme = theme || currentTheme;
+    const baseColor = (resolvedTheme && resolvedTheme.tool_text) || entryEl.style.color || '#cacacaff';
+    const fontFamily = (resolvedTheme && resolvedTheme.tool_font_family) || 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    let fontSize = entryEl.style.fontSize || '12px';
+    if (resolvedTheme) {
+        if (resolvedTheme.tool_font_px != null) {
+            fontSize = `${resolvedTheme.tool_font_px}px`;
+        } else if (resolvedTheme.tool_font) {
+            fontSize = String(resolvedTheme.tool_font);
+        }
+    }
+
+    entryEl.style.background = resolveFloatingEntryBackground(resolvedTheme, typeName);
+    entryEl.style.color = baseColor;
+    entryEl.style.fontFamily = fontFamily;
+    entryEl.style.fontSize = fontSize;
+    entryEl.style.display = 'inline-flex';
+    entryEl.style.alignItems = 'center';
+    entryEl.style.justifyContent = 'center';
+    entryEl.style.width = resolveThemeItemSizeCss(resolvedTheme);
+    entryEl.style.height = resolveThemeItemSizeCss(resolvedTheme);
+    if (resolvedTheme && resolvedTheme.item_shadow) {
+        entryEl.style.boxShadow = resolvedTheme.item_shadow;
+    }
+    if (resolvedTheme && resolvedTheme.item_border_radius) {
+        entryEl.style.borderRadius = resolvedTheme.item_border_radius;
+    }
+    entryEl.style.pointerEvents = 'auto';
+    entryEl.style.opacity = '1';
+    entryEl.style.visibility = 'visible';
+    entryEl.style.webkitUserSelect = 'none';
+    entryEl.style.userSelect = 'none';
+
+    const labelEl = entryEl.querySelector('.intuition-label');
+    if (labelEl && labelEl.style) {
+        labelEl.style.color = baseColor;
+        labelEl.style.fontFamily = fontFamily;
+        labelEl.style.fontSize = fontSize;
+        labelEl.style.display = '';
+    }
+
+    const iconEl = document.getElementById(`${entryEl.id}__icon`);
+    if (iconEl && iconEl.style) {
+        const iconColor = (resolvedTheme && (resolvedTheme.icon_color || resolvedTheme.toolbox_icon_color)) || baseColor;
+        iconEl.style.fill = iconColor;
+        iconEl.style.stroke = iconColor;
+    }
+}
+
 function closeUnitDropdownsForHost(info) {
     if (!info) return;
     const keysToRemove = [];
@@ -3767,6 +3947,7 @@ function apply_layout() {
         setPaletteVisualState(handlePaletteClick.active.el, true);
     }
     repositionUnitDropdowns();
+    updateFloatingGripLayout();
 }
 
 
@@ -4462,6 +4643,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
 
     setLabelCentered(el, true);
     setPaletteVisualState(el, true);
+    applyThemeToFloatingEntry(el, themeRef, inferDefinitionType(intuition_content[nameKey]));
 
     const satelliteState = {
         type: 'element',
