@@ -4678,8 +4678,9 @@ function repositionActiveSatellites(info) {
                 y: anchor.top - hostRect.top
             }
             : { x: 0, y: 0 });
-        const width = Math.max(1, state.width || state.el.offsetWidth || resolveItemSizePx());
-        const height = Math.max(1, state.height || state.el.offsetHeight || resolveItemSizePx());
+    const width = Math.max(1, state.width || state.el.offsetWidth || resolveItemSizePx());
+    const fallbackHeight = state.el && state.el.offsetHeight ? state.el.offsetHeight : resolveItemSizePx();
+    const height = Math.max(1, state.height != null ? state.height : Math.max(1, fallbackHeight / 2));
         const placeholderRect = anchor
             ? {
                 left: hostRect.left + offset.x,
@@ -4802,6 +4803,9 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     setLabelCentered(el, true);
     setPaletteVisualState(el, true);
     applyThemeToFloatingEntry(el, themeRef, inferDefinitionType(intuition_content[nameKey]));
+    el.style.width = `${width}px`;
+    el.style.height = `${targetHeight}px`;
+    el.style.lineHeight = `${targetHeight}px`;
 
     const satelliteState = {
         type: 'element',
