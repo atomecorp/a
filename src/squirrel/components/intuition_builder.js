@@ -23,6 +23,7 @@ let menuStack = [];
 const unitDropdownRegistry = new Map();
 const floatingRegistry = new Map();
 const floatingPersistence = new Map();
+const orientationSelectionMap = new Map();
 let floatingCounter = 0;
 let floatingHierarchyCounter = 0;
 let intuition_drag_active = false;
@@ -34,6 +35,8 @@ const editModeState = {
 };
 const EDIT_DRAG_THRESHOLD = 16;
 const FLOATING_DRAG_ACTIVATION_THRESHOLD = 2;
+let activeContentHandlerContext = null;
+let pendingParticleUpdateHost = null;
 
 function ensureFloatingPersistenceBucket(info) {
     if (!info || !info.id) return null;
@@ -764,6 +767,7 @@ function removeFloating(id) {
             try { info.container.parentElement.removeChild(info.container); } catch (_) { }
         }
     }
+    orientationSelectionMap.delete(info.id);
     clearPersistedFloatingSatelliteStore(info);
     floatingRegistry.delete(info.id || id);
 }
@@ -973,10 +977,15 @@ function createFloatingHost(opts = {}) {
         reference,
         visibleKeysSnapshot: [],
         _collapseAnimation: false,
-        _pendingCollapse: null
+        _pendingCollapse: null,
+        _hasCustomDirection: false
     };
     floatingRegistry.set(id, info);
     ensureFloatingPersistenceStore(info);
+    const initialDirection = (info.theme && info.theme.direction)
+        ? String(info.theme.direction).toLowerCase()
+        : (currentTheme && currentTheme.direction ? String(currentTheme.direction).toLowerCase() : 'top_left_horizontal');
+    orientationSelectionMap.set(id, initialDirection);
     ensureFloatingHostRecord(info, info.theme, {
         reference,
         position: { left, top },
@@ -1855,6 +1864,9 @@ const Intuition_theme = {
 const intuition_content = {};
 
 const currentTheme = Intuition_theme.basic;
+orientationSelectionMap.set('toolbox', (currentTheme && currentTheme.direction)
+    ? String(currentTheme.direction).toLowerCase()
+    : 'top_left_horizontal');
 
 
 
@@ -2502,6 +2514,8 @@ function runContentHandler(def, handlerName, payload = {}) {
         theme: currentTheme,
         value: payload.value
     };
+    const prevHandlerContext = activeContentHandlerContext;
+    activeContentHandlerContext = { el, event, kind, nameKey, handler: handlerName, payload };
     try {
         if (typeof code === 'function') {
             code(context);
@@ -2511,6 +2525,8 @@ function runContentHandler(def, handlerName, payload = {}) {
         }
     } catch (err) {
         console.error('Intuition content handler error', err);
+    } finally {
+        activeContentHandlerContext = prevHandlerContext;
     }
 }
 
@@ -2585,6 +2601,14 @@ function renderParticleValueFromTheme(cfg) {
     const key = (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
     const def = intuition_content[key];
     if (!def) return;
+    const particleEl = document.getElementById(cfg.id);
+    const hostInfo = particleEl ? resolveFloatingInfoFromElement(particleEl) : null;
+    const particleUpdateHost = particleEl || (hostInfo && hostInfo.container) || null;
+    const dispatchParticleUpdate = (nextValue, nextUnit, nextExt) => {
+        pendingParticleUpdateHost = particleUpdateHost;
+        window.updateParticleValue(key, nextValue, nextUnit, nextExt);
+    };
+    const orientationContextKey = hostInfo ? hostInfo.id : 'toolbox';
     const rawUnit = def.unit;
     const orientationControl = !!def && !!def.orientationControl;
     if (orientationControl && typeof def.value === 'string') {
@@ -2614,23 +2638,43 @@ function renderParticleValueFromTheme(cfg) {
             def._unitSelected = rawUnit;
         }
     }
+    let orientationValue = null;
     if (orientationControl) {
-        if (!def._unitSelected && currentTheme && typeof currentTheme.direction === 'string') {
-            const themeDir = String(currentTheme.direction).toLowerCase();
-            if (unitOptions && unitOptions.includes(themeDir)) {
-                def._unitSelected = themeDir;
+        const normalizeDir = (dir) => {
+            if (!dir && dir !== 0) return '';
+            const str = String(dir).toLowerCase();
+            if (unitOptions && unitOptions.length && unitOptions.includes(str)) {
+                return str;
             }
+            return str;
+        };
+        const themeDir = normalizeDir(
+            (hostInfo && hostInfo.theme && hostInfo.theme.direction)
+            || (currentTheme && currentTheme.direction)
+            || def._unitSelected
+            || (Array.isArray(unitOptions) && unitOptions.length ? unitOptions[0] : '')
+        );
+        let storedDir = normalizeDir(orientationSelectionMap.get(orientationContextKey));
+        if (!storedDir) storedDir = themeDir;
+        if (unitOptions && unitOptions.length && !unitOptions.includes(storedDir)) {
+            storedDir = unitOptions[0];
         }
-        if (syncValueWithUnit) {
-            if (def._unitSelected) {
-                def.value = def._unitSelected;
-            } else if (currentTheme && typeof currentTheme.direction === 'string') {
-                def.value = String(currentTheme.direction).toLowerCase();
-            }
+        if (!storedDir) {
+            storedDir = themeDir || 'top_left_horizontal';
+        }
+        orientationSelectionMap.set(orientationContextKey, storedDir);
+        def._unitSelected = storedDir;
+        orientationValue = storedDir;
+        if (!hostInfo && syncValueWithUnit) {
+            def.value = storedDir;
         }
     }
-    const unit = def._unitSelected || (typeof rawUnit === 'string' ? rawUnit : '');
-    const val = def.value;
+    const unit = orientationControl
+        ? (orientationSelectionMap.get(orientationContextKey) || orientationValue || def._unitSelected || (typeof rawUnit === 'string' ? rawUnit : ''))
+        : (def._unitSelected || (typeof rawUnit === 'string' ? rawUnit : ''));
+    const val = orientationControl
+        ? (orientationSelectionMap.get(orientationContextKey) || orientationValue || def.value)
+        : def.value;
     if (val === undefined || val === null) return;
     const decimals = Math.max(0, Math.min(6, parseInt(def.ext != null ? def.ext : 0, 10)));
     const valueText = (typeof val === 'number') ? val.toFixed(decimals) : String(val);
@@ -2746,7 +2790,6 @@ function renderParticleValueFromTheme(cfg) {
     }
 
     // Inline edit on double click (value only; unit stays static)
-    const particleEl = document.getElementById(cfg.id);
     const nameKey = (particleEl && particleEl.dataset && particleEl.dataset.nameKey) || (cfg && cfg.nameKey) || (cfg && cfg.id ? String(cfg.id).replace(/^_intuition_/, '') : '');
     const beginEdit = () => {
         if (!nameKey) return;
@@ -2790,7 +2833,7 @@ function renderParticleValueFromTheme(cfg) {
             }
             // Utilise updateParticleValue pour forcer la synchronisation helpers
             try { input.remove(); } catch (_) { }
-            window.updateParticleValue(nameKey, newVal);
+            dispatchParticleUpdate(newVal);
         };
         const cancel = () => {
             try { input.remove(); } catch (_) { }
@@ -2960,9 +3003,9 @@ function renderParticleValueFromTheme(cfg) {
                             def._unitChoices.push(val);
                         }
                         if (syncValueWithUnit) {
-                            window.updateParticleValue(key, val, val);
+                            dispatchParticleUpdate(val, val);
                         } else {
-                            window.updateParticleValue(key, def.value, val);
+                            dispatchParticleUpdate(def.value, val);
                         }
                     }
                     if (dropdownRoot && typeof dropdownRoot.closeDropDown === 'function') {
@@ -2993,6 +3036,12 @@ function renderHelperForItem(cfg) {
 
     const host = document.getElementById(cfg.id);
     if (!host) return;
+    const hostInfo = host ? resolveFloatingInfoFromElement(host) : null;
+    const helperUpdateHost = host || (hostInfo && hostInfo.container) || null;
+    const dispatchParticleUpdate = (nextValue, nextUnit, nextExt) => {
+        pendingParticleUpdateHost = helperUpdateHost;
+        window.updateParticleValue(key, nextValue, nextUnit, nextExt);
+    };
 
     const fire = (handlerName, extra = {}) => {
         runContentHandler(def, handlerName, { el: host, nameKey: key, ...extra });
@@ -3096,12 +3145,12 @@ function renderHelperForItem(cfg) {
             onInput: (v) => {
                 const nv = (typeof v === 'number') ? v : parseFloat(v) || 0;
                 if (slider._syncing) return;
-                window.updateParticleValue(key, nv);
+                dispatchParticleUpdate(nv);
             },
             onChange: (v) => {
                 const nv = (typeof v === 'number') ? v : parseFloat(v) || 0;
                 if (slider._syncing) return;
-                window.updateParticleValue(key, nv);
+                dispatchParticleUpdate(nv);
             }
         });
         try { host._helperSlider = slider; } catch (_) { }
@@ -3192,7 +3241,7 @@ function renderHelperForItem(cfg) {
                         const inv = 1 / step;
                         nv = Math.round(nv * inv) / inv;
                     }
-                    window.updateParticleValue(key, nv);
+                    dispatchParticleUpdate(nv);
                 };
                 const onMove = (ev) => {
                     if (!dragging) return;
@@ -3326,7 +3375,7 @@ function renderHelperForItem(cfg) {
         const pushValue = (nextVal) => {
             if (buttonObj) buttonObj._internalToggleSync = true;
             try {
-                window.updateParticleValue(key, nextVal);
+                dispatchParticleUpdate(nextVal);
             } finally {
                 if (buttonObj) buttonObj._internalToggleSync = false;
             }
@@ -3844,95 +3893,100 @@ function repositionUnitDropdowns() {
 }
 // Update a single particle's value/unit/ext in intuition_content and refresh its display
 window.updateParticleValue = function (nameKey, newValue, newUnit, newExt) {
-    if (!nameKey || !(nameKey in intuition_content)) return;
-    const def = intuition_content[nameKey];
-    if (!def) return;
-    const prevValue = def.value;
-    const prevActive = !!prevValue && Number(prevValue) !== 0;
-    if (newValue !== undefined) def.value = newValue;
-    if (newUnit !== undefined) {
-        if (Array.isArray(def._unitChoices)) {
-            def._unitSelected = newUnit;
-        }
-        if (!Array.isArray(def.unit)) {
-            def.unit = newUnit;
-        }
-    }
-    if (newExt !== undefined) def.ext = newExt;
-    const elId = `_intuition_${nameKey}`;
-    const el = document.getElementById(elId);
-    if (el) {
-        renderParticleValueFromTheme({ id: elId, nameKey });
-    }
-    // Sync helper slider (use stored reference if any)
-    const host = el || null;
-    const currentVal = def.value;
-    if (host && host._helperSlider) {
-        const comp = host._helperSlider;
-        if (typeof comp.setValue === 'function') {
-            try { comp._syncing = true; comp.setValue(currentVal); } catch (_) { } finally { try { comp._syncing = false; } catch (_) { } }
-        }
-    } else {
-        const sliderEl = document.getElementById(`${elId}__helper_slider`);
-        if (sliderEl && typeof sliderEl.setValue === 'function') {
-            try { sliderEl._syncing = true; sliderEl.setValue(currentVal); } catch (_) { } finally { try { sliderEl._syncing = false; } catch (_) { } }
-        }
-    }
-    // Ensure visual progression update (some slider libs only update on input events)
+    const pendingHost = pendingParticleUpdateHost || null;
     try {
-        const root = document.getElementById(`${elId}__helper_slider`);
-        if (root) {
-            const prog = root.querySelector('.hs-slider-progression');
-            if (prog) prog.style.width = Math.max(0, Math.min(100, parseFloat(currentVal))) + '%';
+        if (!nameKey || !(nameKey in intuition_content)) return;
+        const def = intuition_content[nameKey];
+        if (!def) return;
+        const prevValue = def.value;
+        const prevActive = !!prevValue && Number(prevValue) !== 0;
+        if (newValue !== undefined) def.value = newValue;
+        if (newUnit !== undefined) {
+            if (Array.isArray(def._unitChoices)) {
+                def._unitSelected = newUnit;
+            }
+            if (!Array.isArray(def.unit)) {
+                def.unit = newUnit;
+            }
         }
-    } catch (_) { }
-    // Sync helper button color/state
-    const active = !!currentVal && Number(currentVal) !== 0;
-    if (host && host._helperButton) {
-        const btn = host._helperButton;
+        if (newExt !== undefined) def.ext = newExt;
+        const elId = `_intuition_${nameKey}`;
+        const el = document.getElementById(elId);
+        if (el) {
+            renderParticleValueFromTheme({ id: elId, nameKey });
+        }
+        // Sync helper slider (use stored reference if any)
+        const host = el || pendingHost || null;
+        const currentVal = def.value;
+        if (host && host._helperSlider) {
+            const comp = host._helperSlider;
+            if (typeof comp.setValue === 'function') {
+                try { comp._syncing = true; comp.setValue(currentVal); } catch (_) { } finally { try { comp._syncing = false; } catch (_) { } }
+            }
+        } else {
+            const sliderEl = document.getElementById(`${elId}__helper_slider`);
+            if (sliderEl && typeof sliderEl.setValue === 'function') {
+                try { sliderEl._syncing = true; sliderEl.setValue(currentVal); } catch (_) { } finally { try { sliderEl._syncing = false; } catch (_) { } }
+            }
+        }
+        // Ensure visual progression update (some slider libs only update on input events)
         try {
-            if (btn && typeof btn.getState === 'function' && !btn._internalToggleSync) {
-                const btnState = !!btn.getState();
-                if (btnState !== active) {
-                    if (active && typeof btn.setOnState === 'function') {
-                        btn.setOnState();
-                    } else if (!active && typeof btn.setOffState === 'function') {
-                        btn.setOffState();
-                    }
-                }
-            }
-            // Récupère le node style cible (certaines implémentations exposent .el, d'autres .root ou rien)
-            let targetEl = null;
-            if (btn) {
-                if (btn.el) targetEl = btn.el;
-                else if (btn.root) targetEl = btn.root;
-                else if (typeof btn.getElement === 'function') targetEl = btn.getElement();
-            }
-            if (!targetEl) {
-                // Fallback via id
-                targetEl = document.getElementById(`${elId}__helper_button`);
-            }
-            if (targetEl && targetEl.style) {
-                targetEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color;
-                targetEl.style.boxShadow = currentTheme.item_shadow;
-                targetEl.style.border = 'none';
-                targetEl.style.outline = 'none';
+            const root = document.getElementById(`${elId}__helper_slider`);
+            if (root) {
+                const prog = root.querySelector('.hs-slider-progression');
+                if (prog) prog.style.width = Math.max(0, Math.min(100, parseFloat(currentVal))) + '%';
             }
         } catch (_) { }
-    } else {
-        const btnEl = document.getElementById(`${elId}__helper_button`);
-        if (btnEl) {
-            try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch (_) { }
-            try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
+        // Sync helper button color/state
+        const active = !!currentVal && Number(currentVal) !== 0;
+        if (host && host._helperButton) {
+            const btn = host._helperButton;
+            try {
+                if (btn && typeof btn.getState === 'function' && !btn._internalToggleSync) {
+                    const btnState = !!btn.getState();
+                    if (btnState !== active) {
+                        if (active && typeof btn.setOnState === 'function') {
+                            btn.setOnState();
+                        } else if (!active && typeof btn.setOffState === 'function') {
+                            btn.setOffState();
+                        }
+                    }
+                }
+                // Récupère le node style cible (certaines implémentations exposent .el, d'autres .root ou rien)
+                let targetEl = null;
+                if (btn) {
+                    if (btn.el) targetEl = btn.el;
+                    else if (btn.root) targetEl = btn.root;
+                    else if (typeof btn.getElement === 'function') targetEl = btn.getElement();
+                }
+                if (!targetEl) {
+                    // Fallback via id
+                    targetEl = document.getElementById(`${elId}__helper_button`);
+                }
+                if (targetEl && targetEl.style) {
+                    targetEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color;
+                    targetEl.style.boxShadow = currentTheme.item_shadow;
+                    targetEl.style.border = 'none';
+                    targetEl.style.outline = 'none';
+                }
+            } catch (_) { }
+        } else {
+            const btnEl = document.getElementById(`${elId}__helper_button`);
+            if (btnEl) {
+                try { btnEl.style.backgroundColor = active ? currentTheme.button_active_color : currentTheme.button_color; } catch (_) { }
+                try { btnEl.style.boxShadow = currentTheme.item_shadow; } catch (_) { }
+            }
         }
-    }
-    const handlerValue = newValue !== undefined ? newValue : currentVal;
-    const valueChanged = newValue !== undefined ? prevValue !== newValue : prevValue !== currentVal;
-    if (valueChanged) {
-        runContentHandler(def, 'change', { el: host, nameKey, kind: 'change', value: handlerValue });
-    }
-    if (prevActive !== active) {
-        runContentHandler(def, active ? 'active' : 'inactive', { el: host, nameKey, kind: active ? 'active' : 'inactive', value: currentVal });
+        const handlerValue = newValue !== undefined ? newValue : currentVal;
+        const valueChanged = newValue !== undefined ? prevValue !== newValue : prevValue !== currentVal;
+        if (valueChanged) {
+            runContentHandler(def, 'change', { el: host, nameKey, kind: 'change', value: handlerValue });
+        }
+        if (prevActive !== active) {
+            runContentHandler(def, active ? 'active' : 'inactive', { el: host, nameKey, kind: active ? 'active' : 'inactive', value: currentVal });
+        }
+    } finally {
+        pendingParticleUpdateHost = null;
     }
 };
 // Toggle an inline expansion of a tool's children right after the clicked tool
@@ -4357,11 +4411,49 @@ function enforceSupportHitThrough() {
 }
 
 
+function setFloatingHostDirection(info, dir) {
+    if (!info || !info.id) return;
+    const nextDir = dir ? String(dir).toLowerCase() : 'top_left_horizontal';
+    const baseTheme = info.theme && info.theme !== currentTheme
+        ? info.theme
+        : { ...currentTheme };
+    info.theme = { ...baseTheme, direction: nextDir };
+    info._hasCustomDirection = true;
+    orientationSelectionMap.set(info.id, nextDir);
+    const bucket = ensureFloatingPersistenceBucket(info);
+    if (bucket && bucket.host) {
+        bucket.host.orientation = resolveOrientationValue(info.theme);
+    }
+    updateFloatingGripLayout();
+    const keysToRender = (info.visibleKeysSnapshot && info.visibleKeysSnapshot.length)
+        ? info.visibleKeysSnapshot.slice()
+        : (info.nameKeys && info.nameKeys.length
+            ? info.nameKeys.slice()
+            : (Array.isArray(info.rootChildren) ? info.rootChildren.slice() : []));
+    if (!info.collapsed) {
+        renderFloatingBody(info, keysToRender);
+    }
+    repositionActiveSatellites(info);
+}
+
+
 
 window.addEventListener('resize', apply_layout);
 window.setDirection = function (dir) {
     const nextDir = String(dir).toLowerCase();
+    const handlerEl = activeContentHandlerContext && activeContentHandlerContext.el;
+    const hostInfo = handlerEl ? resolveFloatingInfoFromElement(handlerEl) : null;
+    if (hostInfo) {
+        setFloatingHostDirection(hostInfo, nextDir);
+        closeUnitDropdownsForHost(hostInfo);
+        return;
+    }
     currentTheme.direction = nextDir;
+    orientationSelectionMap.set('toolbox', nextDir);
+    floatingRegistry.forEach((floatingInfo) => {
+        if (!floatingInfo || floatingInfo._hasCustomDirection) return;
+        orientationSelectionMap.set(floatingInfo.id, nextDir);
+    });
     Object.keys(intuition_content || {}).forEach((nameKey) => {
         const def = intuition_content[nameKey];
         if (!def || !def.unit) return;
@@ -4678,9 +4770,9 @@ function repositionActiveSatellites(info) {
                 y: anchor.top - hostRect.top
             }
             : { x: 0, y: 0 });
-    const width = Math.max(1, state.width || state.el.offsetWidth || resolveItemSizePx());
-    const fallbackHeight = state.el && state.el.offsetHeight ? state.el.offsetHeight : resolveItemSizePx();
-    const height = Math.max(1, state.height != null ? state.height : Math.max(1, fallbackHeight / 2));
+        const width = Math.max(1, state.width || state.el.offsetWidth || resolveItemSizePx());
+        const fallbackHeight = state.el && state.el.offsetHeight ? state.el.offsetHeight : resolveItemSizePx();
+        const height = Math.max(1, state.height != null ? state.height : Math.max(1, fallbackHeight / 2));
         const placeholderRect = anchor
             ? {
                 left: hostRect.left + offset.x,
