@@ -295,11 +295,8 @@ function ensureEditModeStyle() {
             flex-direction: column;
             align-items: stretch;
             justify-content: flex-start;
-            background: rgba(32, 32, 32, 0.55);
             border-radius: 12px;
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+     
             z-index: 10000020;
         }
 
@@ -555,6 +552,15 @@ function updateFloatingGripLayout() {
         grip.style.justifyContent = 'center';
         grip.style.flex = '0 0 auto';
         grip.style.flexShrink = '0';
+        const gripBackground = resolveFloatingHostBackground(themeRef, info.type);
+        grip.style.background = gripBackground || 'transparent';
+        if (themeRef && themeRef.item_shadow) {
+            grip.style.boxShadow = themeRef.item_shadow;
+        } else {
+            grip.style.boxShadow = '';
+        }
+        const gripBlur = resolveFloatingGripBlur(themeRef, gripBackground);
+        applyBackdropStyle(grip, gripBlur);
         const spacing = themeRef && themeRef.items_spacing ? String(themeRef.items_spacing) : '6px';
         if (isHorizontal) {
             grip.style.marginRight = spacing;
@@ -1783,6 +1789,7 @@ const Intuition_theme = {
         palette_label: true,
         dropdown_text_color: '#ffff00',
         dropdown_background_color: 'rgba(255, 0, 0, 0.36)',
+        floating_host_bg: 'transparent',
         // Particle value/unit display (theme-driven)
         particle_value_unit: '%',
         particle_value_value: 30,
@@ -3436,6 +3443,29 @@ function resolveFloatingHostBlur(theme, background) {
     }
     if (!background || background === 'transparent' || background === 'none') {
         return null;
+    }
+    return theme.tool_backDrop_effect || null;
+}
+
+function resolveFloatingGripBlur(theme, background) {
+    if (!theme) return null;
+    if (Object.prototype.hasOwnProperty.call(theme, 'floating_grip_blur')) {
+        const raw = theme.floating_grip_blur;
+        if (raw === null || raw === undefined || raw === '' || raw === false) {
+            return null;
+        }
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+            return `${raw}px`;
+        }
+        const str = String(raw).trim();
+        if (!str) {
+            return null;
+        }
+        return str;
+    }
+    const hostBlur = resolveFloatingHostBlur(theme, background);
+    if (hostBlur) {
+        return hostBlur;
     }
     return theme.tool_backDrop_effect || null;
 }
