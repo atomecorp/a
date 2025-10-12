@@ -303,6 +303,6 @@ setTimeout(() => {
   }
 
   Intuition({ type: 'extract', content: test_elem });
-  puts('restore extract in 5s')
+  puts('restore extract in 2s')
 }
-  , 5000); 
+  , 2000); 
