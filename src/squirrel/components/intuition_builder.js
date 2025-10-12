@@ -858,9 +858,16 @@ function attachFloatingGripInteractions(info) {
                 e.stopPropagation();
                 return;
             }
+            if (intuition_drag_active) {
+                suppressNextClick = false;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
             if (isEditModeActive()) {
                 e.preventDefault();
                 e.stopPropagation();
+                exitEditMode();
                 return;
             }
             toggleFloatingCollapse(info.id);
@@ -1668,8 +1675,10 @@ function finishFloatingMove(e, ctx) {
         clampFloatingToViewport(ctx.floatingInfo);
         repositionActiveSatellites(ctx.floatingInfo);
     }
-    intuition_drag_active = false;
-    cleanupDragContext(ctx);
+    setTimeout(() => {
+        intuition_drag_active = false;
+        cleanupDragContext(ctx);
+    }, 0);
 }
 
 function attachToolboxEditBehavior(toolboxEl) {
