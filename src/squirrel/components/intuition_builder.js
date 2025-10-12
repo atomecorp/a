@@ -2649,21 +2649,36 @@ function renderParticleValueFromTheme(cfg) {
             entry = unitDropdownRegistry.get(key);
         }
         if (!entry || !entry.wrap || !entry.dropdown) return;
-        // ensure dropdown tracks the current host (toolbox or floating extract)
-        if (particleEl && particleEl !== entry.host) {
-            entry.host = particleEl;
-        }
         const dropdown = entry.dropdown;
+        const wrapEl = entry.wrap;
         const isOpen = dropdown && typeof dropdown.isDropDownOpen === 'function'
             ? dropdown.isDropDownOpen()
-            : false;
-        if (!isOpen) {
-            try { positionUnitDropdownEntry(entry); } catch (_) { }
+            : (wrapEl && wrapEl.style.display !== 'none');
+        if (isOpen) {
+            if (dropdown && typeof dropdown.closeDropDown === 'function') {
+                dropdown.closeDropDown();
+            } else if (dropdown && typeof dropdown.toggleDropDown === 'function') {
+                dropdown.toggleDropDown();
+            } else if (wrapEl) {
+                try { wrapEl.click(); } catch (_) { }
+            }
+            hideUnitDropdownEntry(entry);
+            return;
         }
-        if (dropdown && typeof dropdown.toggleDropDown === 'function') {
+        showUnitDropdownEntry(entry, particleEl);
+        try { positionUnitDropdownEntry(entry); } catch (_) { }
+        if (dropdown && typeof dropdown.openDropDown === 'function') {
+            dropdown.openDropDown();
+        } else if (dropdown && typeof dropdown.toggleDropDown === 'function') {
             dropdown.toggleDropDown();
-        } else if (entry.wrap) {
-            try { entry.wrap.click(); } catch (_) { }
+        } else if (wrapEl) {
+            try { wrapEl.click(); } catch (_) { }
+        }
+        if (dropdown && typeof dropdown.isDropDownOpen === 'function') {
+            const opened = dropdown.isDropDownOpen();
+            if (!opened) {
+                hideUnitDropdownEntry(entry);
+            }
         }
     };
     const attachDropdownTrigger = (target) => {
@@ -2847,11 +2862,12 @@ function renderParticleValueFromTheme(cfg) {
             wrapEl.id = wrapId;
             wrapEl.dataset.unitDropdown = 'true';
             wrapEl.style.position = 'fixed';
-            wrapEl.style.display = 'flex';
+            wrapEl.style.display = 'none';
             wrapEl.style.alignItems = 'center';
             wrapEl.style.justifyContent = 'center';
-            wrapEl.style.pointerEvents = 'auto';
+            wrapEl.style.pointerEvents = 'none';
             wrapEl.style.zIndex = '10000060';
+            wrapEl.dataset.unitDropdownDisplay = 'flex';
             const dropdownBackdropBlur = currentTheme && currentTheme.tool_backDrop_effect;
             const dropdownBackdropBg = (currentTheme && currentTheme.dropdown_background_color) || (currentTheme && currentTheme.tool_bg);
             if (dropdownBackdropBg && typeof dropdownBackdropBg === 'string') {
@@ -2914,21 +2930,28 @@ function renderParticleValueFromTheme(cfg) {
                 backdropBlur: dropdownBackdropBlur,
                 backdropBackground: dropdownBackdropBg,
                 onChange: (val) => {
-                    if (!val || val === def._unitSelected) return;
-                    def._unitSelected = val;
-                    if (Array.isArray(def._unitChoices) && !def._unitChoices.includes(val)) {
-                        def._unitChoices.push(val);
+                    const hasValue = val !== undefined && val !== null && val !== '';
+                    if (hasValue && val !== def._unitSelected) {
+                        def._unitSelected = val;
+                        if (Array.isArray(def._unitChoices) && !def._unitChoices.includes(val)) {
+                            def._unitChoices.push(val);
+                        }
+                        if (syncValueWithUnit) {
+                            window.updateParticleValue(key, val, val);
+                        } else {
+                            window.updateParticleValue(key, def.value, val);
+                        }
                     }
-                    if (syncValueWithUnit) {
-                        window.updateParticleValue(key, val, val);
-                    } else {
-                        window.updateParticleValue(key, def.value, val);
+                    if (dropdownRoot && typeof dropdownRoot.closeDropDown === 'function') {
+                        dropdownRoot.closeDropDown();
                     }
+                    hideUnitDropdownEntry(entry);
                 }
             });
 
             entry.dropdown = dropdownRoot;
             unitDropdownRegistry.set(key, entry);
+            hideUnitDropdownEntry(entry);
         }
     }
 }
@@ -3660,6 +3683,25 @@ function resolveItemSizeCss() {
         return String(currentTheme.item_size);
     }
     return '54px';
+}
+
+function showUnitDropdownEntry(entry, hostOverride) {
+    if (!entry || !entry.wrap) return;
+    if (hostOverride) {
+        entry.host = hostOverride;
+    }
+    const wrapEl = entry.wrap;
+    const displayMode = wrapEl.dataset && wrapEl.dataset.unitDropdownDisplay
+        ? wrapEl.dataset.unitDropdownDisplay
+        : 'flex';
+    wrapEl.style.display = displayMode;
+    wrapEl.style.pointerEvents = 'auto';
+}
+
+function hideUnitDropdownEntry(entry) {
+    if (!entry || !entry.wrap) return;
+    entry.wrap.style.display = 'none';
+    entry.wrap.style.pointerEvents = 'none';
 }
 
 function positionUnitDropdownEntry(entry) {
