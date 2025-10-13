@@ -23,7 +23,7 @@ const shadowLeft = 0,
   shadowBlur = 12;
 const items_spacing = 3;
 const item_border_radius = 3;
-const item_size = 69;
+const item_size = 39;
 const DIRECTIONS = [
   "TLH",
   "TRH",
@@ -291,6 +291,8 @@ setTimeout(() => {
     id: "intuition-floating-1",
 
     orientation: "top_left_vertical",
+
+    state: 'close',
 
 
     position: { left: 0, top: 183 },

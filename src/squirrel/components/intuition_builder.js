@@ -265,6 +265,8 @@ function ensureFloatingHostRecord(info, theme, metadata = {}) {
     const fallbackChildren = childrenMeta
         || (Array.isArray(info.rootChildren) && info.rootChildren.length ? info.rootChildren.slice()
             : (Array.isArray(info.nameKeys) ? info.nameKeys.slice() : []));
+    const stateMeta = metadata.state != null ? String(metadata.state).toLowerCase() : null;
+    const normalizedState = stateMeta === 'open' ? 'open' : (stateMeta === 'close' || stateMeta === 'closed' ? 'close' : (info.collapsed ? 'close' : 'open'));
     const hostRecord = {
         id: info.id,
         reference: metadata.reference != null
@@ -275,6 +277,7 @@ function ensureFloatingHostRecord(info, theme, metadata = {}) {
         toolboxOffsetMain: normalizeOffsetToNumber(themeRef && themeRef.toolboxOffsetMain),
         toolboxOffsetEdge: normalizeOffsetToNumber(themeRef && themeRef.toolboxOffsetEdge),
         position: deriveFloatingHostPosition(info, metadata.position || {}),
+        state: normalizedState,
         content: {
             key: contentMeta.key != null ? contentMeta.key : (info.sourcePaletteKey || null),
             title: contentMeta.title != null
@@ -366,6 +369,13 @@ function persistFloatingSatelliteRecord(info, nameKey, theme, metadata = {}) {
     };
     store.set(nameKey, record);
 
+    const stateHint = entry && typeof entry.state === 'string'
+        ? entry.state
+        : (typeof hostRecord.state === 'string' && hostRecord.state
+            ? hostRecord.state
+            : (typeof options.state === 'string' ? options.state : null));
+    const normalizedState = stateHint ? String(stateHint).trim().toLowerCase() : '';
+    const shouldCollapse = normalizedState === 'open' ? false : (normalizedState === 'close' || normalizedState === 'closed' ? true : true);
     return record;
 }
 
@@ -5991,6 +6001,8 @@ function cloneFloatingHostRecord(record, fallbackId = null) {
         ? record.orientation
         : 'top_left_horizontal';
     const content = cloneFloatingContent(record.content, record.content && record.content.key || null, record.content && record.content.title || null);
+    const rawState = typeof record.state === 'string' ? record.state.trim().toLowerCase() : null;
+    const state = rawState === 'open' ? 'open' : (rawState === 'close' || rawState === 'closed' ? 'close' : null);
     return {
         id,
         reference: record.reference != null ? record.reference : null,
@@ -5998,7 +6010,8 @@ function cloneFloatingHostRecord(record, fallbackId = null) {
         toolboxOffsetMain: normalizeOffsetToNumber(record.toolboxOffsetMain),
         toolboxOffsetEdge: normalizeOffsetToNumber(record.toolboxOffsetEdge),
         position: cloneFloatingPosition(record.position),
-        content
+        content,
+        state
     };
 }
 
@@ -6123,6 +6136,15 @@ function restoreExtractedFloatingElement(options = {}) {
         const satPayload = entry.host ? entry.satellites : entry.satellites;
         const hostRecord = cloneFloatingHostRecord(hostPayload, hostPayload && hostPayload.id ? hostPayload.id : null);
         if (!hostRecord) return null;
+        const stateHint = entry && typeof entry.state === 'string'
+            ? entry.state
+            : (typeof hostRecord.state === 'string' && hostRecord.state
+                ? hostRecord.state
+                : (typeof options.state === 'string' ? options.state : null));
+        const normalizedState = stateHint ? String(stateHint).trim().toLowerCase() : '';
+        const shouldCollapse = normalizedState === 'open'
+            ? false
+            : (normalizedState === 'close' || normalizedState === 'closed' ? true : true);
         const children = Array.isArray(hostRecord.content.children)
             ? hostRecord.content.children.filter(Boolean)
             : [];
@@ -6170,6 +6192,14 @@ function restoreExtractedFloatingElement(options = {}) {
         info.menuStack = [{ parent: hostRecord.content.key || null, children: info.rootChildren.slice(), title }];
         renderFloatingBody(info, info.rootChildren);
 
+        if (shouldCollapse) {
+            toggleFloatingCollapse(info.id, true);
+        } else {
+            toggleFloatingCollapse(info.id, false);
+        }
+        const appliedState = shouldCollapse ? 'close' : 'open';
+        hostRecord.state = appliedState;
+
         ensureFloatingHostRecord(info, hostTheme, {
             reference: hostRecord.reference || 'toolbox',
             position: hostRecord.position,
@@ -6177,7 +6207,8 @@ function restoreExtractedFloatingElement(options = {}) {
                 key: hostRecord.content.key || null,
                 title,
                 children: info.rootChildren.slice()
-            }
+            },
+            state: appliedState
         });
 
         if (hostRecord.position && (hostRecord.position.left != null || hostRecord.position.top != null)) {
