@@ -290,10 +290,10 @@ setTimeout(() => {
 
     id: "intuition-floating-1",
 
-    orientation: "top_left_horizontal",
+    orientation: "top_left_vertical",
 
 
-    position: { left: 489.5, top: 483 },
+    position: { left: 0, top: 183 },
 
     reference: "toolbox",
 
