@@ -484,20 +484,35 @@ function ensureEditModeStyle() {
 
         .intuition-floating-delete {
             position: absolute;
-            top: 4px;
-            left: 8px;
-            width: 7px;
-            height: 7px;
+            top: 0;
+            left: 0;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: #ff3b30;
-            border: 2px solid rgba(255,255,255,0.85);
-            box-shadow: 0 0 6px rgba(0,0,0,0.35);
+            border: none;
+            box-shadow: 0 0 6px rgba(0,0,0,0.45);
             display: none;
             pointer-events: auto;
+            transform: translate(-50%, -50%);
         }
 
         .intuition-floating[data-edit="true"] .intuition-floating-delete {
             display: block;
+        }
+
+        .intuition-floating-delete:hover {
+            cursor: pointer;
+            background: radial-gradient(circle at center, #ff6f61 0%, #ff3b30 65%, #d62218 100%);
+        }
+
+        .intuition-floating-delete svg {
+            opacity: 0;
+            transition: opacity 0.14s ease;
+        }
+
+        .intuition-floating-delete:hover svg {
+            opacity: 1;
         }
 
         .intuition-floating-body {
@@ -1100,6 +1115,30 @@ function createFloatingHost(opts = {}) {
         id: `${id}__delete`,
         parent: `#${id}__grip`,
         class: 'intuition-floating-delete'
+    });
+    $('svg', {
+        parent: `#${deleteBtn.id}`,
+        attrs: {
+            viewBox: '0 0 10 10',
+            width: '10',
+            height: '10'
+        },
+        css: {
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none'
+        }
+    });
+    $('path', {
+        parent: `#${deleteBtn.id} svg`,
+        attrs: {
+            d: 'M2.1 2.1 L7.9 7.9 M7.9 2.1 L2.1 7.9',
+            stroke: 'white',
+            'stroke-width': '1.4',
+            'stroke-linecap': 'round'
+        }
     });
 
     const body = $('div', {
