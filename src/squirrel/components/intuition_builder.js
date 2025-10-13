@@ -1461,6 +1461,113 @@ function renderFloatingBody(info, nameKeys) {
     }
 }
 
+function computeFloatingInsertionIndex(info, x, y) {
+    if (!info || !info.body) return 0;
+    const items = Array.from(info.body.children || []).filter((node) => {
+        if (!node || !node.dataset) return false;
+        if (!node.dataset.nameKey) return false;
+        return true;
+    });
+    if (!items.length) return 0;
+    const { isHorizontal } = getDirMeta(info.theme || currentTheme);
+    const axisPoint = isHorizontal ? x : y;
+    let insertionIndex = items.length;
+    for (let i = 0; i < items.length; i += 1) {
+        const rect = items[i].getBoundingClientRect();
+        if (!rect) continue;
+        const center = isHorizontal
+            ? rect.left + (rect.width || 0) / 2
+            : rect.top + (rect.height || 0) / 2;
+        if (axisPoint < center) {
+            insertionIndex = i;
+            break;
+        }
+    }
+    return insertionIndex;
+}
+
+function resolveFloatingDropTarget(x, y) {
+    if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') return null;
+    let el = document.elementFromPoint(x, y);
+    const visited = new Set();
+    while (el && !visited.has(el)) {
+        visited.add(el);
+        const info = resolveFloatingInfoFromElement(el);
+        if (info && info.body) {
+            const rect = info.body.getBoundingClientRect();
+            if (rect && x >= rect.left - 12 && x <= rect.right + 12 && y >= rect.top - 12 && y <= rect.bottom + 12) {
+                return {
+                    info,
+                    insertionIndex: computeFloatingInsertionIndex(info, x, y)
+                };
+            }
+        }
+        el = el.parentElement;
+    }
+    return null;
+}
+
+function applyFloatingHostOrder(info, orderedKeys) {
+    if (!info || !info.body) return false;
+    const nextKeys = Array.isArray(orderedKeys) ? orderedKeys.filter(Boolean) : [];
+    renderFloatingBody(info, nextKeys);
+    info.rootChildren = info.nameKeys.slice();
+    ensureFloatingHostRecord(info, info.theme, {
+        reference: info.reference != null ? info.reference : (info.parentFloatingId || 'toolbox'),
+        parent: info.parentFloatingId || null,
+        content: {
+            key: info.sourcePaletteKey || null,
+            title: info.title || null,
+            children: info.rootChildren.slice()
+        }
+    });
+    repositionActiveSatellites(info);
+    return true;
+}
+
+function removeFloatingEntryByKey(info, nameKey) {
+    if (!info || !nameKey) return false;
+    const base = Array.isArray(info.nameKeys) && info.nameKeys.length
+        ? info.nameKeys.slice()
+        : (Array.isArray(info.rootChildren) ? info.rootChildren.slice() : []);
+    const idx = base.indexOf(nameKey);
+    if (idx === -1) return false;
+    base.splice(idx, 1);
+    return applyFloatingHostOrder(info, base);
+}
+
+function integrateMenuItemIntoFloatingHost(ctx, dropMeta, originHost) {
+    if (!ctx || !dropMeta || !dropMeta.info) return false;
+    const info = dropMeta.info;
+    const nameKey = ctx.nameKey;
+    if (!info || !nameKey) return false;
+    let insertionIndex = Number.isFinite(dropMeta.insertionIndex)
+        ? Math.max(0, dropMeta.insertionIndex)
+        : 0;
+    const baseKeys = Array.isArray(info.nameKeys) && info.nameKeys.length
+        ? info.nameKeys.slice()
+        : (Array.isArray(info.rootChildren) ? info.rootChildren.slice() : []);
+    const normalized = baseKeys.filter(Boolean);
+    const existingIndex = normalized.indexOf(nameKey);
+    if (existingIndex !== -1) {
+        normalized.splice(existingIndex, 1);
+        if (existingIndex < insertionIndex) insertionIndex -= 1;
+    }
+    if (insertionIndex > normalized.length) {
+        insertionIndex = normalized.length;
+    }
+    const settingsIndex = normalized.indexOf('settings');
+    if (settingsIndex !== -1 && insertionIndex > settingsIndex) {
+        insertionIndex = settingsIndex;
+    }
+    normalized.splice(insertionIndex, 0, nameKey);
+    const applied = applyFloatingHostOrder(info, normalized);
+    if (applied && originHost && originHost !== info) {
+        removeFloatingEntryByKey(originHost, nameKey);
+    }
+    return applied;
+}
+
 function spawnFloatingPaletteFromSupport(nameKeys, opts = {}) {
     if (!nameKeys || !nameKeys.length) return null;
     let icon;
@@ -1790,23 +1897,30 @@ function finishMenuItemDrag(e, ctx) {
     if (pointer && !ensurePointerMatchesContext(ctx, pointer, e)) return;
     const eventType = e && e.type;
     const isDropEvent = !eventType || eventType === 'pointerup' || eventType === 'mouseup' || eventType === 'touchend';
+    const originHost = resolveFloatingInfoFromElement(ctx.originEl || null);
     if (ctx.dragActivated && isDropEvent) {
         const dropX = pointer ? pointer.clientX : ctx.lastClientX;
         const dropY = pointer ? pointer.clientY : ctx.lastClientY;
         const spawnX = Number.isFinite(dropX) ? dropX : ctx.startX;
         const spawnY = Number.isFinite(dropY) ? dropY : ctx.startY;
-        const info = spawnFloatingFromMenuItem(ctx.nameKey, {
-            label: ctx.label,
-            typeName: ctx.typeName,
-            x: spawnX,
-            y: spawnY,
-            theme: currentTheme,
-            reference: ctx.supportReference,
-            parentFloatingId: ctx.supportParentId || null
-        });
-        if (info) {
-            clampFloatingToViewport(info);
-            repositionActiveSatellites(info);
+        const dropTarget = resolveFloatingDropTarget(spawnX, spawnY);
+        const handled = dropTarget && dropTarget.info
+            ? integrateMenuItemIntoFloatingHost(ctx, dropTarget, originHost)
+            : false;
+        if (!handled) {
+            const info = spawnFloatingFromMenuItem(ctx.nameKey, {
+                label: ctx.label,
+                typeName: ctx.typeName,
+                x: spawnX,
+                y: spawnY,
+                theme: currentTheme,
+                reference: ctx.supportReference,
+                parentFloatingId: ctx.supportParentId || null
+            });
+            if (info) {
+                clampFloatingToViewport(info);
+                repositionActiveSatellites(info);
+            }
         }
     }
     const baseEvent = pointer && pointer.originalEvent ? pointer.originalEvent : e;
