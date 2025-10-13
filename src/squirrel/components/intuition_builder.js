@@ -38,6 +38,152 @@ const FLOATING_DRAG_ACTIVATION_THRESHOLD = 2;
 let activeContentHandlerContext = null;
 let pendingParticleUpdateHost = null;
 
+const POINTER_TOUCH_ID_OFFSET = 1000;
+
+function resolvePointerDetails(event) {
+    if (!event) return null;
+    if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
+        const inferredType = event.pointerType
+            || (typeof event.type === 'string' && event.type.indexOf('mouse') !== -1 ? 'mouse' : undefined);
+        return {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            pointerId: event.pointerId,
+            pointerType: inferredType,
+            originalEvent: event
+        };
+    }
+    const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0]) || null;
+    if (!touch) return null;
+    return {
+        clientX: touch.clientX,
+        clientY: touch.clientY,
+        pointerId: touch.identifier != null ? touch.identifier + POINTER_TOUCH_ID_OFFSET : 'touch',
+        pointerType: 'touch',
+        originalEvent: event
+    };
+}
+
+function ensurePointerMatchesContext(ctx, pointerMeta, event) {
+    if (!ctx) return true;
+    const nextPointerId = pointerMeta && pointerMeta.pointerId != null
+        ? pointerMeta.pointerId
+        : (event && event.pointerId != null ? event.pointerId : null);
+    if (ctx.pointerId == null) {
+        ctx.pointerId = nextPointerId != null ? nextPointerId : ctx.pointerId;
+        const pType = (pointerMeta && pointerMeta.pointerType) || (event && event.pointerType);
+        if (pType && !ctx.pointerType) ctx.pointerType = pType;
+        return true;
+    }
+    if (nextPointerId == null) return true;
+    if (ctx.pointerId === nextPointerId) return true;
+    const metaType = (pointerMeta && pointerMeta.pointerType) || (event && event.pointerType);
+    if (!ctx.pointerType && metaType) {
+        ctx.pointerType = metaType;
+    }
+    const sameType = ctx.pointerType && metaType && ctx.pointerType === metaType;
+    if (sameType || !ctx.pointerType || !ctx.dragActivated) {
+        ctx.pointerId = nextPointerId;
+        if (ctx.kind === 'floating-move' && ctx.capturePointerId != null) {
+            ctx.capturePointerId = nextPointerId;
+        }
+        return true;
+    }
+    return false;
+}
+
+function attachRobustGlobalDragListeners(ctx) {
+    if (!ctx || typeof document === 'undefined') return;
+    const doc = document;
+    doc.addEventListener('pointermove', ctx.moveHandler, true);
+    doc.addEventListener('pointerup', ctx.upHandler, true);
+    doc.addEventListener('pointercancel', ctx.upHandler, true);
+    const fallbackMove = (ev) => ctx.moveHandler(ev);
+    const fallbackUp = (ev) => ctx.upHandler(ev);
+    doc.addEventListener('mousemove', fallbackMove, true);
+    doc.addEventListener('mouseup', fallbackUp, true);
+    doc.addEventListener('touchmove', fallbackMove, { passive: false, capture: true });
+    doc.addEventListener('touchend', fallbackUp, true);
+    doc.addEventListener('touchcancel', fallbackUp, true);
+    const onVisibilityChange = () => {
+        if (!document || document.visibilityState !== 'hidden') return;
+        const cancelEvent = {
+            type: 'pointercancel',
+            pointerId: ctx.pointerId,
+            clientX: ctx.lastClientX,
+            clientY: ctx.lastClientY,
+            preventDefault: () => { },
+            stopPropagation: () => { }
+        };
+        ctx.upHandler(cancelEvent);
+    };
+    doc.addEventListener('visibilitychange', onVisibilityChange, true);
+    const onWindowBlur = () => {
+        const cancelEvent = {
+            type: 'pointercancel',
+            pointerId: ctx.pointerId,
+            clientX: ctx.lastClientX,
+            clientY: ctx.lastClientY,
+            preventDefault: () => { },
+            stopPropagation: () => { }
+        };
+        ctx.upHandler(cancelEvent);
+    };
+    if (typeof window !== 'undefined') {
+        window.addEventListener('blur', onWindowBlur, true);
+    }
+    ctx.fallbackMoveHandler = fallbackMove;
+    ctx.fallbackUpHandler = fallbackUp;
+    ctx.visibilityChangeHandler = onVisibilityChange;
+    ctx.windowBlurHandler = onWindowBlur;
+    if (ctx.originEl && typeof ctx.originEl.addEventListener === 'function' && ctx.capturePointerId != null) {
+        const onLostCapture = () => {
+            if (ctx.dragFinished) return;
+            if (editModeState.dragContext !== ctx) return;
+            requestAnimationFrame(() => {
+                if (ctx.dragFinished) return;
+                if (editModeState.dragContext !== ctx) return;
+                try { ctx.originEl.setPointerCapture(ctx.capturePointerId); } catch (_) { }
+            });
+        };
+        ctx.lostPointerCaptureHandler = onLostCapture;
+        ctx.originEl.addEventListener('lostpointercapture', onLostCapture);
+    }
+}
+
+function detachRobustGlobalDragListeners(ctx) {
+    if (!ctx || typeof document === 'undefined') return;
+    const doc = document;
+    if (ctx.moveHandler) {
+        doc.removeEventListener('pointermove', ctx.moveHandler, true);
+        doc.removeEventListener('pointerup', ctx.upHandler, true);
+        doc.removeEventListener('pointercancel', ctx.upHandler, true);
+    }
+    if (ctx.fallbackMoveHandler) {
+        doc.removeEventListener('mousemove', ctx.fallbackMoveHandler, true);
+        doc.removeEventListener('touchmove', ctx.fallbackMoveHandler, true);
+    }
+    if (ctx.fallbackUpHandler) {
+        doc.removeEventListener('mouseup', ctx.fallbackUpHandler, true);
+        doc.removeEventListener('touchend', ctx.fallbackUpHandler, true);
+        doc.removeEventListener('touchcancel', ctx.fallbackUpHandler, true);
+    }
+    if (ctx.visibilityChangeHandler) {
+        doc.removeEventListener('visibilitychange', ctx.visibilityChangeHandler, true);
+        ctx.visibilityChangeHandler = null;
+    }
+    if (typeof window !== 'undefined' && ctx.windowBlurHandler) {
+        window.removeEventListener('blur', ctx.windowBlurHandler, true);
+        ctx.windowBlurHandler = null;
+    }
+    if (ctx.originEl && ctx.lostPointerCaptureHandler) {
+        try { ctx.originEl.removeEventListener('lostpointercapture', ctx.lostPointerCaptureHandler); } catch (_) { }
+        ctx.lostPointerCaptureHandler = null;
+    }
+    ctx.fallbackMoveHandler = null;
+    ctx.fallbackUpHandler = null;
+}
+
 function ensureFloatingPersistenceBucket(info) {
     if (!info || !info.id) return null;
     let bucket = floatingPersistence.get(info.id);
@@ -1455,33 +1601,46 @@ function beginToolboxDrag(ev) {
     if (editModeState.dragContext) return;
     const entries = getVisibleMenuEntries();
     const supportCtx = resolveActiveSupportContext();
-    const pointerId = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const pointerMeta = resolvePointerDetails(ev) || {
+        clientX: ev.clientX,
+        clientY: ev.clientY,
+        pointerId: ev.pointerId,
+        pointerType: ev.pointerType || (ev.touches ? 'touch' : 'mouse'),
+        originalEvent: ev
+    };
     const ctx = {
         kind: 'toolbox',
-        pointerId,
-        startX: ev.clientX,
-        startY: ev.clientY,
+        pointerId: pointerMeta.pointerId != null ? pointerMeta.pointerId : null,
+        pointerType: pointerMeta.pointerType || ev.pointerType || (typeof ev.type === 'string' && ev.type.indexOf('touch') !== -1 ? 'touch' : 'mouse'),
+        startX: pointerMeta.clientX,
+        startY: pointerMeta.clientY,
         entries,
         floatingInfo: null,
         supportReference: supportCtx.reference,
-        supportParentId: supportCtx.parentFloatingId || null
+        supportParentId: supportCtx.parentFloatingId || null,
+        originEl: ev.currentTarget || ev.target || null,
+        lastClientX: pointerMeta.clientX,
+        lastClientY: pointerMeta.clientY,
+        dragFinished: false
     };
     ctx.moveHandler = (e) => handleToolboxDragMove(e, ctx);
     ctx.upHandler = (e) => finishToolboxDrag(e, ctx);
-    document.addEventListener('pointermove', ctx.moveHandler, true);
-    document.addEventListener('pointerup', ctx.upHandler, true);
-    document.addEventListener('pointercancel', ctx.upHandler, true);
-    document.addEventListener('pointerleave', ctx.upHandler, true);
+    attachRobustGlobalDragListeners(ctx);
     editModeState.dragContext = ctx;
-    ev.preventDefault();
-    ev.stopPropagation();
+    const baseEvent = pointerMeta.originalEvent || ev;
+    if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
+    if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
 }
 
 function handleToolboxDragMove(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
-    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
-    const x = e.clientX;
-    const y = e.clientY;
+    const pointer = resolvePointerDetails(e) || null;
+    if (pointer && !ensurePointerMatchesContext(ctx, pointer, e)) return;
+    if (!pointer) return;
+    const x = pointer.clientX;
+    const y = pointer.clientY;
+    ctx.lastClientX = x;
+    ctx.lastClientY = y;
     if (!ctx.floatingInfo) {
         const dist = Math.hypot(x - ctx.startX, y - ctx.startY);
         if (dist < EDIT_DRAG_THRESHOLD) return;
@@ -1508,53 +1667,66 @@ function handleToolboxDragMove(e, ctx) {
     const left = x - (ctx.offsetX || 0);
     const top = y - (ctx.offsetY || 0);
     moveFloatingTo(ctx.floatingInfo, left, top);
-    e.preventDefault();
-    e.stopPropagation();
+    const baseEvent = pointer.originalEvent || e;
+    if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
+    if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
 }
 
 function finishToolboxDrag(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
-    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    const pointer = resolvePointerDetails(e);
+    if (pointer && !ensurePointerMatchesContext(ctx, pointer, e)) return;
     if (ctx.floatingInfo) clampFloatingToViewport(ctx.floatingInfo);
+    const baseEvent = pointer && pointer.originalEvent ? pointer.originalEvent : e;
+    if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
+    if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
+    ctx.dragFinished = true;
     cleanupDragContext(ctx);
 }
 
 function cleanupDragContext(ctx) {
     if (!ctx) return;
+    detachRobustGlobalDragListeners(ctx);
     if (ctx.originEl && typeof ctx.originEl.releasePointerCapture === 'function' && ctx.capturePointerId != null) {
         try { ctx.originEl.releasePointerCapture(ctx.capturePointerId); } catch (_) { }
-    }
-    if (ctx.moveHandler) {
-        document.removeEventListener('pointermove', ctx.moveHandler, true);
-        document.removeEventListener('pointerup', ctx.upHandler, true);
-        document.removeEventListener('pointercancel', ctx.upHandler, true);
-        document.removeEventListener('pointerleave', ctx.upHandler, true);
+        ctx.capturePointerId = null;
     }
     disposeFloatingDragGhost(ctx);
     intuition_drag_active = false;
     editModeState.dragContext = null;
+    ctx.dragFinished = true;
 }
 
 function beginMenuItemDrag(ev, meta) {
-    const pointerKey = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const pointerMeta = resolvePointerDetails(ev) || {
+        clientX: ev.clientX,
+        clientY: ev.clientY,
+        pointerId: ev.pointerId,
+        pointerType: ev.pointerType || (ev.touches ? 'touch' : 'mouse'),
+        originalEvent: ev
+    };
     const supportCtx = resolveActiveSupportContext();
     const ctx = {
         kind: 'menu-item',
-        pointerId: pointerKey,
+        pointerId: pointerMeta.pointerId != null ? pointerMeta.pointerId : null,
+        pointerType: pointerMeta.pointerType || ev.pointerType || (typeof ev.type === 'string' && ev.type.indexOf('touch') !== -1 ? 'touch' : 'mouse'),
         nameKey: meta.nameKey,
         label: meta.label,
         typeName: meta.typeName,
-        startX: ev.clientX,
-        startY: ev.clientY,
+        startX: pointerMeta.clientX,
+        startY: pointerMeta.clientY,
         floatingInfo: null,
         originEl: meta.el || meta.originEl || null,
-        capturePointerId: (typeof meta.capturePointerId === 'number') ? meta.capturePointerId : (typeof pointerKey === 'number' ? pointerKey : null),
+        capturePointerId: (typeof meta.capturePointerId === 'number')
+            ? meta.capturePointerId
+            : (pointerMeta.pointerId != null && typeof pointerMeta.pointerId === 'number' ? pointerMeta.pointerId : null),
         supportReference: supportCtx.reference,
         supportParentId: supportCtx.parentFloatingId || null,
         dragActivated: false,
         ghostEl: null,
-        lastClientX: ev.clientX,
-        lastClientY: ev.clientY
+        lastClientX: pointerMeta.clientX,
+        lastClientY: pointerMeta.clientY,
+        dragFinished: false
     };
     const dragDef = meta.nameKey ? intuition_content[meta.nameKey] : null;
     if (meta.nameKey) {
@@ -1573,18 +1745,17 @@ function beginMenuItemDrag(ev, meta) {
     }
     ctx.moveHandler = (e) => handleMenuItemDragMove(e, ctx);
     ctx.upHandler = (e) => finishMenuItemDrag(e, ctx);
-    document.addEventListener('pointermove', ctx.moveHandler, true);
-    document.addEventListener('pointerup', ctx.upHandler, true);
-    document.addEventListener('pointercancel', ctx.upHandler, true);
-    document.addEventListener('pointerleave', ctx.upHandler, true);
+    attachRobustGlobalDragListeners(ctx);
     editModeState.dragContext = ctx;
 }
 
 function handleMenuItemDragMove(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
-    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
-    const x = e.clientX;
-    const y = e.clientY;
+    const pointer = resolvePointerDetails(e);
+    if (!pointer) return;
+    if (!ensurePointerMatchesContext(ctx, pointer, e)) return;
+    const x = pointer.clientX;
+    const y = pointer.clientY;
     ctx.lastClientX = x;
     ctx.lastClientY = y;
     if (!ctx.dragActivated) {
@@ -1607,19 +1778,21 @@ function handleMenuItemDragMove(e, ctx) {
         updateFloatingDragGhostPosition(ctx.ghostEl, x, y);
     }
     if (ctx.dragActivated) {
-        e.preventDefault();
-        e.stopPropagation();
+        const baseEvent = pointer.originalEvent || e;
+        if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
+        if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
     }
 }
 
 function finishMenuItemDrag(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
-    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    const pointer = resolvePointerDetails(e);
+    if (pointer && !ensurePointerMatchesContext(ctx, pointer, e)) return;
     const eventType = e && e.type;
     const isDropEvent = !eventType || eventType === 'pointerup' || eventType === 'mouseup' || eventType === 'touchend';
     if (ctx.dragActivated && isDropEvent) {
-        const dropX = (e && typeof e.clientX === 'number') ? e.clientX : ctx.lastClientX;
-        const dropY = (e && typeof e.clientY === 'number') ? e.clientY : ctx.lastClientY;
+        const dropX = pointer ? pointer.clientX : ctx.lastClientX;
+        const dropY = pointer ? pointer.clientY : ctx.lastClientY;
         const spawnX = Number.isFinite(dropX) ? dropX : ctx.startX;
         const spawnY = Number.isFinite(dropY) ? dropY : ctx.startY;
         const info = spawnFloatingFromMenuItem(ctx.nameKey, {
@@ -1636,46 +1809,61 @@ function finishMenuItemDrag(e, ctx) {
             repositionActiveSatellites(info);
         }
     }
+    const baseEvent = pointer && pointer.originalEvent ? pointer.originalEvent : e;
+    if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
+    if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
+    ctx.dragFinished = true;
     cleanupDragContext(ctx);
 }
 
 function beginFloatingMove(ev, info) {
     if (!info || !info.container) return;
     const rect = info.container.getBoundingClientRect();
-    const pointerKey = ev.pointerId != null ? ev.pointerId : 'mouse';
+    const pointerMeta = resolvePointerDetails(ev) || {
+        clientX: ev.clientX,
+        clientY: ev.clientY,
+        pointerId: ev.pointerId,
+        pointerType: ev.pointerType || (ev.touches ? 'touch' : 'mouse'),
+        originalEvent: ev
+    };
     const originEl = ev.currentTarget || ev.target || info.grip || info.container;
-    const capturePointerId = (typeof ev.pointerId === 'number') ? ev.pointerId : null;
+    const capturePointerId = (pointerMeta.pointerId != null && typeof pointerMeta.pointerId === 'number') ? pointerMeta.pointerId : null;
     if (capturePointerId != null && originEl && typeof originEl.setPointerCapture === 'function') {
         try { originEl.setPointerCapture(capturePointerId); } catch (_) { /* ignore */ }
     }
     const ctx = {
         kind: 'floating-move',
-        pointerId: pointerKey,
+        pointerId: pointerMeta.pointerId != null ? pointerMeta.pointerId : null,
+        pointerType: pointerMeta.pointerType || ev.pointerType || (typeof ev.type === 'string' && ev.type.indexOf('touch') !== -1 ? 'touch' : 'mouse'),
         floatingInfo: info,
-        offsetX: ev.clientX - rect.left,
-        offsetY: ev.clientY - rect.top,
+        offsetX: pointerMeta.clientX - rect.left,
+        offsetY: pointerMeta.clientY - rect.top,
         originEl,
         capturePointerId,
-        initialClientX: ev.clientX,
-        initialClientY: ev.clientY,
-        dragActivated: false
+        initialClientX: pointerMeta.clientX,
+        initialClientY: pointerMeta.clientY,
+        dragActivated: false,
+        lastClientX: pointerMeta.clientX,
+        lastClientY: pointerMeta.clientY,
+        dragFinished: false
     };
     ctx.moveHandler = (e) => handleFloatingMove(e, ctx);
     ctx.upHandler = (e) => finishFloatingMove(e, ctx);
-    document.addEventListener('pointermove', ctx.moveHandler, true);
-    document.addEventListener('pointerup', ctx.upHandler, true);
-    document.addEventListener('pointercancel', ctx.upHandler, true);
-    document.addEventListener('pointerleave', ctx.upHandler, true);
+    attachRobustGlobalDragListeners(ctx);
     editModeState.dragContext = ctx;
 }
 
 function handleFloatingMove(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
-    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    const pointer = resolvePointerDetails(e);
+    if (!pointer) return;
+    if (!ensurePointerMatchesContext(ctx, pointer, e)) return;
+    ctx.lastClientX = pointer.clientX;
+    ctx.lastClientY = pointer.clientY;
     if (!ctx.dragActivated) {
         const dist = Math.hypot(
-            e.clientX - (ctx.initialClientX || 0),
-            e.clientY - (ctx.initialClientY || 0)
+            pointer.clientX - (ctx.initialClientX || 0),
+            pointer.clientY - (ctx.initialClientY || 0)
         );
         if (dist >= FLOATING_DRAG_ACTIVATION_THRESHOLD) {
             intuition_drag_active = true;
@@ -1689,26 +1877,32 @@ function handleFloatingMove(e, ctx) {
         typeof ctx.originEl.setPointerCapture === 'function'
     ) {
         try {
-            if (!ctx.originEl.hasPointerCapture(ctx.capturePointerId)) {
+            if (!ctx.originEl.hasPointerCapture(ctx.capturePointerId) && !ctx.dragFinished) {
                 ctx.originEl.setPointerCapture(ctx.capturePointerId);
             }
         } catch (_) { /* ignore */ }
     }
-    const left = e.clientX - (ctx.offsetX || 0);
-    const top = e.clientY - (ctx.offsetY || 0);
+    const left = pointer.clientX - (ctx.offsetX || 0);
+    const top = pointer.clientY - (ctx.offsetY || 0);
     moveFloatingTo(ctx.floatingInfo, left, top);
     repositionActiveSatellites(ctx.floatingInfo);
-    e.preventDefault();
-    e.stopPropagation();
+    const baseEvent = pointer.originalEvent || e;
+    if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
+    if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
 }
 
 function finishFloatingMove(e, ctx) {
     if (editModeState.dragContext !== ctx) return;
-    if (ctx.pointerId != null && e.pointerId != null && e.pointerId !== ctx.pointerId) return;
+    const pointer = resolvePointerDetails(e);
+    if (pointer && !ensurePointerMatchesContext(ctx, pointer, e)) return;
     if (ctx.floatingInfo) {
         clampFloatingToViewport(ctx.floatingInfo);
         repositionActiveSatellites(ctx.floatingInfo);
     }
+    const baseEvent = pointer && pointer.originalEvent ? pointer.originalEvent : e;
+    if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
+    if (baseEvent && typeof baseEvent.stopPropagation === 'function') baseEvent.stopPropagation();
+    ctx.dragFinished = true;
     setTimeout(() => {
         intuition_drag_active = false;
         cleanupDragContext(ctx);
