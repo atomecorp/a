@@ -176,7 +176,18 @@ Atome.prototype.set = function setAtome(next = {}) {
     return this;
 };
 
+Atome.box = function box(params = {}) {
+    const { mergeDefaults = true, ...rest } = params || {};
+    const defaults = mergeDefaults
+        ? (typeof globalThis !== 'undefined' && globalThis.atomeDefaultsParams)
+            ? { ...globalThis.atomeDefaultsParams }
+            : { ...atomeDefaultsParams }
+        : {};
+    return new Atome({ ...defaults, ...rest });
+};
+
 if (typeof globalThis !== 'undefined') {
     globalThis.Atome = Atome;
     globalThis.atomeDefaultsParams = atomeDefaultsParams;
+    globalThis.Atome.box = Atome.box;
 }

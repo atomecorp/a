@@ -37,12 +37,9 @@ const demo2 = new Atome({
 
 
 
-function box(params = atomeDefaultsParams) {
-    return new Atome({ ...atomeDefaultsParams, ...params });
-}
 
 
-const demo3 = box({
+const demo3 = Atome.box({
     left: 250,
     top: 150,
     width: 150,
@@ -60,4 +57,5 @@ const demo3 = box({
 
 setTimeout(() => {
     demoAtome.set({ left: 30, top: 30 });
+
 }, 1000);
