@@ -4,7 +4,7 @@
  */
 // atome imports
 import './atome/atome.js';
-import './atome/mpc.js';
+import './atome/mcp.js';
 
 // === STATIC ES6 IMPORTS ===
 import './apis/essentials.js';
