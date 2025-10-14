@@ -14,17 +14,31 @@ function ensureAtomeContext() {
     };
 }
 
+function extractAtomePayload(input) {
+    if (!input || typeof input !== 'object') return {};
+
+    const { mergeDefaults = true } = input;
+    const values = hasOwn.call(input, 'values') && input.values && typeof input.values === 'object'
+        ? input.values
+        : { ...input };
+
+    const sanitized = { ...values };
+    delete sanitized.mergeDefaults;
+    delete sanitized.values;
+
+    return { mergeDefaults, payload: sanitized };
+}
+
 const atomeMCPHandlers = {
     'atome.create'(params = {}) {
         const { defaults, AtomeCtor } = ensureAtomeContext();
-        const mergeDefaults = params && params.mergeDefaults !== false;
-        const payload = mergeDefaults ? { ...defaults, ...params } : { ...params };
-        delete payload.mergeDefaults;
-        const instance = new AtomeCtor(payload);
+        const { mergeDefaults, payload } = extractAtomePayload(params);
+        const resolvedPayload = mergeDefaults ? { ...defaults, ...payload } : { ...payload };
+        const instance = new AtomeCtor(resolvedPayload);
         return {
             elementId: instance.element ? instance.element.id : null,
             tag: instance.tag ?? null,
-            params: payload
+            params: resolvedPayload
         };
     },
     'atome.describe'() {

@@ -11,6 +11,28 @@ const atomeDefaultsParams = {
     units: { left: 'px', top: 'px', width: 'px', height: 'px' }
 };
 const hasOwn = Object.prototype.hasOwnProperty;
+const DEFAULT_UNIT_PROPS = new Set([
+    'left',
+    'top',
+    'right',
+    'bottom',
+    'width',
+    'height',
+    'minWidth',
+    'minHeight',
+    'maxWidth',
+    'maxHeight',
+    'margin',
+    'marginTop',
+    'marginRight',
+    'marginBottom',
+    'marginLeft',
+    'padding',
+    'paddingTop',
+    'paddingRight',
+    'paddingBottom',
+    'paddingLeft'
+]);
 let atomeIdCounter = 0;
 
 function resolveParent(candidate) {
@@ -21,13 +43,36 @@ function resolveParent(candidate) {
 
 function normalizeStyleValue(key, value, units) {
     if (value === null || value === undefined) return undefined;
-    if (typeof value === 'number' && units && hasOwn.call(units, key)) {
-        const unit = units[key];
-        if (typeof unit === 'string' && unit.length) {
-            return `${value}${unit}`;
+
+    const resolveUnit = () => {
+        if (units && hasOwn.call(units, key)) {
+            const unit = units[key];
+            if (typeof unit === 'string') {
+                const trimmed = unit.trim();
+                if (trimmed.length) return trimmed;
+            }
         }
-        return `${value}`;
+        return DEFAULT_UNIT_PROPS.has(key) ? 'px' : '';
+    };
+
+    if (typeof value === 'number') {
+        const unit = resolveUnit();
+        return unit ? `${value}${unit}` : `${value}`;
     }
+
+    if (typeof value === 'string') {
+        const trimmedValue = value.trim();
+        if (!trimmedValue.length) return undefined;
+        if (DEFAULT_UNIT_PROPS.has(key)) {
+            const numeric = Number(trimmedValue);
+            if (!Number.isNaN(numeric)) {
+                const unit = resolveUnit();
+                return unit ? `${numeric}${unit}` : `${numeric}`;
+            }
+        }
+        return trimmedValue;
+    }
+
     return value;
 }
 
