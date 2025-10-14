@@ -42,7 +42,7 @@ function box(params = atomeDefaultsParams) {
 }
 
 
-box({
+const demo3 = box({
     left: 250,
     top: 150,
     width: 150,
@@ -56,3 +56,8 @@ box({
     borderRadius: '12px',
     boxShadow: '0 10px 24px rgba(0,0,0,0.99)'
 });
+
+
+setTimeout(() => {
+    demoAtome.set({ left: 30, top: 30 });
+}, 1000);

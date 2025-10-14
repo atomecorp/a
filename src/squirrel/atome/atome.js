@@ -115,9 +115,66 @@ function Atome(params = {}) {
 
     if (element && element.dataset && tag !== undefined) element.dataset.tag = tag;
 
+    config.units = { ...trimmedUnits };
     Object.assign(this, config, { element });
+    this.units = { ...trimmedUnits };
     return this;
 }
+
+Atome.prototype.set = function setAtome(next = {}) {
+    if (!next || typeof next !== 'object') return this;
+    if (!this.element) return this;
+
+    const { units, text, content, tag, ...styleProps } = next;
+
+    if (units && typeof units === 'object') {
+        if (!this.units) this.units = {};
+        for (const key in units) {
+            if (!hasOwn.call(units, key)) continue;
+            const raw = units[key];
+            if (typeof raw === 'string') {
+                const trimmed = raw.trim();
+                if (trimmed.length) {
+                    this.units[key] = trimmed;
+                    continue;
+                }
+            }
+            this.units[key] = raw;
+        }
+    }
+
+    if (text !== undefined || content !== undefined) {
+        const displayText = text ?? content ?? '';
+        this.element.textContent = displayText;
+        if (text !== undefined) this.text = text;
+        if (content !== undefined) this.content = content;
+    }
+
+    if (tag !== undefined) {
+        this.tag = tag;
+        if (this.element.dataset) {
+            if (tag === null || tag === '') {
+                delete this.element.dataset.tag;
+            } else {
+                this.element.dataset.tag = tag;
+            }
+        }
+    }
+
+    for (const key in styleProps) {
+        if (!hasOwn.call(styleProps, key)) continue;
+        const normalized = normalizeStyleValue(key, styleProps[key], this.units);
+        if (normalized !== undefined) {
+            this.element.style[key] = normalized;
+            this[key] = styleProps[key];
+        } else {
+            this.element.style[key] = '';
+            delete this[key];
+        }
+    }
+
+    return this;
+};
 
 if (typeof globalThis !== 'undefined') {
     globalThis.Atome = Atome;

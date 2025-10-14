@@ -67,7 +67,7 @@
 
 // import('./examples/basic.js');
 // import('./examples/tools.js');
-// import('./examples/atome.js');
+import('./examples/atome.js');
 // import('./jeezs/demo.js');
 // import('./examples/!test_taurie-path.js');
 // import('./vie/index.js');
