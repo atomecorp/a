@@ -1,5 +1,5 @@
 
-
+// axion concept example
 
 const demoAtome = new Atome({
     geometry: {
@@ -82,7 +82,7 @@ const demo2 = new Atome({
         resizable: {
             on: {
                 resize: (event, atome) => {
-                    puts(`Resize started on Atome with tag: ${atome.tag}`);
+                    puts(`Resizing on Atome with tag: ${atome.tag}`);
                 }
             }
         }
