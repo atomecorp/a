@@ -41,6 +41,19 @@ const atomeMCPHandlers = {
             params: resolvedPayload
         };
     },
+    'atome.box'(params = {}) {
+        const { defaults, AtomeCtor } = ensureAtomeContext();
+        const { mergeDefaults, payload } = extractAtomePayload(params);
+        const resolvedPayload = mergeDefaults ? { ...defaults, ...payload } : { ...payload };
+        const instance = typeof AtomeCtor.box === 'function'
+            ? AtomeCtor.box({ ...payload, mergeDefaults })
+            : new AtomeCtor(resolvedPayload);
+        return {
+            elementId: instance.element ? instance.element.id : null,
+            tag: instance.tag ?? null,
+            params: resolvedPayload
+        };
+    },
     'atome.describe'() {
         const { defaults } = ensureAtomeContext();
         return {
