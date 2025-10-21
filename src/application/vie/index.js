@@ -66,6 +66,20 @@ function create_audio_object(f, target) {
 }
 
 
+const normalizeEventTarget = (node) => {
+  if (node instanceof Element) return node;
+  return node && node.parentElement ? node.parentElement : null;
+};
+
+const isGlobalDropAllowed = (node) => {
+  const element = normalizeEventTarget(node);
+  if (!element) return true;
+  const menuHost = element.closest('#intuition');
+  if (!menuHost) return true;
+  return Boolean(element.closest('[data-allow-global-drop="true"]'));
+};
+
+
 
 function file_drop_analysis(f, target, index) {
   const extension = f.name.includes('.') ? f.name.split('.').pop().toLowerCase() : null;
@@ -134,9 +148,9 @@ function file_drop_analysis(f, target, index) {
 }
 
 function mainfile_drop(files, event) {
-  const target = event.target;
+  const target = normalizeEventTarget(event.target) || document.body;
   files.forEach((f, index) => {
-    puts('  - Fichier: ' + f.name);
+    puts(target.id)
     file_drop_analysis(f, target, index)
 
   });
@@ -151,49 +165,54 @@ function local_drop(files, event) {
 }
 
 
-$('div', {
-  id: 'isolation_test_zone',
-  css: {
-    backgroundColor: 'rgba(255, 0, 174, 1)',
-    marginLeft: '0',
-    padding: '10px',
-    left: '333px',
-    position: 'absolute',
-    width: '300px',
-    height: '200px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'Drop files here'
-});
+// $('div', {
+//   id: 'isolation_test_zone',
+//   css: {
+//     backgroundColor: 'rgba(255, 0, 174, 1)',
+//     marginLeft: '0',
+//     padding: '10px',
+//     left: '333px',
+//     position: 'absolute',
+//     width: '300px',
+//     height: '200px',
+//     color: 'white',
+//     margin: '10px',
+//     display: 'inline-block'
+//   },
+//   text: 'Drop files here'
+// });
 
 
 
-DragDrop.createDropZone('#isolation_test_zone', {
-  accept: '*',
-  multiple: true,
-  event: 'kill', //  event: 'stop', 'kill' //prevent event bubbling
-  allowedDropId: 'isolation_test_zone',
-  onDrop: (files, event) => {
-    local_drop(files, event);
-  }
-}) || null;
+// DragDrop.createDropZone('#isolation_test_zone', {
+//   accept: '*',
+//   multiple: true,
+//   event: 'kill', //  event: 'stop', 'kill' //prevent event bubbling
+//   allowedDropId: 'isolation_test_zone',
+//   onDrop: (files, event) => {
+//     local_drop(files, event);
+//   }
+// }) || null;
 
 
 DragDrop.registerGlobalDrop({
   accept: '*',
   multiple: true,
   onDragEnter: (event) => {
-    const target = event.target;
+    if (!isGlobalDropAllowed(event.target)) return;
 
   },
   onDragLeave: (event) => {
-    const target = event.target;
+    if (!isGlobalDropAllowed(event.target)) return;
 
   },
   onDrop: (files, event) => {
-    const target = event.target;
+    if (!isGlobalDropAllowed(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    const target = normalizeEventTarget(event.target);
     mainfile_drop(files, event)
   }
 });
@@ -205,23 +224,25 @@ DragDrop.registerGlobalDrop({
 
 
 
-// const customElement = $('div', {
-//   content: '🟡 Custom',
-//   css: {
-//     position: 'absolute',
-//     left: '550px',
-//     top: '100px',
-//     width: '120px',
-//     height: '60px',
-//     backgroundColor: '#f39c12',
-//     borderRadius: '15px',
-//     display: 'flex',
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//     color: 'white',
-//     fontWeight: 'bold'
-//   }
-// });
+const customElement = $('div', {
+  id: 'test_box',
+  css: {
+    position: 'absolute',
+    left: '0px',
+    top: '50px',
+    right: '0px',
+    bottom: '50px',
+    width: 'auto',
+    height: 'auto',
+    backgroundColor: '#f39c12',
+    borderRadius: '3px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    fontWeight: 'bold'
+  }
+});
 
 // // Appliquer makeDraggable directement
 // makeDraggable(customElement, {
@@ -245,11 +266,11 @@ const matrix = new Matrix({
   maintainAspectRatio: true,   // ← garde chaque cellule carrée
 
   // Container with gradient
-  containerStyle: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    borderRadius: '16px',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-  },
+  // containerStyle: {
+  //   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  //   borderRadius: '16px',
+  //   boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+  // },
 
   // Default cell style with gradient and external shadow
   cells: {

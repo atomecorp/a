@@ -13,12 +13,12 @@ class Matrix {
       position: { x: 0, y: 0, ...options.position },
       spacing: { horizontal: 8, vertical: 8, external: 16, ...options.spacing },
       attach: options.attach || 'body',
-      
+
       // Configuration des cellules
       cells: options.cells || {},
       states: options.states || {},
       containerStyle: options.containerStyle || {},
-      
+
       // Options avancées
       debug: options.debug || false,
       responsive: options.responsive !== false,
@@ -68,8 +68,8 @@ class Matrix {
       this.isInitialized = true;
 
       if (this.config.debug) {
-// console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
-// console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
+        // console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
+        // console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
       }
     } catch (error) {
       console.error(`❌ Erreur lors de l'initialisation de Matrix "${this.config.id}":`, error);
@@ -78,8 +78,8 @@ class Matrix {
 
   createContainer() {
     // Attachement au DOM
-    const attachPoint = typeof this.config.attach === 'string' 
-      ? document.querySelector(this.config.attach) 
+    const attachPoint = typeof this.config.attach === 'string'
+      ? document.querySelector(this.config.attach)
       : this.config.attach;
 
     if (!attachPoint) {
@@ -90,10 +90,10 @@ class Matrix {
     this.container = document.createElement('div');
     this.container.id = this.config.id;
     this.container.className = 'matrix-container';
-    
+
     // Application des styles
     this.applyContainerStyles();
-    
+
     attachPoint.appendChild(this.container);
   }
 
@@ -151,7 +151,7 @@ class Matrix {
     const cellKey = `${x},${y}`;
     const cellConfig = this.config.cells[cellKey] || {};
     const defaultConfig = this.config.cells.default || {};
-    
+
     // ID de la cellule (personnalisé ou auto-généré)
     const cellId = cellConfig.id || `${this.config.id}-cell-${x}-${y}`;
 
@@ -187,10 +187,10 @@ class Matrix {
     };
 
     // Application des styles (défaut + personnalisés)
-    const cellStyles = { 
-      ...defaultCellStyles, 
-      ...defaultConfig.style, 
-      ...cellConfig.style 
+    const cellStyles = {
+      ...defaultCellStyles,
+      ...defaultConfig.style,
+      ...cellConfig.style
     };
     Object.assign(cellElement.style, cellStyles);
 
@@ -364,7 +364,7 @@ class Matrix {
     const cellKey = `${x},${y}`;
     const states = this.cellStates.get(cellKey);
     if (!states || states.size === 0) return null;
-    
+
     // Retourne l'état principal (le dernier ajouté qui n'est pas 'normal')
     const statesArray = Array.from(states);
     return statesArray.find(state => state !== 'normal') || 'normal';
@@ -434,15 +434,15 @@ class Matrix {
   clearCellStates(x, y) {
     const cellKey = `${x},${y}`;
     const cell = this.cellsMap.get(cellKey);
-    
+
     if (!cell) return;
 
     // Retour au style par défaut
     this.resetCellStyle(x, y);
-    
+
     // Réinitialisation avec état normal uniquement
     this.cellStates.set(cellKey, new Set(['normal']));
-    
+
     // Suppression de la sélection
     this.selectedCells.delete(cellKey);
     this.triggerSelectionChange();
@@ -462,7 +462,7 @@ class Matrix {
   removeCellStateStyle(x, y, stateName) {
     const cellKey = `${x},${y}`;
     const cell = this.cellsMap.get(cellKey);
-    
+
     if (!cell) return;
 
     // Suppression spécifique des propriétés CSS de cet état
@@ -509,17 +509,17 @@ class Matrix {
     if (width !== undefined && height !== undefined) {
       this.config.size.width = width;
       this.config.size.height = height;
-      
+
       if (!this.config.autoResize) {
         this.container.style.width = `${width}px`;
         this.container.style.height = `${height}px`;
       }
     }
-    
+
     this.updateCellSizes();
-    
+
     if (this.config.debug) {
-// console.log(`📐 Matrix "${this.config.id}" redimensionnée à ${this.config.size.width}x${this.config.size.height}px`);
+      // console.log(`📐 Matrix "${this.config.id}" redimensionnée à ${this.config.size.width}x${this.config.size.height}px`);
     }
   }
 
@@ -557,8 +557,8 @@ class Matrix {
    * @param {HTMLElement|string} parentElement - Élément parent ou sélecteur
    */
   fitToParent(parentElement) {
-    const parent = typeof parentElement === 'string' 
-      ? document.querySelector(parentElement) 
+    const parent = typeof parentElement === 'string'
+      ? document.querySelector(parentElement)
       : parentElement;
 
     if (!parent) {
@@ -568,10 +568,10 @@ class Matrix {
 
     // Déplacement vers le nouveau parent
     parent.appendChild(this.container);
-    
+
     // Activation du redimensionnement automatique
     this.setAutoResize(true);
-    
+
     // Force une mise à jour immédiate
     const rect = parent.getBoundingClientRect();
     this.handleResize({ contentRect: rect });
@@ -582,17 +582,17 @@ class Matrix {
    * @param {Object} options - Options d'ajustement
    */
   autoSizeCells(options = {}) {
-    const { 
-      minWidth = 40, 
-      minHeight = 40, 
+    const {
+      minWidth = 40,
+      minHeight = 40,
       padding = 8,
-      fontSize = null 
+      fontSize = null
     } = options;
 
     this.cellsMap.forEach((cell, cellKey) => {
       const element = cell.element;
       const content = element.textContent || '';
-      
+
       if (content.length > 0) {
         // Créer un élément temporaire pour mesurer le texte
         const measureEl = document.createElement('div');
@@ -608,23 +608,23 @@ class Matrix {
         `;
         measureEl.textContent = content;
         document.body.appendChild(measureEl);
-        
+
         const textWidth = measureEl.offsetWidth;
         const textHeight = measureEl.offsetHeight;
-        
+
         document.body.removeChild(measureEl);
-        
+
         // Appliquer les nouvelles dimensions
         const newWidth = Math.max(textWidth + padding * 2, minWidth);
         const newHeight = Math.max(textHeight + padding * 2, minHeight);
-        
+
         element.style.width = `${newWidth}px`;
         element.style.height = `${newHeight}px`;
       }
     });
-    
+
     if (this.config.debug) {
-// console.log(`📏 Auto-dimensionnement des cellules effectué`);
+      // console.log(`📏 Auto-dimensionnement des cellules effectué`);
     }
   }
 
@@ -634,25 +634,25 @@ class Matrix {
    */
   fitToContent(options = {}) {
     this.autoSizeCells(options);
-    
+
     // Recalcul de la taille du container
     let maxWidth = 0;
     let maxHeight = 0;
-    
+
     this.cellsMap.forEach((cell) => {
       const rect = cell.element.getBoundingClientRect();
       maxWidth = Math.max(maxWidth, rect.width);
       maxHeight = Math.max(maxHeight, rect.height);
     });
-    
-    const totalWidth = (maxWidth * this.config.grid.x) + 
-                      (this.config.spacing.horizontal * (this.config.grid.x - 1)) + 
-                      (this.config.spacing.external * 2);
-                      
-    const totalHeight = (maxHeight * this.config.grid.y) + 
-                       (this.config.spacing.vertical * (this.config.grid.y - 1)) + 
-                       (this.config.spacing.external * 2);
-    
+
+    const totalWidth = (maxWidth * this.config.grid.x) +
+      (this.config.spacing.horizontal * (this.config.grid.x - 1)) +
+      (this.config.spacing.external * 2);
+
+    const totalHeight = (maxHeight * this.config.grid.y) +
+      (this.config.spacing.vertical * (this.config.grid.y - 1)) +
+      (this.config.spacing.external * 2);
+
     this.resize(totalWidth, totalHeight);
   }
 
@@ -677,9 +677,9 @@ class Matrix {
     if (!this.config.autoResize) return;
 
     const { width, height } = entry.contentRect;
-    
+
     if (this.config.debug) {
-// console.log(`🔄 Matrix "${this.config.id}" - Redimensionnement détecté:`, { width, height });
+      // console.log(`🔄 Matrix "${this.config.id}" - Redimensionnement détecté:`, { width, height });
     }
 
     // Mise à jour de la configuration interne
@@ -700,11 +700,11 @@ class Matrix {
 
     // Les cellules se redimensionnent automatiquement grâce au CSS Grid
     // Mais on peut ajuster certaines propriétés si nécessaire
-    
+
     const containerRect = this.container.getBoundingClientRect();
     const availableWidth = containerRect.width - (2 * this.config.spacing.external);
     const availableHeight = containerRect.height - (2 * this.config.spacing.external);
-    
+
     const cellWidth = (availableWidth - (this.config.spacing.horizontal * (this.config.grid.x - 1))) / this.config.grid.x;
     const cellHeight = (availableHeight - (this.config.spacing.vertical * (this.config.grid.y - 1))) / this.config.grid.y;
 
@@ -718,7 +718,7 @@ class Matrix {
     }
 
     if (this.config.debug) {
-// console.log(`📐 Taille des cellules: ${cellWidth.toFixed(1)}x${cellHeight.toFixed(1)}px`);
+      // console.log(`📐 Taille des cellules: ${cellWidth.toFixed(1)}x${cellHeight.toFixed(1)}px`);
     }
   }
 
@@ -788,7 +788,7 @@ class Matrix {
 
   getCellsByState(stateName) {
     const result = [];
-    
+
     this.cellStates.forEach((states, cellKey) => {
       if (states.has(stateName)) {
         const [x, y] = cellKey.split(',').map(Number);
@@ -802,17 +802,17 @@ class Matrix {
 
   getCellsWithAnyState(stateNames) {
     const result = [];
-    
+
     this.cellStates.forEach((states, cellKey) => {
       const hasAnyState = stateNames.some(stateName => states.has(stateName));
       if (hasAnyState) {
         const [x, y] = cellKey.split(',').map(Number);
         const cell = this.cellsMap.get(cellKey);
-        result.push({ 
-          x, y, 
-          id: cell.id, 
-          element: cell.element, 
-          states: Array.from(states) 
+        result.push({
+          x, y,
+          id: cell.id,
+          element: cell.element,
+          states: Array.from(states)
         });
       }
     });
@@ -822,17 +822,17 @@ class Matrix {
 
   getCellsWithAllStates(stateNames) {
     const result = [];
-    
+
     this.cellStates.forEach((states, cellKey) => {
       const hasAllStates = stateNames.every(stateName => states.has(stateName));
       if (hasAllStates) {
         const [x, y] = cellKey.split(',').map(Number);
         const cell = this.cellsMap.get(cellKey);
-        result.push({ 
-          x, y, 
-          id: cell.id, 
-          element: cell.element, 
-          states: Array.from(states) 
+        result.push({
+          x, y,
+          id: cell.id,
+          element: cell.element,
+          states: Array.from(states)
         });
       }
     });
@@ -872,7 +872,7 @@ class Matrix {
 
   findCells(criteria) {
     const result = [];
-    
+
     this.cellsMap.forEach((cell, cellKey) => {
       const [x, y] = cellKey.split(',').map(Number);
       let matches = true;
@@ -881,14 +881,14 @@ class Matrix {
       if (criteria.state && !this.hasCellState(x, y, criteria.state)) {
         matches = false;
       }
-      
+
       if (criteria.hasContent !== undefined) {
         const hasContent = cell.content && cell.content.trim().length > 0;
         if (criteria.hasContent !== hasContent) {
           matches = false;
         }
       }
-      
+
       if (criteria.position) {
         if (criteria.position.x) {
           if (criteria.position.x.min !== undefined && x < criteria.position.x.min) matches = false;
@@ -901,9 +901,9 @@ class Matrix {
       }
 
       if (matches) {
-        result.push({ 
-          x, y, 
-          id: cell.id, 
+        result.push({
+          x, y,
+          id: cell.id,
           element: cell.element,
           content: cell.content,
           states: this.getCellStates(x, y)
@@ -926,10 +926,10 @@ class Matrix {
         const cellKey = `${x},${y}`;
         const cell = this.cellsMap.get(cellKey);
         if (cell) {
-          result.push({ 
-            x, y, 
-            id: cell.id, 
-            element: cell.element 
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element
           });
         }
       }
@@ -944,11 +944,11 @@ class Matrix {
       const cellKey = `${x},${rowIndex}`;
       const cell = this.cellsMap.get(cellKey);
       if (cell) {
-        result.push({ 
-          x, 
-          y: rowIndex, 
-          id: cell.id, 
-          element: cell.element 
+        result.push({
+          x,
+          y: rowIndex,
+          id: cell.id,
+          element: cell.element
         });
       }
     }
@@ -961,11 +961,11 @@ class Matrix {
       const cellKey = `${columnIndex},${y}`;
       const cell = this.cellsMap.get(cellKey);
       if (cell) {
-        result.push({ 
-          x: columnIndex, 
-          y, 
-          id: cell.id, 
-          element: cell.element 
+        result.push({
+          x: columnIndex,
+          y,
+          id: cell.id,
+          element: cell.element
         });
       }
     }
@@ -975,64 +975,64 @@ class Matrix {
   compareCellStates(x1, y1, x2, y2) {
     const states1 = new Set(this.getCellStates(x1, y1));
     const states2 = new Set(this.getCellStates(x2, y2));
-    
-    const same = [...states1].every(state => states2.has(state)) && 
-                 [...states2].every(state => states1.has(state));
-    
+
+    const same = [...states1].every(state => states2.has(state)) &&
+      [...states2].every(state => states1.has(state));
+
     const common = [...states1].filter(state => states2.has(state));
     const different1 = [...states1].filter(state => !states2.has(state));
     const different2 = [...states2].filter(state => !states1.has(state));
-    
+
     return { same, common, different1, different2 };
   }
 
   findSimilarCells(x, y) {
     const referenceStates = new Set(this.getCellStates(x, y));
     const result = [];
-    
+
     this.cellStates.forEach((states, cellKey) => {
       const [cellX, cellY] = cellKey.split(',').map(Number);
-      
+
       // Skip la cellule de référence
       if (cellX === x && cellY === y) return;
-      
+
       // Vérifier si les états sont identiques
-      const same = states.size === referenceStates.size && 
-                   [...states].every(state => referenceStates.has(state));
-      
+      const same = states.size === referenceStates.size &&
+        [...states].every(state => referenceStates.has(state));
+
       if (same) {
         const cell = this.cellsMap.get(cellKey);
-        result.push({ 
-          x: cellX, 
-          y: cellY, 
-          id: cell.id, 
-          element: cell.element 
+        result.push({
+          x: cellX,
+          y: cellY,
+          id: cell.id,
+          element: cell.element
         });
       }
     });
-    
+
     return result;
   }
 
   groupCellsByState() {
     const groups = {};
-    
+
     this.cellStates.forEach((states, cellKey) => {
       const [x, y] = cellKey.split(',').map(Number);
       const cell = this.cellsMap.get(cellKey);
-      
+
       states.forEach(stateName => {
         if (!groups[stateName]) {
           groups[stateName] = [];
         }
-        groups[stateName].push({ 
-          x, y, 
-          id: cell.id, 
-          element: cell.element 
+        groups[stateName].push({
+          x, y,
+          id: cell.id,
+          element: cell.element
         });
       });
     });
-    
+
     return groups;
   }
 
@@ -1055,7 +1055,7 @@ class Matrix {
   setCellContent(x, y, content) {
     const cellKey = `${x},${y}`;
     const cell = this.cellsMap.get(cellKey);
-    
+
     if (cell) {
       cell.content = content;
       cell.element.textContent = content;
@@ -1071,7 +1071,7 @@ class Matrix {
   setCellStyle(x, y, styles) {
     const cellKey = `${x},${y}`;
     const cell = this.cellsMap.get(cellKey);
-    
+
     if (cell) {
       Object.assign(cell.element.style, styles);
     }
@@ -1080,12 +1080,18 @@ class Matrix {
   resetCellStyle(x, y) {
     const cellKey = `${x},${y}`;
     const cell = this.cellsMap.get(cellKey);
-    
+
     if (cell) {
+      const preserved = {
+        width: cell.element.style.width,
+        height: cell.element.style.height,
+        minWidth: cell.element.style.minWidth,
+        minHeight: cell.element.style.minHeight
+      };
       // Récupération des styles de base
       const cellConfig = cell.config;
       const defaultConfig = this.config.cells.default || {};
-      
+
       const defaultCellStyles = {
         display: 'flex',
         alignItems: 'center',
@@ -1101,17 +1107,23 @@ class Matrix {
         userSelect: 'none'
       };
 
-      const baseStyles = { 
-        ...defaultCellStyles, 
-        ...defaultConfig.style, 
-        ...cellConfig.style 
+      const baseStyles = {
+        ...defaultCellStyles,
+        ...defaultConfig.style,
+        ...cellConfig.style
       };
 
       // Reset complet du style
       cell.element.removeAttribute('style');
-      
+
       // Réapplication des styles de base avec priorité normale
       this.applyStylesToElement(cell.element, baseStyles, false);
+
+      Object.entries(preserved).forEach(([prop, value]) => {
+        if (value && value.length) {
+          cell.element.style[prop] = value;
+        }
+      });
     }
   }
 
@@ -1124,10 +1136,10 @@ class Matrix {
     this.selectedCells.forEach(cellKey => {
       const [x, y] = cellKey.split(',').map(Number);
       const cell = this.cellsMap.get(cellKey);
-      result.push({ 
-        x, y, 
-        id: cell.id, 
-        element: cell.element 
+      result.push({
+        x, y,
+        id: cell.id,
+        element: cell.element
       });
     });
     return result;
@@ -1206,7 +1218,7 @@ class Matrix {
       // Reset des callbacks
       this.callbacks = {};
 
-// console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
+      // console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
     } catch (error) {
       console.error(`❌ Erreur lors de la destruction de Matrix "${this.config.id}":`, error);
     }
@@ -1230,11 +1242,11 @@ function createMatrix(options) {
  */
 function createResponsiveMatrix(parent, options = {}) {
   const parentElement = typeof parent === 'string' ? document.querySelector(parent) : parent;
-  
+
   if (!parentElement) {
     throw new Error(`Élément parent "${parent}" non trouvé`);
   }
-  
+
   return new Matrix({
     autoResize: true,
     maintainAspectRatio: false,
@@ -1253,12 +1265,12 @@ function createAutoSizedMatrix(options = {}) {
     autoResize: false,
     ...options
   });
-  
+
   // Auto-dimensionnement après création
   setTimeout(() => {
     matrix.fitToContent();
   }, 0);
-  
+
   return matrix;
 }
 
