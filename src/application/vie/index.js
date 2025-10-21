@@ -241,6 +241,7 @@ const matrix = new Matrix({
 
   spacing: { horizontal: 8, vertical: 8, external: 20 },
   attach: '#view',
+  maintainAspectRatio: true,   // ← garde chaque cellule carrée
 
   // Container with gradient
   containerStyle: {
