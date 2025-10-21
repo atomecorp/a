@@ -147,7 +147,7 @@ class Matrix {
     }
   }
 
-  createCell(x, y) {
+  createCell(x, y, insertIndex) {
     const cellKey = `${x},${y}`;
     const cellConfig = this.config.cells[cellKey] || {};
     const defaultConfig = this.config.cells.default || {};
@@ -218,7 +218,17 @@ class Matrix {
       cellElement.setAttribute('title', `Cellule (${x}, ${y}) - ID: ${cellId}`);
     }
 
-    this.container.appendChild(cellElement);
+    let reference = null;
+    if (typeof insertIndex === 'number' && insertIndex >= 0) {
+      reference = this.container.children[insertIndex] || null;
+    }
+    if (reference) {
+      this.container.insertBefore(cellElement, reference);
+    } else {
+      this.container.appendChild(cellElement);
+    }
+
+    return cellElement;
   }
 
   applyInitialStates() {
@@ -710,6 +720,39 @@ class Matrix {
     if (this.config.debug) {
 // console.log(`📐 Taille des cellules: ${cellWidth.toFixed(1)}x${cellHeight.toFixed(1)}px`);
     }
+  }
+
+  addColumn() {
+    const prevCols = this.config.grid.x;
+    const rows = this.config.grid.y;
+    const newColIndex = prevCols;
+
+    this.config.grid.x += 1;
+    this.container.style.gridTemplateColumns = `repeat(${this.config.grid.x}, 1fr)`;
+
+    for (let y = 0; y < rows; y += 1) {
+      const insertIndex = (y * this.config.grid.x) + newColIndex;
+      this.createCell(newColIndex, y, insertIndex);
+    }
+
+    this.updateCellSizes();
+    return this;
+  }
+
+  addRow() {
+    const prevRows = this.config.grid.y;
+    const cols = this.config.grid.x;
+    const newRowIndex = prevRows;
+
+    this.config.grid.y += 1;
+    this.container.style.gridTemplateRows = `repeat(${this.config.grid.y}, 1fr)`;
+
+    for (let x = 0; x < cols; x += 1) {
+      this.createCell(x, newRowIndex);
+    }
+
+    this.updateCellSizes();
+    return this;
   }
   // ========================================
   // 🎨 UTILITAIRES DE STYLES

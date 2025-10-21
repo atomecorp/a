@@ -77,6 +77,11 @@ for (let y = 0; y < 3; y++) {
   }
 }
 
+setTimeout(() => {
+  matrix.addColumn().addRow()
+
+}, 1500);
+
 ///////////
 // Responsive matrix that adapts to its parent
 const responsiveMatrix = new Matrix({
