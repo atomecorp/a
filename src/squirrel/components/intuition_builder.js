@@ -1479,6 +1479,9 @@ function renderFloatingBody(info, nameKeys) {
         keys.forEach((key) => {
             const entry = addFloatingEntry(info, key, info.body, { forceVisible: true });
             if (!entry) return;
+            // Keep new entries hidden until the slide-in animation starts to avoid flashing at full size
+            entry.style.visibility = 'hidden';
+            entry.style.transform = 'translate3d(0, 0, 0)';
             if (entry.dataset && entry.dataset.floatingSatelliteId) {
                 delete entry.dataset.floatingSatelliteId;
             }

@@ -17,7 +17,18 @@
   <script src="js/wavesurfer.min.js"></script>
   <script type="module" src="js/three.min.js"></script>
   <script type="module" src="squirrel/spark.js"></script>
+
   <script type="module">
+    window.addEventListener("dragover", function (e) {
+      e.preventDefault(); // Empêche le navigateur d’ouvrir le fichier
+      e.stopPropagation();
+    });
+
+    window.addEventListener("drop", function (e) {
+      e.preventDefault(); // Empêche le fichier d’être chargé dans la fenêtre
+      e.stopPropagation();
+      console.log("Fichier déposé, mais ignoré.");
+    });
     // Ultra minimal readiness: rely purely on native event (local-server-ready) or immediate import on non-iOS.
     let __appImported = false;
     function __importAppOnce() { if (__appImported) return; __appImported = true; import('./application/index.js'); }
