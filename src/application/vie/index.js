@@ -1,22 +1,22 @@
-const vieLogo = $('img', {
-  id: 'img_test',
-  parent: "#view",
-  attrs: {
-    src: './assets/images/2.png',
-    alt: 'ballanim'
-  },
-  css: {
-    marginLeft: '0',
-    color: 'white',
-    left: '0px',
-    top: '0px',
-    position: 'relative',
-    height: "100%",
-    width: "100%",
-    textAlign: 'center',
-    display: 'block'
-  }
-});
+// const vieLogo = $('img', {
+//   id: 'img_test',
+//   parent: "#view",
+//   attrs: {
+//     src: './assets/images/2.png',
+//     alt: 'ballanim'
+//   },
+//   css: {
+//     marginLeft: '0',
+//     color: 'white',
+//     left: '0px',
+//     top: '0px',
+//     position: 'relative',
+//     height: "100%",
+//     width: "100%",
+//     textAlign: 'center',
+//     display: 'block'
+//   }
+// });
 
 import './menu.js';
 
@@ -201,42 +201,105 @@ DragDrop.registerGlobalDrop({
 
 
 
-$('div', {
-
-  id: 'test1',
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    width: '300px',
-    height: '200px',
-    left: '20%',
-    top: '20%',
-    position: 'absolute',
-    transform: 'translate(-50%, -50%  )',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block'
-  },
-  text: 'Je laisse passer des fichiers ici !'
-});
 
 
-const basicDrag = Draggable('draggable-box', {
-  content: '🔴 Basic',
-  css: {
-    left: '100px',
-    top: '100px',
-    width: '170px',
-    height: '170px',
-    borderRadius: '12px',
-    backgroundColor: '#e74c3c'
+
+
+// const customElement = $('div', {
+//   content: '🟡 Custom',
+//   css: {
+//     position: 'absolute',
+//     left: '550px',
+//     top: '100px',
+//     width: '120px',
+//     height: '60px',
+//     backgroundColor: '#f39c12',
+//     borderRadius: '15px',
+//     display: 'flex',
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     color: 'white',
+//     fontWeight: 'bold'
+//   }
+// });
+
+// // Appliquer makeDraggable directement
+// makeDraggable(customElement, {
+//   cursor: 'grab',
+//   onDragStart: (el) => {
+
+//   },
+//   onDragEnd: (el) => {
+
+//   }
+// });
+
+
+const matrix = new Matrix({
+  id: 'gradient-matrix',
+  grid: { x: 8, y: 8 },
+
+  spacing: { horizontal: 8, vertical: 8, external: 20 },
+  attach: '#view',
+
+  // Container with gradient
+  containerStyle: {
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    borderRadius: '16px',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
   },
-  text: 'Je laisse aussi passer des fichiers ici !',
-  onDragStart: (el) => {
-    console.log('🔴 Début drag basique');
+
+  // Default cell style with gradient and external shadow
+  cells: {
+    default: {
+      style: {
+        background: 'linear-gradient(145deg, #ffffff 0%, #f0f0f0 100%)',
+        borderRadius: '8px',
+        border: 'none',
+        boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+        fontSize: '16px',
+        fontWeight: '600',
+        color: '#333',
+        cursor: 'pointer',
+        transition: 'all 0.3s ease'
+      }
+    }
   },
-  onDragEnd: (el) => {
-    console.log('🔴 Fin drag basique');
+
+  // States with shadow styles
+  states: {
+    selected: {
+      // Selected: external shadow to internal shadow
+      boxShadow: 'inset 0 4px 8px rgba(0,0,0,0.2)',
+      background: 'linear-gradient(145deg, #e8e8e8 0%, #d0d0d0 100%)'
+    },
+
+    'selected-clicked': {
+      // Selected + clicked: add border
+      boxShadow: 'inset 0 4px 8px rgba(0,0,0,0.2)',
+      background: 'linear-gradient(145deg, #e8e8e8 0%, #d0d0d0 100%)',
+      border: '3px solid #667eea'
+    }
+  },
+
+  // Click handling
+  onCellClick: (cell, x, y, cellId) => {
+    const isSelected = matrix.hasCellState(x, y, 'selected');
+    const isClickedSelected = matrix.hasCellState(x, y, 'selected-clicked');
+
+    if (!isSelected) {
+      // Not selected → Selected (internal shadow)
+      matrix.addCellState(x, y, 'selected');
+
+    } else if (isSelected && !isClickedSelected) {
+      // Selected → Selected + Border
+      matrix.removeCellState(x, y, 'selected');
+      matrix.addCellState(x, y, 'selected-clicked');
+
+    } else {
+      // Selected + Border → Deselected (original style)
+      matrix.removeCellState(x, y, 'selected-clicked');
+      matrix.resetCellStyle(x, y);
+    }
   }
 });
