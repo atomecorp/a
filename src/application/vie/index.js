@@ -297,12 +297,12 @@ const matrix = new Matrix({
       background: 'linear-gradient(145deg, #e8e8e8 0%, #d0d0d0 100%)'
     },
 
-    'selected-clicked': {
-      // Selected + clicked: add border
-      boxShadow: 'inset 0 4px 8px rgba(0,0,0,0.2)',
-      background: 'linear-gradient(145deg, #e8e8e8 0%, #d0d0d0 100%)',
-      border: '3px solid #667eea'
-    }
+    // 'selected-clicked': {
+    //   // Selected + clicked: add border
+    //   boxShadow: 'inset 0 4px 8px rgba(0,0,0,0.2)',
+    //   background: 'linear-gradient(145deg, #ad1818ff 0%, #560e0eff 100%)',
+    //   // border: '3px solid #667eea'
+    // }
   },
 
   // Click handling
