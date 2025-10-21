@@ -304,3 +304,40 @@ const matrix = new Matrix({
     }
   }
 });
+
+
+
+function addColumn(matrix) {
+  const newX = matrix.config.grid.x;
+  const rowCount = matrix.config.grid.y;
+
+  matrix.config.grid.x += 1;
+  matrix.container.style.gridTemplateColumns = `repeat(${matrix.config.grid.x}, 1fr)`;
+
+  for (let y = 0; y < rowCount; y += 1) {
+    matrix.createCell(newX, y);
+  }
+
+  matrix.updateCellSizes();
+}
+
+
+function addRow(matrix) {
+  const newY = matrix.config.grid.y;
+  const colCount = matrix.config.grid.x;
+
+  matrix.config.grid.y += 1;
+  matrix.container.style.gridTemplateRows = `repeat(${matrix.config.grid.y}, 1fr)`;
+
+  for (let x = 0; x < colCount; x += 1) {
+    matrix.createCell(x, newY);
+  }
+
+  matrix.updateCellSizes();
+}
+
+
+setTimeout(() => {
+  addColumn(matrix);
+  addRow(matrix);
+}, 3000);
