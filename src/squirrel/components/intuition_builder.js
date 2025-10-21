@@ -369,13 +369,19 @@ function persistFloatingSatelliteRecord(info, nameKey, theme, metadata = {}) {
     };
     store.set(nameKey, record);
 
-    const stateHint = entry && typeof entry.state === 'string'
-        ? entry.state
-        : (typeof hostRecord.state === 'string' && hostRecord.state
-            ? hostRecord.state
-            : (typeof options.state === 'string' ? options.state : null));
+    const bucket = getFloatingPersistenceBucket(info);
+    const hostRecord = bucket && bucket.host ? bucket.host : null;
+    const stateHint = metadata && typeof metadata.state === 'string'
+        ? metadata.state
+        : (existing && typeof existing.state === 'string' && existing.state
+            ? existing.state
+            : (hostRecord && typeof hostRecord.state === 'string' ? hostRecord.state : null));
     const normalizedState = stateHint ? String(stateHint).trim().toLowerCase() : '';
-    const shouldCollapse = normalizedState === 'open' ? false : (normalizedState === 'close' || normalizedState === 'closed' ? true : true);
+    if (normalizedState === 'open' || normalizedState === 'close' || normalizedState === 'closed') {
+        record.state = normalizedState === 'closed' ? 'close' : normalizedState;
+        record.collapsed = record.state === 'open' ? false : true;
+    }
+
     return record;
 }
 

@@ -1,3 +1,6 @@
+
+import './menu.js';
+
 function formatBytes(bytes, decimals = 2) {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;

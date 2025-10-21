@@ -691,16 +691,16 @@ function bindDraggableEvents(instance, groupName, config) {
         const nextTop = baseTop + deltaY;
         applyPosition(nextLeft, nextTop);
 
-    if (dragHandler) dragHandler(event, instance);
-    if (!moveListenerOptions.passive && typeof event.preventDefault === 'function') event.preventDefault();
+        if (dragHandler) dragHandler(event, instance);
+        if (!moveListenerOptions.passive && typeof event.preventDefault === 'function') event.preventDefault();
     };
 
     const stopDragging = (event, isCancel = false) => {
         if (!active) return;
         active = false;
         pointerId = null;
-    moveEvents.forEach((type) => window.removeEventListener(type, handleMove, moveListenerOptions));
-    endEvents.forEach((type) => window.removeEventListener(type, endListener, endListenerOptions));
+        moveEvents.forEach((type) => window.removeEventListener(type, handleMove, moveListenerOptions));
+        endEvents.forEach((type) => window.removeEventListener(type, endListener, endListenerOptions));
         if (isCancel) {
             if (cancelHandler) cancelHandler(event, instance);
         } else if (endHandler) {
@@ -732,10 +732,10 @@ function bindDraggableEvents(instance, groupName, config) {
         startX = coords.x;
         startY = coords.y;
 
-    if (!startListenerOptions.passive && typeof event.preventDefault === 'function') event.preventDefault();
+        if (!startListenerOptions.passive && typeof event.preventDefault === 'function') event.preventDefault();
 
-    moveEvents.forEach((type) => window.addEventListener(type, handleMove, moveListenerOptions));
-    endEvents.forEach((type) => window.addEventListener(type, endListener, endListenerOptions));
+        moveEvents.forEach((type) => window.addEventListener(type, handleMove, moveListenerOptions));
+        endEvents.forEach((type) => window.addEventListener(type, endListener, endListenerOptions));
 
         if (startHandler) startHandler(event, instance);
     };
