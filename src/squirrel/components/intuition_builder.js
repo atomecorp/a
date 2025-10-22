@@ -2335,6 +2335,7 @@ const Intuition_theme = {
         drag_mode: 'unit', // 'unit' => 1px pointeur = 1 unité; 'percent' => (dx/width*100)
         button_size: '33%',
         satellite_offset: '0px',
+        satellite_bg: 'rgba(72,71,71,0)',
         items_spacing: items_spacing + 'px',
         item_size: item_size + 'px',
         support_thickness: item_size + shadowBlur + shadowTop + shadowLeft + 'px',
@@ -5429,6 +5430,9 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     setLabelCentered(el, true);
     setPaletteVisualState(el, true);
     applyThemeToFloatingEntry(el, themeRef, inferDefinitionType(intuition_content[nameKey]));
+    if (themeBg) {
+        el.style.background = themeBg;
+    }
     el.style.width = `${width}px`;
     el.style.height = `${targetHeight}px`;
     el.style.lineHeight = `${targetHeight}px`;
@@ -5534,8 +5538,10 @@ function handlePaletteClick(el, cfg) {
     const supportRect = supportEl.getBoundingClientRect();
 
     // Figer la taille courante pour éviter l'effondrement (pourcentage/flex) en position:fixed
-    el.style.width = `${phRect.width}px`;
-    el.style.height = `${phRect.height}px`;
+    const placeholderWidth = phRect.width;
+    const placeholderHeight = phRect.height;
+    el.style.width = `${placeholderWidth}px`;
+    el.style.height = `${placeholderHeight}px`;
     // Passer l'élément en position fixed pour le sortir du container, sans changer x/y main-axis
     el.style.position = 'fixed';
     // Déplacer dans le body pour éviter le bug des ancêtres transformés qui piègent position:fixed
@@ -5549,14 +5555,21 @@ function handlePaletteClick(el, cfg) {
     setLabelCentered(el, true);
     // Apply palette icon/label visibility rules while outside
     setPaletteVisualState(el, true);
-
+    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const themeBg = (currentTheme && currentTheme.satellite_bg);
+    const paletteType = inferDefinitionType(key ? intuition_content[key] : undefined);
+    applyThemeToFloatingEntry(el, currentTheme, paletteType);
+    el.style.background = themeBg;
+    // Reapply target dimensions after theming to keep the satellite compact
+    el.style.width = `${placeholderWidth}px`;
+    el.style.height = `${placeholderHeight}px`;
+    el.style.lineHeight = `${placeholderHeight}px`;
     // Calculer la cible externe en réutilisant la même logique que le menu principal
     const elW = el.offsetWidth;
     const elH = el.offsetHeight;
     const targetPos = computeExtractedPaletteTarget(phRect, supportRect, elW, elH, currentTheme);
     const targetLeft = targetPos.left;
     const targetTop = targetPos.top;
-    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
     const desc = intuition_content[key];
 
     // Animer le glissement de la position placeholder vers la position externe

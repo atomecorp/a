@@ -64,6 +64,8 @@ Intuition({
         anim_duration_ms: 200,
         toolboxOffsetMain: "7px",
         toolboxOffsetEdge: "69px",
+        satellite_bg: 'red',
+
 
     },
     content: intuition_content,
