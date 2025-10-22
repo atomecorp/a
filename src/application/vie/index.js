@@ -18,15 +18,9 @@
 //   }
 // });
 
-const MATRIX_VISIBLE_CELLS = 8;
-const MATRIX_CELL_SIZE = 56;
-const MATRIX_HORIZONTAL_GAP = 8;
-const MATRIX_VERTICAL_GAP = 8;
-const MATRIX_EXTERNAL_PADDING = 20;
-const MATRIX_CONTENT_WIDTH = (MATRIX_CELL_SIZE * MATRIX_VISIBLE_CELLS) + (MATRIX_HORIZONTAL_GAP * (MATRIX_VISIBLE_CELLS - 1));
-const MATRIX_CONTENT_HEIGHT = (MATRIX_CELL_SIZE * MATRIX_VISIBLE_CELLS) + (MATRIX_VERTICAL_GAP * (MATRIX_VISIBLE_CELLS - 1));
-const MATRIX_VIEWPORT_WIDTH = MATRIX_CONTENT_WIDTH + (MATRIX_EXTERNAL_PADDING * 2);
-const MATRIX_VIEWPORT_HEIGHT = MATRIX_CONTENT_HEIGHT + (MATRIX_EXTERNAL_PADDING * 2);
+// const MATRIX_VISIBLE_CELLS = 8;
+// const MATRIX_CELL_SIZE = 56;
+// const MATRIX_EXTERNAL_PADDING = 20;
 
 import './menu.js';
 
@@ -249,10 +243,10 @@ const customElement = $('div', {
     boxSizing: 'border-box',
     overflow: 'auto',
     scrollSnapType: 'both mandatory',
-    scrollPadding: `${MATRIX_EXTERNAL_PADDING}px`,
+    scrollPadding: '20px',
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    // alignItems: 'center',
+    // justifyContent: 'center',
     justifyContent: 'flex-start',
     padding: '0',
     color: '#fff',
@@ -275,7 +269,7 @@ const spacing = 12
 
 const matrix = new Matrix({
   id: 'gradient-matrix',
-  grid: { x: MATRIX_VISIBLE_CELLS, y: MATRIX_VISIBLE_CELLS },
+  grid: { x: 8, y: 8 },
 
   spacing: {
     horizontal: spacing,
@@ -284,7 +278,7 @@ const matrix = new Matrix({
   },
   attach: '#test_box',
   autoResize: false,
-  cellSize: MATRIX_CELL_SIZE,
+  cellSize: 69,
   maintainAspectRatio: true,
 
   // Container with gradient
