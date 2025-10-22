@@ -251,7 +251,8 @@ const customElement = $('div', {
     scrollSnapType: 'both mandatory',
     scrollPadding: `${MATRIX_EXTERNAL_PADDING}px`,
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
     justifyContent: 'flex-start',
     padding: '0',
     color: '#fff',
@@ -350,6 +351,11 @@ const matrix = new Matrix({
   }
 });
 
+
+matrix.container.style.position = 'relative';
+matrix.container.style.left = 'auto';
+matrix.container.style.top = 'auto';
+matrix.container.style.margin = '0 auto';
 
 
 
