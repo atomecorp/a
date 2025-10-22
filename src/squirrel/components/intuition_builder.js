@@ -2347,11 +2347,12 @@ const Intuition_theme = {
         tool_font: "0.9vw",
         tool_font_px: 10,
         text_char_max: 9,
-        tool_active_bg: "#e0e0e0",
-        tool_lock_bg: '#ff5555', // couleur lock
+        tool_active_bg: "#a06e0aff",
+        tool_lock_bg: '#9f1f1fff', // couleur lock
+
         tool_lock_pulse_duration: '1400ms', // durée animation clignotement doux
         tool_lock_toggle_mode: 'long', // 'long' (par défaut) ou 'click' pour permettre le clic simple de sortir
-        tool_lock_bg: "#b22929ff",
+
         toolbox_icon: 'menu',            // false pour masquer, ou 'settings', 'play', etc.
         toolbox_icon_color: '#cacacaff',
         toolbox_icon_size: '39%',      // px, %, ou ratio (0..1)
@@ -3087,8 +3088,7 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
         } else {
             el.dataset.simpleActive = 'true';
-            // ordre de fallback: tool_bg_active -> tool_active_bg -> tool_bg
-            const bg = currentTheme.tool_bg_active || currentTheme.tool_active_bg || currentTheme.tool_bg || '#444';
+            const bg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || currentTheme.tool_bg || '#444';
             try { el.style.background = bg; } catch (_) { }
             el.dataset.activeTag = 'true';
             runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
