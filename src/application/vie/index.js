@@ -225,7 +225,7 @@ DragDrop.registerGlobalDrop({
 
 
 
-
+const spacing = 12
 
 
 const customElement = $('div', {
@@ -243,7 +243,7 @@ const customElement = $('div', {
     boxSizing: 'border-box',
     overflow: 'auto',
     scrollSnapType: 'both mandatory',
-    scrollPadding: '20px',
+    scrollPadding: spacing / 2 + 'px',
     display: 'flex',
     // alignItems: 'center',
     // justifyContent: 'center',
@@ -265,7 +265,7 @@ const customElement = $('div', {
 //   }
 // });
 
-const spacing = 12
+
 
 const matrix = new Matrix({
   id: 'gradient-matrix',
@@ -287,7 +287,11 @@ const matrix = new Matrix({
     border: 'none',
     boxShadow: 'none',
     flex: '0 0 auto',
-    padding: spacing + 'px'
+    padding: spacing + 'px',
+    position: 'relative',
+    left: 'auto',
+    top: 'auto',
+    margin: '0 auto'
   },
 
   // Default cell style with gradient and external shadow
