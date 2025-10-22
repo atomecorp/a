@@ -18,6 +18,16 @@
 //   }
 // });
 
+const MATRIX_VISIBLE_CELLS = 8;
+const MATRIX_CELL_SIZE = 56;
+const MATRIX_HORIZONTAL_GAP = 8;
+const MATRIX_VERTICAL_GAP = 8;
+const MATRIX_EXTERNAL_PADDING = 20;
+const MATRIX_CONTENT_WIDTH = (MATRIX_CELL_SIZE * MATRIX_VISIBLE_CELLS) + (MATRIX_HORIZONTAL_GAP * (MATRIX_VISIBLE_CELLS - 1));
+const MATRIX_CONTENT_HEIGHT = (MATRIX_CELL_SIZE * MATRIX_VISIBLE_CELLS) + (MATRIX_VERTICAL_GAP * (MATRIX_VISIBLE_CELLS - 1));
+const MATRIX_VIEWPORT_WIDTH = MATRIX_CONTENT_WIDTH + (MATRIX_EXTERNAL_PADDING * 2);
+const MATRIX_VIEWPORT_HEIGHT = MATRIX_CONTENT_HEIGHT + (MATRIX_EXTERNAL_PADDING * 2);
+
 import './menu.js';
 
 function formatBytes(bytes, decimals = 2) {
@@ -236,10 +246,15 @@ const customElement = $('div', {
     height: 'auto',
     backgroundColor: '#f39c12',
     borderRadius: '3px',
+    boxSizing: 'border-box',
+    overflow: 'auto',
+    scrollSnapType: 'both mandatory',
+    scrollPadding: `${MATRIX_EXTERNAL_PADDING}px`,
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: 'white',
+    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+    padding: '0',
+    color: '#fff',
     fontWeight: 'bold'
   }
 });
@@ -255,22 +270,30 @@ const customElement = $('div', {
 //   }
 // });
 
-
+const spacing = 12
 
 const matrix = new Matrix({
   id: 'gradient-matrix',
-  grid: { x: 8, y: 8 },
+  grid: { x: MATRIX_VISIBLE_CELLS, y: MATRIX_VISIBLE_CELLS },
 
-  spacing: { horizontal: 8, vertical: 8, external: 20 },
-  attach: '#view',
-  maintainAspectRatio: true,   // ← garde chaque cellule carrée
+  spacing: {
+    horizontal: spacing,
+    vertical: spacing,
+    external: spacing,
+  },
+  attach: '#test_box',
+  autoResize: false,
+  cellSize: MATRIX_CELL_SIZE,
+  maintainAspectRatio: true,
 
   // Container with gradient
-  // containerStyle: {
-  //   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  //   borderRadius: '16px',
-  //   boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
-  // },
+  containerStyle: {
+    background: 'red',
+    border: 'none',
+    boxShadow: 'none',
+    flex: '0 0 auto',
+    padding: spacing + 'px'
+  },
 
   // Default cell style with gradient and external shadow
   cells: {

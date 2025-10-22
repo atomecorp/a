@@ -23,7 +23,8 @@ class Matrix {
       debug: options.debug || false,
       responsive: options.responsive !== false,
       autoResize: options.autoResize !== false,
-      maintainAspectRatio: options.maintainAspectRatio || false
+      maintainAspectRatio: options.maintainAspectRatio || false,
+      cellSize: typeof options.cellSize === 'number' ? options.cellSize : null
     };
 
     // Stockage interne
@@ -98,13 +99,14 @@ class Matrix {
   }
 
   applyContainerStyles() {
+    const trackSize = this.getTrackSize();
     const defaultStyles = {
       position: 'absolute',
       left: `${this.config.position.x}px`,
       top: `${this.config.position.y}px`,
       display: 'grid',
-      gridTemplateColumns: `repeat(${this.config.grid.x}, 1fr)`,
-      gridTemplateRows: `repeat(${this.config.grid.y}, 1fr)`,
+      gridTemplateColumns: `repeat(${this.config.grid.x}, ${trackSize})`,
+      gridTemplateRows: `repeat(${this.config.grid.y}, ${trackSize})`,
       gap: `${this.config.spacing.vertical}px ${this.config.spacing.horizontal}px`,
       background: '#f8f9fa',
       borderRadius: '12px',
@@ -137,6 +139,63 @@ class Matrix {
     // Fusion avec les styles personnalisés
     const finalStyles = { ...defaultStyles, ...this.config.containerStyle };
     Object.assign(this.container.style, finalStyles);
+
+    this.updateGridTemplate();
+    this.updateContainerDimensions();
+  }
+
+  getTrackSize() {
+    return this.config.cellSize ? `${this.config.cellSize}px` : '1fr';
+  }
+
+  updateGridTemplate() {
+    if (!this.container) return;
+    const trackSize = this.getTrackSize();
+    this.container.style.gridTemplateColumns = `repeat(${this.config.grid.x}, ${trackSize})`;
+    this.container.style.gridTemplateRows = `repeat(${this.config.grid.y}, ${trackSize})`;
+  }
+
+  calculateContentDimension(axis) {
+    if (!this.config.cellSize) return 0;
+
+    const isHorizontal = axis === 'width';
+    const cellCount = isHorizontal ? this.config.grid.x : this.config.grid.y;
+    const spacing = isHorizontal ? this.config.spacing.horizontal : this.config.spacing.vertical;
+    const gaps = Math.max(0, cellCount - 1);
+
+    return (this.config.cellSize * cellCount) + (spacing * gaps);
+  }
+
+  updateContainerDimensions() {
+    if (!this.container) return;
+
+    if (!this.config.autoResize || this.config.cellSize) {
+      if (this.config.cellSize) {
+        const contentWidth = this.calculateContentDimension('width');
+        const contentHeight = this.calculateContentDimension('height');
+        const externalPadding = this.config.spacing?.external || 0;
+
+        if (contentWidth) {
+          const totalWidth = contentWidth + (externalPadding * 2);
+          this.container.style.width = `${totalWidth}px`;
+        }
+
+        if (contentHeight) {
+          const totalHeight = contentHeight + (externalPadding * 2);
+          this.container.style.height = `${totalHeight}px`;
+        }
+
+        return;
+      }
+
+      if (this.config.size.width) {
+        this.container.style.width = `${this.config.size.width}px`;
+      }
+
+      if (this.config.size.height) {
+        this.container.style.height = `${this.config.size.height}px`;
+      }
+    }
   }
 
   createCells() {
@@ -193,6 +252,16 @@ class Matrix {
       ...cellConfig.style
     };
     Object.assign(cellElement.style, cellStyles);
+
+    if (this.config.cellSize) {
+      const sizePx = `${this.config.cellSize}px`;
+      cellElement.style.width = sizePx;
+      cellElement.style.height = sizePx;
+      cellElement.style.minWidth = sizePx;
+      cellElement.style.minHeight = sizePx;
+      cellElement.style.scrollSnapAlign = 'start';
+      cellElement.style.scrollSnapStop = 'always';
+    }
 
     // Stockage des données de la cellule
     this.cellsMap.set(cellKey, {
@@ -696,6 +765,21 @@ class Matrix {
   }
 
   updateCellSizes() {
+    if (this.config.cellSize) {
+      const sizePx = `${this.config.cellSize}px`;
+      this.cellsMap.forEach((cell) => {
+        cell.element.style.width = sizePx;
+        cell.element.style.height = sizePx;
+        cell.element.style.minWidth = sizePx;
+        cell.element.style.minHeight = sizePx;
+        cell.element.style.scrollSnapAlign = 'start';
+        cell.element.style.scrollSnapStop = 'always';
+      });
+
+      this.updateContainerDimensions();
+      return;
+    }
+
     if (!this.config.autoResize) return;
 
     // Les cellules se redimensionnent automatiquement grâce au CSS Grid
@@ -728,7 +812,7 @@ class Matrix {
     const newColIndex = prevCols;
 
     this.config.grid.x += 1;
-    this.container.style.gridTemplateColumns = `repeat(${this.config.grid.x}, 1fr)`;
+    this.updateGridTemplate();
 
     for (let y = 0; y < rows; y += 1) {
       const insertIndex = (y * this.config.grid.x) + newColIndex;
@@ -745,7 +829,7 @@ class Matrix {
     const newRowIndex = prevRows;
 
     this.config.grid.y += 1;
-    this.container.style.gridTemplateRows = `repeat(${this.config.grid.y}, 1fr)`;
+    this.updateGridTemplate();
 
     for (let x = 0; x < cols; x += 1) {
       this.createCell(x, newRowIndex);
