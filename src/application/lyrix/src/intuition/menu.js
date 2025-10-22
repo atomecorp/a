@@ -24,6 +24,10 @@ function stopPerforming() {
 function stop_lock_test_touch() {
     puts('Tools lock test unlock triggered!!!');
 }
+function openSettingsPanel() {
+    toggleSettingsPanel('settings_button');
+    puts('Settings panel opened');
+}
 
 const intuition_content = {
     version: "1.1",
@@ -32,7 +36,7 @@ const intuition_content = {
     //
     file: { type: 'palette', children: ['import', 'load', 'save'] },
     tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
-    settings: { type: 'palette', children: ['email',], icon: false },
+    settings: { type: 'palette', children: ['midi',], icon: false, touch: openSettingsPanel },
     capture: { label: 'record', type: 'tool', icon: 'record' },
     perform: { label: 'perform', type: 'tool', icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
@@ -40,7 +44,7 @@ const intuition_content = {
     import: { type: 'tool', children: ['audio', 'modules', 'projects'] },
     load: { type: 'tool', children: ['modules', 'projects'], touch_up: function () { puts('Import touch triggered'); } },
     save: { type: 'tool', touch: function () { puts('Save touch triggered'); } },
-    email: { type: 'option', touch: option_test_touch },
+    midi: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel, icon: false },
     volume: { type: 'particle', helper: 'slider', value: 3 },
     ADSR: { type: 'tool', children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
     controller: { type: 'zonespecial', touch: function () { puts('Controller touch triggered'); } },
@@ -66,3 +70,6 @@ Intuition({
     orientation: 'top_left_horizontal'
 });
 
+
+// touch_up: openSettingsPanel,
+//    toggleSettingsPanel('settings_button');
