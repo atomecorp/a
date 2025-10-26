@@ -64,7 +64,8 @@ async function resolveUploadPath(rawName) {
 }
 
 // Créer l'instance Fastify
-const server = fastify({
+const server = fastify({ 
+  bodyLimit: 1024 * 1024 * 1024, // 1 GiB
   logger: {
     level: 'info',
     transport: {

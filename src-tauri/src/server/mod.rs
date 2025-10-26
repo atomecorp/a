@@ -1,6 +1,6 @@
 use axum::{
     body::Bytes,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, get_service, post},
@@ -15,7 +15,7 @@ use std::{
     sync::Arc,
 };
 use tokio::fs;
-use tower_http::{cors::CorsLayer, services::ServeDir};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
 
 #[derive(Clone)]
 struct AppState {
@@ -24,6 +24,7 @@ struct AppState {
 }
 
 const SERVER_TYPE: &str = "Tauri frontend process";
+const MAX_UPLOAD_BYTES: usize = 1024 * 1024 * 1024; // 1 GiB
 
 fn sanitize_file_name(name: &str) -> String {
     if name.is_empty() {
@@ -204,6 +205,8 @@ pub async fn start_server(static_dir: PathBuf) {
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)
         .layer(CorsLayer::permissive())
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
