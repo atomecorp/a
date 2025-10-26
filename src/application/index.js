@@ -49,7 +49,8 @@
 //  import('./examples/audio_basic.js');
 ////////////////////
 
-import('./lyrix/index.js');
+import('./aBox/index.js');
+// import('./lyrix/index.js');
 // import('./examples/iOS_app_launcher.js');
 // import('./examples/ios_audio_bridge.js');
 // import('./examples/iplug_ios.js');
@@ -74,7 +75,7 @@ import('./lyrix/index.js');
 // import('./examples/events.js');
 // import('./examples/intuition.js');
 
-// import('./examples/file_drop.js');
+// import('./examples/drag_drop_files.js');
 // import('./examples/svg_fetch_usage.js');
 // import('./examples/svg_animate.js');
 // import('./examples/testSVGSize.js');
