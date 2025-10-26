@@ -5,6 +5,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { promises as fs } from 'fs';
 
 // Database imports
 import { knex, DB_PATH } from '../database/db.js';
@@ -13,9 +14,42 @@ import Project from '../database/Project.js';
 import Atome from '../database/Atome.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.join(__dirname, '../src/assets/uploads');
+const SERVER_VERSION = '1.0.6';
+const SERVER_TYPE = 'Fastify';
+
+const sanitizeFileName = (name) => {
+  const base = typeof name === 'string' ? name : 'upload.bin';
+  const cleaned = path.basename(base).replace(/[^a-z0-9._-]/gi, '_');
+  return cleaned || 'upload.bin';
+};
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveUploadPath(rawName) {
+  const sanitized = sanitizeFileName(rawName);
+  const ext = path.extname(sanitized);
+  const stem = path.basename(sanitized, ext);
+  let candidate = sanitized;
+  let targetPath = path.join(uploadsDir, candidate);
+  let counter = 1;
+  while (await fileExists(targetPath)) {
+    candidate = `${stem}_${counter}${ext}`;
+    targetPath = path.join(uploadsDir, candidate);
+    counter += 1;
+  }
+  return { fileName: candidate, filePath: targetPath };
+}
 
 // Créer l'instance Fastify
-const server = fastify({ 
+const server = fastify({
   logger: {
     level: 'info',
     transport: {
@@ -30,16 +64,18 @@ async function startServer() {
   try {
     console.log('🚀 Démarrage du serveur Fastify v5...');
 
+    await fs.mkdir(uploadsDir, { recursive: true });
+
     // ===========================
     // 0. DATABASE INITIALIZATION
     // ===========================
-    
+
     console.log('📊 Initialisation de la base de données...');
-    
+
     // Run migrations
     await knex.migrate.latest();
     console.log('✅ Migrations exécutées');
-    
+
     // Test database connection
     await knex.raw('SELECT 1');
     console.log('✅ Connexion à la base de données établie');
@@ -64,6 +100,10 @@ async function startServer() {
 
     // WebSocket natif Fastify v5
     await server.register(fastifyWebsocket);
+
+    server.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (req, body, done) => {
+      done(null, body);
+    });
 
     // ===========================
     // 2. ROUTES API
@@ -95,6 +135,48 @@ async function startServer() {
         version: server.version,
         websocket: 'Natif intégré'
       };
+    });
+
+    server.get('/api/server-info', async () => {
+      return {
+        success: true,
+        version: SERVER_VERSION,
+        type: SERVER_TYPE
+      };
+    });
+
+    server.post('/api/uploads', async (request, reply) => {
+      try {
+        const headerValue = Array.isArray(request.headers['x-filename'])
+          ? request.headers['x-filename'][0]
+          : request.headers['x-filename'];
+        if (!headerValue) {
+          reply.code(400);
+          return { success: false, error: 'Missing X-Filename header' };
+        }
+
+        let decodedName = String(headerValue);
+        try {
+          decodedName = decodeURIComponent(decodedName);
+        } catch {
+          // Keep original value if decoding fails
+        }
+
+        const bodyBuffer = request.body;
+        if (!bodyBuffer || !(bodyBuffer instanceof Buffer) || !bodyBuffer.length) {
+          reply.code(400);
+          return { success: false, error: 'Empty upload body' };
+        }
+
+        const { fileName, filePath } = await resolveUploadPath(decodedName);
+        await fs.writeFile(filePath, bodyBuffer);
+
+        return { success: true, file: fileName };
+      } catch (error) {
+        request.log.error({ err: error }, 'File upload failed');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
     });
 
     // YouTube Search proxy (requires YOUTUBE_API_KEY)
@@ -210,12 +292,13 @@ async function startServer() {
             file: DB_PATH
           },
           timestamp: new Date().toISOString()
-        };      } catch (error) {
+        };
+      } catch (error) {
         reply.code(500);
         return {
           success: false,
           status: 'disconnected',
-          error: error.message,          timestamp: new Date().toISOString()
+          error: error.message, timestamp: new Date().toISOString()
         };
       }
     });
@@ -248,12 +331,12 @@ async function startServer() {
         const user = await User.query()
           .findById(request.params.id)
           .withGraphFetched('[project, atomes]');
-        
+
         if (!user) {
           reply.code(404);
           return { success: false, error: 'User not found' };
         }
-        
+
         return { success: true, data: user };
       } catch (error) {
         reply.code(500);
@@ -264,14 +347,14 @@ async function startServer() {
     server.delete('/api/users/:id', async (request, reply) => {
       try {
         const deletedCount = await User.query().deleteById(request.params.id);
-        
+
         if (deletedCount === 0) {
           reply.code(404);
           return { success: false, error: 'User not found' };
         }
-        
-        return { 
-          success: true, 
+
+        return {
+          success: true,
           message: `User with ID ${request.params.id} deleted successfully`,
           data: { deletedId: request.params.id }
         };
@@ -307,12 +390,12 @@ async function startServer() {
         const project = await Project.query()
           .findById(request.params.id)
           .withGraphFetched('[users, owner, atomes]');
-        
+
         if (!project) {
           reply.code(404);
           return { success: false, error: 'Project not found' };
         }
-        
+
         return { success: true, data: project };
       } catch (error) {
         reply.code(500);
@@ -347,7 +430,7 @@ async function startServer() {
         const [userCount] = await knex('user').count('* as count');
         const [projectCount] = await knex('project').count('* as count');
         const [atomeCount] = await knex('atome').count('* as count');
-        
+
         return {
           success: true,
           data: {
@@ -445,11 +528,11 @@ async function startServer() {
     // 4. DÉMARRAGE
     // ===========================
 
-    await server.listen({ 
-      port: PORT, 
-      host: '0.0.0.0' 
+    await server.listen({
+      port: PORT,
+      host: '0.0.0.0'
     });
-    
+
     console.log(`✅ Serveur Fastify v${server.version} démarré sur http://localhost:${PORT}`);
     console.log(`🔌 WebSocket disponible sur ws://localhost:${PORT}/ws`);
     console.log(`📡 Events WebSocket sur ws://localhost:${PORT}/ws/events`);

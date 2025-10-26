@@ -43,7 +43,9 @@ function attachDropZoneHighlight() {
         isDragInside = false;
     };
 
-    const handleDrop = () => {
+    const handleDrop = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         setDropZoneColor(dropZoneDefaultBg);
         isDragInside = false;
     };
@@ -56,14 +58,59 @@ function attachDropZoneHighlight() {
 
 attachDropZoneHighlight();
 
+async function sendFileToServer(entry) {
+    const blob = entry && (entry.file || entry.blob || entry);
+    if (!blob || typeof blob.arrayBuffer !== 'function') {
+        puts(`[upload] fichier invalide ignoré (${entry && entry.name ? entry.name : 'inconnu'})`);
+        return;
+    }
+
+    const fileName = entry && entry.name ? entry.name : (blob.name || `upload_${Date.now()}`);
+    const headers = {
+        'Content-Type': 'application/octet-stream',
+        'X-Filename': encodeURIComponent(fileName)
+    };
+
+    const response = await fetch('/api/uploads', {
+        method: 'POST',
+        headers,
+        body: blob
+    });
+
+    if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || `statut HTTP ${response.status}`);
+    }
+
+    const payload = await response.json().catch(() => ({ success: true, file: fileName }));
+    if (!payload || payload.success !== true) {
+        throw new Error(payload && payload.error ? payload.error : 'réponse serveur invalide');
+    }
+
+    puts(`[upload] ${payload.file} envoyé au serveur`);
+}
+
+async function uploadDroppedFiles(fileList) {
+    if (!Array.isArray(fileList) || !fileList.length) return;
+    for (const entry of fileList) {
+        try {
+            await sendFileToServer(entry);
+        } catch (error) {
+            console.error('Upload error:', error);
+            puts(`[upload] échec pour ${entry && entry.name ? entry.name : 'inconnu'} : ${error.message}`);
+        }
+    }
+}
+
 DragDrop.createDropZone(`#${dropZoneId}`, {
     accept: '*',
     multiple: true,
     allowedDropId: dropZoneId,
     event: 'stop',
-    onDrop: (files) => {
+    onDrop: async (files) => {
         setDropZoneColor(dropZoneDefaultBg);
         puts(`file drop on ${dropZoneId}`);
         files.forEach((file) => puts(`- ${file.name}`));
+        await uploadDroppedFiles(files);
     }
 });
