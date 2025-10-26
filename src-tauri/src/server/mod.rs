@@ -150,7 +150,7 @@ async fn upload_handler(
     )
 }
 
-pub async fn start_server(static_dir: PathBuf) {
+pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
     let serve_dir_root = ServeDir::new(base_dir.clone()).append_index_html_on_directories(true);
@@ -182,7 +182,6 @@ pub async fn start_server(static_dir: PathBuf) {
         )
     });
 
-    let uploads_dir = base_dir.join("assets/uploads");
     if let Err(err) = fs::create_dir_all(&uploads_dir).await {
         eprintln!(
             "Impossible de créer le dossier uploads {:?}: {}",

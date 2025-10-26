@@ -117,7 +117,31 @@ if [ "$PROD_BUILD" = true ]; then
     echo ""
 
     echo "🛠️  Build Tauri (production)..."
-    npm run tauri build
+    TAURI_SKIP_BUNDLE_OPEN=1 npm run tauri build
+    echo ""
+
+    echo "🗂️  Recherche du dernier DMG généré..."
+    dmg_dir="$PROJECT_ROOT/src-tauri/target/release/bundle/dmg"
+    if [ -d "$dmg_dir" ]; then
+        latest_dmg=$(ls -t "$dmg_dir"/*.dmg 2>/dev/null | head -n 1 || true)
+        if [ -n "${latest_dmg:-}" ] && [ -f "$latest_dmg" ]; then
+            echo "📦 DMG généré: $latest_dmg"
+            if hdiutil info | grep -q "$latest_dmg"; then
+                echo "ℹ️  DMG déjà monté. Laissez-le ouvert tant que nécessaire."
+            else
+                echo "📎 Montage du DMG (reste monté jusqu'à éjection manuelle)..."
+                if hdiutil attach "$latest_dmg"; then
+                    echo "✅ DMG monté. Consultez-le dans le Finder et éjectez-le quand vous avez terminé."
+                else
+                    echo "⚠️  Impossible de monter automatiquement le DMG. Ouvrez-le manuellement si nécessaire."
+                fi
+            fi
+        else
+            echo "⚠️  Aucun DMG trouvé dans $dmg_dir"
+        fi
+    else
+        echo "⚠️  Répertoire DMG introuvable: $dmg_dir"
+    fi
     echo ""
 
     echo "✅ Build Tauri production terminé"

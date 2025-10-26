@@ -4,22 +4,72 @@
 )]
 
 mod server;
+use std::fs;
 use std::net::TcpStream;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 use tauri::Manager; // pour get_webview_window
 
 fn main() {
-    let static_dir = std::path::PathBuf::from("../src");
     tauri::Builder::default()
-        .setup(move |app| {
-            let static_dir_clone = static_dir.clone();
+        .setup(|app| {
+            let path_resolver = app.path();
+            let static_dir: PathBuf = match path_resolver.resource_dir() {
+                Ok(dir) => {
+                    let mut resolved: Option<PathBuf> = None;
+                    let mut candidates: Vec<PathBuf> = vec![
+                        dir.join("dist"),
+                        dir.join("public"),
+                        dir.join("src"),
+                        dir.join("_up_/dist"),
+                        dir.join("_up_/public"),
+                        dir.join("_up_/src"),
+                        dir.clone(),
+                    ];
+
+                    // Dev fallback (../src) checked last
+                    candidates.push(PathBuf::from("../src"));
+
+                    for candidate in candidates {
+                        if candidate.join("index.html").exists() {
+                            resolved = Some(candidate);
+                            break;
+                        }
+                    }
+
+                    resolved.unwrap_or_else(|| PathBuf::from("../src"))
+                }
+                Err(_) => PathBuf::from("../src"),
+            };
+
+            if !static_dir.join("index.html").exists() {
+                eprintln!("⚠️  Static directory does not contain index.html: {:?}", static_dir);
+            }
+
+            println!("📂 Static assets directory: {:?}", static_dir);
+
+            let uploads_root = match path_resolver.app_data_dir() {
+                Ok(dir) => dir,
+                Err(_) => {
+                    let mut fallback = std::env::temp_dir();
+                    fallback.push("squirrel");
+                    fallback
+                }
+            };
+            let uploads_dir = uploads_root.join("uploads");
+            if let Err(err) = fs::create_dir_all(&uploads_dir) {
+                eprintln!("⚠️  Unable to prepare uploads directory {:?}: {}", uploads_dir, err);
+            }
+
+            let static_dir_for_server = static_dir.clone();
+            let uploads_dir_for_server = uploads_dir.clone();
 
             // Serveur Axum en arrière-plan
             std::thread::spawn(move || {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(async {
-                    server::start_server(static_dir_clone).await;
+                    server::start_server(static_dir_for_server, uploads_dir_for_server).await;
                 });
             });
 
