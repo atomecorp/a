@@ -83,20 +83,33 @@ console.log('Squirrel 1.0.6 ©atome');
 console.log('Current platform: ' + current_platform());
 
 async function logServerInfo() {
-  try {
-    const res = await fetch('/api/server-info', { cache: 'no-store' });
-    if (!res.ok) {
-      console.warn('⚠️ Unable to reach /api/server-info:', res.status);
-      return;
+  const resolveApiBases = () => {
+    try {
+      const platform = typeof current_platform === 'function' ? current_platform() : '';
+      if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
+        return ['http://127.0.0.1:3000', 'http://127.0.0.1:3001', ''];
+      }
+    } catch (_) { }
+    return [''];
+  };
+
+  const bases = resolveApiBases();
+  for (const base of bases) {
+    const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
+    try {
+      const res = await fetch(endpoint, { cache: 'no-store' });
+      if (!res.ok) {
+        console.warn('⚠️ Unable to reach /api/server-info:', res.status);
+        continue;
+      }
+      const data = await res.json();
+      if (data && data.success) {
+        console.log(`Server ${data.version} (${data.type})`);
+        return;
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to fetch /api/server-info', error);
     }
-    const data = await res.json();
-    if (data && data.success) {
-      console.log(`Server ${data.version} (${data.type})`);
-    } else {
-      console.warn('⚠️ Unexpected response from /api/server-info');
-    }
-  } catch (error) {
-    console.warn('⚠️ Failed to fetch /api/server-info', error);
   }
 }
 

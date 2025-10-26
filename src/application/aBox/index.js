@@ -58,6 +58,18 @@ function attachDropZoneHighlight() {
 
 attachDropZoneHighlight();
 
+function resolveApiBases() {
+    try {
+        const platform = typeof current_platform === 'function' ? current_platform() : '';
+        if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
+            return ['http://127.0.0.1:3000', 'http://127.0.0.1:3001', ''];
+        }
+    } catch (_) { }
+    return [''];
+}
+
+const apiBases = resolveApiBases();
+
 async function sendFileToServer(entry) {
     const blob = entry && (entry.file || entry.blob || entry);
     if (!blob || typeof blob.arrayBuffer !== 'function') {
@@ -71,23 +83,37 @@ async function sendFileToServer(entry) {
         'X-Filename': encodeURIComponent(fileName)
     };
 
-    const response = await fetch('/api/uploads', {
-        method: 'POST',
-        headers,
-        body: blob
-    });
+    let lastError = null;
+    for (const base of apiBases) {
+        const endpoint = base ? `${base}/api/uploads` : '/api/uploads';
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers,
+                body: blob
+            });
 
-    if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(text || `statut HTTP ${response.status}`);
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(text || `statut HTTP ${response.status}`);
+            }
+
+            const payload = await response.json().catch(() => ({ success: true, file: fileName }));
+            if (!payload || payload.success !== true) {
+                throw new Error(payload && payload.error ? payload.error : 'réponse serveur invalide');
+            }
+
+            puts(`[upload] ${payload.file} envoyé au serveur`);
+            return;
+        } catch (error) {
+            lastError = error;
+            continue;
+        }
     }
 
-    const payload = await response.json().catch(() => ({ success: true, file: fileName }));
-    if (!payload || payload.success !== true) {
-        throw new Error(payload && payload.error ? payload.error : 'réponse serveur invalide');
+    if (lastError) {
+        throw lastError;
     }
-
-    puts(`[upload] ${payload.file} envoyé au serveur`);
 }
 
 async function uploadDroppedFiles(fileList) {
