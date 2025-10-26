@@ -5,7 +5,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { promises as fs } from 'fs';
+import { promises as fs, createReadStream } from 'fs';
 
 // Database imports
 import { knex, DB_PATH } from '../database/db.js';
@@ -61,6 +61,30 @@ async function resolveUploadPath(rawName) {
     counter += 1;
   }
   return { fileName: candidate, filePath: targetPath };
+}
+
+async function listUploads() {
+  const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const safeName = sanitizeFileName(entry.name);
+    const absolutePath = path.join(uploadsDir, safeName);
+    try {
+      const stats = await fs.stat(absolutePath);
+      files.push({
+        name: safeName,
+        size: stats.size,
+        modified: stats.mtime.toISOString()
+      });
+    } catch (error) {
+      console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
+    }
+  }
+
+  files.sort((a, b) => b.modified.localeCompare(a.modified));
+  return files;
 }
 
 // Créer l'instance Fastify
@@ -195,6 +219,34 @@ async function startServer() {
         request.log.error({ err: error }, 'File upload failed');
         reply.code(500);
         return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/uploads', async (request, reply) => {
+      try {
+        const files = await listUploads();
+        return { success: true, files };
+      } catch (error) {
+        request.log.error({ err: error }, 'Unable to list uploads');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/uploads/:file', async (request, reply) => {
+      try {
+        const fileParam = request.params.file || '';
+        const safeName = sanitizeFileName(fileParam);
+        const filePath = path.join(uploadsDir, safeName);
+
+        await fs.access(filePath);
+        reply.header('Content-Disposition', `attachment; filename="${safeName}"`);
+        reply.type('application/octet-stream');
+        return reply.send(createReadStream(filePath));
+      } catch (error) {
+        request.log.error({ err: error }, 'Unable to download upload');
+        reply.code(404);
+        return { success: false, error: 'File not found' };
       }
     });
 

@@ -1,9 +1,9 @@
 use axum::{
     body::Bytes,
-    extract::{DefaultBodyLimit, State},
-    http::{HeaderMap, StatusCode},
+    extract::{DefaultBodyLimit, Path as AxumPath, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::IntoResponse,
-    routing::{get, get_service, post},
+    routing::{get, get_service},
     Json, Router,
 };
 use serde_json::json;
@@ -150,6 +150,99 @@ async fn upload_handler(
     )
 }
 
+async fn list_uploads_handler(State(state): State<AppState>) -> impl IntoResponse {
+    let mut files: Vec<(String, u64, u64)> = Vec::new();
+    match fs::read_dir(&*state.uploads_dir).await {
+        Ok(mut dir) => {
+            while let Ok(Some(entry)) = dir.next_entry().await {
+                if !entry
+                    .file_type()
+                    .await
+                    .map(|ft| ft.is_file())
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                let file_name = entry.file_name().to_string_lossy().to_string();
+                let safe_name = sanitize_file_name(&file_name);
+                let path = state.uploads_dir.join(&safe_name);
+                match fs::metadata(&path).await {
+                    Ok(meta) => {
+                        let modified = meta
+                            .modified()
+                            .ok()
+                            .and_then(|mtime| mtime.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|duration| duration.as_secs())
+                            .unwrap_or_default();
+                        files.push((safe_name, meta.len(), modified));
+                    }
+                    Err(err) => {
+                        eprintln!("Erreur métadonnées upload {:?}: {}", path, err);
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            eprintln!(
+                "Erreur lecture dossier uploads {:?}: {}",
+                state.uploads_dir, err
+            );
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "success": false, "error": err.to_string() })),
+            );
+        }
+    }
+
+    files.sort_by(|a, b| b.2.cmp(&a.2));
+
+    let json_files: Vec<_> = files
+        .into_iter()
+        .map(|(name, size, modified)| {
+            json!({
+                "name": name,
+                "size": size,
+                "modified": modified,
+            })
+        })
+        .collect();
+
+    (
+        StatusCode::OK,
+        Json(json!({ "success": true, "files": json_files })),
+    )
+}
+
+async fn download_upload_handler(
+    State(state): State<AppState>,
+    AxumPath(file): AxumPath<String>,
+) -> impl IntoResponse {
+    let safe_name = sanitize_file_name(&file);
+    let file_path = state.uploads_dir.join(&safe_name);
+
+    match fs::read(&file_path).await {
+        Ok(bytes) => {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/octet-stream"),
+            );
+            if let Ok(header_value) =
+                HeaderValue::from_str(&format!("attachment; filename=\"{}\"", safe_name))
+            {
+                headers.insert(header::CONTENT_DISPOSITION, header_value);
+            }
+
+            (StatusCode::OK, headers, bytes).into_response()
+        }
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "success": false, "error": "File not found" })),
+        )
+            .into_response(),
+    }
+}
+
 pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
@@ -199,7 +292,11 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
-        .route("/api/uploads", post(upload_handler))
+        .route(
+            "/api/uploads",
+            get(list_uploads_handler).post(upload_handler),
+        )
+        .route("/api/uploads/:file", get(download_upload_handler))
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)
