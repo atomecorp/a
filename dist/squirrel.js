@@ -841,7 +841,7 @@
   // Fonction utilitaire pour ajouter des classes (évite la duplication de code)
   const addClasses = (element, classes) => {
     if (!classes) return;
-    
+
     if (typeof classes === 'string') {
       // Éviter split si une seule classe
       if (classes.indexOf(' ') === -1) {
@@ -862,10 +862,10 @@
   const $ = (id, props = {}) => {
     const config = templateRegistry.get(id) || {};
     const element = createElement(config.tag || props.tag || id || 'div');
-    
+
     // 🔧 FIX: Merge CSS intelligent
     const merged = { ...config, ...props };
-    
+
     // CSS merge corrigé
     if (config.css || props.css) {
       if (typeof config.css === 'string' && typeof props.css === 'string') {
@@ -876,20 +876,20 @@
         merged.css = props.css || config.css;
       }
     }
-    
+
     // 🔧 FIX: Attrs merge corrigé
     if (config.attrs || props.attrs) {
       merged.attrs = { ...(config.attrs || {}), ...(props.attrs || {}) };
     }
-    
+
     // Marquage optionnel
     if (merged.mark) element.setAttribute('data-hyperfactory', 'true');
-    
+
     // Attributs basiques
     merged.id && (element.id = merged.id);
     merged.text && (element.textContent = merged.text);
     merged.innerHTML && (element.innerHTML = merged.innerHTML);
-    
+
     // Chargement SVG depuis fichier
     if (merged.svgSrc) {
       fetch(merged.svgSrc)
@@ -901,10 +901,10 @@
           console.error(`Erreur lors du chargement du SVG ${merged.svgSrc}:`, error);
         });
     }
-    
+
     // Classes via classList (optimisé)
     addClasses(element, merged.class);
-    
+
     // Attributs personnalisés
     if (merged.attrs) {
       for (const [key, value] of Object.entries(merged.attrs)) {
@@ -917,7 +917,7 @@
         }
       }
     }
-    
+
     // Styles CSS
     if (merged.css) {
       if (typeof merged.css === 'string') {
@@ -927,14 +927,14 @@
           if (merged.css.hasOwnProperty(key)) {
             const value = merged.css[key];
             const kebabKey = toKebabCase(key);
-            value == null 
+            value == null
               ? element.style.removeProperty(kebabKey)
               : element.style.setProperty(kebabKey, value);
           }
         }
       }
     }
-    
+
     // Événements avec addEventListener
     eventRegistry.set(element, {});
     for (const key in merged) {
@@ -945,7 +945,7 @@
         eventRegistry.get(element)[eventName] = handler;
       }
     }
-    
+
     // Enfants imbriqués
     if (merged.children) {
       merged.children.forEach(childConfig => {
@@ -953,12 +953,12 @@
         element.appendChild(child);
       });
     }
-    
+
     // Méthode de mise à jour
     element.$ = updateProps => {
       if ('text' in updateProps) element.textContent = updateProps.text;
       if ('innerHTML' in updateProps) element.innerHTML = updateProps.innerHTML;
-      
+
       // Mise à jour SVG depuis fichier
       if ('svgSrc' in updateProps) {
         fetch(updateProps.svgSrc)
@@ -970,11 +970,11 @@
             console.error(`Erreur lors du chargement du SVG ${updateProps.svgSrc}:`, error);
           });
       }
-      
+
       if (updateProps.class) {
         addClasses(element, updateProps.class);
       }
-      
+
       if (updateProps.css) {
         if (typeof updateProps.css === 'string') {
           element.style.cssText = updateProps.css;
@@ -983,14 +983,14 @@
             if (updateProps.css.hasOwnProperty(key)) {
               const value = updateProps.css[key];
               const kebabKey = toKebabCase(key);
-              value == null 
+              value == null
                 ? element.style.removeProperty(kebabKey)
                 : element.style.setProperty(kebabKey, value);
             }
           }
         }
       }
-      
+
       if (updateProps.attrs) {
         for (const key in updateProps.attrs) {
           if (updateProps.attrs.hasOwnProperty(key)) {
@@ -1005,47 +1005,90 @@
           }
         }
       }
-      
+
       // Mise à jour des événements
       const currentListeners = eventRegistry.get(element);
       for (const key in updateProps) {
         if (isEventHandler(key) && typeof updateProps[key] === 'function') {
           const eventName = key.slice(2).toLowerCase();
           const newHandler = updateProps[key];
-          
+
           if (currentListeners[eventName]) {
             element.removeEventListener(eventName, currentListeners[eventName]);
           }
-          
+
           element.addEventListener(eventName, newHandler);
           currentListeners[eventName] = newHandler;
         }
       }
-      
+
       return element;
     };
-    
+
     // Alias pour le style
     element._ = element.style;
-    
+
     // Parent (support des sélecteurs)
     const parent = merged.parent || '#view';
-    const appendToParent = () => {
-      if (typeof parent === 'string') {
+    const parentIsSelector = typeof parent === 'string';
+
+    const tryAppendToParent = () => {
+      if (parentIsSelector) {
         const target = document.querySelector(parent);
-        if (target) target.appendChild(element);
-        else console.warn(`Parent selector "${parent}" not found`);
-      } else {
-        parent.appendChild(element);
+        if (target) {
+          target.appendChild(element);
+          element._parentAttachPending = false;
+          if (element._parentAttachRaf) {
+            cancelAnimationFrame(element._parentAttachRaf);
+            element._parentAttachRaf = null;
+          }
+          return true;
+        }
+        return false;
       }
+      parent.appendChild(element);
+      element._parentAttachPending = false;
+      return true;
+    };
+
+    const scheduleParentRetry = () => {
+      if (!parentIsSelector) return;
+      if (element._parentAttachPending) return;
+      element._parentAttachPending = true;
+      let attempts = 0;
+      const retry = () => {
+        if (tryAppendToParent()) {
+          window.removeEventListener('squirrel:ready', retry, true);
+          document.removeEventListener('DOMContentLoaded', retry, true);
+          return;
+        }
+        attempts += 1;
+        if (attempts >= 120) {
+          console.warn(`Parent selector "${parent}" not found`);
+          element._parentAttachPending = false;
+          window.removeEventListener('squirrel:ready', retry, true);
+          document.removeEventListener('DOMContentLoaded', retry, true);
+          element._parentAttachRaf = null;
+          return;
+        }
+        element._parentAttachRaf = requestAnimationFrame(retry);
+      };
+      window.addEventListener('squirrel:ready', retry, true);
+      document.addEventListener('DOMContentLoaded', retry, true);
+      element._parentAttachRaf = requestAnimationFrame(retry);
+    };
+
+    const ensureParentAttachment = () => {
+      if (tryAppendToParent()) return;
+      scheduleParentRetry();
     };
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', appendToParent);
+      document.addEventListener('DOMContentLoaded', ensureParentAttachment, { once: true, capture: true });
     } else {
-      appendToParent();
+      ensureParentAttachment();
     }
-    
+
     // 🔧 FIX: Animation native intégrée
     element.animate = (keyframes, options = {}) => {
       const animation = nativeAnimate.call(element, keyframes, {
@@ -1055,7 +1098,7 @@
       });
       return animation.finished;
     };
-    
+
     // 🔧 FIX: Cleanup des observers
     element.remove = () => {
       // Nettoyer les observers
@@ -1064,7 +1107,7 @@
         observers.forEach(observer => observer.disconnect());
         mutationRegistry.delete(element);
       }
-      
+
       // Nettoyer les events
       const events = eventRegistry.get(element);
       if (events) {
@@ -1075,10 +1118,10 @@
         }
         eventRegistry.delete(element);
       }
-      
+
       element.parentNode?.removeChild(element);
     };
-    
+
     return element;
   };
 
@@ -1119,14 +1162,14 @@
     const observer = new MutationObserver((mutations) => {
       mutations.forEach(mutation => callback(mutation));
     });
-    
+
     observer.observe(element, {
       attributes: true,
       childList: true,
       subtree: true,
       ...options
     });
-    
+
     // Stocker l'observateur pour le nettoyage
     if (!mutationRegistry.has(element)) mutationRegistry.set(element, []);
     mutationRegistry.get(element).push(observer);
@@ -4271,17 +4314,18 @@
         position: { x: 0, y: 0, ...options.position },
         spacing: { horizontal: 8, vertical: 8, external: 16, ...options.spacing },
         attach: options.attach || 'body',
-        
+
         // Configuration des cellules
         cells: options.cells || {},
         states: options.states || {},
         containerStyle: options.containerStyle || {},
-        
+
         // Options avancées
         debug: options.debug || false,
         responsive: options.responsive !== false,
         autoResize: options.autoResize !== false,
-        maintainAspectRatio: options.maintainAspectRatio || false
+        maintainAspectRatio: options.maintainAspectRatio || false,
+        cellSize: typeof options.cellSize === 'number' ? options.cellSize : null
       };
 
       // Stockage interne
@@ -4326,8 +4370,8 @@
         this.isInitialized = true;
 
         if (this.config.debug) {
-  // console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
-  // console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
+          // console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
+          // console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
         }
       } catch (error) {
         console.error(`❌ Erreur lors de l'initialisation de Matrix "${this.config.id}":`, error);
@@ -4336,8 +4380,8 @@
 
     createContainer() {
       // Attachement au DOM
-      const attachPoint = typeof this.config.attach === 'string' 
-        ? document.querySelector(this.config.attach) 
+      const attachPoint = typeof this.config.attach === 'string'
+        ? document.querySelector(this.config.attach)
         : this.config.attach;
 
       if (!attachPoint) {
@@ -4348,21 +4392,22 @@
       this.container = document.createElement('div');
       this.container.id = this.config.id;
       this.container.className = 'matrix-container';
-      
+
       // Application des styles
       this.applyContainerStyles();
-      
+
       attachPoint.appendChild(this.container);
     }
 
     applyContainerStyles() {
+      const trackSize = this.getTrackSize();
       const defaultStyles = {
         position: 'absolute',
         left: `${this.config.position.x}px`,
         top: `${this.config.position.y}px`,
         display: 'grid',
-        gridTemplateColumns: `repeat(${this.config.grid.x}, 1fr)`,
-        gridTemplateRows: `repeat(${this.config.grid.y}, 1fr)`,
+        gridTemplateColumns: `repeat(${this.config.grid.x}, ${trackSize})`,
+        gridTemplateRows: `repeat(${this.config.grid.y}, ${trackSize})`,
         gap: `${this.config.spacing.vertical}px ${this.config.spacing.horizontal}px`,
         background: '#f8f9fa',
         borderRadius: '12px',
@@ -4395,6 +4440,63 @@
       // Fusion avec les styles personnalisés
       const finalStyles = { ...defaultStyles, ...this.config.containerStyle };
       Object.assign(this.container.style, finalStyles);
+
+      this.updateGridTemplate();
+      this.updateContainerDimensions();
+    }
+
+    getTrackSize() {
+      return this.config.cellSize ? `${this.config.cellSize}px` : '1fr';
+    }
+
+    updateGridTemplate() {
+      if (!this.container) return;
+      const trackSize = this.getTrackSize();
+      this.container.style.gridTemplateColumns = `repeat(${this.config.grid.x}, ${trackSize})`;
+      this.container.style.gridTemplateRows = `repeat(${this.config.grid.y}, ${trackSize})`;
+    }
+
+    calculateContentDimension(axis) {
+      if (!this.config.cellSize) return 0;
+
+      const isHorizontal = axis === 'width';
+      const cellCount = isHorizontal ? this.config.grid.x : this.config.grid.y;
+      const spacing = isHorizontal ? this.config.spacing.horizontal : this.config.spacing.vertical;
+      const gaps = Math.max(0, cellCount - 1);
+
+      return (this.config.cellSize * cellCount) + (spacing * gaps);
+    }
+
+    updateContainerDimensions() {
+      if (!this.container) return;
+
+      if (!this.config.autoResize || this.config.cellSize) {
+        if (this.config.cellSize) {
+          const contentWidth = this.calculateContentDimension('width');
+          const contentHeight = this.calculateContentDimension('height');
+          const externalPadding = this.config.spacing?.external || 0;
+
+          if (contentWidth) {
+            const totalWidth = contentWidth + (externalPadding * 2);
+            this.container.style.width = `${totalWidth}px`;
+          }
+
+          if (contentHeight) {
+            const totalHeight = contentHeight + (externalPadding * 2);
+            this.container.style.height = `${totalHeight}px`;
+          }
+
+          return;
+        }
+
+        if (this.config.size.width) {
+          this.container.style.width = `${this.config.size.width}px`;
+        }
+
+        if (this.config.size.height) {
+          this.container.style.height = `${this.config.size.height}px`;
+        }
+      }
     }
 
     createCells() {
@@ -4405,11 +4507,11 @@
       }
     }
 
-    createCell(x, y) {
+    createCell(x, y, insertIndex) {
       const cellKey = `${x},${y}`;
       const cellConfig = this.config.cells[cellKey] || {};
       const defaultConfig = this.config.cells.default || {};
-      
+
       // ID de la cellule (personnalisé ou auto-généré)
       const cellId = cellConfig.id || `${this.config.id}-cell-${x}-${y}`;
 
@@ -4445,12 +4547,22 @@
       };
 
       // Application des styles (défaut + personnalisés)
-      const cellStyles = { 
-        ...defaultCellStyles, 
-        ...defaultConfig.style, 
-        ...cellConfig.style 
+      const cellStyles = {
+        ...defaultCellStyles,
+        ...defaultConfig.style,
+        ...cellConfig.style
       };
       Object.assign(cellElement.style, cellStyles);
+
+      if (this.config.cellSize) {
+        const sizePx = `${this.config.cellSize}px`;
+        cellElement.style.width = sizePx;
+        cellElement.style.height = sizePx;
+        cellElement.style.minWidth = sizePx;
+        cellElement.style.minHeight = sizePx;
+        cellElement.style.scrollSnapAlign = 'start';
+        cellElement.style.scrollSnapStop = 'always';
+      }
 
       // Stockage des données de la cellule
       this.cellsMap.set(cellKey, {
@@ -4476,7 +4588,17 @@
         cellElement.setAttribute('title', `Cellule (${x}, ${y}) - ID: ${cellId}`);
       }
 
-      this.container.appendChild(cellElement);
+      let reference = null;
+      if (typeof insertIndex === 'number' && insertIndex >= 0) {
+        reference = this.container.children[insertIndex] || null;
+      }
+      if (reference) {
+        this.container.insertBefore(cellElement, reference);
+      } else {
+        this.container.appendChild(cellElement);
+      }
+
+      return cellElement;
     }
 
     applyInitialStates() {
@@ -4612,7 +4734,7 @@
       const cellKey = `${x},${y}`;
       const states = this.cellStates.get(cellKey);
       if (!states || states.size === 0) return null;
-      
+
       // Retourne l'état principal (le dernier ajouté qui n'est pas 'normal')
       const statesArray = Array.from(states);
       return statesArray.find(state => state !== 'normal') || 'normal';
@@ -4682,15 +4804,15 @@
     clearCellStates(x, y) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (!cell) return;
 
       // Retour au style par défaut
       this.resetCellStyle(x, y);
-      
+
       // Réinitialisation avec état normal uniquement
       this.cellStates.set(cellKey, new Set(['normal']));
-      
+
       // Suppression de la sélection
       this.selectedCells.delete(cellKey);
       this.triggerSelectionChange();
@@ -4710,7 +4832,7 @@
     removeCellStateStyle(x, y, stateName) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (!cell) return;
 
       // Suppression spécifique des propriétés CSS de cet état
@@ -4757,15 +4879,15 @@
       if (width !== undefined && height !== undefined) {
         this.config.size.width = width;
         this.config.size.height = height;
-        
+
         if (!this.config.autoResize) {
           this.container.style.width = `${width}px`;
           this.container.style.height = `${height}px`;
         }
       }
-      
+
       this.updateCellSizes();
-      
+
       if (this.config.debug) ;
     }
 
@@ -4803,8 +4925,8 @@
      * @param {HTMLElement|string} parentElement - Élément parent ou sélecteur
      */
     fitToParent(parentElement) {
-      const parent = typeof parentElement === 'string' 
-        ? document.querySelector(parentElement) 
+      const parent = typeof parentElement === 'string'
+        ? document.querySelector(parentElement)
         : parentElement;
 
       if (!parent) {
@@ -4814,10 +4936,10 @@
 
       // Déplacement vers le nouveau parent
       parent.appendChild(this.container);
-      
+
       // Activation du redimensionnement automatique
       this.setAutoResize(true);
-      
+
       // Force une mise à jour immédiate
       const rect = parent.getBoundingClientRect();
       this.handleResize({ contentRect: rect });
@@ -4828,17 +4950,17 @@
      * @param {Object} options - Options d'ajustement
      */
     autoSizeCells(options = {}) {
-      const { 
-        minWidth = 40, 
-        minHeight = 40, 
+      const {
+        minWidth = 40,
+        minHeight = 40,
         padding = 8,
-        fontSize = null 
+        fontSize = null
       } = options;
 
       this.cellsMap.forEach((cell, cellKey) => {
         const element = cell.element;
         const content = element.textContent || '';
-        
+
         if (content.length > 0) {
           // Créer un élément temporaire pour mesurer le texte
           const measureEl = document.createElement('div');
@@ -4854,21 +4976,21 @@
         `;
           measureEl.textContent = content;
           document.body.appendChild(measureEl);
-          
+
           const textWidth = measureEl.offsetWidth;
           const textHeight = measureEl.offsetHeight;
-          
+
           document.body.removeChild(measureEl);
-          
+
           // Appliquer les nouvelles dimensions
           const newWidth = Math.max(textWidth + padding * 2, minWidth);
           const newHeight = Math.max(textHeight + padding * 2, minHeight);
-          
+
           element.style.width = `${newWidth}px`;
           element.style.height = `${newHeight}px`;
         }
       });
-      
+
       if (this.config.debug) ;
     }
 
@@ -4878,25 +5000,25 @@
      */
     fitToContent(options = {}) {
       this.autoSizeCells(options);
-      
+
       // Recalcul de la taille du container
       let maxWidth = 0;
       let maxHeight = 0;
-      
+
       this.cellsMap.forEach((cell) => {
         const rect = cell.element.getBoundingClientRect();
         maxWidth = Math.max(maxWidth, rect.width);
         maxHeight = Math.max(maxHeight, rect.height);
       });
-      
-      const totalWidth = (maxWidth * this.config.grid.x) + 
-                        (this.config.spacing.horizontal * (this.config.grid.x - 1)) + 
-                        (this.config.spacing.external * 2);
-                        
-      const totalHeight = (maxHeight * this.config.grid.y) + 
-                         (this.config.spacing.vertical * (this.config.grid.y - 1)) + 
-                         (this.config.spacing.external * 2);
-      
+
+      const totalWidth = (maxWidth * this.config.grid.x) +
+        (this.config.spacing.horizontal * (this.config.grid.x - 1)) +
+        (this.config.spacing.external * 2);
+
+      const totalHeight = (maxHeight * this.config.grid.y) +
+        (this.config.spacing.vertical * (this.config.grid.y - 1)) +
+        (this.config.spacing.external * 2);
+
       this.resize(totalWidth, totalHeight);
     }
 
@@ -4921,7 +5043,7 @@
       if (!this.config.autoResize) return;
 
       const { width, height } = entry.contentRect;
-      
+
       if (this.config.debug) ;
 
       // Mise à jour de la configuration interne
@@ -4938,15 +5060,30 @@
     }
 
     updateCellSizes() {
+      if (this.config.cellSize) {
+        const sizePx = `${this.config.cellSize}px`;
+        this.cellsMap.forEach((cell) => {
+          cell.element.style.width = sizePx;
+          cell.element.style.height = sizePx;
+          cell.element.style.minWidth = sizePx;
+          cell.element.style.minHeight = sizePx;
+          cell.element.style.scrollSnapAlign = 'start';
+          cell.element.style.scrollSnapStop = 'always';
+        });
+
+        this.updateContainerDimensions();
+        return;
+      }
+
       if (!this.config.autoResize) return;
 
       // Les cellules se redimensionnent automatiquement grâce au CSS Grid
       // Mais on peut ajuster certaines propriétés si nécessaire
-      
+
       const containerRect = this.container.getBoundingClientRect();
       const availableWidth = containerRect.width - (2 * this.config.spacing.external);
       const availableHeight = containerRect.height - (2 * this.config.spacing.external);
-      
+
       const cellWidth = (availableWidth - (this.config.spacing.horizontal * (this.config.grid.x - 1))) / this.config.grid.x;
       const cellHeight = (availableHeight - (this.config.spacing.vertical * (this.config.grid.y - 1))) / this.config.grid.y;
 
@@ -4960,6 +5097,39 @@
       }
 
       if (this.config.debug) ;
+    }
+
+    addColumn() {
+      const prevCols = this.config.grid.x;
+      const rows = this.config.grid.y;
+      const newColIndex = prevCols;
+
+      this.config.grid.x += 1;
+      this.updateGridTemplate();
+
+      for (let y = 0; y < rows; y += 1) {
+        const insertIndex = (y * this.config.grid.x) + newColIndex;
+        this.createCell(newColIndex, y, insertIndex);
+      }
+
+      this.updateCellSizes();
+      return this;
+    }
+
+    addRow() {
+      const prevRows = this.config.grid.y;
+      const cols = this.config.grid.x;
+      const newRowIndex = prevRows;
+
+      this.config.grid.y += 1;
+      this.updateGridTemplate();
+
+      for (let x = 0; x < cols; x += 1) {
+        this.createCell(x, newRowIndex);
+      }
+
+      this.updateCellSizes();
+      return this;
     }
     // ========================================
     // 🎨 UTILITAIRES DE STYLES
@@ -4995,7 +5165,7 @@
 
     getCellsByState(stateName) {
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         if (states.has(stateName)) {
           const [x, y] = cellKey.split(',').map(Number);
@@ -5009,17 +5179,17 @@
 
     getCellsWithAnyState(stateNames) {
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const hasAnyState = stateNames.some(stateName => states.has(stateName));
         if (hasAnyState) {
           const [x, y] = cellKey.split(',').map(Number);
           const cell = this.cellsMap.get(cellKey);
-          result.push({ 
-            x, y, 
-            id: cell.id, 
-            element: cell.element, 
-            states: Array.from(states) 
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element,
+            states: Array.from(states)
           });
         }
       });
@@ -5029,17 +5199,17 @@
 
     getCellsWithAllStates(stateNames) {
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const hasAllStates = stateNames.every(stateName => states.has(stateName));
         if (hasAllStates) {
           const [x, y] = cellKey.split(',').map(Number);
           const cell = this.cellsMap.get(cellKey);
-          result.push({ 
-            x, y, 
-            id: cell.id, 
-            element: cell.element, 
-            states: Array.from(states) 
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element,
+            states: Array.from(states)
           });
         }
       });
@@ -5079,7 +5249,7 @@
 
     findCells(criteria) {
       const result = [];
-      
+
       this.cellsMap.forEach((cell, cellKey) => {
         const [x, y] = cellKey.split(',').map(Number);
         let matches = true;
@@ -5088,14 +5258,14 @@
         if (criteria.state && !this.hasCellState(x, y, criteria.state)) {
           matches = false;
         }
-        
+
         if (criteria.hasContent !== undefined) {
           const hasContent = cell.content && cell.content.trim().length > 0;
           if (criteria.hasContent !== hasContent) {
             matches = false;
           }
         }
-        
+
         if (criteria.position) {
           if (criteria.position.x) {
             if (criteria.position.x.min !== undefined && x < criteria.position.x.min) matches = false;
@@ -5108,9 +5278,9 @@
         }
 
         if (matches) {
-          result.push({ 
-            x, y, 
-            id: cell.id, 
+          result.push({
+            x, y,
+            id: cell.id,
             element: cell.element,
             content: cell.content,
             states: this.getCellStates(x, y)
@@ -5133,10 +5303,10 @@
           const cellKey = `${x},${y}`;
           const cell = this.cellsMap.get(cellKey);
           if (cell) {
-            result.push({ 
-              x, y, 
-              id: cell.id, 
-              element: cell.element 
+            result.push({
+              x, y,
+              id: cell.id,
+              element: cell.element
             });
           }
         }
@@ -5151,11 +5321,11 @@
         const cellKey = `${x},${rowIndex}`;
         const cell = this.cellsMap.get(cellKey);
         if (cell) {
-          result.push({ 
-            x, 
-            y: rowIndex, 
-            id: cell.id, 
-            element: cell.element 
+          result.push({
+            x,
+            y: rowIndex,
+            id: cell.id,
+            element: cell.element
           });
         }
       }
@@ -5168,11 +5338,11 @@
         const cellKey = `${columnIndex},${y}`;
         const cell = this.cellsMap.get(cellKey);
         if (cell) {
-          result.push({ 
-            x: columnIndex, 
-            y, 
-            id: cell.id, 
-            element: cell.element 
+          result.push({
+            x: columnIndex,
+            y,
+            id: cell.id,
+            element: cell.element
           });
         }
       }
@@ -5182,64 +5352,64 @@
     compareCellStates(x1, y1, x2, y2) {
       const states1 = new Set(this.getCellStates(x1, y1));
       const states2 = new Set(this.getCellStates(x2, y2));
-      
-      const same = [...states1].every(state => states2.has(state)) && 
-                   [...states2].every(state => states1.has(state));
-      
+
+      const same = [...states1].every(state => states2.has(state)) &&
+        [...states2].every(state => states1.has(state));
+
       const common = [...states1].filter(state => states2.has(state));
       const different1 = [...states1].filter(state => !states2.has(state));
       const different2 = [...states2].filter(state => !states1.has(state));
-      
+
       return { same, common, different1, different2 };
     }
 
     findSimilarCells(x, y) {
       const referenceStates = new Set(this.getCellStates(x, y));
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const [cellX, cellY] = cellKey.split(',').map(Number);
-        
+
         // Skip la cellule de référence
         if (cellX === x && cellY === y) return;
-        
+
         // Vérifier si les états sont identiques
-        const same = states.size === referenceStates.size && 
-                     [...states].every(state => referenceStates.has(state));
-        
+        const same = states.size === referenceStates.size &&
+          [...states].every(state => referenceStates.has(state));
+
         if (same) {
           const cell = this.cellsMap.get(cellKey);
-          result.push({ 
-            x: cellX, 
-            y: cellY, 
-            id: cell.id, 
-            element: cell.element 
+          result.push({
+            x: cellX,
+            y: cellY,
+            id: cell.id,
+            element: cell.element
           });
         }
       });
-      
+
       return result;
     }
 
     groupCellsByState() {
       const groups = {};
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const [x, y] = cellKey.split(',').map(Number);
         const cell = this.cellsMap.get(cellKey);
-        
+
         states.forEach(stateName => {
           if (!groups[stateName]) {
             groups[stateName] = [];
           }
-          groups[stateName].push({ 
-            x, y, 
-            id: cell.id, 
-            element: cell.element 
+          groups[stateName].push({
+            x, y,
+            id: cell.id,
+            element: cell.element
           });
         });
       });
-      
+
       return groups;
     }
 
@@ -5262,7 +5432,7 @@
     setCellContent(x, y, content) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (cell) {
         cell.content = content;
         cell.element.textContent = content;
@@ -5278,7 +5448,7 @@
     setCellStyle(x, y, styles) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (cell) {
         Object.assign(cell.element.style, styles);
       }
@@ -5287,12 +5457,18 @@
     resetCellStyle(x, y) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (cell) {
+        const preserved = {
+          width: cell.element.style.width,
+          height: cell.element.style.height,
+          minWidth: cell.element.style.minWidth,
+          minHeight: cell.element.style.minHeight
+        };
         // Récupération des styles de base
         const cellConfig = cell.config;
         const defaultConfig = this.config.cells.default || {};
-        
+
         const defaultCellStyles = {
           display: 'flex',
           alignItems: 'center',
@@ -5308,17 +5484,23 @@
           userSelect: 'none'
         };
 
-        const baseStyles = { 
-          ...defaultCellStyles, 
-          ...defaultConfig.style, 
-          ...cellConfig.style 
+        const baseStyles = {
+          ...defaultCellStyles,
+          ...defaultConfig.style,
+          ...cellConfig.style
         };
 
         // Reset complet du style
         cell.element.removeAttribute('style');
-        
+
         // Réapplication des styles de base avec priorité normale
         this.applyStylesToElement(cell.element, baseStyles, false);
+
+        Object.entries(preserved).forEach(([prop, value]) => {
+          if (value && value.length) {
+            cell.element.style[prop] = value;
+          }
+        });
       }
     }
 
@@ -5331,10 +5513,10 @@
       this.selectedCells.forEach(cellKey => {
         const [x, y] = cellKey.split(',').map(Number);
         const cell = this.cellsMap.get(cellKey);
-        result.push({ 
-          x, y, 
-          id: cell.id, 
-          element: cell.element 
+        result.push({
+          x, y,
+          id: cell.id,
+          element: cell.element
         });
       });
       return result;
@@ -5413,7 +5595,7 @@
         // Reset des callbacks
         this.callbacks = {};
 
-  // console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
+        // console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
       } catch (error) {
         console.error(`❌ Erreur lors de la destruction de Matrix "${this.config.id}":`, error);
       }

@@ -41,6 +41,7 @@ cleanup() {
 
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
+PROD_BUILD=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -48,16 +49,22 @@ while [[ $# -gt 0 ]]; do
             FORCE_DEPS=true
             shift
             ;;
+        --prod)
+            PROD_BUILD=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  -f, --force-deps      Force update all dependencies before starting"
+            echo "      --prod            Build a production Tauri bundle and exit"
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                   # Start server (install deps if needed)"
             echo "  $0 --force-deps      # Force update deps then start server"
+            echo "  $0 --prod            # Build Tauri production bundle"
             echo ""
             exit 0
             ;;
@@ -96,6 +103,25 @@ if [ ! -d "node_modules" ] || [ ! -f "node_modules/.install_complete" ]; then
 else
     echo "✅ Dépendances déjà installées (utilisez --force pour forcer la mise à jour)"
     echo ""
+fi
+
+# Construction production si demandée
+if [ "$PROD_BUILD" = true ]; then
+    echo "🏗️  Construction production (Tauri)"
+    echo "🔍 Scan des composants Squirrel..."
+    npm run scan:components
+    echo ""
+
+    echo "📦 Build frontend..."
+    npm run build
+    echo ""
+
+    echo "🛠️  Build Tauri (production)..."
+    npm run tauri build
+    echo ""
+
+    echo "✅ Build Tauri production terminé"
+    exit 0
 fi
 
 # Scanner les composants Squirrel (sera relancé par run_fastify mais on garde l'appel initial)
