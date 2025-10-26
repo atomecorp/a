@@ -15,8 +15,23 @@ import Atome from '../database/Atome.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, '../src/assets/uploads');
-const SERVER_VERSION = '1.0.6';
+const VERSION_FILE = path.join(__dirname, '../version.txt');
+let SERVER_VERSION = 'unknown';
 const SERVER_TYPE = 'Fastify';
+
+async function loadServerVersion() {
+  try {
+    const raw = await fs.readFile(VERSION_FILE, 'utf8');
+    const trimmed = raw.trim();
+    return trimmed || 'unknown';
+  } catch (error) {
+    const details = error && typeof error === 'object' && 'message' in error
+      ? error.message
+      : String(error);
+    console.warn('⚠️ Impossible de lire version.txt:', details);
+    return 'unknown';
+  }
+}
 
 const sanitizeFileName = (name) => {
   const base = typeof name === 'string' ? name : 'upload.bin';
@@ -63,6 +78,9 @@ const PORT = process.env.PORT || 3001;
 async function startServer() {
   try {
     console.log('🚀 Démarrage du serveur Fastify v5...');
+
+    SERVER_VERSION = await loadServerVersion();
+    console.log(`📦 Version applicative: ${SERVER_VERSION}`);
 
     await fs.mkdir(uploadsDir, { recursive: true });
 
@@ -533,7 +551,7 @@ async function startServer() {
       host: '0.0.0.0'
     });
 
-    console.log(`✅ Serveur Fastify v${server.version} démarré sur http://localhost:${PORT}`);
+    console.log(`✅ Serveur Fastify v${server.version} (app ${SERVER_VERSION}) démarré sur http://localhost:${PORT}`);
     console.log(`🔌 WebSocket disponible sur ws://localhost:${PORT}/ws`);
     console.log(`📡 Events WebSocket sur ws://localhost:${PORT}/ws/events`);
     console.log(`🌐 Frontend servi depuis: http://localhost:${PORT}/`);

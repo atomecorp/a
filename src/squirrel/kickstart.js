@@ -79,7 +79,6 @@ function initKickstart() {
 // Global helpers are already exposed by spark.js
 initKickstart();
 
-console.log('Squirrel 1.0.6 ©atome');
 console.log('Current platform: ' + current_platform());
 
 async function logServerInfo() {
@@ -104,13 +103,23 @@ async function logServerInfo() {
       }
       const data = await res.json();
       if (data && data.success) {
-        console.log(`Server ${data.version} (${data.type})`);
+        const version = (typeof data.version === 'string' && data.version.trim() !== '')
+          ? data.version.trim()
+          : 'unknown';
+        window.__SQUIRREL_VERSION__ = version;
+        console.log(`Squirrel ${version} ©atome`);
+        console.log(`Server ${version} (${data.type || 'unknown'})`);
         return;
       }
     } catch (error) {
       console.warn('⚠️ Failed to fetch /api/server-info', error);
     }
   }
+
+  if (typeof window !== 'undefined' && !window.__SQUIRREL_VERSION__) {
+    window.__SQUIRREL_VERSION__ = 'unknown';
+  }
+  console.log('Squirrel version unknown ©atome');
 }
 
 logServerInfo();

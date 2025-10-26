@@ -9,6 +9,7 @@ use axum::{
 use serde_json::json;
 use std::{
     borrow::Cow,
+    fs as stdfs,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
@@ -19,9 +20,9 @@ use tower_http::{cors::CorsLayer, services::ServeDir};
 #[derive(Clone)]
 struct AppState {
     uploads_dir: Arc<PathBuf>,
+    version: Arc<String>,
 }
 
-const SERVER_VERSION: &str = "1.0.6";
 const SERVER_TYPE: &str = "Tauri frontend process";
 
 fn sanitize_file_name(name: &str) -> String {
@@ -40,6 +41,33 @@ fn sanitize_file_name(name: &str) -> String {
     } else {
         sanitized
     }
+}
+
+fn load_version(static_dir: &Path) -> String {
+    let mut candidates = Vec::new();
+    candidates.push(static_dir.join("version.txt"));
+    if let Some(parent) = static_dir.parent() {
+        candidates.push(parent.join("version.txt"));
+    }
+    if let Ok(canon) = stdfs::canonicalize(static_dir) {
+        candidates.push(canon.join("version.txt"));
+        if let Some(parent) = canon.parent() {
+            candidates.push(parent.join("version.txt"));
+        }
+    }
+    candidates.push(PathBuf::from("../version.txt"));
+    candidates.push(PathBuf::from("version.txt"));
+
+    for candidate in candidates {
+        if let Ok(raw) = stdfs::read_to_string(&candidate) {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    "unknown".to_string()
 }
 
 async fn resolve_upload_path(state: &AppState, raw_name: &str) -> (String, PathBuf) {
@@ -71,10 +99,10 @@ async fn resolve_upload_path(state: &AppState, raw_name: &str) -> (String, PathB
     }
 }
 
-async fn server_info_handler() -> impl IntoResponse {
+async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse {
     Json(json!({
         "success": true,
-        "version": SERVER_VERSION,
+        "version": state.version.as_str(),
         "type": SERVER_TYPE,
     }))
 }
@@ -103,7 +131,8 @@ async fn upload_handler(
         _ => "upload.bin",
     };
 
-    let decoded: Cow<'_, str> = urlencoding::decode(file_name_raw).unwrap_or_else(|_| Cow::from(file_name_raw));
+    let decoded: Cow<'_, str> =
+        urlencoding::decode(file_name_raw).unwrap_or_else(|_| Cow::from(file_name_raw));
     let (file_name, file_path) = resolve_upload_path(&state, decoded.as_ref()).await;
 
     if let Err(err) = fs::write(&file_path, &body).await {
@@ -126,30 +155,46 @@ pub async fn start_server(static_dir: PathBuf) {
     let serve_dir_root = ServeDir::new(base_dir.clone()).append_index_html_on_directories(true);
     let root_service = get_service(serve_dir_root).handle_error(|error| async move {
         println!("Erreur serveur statique: {:?}", error);
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur serveur")
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur serveur",
+        )
     });
 
     // Service fichiers (correspond à dataFetcher: /file/<path>)
     let serve_dir_file = ServeDir::new(base_dir.clone());
     let file_service = get_service(serve_dir_file).handle_error(|error| async move {
         println!("Erreur /file: {:?}", error);
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur fichier")
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur fichier",
+        )
     });
 
     // Service texte (même répertoire, pas de transformation spéciale)
     let serve_dir_text = ServeDir::new(base_dir.clone());
     let text_service = get_service(serve_dir_text).handle_error(|error| async move {
         println!("Erreur /text: {:?}", error);
-        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur texte")
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur texte",
+        )
     });
 
     let uploads_dir = base_dir.join("assets/uploads");
     if let Err(err) = fs::create_dir_all(&uploads_dir).await {
-        eprintln!("Impossible de créer le dossier uploads {:?}: {}", uploads_dir, err);
+        eprintln!(
+            "Impossible de créer le dossier uploads {:?}: {}",
+            uploads_dir, err
+        );
     }
+
+    let version = load_version(&base_dir);
+    println!("📦 Version applicative: {}", version);
 
     let state = AppState {
         uploads_dir: Arc::new(uploads_dir),
+        version: Arc::new(version.clone()),
     };
 
     let app = Router::new()
@@ -160,9 +205,9 @@ pub async fn start_server(static_dir: PathBuf) {
         .nest_service("/text", text_service)
         .layer(CorsLayer::permissive())
         .with_state(state);
-        
+
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("Serveur Axum démarré: http://localhost:3000");
+    println!("Serveur Axum {} démarré: http://localhost:3000", version);
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
