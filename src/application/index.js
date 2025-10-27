@@ -50,7 +50,7 @@
 ////////////////////
 
 // import('./aBox/index.js');
-import('./example/user_creation.js');
+import('./examples/user_creation.js');
 
 
 // import('./lyrix/index.js');
