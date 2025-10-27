@@ -49,7 +49,10 @@
 //  import('./examples/audio_basic.js');
 ////////////////////
 
-import('./aBox/index.js');
+// import('./aBox/index.js');
+import('./example/user_creation.js');
+
+
 // import('./lyrix/index.js');
 // import('./examples/iOS_app_launcher.js');
 // import('./examples/ios_audio_bridge.js');
