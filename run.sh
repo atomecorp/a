@@ -12,6 +12,38 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 
+compute_default_dsn() {
+    local host="${ADOLE_PG_HOST:-${PGHOST:-localhost}}"
+    local port="${ADOLE_PG_PORT:-${PGPORT:-5432}}"
+    local user="${ADOLE_PG_USER:-${PGUSER:-postgres}}"
+    local password="${ADOLE_PG_PASSWORD:-${PGPASSWORD:-postgres}}"
+    local database="${ADOLE_PG_DATABASE:-${PGDATABASE:-squirrel}}"
+
+    printf 'postgres://%s:%s@%s:%s/%s' "$user" "$password" "$host" "$port" "$database"
+}
+
+write_pg_dsn_to_env() {
+    local dsn="$1"
+    local env_file="$PROJECT_ROOT/.env"
+    local tmp
+
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' RETURN
+
+    if [[ -f "$env_file" ]]; then
+        grep -v '^ADOLE_PG_DSN=' "$env_file" >"$tmp" || true
+    else
+        : >"$tmp"
+    fi
+
+    printf 'ADOLE_PG_DSN=%s\n' "$dsn" >>"$tmp"
+    mv "$tmp" "$env_file"
+    trap - RETURN
+
+    chmod 600 "$env_file" 2>/dev/null || true
+    echo "INFO: Wrote PostgreSQL DSN to $(basename "$env_file")."
+}
+
 load_env_file() {
     local env_file="$1"
     if [ -f "$env_file" ]; then
@@ -28,9 +60,15 @@ load_env_file "$PROJECT_ROOT/.env.local"
 
 if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
     echo "INFO: No PostgreSQL connection string detected (ADOLE_PG_DSN/PG_CONNECTION_STRING/DATABASE_URL)."
-    echo "INFO: Running ./adole.sh to configure a default connection string."
-    if ! bash "$PROJECT_ROOT/adole.sh"; then
-        echo "ERROR: ./adole.sh failed to configure the PostgreSQL connection string."
+    local generated_dsn
+    generated_dsn="$(compute_default_dsn)"
+    if [[ -z "$generated_dsn" ]]; then
+        generated_dsn="postgres://postgres:postgres@localhost:5432/squirrel"
+    fi
+
+    echo "INFO: Writing default PostgreSQL connection string to .env."
+    if ! write_pg_dsn_to_env "$generated_dsn"; then
+        echo "ERROR: Failed to configure the PostgreSQL connection string automatically."
         exit 1
     fi
 
@@ -40,7 +78,7 @@ if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE
 fi
 
 if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    echo "ERROR: No PostgreSQL connection string detected even after running ./adole.sh."
+    echo "ERROR: No PostgreSQL connection string detected even after automatic configuration."
     echo "       Please configure it manually in .env or export it before running ./run.sh."
     exit 1
 fi

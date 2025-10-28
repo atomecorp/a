@@ -16,6 +16,38 @@ SKIP_IPLUG=false
 
 DEFAULT_PG_DSN="postgres://postgres:postgres@localhost:5432/squirrel"
 
+compute_default_dsn() {
+  local host="${ADOLE_PG_HOST:-${PGHOST:-localhost}}"
+  local port="${ADOLE_PG_PORT:-${PGPORT:-5432}}"
+  local user="${ADOLE_PG_USER:-${PGUSER:-postgres}}"
+  local password="${ADOLE_PG_PASSWORD:-${PGPASSWORD:-postgres}}"
+  local database="${ADOLE_PG_DATABASE:-${PGDATABASE:-squirrel}}"
+
+  printf 'postgres://%s:%s@%s:%s/%s' "$user" "$password" "$host" "$port" "$database"
+}
+
+write_pg_dsn_to_env() {
+  local dsn="$1"
+  local env_file="$PROJECT_ROOT/.env"
+  local tmp
+
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN
+
+  if [[ -f "$env_file" ]]; then
+    grep -v '^ADOLE_PG_DSN=' "$env_file" >"$tmp" || true
+  else
+    : >"$tmp"
+  fi
+
+  printf 'ADOLE_PG_DSN=%s\n' "$dsn" >>"$tmp"
+  mv "$tmp" "$env_file"
+  trap - RETURN
+
+  chmod 600 "$env_file" 2>/dev/null || true
+  log_ok "✅ PostgreSQL DSN stored in $(basename "$env_file")"
+}
+
 load_env_file() {
   local env_file="$1"
   if [ -f "$env_file" ]; then
@@ -32,17 +64,24 @@ ensure_env_configured() {
   load_env_file "$PROJECT_ROOT/.env.local"
 
   if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    log_info "ℹ️  No PostgreSQL DSN found. Running ./adole.sh to configure one."
-    if ! bash "$PROJECT_ROOT/adole.sh" --dsn "$DEFAULT_PG_DSN" --force; then
-      log_error "❌ ./adole.sh failed to configure the PostgreSQL DSN."
+    local generated_dsn
+    generated_dsn="$(compute_default_dsn)"
+    if [[ -z "$generated_dsn" ]]; then
+      generated_dsn="$DEFAULT_PG_DSN"
+    fi
+
+    log_info "ℹ️  No PostgreSQL DSN found. Writing default DSN to .env."
+    if ! write_pg_dsn_to_env "$generated_dsn"; then
+      log_error "❌ Failed to persist PostgreSQL DSN in .env."
       exit 1
     fi
+
     load_env_file "$PROJECT_ROOT/.env"
     load_env_file "$PROJECT_ROOT/.env.local"
   fi
 
   if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    log_error "❌ PostgreSQL DSN still missing after running ./adole.sh."
+    log_error "❌ PostgreSQL DSN still missing after attempting automatic configuration."
     exit 1
   fi
 }
