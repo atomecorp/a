@@ -14,6 +14,39 @@ SKIP_TAURI=false
 SKIP_FASTIFY=false
 SKIP_IPLUG=false
 
+DEFAULT_PG_DSN="postgres://postgres:postgres@localhost:5432/squirrel"
+
+load_env_file() {
+  local env_file="$1"
+  if [ -f "$env_file" ]; then
+    log_info "🌱 Loading variables from $(basename "$env_file")"
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+  fi
+}
+
+ensure_env_configured() {
+  load_env_file "$PROJECT_ROOT/.env"
+  load_env_file "$PROJECT_ROOT/.env.local"
+
+  if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
+    log_info "ℹ️  No PostgreSQL DSN found. Running ./adole.sh to configure one."
+    if ! bash "$PROJECT_ROOT/adole.sh" --dsn "$DEFAULT_PG_DSN" --force; then
+      log_error "❌ ./adole.sh failed to configure the PostgreSQL DSN."
+      exit 1
+    fi
+    load_env_file "$PROJECT_ROOT/.env"
+    load_env_file "$PROJECT_ROOT/.env.local"
+  fi
+
+  if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
+    log_error "❌ PostgreSQL DSN still missing after running ./adole.sh."
+    exit 1
+  fi
+}
+
 show_help() {
   cat <<'EOF'
 Usage: ./update_all_libraries.sh [options]
@@ -106,6 +139,8 @@ log_info()  { printf "${BLUE}%s${NC}\n" "$1"; }
 log_ok()    { printf "${GREEN}%s${NC}\n" "$1"; }
 log_warn()  { printf "${YELLOW}%s${NC}\n" "$1"; }
 log_error() { printf "${RED}%s${NC}\n" "$1"; }
+
+ensure_env_configured
 
 # --- Utility helpers -------------------------------------------------------
 get_file_size_human() {
@@ -479,5 +514,151 @@ esac
 update_tauri_cli
 update_fastify_stack
 reinstall_project_dependencies
+
+install_pg_module() {
+  log_info "🧩 Ensuring pg driver is installed"
+  (cd "$PROJECT_ROOT" && npm install pg@latest)
+  log_ok "✅ pg driver installed"
+}
+
+escape_sql_literal() {
+  local value="$1"
+  value="${value//\'/''}"
+  printf "%s" "$value"
+}
+
+escape_sql_identifier() {
+  local value="$1"
+  value="${value//\"/""}"
+  printf "%s" "$value"
+}
+
+parse_dsn_components() {
+  local dsn="$1"
+  local remainder="${dsn#*://}"
+
+  if [[ "$remainder" == "$dsn" ]]; then
+    return 1
+  fi
+
+  local credentials host_and_path user password host_with_port path host port database
+
+  if [[ "$remainder" == *@* ]]; then
+    credentials="${remainder%@*}"
+    host_and_path="${remainder#*@}"
+  else
+    credentials=""
+    host_and_path="$remainder"
+  fi
+
+  user="${credentials%%:*}"
+  if [[ "$credentials" == *:* ]]; then
+    password="${credentials#*:}"
+  else
+    password=""
+  fi
+
+  host_with_port="${host_and_path%%/*}"
+  path="${host_and_path#*/}"
+
+  if [[ "$host_with_port" == *:* ]]; then
+    host="${host_with_port%%:*}"
+    port="${host_with_port#*:}"
+  else
+    host="$host_with_port"
+    port=""
+  fi
+
+  database="${path%%\?*}"
+  database="${database%%#*}"
+
+  DB_USER="${user:-postgres}"
+  DB_PASSWORD="$password"
+  DB_HOST="${host:-localhost}"
+  DB_PORT="${port:-5432}"
+  DB_NAME="${database:-squirrel}"
+  return 0
+}
+
+setup_postgres_role_and_database() {
+  local dsn
+  dsn="${ADOLE_PG_DSN:-${PG_CONNECTION_STRING:-${DATABASE_URL:-}}}"
+
+  if [[ -z "$dsn" ]]; then
+    log_warn "⚠️  No PostgreSQL DSN available. Skipping database setup."
+    return
+  fi
+
+  if ! command -v psql >/dev/null 2>&1; then
+    log_warn "⚠️  psql not available. Skipping automatic database setup."
+    return
+  fi
+
+  if ! parse_dsn_components "$dsn"; then
+    log_warn "⚠️  Unable to parse PostgreSQL DSN. Skipping automatic database setup."
+    return
+  fi
+
+  local super_user super_password super_db
+  super_user="${ADOLE_PG_SUPERUSER:-$USER}"
+  super_password="${ADOLE_PG_SUPERUSER_PASSWORD:-}"
+  super_db="${ADOLE_PG_SUPERUSER_DB:-postgres}"
+
+  local original_pgpassword="${PGPASSWORD-}"
+  if [[ -n "$super_password" ]]; then
+    export PGPASSWORD="$super_password"
+  else
+    unset PGPASSWORD
+  fi
+
+  local psql_cmd=(psql -h "$DB_HOST" -p "$DB_PORT" -U "$super_user" "$super_db")
+
+  if ! "${psql_cmd[@]}" -Atc "SELECT 1" >/dev/null 2>&1; then
+    log_warn "⚠️  Unable to connect to PostgreSQL as '$super_user'. Skipping automatic database setup."
+    if [[ -n "$original_pgpassword" ]]; then
+      export PGPASSWORD="$original_pgpassword"
+    else
+      unset PGPASSWORD
+    fi
+    return
+  fi
+
+  local role_exists
+  role_exists="$("${psql_cmd[@]}" -Atc "SELECT 1 FROM pg_roles WHERE rolname = '$(escape_sql_literal "$DB_USER")'")" || true
+  if [[ "$role_exists" != "1" ]]; then
+    log_info "� Creating PostgreSQL role '$DB_USER'"
+    if ! "${psql_cmd[@]}" -c "CREATE ROLE \"$(escape_sql_identifier "$DB_USER")\" WITH LOGIN PASSWORD '$(escape_sql_literal "$DB_PASSWORD")';"; then
+      log_warn "⚠️  Unable to create role '$DB_USER'."
+    else
+      log_ok "✅ Role '$DB_USER' created"
+    fi
+  else
+    log_info "👤 Role '$DB_USER' already exists"
+  fi
+
+  "${psql_cmd[@]}" -c "ALTER ROLE \"$(escape_sql_identifier "$DB_USER")\" CREATEDB;" >/dev/null 2>&1 || true
+
+  local db_exists
+  db_exists="$("${psql_cmd[@]}" -Atc "SELECT 1 FROM pg_database WHERE datname = '$(escape_sql_literal "$DB_NAME")'")" || true
+  if [[ "$db_exists" != "1" ]]; then
+    log_info "�️  Creating database '$DB_NAME'"
+    if ! "${psql_cmd[@]}" -c "CREATE DATABASE \"$(escape_sql_identifier "$DB_NAME")\" OWNER \"$(escape_sql_identifier "$DB_USER")\";"; then
+      log_warn "⚠️  Unable to create database '$DB_NAME'."
+    else
+      log_ok "✅ Database '$DB_NAME' created"
+    fi
+  else
+    log_info "🗄️  Database '$DB_NAME' already exists"
+  fi
+
+  if [[ -n "$original_pgpassword" ]]; then
+    export PGPASSWORD="$original_pgpassword"
+  else
+    unset PGPASSWORD
+  fi
+}
+
+install_pg_module
+setup_postgres_role_and_database
 update_iplug2
 log_ok "✅ All updates complete"

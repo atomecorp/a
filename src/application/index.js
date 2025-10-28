@@ -21,7 +21,7 @@
 
 // import('./examples/material_page.js');
 
-// import('./examples/DB.js');
+import('./examples/DB.js');
 
 // import('./test/component_test.js');
 // import('./examples/image.js');
@@ -50,7 +50,7 @@
 ////////////////////
 
 // import('./aBox/index.js');
-import('./examples/user_creation.js');
+// import('./examples/user_creation.js');
 
 
 // import('./lyrix/index.js');

@@ -14,6 +14,26 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Always operate from project root
 cd "$PROJECT_ROOT"
 
+load_env_file() {
+    local env_file="$1"
+    if [ -f "$env_file" ]; then
+        echo "🌱 Chargement des variables depuis $(basename "$env_file")"
+        set -a
+        # shellcheck disable=SC1090
+        source "$env_file"
+        set +a
+    fi
+}
+
+load_env_file "$PROJECT_ROOT/.env"
+load_env_file "$PROJECT_ROOT/.env.local"
+
+if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
+    echo "ERROR: No PostgreSQL connection string detected (ADOLE_PG_DSN/PG_CONNECTION_STRING/DATABASE_URL)."
+    echo "       Define it in .env or export it before starting the server."
+    exit 1
+fi
+
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
 

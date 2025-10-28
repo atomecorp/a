@@ -13,6 +13,20 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$PROJECT_ROOT"
 
+load_env_file() {
+    local env_file="$1"
+    if [ -f "$env_file" ]; then
+        echo "🌱 Chargement des variables depuis $(basename "$env_file")"
+        set -a
+        # shellcheck disable=SC1090
+        source "$env_file"
+        set +a
+    fi
+}
+
+load_env_file "$PROJECT_ROOT/.env"
+load_env_file "$PROJECT_ROOT/.env.local"
+
 echo "🖥️ Démarrage de Tauri..."
 
 # Vérifier les arguments de ligne de commande

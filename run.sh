@@ -12,6 +12,39 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 
+load_env_file() {
+    local env_file="$1"
+    if [ -f "$env_file" ]; then
+        echo "🌱 Chargement des variables depuis $(basename "$env_file")"
+        set -a
+        # shellcheck disable=SC1090
+        source "$env_file"
+        set +a
+    fi
+}
+
+load_env_file "$PROJECT_ROOT/.env"
+load_env_file "$PROJECT_ROOT/.env.local"
+
+if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
+    echo "INFO: No PostgreSQL connection string detected (ADOLE_PG_DSN/PG_CONNECTION_STRING/DATABASE_URL)."
+    echo "INFO: Running ./adole.sh to configure a default connection string."
+    if ! bash "$PROJECT_ROOT/adole.sh"; then
+        echo "ERROR: ./adole.sh failed to configure the PostgreSQL connection string."
+        exit 1
+    fi
+
+    # Reload environment files to pick up the newly configured DSN
+    load_env_file "$PROJECT_ROOT/.env"
+    load_env_file "$PROJECT_ROOT/.env.local"
+fi
+
+if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
+    echo "ERROR: No PostgreSQL connection string detected even after running ./adole.sh."
+    echo "       Please configure it manually in .env or export it before running ./run.sh."
+    exit 1
+fi
+
 cd "$PROJECT_ROOT"
 
 FASTIFY_PID=""
