@@ -4,6 +4,7 @@ node_modules/
 # Build outputs
 src-Auv3/build/
 packages/
+temp/
 
 # Development files
 package-lock.json
