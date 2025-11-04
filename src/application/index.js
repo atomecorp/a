@@ -74,7 +74,8 @@
 // import('./examples/atome.js');
 // import('./jeezs/demo.js');
 // import('./examples/!test_taurie-path.js');
-import('./vie/index.js');
+// import('./vie/index.js');
+
 // import('./examples/events.js');
 // import('./examples/intuition.js');
 
@@ -87,6 +88,7 @@ import('./vie/index.js');
 // import('./examples/class.js');
 // import('./examples/drop_down.js');
 
+// createBasicConsole();
 
 
 

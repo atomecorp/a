@@ -82,6 +82,22 @@ initKickstart();
 console.log('Current platform: ' + current_platform());
 
 async function logServerInfo() {
+  const isStandaloneFile = (() => {
+    if (typeof window === 'undefined' || !window.location) return false;
+    const { protocol, origin } = window.location;
+    if (protocol === 'file:') return true;
+    // Some desktop browsers report origin "null" for local HTML files
+    return origin === 'null';
+  })();
+
+  if (isStandaloneFile) {
+    if (typeof window !== 'undefined' && !window.__SQUIRREL_VERSION__) {
+      window.__SQUIRREL_VERSION__ = 'standalone';
+    }
+    console.log('Squirrel standalone mode ©atome');
+    return;
+  }
+
   const resolveApiBases = () => {
     try {
       const platform = typeof current_platform === 'function' ? current_platform() : '';
