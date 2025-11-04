@@ -21,7 +21,7 @@
 
 // import('./examples/material_page.js');
 
-import('./examples/DB.js');
+// import('./examples/DB.js');
 
 // import('./test/component_test.js');
 // import('./examples/image.js');
@@ -38,11 +38,11 @@ import('./examples/DB.js');
 
 // import('./examples/leaflet.js');
 
-// import('./examples/console.js');
+// import('./examples/console.js'); // terminal
 // import('./examples/audio.js');
 
 // import('./examples/audio_swift.js'); // Active les boutons audio (routeButton Local/Auto/Host + C4/A4/E5/Chord)
-// import('./examples/console_to_swift.js');
+// import('./examples/console_to_swift.js');// terminal
 
 
 
@@ -74,7 +74,7 @@ import('./examples/DB.js');
 // import('./examples/atome.js');
 // import('./jeezs/demo.js');
 // import('./examples/!test_taurie-path.js');
-// import('./vie/index.js');
+import('./vie/index.js');
 // import('./examples/events.js');
 // import('./examples/intuition.js');
 
