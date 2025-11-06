@@ -90,8 +90,7 @@
 
 // createBasicConsole();
 
-
-
+openConsole();
 
 
 
