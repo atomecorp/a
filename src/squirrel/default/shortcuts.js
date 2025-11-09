@@ -1,22 +1,31 @@
+let debugConsole = null;
+let debugConsoleVisible = false;
 
 function createBasicConsole() {
-  const console1 = Console({
-    title: 'Debug Console',
-    position: { x: 50, y: 50 },
-    size: { width: 500, height: 350 },
-    template: 'dark_theme'
-  });
-
-  console1.show();
-  return console1;
+  if (!debugConsole) {
+    debugConsole = Console({
+      title: 'Debug Console',
+      position: { x: 50, y: 50 },
+      size: { width: 500, height: 350 },
+      template: 'dark_theme'
+    });
+  }
+  return debugConsole;
 }
 
-
-
-
 const openConsole = function atest(key) {
-  createBasicConsole();
+  const consoleInstance = createBasicConsole();
+
+  if (!debugConsoleVisible) {
+    consoleInstance.show?.();
+    debugConsoleVisible = true;
+    return;
+  }
+
+  consoleInstance.hide?.();
+  debugConsoleVisible = false;
 };
+
 shortcut('alt-c', openConsole);
 
 window.openConsole = openConsole;
