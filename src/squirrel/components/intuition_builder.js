@@ -6468,6 +6468,176 @@ function mergeContentOption(contentOption) {
     });
 }
 
+function sanitizeMenuKey(rawKey, fallback) {
+    const base = rawKey != null ? String(rawKey) : '';
+    const trimmed = base.trim();
+    if (trimmed) {
+        return trimmed;
+    }
+    const suffix = fallback ? String(fallback) : String(Date.now());
+    return `intuition_item_${suffix}`;
+}
+
+function coerceChildrenArray(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        return raw
+            .map((item) => (typeof item === 'string' ? item.trim() : null))
+            .filter(Boolean);
+    }
+    if (typeof raw === 'string') {
+        return raw.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+    return [];
+}
+
+function normalizeMenuAdditionEntries(payload) {
+    const entries = [];
+    if (!payload) return entries;
+
+    const pushEntry = (source, index) => {
+        if (!source || typeof source !== 'object') return;
+        const entry = { ...source };
+        const fallback = index != null ? `entry_${index}` : 'entry';
+        const rawKey = entry.key || entry.name || null;
+        entry.key = sanitizeMenuKey(rawKey || source.id || null, fallback);
+        if (!entry.parent && entry.parentKey) entry.parent = entry.parentKey;
+        if (!entry.parent && entry.appendTo) entry.parent = entry.appendTo;
+        if (!entry.parent && entry.container) entry.parent = entry.container;
+        if (!entry.parent && entry.target) entry.parent = entry.target;
+        entry.children = coerceChildrenArray(entry.children);
+        if (typeof entry.parent === 'string') {
+            entry.parent = entry.parent.trim();
+        }
+        if (entry.parent && typeof entry.parent !== 'string') {
+            entry.parent = String(entry.parent).trim();
+        }
+        if (entry.parents) {
+            const parentsArray = Array.isArray(entry.parents) ? entry.parents : [entry.parents];
+            entry.parents = parentsArray
+                .map((parentKey) => (parentKey != null ? String(parentKey).trim() : ''))
+                .filter(Boolean);
+        }
+        entries.push(entry);
+    };
+
+    if (Array.isArray(payload)) {
+        payload.forEach((item, index) => pushEntry(item, index));
+        return entries;
+    }
+
+    if (typeof payload === 'object') {
+        Object.keys(payload).forEach((key, idx) => {
+            const source = payload[key];
+            if (!source || typeof source !== 'object') return;
+            const entry = { ...source };
+            if (!entry.key && !entry.name) {
+                entry.key = key;
+            }
+            pushEntry(entry, idx);
+        });
+    }
+    return entries;
+}
+
+function ensureMenuParentChildren(parentKey) {
+    if (!parentKey) return null;
+    const parentNode = intuition_content[parentKey];
+    if (!parentNode || typeof parentNode !== 'object') {
+        console.warn(`[Intuition] new_menu.add: parent '${parentKey}' introuvable`);
+        return null;
+    }
+    if (!Array.isArray(parentNode.children)) {
+        parentNode.children = [];
+    }
+    return parentNode.children;
+}
+
+function linkChildToParent(childKey, parentKey) {
+    const children = ensureMenuParentChildren(parentKey);
+    if (!children) return;
+    if (!children.includes(childKey)) {
+        children.push(childKey);
+    }
+}
+
+function applyMenuAdditionEntries(entries) {
+    if (!entries.length) return;
+    const pendingLinks = [];
+
+    entries.forEach((entry) => {
+        const key = entry.key;
+        if (!key) return;
+
+        const definition = { ...entry };
+        delete definition.parent;
+        delete definition.appendTo;
+        delete definition.parentKey;
+        delete definition.container;
+        delete definition.target;
+        delete definition.parents;
+        delete definition.childOf;
+        delete definition.child;
+
+        const normalized = normalizeContentEntry({ ...definition, key });
+        if (!normalized.key) {
+            normalized.key = key;
+        }
+
+        if (Array.isArray(normalized.children)) {
+            normalized.children = normalized.children
+                .map((child) => (child != null ? String(child).trim() : ''))
+                .filter(Boolean);
+        }
+
+        if (!intuition_content[key] || typeof intuition_content[key] !== 'object') {
+            intuition_content[key] = normalized;
+        } else {
+            Object.assign(intuition_content[key], normalized);
+        }
+
+        if (entry.parent) {
+            const parentKey = String(entry.parent).trim();
+            if (parentKey) {
+                pendingLinks.push({ child: key, parent: parentKey });
+            }
+        }
+
+        if (Array.isArray(entry.parents)) {
+            entry.parents.forEach((parentKey) => {
+                if (!parentKey) return;
+                const normalizedParent = String(parentKey).trim();
+                if (!normalizedParent) return;
+                pendingLinks.push({ child: key, parent: normalizedParent });
+            });
+        }
+    });
+
+    pendingLinks.forEach((link) => {
+        linkChildToParent(link.child, link.parent);
+    });
+
+    const wasOpen = menuOpen !== 'false';
+    window.refreshMenu({});
+    if (wasOpen) {
+        openMenu('toolbox');
+    }
+}
+
+function registerMenuAdditionAPI() {
+    if (!window.new_menu) {
+        window.new_menu = {};
+    }
+    window.new_menu.add = (payload) => {
+        const entries = normalizeMenuAdditionEntries(payload);
+        if (!entries.length) {
+            console.warn('[Intuition] new_menu.add: payload vide ou invalide');
+            return;
+        }
+        applyMenuAdditionEntries(entries);
+    };
+}
+
 const Intuition = function Intuition(options = {}) {
     if (options && options.type === 'extract') {
         return restoreExtractedFloatingElement(options);
@@ -6503,6 +6673,7 @@ const Intuition = function Intuition(options = {}) {
             apply_layout();
         }
     }
+    registerMenuAdditionAPI();
     return {
         open: () => openMenu('toolbox'),
         close: () => closeMenu(),
@@ -6510,6 +6681,12 @@ const Intuition = function Intuition(options = {}) {
         setDirection: (dir) => window.setDirection(dir),
         updateTheme: (themePatch) => applyThemeOption(themePatch),
         updateContent: (contentPatch) => applyContentOption(contentPatch),
+        add: (payload) => {
+            registerMenuAdditionAPI();
+            if (window.new_menu && typeof window.new_menu.add === 'function') {
+                window.new_menu.add(payload);
+            }
+        },
         getTheme: (name = 'current') => {
             if (name === 'current') return clonePlainIntuitionValue(currentTheme);
             const key = String(name).toLowerCase();

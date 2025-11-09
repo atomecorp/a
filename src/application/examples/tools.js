@@ -252,7 +252,7 @@ const intuition_content = {
 
 };
 
-Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
+const new_menu = Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
 
 $('span', {
   // pas besoin de 'tag'
@@ -307,4 +307,17 @@ setTimeout(() => {
   Intuition({ type: 'extract', content: test_elem });
   puts('restore extract in 2s')
 }
-  , 2000); 
+  , 2000);
+
+
+
+
+
+setTimeout(() => {
+  new_menu.add([
+    { key: 'verif', parent: 'settings', type: 'option', label: 'verification', icon: null },
+    { key: 'dummy_palette', parent: 'tools', type: 'palette', label: 'dummy', icon: null, children: ['test'] },
+    { key: 'test', parent: 'dummy_palette', type: 'tool', label: 'test tool', icon: null, children: ['blur'] },
+    { key: 'blur', parent: 'test', type: 'particle', label: 'blur amount', helper: 'slider', value: 0, icon: null }
+  ]);
+}, 3000);

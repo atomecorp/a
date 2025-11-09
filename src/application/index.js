@@ -77,7 +77,7 @@ import('./examples/tools.js');
 // import('./vie/index.js');
 
 // import('./examples/events.js');
-// import('./examples/intuition.js');
+
 
 // import('./examples/drag_drop_files.js');
 // import('./examples/svg_fetch_usage.js');
