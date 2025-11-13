@@ -316,12 +316,23 @@ setTimeout(() => {
 setTimeout(() => {
   const support = grab('toolbox_support');
   if (support && typeof support.add === 'function') {
+    console.log('Before adding - verif exists:', !!intuition_content.verif);
+    console.log('Before adding - dummy_palette exists:', !!intuition_content.dummy_palette);
+
     support.add([
       { key: 'verif', parent: 'settings', type: 'option', label: 'verification', icon: null },
       { key: 'dummy_palette', parent: 'tools', type: 'palette', label: 'dummy', icon: null, children: ['test'] },
       { key: 'test', parent: 'dummy_palette', type: 'tool', label: 'test tool', icon: null, children: ['blur'] },
       { key: 'blur', parent: 'test', type: 'particle', label: 'blur amount', helper: 'slider', value: 0, icon: null }
     ]);
+
+    setTimeout(() => {
+      console.log('After adding - verif exists:', !!intuition_content.verif);
+      console.log('After adding - verif definition:', intuition_content.verif);
+      console.log('After adding - dummy_palette exists:', !!intuition_content.dummy_palette);
+      console.log('After adding - dummy_palette definition:', intuition_content.dummy_palette);
+      console.log('Full intuition_content keys:', Object.keys(intuition_content));
+    }, 100);
   }
 }, 3000);
 
@@ -334,3 +345,35 @@ setTimeout(() => {
     ]);
   }
 }, 4500);
+
+setTimeout(() => {
+  const support = grab('toolbox_support');
+  if (support && typeof support.remove === 'function') {
+    console.log('Before removing - verif exists:', !!intuition_content.verif);
+    console.log('Before removing - dummy_palette exists:', !!intuition_content.dummy_palette);
+
+    const removed = support.remove(['verif', 'dummy_palette']);
+    console.log('Removed keys:', removed);
+
+    setTimeout(() => {
+      console.log('After removing - verif exists:', !!intuition_content.verif);
+      console.log('After removing - dummy_palette exists:', !!intuition_content.dummy_palette);
+      console.log('Settings children now:', intuition_content.settings?.children);
+      console.log('Tools children now:', intuition_content.tools?.children);
+    }, 100);
+  }
+}, 6000);
+
+setTimeout(() => {
+  const floatingGrip = grab('intuition-floating-1__grip');
+  if (floatingGrip && typeof floatingGrip.remove === 'function') {
+    console.log('Before removing from floating - tools_helper exists:', !!intuition_content.tools_helper);
+
+    const removed = floatingGrip.remove(['tools_helper']);
+    console.log('Removed from floating:', removed);
+
+    setTimeout(() => {
+      console.log('After removing from floating - tools_helper exists:', !!intuition_content.tools_helper);
+    }, 100);
+  }
+}, 7500);

@@ -6730,6 +6730,73 @@ function attachMenuAddToToolboxSupport() {
         defaultParent: 'toolbox',
         applyOptions: { parent: 'toolbox' }
     }));
+    attachMenuRemoveMethodToElement(support, () => ({}));
+}
+
+function removeMenuEntryFromContent(key) {
+    if (!key || !intuition_content[key]) return false;
+
+    // Remove from all parent children arrays
+    Object.keys(intuition_content).forEach(parentKey => {
+        const parentDef = intuition_content[parentKey];
+        if (parentDef && Array.isArray(parentDef.children)) {
+            const index = parentDef.children.indexOf(key);
+            if (index !== -1) {
+                parentDef.children.splice(index, 1);
+            }
+        }
+    });
+
+    // Remove the item itself
+    delete intuition_content[key];
+    return true;
+}
+
+function removeMenuEntries(keys) {
+    if (!Array.isArray(keys)) {
+        keys = [keys];
+    }
+
+    const removedKeys = [];
+    keys.forEach(key => {
+        if (removeMenuEntryFromContent(key)) {
+            removedKeys.push(key);
+        }
+    });
+
+    if (removedKeys.length > 0) {
+        // Refresh the menu to show changes
+        const wasOpen = menuOpen !== 'false';
+        window.refreshMenu({});
+        if (wasOpen) {
+            openMenu('toolbox');
+        }
+    }
+
+    return removedKeys;
+}
+
+function attachMenuRemoveMethodToElement(element, resolver) {
+    if (!element || typeof element !== 'object') return;
+    if (element._intuitionMenuRemoveAttached) return;
+
+    const handler = (keys) => {
+        const context = typeof resolver === 'function' ? resolver(element) : (resolver || {});
+        const removedKeys = removeMenuEntries(keys);
+
+        if (context && typeof context.afterRemove === 'function') {
+            try {
+                context.afterRemove({ removedKeys });
+            } catch (err) {
+                console.warn('[Intuition] remove afterRemove error', err);
+            }
+        }
+
+        return removedKeys;
+    };
+
+    element.remove = handler;
+    element._intuitionMenuRemoveAttached = true;
 }
 
 function attachMenuAddToFloatingHost(info) {
@@ -6748,6 +6815,12 @@ function attachMenuAddToFloatingHost(info) {
                 }
             }
         }));
+
+        attachMenuRemoveMethodToElement(el, () => ({
+            afterRemove: () => {
+                refreshFloatingHostFromContent(info);
+            }
+        }));
     });
 }
 
@@ -6762,6 +6835,9 @@ function registerMenuAdditionAPI() {
             return [];
         }
         return applyMenuAdditionEntries(entries);
+    };
+    window.new_menu.remove = (keys) => {
+        return removeMenuEntries(keys);
     };
     attachMenuAddToToolboxSupport();
 }
@@ -6813,6 +6889,13 @@ const Intuition = function Intuition(options = {}) {
             registerMenuAdditionAPI();
             if (window.new_menu && typeof window.new_menu.add === 'function') {
                 return window.new_menu.add(payload);
+            }
+            return [];
+        },
+        remove: (keys) => {
+            registerMenuAdditionAPI();
+            if (window.new_menu && typeof window.new_menu.remove === 'function') {
+                return window.new_menu.remove(keys);
             }
             return [];
         },
