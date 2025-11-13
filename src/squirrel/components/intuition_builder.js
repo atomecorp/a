@@ -1207,6 +1207,7 @@ function createFloatingHost(opts = {}) {
     attachFloatingGripInteractions(info);
     updateFloatingGripLayout();
     setFloatingEditMode(isEditModeActive());
+    attachMenuAddToFloatingHost(info);
     return info;
 }
 
@@ -4628,6 +4629,7 @@ function createToolbox() {
     const supportEl = grab('toolbox_support');
     if (supportEl) applyBackdropStyle(supportEl, null);
     if (toolboxEl) applyBackdropStyle(toolboxEl, currentTheme.tool_backDrop_effect);
+    attachMenuAddToToolboxSupport();
 
     // >>> Ajouter l’icône du toolbox (optionnelle via le thème)
     {
@@ -6561,15 +6563,28 @@ function linkChildToParent(childKey, parentKey) {
     }
 }
 
-function applyMenuAdditionEntries(entries) {
-    if (!entries.length) return;
+function applyMenuAdditionEntries(entries, options = {}) {
+    if (!entries.length) return [];
     const pendingLinks = [];
+    const addedKeys = [];
+    const defaultParent = options && options.parent
+        ? String(options.parent).trim()
+        : null;
 
     entries.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') return;
         const key = entry.key;
         if (!key) return;
 
-        const definition = { ...entry };
+        const working = { ...entry };
+        const resolvedParent = working.parent && typeof working.parent === 'string'
+            ? working.parent.trim()
+            : (defaultParent || null);
+        if (resolvedParent && !working.parent) {
+            working.parent = resolvedParent;
+        }
+
+        const definition = { ...working };
         delete definition.parent;
         delete definition.appendTo;
         delete definition.parentKey;
@@ -6596,32 +6611,144 @@ function applyMenuAdditionEntries(entries) {
             Object.assign(intuition_content[key], normalized);
         }
 
-        if (entry.parent) {
-            const parentKey = String(entry.parent).trim();
-            if (parentKey) {
-                pendingLinks.push({ child: key, parent: parentKey });
-            }
+        if (resolvedParent) {
+            pendingLinks.push({ child: key, parent: resolvedParent });
         }
 
-        if (Array.isArray(entry.parents)) {
-            entry.parents.forEach((parentKey) => {
+        if (Array.isArray(working.parents)) {
+            working.parents.forEach((parentKey) => {
                 if (!parentKey) return;
                 const normalizedParent = String(parentKey).trim();
                 if (!normalizedParent) return;
                 pendingLinks.push({ child: key, parent: normalizedParent });
             });
         }
+
+        addedKeys.push(key);
     });
 
     pendingLinks.forEach((link) => {
         linkChildToParent(link.child, link.parent);
     });
 
-    const wasOpen = menuOpen !== 'false';
-    window.refreshMenu({});
-    if (wasOpen) {
-        openMenu('toolbox');
+    if (!options || options.refresh !== false) {
+        const wasOpen = menuOpen !== 'false';
+        window.refreshMenu({});
+        if (wasOpen) {
+            openMenu('toolbox');
+        }
     }
+
+    if (typeof options.afterApply === 'function') {
+        try {
+            options.afterApply({ addedKeys, parent: defaultParent });
+        } catch (err) {
+            console.warn('[Intuition] menu afterApply callback error', err);
+        }
+    }
+
+    return addedKeys;
+}
+
+function refreshFloatingHostFromContent(info, paletteKeyHint = null) {
+    if (!info || !info.body) return;
+    const paletteKey = paletteKeyHint
+        || info.sourcePaletteKey
+        || (Array.isArray(info.menuStack) && info.menuStack.length ? info.menuStack[0].parent : null);
+    if (!paletteKey) return;
+    const paletteDef = intuition_content[paletteKey];
+    if (!paletteDef || typeof paletteDef !== 'object') return;
+    const childKeys = Array.isArray(paletteDef.children)
+        ? paletteDef.children.filter(Boolean)
+        : [];
+
+    info.rootChildren = childKeys.slice();
+    const stackTitle = (paletteDef && (paletteDef.title || paletteDef.label)) || info.title || paletteKey;
+    if (!Array.isArray(info.menuStack) || !info.menuStack.length) {
+        info.menuStack = [{ parent: paletteKey, children: info.rootChildren.slice(), title: stackTitle }];
+    } else {
+        info.menuStack[0] = {
+            parent: paletteKey,
+            children: info.rootChildren.slice(),
+            title: stackTitle
+        };
+    }
+
+    renderFloatingBody(info, info.rootChildren);
+
+    const leftStyle = info.container && info.container.style ? info.container.style.left : null;
+    const topStyle = info.container && info.container.style ? info.container.style.top : null;
+    const left = normalizeOffsetToNumber(leftStyle != null && leftStyle !== '' ? leftStyle : (info.container ? info.container.offsetLeft : 0));
+    const top = normalizeOffsetToNumber(topStyle != null && topStyle !== '' ? topStyle : (info.container ? info.container.offsetTop : 0));
+    const state = info.collapsed ? 'close' : 'open';
+
+    ensureFloatingHostRecord(info, info.theme || currentTheme, {
+        reference: info.reference || 'toolbox',
+        position: { left, top },
+        content: {
+            key: paletteKey,
+            title: stackTitle,
+            children: info.rootChildren.slice()
+        },
+        state
+    });
+}
+
+function attachMenuAddMethodToElement(element, resolver) {
+    if (!element || typeof element !== 'object') return;
+    if (element._intuitionMenuAddAttached) return;
+    const handler = (payload) => {
+        const context = typeof resolver === 'function' ? resolver(element) : (resolver || {});
+        const entries = normalizeMenuAdditionEntries(payload);
+        if (!entries.length) {
+            console.warn('[Intuition] add: payload vide ou invalide');
+            return;
+        }
+        const applyOptions = context && context.applyOptions ? { ...context.applyOptions } : {};
+        if (context && context.defaultParent && !applyOptions.parent) {
+            applyOptions.parent = context.defaultParent;
+        }
+        const addedKeys = applyMenuAdditionEntries(entries, applyOptions);
+        if (context && typeof context.afterApply === 'function') {
+            try {
+                context.afterApply({ addedKeys, entries });
+            } catch (err) {
+                console.warn('[Intuition] add afterApply error', err);
+            }
+        }
+        return addedKeys;
+    };
+    element.add = handler;
+    element._intuitionMenuAddAttached = true;
+}
+
+function attachMenuAddToToolboxSupport() {
+    if (typeof document === 'undefined') return;
+    const support = document.getElementById('toolbox_support');
+    if (!support) return;
+    attachMenuAddMethodToElement(support, () => ({
+        defaultParent: 'toolbox',
+        applyOptions: { parent: 'toolbox' }
+    }));
+}
+
+function attachMenuAddToFloatingHost(info) {
+    if (!info) return;
+    const elements = [info.container, info.grip, info.body];
+    elements.forEach((el) => {
+        if (!el) return;
+        attachMenuAddMethodToElement(el, () => ({
+            defaultParent: info.sourcePaletteKey
+                || (Array.isArray(info.menuStack) && info.menuStack.length ? info.menuStack[0].parent : null),
+            applyOptions: {
+                parent: info.sourcePaletteKey
+                    || (Array.isArray(info.menuStack) && info.menuStack.length ? info.menuStack[0].parent : null),
+                afterApply: () => {
+                    refreshFloatingHostFromContent(info);
+                }
+            }
+        }));
+    });
 }
 
 function registerMenuAdditionAPI() {
@@ -6632,10 +6759,11 @@ function registerMenuAdditionAPI() {
         const entries = normalizeMenuAdditionEntries(payload);
         if (!entries.length) {
             console.warn('[Intuition] new_menu.add: payload vide ou invalide');
-            return;
+            return [];
         }
-        applyMenuAdditionEntries(entries);
+        return applyMenuAdditionEntries(entries);
     };
+    attachMenuAddToToolboxSupport();
 }
 
 const Intuition = function Intuition(options = {}) {
@@ -6684,8 +6812,9 @@ const Intuition = function Intuition(options = {}) {
         add: (payload) => {
             registerMenuAdditionAPI();
             if (window.new_menu && typeof window.new_menu.add === 'function') {
-                window.new_menu.add(payload);
+                return window.new_menu.add(payload);
             }
+            return [];
         },
         getTheme: (name = 'current') => {
             if (name === 'current') return clonePlainIntuitionValue(currentTheme);

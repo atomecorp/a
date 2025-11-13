@@ -286,7 +286,7 @@ $('span', {
 
 setTimeout(() => {
   const test_elem = {
-    content: { key: "capture", title: "record", children: ["capture", "settings"] },
+    content: { key: "tools", title: "tools", children: ["volume", "ADSR", "controller"] },
 
     id: "intuition-floating-1",
 
@@ -314,10 +314,23 @@ setTimeout(() => {
 
 
 setTimeout(() => {
-  new_menu.add([
-    { key: 'verif', parent: 'settings', type: 'option', label: 'verification', icon: null },
-    { key: 'dummy_palette', parent: 'tools', type: 'palette', label: 'dummy', icon: null, children: ['test'] },
-    { key: 'test', parent: 'dummy_palette', type: 'tool', label: 'test tool', icon: null, children: ['blur'] },
-    { key: 'blur', parent: 'test', type: 'particle', label: 'blur amount', helper: 'slider', value: 0, icon: null }
-  ]);
+  const support = grab('toolbox_support');
+  if (support && typeof support.add === 'function') {
+    support.add([
+      { key: 'verif', parent: 'settings', type: 'option', label: 'verification', icon: null },
+      { key: 'dummy_palette', parent: 'tools', type: 'palette', label: 'dummy', icon: null, children: ['test'] },
+      { key: 'test', parent: 'dummy_palette', type: 'tool', label: 'test tool', icon: null, children: ['blur'] },
+      { key: 'blur', parent: 'test', type: 'particle', label: 'blur amount', helper: 'slider', value: 0, icon: null }
+    ]);
+  }
 }, 3000);
+
+setTimeout(() => {
+  const floatingGrip = grab('intuition-floating-1__grip');
+  if (floatingGrip && typeof floatingGrip.add === 'function') {
+    floatingGrip.add([
+      { key: 'tools_helper', type: 'tool', label: 'helper', icon: 'info', children: ['tools_helper_gain'] },
+      { key: 'tools_helper_gain', type: 'particle', label: 'gain', helper: 'slider', value: 50 }
+    ]);
+  }
+}, 4500);
