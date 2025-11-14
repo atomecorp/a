@@ -9,11 +9,11 @@ import { closeSettingsPanel } from './settings.js';
 function closeSongLibraryPanel(keepButtonActive = false) {
     const existingPanel = document.getElementById('song-library-panel');
     const existingGrip = document.getElementById('song-library-resize-grip');
-    
+
     if (existingPanel) {
         existingPanel.remove();
     }
-    
+
     if (existingGrip) {
         existingGrip.remove();
     }
@@ -48,13 +48,13 @@ export function toggleSongLibrary() {
     if (existingPanel) {
         // Panel exists, close it properly
         closeSongLibraryPanel();
-    // If settings panel is open, also close it when explicitly toggling off song list
-    const settingsPanel2 = document.getElementById('settings-panel');
-    if (settingsPanel2 && typeof closeSettingsPanel === 'function') {
-        closeSettingsPanel();
-    }
-    const btn2 = document.getElementById('song_list_button');
-    if (btn2 && btn2._setActive) btn2._setActive(false);
+        // If settings panel is open, also close it when explicitly toggling off song list
+        const settingsPanel2 = document.getElementById('settings-panel');
+        if (settingsPanel2 && typeof closeSettingsPanel === 'function') {
+            closeSettingsPanel();
+        }
+        const btn2 = document.getElementById('song_list_button');
+        if (btn2 && btn2._setActive) btn2._setActive(false);
         return false; // Panel closed
     } else {
         // Panel doesn't exist, show it
@@ -66,17 +66,17 @@ export function toggleSongLibrary() {
             origSettings.style.display = 'none';
             origSettings.__hiddenBySongLibrary = true;
         }
-    const btn = document.getElementById('song_list_button');
-    if (btn && btn._setActive) btn._setActive(true);
+        const btn = document.getElementById('song_list_button');
+        if (btn && btn._setActive) btn._setActive(true);
         return true; // Panel opened
     }
 }
-
+window.toggleSongLibrary = toggleSongLibrary;
 // Show song library
 export function showSongLibrary() {
     if (window.midiUtilities) {
     }
-    
+
     if (!window.lyricsLibrary) {
         window.Modal({
             title: '❌ Error',
@@ -91,14 +91,14 @@ export function showSongLibrary() {
     const settingsPanel = document.getElementById('settings-panel');
     if (settingsPanel) {
         settingsPanel.remove();
-        
+
         // Also remove the settings resize grip
         const settingsGrip = document.getElementById('settings-resize-grip');
         if (settingsGrip) {
             settingsGrip.remove();
         }
-        
-    // (Theme utilities already imported at top if needed)
+
+        // (Theme utilities already imported at top if needed)
         // Also reset settings panel state if needed
         if (window.settingsState) {
             window.settingsState.isSettingsOpen = false;
@@ -115,19 +115,19 @@ export function showSongLibrary() {
     }
 
     const songs = window.lyricsLibrary.getAllSongs();
-    
+
     // Always show the song library, even if empty, so users can create or import songs
-    
+
     // Create inline panel instead of modal - insert between toolbar and lyrics
     const toolbar = document.querySelector('#lyrics-toolbar, .lyrics-toolbar, [id*="toolbar"]') || document.getElementById('view') || document.body;
     const lyricsContainer = document.querySelector('#lyrics-content, #lyrics_lines_container, .lyrics-container') || document.getElementById('view') || document.body;
-    
+
     // Remove existing song library panel if it exists
     const existingPanel = document.getElementById('song-library-panel');
     if (existingPanel) {
         existingPanel.remove();
     }
-    
+
     // Create panel container (not modal)
     const savedHeight = localStorage.getItem('lyrix_song_library_panel_height') || '400px';
     const modalContainer = window.$('div', {
@@ -151,18 +151,18 @@ export function showSongLibrary() {
             msUserSelect: 'none'
         }
     });
-    
+
     const modal = window.$('div', {
         id: 'song-library-modal',
-        css: { 
+        css: {
             width: '100%',
             height: '100%',
             display: 'flex',
             flexDirection: 'column',
-               //         padding: window.UIManager.THEME.spacing.lg,
+            //         padding: window.UIManager.THEME.spacing.lg,
             backgroundColor: window.UIManager.THEME.colors.primary,
-    //         borderRadius: `${window.UIManager.THEME.borderRadius.lg} ${window.UIManager.THEME.borderRadius.lg} 0 0`,
-    //         borderBottom: `1px solid ${window.UIManager.THEME.colors.border}`,
+            //         borderRadius: `${window.UIManager.THEME.borderRadius.lg} ${window.UIManager.THEME.borderRadius.lg} 0 0`,
+            //         borderBottom: `1px solid ${window.UIManager.THEME.colors.border}`,
         }
     });
 
@@ -242,22 +242,22 @@ export function showSongLibrary() {
                     a.href = url; a.download = name; a.style.display = 'none';
                     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
                 }
-            } catch {}
+            } catch { }
         }
     });
     // Replace emoji with SVG save icon
-    try { exportLRXButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/save.svg'; img.alt='save'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Save'; span.style.fontSize=UNIFIED_FONT_SIZE; exportLRXButton.append(img, span);} catch(e) {}
+    try { exportLRXButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/save.svg'; img.alt = 'save'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Save'; span.style.fontSize = UNIFIED_FONT_SIZE; exportLRXButton.append(img, span); } catch (e) { }
 
     const exportTextButton = makeMiniBtn({
         id: 'export-songs-as-text',
-        onClick: () => { 
+        onClick: () => {
             closeSongLibraryPanel();
             const btn = document.getElementById('song_list_button');
             if (btn && btn._setActive) btn._setActive(false);
-            window.exportSelectedSongsAsTextWithFolderDialog && window.exportSelectedSongsAsTextWithFolderDialog(); 
+            window.exportSelectedSongsAsTextWithFolderDialog && window.exportSelectedSongsAsTextWithFolderDialog();
         }
     });
-    try { exportTextButton.innerHTML=''; const span=document.createElement('span'); span.textContent='TXT'; span.style.fontSize=UNIFIED_FONT_SIZE; exportTextButton.append(span);} catch(e) {}
+    try { exportTextButton.innerHTML = ''; const span = document.createElement('span'); span.textContent = 'export all as text'; span.style.fontSize = UNIFIED_FONT_SIZE; exportTextButton.append(span); } catch (e) { }
 
     const importFileButton = makeMiniBtn({
         id: 'import_file_button_library',
@@ -273,7 +273,7 @@ export function showSongLibrary() {
                     if (mgr) {
                         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
                         if (isIOS) {
-                            for (let i=0;i<files.length;i++) { if (i>0) await new Promise(r=>setTimeout(r,120)); await mgr.processFile(files[i]); }
+                            for (let i = 0; i < files.length; i++) { if (i > 0) await new Promise(r => setTimeout(r, 120)); await mgr.processFile(files[i]); }
                         } else {
                             for (const f of files) { await mgr.processFile(f); }
                         }
@@ -287,18 +287,18 @@ export function showSongLibrary() {
             const hasAUv3Multi = !!(window.AUv3API && AUv3API.fileSystem && AUv3API.fileSystem.loadFilesWithDocumentPicker);
             if (hasAUv3Multi) {
                 try {
-                    AUv3API.fileSystem.loadFilesWithDocumentPicker(['txt','lrc','lrx','json','mp3','m4a','wav'], async (resp) => {
+                    AUv3API.fileSystem.loadFilesWithDocumentPicker(['txt', 'lrc', 'lrx', 'json', 'mp3', 'm4a', 'wav'], async (resp) => {
                         if (!resp || !resp.success || !resp.data || !resp.data.files) { fallbackChain(); return; }
                         const out = [];
                         for (const entry of resp.data.files) {
                             try {
                                 const b64 = entry.base64; const byteStr = atob(b64); const len = byteStr.length; const bytes = new Uint8Array(len);
-                                for (let i=0;i<len;i++) bytes[i] = byteStr.charCodeAt(i);
-                                const ext = (entry.name||'').split('.').pop().toLowerCase();
-                                let mime='application/octet-stream';
-                                if (['txt','lrc','lrx','json'].includes(ext)) mime='text/plain'; else if (ext==='mp3') mime='audio/mpeg'; else if (['m4a','aac'].includes(ext)) mime='audio/mp4'; else if (ext==='wav') mime='audio/wav';
+                                for (let i = 0; i < len; i++) bytes[i] = byteStr.charCodeAt(i);
+                                const ext = (entry.name || '').split('.').pop().toLowerCase();
+                                let mime = 'application/octet-stream';
+                                if (['txt', 'lrc', 'lrx', 'json'].includes(ext)) mime = 'text/plain'; else if (ext === 'mp3') mime = 'audio/mpeg'; else if (['m4a', 'aac'].includes(ext)) mime = 'audio/mp4'; else if (ext === 'wav') mime = 'audio/wav';
                                 out.push(new File([bytes], entry.name || 'import', { type: mime }));
-                            } catch {}
+                            } catch { }
                         }
                         await processImportedFiles(out);
                     });
@@ -311,11 +311,11 @@ export function showSongLibrary() {
                 try {
                     window.fileSystemCallback = async (resp) => {
                         if (resp && resp.success && resp.data && resp.data.files) {
-                            const out=[]; for (const entry of resp.data.files){ try { const b64=entry.base64; const bs=atob(b64); const len=bs.length; const bytes=new Uint8Array(len); for(let i=0;i<len;i++) bytes[i]=bs.charCodeAt(i); const ext=(entry.name||'').split('.').pop().toLowerCase(); let mime='application/octet-stream'; if(['txt','lrc','lrx','json'].includes(ext)) mime='text/plain'; else if(ext==='mp3') mime='audio/mpeg'; else if(['m4a','aac'].includes(ext)) mime='audio/mp4'; else if(ext==='wav') mime='audio/wav'; out.push(new File([bytes], entry.name||'import',{type:mime})); } catch{} }
+                            const out = []; for (const entry of resp.data.files) { try { const b64 = entry.base64; const bs = atob(b64); const len = bs.length; const bytes = new Uint8Array(len); for (let i = 0; i < len; i++) bytes[i] = bs.charCodeAt(i); const ext = (entry.name || '').split('.').pop().toLowerCase(); let mime = 'application/octet-stream'; if (['txt', 'lrc', 'lrx', 'json'].includes(ext)) mime = 'text/plain'; else if (ext === 'mp3') mime = 'audio/mpeg'; else if (['m4a', 'aac'].includes(ext)) mime = 'audio/mp4'; else if (ext === 'wav') mime = 'audio/wav'; out.push(new File([bytes], entry.name || 'import', { type: mime })); } catch { } }
                             await processImportedFiles(out);
                         } else { fallbackChain(); }
                     };
-                    window.webkit.messageHandlers.fileSystem.postMessage({ action:'loadFilesWithDocumentPicker', fileTypes:['txt','lrc','lrx','json','mp3','m4a','wav'] });
+                    window.webkit.messageHandlers.fileSystem.postMessage({ action: 'loadFilesWithDocumentPicker', fileTypes: ['txt', 'lrc', 'lrx', 'json', 'mp3', 'm4a', 'wav'] });
                     return;
                 } catch (e) { /* continue */ }
             }
@@ -325,26 +325,26 @@ export function showSongLibrary() {
                 if (fsAccess) {
                     (async () => {
                         try {
-                            const handles = await window.showOpenFilePicker({ multiple:true, types:[ { description:'Lyrics & Text', accept:{'text/plain':['.txt','.lrc','.lrx']}}, { description:'JSON', accept:{'application/json':['.json']}}, { description:'Audio', accept:{'audio/*':['.mp3','.m4a','.wav']}} ] });
-                            const files=[]; for (const h of handles){ try { files.push(await h.getFile()); } catch{} }
+                            const handles = await window.showOpenFilePicker({ multiple: true, types: [{ description: 'Lyrics & Text', accept: { 'text/plain': ['.txt', '.lrc', '.lrx'] } }, { description: 'JSON', accept: { 'application/json': ['.json'] } }, { description: 'Audio', accept: { 'audio/*': ['.mp3', '.m4a', '.wav'] } }] });
+                            const files = []; for (const h of handles) { try { files.push(await h.getFile()); } catch { } }
                             await processImportedFiles(files); return;
                         } catch (err) { legacyInput(); }
                     })();
                 } else { legacyInput(); }
             }
 
-            function legacyInput(){
+            function legacyInput() {
                 const input = document.createElement('input');
-                input.type='file'; input.multiple=true; input.accept='.txt,.lrc,.lrx,.json,.mp3,.m4a,.wav'; input.style.display='none';
-                input.addEventListener('change', async (e)=>{ const files = Array.from(e.target.files||[]); await processImportedFiles(files); input.remove(); });
-                document.body.appendChild(input); setTimeout(()=>input.click(),0);
+                input.type = 'file'; input.multiple = true; input.accept = '.txt,.lrc,.lrx,.json,.mp3,.m4a,.wav'; input.style.display = 'none';
+                input.addEventListener('change', async (e) => { const files = Array.from(e.target.files || []); await processImportedFiles(files); input.remove(); });
+                document.body.appendChild(input); setTimeout(() => input.click(), 0);
             }
 
             // Start fallback chain if native not used
             fallbackChain();
         }
     });
-    try { importFileButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/folder.svg'; img.alt='import'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Import'; span.style.fontSize=UNIFIED_FONT_SIZE; importFileButton.append(img, span);} catch(e) {}
+    try { importFileButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/folder.svg'; img.alt = 'import'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Import'; span.style.fontSize = UNIFIED_FONT_SIZE; importFileButton.append(img, span); } catch (e) { }
 
     // Auto Fill MIDI container
     const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: UNIFIED_BTN_BG, height: '28px', padding: '0 8px', borderRadius: default_theme.borderRadius.sm, border: 'none', boxSizing: 'border-box' } });
@@ -387,7 +387,7 @@ export function showSongLibrary() {
         },
         onClick: () => autoFillMidiNotes()
     });
-    try { autoFillButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='auto fill'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; const span=document.createElement('span'); span.textContent='Fill'; span.style.fontSize=UNIFIED_FONT_SIZE; autoFillButton.append(img, span);} catch(e) {}
+    try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Fill'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
 
     autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 
@@ -402,14 +402,16 @@ export function showSongLibrary() {
             }
         }
     });
-    try { sortAlphabeticallyButton.innerHTML=''; const span=document.createElement('span'); span.textContent='A-Z'; span.style.fontSize=UNIFIED_FONT_SIZE; sortAlphabeticallyButton.append(span);} catch(e) {}
+    try { sortAlphabeticallyButton.innerHTML = ''; const span = document.createElement('span'); span.textContent = 'A-Z'; span.style.fontSize = UNIFIED_FONT_SIZE; sortAlphabeticallyButton.append(span); } catch (e) { }
 
     // Bouton supprimer toutes les chansons
-    const deleteAllButton = window.$('button', { id: 'delete-all-songs-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '28px', lineHeight: '28px', boxSizing: 'border-box' }, onClick: () => {
-        window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [ { text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch {} }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } } ], size: 'small' });
-    }});
+    const deleteAllButton = window.$('button', {
+        id: 'delete-all-songs-button', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '28px', lineHeight: '28px', boxSizing: 'border-box' }, onClick: () => {
+            window.Modal && window.Modal({ title: 'Confirmation', content: '<p>Supprimer toutes les chansons ? Action irréversible.</p>', buttons: [{ text: 'Annuler' }, { text: 'Supprimer', onClick: () => { try { window.lyricsLibrary && window.lyricsLibrary.deleteAllSongs(); closeSongLibraryPanel(); showSongLibrary(); } catch { } }, css: { backgroundColor: default_theme.colors.danger, color: '#fff' } }], size: 'small' });
+        }
+    });
     try {
-        deleteAllButton.innerHTML='';
+        deleteAllButton.innerHTML = '';
         const img = document.createElement('img');
         img.src = 'assets/images/icons/delete.svg';
         img.alt = 'delete all';
@@ -417,26 +419,28 @@ export function showSongLibrary() {
         img.style.height = '16px';
         img.style.pointerEvents = 'none';
         deleteAllButton.appendChild(img);
-    } catch(e) { /* silent */ }
+    } catch (e) { /* silent */ }
     // Create inline settings button (new instance) shown only inside song list panel
-    const inlineSettingsButton = window.$('button', { id: 'settings_button_inline', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, height: '28px', lineHeight: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', border: 'none', boxSizing: 'border-box' }, onClick: () => {
-        // Required behavior: close song library panel but keep song list button marked active
-        closeSongLibraryPanel(true);
-        const btn = document.getElementById('song_list_button');
-        if (btn && btn._setActive) btn._setActive(true);
-        toggleSettingsPanel('settings_button_inline');
-    } });
+    const inlineSettingsButton = window.$('button', {
+        id: 'settings_button_inline', css: { ...default_theme.button, backgroundColor: UNIFIED_BTN_BG, width: 'auto', padding: '0 10px', fontSize: UNIFIED_FONT_SIZE, height: '28px', lineHeight: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', border: 'none', boxSizing: 'border-box' }, onClick: () => {
+            // Required behavior: close song library panel but keep song list button marked active
+            closeSongLibraryPanel(true);
+            const btn = document.getElementById('song_list_button');
+            if (btn && btn._setActive) btn._setActive(true);
+            toggleSettingsPanel('settings_button_inline');
+        }
+    });
     // Inject SVG icon for inline settings
-    try {
-    inlineSettingsButton.innerHTML='';
-    const img = document.createElement('img');
-    img.src = 'assets/images/icons/settings.svg';
-    img.alt = 'settings';
-    img.style.width = '14px';
-    img.style.height = '14px';
-    img.style.pointerEvents = 'none';
-    const span=document.createElement('span'); span.textContent='Settings'; span.style.fontSize=UNIFIED_FONT_SIZE; inlineSettingsButton.append(img, span);
-    } catch(e) { /* silent */ }
+    // try {
+    //     inlineSettingsButton.innerHTML = '';
+    //     const img = document.createElement('img');
+    //     img.src = 'assets/images/icons/settings.svg';
+    //     img.alt = 'settings';
+    //     img.style.width = '14px';
+    //     img.style.height = '14px';
+    //     img.style.pointerEvents = 'none';
+    //     const span = document.createElement('span'); span.textContent = 'Settings'; span.style.fontSize = UNIFIED_FONT_SIZE; inlineSettingsButton.append(img, span);
+    // } catch (e) { /* silent */ }
 
     // Hide original settings button while panel open (if exists)
     const originalSettings = document.getElementById('settings_button');
@@ -453,7 +457,7 @@ export function showSongLibrary() {
 
     // Content with search and song list
     const content = window.UIManager.createModalContent({});
-    
+
     // Search input
     const searchInput = window.$('input', {
         type: 'text',
@@ -478,7 +482,7 @@ export function showSongLibrary() {
             backgroundColor: 'rgb(37, 48, 64)'
         }
     });
-    
+
     // Prepare items for display
     const songItems = songs.map(song => ({
         text: `${(song.metadata?.title || song.title || 'Untitled')} - ${(song.metadata?.artist || song.artist || 'Unknown Artist')}${(song.metadata?.album || song.album) ? ` (${song.metadata?.album || song.album})` : ''}`,
@@ -513,7 +517,7 @@ export function showSongLibrary() {
             // Separate songs with saved order from new songs
             const songsWithOrder = [];
             const newSongs = [];
-            
+
             filteredItems.forEach(item => {
                 if (orderMap.has(item.value)) {
                     songsWithOrder.push({
@@ -527,7 +531,7 @@ export function showSongLibrary() {
 
             // Sort songs with saved order
             songsWithOrder.sort((a, b) => a.savedOrder - b.savedOrder);
-            
+
             // Combine: ordered songs first, then new songs at the end
             filteredItems = [
                 ...songsWithOrder.map(item => ({ ...item, savedOrder: undefined })),
@@ -544,7 +548,7 @@ export function showSongLibrary() {
     // Function to refresh all MIDI input values
     function refreshMidiInputs() {
         if (!window.midiUtilities) return;
-        
+
         const midiInputs = listContainer.querySelectorAll('input[data-song-key]');
         midiInputs.forEach(input => {
             const songKey = input.getAttribute('data-song-key');
@@ -616,7 +620,7 @@ export function showSongLibrary() {
 
         filteredItems.forEach((item, index) => {
             const midiNote = rootNote + index;
-            
+
             // Check if MIDI note is in valid range
             if (midiNote > 127) {
                 skippedCount++;
@@ -626,11 +630,11 @@ export function showSongLibrary() {
             try {
                 // Remove any existing assignment for this song
                 window.midiUtilities.removeMidiAssignment(item.value);
-                
+
                 // Set new assignment
                 window.midiUtilities.setMidiAssignment(item.value, midiNote);
                 assignedCount++;
-                
+
             } catch (error) {
                 skippedCount++;
             }
@@ -643,7 +647,7 @@ export function showSongLibrary() {
 
     function updateSongList() {
         listContainer.innerHTML = '';
-        
+
         // Check if there are no songs to display
         if (filteredItems.length === 0) {
             const emptyMessage = window.$('div', {
@@ -654,7 +658,7 @@ export function showSongLibrary() {
                     fontSize: '16px'
                 }
             });
-            
+
             const emptyIcon = window.$('div', {
                 text: '',
                 css: {
@@ -662,34 +666,34 @@ export function showSongLibrary() {
                     marginBottom: '15px'
                 }
             });
-            
+
             const emptyText = window.$('div', {
-                text: songs.length === 0 ? 
-                    'No songs in your library yet.\nUse the buttons above to import existing songs.' : 
+                text: songs.length === 0 ?
+                    'No songs in your library yet.\nUse the buttons above to import existing songs.' :
                     'No songs match your search.',
                 css: {
                     lineHeight: '1.6',
                     whiteSpace: 'pre-line'
                 }
             });
-            
+
             emptyMessage.append(emptyIcon, emptyText);
             listContainer.appendChild(emptyMessage);
             return;
         }
-        
+
         filteredItems.forEach((item, index) => {
             const itemDiv = window.UIManager.createListItem({
                 css: {
                     backgroundColor: '#253040'
                 }
             });
-            
+
             // Add drag and drop functionality
             itemDiv.draggable = true;
             itemDiv.dataset.songIndex = index;
             itemDiv.style.cursor = 'grab';
-            
+
             // Add drag handle visual indicator
             const dragHandle = window.$('span', {
                 text: '⋮⋮',
@@ -701,7 +705,7 @@ export function showSongLibrary() {
                     userSelect: 'none'
                 }
             });
-            
+
             const textSpan = window.UIManager.createListItemText({
                 text: item.text
             });
@@ -721,8 +725,8 @@ export function showSongLibrary() {
             if (window.midiUtilities) {
                 currentMidiNote = window.midiUtilities.getMidiAssignment(item.value);
             }
-            
-        const midiInput = window.$('input', {
+
+            const midiInput = window.$('input', {
                 type: 'number',
                 min: '0',
                 max: '127',
@@ -731,15 +735,15 @@ export function showSongLibrary() {
                 css: {
                     width: '50px',
                     padding: '2px 4px',
-            border: 'none',
+                    border: 'none',
                     borderRadius: '3px',
                     fontSize: '11px',
-            textAlign: 'center',
-            backgroundColor: 'rgb(48, 60, 78)',
-            color: '#fff'
+                    textAlign: 'center',
+                    backgroundColor: 'rgb(48, 60, 78)',
+                    color: '#fff'
                 }
             });
-            
+
             // Store reference to input for updating
             midiInput.setAttribute('data-song-key', item.value);
 
@@ -759,14 +763,14 @@ export function showSongLibrary() {
             });
 
             // MIDI learn button
-        const midiLearnButton = window.$('button', {
+            const midiLearnButton = window.$('button', {
                 text: '',
                 css: {
                     width: '25px',
                     height: '25px',
-            border: 'none',
+                    border: 'none',
                     borderRadius: '3px',
-            backgroundColor: 'transparent',
+                    backgroundColor: 'transparent',
                     color: '#007acc',
                     cursor: 'pointer',
                     fontSize: '12px',
@@ -779,15 +783,15 @@ export function showSongLibrary() {
             });
             // Initial icon injection so it shows before first click
             try {
-                midiLearnButton.innerHTML='';
-                const img=document.createElement('img');
-                img.src='assets/images/icons/target.svg';
-                img.alt='midi';
-                img.style.width='12px';
-                img.style.height='12px';
-                img.style.pointerEvents='none';
+                midiLearnButton.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = 'assets/images/icons/target.svg';
+                img.alt = 'midi';
+                img.style.width = '12px';
+                img.style.height = '12px';
+                img.style.pointerEvents = 'none';
                 midiLearnButton.appendChild(img);
-            } catch(e) { /* silent */ }
+            } catch (e) { /* silent */ }
 
             // MIDI learn functionality
             midiLearnButton.addEventListener('click', (e) => {
@@ -806,13 +810,13 @@ export function showSongLibrary() {
                         midiLearnButton.style.backgroundColor = 'transparent';
                         midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
                     }, 0);
-                    midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='12px'; img.style.height='12px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
+                    midiLearnButton.innerHTML = ''; try { const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'midi'; img.style.width = '12px'; img.style.height = '12px'; img.style.pointerEvents = 'none'; midiLearnButton.appendChild(img); } catch (e) { }
                 } else {
                     // Start learning
                     midiLearnButton.style.backgroundColor = '#ff6b6b';
                     midiLearnButton.style.color = 'white';
                     midiLearnButton.textContent = '⏹️';
-                    
+
                     window.midiUtilities.startMidiLearn((midiNote) => {
                         // Remove any existing assignment for this song
                         window.midiUtilities.removeMidiAssignment(item.value);
@@ -828,7 +832,7 @@ export function showSongLibrary() {
                             midiLearnButton.style.backgroundColor = 'transparent';
                             midiLearnButton.style.setProperty('background-color', 'transparent', 'important');
                         }, 0);
-                        midiLearnButton.innerHTML=''; try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='12px'; img.style.height='12px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
+                        midiLearnButton.innerHTML = ''; try { const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'midi'; img.style.width = '12px'; img.style.height = '12px'; img.style.pointerEvents = 'none'; midiLearnButton.appendChild(img); } catch (e) { }
                     });
                 }
             });
@@ -839,7 +843,7 @@ export function showSongLibrary() {
             const deleteButton = window.UIManager.createDeleteButton({
                 onClick: (e) => {
                     e.stopPropagation();
-                    
+
                     window.ConfirmModal({
                         title: 'Delete Song',
                         message: `Are you sure you want to delete "${item.song.title}" by ${item.song.artist}?`,
@@ -877,9 +881,9 @@ export function showSongLibrary() {
 
             // Click handler for song selection
             itemDiv.addEventListener('click', (e) => {
-                if (e.target !== deleteButton && 
-                    e.target !== midiLearnButton && 
-                    e.target !== midiInput && 
+                if (e.target !== deleteButton &&
+                    e.target !== midiLearnButton &&
+                    e.target !== midiInput &&
                     e.target !== dragHandle &&
                     !midiControls.contains(e.target)) {
                     closeSongLibraryPanel();
@@ -913,13 +917,13 @@ export function showSongLibrary() {
                 itemDiv.style.borderTop = '';
                 const draggedIndex = parseInt(e.dataTransfer.getData('text/plain'));
                 const targetIndex = index;
-                
+
                 if (draggedIndex !== targetIndex) {
                     // Reorder the filteredItems array
                     const draggedItem = filteredItems[draggedIndex];
                     filteredItems.splice(draggedIndex, 1);
                     filteredItems.splice(targetIndex, 0, draggedItem);
-                    
+
                     // Update the display
                     updateSongList();
                     setTimeout(() => refreshMidiInputs(), 50);
@@ -935,7 +939,7 @@ export function showSongLibrary() {
     // Search functionality
     searchInput.addEventListener('input', (e) => {
         const searchTerm = e.target.value.toLowerCase();
-        filteredItems = songItems.filter(item => 
+        filteredItems = songItems.filter(item =>
             item.text.toLowerCase().includes(searchTerm)
         );
         updateSongList();
@@ -945,16 +949,16 @@ export function showSongLibrary() {
 
     content.append(searchInput, listContainer);
     updateSongList();
-    
+
     // Refresh MIDI inputs after DOM is ready
     setTimeout(() => {
         refreshMidiInputs();
     }, 100);
 
     // Assemble panel (without footer/close button)
-    modal.append( content);
+    modal.append(content);
     modalContainer.appendChild(modal);
-    
+
     // Create resize grip
     const resizeGrip = window.$('div', {
         id: 'song-library-resize-grip',
@@ -971,7 +975,7 @@ export function showSongLibrary() {
             position: 'relative'
         }
     });
-    
+
     // Add visual indicator (dots)
     const gripIndicator = window.$('div', {
         css: {
@@ -987,7 +991,7 @@ export function showSongLibrary() {
     function lockGripColor() {
         resizeGrip.style.backgroundColor = stableColor;
     }
-    ['mouseenter','mouseleave','mouseover','mouseout','focus','blur'].forEach(evt => {
+    ['mouseenter', 'mouseleave', 'mouseover', 'mouseout', 'focus', 'blur'].forEach(evt => {
         resizeGrip.addEventListener(evt, lockGripColor);
     });
 
@@ -998,9 +1002,9 @@ export function showSongLibrary() {
         styleEl.textContent = `#song-library-resize-grip, #song-library-resize-grip:hover, #song-library-resize-grip:active { background-color: #364754 !important; }`;
         document.head.appendChild(styleEl);
     }
-    
+
     resizeGrip.appendChild(gripIndicator);
-    
+
     // Insert between toolbar and lyrics (not as modal overlay)
     if (toolbar && lyricsContainer) {
         if (toolbar.nextSibling) {
@@ -1010,14 +1014,14 @@ export function showSongLibrary() {
             toolbar.parentNode.appendChild(modalContainer);
             toolbar.parentNode.appendChild(resizeGrip);
         }
-        
+
         // Add resize functionality
         addResizeListeners(modalContainer, resizeGrip, 'lyrix_song_library_panel_height');
     } else {
         // Fallback: add to body if toolbar/lyrics not found
         document.body.appendChild(modalContainer);
         document.body.appendChild(resizeGrip);
-        
+
         // Add resize functionality
         addResizeListeners(modalContainer, resizeGrip, 'lyrix_song_library_panel_height');
     }
@@ -1050,31 +1054,31 @@ function addResizeListeners(panel, grip, storageKey) {
         isResizing = true;
         startY = e.clientY;
         startHeight = parseInt(window.getComputedStyle(panel).height, 10);
-        
+
         grip.style.backgroundColor = '#007acc';
         grip.querySelector('div').style.backgroundColor = 'white';
-        
+
         document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
-        
+
         e.preventDefault();
     });
 
     // Handle resizing
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
-        
+
         const deltaY = e.clientY - startY;
         const newHeight = startHeight + deltaY;
-        
+
         // Set minimum and maximum heights
         const minHeight = 150; // minimum 150px
         const maxHeight = window.innerHeight * 0.8; // maximum 80% of viewport height
-        
+
         const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-        
+
         panel.style.height = `${clampedHeight}px`;
-        
+
         e.preventDefault();
     });
 
@@ -1082,15 +1086,15 @@ function addResizeListeners(panel, grip, storageKey) {
     document.addEventListener('mouseup', () => {
         if (isResizing) {
             isResizing = false;
-            
+
             // Save the new height
             const finalHeight = panel.style.height;
             localStorage.setItem(storageKey, finalHeight);
-            
+
             // Reset cursor and selection
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            
+
             // Reset grip appearance
             grip.style.backgroundColor = '#e0e0e0';
             grip.querySelector('div').style.backgroundColor = '#999';

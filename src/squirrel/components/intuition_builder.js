@@ -2677,10 +2677,8 @@ function intuitionCommon(cfg) {
 
 
 function createIcon(cfg) {
-    // puts(cfg.icon_top);
     const parentId = cfg.id;
     const svgId = `${parentId}__icon`;
-    // Nettoyer une éventuelle icône précédente
     const prev = document.getElementById(svgId);
     if (prev) { try { prev.remove(); } catch (e) { /* ignore */ } }
     const icon = cfg.icon;

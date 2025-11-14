@@ -14,10 +14,11 @@ function option_test_touch() {
 }
 
 function performing() {
+    puts('performing started');
     $('div', { text: 'Performing...', id: 'performingDiv', css: { width: '200px', height: '100px' } });
 }
 function stopPerforming() {
-
+    puts('performing stopped');
     grab('performingDiv').remove();
 }
 
@@ -25,33 +26,42 @@ function stop_lock_test_touch() {
     puts('Tools lock test unlock triggered!!!');
 }
 function openSettingsPanel() {
-    toggleSettingsPanel('settings_button');
-    puts('Settings panel opened');
+    toggleSettingsPanel();
+}
+
+function openSongLibrary() {
+    toggleSongLibrary('settings_button');
+}
+
+function exportAsTxt() {
+    exportSelectedSongsAsTextWithFolderDialog();
 }
 
 const intuition_content = {
     version: "1.1",
     meta: { namespace: "vie.menu", defaultLocale: "en" },
-    toolbox: { children: ['file', 'tools', 'capture', 'perform', 'settings'] },
+    toolbox: { children: ['file', 'tools', 'capture', 'perform', 'projects', 'settings'] },
     //
-    file: { type: 'palette', children: ['import', 'load', 'save'] },
-    tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch },
-    settings: { type: 'palette', children: ['midi',], icon: false, touch: openSettingsPanel },
-    capture: { label: 'record', type: 'tool', icon: 'record' },
-    perform: { label: 'perform', type: 'tool', icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
+    file: { type: 'palette', children: ['import', 'load', 'save', 'export'] },
+    projects: { type: 'tool', touch: openSongLibrary, icon: null },
+    tools: { type: 'palette', children: ['edit', 'new'] },
+    settings: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel },
+    capture: { label: 'capture', type: 'palette', icon: 'record' },
+    perform: { label: 'perform', type: 'palette', children: ['play', 'pause', 'prev', 'next', 'fullscreen'], icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
-    import: { type: 'tool', children: ['audio', 'modules', 'projects'] },
-    load: { type: 'tool', children: ['modules', 'projects'], touch_up: function () { puts('Import touch triggered'); } },
+    import: { type: 'tool', touch_down: function () { puts('Import touch triggered'); } },
+    load: { type: 'tool', children: ['modules', 'projects'], touch_down: function () { puts('load touch triggered'); } },
     save: { type: 'tool', touch: function () { puts('Save touch triggered'); } },
-    midi: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel, icon: false },
-    volume: { type: 'particle', helper: 'slider', value: 3 },
-    ADSR: { type: 'tool', children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
-    controller: { type: 'zonespecial', touch: function () { puts('Controller touch triggered'); } },
-    A: { type: 'particle', helper: 'slider', unit: '%', value: 50, ext: 3, },
-    D: { type: 'particle', helper: 'button', unit: '%', value: 0, ext: 3 },
-    S: { type: 'particle', helper: 'slider', unit: '%', value: 0, ext: 3 },
-    R: { type: 'particle', unit: '%', value: 20, ext: 3 },
+    export: { type: 'tool', touch: exportAsTxt },
+
+    edit: { type: 'particle', helper: 'slider' },
+    new: { type: 'tool', icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
+    play: { type: 'tool' },
+    pause: { type: 'tool' },
+    prev: { type: 'tool' },
+    next: { type: 'tool' },
+    fullscreen: { type: 'tool' },
 
 };
 
@@ -62,8 +72,8 @@ Intuition({
         option_bg: '#442200cc',
         item_size: '39px',
         anim_duration_ms: 200,
-        toolboxOffsetMain: "7px",
-        toolboxOffsetEdge: "69px",
+        toolboxOffsetMain: "3px",
+        toolboxOffsetEdge: "63px",
         satellite_bg: 'red',
         // tool_active_bg: "yellow",
         // tool_lock_bg: '#ff5555', 

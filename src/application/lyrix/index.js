@@ -1,6 +1,31 @@
 // Lyrix Application - New Entry Point
 // This is the new modular entry point for the Lyrix application
-
+//Todo : Menu structure :
+// Tools => edit song
+// medias => song panel 
+// settings => settings panel
+// file : import: import file  / project ; save : save current song
+//      : load : load file in current user folder 
+//      save => save current song
+//      export => text / lrc / lrx export
+//record => record audio, capture user zcyions (lyrics)
+//perform => play / stop audio + fullscreen display /next song/previous song
+//
+//scroll with reference between two lines of lyrics
+//pause in lyrics ( sec/wait for user action)
+// rich txt editor for lyrics +relative size
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 // Import modal modules from new organized structure
 import { showSongLibrary, toggleSongLibrary } from './src/components/songLibraryModal.js';
 import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
@@ -1497,6 +1522,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
     // Create custom modal with checkboxes
     const modalContainer = UIManager.createEnhancedModalOverlay();
+
     const modal = UIManager.createEnhancedModalContainer({
         css: {
             maxWidth: '600px',
@@ -1643,10 +1669,10 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     // Footer
     const footer = UIManager.createModalFooter({});
 
-    const cancelButton = UIManager.createCancelButton({
-        text: 'Cancel',
-        onClick: () => document.body.removeChild(modalContainer)
-    });
+    // const cancelButton = UIManager.createCancelButton({
+    //     text: 'Cancel jjjjjj',
+    //     onClick: () => document.body.removeChild(modalContainer)
+    // });
 
     const exportButton = UIManager.createSaveButton({
         text: 'Export Selected',
@@ -1672,7 +1698,8 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         }
     });
 
-    footer.append(cancelButton, exportButton);
+    // footer.append(exportButton);
+    selectAllContainer.append(exportButton);
     modal.append(content, footer);
     modalContainer.appendChild(modal);
     document.body.appendChild(modalContainer);
@@ -2898,7 +2925,6 @@ function setupDeferredAudioRebind() {
             if (audioController && audioController.loadAudio) {
                 const ok = audioController.loadAudio(fileName);
                 if (ok) {
-                    console.log('🔁 Rebind audio après dispo port local:', fileName);
                     return; // stop retries
                 }
             }
@@ -2947,9 +2973,7 @@ function loadLastSong() {
                 if (audioController && audioController.loadAudio) {
                     const ok = audioController.loadAudio(fileName);
                     if (!ok) {
-                        console.warn('⚠️ Impossible de charger audio au démarrage:', fileName);
-                    } else {
-                        console.log('🎵 Audio rechargé au démarrage:', fileName);
+                        console.warn('⚠️ Impossible to load audio at startup:', fileName);
                     }
                 }
             } else {
