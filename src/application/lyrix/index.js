@@ -339,6 +339,13 @@ function initializeLyrix() {
                 console.warn('❌ createNewEmptySong indisponible (lyricsDisplay non initialisé)');
             }
         };
+        window.toggleLyricsRecordMode = () => {
+            if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleRecordMode === 'function') {
+                window.lyricsDisplay.toggleRecordMode();
+            } else {
+                console.warn('❌ toggleRecordMode indisponible (lyricsDisplay non initialisé)');
+            }
+        };
         window.currentSong = currentSong;
         window.Modal = Modal;
         window.ConfirmModal = ConfirmModal;
@@ -3301,6 +3308,7 @@ window.Lyrix = {
     dragDropManager,
     midiUtilities,
     toggleEditMode: () => window.toggleLyricsEditMode && window.toggleLyricsEditMode(),
+    toggleRecordMode: () => window.toggleLyricsRecordMode && window.toggleLyricsRecordMode(),
     createNewEmptySong: () => window.createNewEmptySong && window.createNewEmptySong(),
     loadAndDisplaySong,
     navigateToPreviousSong,

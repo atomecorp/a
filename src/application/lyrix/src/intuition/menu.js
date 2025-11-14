@@ -57,27 +57,61 @@ function createNewSongFromMenu() {
 }
 
 function recordLyrixTimecode() {
-    puts('Record Lyrix Timecode triggered');
+    if (window.toggleLyricsRecordMode) {
+        window.toggleLyricsRecordMode();
+    } else if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleRecordMode === 'function') {
+        window.lyricsDisplay.toggleRecordMode();
+    } else {
+        puts('Record Lyrix Timecode triggered (fallback)');
+    }
 }
 
 function playMode() {
-    puts('Play mode activated');
+    const playButton = document.getElementById('audio-play-button');
+    if (playButton) {
+        playButton.click();
+    } else {
+        puts('Play mode activated (no play button)');
+    }
 }
 
 function pauseMode() {
-    puts('Pause mode activated');
+    const playButton = document.getElementById('audio-play-button');
+    if (playButton && window.audioController) {
+        if (window.audioController.isPlaying && window.audioController.isPlaying()) {
+            window.audioController.pause();
+            playButton._setActive ? playButton._setActive(false) : (playButton.style.backgroundColor = 'transparent');
+        }
+    } else {
+        puts('Pause mode activated (fallback)');
+    }
 }
 
 function prevMode() {
-    puts('Previous mode activated');
+    if (window.navigateToPreviousSong) {
+        window.navigateToPreviousSong();
+    } else {
+        puts('Previous mode activated (no handler)');
+    }
 }
 
 function nextMode() {
-    puts('Next mode activated');
+    if (window.navigateToNextSong) {
+        window.navigateToNextSong();
+    } else {
+        puts('Next mode activated (no handler)');
+    }
 }
 
 function fullscreenMode() {
-    puts('Fullscreen mode activated');
+    const button = document.getElementById('fullscreen_mode');
+    if (button) {
+        button.click();
+    } else if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleFullscreen === 'function') {
+        window.lyricsDisplay.toggleFullscreen();
+    } else {
+        puts('Fullscreen mode activated (fallback)');
+    }
 }
 
 
