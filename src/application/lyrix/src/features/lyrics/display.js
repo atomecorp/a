@@ -2039,6 +2039,7 @@ export class LyricsDisplay {
         console.log('✅ Created new empty song for editing');
     }
 
+
     // Toggle edit mode
     toggleEditMode() {
         // Check if no song is loaded when trying to enter edit mode

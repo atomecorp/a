@@ -44,6 +44,18 @@ function activate_Edition() {
     window.toggleLyricsEditMode()
 }
 
+function createNewSongFromMenu() {
+    if (window.createNewEmptySong) {
+        window.createNewEmptySong();
+        window.toggleLyricsEditMode()
+    } else if (window.lyricsDisplay && typeof window.lyricsDisplay.createNewEmptySong === 'function') {
+        window.lyricsDisplay.createNewEmptySong();
+        window.toggleLyricsEditMode()
+    } else {
+        console.warn('❌ Impossible de créer une chanson : createNewEmptySong non disponible');
+    }
+}
+
 
 const intuition_content = {
     version: "1.1",
@@ -64,7 +76,7 @@ const intuition_content = {
     export: { type: 'tool', touch: exportAsTxt, icon: false },
 
     edit: { type: 'tool', touch: activate_Edition, icon: 'edit' },
-    new: { type: 'tool', icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
+    new: { type: 'tool', icon: 'envelope', touch: createNewSongFromMenu, lock: tools_lock_test_touch },
     play: { type: 'tool' },
     pause: { type: 'tool' },
     prev: { type: 'tool' },
