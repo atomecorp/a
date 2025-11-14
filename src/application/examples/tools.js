@@ -255,33 +255,9 @@ const intuition_content = {
 
 const new_menu = Intuition({ name: 'newMenu', theme: light_theme, content: intuition_content, orientation: DEFAULT_ORIENTATION });
 
-$('span', {
-  // pas besoin de 'tag'
-  id: 'checker',
-  css: {
-    backgroundColor: '#00f',
-    marginLeft: '0',
-    padding: '10px',
-    color: 'white',
-    margin: '10px',
-    display: 'inline-block',
-    left: '50%',
-    top: '50%',
-    position: 'relative',
-    transform: 'translateX(-50%)'
-  },
-  text: 'intuition content',
-  onclick: () => {
-    const snapshot = typeof window.getFloatingPalettePersistenceSnapshot === 'function'
-      ? window.getFloatingPalettePersistenceSnapshot()
-      : null;
-    if (snapshot && typeof snapshot === 'object') {
-      console.log('📦 Extracted palette metadata snapshot:', snapshot);
-    } else {
-      console.log('⚠️ Aucun extrait enregistré pour le moment (snapshot indisponible).');
-    }
-  },
-});
+const MENU_SNAPSHOT_STORAGE_KEY = 'intuition_menu_status_snapshot';
+
+
 
 
 
@@ -378,3 +354,125 @@ setTimeout(() => {
     }, 100);
   }
 }, 7500);
+
+
+
+// $('span', {
+//   id: 'checker',
+//   css: {
+//     backgroundColor: '#00f',
+//     marginLeft: '0',
+//     padding: '10px',
+//     color: 'white',
+//     margin: '10px',
+//     display: 'inline-block',
+//     left: '50%',
+//     top: '50%',
+//     position: 'relative',
+//     transform: 'translateX(-50%)'
+//   },
+//   text: 'intuition content',
+//   onclick: () => {
+//     const snapshot = typeof window.getFloatingPalettePersistenceSnapshot === 'function'
+//       ? window.getFloatingPalettePersistenceSnapshot()
+//       : null;
+//     if (snapshot && typeof snapshot === 'object') {
+//       console.log('📦 Extracted palette metadata snapshot:', snapshot);
+//     } else {
+//       console.log('⚠️ Aucun extrait enregistré pour le moment (snapshot indisponible).');
+//     }
+//   },
+// });
+
+
+$('div', {
+  id: 'test1',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    top: '25%',
+    position: 'relative',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'store content ',
+  onclick: () => {
+    const updatedSnapshot = (typeof window !== 'undefined' && typeof window.updateCurrentMenuStatus === 'function')
+      ? window.updateCurrentMenuStatus({ reason: 'manual-store' })
+      : (typeof window !== 'undefined' ? window.current_menu_status : null);
+    console.log('Current menu status snapshot:', updatedSnapshot);
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      console.warn('localStorage unavailable; snapshot not persisted.');
+      return;
+    }
+    try {
+      localStorage.removeItem(MENU_SNAPSHOT_STORAGE_KEY);
+      localStorage.setItem(MENU_SNAPSHOT_STORAGE_KEY, JSON.stringify(updatedSnapshot || null));
+      console.log('Menu snapshot stored in localStorage.');
+    } catch (error) {
+      console.error('Failed to store menu snapshot:', error);
+    }
+  },
+});
+
+$('div', {
+  id: 'test2',
+  css: {
+    backgroundColor: '#00f',
+    marginLeft: '0',
+    top: '25%',
+    position: 'relative',
+    padding: '10px',
+    color: 'white',
+    margin: '10px',
+    display: 'inline-block'
+  },
+  text: 'restore content ',
+  onclick: () => {
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      console.warn('localStorage unavailable; cannot restore menu snapshot.');
+      return;
+    }
+    const serialized = localStorage.getItem(MENU_SNAPSHOT_STORAGE_KEY);
+    if (!serialized) {
+      console.warn('No stored menu snapshot found.');
+      return;
+    }
+    let storedSnapshot = null;
+    try {
+      storedSnapshot = JSON.parse(serialized);
+    } catch (error) {
+      console.error('Failed to parse stored menu snapshot:', error);
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.current_menu_status = storedSnapshot;
+    }
+    const floatingPayload = storedSnapshot && storedSnapshot.floatingSnapshot;
+    if (floatingPayload) {
+      if (typeof window !== 'undefined' && typeof window.clearFloatingPalettePersistenceSnapshot === 'function') {
+        window.clearFloatingPalettePersistenceSnapshot();
+      }
+      try {
+        if (typeof Intuition === 'function') {
+          Intuition({ type: 'extract', content: floatingPayload });
+        } else if (typeof window !== 'undefined' && typeof window.setFloatingPalettePersistenceSnapshot === 'function') {
+          window.setFloatingPalettePersistenceSnapshot(floatingPayload);
+        } else {
+          console.warn('No extractor available to restore floating payload.');
+        }
+      } catch (error) {
+        console.error('Failed to restore floating payload via Intuition:', error);
+      }
+    }
+    if (storedSnapshot && storedSnapshot.menuOpen && typeof window !== 'undefined' && typeof window.openMenu === 'function') {
+      window.openMenu(storedSnapshot.menuOpen);
+    }
+    const refreshedStatus = (typeof window !== 'undefined' && typeof window.updateCurrentMenuStatus === 'function')
+      ? window.updateCurrentMenuStatus({ reason: 'manual-restore' })
+      : storedSnapshot;
+    console.log('Menu state restored from stored snapshot:', refreshedStatus);
+  },
+});

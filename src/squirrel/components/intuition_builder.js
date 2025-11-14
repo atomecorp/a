@@ -2147,6 +2147,7 @@ function finishMenuItemDrag(e, ctx) {
             if (info) {
                 clampFloatingToViewport(info);
                 repositionActiveSatellites(info);
+                updateCurrentMenuStatus({ reason: 'extraction' });
             }
         }
     }
@@ -6428,6 +6429,51 @@ function clonePlainIntuitionValue(value) {
     }
     return value;
 }
+
+function snapshotCurrentMenuState(meta = {}) {
+    const reason = meta && meta.reason != null
+        ? String(meta.reason)
+        : null;
+    const supportContext = clonePlainIntuitionValue(resolveActiveSupportContext());
+    const floatingSnapshot = snapshotFloatingPersistence() || {};
+    const normalizedMenuOpen = (typeof menuOpen === 'string' && menuOpen !== 'false')
+        ? menuOpen
+        : null;
+    return {
+        reason,
+        timestamp: Date.now(),
+        menuOpen: normalizedMenuOpen,
+        menuStack: Array.isArray(menuStack) ? clonePlainIntuitionValue(menuStack) : [],
+        visibleEntries: getVisibleMenuEntries(),
+        supportContext,
+        floatingSnapshot,
+        floatingHosts: Array.from(floatingRegistry.keys()),
+        editModeActive: isEditModeActive()
+    };
+}
+
+function updateCurrentMenuStatus(meta = {}) {
+    const snapshot = snapshotCurrentMenuState(meta);
+    const target = typeof window !== 'undefined'
+        ? window
+        : (typeof globalThis !== 'undefined' ? globalThis : null);
+    if (target) {
+        target.current_menu_status = snapshot;
+    }
+    return snapshot;
+}
+
+function ensureCurrentMenuStatusInitialized() {
+    const target = typeof window !== 'undefined'
+        ? window
+        : (typeof globalThis !== 'undefined' ? globalThis : null);
+    if (!target || target.current_menu_status) {
+        return;
+    }
+    updateCurrentMenuStatus({ reason: 'bootstrap' });
+}
+
+ensureCurrentMenuStatusInitialized();
 
 function normalizeContentEntry(entry) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
