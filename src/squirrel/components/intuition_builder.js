@@ -3073,38 +3073,63 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
         try { def = intuition_content[nameKey]; } catch (_) { }
     }
 
+    const triggerMomentaryPulse = () => {
+        if (!def) return;
+        if (el.dataset.locked === 'true') return;
+        const inlineBgBefore = el.style.background || '';
+        const defaultBg = inlineBgBefore || currentTheme.tool_bg || '';
+        const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
+        const flashDuration = (() => {
+            if (typeof def.momentaryDelay === 'number' && isFinite(def.momentaryDelay)) {
+                return Math.max(0, def.momentaryDelay);
+            }
+            const fromTheme = currentTheme && currentTheme.momentary_flash_duration;
+            const parsedThemeValue = typeof fromTheme === 'string' ? parseFloat(fromTheme) : fromTheme;
+            if (typeof parsedThemeValue === 'number' && isFinite(parsedThemeValue)) {
+                return Math.max(0, parsedThemeValue);
+            }
+            return 0;
+        })();
+        const previousTransition = el.style.transition;
+        if (!previousTransition || !/background/i.test(previousTransition)) {
+            try { el.style.transition = `background ${Math.max(flashDuration, 80)}ms ease-out`; } catch (_) { }
+        }
+        try { el.style.background = activeBg; } catch (_) { }
+        runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
+        const revert = () => {
+            if (inlineBgBefore) {
+                try { el.style.background = inlineBgBefore; } catch (_) { }
+            } else {
+                try { el.style.removeProperty('background'); } catch (_) { }
+            }
+            runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
+            if (previousTransition) {
+                try { el.style.transition = previousTransition; } catch (_) { }
+            } else {
+                try { el.style.removeProperty('transition'); } catch (_) { }
+            }
+        };
+        if (flashDuration > 0) {
+            setTimeout(revert, flashDuration);
+        } else {
+            requestAnimationFrame(revert);
+        }
+    };
+
     // Activation simple pour tools sans enfants
     const toggleChildlessActive = () => {
         if (!def) return;
         if (el.dataset.locked === 'true') return; // ne pas toucher si lock actif
         const hasChildren = def && Array.isArray(def.children) && def.children.length > 0;
         if (hasChildren) return;
-        const actionMode = (def && typeof def.action === 'string') ? def.action.trim().toLowerCase() : null;
         const defaultBg = currentTheme.tool_bg || '';
         const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
-        const runInactiveHandler = () => {
-            try { el.style.background = defaultBg; } catch (_) { }
-            delete el.dataset.simpleActive;
-            delete el.dataset.activeTag;
-            runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
-        };
-        if (actionMode === 'momentary') {
-            // Pulse active handler once, then immediately revert
-            delete el.dataset.simpleActive;
-            delete el.dataset.activeTag;
-            try { el.style.background = activeBg; } catch (_) { }
-            runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
-            const delay = typeof def.momentaryDelay === 'number' && isFinite(def.momentaryDelay) ? Math.max(0, def.momentaryDelay) : 0;
-            if (delay > 0) {
-                setTimeout(runInactiveHandler, delay);
-            } else {
-                requestAnimationFrame(runInactiveHandler);
-            }
-            return;
-        }
         const isActive = el.dataset.simpleActive === 'true';
         if (isActive) {
-            runInactiveHandler();
+            delete el.dataset.simpleActive;
+            delete el.dataset.activeTag;
+            try { el.style.background = defaultBg; } catch (_) { }
+            runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
         } else {
             el.dataset.simpleActive = 'true';
             try { el.style.background = activeBg; } catch (_) { }
@@ -3114,6 +3139,8 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
     };
 
     const basePayload = { el, event: rawEvent, nameKey };
+    const hasChildren = def && Array.isArray(def.children) && def.children.length > 0;
+    const actionMode = (def && typeof def.action === 'string') ? def.action.trim().toLowerCase() : null;
 
     switch (kind) {
         case 'touch_down':
@@ -3125,8 +3152,15 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             break;
         case 'touch':
             runContentHandler(def, 'touch', { ...basePayload, kind: 'touch' });
+            if (actionMode === 'momentary') {
+                triggerMomentaryPulse();
+                if (hasChildren) {
+                    try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
+                }
+                break;
+            }
             // Si tool avec enfants -> comportement historique (expand). Sinon toggle actif simple.
-            if (def && Array.isArray(def.children) && def.children.length > 0) {
+            if (hasChildren) {
                 try { expandToolInline(el, { id: el.id, nameKey }); } catch (_) { }
             } else {
                 toggleChildlessActive();

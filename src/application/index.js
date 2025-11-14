@@ -142,3 +142,6 @@ import('./examples/tools.js'); //intuition menu
 // puts (a);
 
 // a.style.left= '100px';
+
+
+// TODO: tools must be able to save the whole current state when extraciing new toolboxs.

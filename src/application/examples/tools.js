@@ -61,6 +61,7 @@ const light_theme = {
   // particle_bg: '#4a4a4aff',
   // option_bg: '#c40fdfff',
   // zonespecial_bg: '#4a4a4aff',
+  momentary_flash_duration: 150,
   slider_length: '70%',
   slider_zoom_length: '100%',
   slider_length_vertical: '30%',
