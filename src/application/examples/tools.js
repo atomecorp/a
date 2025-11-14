@@ -266,6 +266,37 @@ const new_menu = Intuition({ name: 'newMenu', theme: light_theme, content: intui
 
 const MENU_SNAPSHOT_STORAGE_KEY = 'intuition_menu_status_snapshot';
 
+function normalizeFloatingSnapshotStates(payload) {
+  const map = {};
+  if (!payload) {
+    return map;
+  }
+  const captureEntry = (entry, fallbackId) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const hostData = entry.host ? entry.host : entry;
+    const hostId = hostData.id || fallbackId;
+    if (!hostId) {
+      return;
+    }
+    const stateValue = (entry.state || hostData.state || '').trim().toLowerCase();
+    if (stateValue) {
+      map[hostId] = stateValue;
+    }
+  };
+  if (Array.isArray(payload)) {
+    payload.forEach(item => captureEntry(item));
+    return map;
+  }
+  if (typeof payload === 'object') {
+    Object.keys(payload).forEach(key => {
+      captureEntry(payload[key], key);
+    });
+  }
+  return map;
+}
+
 
 
 
@@ -395,7 +426,7 @@ setTimeout(() => {
 
 
 $('div', {
-  id: 'test1',
+  id: 'storing',
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -427,7 +458,7 @@ $('div', {
 });
 
 $('div', {
-  id: 'test2',
+  id: 'restoring',
   css: {
     backgroundColor: '#00f',
     marginLeft: '0',
@@ -464,13 +495,20 @@ $('div', {
       if (typeof window !== 'undefined' && typeof window.clearFloatingPalettePersistenceSnapshot === 'function') {
         window.clearFloatingPalettePersistenceSnapshot();
       }
+      const floatingStates = normalizeFloatingSnapshotStates(floatingPayload);
       try {
+        let restoredHosts = null;
         if (typeof Intuition === 'function') {
-          Intuition({ type: 'extract', content: floatingPayload });
+          restoredHosts = Intuition({ type: 'extract', content: floatingPayload });
         } else if (typeof window !== 'undefined' && typeof window.setFloatingPalettePersistenceSnapshot === 'function') {
           window.setFloatingPalettePersistenceSnapshot(floatingPayload);
         } else {
           console.warn('No extractor available to restore floating payload.');
+        }
+        if (floatingStates && typeof window !== 'undefined' && typeof window.setFloatingHostState === 'function') {
+          Object.keys(floatingStates).forEach((hostId) => {
+            window.setFloatingHostState(hostId, floatingStates[hostId]);
+          });
         }
       } catch (error) {
         console.error('Failed to restore floating payload via Intuition:', error);

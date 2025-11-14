@@ -315,6 +315,49 @@ function updatePersistedFloatingHostPosition(info, left, top) {
     prev.top = nextTop;
 }
 
+function persistFloatingHostState(info) {
+    if (!info || !info.id) return;
+    const container = info.container;
+    const leftStyle = container && container.style ? container.style.left : null;
+    const topStyle = container && container.style ? container.style.top : null;
+    const left = normalizeOffsetToNumber(
+        leftStyle != null && leftStyle !== ''
+            ? leftStyle
+            : (container ? container.offsetLeft : 0)
+    );
+    const top = normalizeOffsetToNumber(
+        topStyle != null && topStyle !== ''
+            ? topStyle
+            : (container ? container.offsetTop : 0)
+    );
+    const children = Array.isArray(info.rootChildren) && info.rootChildren.length
+        ? info.rootChildren.slice()
+        : (Array.isArray(info.nameKeys) ? info.nameKeys.slice() : []);
+    ensureFloatingHostRecord(info, info.theme || currentTheme, {
+        reference: info.reference || info.parentFloatingId || 'toolbox',
+        position: { left, top },
+        content: {
+            key: info.sourcePaletteKey || null,
+            title: info.title || null,
+            children
+        },
+        state: info.collapsed ? 'close' : 'open'
+    });
+}
+
+function recordFloatingStateChange(info, reason) {
+    if (typeof updateCurrentMenuStatus !== 'function') return;
+    if (!info || !info.id) {
+        updateCurrentMenuStatus({ reason: reason || 'floating-state' });
+        return;
+    }
+    updateCurrentMenuStatus({
+        reason: reason || 'floating-state',
+        hostId: info.id,
+        state: info.collapsed ? 'close' : 'open'
+    });
+}
+
 function resolveOrientationValue(theme) {
     const dir = theme && typeof theme.direction === 'string' ? theme.direction.trim() : '';
     if (dir) {
@@ -838,15 +881,19 @@ function toggleFloatingCollapse(id, force) {
             info.nameKeys = snapshotKeys.slice();
             info.collapsed = true;
             info.container.dataset.collapsed = 'true';
+            persistFloatingHostState(info);
+            recordFloatingStateChange(info, 'floating-close');
             return;
         }
         info._collapseAnimation = true;
         info.visibleKeysSnapshot = snapshotKeys;
         info.nameKeys = snapshotKeys.slice();
+        info.collapsed = true;
+        info.container.dataset.collapsed = 'true';
+        persistFloatingHostState(info);
+        recordFloatingStateChange(info, 'floating-close');
         slideOutItemsToOrigin(children, () => {
             info.body.innerHTML = '';
-            info.container.dataset.collapsed = 'true';
-            info.collapsed = true;
             info._collapseAnimation = false;
             if (info._pendingCollapse != null) {
                 const pending = info._pendingCollapse;
@@ -870,6 +917,8 @@ function toggleFloatingCollapse(id, force) {
                     : []));
         info.container.dataset.collapsed = 'false';
         info.collapsed = false;
+        persistFloatingHostState(info);
+        recordFloatingStateChange(info, 'floating-open');
         info._collapseAnimation = true;
         requestAnimationFrame(() => {
             renderFloatingBody(info, keysToRender);
@@ -885,6 +934,28 @@ function toggleFloatingCollapse(id, force) {
         });
     }
 }
+
+window.setFloatingHostState = function setFloatingHostState(hostId, desiredState) {
+    if (!hostId) return false;
+    const info = floatingRegistry.get(hostId);
+    if (!info) return false;
+    const normalized = typeof desiredState === 'string'
+        ? desiredState.trim().toLowerCase()
+        : '';
+    let targetCollapse;
+    if (normalized === 'open') {
+        targetCollapse = false;
+    } else if (normalized === 'close' || normalized === 'closed') {
+        targetCollapse = true;
+    } else {
+        return false;
+    }
+    if (info.collapsed === targetCollapse) {
+        return true;
+    }
+    toggleFloatingCollapse(hostId, targetCollapse);
+    return true;
+};
 
 function removeFloating(id) {
     const info = typeof id === 'string' ? floatingRegistry.get(id) : id;
@@ -1192,6 +1263,10 @@ function createFloatingHost(opts = {}) {
     };
     floatingRegistry.set(id, info);
     ensureFloatingPersistenceStore(info);
+    const persistedBucket = getFloatingPersistenceBucket(id);
+    const persistedState = persistedBucket && persistedBucket.host && persistedBucket.host.state
+        ? String(persistedBucket.host.state).trim().toLowerCase()
+        : null;
     const initialDirection = (info.theme && info.theme.direction)
         ? String(info.theme.direction).toLowerCase()
         : (currentTheme && currentTheme.direction ? String(currentTheme.direction).toLowerCase() : 'top_left_horizontal');
@@ -1203,7 +1278,8 @@ function createFloatingHost(opts = {}) {
             key: info.sourcePaletteKey || null,
             title: info.title || null,
             children: Array.isArray(opts.initialChildren) ? opts.initialChildren.slice() : []
-        }
+        },
+        state: persistedState === 'close' || persistedState === 'closed' ? 'close' : 'open'
     });
     if (info.parentFloatingId && floatingRegistry.has(info.parentFloatingId)) {
         const parentInfo = floatingRegistry.get(info.parentFloatingId);
@@ -1217,6 +1293,11 @@ function createFloatingHost(opts = {}) {
     updateFloatingGripLayout();
     setFloatingEditMode(isEditModeActive());
     attachMenuAddToFloatingHost(info);
+
+    if (persistedState === 'close' || persistedState === 'closed') {
+        requestAnimationFrame(() => toggleFloatingCollapse(info.id, true));
+    }
+
     return info;
 }
 
