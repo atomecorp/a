@@ -1,22 +1,22 @@
-const vieLogo = $('img', {
-  id: 'img_test',
-  parent: "#view",
-  attrs: {
-    src: './assets/images/2.png',
-    alt: 'ballanim'
-  },
-  css: {
-    marginLeft: '0',
-    color: 'white',
-    left: '0px',
-    top: '0px',
-    position: 'relative',
-    height: "100%",
-    width: "100%",
-    textAlign: 'center',
-    display: 'block'
-  }
-});
+// const vieLogo = $('img', {
+//   id: 'img_test',
+//   parent: "#view",
+//   attrs: {
+//     src: './assets/images/2.png',
+//     alt: 'ballanim'
+//   },
+//   css: {
+//     marginLeft: '0',
+//     color: 'white',
+//     left: '0px',
+//     top: '0px',
+//     position: 'relative',
+//     height: "100%",
+//     width: "100%",
+//     textAlign: 'center',
+//     display: 'block'
+//   }
+// });
 
 const shadowLeft = 0,
   shadowTop = 0,

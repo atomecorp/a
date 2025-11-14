@@ -2187,7 +2187,8 @@ function beginFloatingMove(ev, info) {
         dragActivated: false,
         lastClientX: pointerMeta.clientX,
         lastClientY: pointerMeta.clientY,
-        dragFinished: false
+        dragFinished: false,
+        loggedDrag: false
     };
     ctx.moveHandler = (e) => handleFloatingMove(e, ctx);
     ctx.upHandler = (e) => finishFloatingMove(e, ctx);
@@ -2210,6 +2211,10 @@ function handleFloatingMove(e, ctx) {
         if (dist >= FLOATING_DRAG_ACTIVATION_THRESHOLD) {
             intuition_drag_active = true;
             ctx.dragActivated = true;
+            if (!ctx.loggedDrag) {
+                console.log('item dragged');
+                ctx.loggedDrag = true;
+            }
         }
     }
     if (
