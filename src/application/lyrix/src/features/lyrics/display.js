@@ -316,13 +316,13 @@ export class LyricsDisplay {
         const mainToolRow = $('div', {
             id: 'main-toolbar-row',
             css: {
-                display: 'flex', // Always visible
-                gap: '6px',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                padding: '6px 8px', // Slightly reduced height
-                backgroundColor: UIManager.THEME.colors.surfaceAlt, // unified toolbar background
-                transition: 'all 0.3s ease' // Smooth transition for show/hide
+                display: 'none', // Always visible
+                //     gap: '6px',
+                //     alignItems: 'center',
+                //     flexWrap: 'wrap',
+                //     padding: '6px 8px', // Slightly reduced height
+                //     backgroundColor: UIManager.THEME.colors.surfaceAlt, // unified toolbar background
+                //     transition: 'all 0.3s ease' // Smooth transition for show/hide
             }
         });
 

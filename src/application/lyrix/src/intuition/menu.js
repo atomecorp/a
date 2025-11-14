@@ -116,11 +116,7 @@ function fullscreenMode() {
 
 
 function saveLRXFormat() {
-    if (window.exportSongLibraryAsLRX) {
-        window.exportSongLibraryAsLRX();
-    } else {
-        console.warn('❌ Export LRX handler not available');
-    }
+
 }
 
 
@@ -146,8 +142,8 @@ const intuition_content = {
     new: { type: 'tool', icon: 'envelope', touch: createNewSongFromMenu, lock: tools_lock_test_touch },
     play: { type: 'tool', touch: playMode },
     pause: { type: 'tool', touch: pauseMode },
-    prev: { type: 'tool', touch: prevMode },
-    next: { type: 'tool', touch: nextMode },
+    prev: { type: 'tool', touch: prevMode, icon: 'previous' },
+    next: { type: 'tool', touch: nextMode, icon: 'next' },
     fullscreen: { type: 'tool', touch: fullscreenMode },
 
 };
