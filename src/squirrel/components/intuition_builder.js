@@ -3079,16 +3079,35 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
         if (el.dataset.locked === 'true') return; // ne pas toucher si lock actif
         const hasChildren = def && Array.isArray(def.children) && def.children.length > 0;
         if (hasChildren) return;
-        const isActive = el.dataset.simpleActive === 'true';
-        if (isActive) {
+        const actionMode = (def && typeof def.action === 'string') ? def.action.trim().toLowerCase() : null;
+        const defaultBg = currentTheme.tool_bg || '';
+        const activeBg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || defaultBg || '#444';
+        const runInactiveHandler = () => {
+            try { el.style.background = defaultBg; } catch (_) { }
             delete el.dataset.simpleActive;
-            try { el.style.background = currentTheme.tool_bg || ''; } catch (_) { }
             delete el.dataset.activeTag;
             runContentHandler(def, 'inactive', { el, event: rawEvent, nameKey, kind: 'inactive' });
+        };
+        if (actionMode === 'momentary') {
+            // Pulse active handler once, then immediately revert
+            delete el.dataset.simpleActive;
+            delete el.dataset.activeTag;
+            try { el.style.background = activeBg; } catch (_) { }
+            runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
+            const delay = typeof def.momentaryDelay === 'number' && isFinite(def.momentaryDelay) ? Math.max(0, def.momentaryDelay) : 0;
+            if (delay > 0) {
+                setTimeout(runInactiveHandler, delay);
+            } else {
+                requestAnimationFrame(runInactiveHandler);
+            }
+            return;
+        }
+        const isActive = el.dataset.simpleActive === 'true';
+        if (isActive) {
+            runInactiveHandler();
         } else {
             el.dataset.simpleActive = 'true';
-            const bg = currentTheme.tool_active_bg || currentTheme.tool_bg_active || currentTheme.tool_bg || '#444';
-            try { el.style.background = bg; } catch (_) { }
+            try { el.style.background = activeBg; } catch (_) { }
             el.dataset.activeTag = 'true';
             runContentHandler(def, 'active', { el, event: rawEvent, nameKey, kind: 'active' });
         }

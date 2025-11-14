@@ -202,7 +202,7 @@ const intuition_content = {
   tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch, floatingMenuKey: 'record_child_tools' },
   settings: { type: 'palette', children: ['orientation'], icon: false },
   capture: { label: 'record', type: 'tool', icon: 'record' },
-  perform: { label: 'perform', type: 'tool', icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
+  perform: { label: 'perform', type: 'tool', icon: null, action: 'momentary', active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
   import: { type: 'tool', children: ['audio', 'modules', 'projects'] },
