@@ -356,6 +356,7 @@ function recordFloatingStateChange(info, reason) {
         hostId: info.id,
         state: info.collapsed ? 'close' : 'open'
     });
+    save_intuition_menu();
 }
 
 function resolveOrientationValue(theme) {
