@@ -56,6 +56,30 @@ function createNewSongFromMenu() {
     }
 }
 
+function recordLyrixTimecode() {
+    puts('Record Lyrix Timecode triggered');
+}
+
+function playMode() {
+    puts('Play mode activated');
+}
+
+function pauseMode() {
+    puts('Pause mode activated');
+}
+
+function prevMode() {
+    puts('Previous mode activated');
+}
+
+function nextMode() {
+    puts('Next mode activated');
+}
+
+function fullscreenMode() {
+    puts('Fullscreen mode activated');
+}
+
 
 const intuition_content = {
     version: "1.1",
@@ -66,7 +90,7 @@ const intuition_content = {
     songs: { type: 'tool', touch: openSongLibrary, icon: null },
     tools: { type: 'palette', children: ['edit', 'new'] },
     settings: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel },
-    capture: { label: 'capture', type: 'palette', icon: 'record' },
+    capture: { label: 'capture', type: 'tool', icon: 'record', touch: recordLyrixTimecode },
     perform: { label: 'perform', type: 'palette', children: ['play', 'pause', 'prev', 'next', 'fullscreen'], icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
@@ -77,11 +101,11 @@ const intuition_content = {
 
     edit: { type: 'tool', touch: activate_Edition, icon: 'edit' },
     new: { type: 'tool', icon: 'envelope', touch: createNewSongFromMenu, lock: tools_lock_test_touch },
-    play: { type: 'tool' },
-    pause: { type: 'tool' },
-    prev: { type: 'tool' },
-    next: { type: 'tool' },
-    fullscreen: { type: 'tool' },
+    play: { type: 'tool', touch: playMode },
+    pause: { type: 'tool', touch: pauseMode },
+    prev: { type: 'tool', touch: prevMode },
+    next: { type: 'tool', touch: nextMode },
+    fullscreen: { type: 'tool', touch: fullscreenMode },
 
 };
 
