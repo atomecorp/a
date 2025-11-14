@@ -2212,6 +2212,7 @@ function handleFloatingMove(e, ctx) {
             intuition_drag_active = true;
             ctx.dragActivated = true;
             if (!ctx.loggedDrag) {
+                updateCurrentMenuStatus({ reason: 'floating-drag' });
                 console.log('item dragged');
                 ctx.loggedDrag = true;
             }
