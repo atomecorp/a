@@ -156,7 +156,7 @@ Intuition({
         item_size: '39px',
         anim_duration_ms: 200,
         toolboxOffsetMain: "3px",
-        toolboxOffsetEdge: "63px",
+        toolboxOffsetEdge: "3px",
         satellite_bg: 'red',
         // tool_active_bg: "yellow",
         // tool_lock_bg: '#ff5555', 
@@ -169,3 +169,7 @@ Intuition({
 
 // touch_up: openSettingsPanel,
 //    toggleSettingsPanel('settings_button');
+
+
+
+// grab('toolbox').style.display = 'none';

@@ -112,6 +112,7 @@ export class LyricsDisplay {
             try {
                 const hasNotch = !!window.__HAS_NOTCH__;
                 const dc = document.getElementById('display-container');
+
                 if (dc) {
                     dc.style.paddingTop = hasNotch ? 'env(safe-area-inset-top)' : '0';
                     dc.style.backgroundColor = hasNotch ? '#000' : basePrimary;
@@ -134,6 +135,7 @@ export class LyricsDisplay {
                 backgroundColor: 'rgb(37, 48, 64)',
                 flexShrink: 0,
                 zIndex: '100',
+                height: '0px',
                 top: toolbarTop
             }
         });
@@ -378,6 +380,13 @@ export class LyricsDisplay {
         // Add edit mode buttons (save and cancel) - these should be at the very end
         mainToolElements.push(this.saveChangesButton, this.cancelEditButton);
 
+        // Force-hide every button/icon in the top toolbar per request
+        mainToolElements.forEach((element) => {
+            if (element && element.style) {
+                element.style.display = 'none';
+            }
+        });
+
         mainToolRow.append(...mainToolElements);
 
         // Debug: Check if audio buttons are actually in the toolbar after appending
@@ -520,7 +529,7 @@ export class LyricsDisplay {
         if (settingsPanel && settingsPanel.offsetTop === 0) {
             displayContainer.style.top = `${settingsHeight}px`;
         } else {
-            displayContainer.style.top = '0px';
+            displayContainer.style.top = '52px';
         }
 
         // console.log('🔄 Updated display container height:', availableHeight, 'px, settings height:', settingsHeight, 'px');
@@ -2317,6 +2326,8 @@ export class LyricsDisplay {
         this.fullscreenMode = !this.fullscreenMode;
 
         if (this.fullscreenMode) {
+            grab('intuition').style.display = 'none';
+
             // Hide everything except lyrics content
             const leftPanel = document.getElementById('control_panel');
             const statusBar = document.querySelector('[style*="position: fixed"][style*="bottom"]');
@@ -2339,6 +2350,7 @@ export class LyricsDisplay {
 
         } else {
             // Remove click handler
+            grab('intuition').style.display = 'flex';
             if (this.fullscreenClickHandler) {
                 this.lyricsContent.removeEventListener('click', this.fullscreenClickHandler);
                 this.fullscreenClickHandler = null;

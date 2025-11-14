@@ -299,6 +299,13 @@ function initializeLyrix() {
         const purchaseManager = getPurchaseManager();
         window.purchaseManager = purchaseManager;
 
+        function hideShowMidiConsoleButton() {
+            const button = document.getElementById('show_midi_console_button');
+            if (button && button.style) {
+                button.style.display = 'none';
+            }
+        }
+
         function ensureMidiConsoleUI() {
             const toolbarRow = document.getElementById('main-toolbar-row');
             if (!toolbarRow) return;
@@ -312,12 +319,14 @@ function initializeLyrix() {
                     });
                     toolbarRow.appendChild(consoleBtn);
                 }
+                hideShowMidiConsoleButton();
             } else {
                 if (consoleBtn) consoleBtn.remove();
             }
         }
         window.addEventListener('lyrix-purchase-updated', ensureMidiConsoleUI);
         setTimeout(ensureMidiConsoleUI, 0);
+        setTimeout(hideShowMidiConsoleButton, 50);
 
         // Export managers and modal functions to global scope
         window.UIManager = UIManager; // Export the class for static methods
@@ -2625,7 +2634,12 @@ function createMainInterface() {
             css: {
                 display: initialDisplay,
                 padding: '0 8px', // Slightly reduced horizontal + no extra vertical height
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                position: 'absolute',
+                top: '52px',
+                left: '0',
+                right: '0',
+                width: '100%'
             }
         });
         scrubContainer.classList.add('audio-tools-row');
@@ -3352,4 +3366,16 @@ export {
 };
 
 
+
+// setTimeout(() => {
 // grab('view').style.backgroundColor = 'black'; // patch for notch support
+
+
+const mainArea = document.getElementById('display-container');
+
+mainArea.style.top = '52px'
+console.log('patched mainArea top to 120px')
+// }, 1500);
+
+
+
