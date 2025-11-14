@@ -115,6 +115,15 @@ function fullscreenMode() {
 }
 
 
+function saveLRXFormat() {
+    if (window.exportSongLibraryAsLRX) {
+        window.exportSongLibraryAsLRX();
+    } else {
+        console.warn('❌ Export LRX handler not available');
+    }
+}
+
+
 const intuition_content = {
     version: "1.1",
     meta: { namespace: "vie.menu", defaultLocale: "en" },
@@ -130,7 +139,7 @@ const intuition_content = {
 
     import: { type: 'tool', touch_down: importFilesIntoLyrix },
     load: { type: 'tool', touch: openSongLibrary },
-    save: { type: 'tool', touch: function () { puts('Save touch triggered'); } },
+    save: { type: 'tool', touch: saveLRXFormat },
     export: { type: 'tool', touch: exportAsTxt, icon: false },
 
     edit: { type: 'tool', touch: activate_Edition, icon: 'edit' },

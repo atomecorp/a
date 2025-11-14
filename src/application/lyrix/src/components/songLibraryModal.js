@@ -5,6 +5,47 @@ import { exportSongsToLRX } from '../features/lyrics/SongUtils.js';
 import default_theme from './style.js';
 import { closeSettingsPanel } from './settings.js';
 
+function exportSongLibraryAsLRX() {
+    try {
+        closeSongLibraryPanel();
+        const btn = document.getElementById('song_list_button');
+        if (btn && btn._setActive) btn._setActive(false);
+        const library = window.lyricsLibrary || (typeof lyricsLibrary !== 'undefined' ? lyricsLibrary : null);
+        if (!library) return;
+        const list = library.getAllSongs();
+        if (!list.length) return;
+        const data = exportSongsToLRX(list, library);
+        const json = JSON.stringify(data, null, 2);
+        const date = new Date().toISOString().split('T')[0];
+        const name = `song_library_${date}.lrx`;
+        const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
+        if (isAUv3) {
+            window.webkit.messageHandlers.swiftBridge.postMessage({
+                action: 'saveFileWithDocumentPicker',
+                requestId: Date.now().toString(),
+                fileName: name,
+                data: json,
+                encoding: 'utf8'
+            });
+        } else {
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+        console.log('Export LRX triggered');
+    } catch (error) {
+        console.error('❌ Export LRX failed', error);
+    }
+}
+window.exportSongLibraryAsLRX = exportSongLibraryAsLRX;
+
 // Helper function to properly close song library panel and remove all related elements
 function closeSongLibraryPanel(keepButtonActive = false) {
     const existingPanel = document.getElementById('song-library-panel');
@@ -364,32 +405,36 @@ export function showSongLibrary() {
         return btn;
     };
 
+    function exportSongLibraryAsLRX() {
+        try {
+            closeSongLibraryPanel();
+            const btn = document.getElementById('song_list_button');
+            if (btn && btn._setActive) btn._setActive(false);
+            if (!lyricsLibrary) return;
+            const list = lyricsLibrary.getAllSongs();
+            if (!list.length) return;
+            const data = exportSongsToLRX(list, lyricsLibrary);
+            const json = JSON.stringify(data, null, 2);
+            const date = new Date().toISOString().split('T')[0];
+            const name = `song_library_${date}.lrx`;
+            const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
+            if (isAUv3) {
+                window.webkit.messageHandlers.swiftBridge.postMessage({ action: 'saveFileWithDocumentPicker', requestId: Date.now().toString(), fileName: name, data: json, encoding: 'utf8' });
+            } else {
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = name; a.style.display = 'none';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+            }
+            console.log('Export LRX triggered');
+        } catch (error) {
+            console.error('❌ Export LRX failed', error);
+        }
+    }
     const exportLRXButton = makeMiniBtn({
         id: 'export-lrx-format',
-        onClick: () => {
-            try {
-                closeSongLibraryPanel();
-                const btn = document.getElementById('song_list_button');
-                if (btn && btn._setActive) btn._setActive(false);
-                if (!lyricsLibrary) return;
-                const list = lyricsLibrary.getAllSongs();
-                if (!list.length) return;
-                const data = exportSongsToLRX(list, lyricsLibrary);
-                const json = JSON.stringify(data, null, 2);
-                const date = new Date().toISOString().split('T')[0];
-                const name = `song_library_${date}.lrx`;
-                const isAUv3 = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.swiftBridge;
-                if (isAUv3) {
-                    window.webkit.messageHandlers.swiftBridge.postMessage({ action: 'saveFileWithDocumentPicker', requestId: Date.now().toString(), fileName: name, data: json, encoding: 'utf8' });
-                } else {
-                    const blob = new Blob([json], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url; a.download = name; a.style.display = 'none';
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-                }
-            } catch { }
-        }
+        onClick: exportSongLibraryAsLRX
     });
     // Replace emoji with SVG save icon
     try { exportLRXButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/save.svg'; img.alt = 'save'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Save'; span.style.fontSize = UNIFIED_FONT_SIZE; exportLRXButton.append(img, span); } catch (e) { }
