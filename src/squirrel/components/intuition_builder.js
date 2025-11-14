@@ -2199,7 +2199,8 @@ function beginFloatingMove(ev, info) {
         lastClientX: pointerMeta.clientX,
         lastClientY: pointerMeta.clientY,
         dragFinished: false,
-        loggedDrag: false
+        loggedDrag: false,
+        pendingDragLog: false
     };
     ctx.moveHandler = (e) => handleFloatingMove(e, ctx);
     ctx.upHandler = (e) => finishFloatingMove(e, ctx);
@@ -2224,9 +2225,7 @@ function handleFloatingMove(e, ctx) {
             ctx.dragActivated = true;
             if (!ctx.loggedDrag) {
                 updateCurrentMenuStatus({ reason: 'floating-drag' });
-                console.log('item dragged');
-                save_intuition_menu();
-                ctx.loggedDrag = true;
+                ctx.pendingDragLog = true;
             }
         }
     }
@@ -2258,6 +2257,12 @@ function finishFloatingMove(e, ctx) {
     if (ctx.floatingInfo) {
         clampFloatingToViewport(ctx.floatingInfo);
         repositionActiveSatellites(ctx.floatingInfo);
+    }
+    if (ctx.dragActivated && ctx.pendingDragLog && !ctx.loggedDrag) {
+        console.log('item dragged');
+        save_intuition_menu();
+        ctx.loggedDrag = true;
+        ctx.pendingDragLog = false;
     }
     const baseEvent = pointer && pointer.originalEvent ? pointer.originalEvent : e;
     if (baseEvent && typeof baseEvent.preventDefault === 'function' && baseEvent.cancelable !== false) baseEvent.preventDefault();
