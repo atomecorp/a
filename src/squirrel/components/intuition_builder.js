@@ -40,6 +40,15 @@ let pendingParticleUpdateHost = null;
 
 const POINTER_TOUCH_ID_OFFSET = 1000;
 
+function save_intuition_menu(...args) {
+    console.log('Saving menu...');
+    if (typeof window.saveMenuHook === 'function') {
+        window.saveMenuHook(...args);
+    }
+    // existing logic...
+}
+
+window.save_intuition_menu = (...args) => save_intuition_menu(...args);
 function resolvePointerDetails(event) {
     if (!event) return null;
     if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
@@ -2148,6 +2157,8 @@ function finishMenuItemDrag(e, ctx) {
                 clampFloatingToViewport(info);
                 repositionActiveSatellites(info);
                 updateCurrentMenuStatus({ reason: 'extraction' });
+                console.log('item extracted to floating palette');
+                save_intuition_menu();
             }
         }
     }
@@ -2214,6 +2225,7 @@ function handleFloatingMove(e, ctx) {
             if (!ctx.loggedDrag) {
                 updateCurrentMenuStatus({ reason: 'floating-drag' });
                 console.log('item dragged');
+                save_intuition_menu();
                 ctx.loggedDrag = true;
             }
         }

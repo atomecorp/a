@@ -18,6 +18,15 @@
 //   }
 // });
 
+
+
+puts('important to save the intuition menu state juste redefine the window.save_intuition_menu function, this method is call on any change of the menu. example below ');
+window.saveMenuHook = () => {
+  console.log('Custom save from tools.js');
+  // custom code here
+};
+
+
 const shadowLeft = 0,
   shadowTop = 0,
   shadowBlur = 12;
@@ -476,3 +485,4 @@ $('div', {
     console.log('Menu state restored from stored snapshot:', refreshedStatus);
   },
 });
+
