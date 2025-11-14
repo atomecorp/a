@@ -325,6 +325,13 @@ function initializeLyrix() {
         window.lyricsLibrary = lyricsLibrary;
         window.audioController = audioController;
         window.lyricsDisplay = lyricsDisplay;
+        window.toggleLyricsEditMode = () => {
+            if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleEditMode === 'function') {
+                window.lyricsDisplay.toggleEditMode();
+            } else {
+                console.warn('❌ toggleEditMode indisponible (lyricsDisplay non initialisé)');
+            }
+        };
         window.currentSong = currentSong;
         window.Modal = Modal;
         window.ConfirmModal = ConfirmModal;
@@ -1501,6 +1508,17 @@ function exportSelectedSongsAsTextWithFolderDialog() {
         return;
     }
 
+    const existingModal = window._exportSelectedSongsFolderModal;
+    if (existingModal) {
+        if (existingModal.parentElement) {
+            existingModal.parentElement.removeChild(existingModal);
+        } else if (typeof existingModal.remove === 'function') {
+            existingModal.remove();
+        }
+        window._exportSelectedSongsFolderModal = null;
+        return;
+    }
+
     // Get all summary song objects
     const songSummaries = lyricsLibrary.getAllSongs();
     if (songSummaries.length === 0) {
@@ -1522,6 +1540,7 @@ function exportSelectedSongsAsTextWithFolderDialog() {
 
     // Create custom modal with checkboxes
     const modalContainer = UIManager.createEnhancedModalOverlay();
+    window._exportSelectedSongsFolderModal = modalContainer;
 
     const modal = UIManager.createEnhancedModalContainer({
         css: {
@@ -1691,7 +1710,12 @@ function exportSelectedSongsAsTextWithFolderDialog() {
                 return;
             }
 
-            document.body.removeChild(modalContainer);
+            if (modalContainer.parentElement) {
+                modalContainer.parentElement.removeChild(modalContainer);
+            }
+            if (window._exportSelectedSongsFolderModal === modalContainer) {
+                window._exportSelectedSongsFolderModal = null;
+            }
 
             // Export all songs in a single file
             exportSongsAsSingleFile(selectedSongIds);
@@ -1703,6 +1727,15 @@ function exportSelectedSongsAsTextWithFolderDialog() {
     modal.append(content, footer);
     modalContainer.appendChild(modal);
     document.body.appendChild(modalContainer);
+
+    modalContainer.addEventListener('click', (event) => {
+        if (event.target === modalContainer) {
+            modalContainer.parentElement?.removeChild(modalContainer);
+            if (window._exportSelectedSongsFolderModal === modalContainer) {
+                window._exportSelectedSongsFolderModal = null;
+            }
+        }
+    });
 }
 
 // Function to export songs as separate files
@@ -3260,6 +3293,7 @@ window.Lyrix = {
     currentSong,
     dragDropManager,
     midiUtilities,
+    toggleEditMode: () => window.toggleLyricsEditMode && window.toggleLyricsEditMode(),
     loadAndDisplaySong,
     navigateToPreviousSong,
     navigateToNextSong,

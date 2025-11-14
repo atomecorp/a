@@ -36,26 +36,34 @@ function openSongLibrary() {
 function exportAsTxt() {
     exportSelectedSongsAsTextWithFolderDialog();
 }
+function importFilesIntoLyrix() {
+    import_files_into_library();
+}
+
+function activate_Edition() {
+    window.toggleLyricsEditMode()
+}
+
 
 const intuition_content = {
     version: "1.1",
     meta: { namespace: "vie.menu", defaultLocale: "en" },
-    toolbox: { children: ['file', 'tools', 'capture', 'perform', 'projects', 'settings'] },
+    toolbox: { children: ['file', 'tools', 'capture', 'perform', 'songs', 'settings'] },
     //
     file: { type: 'palette', children: ['import', 'load', 'save', 'export'] },
-    projects: { type: 'tool', touch: openSongLibrary, icon: null },
+    songs: { type: 'tool', touch: openSongLibrary, icon: null },
     tools: { type: 'palette', children: ['edit', 'new'] },
     settings: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel },
     capture: { label: 'capture', type: 'palette', icon: 'record' },
     perform: { label: 'perform', type: 'palette', children: ['play', 'pause', 'prev', 'next', 'fullscreen'], icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
-    import: { type: 'tool', touch_down: function () { puts('Import touch triggered'); } },
-    load: { type: 'tool', children: ['modules', 'projects'], touch_down: function () { puts('load touch triggered'); } },
+    import: { type: 'tool', touch_down: importFilesIntoLyrix },
+    load: { type: 'tool', touch: openSongLibrary },
     save: { type: 'tool', touch: function () { puts('Save touch triggered'); } },
-    export: { type: 'tool', touch: exportAsTxt },
+    export: { type: 'tool', touch: exportAsTxt, icon: false },
 
-    edit: { type: 'particle', helper: 'slider' },
+    edit: { type: 'tool', touch: activate_Edition, icon: 'edit' },
     new: { type: 'tool', icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
     play: { type: 'tool' },
     pause: { type: 'tool' },

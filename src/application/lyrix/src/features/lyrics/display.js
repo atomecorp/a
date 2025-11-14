@@ -284,6 +284,11 @@ export class LyricsDisplay {
             }
         });
 
+        // function activate_Edition() {
+        //      this.originalLinesBackup = null; // Discard changes
+        //         this.toggleEditMode(); // Exit edit mode without saving  
+        // }
+
         this.cancelEditButton = UIManager.createInterfaceButton('❌', {
             id: 'cancel_edit_button',
             onClick: () => {
@@ -2077,7 +2082,7 @@ export class LyricsDisplay {
         } else if (this.editMode && !wasInEdit) {
             // Just entered edit mode -> activate persistent state
             if (this.editButton && this.editButton._setActive) {
-                this.editButton._setActive(true);
+                //  this.editButton._setActive(true);
             } else {
                 this.editButton.style.backgroundColor = (_theme.buttonActive && _theme.buttonActive.backgroundColor) || 'rgb(58,74,96)';
             }
