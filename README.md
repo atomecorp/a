@@ -1,10 +1,10 @@
 # 🐿️ Squirrel Framework
 
-> Hybrid audio-first toolkit that mixes Vanilla JS + Squirrel UI DSL, a Node/Fastify toolchain, and a Rust/Tauri runtime to target web, desktop,mobile and even AUv3 hosts with a single codebase.
+> Hybrid agnostic and multi purpose-first toolkit that mixes Vanilla JS + Squirrel UI DSL, a Node/Fastify toolchain, and a Rust/Tauri runtime to target web, desktop,mobile and even AUv3 hosts with a single codebase.
 
 ## Overview
 
-Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that drives custom components integrations, and drag-and-drop workflows. The desktop shell is powered by Tauri 2, which embeds both a Rust (Axum) micro server and the Node/Fastify stack so that the same `/api/uploads` and static assets work across dev servers, packaged apps, and AUv3 extensions. A shared iPlug2 pipeline keeps the DSP core consistent between AUv3 and WebAudio Module (WAM) builds.
+Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that drives custom components, WaveSurfer integrations, and drag-and-drop workflows. The authoring syntax is intentionally Ruby-like (symbols, method blocks, `box/text` primitives) but compiles down to vanilla JS so it can run everywhere. The desktop shell is powered by Tauri 2, which embeds both a Rust (Axum) micro server and the Node/Fastify stack so that the same `/api/uploads` and static assets work across dev servers, packaged apps, and AUv3 extensions. A shared iPlug2 pipeline keeps the DSP core consistent between AUv3 and WebAudio Module (WAM) builds.
 
 ## Architecture at a glance
 
