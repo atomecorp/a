@@ -15,7 +15,7 @@
 
 // import('./examples/lists.js');
 
-// import('./examples/wavesurfer.js');
+//import('./examples/wavesurfer.js');
 
 // import('./examples/design_slider.js');
 
@@ -49,7 +49,7 @@
 //  import('./examples/audio_basic.js');
 ////////////////////
 
-// import('./aBox/index.js');
+import('./aBox/index.js');
 // import('./examples/user_creation.js');
 
 
@@ -70,7 +70,7 @@
 // import('./examples/a_svg.js');
 
 // import('./examples/basic.js');
-import('./examples/tools.js'); //intuition menu
+//import('./examples/tools.js'); //intuition menu
 // import('./examples/atome.js');
 // import('./jeezs/demo.js');
 // import('./examples/!test_taurie-path.js');
@@ -142,6 +142,3 @@ import('./examples/tools.js'); //intuition menu
 // puts (a);
 
 // a.style.left= '100px';
-
-
-// TODO: tools must be able to save the whole current state when extraciing new toolboxs.
