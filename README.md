@@ -1,5 +1,7 @@
 # 🐿️ Squirrel Framework
 
+> This repository (`a`, codename **Squirrel**) is the next-generation evolution of the original Atome Ruby framework and is still under active development. The roadmap includes a FreeBSD boot mode leveraging jails to provide connected, shareable environments that sync seamlessly online/offline (with robust conflict resolution), plus the same unified, agnostic object system that made classic Atome unique.
+> Atome (Squirrel version) is a full-stack, cross-platform creation framework aimed at building entire ecosystems: from multimedia operating-system-like experiences, audio/video editors, web apps, and services, down to tiny personal utilities or educational playgrounds.
 > Hybrid agnostic and multi purpose-first toolkit that mixes Vanilla JS + Squirrel UI DSL, a Node/Fastify toolchain, and a Rust/Tauri runtime to target web, desktop,mobile and even AUv3 hosts with a single codebase.
 
 ## Overview
