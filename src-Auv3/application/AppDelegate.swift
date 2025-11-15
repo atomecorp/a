@@ -16,10 +16,7 @@ struct atomeApp: App {
     init() {
         // Initialiser les fichiers au démarrage avec iCloudFileManager
         iCloudFileManager.shared.initializeFileStructure()
-        // Start Darwin listener early so we can react to AUv3 relays even before UI appears
-        DarwinNotificationListener.shared.start()
-        // Try to recover any pending relayed URLs (if app launched after AUv3 posted)
-        AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
+    // Inbox system disabled (Darwin + drain/flush removed)
     }
 
     var body: some Scene {
@@ -30,51 +27,20 @@ struct atomeApp: App {
                     if !fileManager.isInitialized {
                         fileManager.initializeFileStructure()
                     }
-                    // Attempt an initial flush if we're already active
-                    AppGroupOpenURLInbox.shared.flushIfPossible()
+                    // Inbox disabled: no initial flush
                 }
                 // Handle custom activation scheme (e.g., atomeapp://activate) from AUv3 nudge
-                .onOpenURL { url in
-                    if url.scheme == SharedBus.activationScheme {
-                        print("🔗 SwiftUI.onOpenURL activation → drain + flush")
-                        AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
-                        AppGroupOpenURLInbox.shared.flushIfPossible()
-                    } else if url.scheme == "http" || url.scheme == "https" {
-                        // Universal Link activation: accept our activate path and drain/flush
-                        if url.host?.lowercased().hasSuffix("atome.one") == true && url.path.lowercased().hasPrefix("/activate") {
-                            print("🔗 SwiftUI.onOpenURL universal-link activation → drain + flush (")
-                            AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
-                            AppGroupOpenURLInbox.shared.flushIfPossible()
-                        }
-                    }
-                }
+                .onOpenURL { _ in /* inbox disabled */ }
                 // Handle NSUserActivity-based activation (fallback path)
-                .onContinueUserActivity(SharedBus.userActivityType) { _ in
-                    print("🧭 SwiftUI.onContinueUserActivity → drain + flush")
-                    AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
-                    AppGroupOpenURLInbox.shared.flushIfPossible()
-                }
+                .onContinueUserActivity(SharedBus.userActivityType) { _ in /* inbox disabled */ }
                 // Also handle general web-browsing user activities (universal links)
-                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                    if let url = activity.webpageURL,
-                       (url.scheme == "http" || url.scheme == "https"),
-                       url.host?.lowercased().hasSuffix("atome.one") == true,
-                       url.path.lowercased().hasPrefix("/activate") {
-                        print("🧭 SwiftUI.onContinueUserActivity(browsingWeb) universal-link activation → drain + flush")
-                        AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
-                        AppGroupOpenURLInbox.shared.flushIfPossible()
-                    }
-                }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { _ in /* inbox disabled */ }
         }
         // React to scene lifecycle to flush inbox only when foregroundActive
         .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .active:
-                print("🟢 SwiftUI scenePhase active → start Darwin + drain + flush")
-                DarwinNotificationListener.shared.start()
-                ActiveScenePoller.shared.start()
-                AppGroupOpenURLInbox.shared.drainPersistentIndexIfAny()
-                AppGroupOpenURLInbox.shared.flushIfPossible()
+                print("🟢 SwiftUI scenePhase active (inbox disabled)")
             case .background, .inactive:
                 ActiveScenePoller.shared.stop()
             @unknown default:
@@ -89,3 +55,4 @@ struct ContentView: View {
     WebViewContainer()
     }
 }
+

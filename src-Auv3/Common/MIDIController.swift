@@ -24,6 +24,13 @@ public class MIDIController: NSObject {
     // OPTIMIZATION: Rate limiting for MIDI logs to reduce CPU usage
     private var lastLogTime: CFTimeInterval = 0
     private let logInterval: CFTimeInterval = 0.5 // Max 2 logs per second
+
+    // Prevent duplicate source connections and race conditions
+    private let midiQueue = DispatchQueue(label: "com.atomecorp.atome.midi.queue")
+    private var connectedSources = Set<MIDIEndpointRef>()
+    private var lastPacketLogTime: CFTimeInterval = 0
+    private let packetLogInterval: CFTimeInterval = 0.25 // reduce spam from frequent packets
+    private var lastSourceCountLogged: Int = -1
     
     public override init() {
         super.init()
@@ -95,7 +102,12 @@ public class MIDIController: NSObject {
         // Parse MIDI event list
         var packet = eventList.pointee.packet
         
-        logger.info("📥 MIDI INPUT RECEIVED from AUM - Packets: \(eventList.pointee.numPackets)")
+        // Rate-limit the high-frequency packet log to avoid console flood on some hosts
+        let nowt = CACurrentMediaTime()
+        if nowt - lastPacketLogTime > packetLogInterval {
+            logger.info("📥 MIDI INPUT RECEIVED from AUM - Packets: \(eventList.pointee.numPackets)")
+            lastPacketLogTime = nowt
+        }
         
         for _ in 0..<eventList.pointee.numPackets {
             
@@ -103,9 +115,11 @@ public class MIDIController: NSObject {
             let wordCount = packet.wordCount
             
             if wordCount > 0 {
-                // Extract MIDI words (UInt32)
-                let words = withUnsafePointer(to: packet.words) { ptr in
-                    Array(UnsafeBufferPointer(start: ptr.withMemoryRebound(to: UInt32.self, capacity: Int(wordCount)) { $0 }, count: Int(wordCount)))
+                // Extract MIDI words (UInt32) safely: take the address of the first tuple element (words.0)
+                // Avoid rebinding a tuple pointer which can lead to undefined behavior.
+                let words: [UInt32] = withUnsafePointer(to: &packet.words.0) { p in
+                    let buf = UnsafeBufferPointer(start: p, count: Int(wordCount))
+                    return Array(buf)
                 }
                 
                 // Log raw MIDI data with rate limiting
@@ -241,22 +255,36 @@ public class MIDIController: NSObject {
     // MARK: - MIDI Source Connection
     
     private func connectToAllMIDISources() {
-        let sourceCount = MIDIGetNumberOfSources()
-        logger.info("📡 Found \(sourceCount) MIDI sources")
-        
-        for i in 0..<sourceCount {
-            let source = MIDIGetSource(i)
-            if source != 0 {
-                let status = MIDIPortConnectSource(inputPort, source, nil)
+        midiQueue.async { [weak self] in
+            guard let self = self else { return }
+            let sourceCount = MIDIGetNumberOfSources()
+            if self.lastSourceCountLogged != sourceCount {
+                self.logger.info("📡 Found \(sourceCount) MIDI sources")
+                self.lastSourceCountLogged = sourceCount
+            }
+            var current = Set<MIDIEndpointRef>()
+            for i in 0..<sourceCount {
+                let source = MIDIGetSource(i)
+                if source == 0 { continue }
+                current.insert(source)
+                if self.connectedSources.contains(source) { continue }
+                let status = MIDIPortConnectSource(self.inputPort, source, nil)
                 if status == noErr {
-                    if let sourceName = getMIDIObjectName(source) {
-                        logger.info("🔗 Connected to MIDI source: \(sourceName)")
+                    self.connectedSources.insert(source)
+                    if let sourceName = self.getMIDIObjectName(source) {
+                        self.logger.info("🔗 Connected to MIDI source: \(sourceName)")
                     } else {
-                        logger.info("🔗 Connected to MIDI source \(i)")
+                        self.logger.info("🔗 Connected to MIDI source \(i)")
                     }
                 } else {
-                    logger.error("❌ Failed to connect to MIDI source \(i): \(status)")
+                    self.logger.error("❌ Failed to connect to MIDI source \(i): \(status)")
                 }
+            }
+            // Optionally disconnect sources that disappeared
+            let removed = self.connectedSources.subtracting(current)
+            for src in removed {
+                MIDIPortDisconnectSource(self.inputPort, src)
+                self.connectedSources.remove(src)
             }
         }
     }

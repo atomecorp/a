@@ -26,7 +26,7 @@ final class LocalHTTPServer {
     private var faststartInFlight: Set<String> = []
     private var faststartFailed: Set<String> = []
     private let faststartQueue = DispatchQueue(label: "local.http.server.faststart", qos: .utility)
-    private let allowedAudioExtensions: Set<String> = ["m4a"]
+    private let allowedAudioExtensions: Set<String> = ["m4a", "mp3", "wav"]
 
     func start(preferredPort: UInt16? = nil) {
         guard !started else { return }
@@ -137,6 +137,10 @@ final class LocalHTTPServer {
             let decodedName = rawName.removingPercentEncoding ?? rawName
             if rawName != decodedName { print("🧪 Decoded audio name raw=\(rawName) decoded=\(decodedName)") }
             serveAudio(named: decodedName, rangeHeader: rangeHeader, on: connection)
+        } else if path.hasPrefix("/file/") {
+            let raw = String(path.dropFirst("/file/".count))
+            let decoded = raw.removingPercentEncoding ?? raw
+            serveUnified(named: decoded, rangeHeader: rangeHeader, on: connection)
         } else if path == "/health" {
             serveHealth(on: connection)
         } else if path == "/tree" {
@@ -148,26 +152,93 @@ final class LocalHTTPServer {
         }
     }
 
+    // Unified file serving (any extension) via /file/<path>
+    private func serveUnified(named name: String, rangeHeader: String?, on connection: NWConnection) {
+        let lower = name.lowercased()
+        // Audio fast path → reuse audio pipeline (range, faststart)
+        if lower.hasSuffix(".m4a") { serveAudio(named: name, rangeHeader: rangeHeader, on: connection); return }
+        // For small text-like types reuse text (preserves existing candidate enumeration)
+        if lower.hasSuffix(".txt") || lower.hasSuffix(".json") || lower.hasSuffix(".svg") || lower.hasSuffix(".md") {
+            serveText(named: name, on: connection); return
+        }
+        // Generic binary/text fallback: locate file using existing candidate logic (without text-only filtering)
+        let candidates = candidateFileURLs(for: name)
+        guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+            sendSimple(status: 404, reason: "Not Found", body: "file missing", on: connection); return
+        }
+        let ext = url.pathExtension.lowercased()
+        let mime: String = {
+            switch ext {
+            case "png": return "image/png"
+            case "jpg", "jpeg": return "image/jpeg"
+            case "gif": return "image/gif"
+            case "webp": return "image/webp"
+            case "svg": return "image/svg+xml"
+            case "json": return "application/json"
+            case "txt", "log", "md", "csv": return "text/plain; charset=utf-8"
+            case "mp3": return "audio/mpeg"
+            case "wav": return "audio/wav"
+            case "mp4", "m4v": return "video/mp4"
+            case "pdf": return "application/pdf"
+            case "woff": return "font/woff"
+            case "woff2": return "font/woff2"
+            case "ttf": return "font/ttf"
+            case "otf": return "font/otf"
+            default: return "application/octet-stream"
+            }
+        }()
+        do {
+            let data = try Data(contentsOf: url)
+            sendRaw(status: 200, reason: "OK", headers: ["Content-Type": mime], body: data, on: connection)
+            print("🗂 Served unified file: \(url.lastPathComponent) bytes=\(data.count) mime=\(mime)")
+        } catch {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "read fail", on: connection)
+        }
+    }
+
     private func candidateFileURLs(for name: String) -> [URL] {
-        var candidates: [URL] = []
-        // 1. App Group canonical Documents (Option A) – ensures both processes see same files
-        if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) {
-            candidates.append(group.appendingPathComponent(name))
+        var ordered: [URL] = []
+        var seen: Set<String> = []
+        func add(_ url: URL?) { guard let u = url else { return }; let p = u.path; if !seen.contains(p) { seen.insert(p); ordered.append(u) } }
+
+        // Base paths
+        let fileOnly = (name as NSString).lastPathComponent
+        let lower = name.lowercased()
+
+        // App Group + Documents
+        if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) { add(group.appendingPathComponent(name)) }
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { add(docs.appendingPathComponent(name)) }
+
+        // Direct bundle resource (works if added as loose file)
+        let baseName = (name as NSString).deletingPathExtension
+        let ext = (name as NSString).pathExtension
+        if !ext.isEmpty { add(Bundle.main.url(forResource: baseName, withExtension: ext)) }
+        // Legacy audio direct (if name missing path parts)
+        if lower.hasSuffix(".m4a") { add(Bundle.main.url(forResource: baseName, withExtension: "m4a")) }
+
+        // Bundle assets tree
+        if let assetsRoot = Bundle.main.url(forResource: "assets", withExtension: nil) {
+            add(assetsRoot.appendingPathComponent(name))
+            // Common subfolders
+            add(assetsRoot.appendingPathComponent("audios/" + fileOnly))
+            add(assetsRoot.appendingPathComponent("audios/" + name))
+            add(assetsRoot.appendingPathComponent("texts/" + name))
+            add(assetsRoot.appendingPathComponent("images/" + name))
+            add(assetsRoot.appendingPathComponent("images/logos/" + fileOnly))
         }
-        // 2. Process-local Documents (mirror)
-        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-            candidates.append(docs.appendingPathComponent(name))
-        }
-        // 3. Main bundle direct
-        if let bundleURL = Bundle.main.url(forResource: name.replacingOccurrences(of: ".m4a", with: ""), withExtension: "m4a") {
-            candidates.append(bundleURL)
-        }
-        // 4. Inside src/ if packaged (e.g., src/audio)
+
+        // src/assets packaged
         if let srcRoot = Bundle.main.url(forResource: "src", withExtension: nil) {
-            candidates.append(srcRoot.appendingPathComponent(name))
-            candidates.append(srcRoot.appendingPathComponent("audio/").appendingPathComponent(name))
+            let srcAssets = srcRoot.appendingPathComponent("assets", isDirectory: true)
+            add(srcAssets.appendingPathComponent(name))
+            add(srcAssets.appendingPathComponent("audios/" + fileOnly))
+            add(srcAssets.appendingPathComponent("audios/" + name))
+            add(srcAssets.appendingPathComponent("texts/" + name))
+            add(srcAssets.appendingPathComponent("images/logos/" + fileOnly))
+            add(srcRoot.appendingPathComponent(name)) // raw inside src/
         }
-        return candidates
+
+        return ordered
     }
 
     private func serveSyncNow(on connection: NWConnection) {
@@ -483,7 +554,11 @@ final class LocalHTTPServer {
 
     // MARK: - Text file serving
     private func serveText(named name: String, on connection: NWConnection) {
-        guard let url = candidateFileURLs(for: name).first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+    let candidates = candidateFileURLs(for: name)
+    #if DEBUG
+    print("🔍 Text lookup for \(name) candidates=\n" + candidates.map { "  • " + $0.path }.joined(separator: "\n"))
+    #endif
+    guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
             sendSimple(status: 404, reason: "Not Found", body: "text file missing", on: connection)
             return
         }

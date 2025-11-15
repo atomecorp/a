@@ -28,10 +28,10 @@ git push
 
 # Create a tag if version found
 if [ -n "$VERSION" ]; then
-  git tag "$VERSION" || true
-  git push origin "$VERSION" || true
+  git tag -f "$VERSION" >/dev/null 2>&1 || true
+  git push -f origin "$VERSION" || true
   # Met à jour le tag 'latest' pour pointer sur la dernière version
-  git tag -f latest
+  git tag -f latest >/dev/null 2>&1
   git push -f origin latest
   REF="$VERSION"
 else

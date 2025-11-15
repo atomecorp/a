@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128"  xml:space="preserve" id="volumeCanvas">
+    <g id="volumeCanvas-group">
+        <g id="volumeCanvas-group2">
+            <rect id="volumeCanvas-rectangle4" stroke="rgb(0, 0, 0)" stroke-width="10" stroke-miterlimit="10" fill="rgb(0, 0, 0)" x="57.87" y="5.25" width="10.5" height="69.7" />
+            <rect id="volumeCanvas-rectangle5" stroke="rgb(0, 0, 0)" stroke-width="10" stroke-miterlimit="10" fill="rgb(0, 0, 0)" x="57.87" y="103.45" width="10.5" height="18.8" />
+            <rect id="volumeCanvas-rectangle6" stroke="rgb(0, 0, 0)" stroke-width="10" stroke-miterlimit="10" fill="rgb(0, 0, 0)" x="48.88" y="81.21" width="28.5" height="15.88" rx="3.4" />
+        </g>
+    </g>
+</svg>

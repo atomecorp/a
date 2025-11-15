@@ -76,7 +76,7 @@ import('./values.js').then(() => {
       viewBox: '0 0 237 237',
       xmlns: 'http://www.w3.org/2000/svg'
     },
-    svgSrc: '../../assets/images/logos/vie.svg',
+    svgSrc: './assets/images/logos/vie.svg',
     parent: topBar,
     css: {
       top: Math.floor((barsHeight - (barsHeight - 10)) / 2) + 'px',

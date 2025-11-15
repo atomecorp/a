@@ -4,6 +4,7 @@
 // import('./examples/drag.js');
 // import('./examples/dragNdrop.js');
 
+
 // import('./examples/unit.js');
 
 // import('./examples/menus.js');
@@ -14,7 +15,7 @@
 
 // import('./examples/lists.js');
 
-// import('./examples/wavesurfer.js');
+//import('./examples/wavesurfer.js');
 
 // import('./examples/design_slider.js');
 
@@ -25,27 +26,69 @@
 // import('./test/component_test.js');
 // import('./examples/image.js');
 
-// import('./vie/vie.js');
+
+
 // import('./examples/svg.js');
+// import('./examples/platform.js');
 // import('./examples/anim_svg.js');
 
+// import('./examples/shortcut.js');
+
+
 
 // import('./examples/leaflet.js');
 
-// import('./examples/console.js');
-// import('./examples/leaflet.js');
+// import('./examples/console.js'); // terminal
 // import('./examples/audio.js');
 
 // import('./examples/audio_swift.js'); // Active les boutons audio (routeButton Local/Auto/Host + C4/A4/E5/Chord)
-// import('./examples/console_to_swift.js');
+// import('./examples/console_to_swift.js');// terminal
 
 
 
 //  import('./examples/audio_basic.js');
 ////////////////////
+
+import('./aBox/index.js');
+// import('./examples/user_creation.js');
+
+
 // import('./lyrix/index.js');
 // import('./examples/iOS_app_launcher.js');
-import('./examples/ios_audio_bridge.js');
+// import('./examples/ios_audio_bridge.js');
+// import('./examples/iplug_ios.js');
+
+
+// import('./examples/ios_file_browser.js');
+
+// // import('./iplug/audio.facade.js');
+// // import('./iplug/backend.iplug.js');
+// // import('./iplug/backend.html.js');
+// import('./examples/iplug_sampler.js');
+
+// File editor helpers (create/rename + iOS keyboard + trash icon fix)
+// import('./examples/a_svg.js');
+
+// import('./examples/basic.js');
+//import('./examples/tools.js'); //intuition menu
+// import('./examples/atome.js');
+// import('./jeezs/demo.js');
+// import('./examples/!test_taurie-path.js');
+// import('./vie/index.js');
+
+// import('./examples/events.js');
+
+
+// import('./examples/drag_drop_files.js');
+// import('./examples/svg_fetch_usage.js');
+// import('./examples/svg_animate.js');
+// import('./examples/testSVGSize.js');
+// import('./examples/iOSFetch.js');
+
+// import('./examples/class.js');
+// import('./examples/drop_down.js');
+
+// createBasicConsole();
 
 
 

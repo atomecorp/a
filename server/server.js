@@ -5,17 +5,92 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { promises as fs, createReadStream } from 'fs';
 
 // Database imports
-import { knex } from '../database/db.js';
+import { knex, ensureAdoleSchema, PG_URL } from '../database/db.js';
+import { v4 as uuidv4 } from 'uuid';
 import User from '../database/User.js';
 import Project from '../database/Project.js';
 import Atome from '../database/Atome.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.join(__dirname, '../src/assets/uploads');
+const VERSION_FILE = path.join(__dirname, '../version.txt');
+let SERVER_VERSION = 'unknown';
+const SERVER_TYPE = 'Fastify';
+
+async function loadServerVersion() {
+  try {
+    const raw = await fs.readFile(VERSION_FILE, 'utf8');
+    const trimmed = raw.trim();
+    return trimmed || 'unknown';
+  } catch (error) {
+    const details = error && typeof error === 'object' && 'message' in error
+      ? error.message
+      : String(error);
+    console.warn('⚠️ Impossible de lire version.txt:', details);
+    return 'unknown';
+  }
+}
+
+const sanitizeFileName = (name) => {
+  const base = typeof name === 'string' ? name : 'upload.bin';
+  const cleaned = path.basename(base).replace(/[^a-z0-9._-]/gi, '_');
+  return cleaned || 'upload.bin';
+};
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveUploadPath(rawName) {
+  const sanitized = sanitizeFileName(rawName);
+  const ext = path.extname(sanitized);
+  const stem = path.basename(sanitized, ext);
+  let candidate = sanitized;
+  let targetPath = path.join(uploadsDir, candidate);
+  let counter = 1;
+  while (await fileExists(targetPath)) {
+    candidate = `${stem}_${counter}${ext}`;
+    targetPath = path.join(uploadsDir, candidate);
+    counter += 1;
+  }
+  return { fileName: candidate, filePath: targetPath };
+}
+
+async function listUploads() {
+  const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const safeName = sanitizeFileName(entry.name);
+    const absolutePath = path.join(uploadsDir, safeName);
+    try {
+      const stats = await fs.stat(absolutePath);
+      files.push({
+        name: safeName,
+        size: stats.size,
+        modified: stats.mtime.toISOString()
+      });
+    } catch (error) {
+      console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
+    }
+  }
+
+  files.sort((a, b) => b.modified.localeCompare(a.modified));
+  return files;
+}
 
 // Créer l'instance Fastify
-const server = fastify({ 
+const server = fastify({
+  bodyLimit: 1024 * 1024 * 1024, // 1 GiB
   logger: {
     level: 'info',
     transport: {
@@ -25,24 +100,63 @@ const server = fastify({
 });
 
 const PORT = process.env.PORT || 3001;
+const DATABASE_ENABLED = Boolean(knex);
+const DB_REQUIRED_MESSAGE = 'Database not configured. Set ADOLE_PG_DSN or PG_CONNECTION_STRING/DATABASE_URL.';
 
 async function startServer() {
   try {
     console.log('🚀 Démarrage du serveur Fastify v5...');
 
+    SERVER_VERSION = await loadServerVersion();
+    console.log(`📦 Version applicative: ${SERVER_VERSION}`);
+
+    await fs.mkdir(uploadsDir, { recursive: true });
+
     // ===========================
     // 0. DATABASE INITIALIZATION
     // ===========================
-    
-    console.log('📊 Initialisation de la base de données...');
-    
-    // Run migrations
-    await knex.migrate.latest();
-    console.log('✅ Migrations exécutées');
-    
-    // Test database connection
-    await knex.raw('SELECT 1');
-    console.log('✅ Connexion à la base de données établie');
+
+    if (DATABASE_ENABLED) {
+      console.log('📊 Initialisation de la base de données...');
+
+      // Run migrations
+      try {
+        await knex.migrate.latest();
+      } catch (error) {
+        if (error && error.code === 'ECONNREFUSED') {
+          console.error('❌ PostgreSQL connection refused. Start the database and retry.');
+          console.error('   macOS (Homebrew): brew services start postgresql@16');
+          console.error('   macOS (manual):  pg_ctl -D /usr/local/var/postgresql@16 start');
+          console.error('   Linux (systemd): sudo systemctl start postgresql');
+          console.error('   Windows:         Services.msc → start "PostgreSQL 16" or run "net start postgresql-x64-16"');
+          console.error('   Docker (any OS): docker run --name squirrel-db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=squirrel -p 5432:5432 -d postgres:16');
+        }
+        throw error;
+      }
+      console.log('✅ Migrations exécutées');
+
+      // Test database connection
+      try {
+        await knex.raw('SELECT 1');
+      } catch (error) {
+        if (error && error.code === 'ECONNREFUSED') {
+          console.error('❌ PostgreSQL connection refused. Start the database and retry.');
+          console.error('   macOS (Homebrew): brew services start postgresql@16');
+          console.error('   macOS (manual):  pg_ctl -D /usr/local/var/postgresql@16 start');
+          console.error('   Linux (systemd): sudo systemctl start postgresql');
+          console.error('   Windows:         Services.msc → start "PostgreSQL 16" or run "net start postgresql-x64-16"');
+          console.error('   Docker (any OS): docker run --name squirrel-db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=squirrel -p 5432:5432 -d postgres:16');
+        }
+        throw error;
+      }
+      console.log('✅ Connexion à la base de données établie');
+
+      console.log('🗄️  Initialisation du schéma ADOLE (PostgreSQL)...');
+      await ensureAdoleSchema();
+      console.log('✅ Schéma ADOLE prêt');
+    } else {
+      console.warn('⚠️  Aucune base PostgreSQL configurée. Les routes dépendant de la base renverront 503.');
+    }
 
     // ===========================
     // 1. PLUGINS DE BASE
@@ -64,6 +178,10 @@ async function startServer() {
 
     // WebSocket natif Fastify v5
     await server.register(fastifyWebsocket);
+
+    server.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (req, body, done) => {
+      done(null, body);
+    });
 
     // ===========================
     // 2. ROUTES API
@@ -95,6 +213,252 @@ async function startServer() {
         version: server.version,
         websocket: 'Natif intégré'
       };
+    });
+
+    server.get('/api/server-info', async () => {
+      return {
+        success: true,
+        version: SERVER_VERSION,
+        type: SERVER_TYPE
+      };
+    });
+
+    server.post('/api/uploads', async (request, reply) => {
+      try {
+        const headerValue = Array.isArray(request.headers['x-filename'])
+          ? request.headers['x-filename'][0]
+          : request.headers['x-filename'];
+        if (!headerValue) {
+          reply.code(400);
+          return { success: false, error: 'Missing X-Filename header' };
+        }
+
+        let decodedName = String(headerValue);
+        try {
+          decodedName = decodeURIComponent(decodedName);
+        } catch {
+          // Keep original value if decoding fails
+        }
+
+        const bodyBuffer = request.body;
+        if (!bodyBuffer || !(bodyBuffer instanceof Buffer) || !bodyBuffer.length) {
+          reply.code(400);
+          return { success: false, error: 'Empty upload body' };
+        }
+
+        const { fileName, filePath } = await resolveUploadPath(decodedName);
+        await fs.writeFile(filePath, bodyBuffer);
+
+        return { success: true, file: fileName };
+      } catch (error) {
+        request.log.error({ err: error }, 'File upload failed');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.post('/api/adole/users', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
+      const {
+        tenantId,
+        tenantName,
+        principalId,
+        email,
+        kind = 'user',
+        username,
+        phone,
+        optional = {}
+      } = request.body || {};
+
+      const tenant_id = tenantId || uuidv4();
+      const principal_id = principalId || uuidv4();
+      const branch_id = uuidv4();
+      const commit_id = uuidv4();
+      const logical_clock = Date.now();
+      const snapshot = {
+        type: 'user_profile',
+        username,
+        phone,
+        optional
+      };
+
+      try {
+        await knex.transaction(async (trx) => {
+          await trx('tenants')
+            .insert({ tenant_id, name: tenantName || username || 'tenant' })
+            .onConflict('tenant_id')
+            .merge({ name: tenantName || username || 'tenant' });
+
+          await trx('principals')
+            .insert({ tenant_id, principal_id, kind, email })
+            .onConflict('principal_id')
+            .merge({ email, kind });
+
+          await trx('objects')
+            .insert({
+              object_id: principal_id,
+              tenant_id,
+              type: 'user_profile',
+              created_by: principal_id
+            })
+            .onConflict('object_id')
+            .merge({ type: 'user_profile', created_by: principal_id });
+
+          await trx('branches')
+            .insert({
+              branch_id,
+              tenant_id,
+              object_id: principal_id,
+              name: 'main',
+              is_default: true
+            })
+            .onConflict('branch_id')
+            .ignore();
+
+          await trx('commits')
+            .insert({
+              commit_id,
+              tenant_id,
+              object_id: principal_id,
+              branch_id,
+              author_id: principal_id,
+              logical_clock,
+              message: 'profile upsert'
+            })
+            .onConflict('commit_id')
+            .ignore();
+
+          await trx('object_state')
+            .insert({
+              tenant_id,
+              object_id: principal_id,
+              branch_id,
+              version_seq: logical_clock,
+              snapshot: trx.raw('?::jsonb', [JSON.stringify(snapshot)])
+            })
+            .onConflict(['tenant_id', 'object_id', 'branch_id'])
+            .merge({
+              version_seq: logical_clock,
+              snapshot: trx.raw('?::jsonb', [JSON.stringify(snapshot)]),
+              updated_at: trx.fn.now()
+            });
+        });
+
+        return {
+          success: true,
+          tenantId: tenant_id,
+          principalId: principal_id,
+          branchId: branch_id,
+          commitId: commit_id
+        };
+      } catch (error) {
+        request.log.error({ err: error }, 'Failed to persist ADOLE user');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/adole/users/:principalId', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
+      try {
+        const principalId = request.params.principalId;
+        const row = await knex('principals as p')
+          .leftJoin('object_state as os', function joinProfiles() {
+            this.on('os.object_id', '=', 'p.principal_id')
+              .andOn('os.tenant_id', '=', 'p.tenant_id');
+          })
+          .select('p.principal_id', 'p.tenant_id', 'p.email', 'p.kind', 'os.snapshot')
+          .where('p.principal_id', principalId)
+          .first();
+
+        if (!row) {
+          reply.code(404);
+          return { success: false, error: 'User not found' };
+        }
+
+        return {
+          success: true,
+          data: {
+            principalId: row.principal_id,
+            tenantId: row.tenant_id,
+            email: row.email,
+            kind: row.kind,
+            snapshot: row.snapshot
+          }
+        };
+      } catch (error) {
+        request.log.error({ err: error }, 'Failed to read ADOLE user');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/adole/users', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
+      try {
+        const rows = await knex('principals as p')
+          .leftJoin('object_state as os', function joinProfiles() {
+            this.on('os.object_id', '=', 'p.principal_id')
+              .andOn('os.tenant_id', '=', 'p.tenant_id');
+          })
+          .select('p.principal_id', 'p.tenant_id', 'p.email', 'p.kind', 'os.snapshot')
+          .orderBy('p.created_at', 'desc');
+
+        return {
+          success: true,
+          data: rows.map((row) => ({
+            principalId: row.principal_id,
+            tenantId: row.tenant_id,
+            email: row.email,
+            kind: row.kind,
+            snapshot: row.snapshot
+          }))
+        };
+      } catch (error) {
+        request.log.error({ err: error }, 'Failed to list ADOLE users');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/uploads', async (request, reply) => {
+      try {
+        const files = await listUploads();
+        return { success: true, files };
+      } catch (error) {
+        request.log.error({ err: error }, 'Unable to list uploads');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.get('/api/uploads/:file', async (request, reply) => {
+      try {
+        const fileParam = request.params.file || '';
+        const safeName = sanitizeFileName(fileParam);
+        const filePath = path.join(uploadsDir, safeName);
+
+        await fs.access(filePath);
+        reply.header('Content-Disposition', `attachment; filename="${safeName}"`);
+        reply.type('application/octet-stream');
+        return reply.send(createReadStream(filePath));
+      } catch (error) {
+        request.log.error({ err: error }, 'Unable to download upload');
+        reply.code(404);
+        return { success: false, error: 'File not found' };
+      }
     });
 
     // YouTube Search proxy (requires YOUTUBE_API_KEY)
@@ -191,31 +555,64 @@ async function startServer() {
 
     // Database status endpoint
     server.get('/api/db/status', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return {
+          success: false,
+          status: 'unavailable',
+          error: DB_REQUIRED_MESSAGE,
+          timestamp: new Date().toISOString()
+        };
+      }
+
       try {
-        // Test database connection
         await knex.raw('SELECT 1');
 
-        // Get table info using Knex query builder for cross-driver compatibility
-        const tableRows = await knex('sqlite_master')
-          .select('name')
-          .where({ type: 'table' });
+        const tableRows = await knex('pg_catalog.pg_tables')
+          .select('tablename')
+          .where('schemaname', 'public')
+          .orderBy('tablename');
+
+        let connectionInfo = {
+          type: knex.client.config.client || 'pg'
+        };
+
+        if (PG_URL) {
+          try {
+            const parsed = new URL(PG_URL);
+            connectionInfo = {
+              type: knex.client.config.client || 'pg',
+              host: parsed.hostname,
+              port: parsed.port || '5432',
+              database: parsed.pathname.replace(/^\//, ''),
+              user: parsed.username || undefined,
+              ssl: parsed.searchParams.get('sslmode') || undefined
+            };
+          } catch (parseError) {
+            request.log.warn({ err: parseError }, 'Unable to parse PG connection string');
+            connectionInfo = {
+              type: knex.client.config.client || 'pg',
+              dsn: PG_URL
+            };
+          }
+        }
 
         return {
           success: true,
           status: 'connected',
-          database: 'SQLite',
-          tables: tableRows.map(row => row.name),
-          connection: {
-            type: 'sqlite3',
-            file: './eDen.db'
-          },
+          database: 'PostgreSQL',
+          tables: tableRows.map((row) => row.tablename),
+          connection: connectionInfo,
           timestamp: new Date().toISOString()
-        };      } catch (error) {
+        };
+      } catch (error) {
+        request.log.error({ err: error }, 'Database status check failed');
         reply.code(500);
         return {
           success: false,
           status: 'disconnected',
-          error: error.message,          timestamp: new Date().toISOString()
+          error: error.message,
+          timestamp: new Date().toISOString()
         };
       }
     });
@@ -224,6 +621,11 @@ async function startServer() {
 
     // Users API
     server.get('/api/users', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const users = await User.query();
         return { success: true, data: users };
@@ -234,6 +636,11 @@ async function startServer() {
     });
 
     server.post('/api/users', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const user = await User.query().insert(request.body);
         return { success: true, data: user };
@@ -244,16 +651,21 @@ async function startServer() {
     });
 
     server.get('/api/users/:id', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const user = await User.query()
           .findById(request.params.id)
           .withGraphFetched('[project, atomes]');
-        
+
         if (!user) {
           reply.code(404);
           return { success: false, error: 'User not found' };
         }
-        
+
         return { success: true, data: user };
       } catch (error) {
         reply.code(500);
@@ -262,16 +674,21 @@ async function startServer() {
     });
 
     server.delete('/api/users/:id', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const deletedCount = await User.query().deleteById(request.params.id);
-        
+
         if (deletedCount === 0) {
           reply.code(404);
           return { success: false, error: 'User not found' };
         }
-        
-        return { 
-          success: true, 
+
+        return {
+          success: true,
           message: `User with ID ${request.params.id} deleted successfully`,
           data: { deletedId: request.params.id }
         };
@@ -283,6 +700,11 @@ async function startServer() {
 
     // Projects API
     server.get('/api/projects', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const projects = await Project.query().withGraphFetched('[users, owner, atomes]');
         return { success: true, data: projects };
@@ -293,6 +715,11 @@ async function startServer() {
     });
 
     server.post('/api/projects', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const project = await Project.query().insert(request.body);
         return { success: true, data: project };
@@ -303,16 +730,21 @@ async function startServer() {
     });
 
     server.get('/api/projects/:id', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const project = await Project.query()
           .findById(request.params.id)
           .withGraphFetched('[users, owner, atomes]');
-        
+
         if (!project) {
           reply.code(404);
           return { success: false, error: 'Project not found' };
         }
-        
+
         return { success: true, data: project };
       } catch (error) {
         reply.code(500);
@@ -322,6 +754,11 @@ async function startServer() {
 
     // Atomes API
     server.get('/api/atomes', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const atomes = await Atome.query().withGraphFetched('[user, project]');
         return { success: true, data: atomes };
@@ -332,6 +769,11 @@ async function startServer() {
     });
 
     server.post('/api/atomes', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
         const atome = await Atome.query().insert(request.body);
         return { success: true, data: atome };
@@ -343,18 +785,25 @@ async function startServer() {
 
     // Database stats endpoint
     server.get('/api/db/stats', async (request, reply) => {
+      if (!DATABASE_ENABLED) {
+        reply.code(503);
+        return { success: false, error: DB_REQUIRED_MESSAGE };
+      }
+
       try {
-        const [userCount] = await knex('user').count('* as count');
-        const [projectCount] = await knex('project').count('* as count');
-        const [atomeCount] = await knex('atome').count('* as count');
-        
+        const [userCount, projectCount, atomeCount] = await Promise.all([
+          User.query().resultSize(),
+          Project.query().resultSize(),
+          Atome.query().resultSize()
+        ]);
+
         return {
           success: true,
           data: {
-            users: userCount.count,
-            projects: projectCount.count,
-            atomes: atomeCount.count,
-            database: 'SQLite + Objection.js',
+            users: userCount,
+            projects: projectCount,
+            atomes: atomeCount,
+            database: 'PostgreSQL + Objection.js',
             timestamp: new Date().toISOString()
           }
         };
@@ -445,12 +894,12 @@ async function startServer() {
     // 4. DÉMARRAGE
     // ===========================
 
-    await server.listen({ 
-      port: PORT, 
-      host: '0.0.0.0' 
+    await server.listen({
+      port: PORT,
+      host: '0.0.0.0'
     });
-    
-    console.log(`✅ Serveur Fastify v${server.version} démarré sur http://localhost:${PORT}`);
+
+    console.log(`✅ Serveur Fastify v${server.version} (app ${SERVER_VERSION}) démarré sur http://localhost:${PORT}`);
     console.log(`🔌 WebSocket disponible sur ws://localhost:${PORT}/ws`);
     console.log(`📡 Events WebSocket sur ws://localhost:${PORT}/ws/events`);
     console.log(`🌐 Frontend servi depuis: http://localhost:${PORT}/`);

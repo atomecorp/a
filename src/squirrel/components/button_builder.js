@@ -311,15 +311,32 @@ const applyTemplateEffects = (button, template) => {
     });
 
     button.addEventListener('mouseleave', () => {
-      // Retourner au style de base
       const currentState = button.getState ? button.getState() : null;
+      const preserveSize = () => {
+        const css = {};
+        if (button && /_toggle$/.test(button.id)) {
+          let masterScale = 1;
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+            const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+            if (baseSize) {
+              const scaled = Math.round(baseSize * masterScale) + 'px';
+              css.width = scaled;
+              css.height = scaled;
+            } else {
+              if (button.style.width) css.width = button.style.width;
+              if (button.style.height) css.height = button.style.height;
+            }
+          if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+        }
+        return css;
+      };
       if (currentState !== null) {
-        // Mode toggle - appliquer le style selon l'état
         const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-        button.$({ css: { ...template.css, ...stateStyle } });
+        const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+        button.$({ css: merged });
       } else {
-        // Mode normal - retourner au style de base
-        button.$({ css: template.css });
+        const baseCss = { ...template.css, ...preserveSize() };
+        button.$({ css: baseCss });
       }
     });
   }
@@ -331,11 +348,31 @@ const applyTemplateEffects = (button, template) => {
 
     button.addEventListener('mouseup', () => {
       const currentState = button.getState ? button.getState() : null;
+      const preserveSize = () => {
+        const css = {};
+        if (button && /_toggle$/.test(button.id)) {
+          let masterScale = 1;
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+          const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+          if (baseSize) {
+            const scaled = Math.round(baseSize * masterScale) + 'px';
+            css.width = scaled;
+            css.height = scaled;
+          } else {
+            if (button.style.width) css.width = button.style.width;
+            if (button.style.height) css.height = button.style.height;
+          }
+          if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+        }
+        return css;
+      };
       if (currentState !== null) {
         const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-        button.$({ css: { ...template.css, ...stateStyle } });
+        const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+        button.$({ css: merged });
       } else {
-        button.$({ css: template.css });
+        const baseCss = { ...template.css, ...preserveSize() };
+        button.$({ css: baseCss });
       }
     });
   }
@@ -347,14 +384,15 @@ const applyTemplateEffects = (button, template) => {
 define('button-container', {
   tag: 'button',
   class: 'hs-button',
-  text: 'hello',
+  text: '',
   css: {
     position: 'relative',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '8px 16px',
-    border: '1px solid #ccc',
+  // remove default contour
+  border: 'none',
     borderRadius: '4px',
     // backgroundColor: '#f8f9fa', // ❌ Retiré pour éviter les conflits
     // color: '#333', // ❌ Retiré pour éviter les conflits
@@ -521,7 +559,8 @@ const buttonSizes = {
  */
 const createButton = (config = {}) => {
   const {
-    text = 'Button',
+    // default to empty text: components will show no label unless explicitly provided
+    text = '',
     icon,
     badge,
     variant = 'default',
@@ -565,7 +604,16 @@ const createButton = (config = {}) => {
   }
 
   // Déterminer le mode de fonctionnement
-  const isToggleMode = onText !== undefined || offText !== undefined;
+  // Toggle mode if any of: onText/offText, onStyle/offStyle, onAction/offAction, or explicit toggle flag
+  const isToggleMode = (
+    onText !== undefined ||
+    offText !== undefined ||
+    (onStyle && Object.keys(onStyle).length > 0) ||
+    (offStyle && Object.keys(offStyle).length > 0) ||
+    typeof onAction === 'function' ||
+    typeof offAction === 'function' ||
+    processedConfig.toggle === true
+  );
   const isMultiStateMode = states && states.length > 0;
   
   // État interne pour le toggle
@@ -628,6 +676,12 @@ const createButton = (config = {}) => {
     if (userStateStyles && Object.keys(userStateStyles).length > 0) {
       containerStyles = { ...containerStyles, ...userStateStyles };
     }
+  } else if (isToggleMode) {
+    // Apply user-provided state styles even without a template
+    const userStateStylesOnly = currentToggleState ? (processedConfig.onStyle || {}) : (processedConfig.offStyle || {});
+    if (Object.keys(userStateStylesOnly).length > 0) {
+      containerStyles = { ...containerStyles, ...userStateStylesOnly };
+    }
   } else if (Object.keys(finalStyles).length > 0) {
     // Pour les modes non-toggle, appliquer finalStyles
     containerStyles = { ...containerStyles, ...finalStyles };
@@ -638,6 +692,44 @@ const createButton = (config = {}) => {
     containerStyles.opacity = '0.6';
     containerStyles.cursor = 'not-allowed';
     containerStyles.pointerEvents = 'none';
+  }
+
+  // Respect explicit small width/height: if the developer provided small dimensions
+  // prefer an icon-only compact button (no padding/minWidth that would expand it).
+  const parsePx = (v) => {
+    if (v === undefined || v === null) return null;
+    if (typeof v === 'number') return v;
+    const m = String(v).match(/^(-?\d+(?:\.\d+)?)(px)?$/);
+    return m ? Number(m[1]) : null;
+  };
+
+  const explicitW = parsePx(containerStyles.width || processedConfig.width || processedConfig.css && processedConfig.css.width);
+  const explicitH = parsePx(containerStyles.height || processedConfig.height || processedConfig.css && processedConfig.css.height);
+  const smallThreshold = 32; // px — consider buttons <= this size as icon-only
+  const isSmall = (explicitW !== null && explicitW <= smallThreshold) || (explicitH !== null && explicitH <= smallThreshold);
+
+  if (isSmall) {
+    // Force compact rendering by overriding template defaults so explicit sizes are respected
+    containerStyles.boxSizing = 'border-box';
+    containerStyles.padding = '0';
+    containerStyles.minWidth = '0';
+    containerStyles.minHeight = '0';
+    // ensure explicit width/height remain as provided (if numeric, add px)
+    if (explicitW !== null) containerStyles.width = String(explicitW) + 'px';
+    if (explicitH !== null) containerStyles.height = String(explicitH) + 'px';
+    // hide any text when small unless explicitly forced
+    if (!processedConfig.forceText) {
+      // this will make later checks like `if (finalText)` fail and avoid adding text nodes
+      finalText = '';
+    }
+    // reduce font-size influence
+    containerStyles.fontSize = '0px';
+    // make overflow hidden so inner content doesn't push size
+    containerStyles.overflow = 'hidden';
+    // ensure inline-flex alignment centers icon
+    containerStyles.display = 'inline-flex';
+    containerStyles.alignItems = 'center';
+    containerStyles.justifyContent = 'center';
   }
 
   // Fonction de gestion du clic
@@ -667,12 +759,35 @@ const createButton = (config = {}) => {
       
       // ✅ Fusionner les styles: template base + template state + user state + user css
       const templateBase = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
+      // Compose so state styles override base CSS. Base = template + user css; State = template state + user state.
       const finalStyles = {
-        ...templateBase,        // 1. Template base styles
-        ...templateStateStyles, // 2. Template state styles (onStyle/offStyle from template)
-        ...userStateStyles,     // 3. User state styles (onStyle/offStyle from config)
-        ...processedConfig.css  // 4. User CSS overrides (highest priority)
+        ...templateBase,        // 1) Template base styles
+        ...processedConfig.css, // 2) User base CSS
+        ...templateStateStyles, // 3) Template state styles
+        ...userStateStyles      // 4) User state styles (highest priority)
       };
+
+      // --- Preserve externally imposed size (e.g. Intuition master scale) ---
+      // If the button already has inline width/height coming from another system (and caller didn't explicitly set new ones in finalStyles), keep them.
+      if (button && button.id && /_toggle$/.test(button.id)) {
+        // Recompute width/height from stored base size * external master scale if available
+        const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+        let masterScale = 1;
+        try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+        if (baseSize) {
+          const scaled = Math.round(baseSize * masterScale) + 'px';
+          finalStyles.width = scaled;
+          finalStyles.height = scaled;
+        } else {
+          const existingW = button.style.width;
+          const existingH = button.style.height;
+          if (existingW && finalStyles.width === undefined) finalStyles.width = existingW;
+          if (existingH && finalStyles.height === undefined) finalStyles.height = existingH;
+        }
+        // Also ensure borderRadius kept if externally scaled
+        const existingBR = button.style.borderRadius;
+        if (existingBR && finalStyles.borderRadius === undefined) finalStyles.borderRadius = existingBR;
+      }
       
       button.$({ css: finalStyles });
       
@@ -757,6 +872,15 @@ const createButton = (config = {}) => {
   // Empêcher la sélection/drag native pour que tout le bouton soit la cible
   button.addEventListener('dragstart', (e) => e.preventDefault());
   button.addEventListener('selectstart', (e) => e.preventDefault());
+
+  // Ensure no default outline/border remains (some templates or UA styles may inject them)
+  try {
+    // remove possible outline and border set later
+    button.style.setProperty('outline', 'none');
+    button.style.setProperty('border', 'none');
+  } catch (e) {
+    // ignore
+  }
 
   // ✅ FORCER TOUS les styles critiques manuellement
   Object.keys(cleanStyles).forEach(key => {

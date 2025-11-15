@@ -7,14 +7,16 @@ const atomeSvg = $('svg', {
     viewBox: '0 0 237 237',
     xmlns: 'http://www.w3.org/2000/svg'
   },
-  svgSrc: '../../assets/images/logos/vie.svg',
+  svgSrc: './assets/images/logos/vie.svg',
   parent: '#view',  
   css: {
     width: '200px',    
     height: '200px',
   }
 });
-
+setTimeout(() => {
+  // resize('svg-vie-from-file', 100, 100, 1.0, 'elastic');
+}, 1500); 
 // Exemple avec innerHTML pour comparaison
 const atomeSvgInline = $('svg', {
   id: 'svg-atome-inline',
@@ -41,5 +43,23 @@ const atomeSvgInline = $('svg', {
     marginLeft: '10px'
   }
 });
+
+// Example of fetching and rendering an SVG with custom size and colors
+
+  dataFetcher('assets/images/icons/add.svg')
+    .then(svgData => { render_svg(svgData,'my_nice_svg', 'view','133px', '333px', '120px', '120px' , null, null);  })
+    .catch(err => { span.textContent = 'Erreur: ' + err.message; });
+
+// Example of resizing an existing SVG by id after a delay
+
+setTimeout(() => {
+  fillColor('my_nice_svg', 'purple');
+  strokeColor('my_nice_svg', 'orange');
+  }, 1500);
+
+  setTimeout(() => {
+  resize('my_nice_svg', 33, 33, 0.5, 'elastic');
+  }, 2500);
+
 
 

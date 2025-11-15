@@ -1,4 +1,3 @@
-
 /* Reset et base */
 * {
     -webkit-tap-highlight-color: transparent;
@@ -30,13 +29,18 @@ body {
 }
 
 
-#view {
-    position: absolute;
-    inset: 0;
-    font-size: 25px;
-    overflow: hidden;
-    -webkit-overflow-scrolling: touch;
-}
+/* #view { */
+/* position: fixed; */
+/* fige au viewport */
+/* inset: 0; */
+/* top/right/bottom/left = 0 */
+/* font-size: 25px; */
+/* overflow: hidden; */
+/* overscroll-behavior: none; */
+/* bloque le scroll chaining */
+/* -webkit-overflow-scrolling: auto */
+/* overscrollBehavior: 'none';  */
+/* } */
 
 /* Composants */
 /* .matrix {

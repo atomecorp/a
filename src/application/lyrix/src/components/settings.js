@@ -23,7 +23,7 @@ window.settingsState = {
 export function toggleAudioPlayerControls() {
     const audioPlayer = document.getElementById('audioPlayer');
     const showControls = getToggleState('lyrix_show_audio_controls');
-    
+
     if (audioPlayer) {
         audioPlayer.style.display = showControls ? 'block' : 'none';
     }
@@ -32,7 +32,7 @@ export function toggleAudioPlayerControls() {
 // Toggle audio sync functionality
 export function toggleAudioSync() {
     const enableSync = getToggleState('lyrix_enable_audio_sync');
-    
+
     if (window.audioController) {
         window.audioController.syncEnabled = enableSync;
     }
@@ -41,7 +41,7 @@ export function toggleAudioSync() {
 // Toggle MIDI inspector functionality
 export function toggleMidiInspector() {
     const showInspector = getToggleState('lyrix_show_midi_inspector');
-    
+
     if (window.midiUtilities && window.midiUtilities.inspector) {
         if (showInspector) {
             window.midiUtilities.inspector.show();
@@ -54,7 +54,7 @@ export function toggleMidiInspector() {
 // Toggle timecode visibility in lyrics lines
 export function toggleTimecodeVisibility() {
     const showTimecodes = getToggleState('lyrix_show_timecodes');
-    
+
     // Find all existing timecode elements and toggle their visibility
     const timecodeElements = document.querySelectorAll('.timecode-span, [class*="timecode"]');
     timecodeElements.forEach(timecode => {
@@ -62,7 +62,7 @@ export function toggleTimecodeVisibility() {
             timecode.style.display = showTimecodes ? 'inline' : 'none';
         }
     });
-    
+
     // Also trigger any existing timecode update mechanism in LyricsDisplay
     if (window.lyricsDisplay && window.lyricsDisplay.updateTimecodeVisibility) {
         window.lyricsDisplay.updateTimecodeVisibility();
@@ -73,13 +73,13 @@ export function toggleTimecodeVisibility() {
 export function toggleTitleVisibility() {
     const savedTitleState = localStorage.getItem('lyrix_show_title');
     const showTitle = savedTitleState !== 'false'; // Default to true if not set, same logic as display.js
-    
+
     // Update display instance if available
     if (window.Lyrix && window.Lyrix.lyricsDisplay) {
         window.Lyrix.lyricsDisplay.showTitle = showTitle;
         window.Lyrix.lyricsDisplay.updateTitleVisibility();
     }
-    
+
     // Also update directly in DOM
     const titleElement = document.getElementById('edit_title_input') || document.getElementById('lyrics-title-display');
     if (titleElement) {
@@ -91,13 +91,13 @@ export function toggleTitleVisibility() {
 export function toggleArtistVisibility() {
     const savedArtistState = localStorage.getItem('lyrix_show_artist');
     const showArtist = savedArtistState !== 'false'; // Default to true if not set, same logic as display.js
-    
+
     // Update display instance if available
     if (window.Lyrix && window.Lyrix.lyricsDisplay) {
         window.Lyrix.lyricsDisplay.showArtist = showArtist;
         window.Lyrix.lyricsDisplay.updateArtistVisibility();
     }
-    
+
     // Also update directly in DOM
     const artistElement = document.getElementById('edit_artist_input') || document.getElementById('lyrics-artist-display');
     if (artistElement) {
@@ -141,18 +141,18 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
     if (window.midiUtilities.isLearning) {
         // Stop learning
         window.midiUtilities.stopMidiLearn();
-    buttonElement.style.backgroundColor = 'transparent';
-    // Force aussi important pour écraser tout style résiduel
-    buttonElement.style.setProperty('background-color', 'transparent', 'important');
-    buttonElement.style.color = '#007acc';
-    buttonElement.innerHTML='';
-    try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
+        buttonElement.style.backgroundColor = 'transparent';
+        // Force aussi important pour écraser tout style résiduel
+        buttonElement.style.setProperty('background-color', 'transparent', 'important');
+        buttonElement.style.color = '#007acc';
+        buttonElement.innerHTML = '';
+        try { const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'midi'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; buttonElement.appendChild(img); } catch (e) { }
     } else {
         // Start learning
         buttonElement.style.backgroundColor = '#ff6b6b';
         buttonElement.style.color = 'white';
         buttonElement.textContent = '⏹️';
-        
+
         window.midiUtilities.startMidiLearn((midiNote) => {
             // Remove any existing assignment for this setting
             window.midiUtilities.removeMidiSpecialAssignment(settingName);
@@ -164,8 +164,8 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
             buttonElement.style.backgroundColor = 'transparent';
             buttonElement.style.setProperty('background-color', 'transparent', 'important');
             buttonElement.style.color = '#007acc';
-            buttonElement.innerHTML='';
-            try { const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; buttonElement.appendChild(img);} catch(e){}
+            buttonElement.innerHTML = '';
+            try { const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'midi'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; buttonElement.appendChild(img); } catch (e) { }
         });
     }
 }
@@ -174,15 +174,15 @@ export function startMidiLearnForSetting(settingName, inputElement, buttonElemen
 export function toggleSettingsPanel(id_passed) {
     if (isSettingsOpen) {
         closeSettingsPanel();
-        
+
         // Remettre la couleur de fond normale du bouton
         const button = document.getElementById(id_passed);
         if (button) {
             if (button._setActive) { button._setActive(false); } else { button.style.backgroundColor = 'transparent'; }
         }
     } else {
-    openSettingsPanel(id_passed);
-        
+        openSettingsPanel(id_passed);
+
         // Changer la couleur de fond du bouton pour indiquer qu'il est actif
         const button = document.getElementById(id_passed);
         if (button) {
@@ -204,12 +204,12 @@ export function openSettingsPanel(triggerId) {
     // Find the main app container and lyrics content
     const appContainer = document.getElementById('lyrix_app') || document.getElementById('view') || document.body;
     const displayContainer = document.getElementById('display-container');
-    const lyricsContent = document.querySelector('#lyrics_content_area') || 
-                         document.querySelector('#lyrics-content') || 
-                         document.querySelector('#lyrics-metadata-container')?.parentNode ||
-                         document.querySelector('#lyrics_lines_container')?.parentNode ||
-                         displayContainer ||
-                         appContainer;
+    const lyricsContent = document.querySelector('#lyrics_content_area') ||
+        document.querySelector('#lyrics-content') ||
+        document.querySelector('#lyrics-metadata-container')?.parentNode ||
+        document.querySelector('#lyrics_lines_container')?.parentNode ||
+        displayContainer ||
+        appContainer;
 
     if (!appContainer && !displayContainer && !lyricsContent) {
         return;
@@ -233,7 +233,7 @@ export function openSettingsPanel(triggerId) {
     const gripIndicator = window.$('div', { css: { width: '34px', height: '3px', backgroundColor: default_theme.colors.textMuted, borderRadius: '2px', position: 'relative', opacity: '0.9' } });
 
     gripIndicator.innerHTML = '<div style="position: absolute; top: -2px; left: 0; width: 30px; height: 1px; background-color: #999; border-radius: 1px;"></div><div style="position: absolute; top: 4px; left: 0; width: 30px; height: 1px; background-color: #999; border-radius: 1px;"></div>';
-    
+
     resizeGrip.appendChild(gripIndicator);
 
     // Add resize functionality
@@ -330,7 +330,7 @@ export function closeSettingsPanel() {
     // New requirement: when settings are closed, also exit edit mode and close song list to return to normal view
     // Exit edit mode if active
     if (window.Lyrix && window.Lyrix.lyricsDisplay && window.Lyrix.lyricsDisplay.editMode) {
-        try { window.Lyrix.lyricsDisplay.toggleEditMode(); } catch(e) {}
+        try { window.Lyrix.lyricsDisplay.toggleEditMode(); } catch (e) { }
     }
     // Close song library panel if present
     const songLibraryPanel = document.getElementById('song-library-panel');
@@ -339,7 +339,7 @@ export function closeSettingsPanel() {
             songLibraryPanel.remove();
             const songLibraryGrip = document.getElementById('song-library-resize-grip');
             if (songLibraryGrip) songLibraryGrip.remove();
-        } catch(e) {}
+        } catch (e) { }
         const songListButton = document.getElementById('song_list_button');
         if (songListButton && songListButton._setActive) songListButton._setActive(false);
     }
@@ -362,8 +362,8 @@ function createSettingsPanelHeader() {
     const title = window.$('h3', {
         id: 'settings-panel-title',
         text: '⚙️ Settings',
-        css: { 
-            margin: '0', 
+        css: {
+            margin: '0',
             color: '#fff',
             fontSize: '18px',
             fontWeight: 'bold'
@@ -416,11 +416,11 @@ function updateSettingsButtonAria(isOpen) {
     if (settingsButton) {
         settingsButton.setAttribute('aria-expanded', isOpen.toString());
         settingsButton.setAttribute('aria-controls', 'settings-panel');
-        
+
         // Update button text for screen readers
         const ariaLabel = isOpen ? 'Close settings panel' : 'Open settings panel';
         settingsButton.setAttribute('aria-label', ariaLabel);
-        
+
         // Simple visual state change
         if (isOpen) {
             settingsButton.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
@@ -538,7 +538,7 @@ function createSettingsContent() {
             currentMidiNote = window.midiUtilities.getMidiSpecialAssignment(settingKey);
         }
 
-    const midiInput = window.$('input', {
+        const midiInput = window.$('input', {
             type: 'number',
             min: '0',
             max: '127',
@@ -547,12 +547,12 @@ function createSettingsContent() {
             css: {
                 width: '60px',
                 padding: '5px',
-        border: 'none',
+                border: 'none',
                 borderRadius: '3px',
                 fontSize: '12px',
-        textAlign: 'center',
-        backgroundColor: 'rgb(48, 60, 78)',
-        color: '#fff'
+                textAlign: 'center',
+                backgroundColor: 'rgb(48, 60, 78)',
+                color: '#fff'
             }
         });
 
@@ -581,8 +581,8 @@ function createSettingsContent() {
                 padding: '0'
             },
             title: `Learn MIDI note for ${label}`
-    });
-    try { midiLearnButton.innerHTML=''; const img=document.createElement('img'); img.src='assets/images/icons/target.svg'; img.alt='midi'; img.style.width='14px'; img.style.height='14px'; img.style.pointerEvents='none'; midiLearnButton.appendChild(img);} catch(e){}
+        });
+        try { midiLearnButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'midi'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; midiLearnButton.appendChild(img); } catch (e) { }
 
         midiLearnButton.addEventListener('click', () => {
             startMidiLearnForSetting(settingKey, midiInput, midiLearnButton);
@@ -627,7 +627,7 @@ function createSettingsContent() {
 
         rightColumn.append(midiInput, midiLearnButton, clearButton);
         row.append(leftColumn, rightColumn);
-        
+
         return row;
     }
 
@@ -707,19 +707,19 @@ function createSettingsContent() {
         applyStateShadow(isEnabled);
 
         // Toggle functionality
-    toggleButton.addEventListener('click', () => {
+        toggleButton.addEventListener('click', () => {
             const currentState = getToggleState(storageKey);
             const newState = !currentState;
-            
+
             // Update localStorage
             localStorage.setItem(storageKey, newState.toString());
-            
+
             // Update button appearance
             toggleButton.textContent = newState ? 'ON' : 'OFF';
             toggleButton.style.backgroundColor = newState ? 'rgb(44, 56, 72)' : 'rgb(58, 74, 96)';
             toggleButton.title = `${newState ? 'Disable' : 'Enable'} ${label}`;
             applyStateShadow(newState);
-            
+
             // Call the toggle function
             if (onToggle) {
                 onToggle();
@@ -745,7 +745,7 @@ function createSettingsContent() {
             toggleButton.style.transform = 'translateY(2px)';
             toggleButton.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.65)';
         });
-        ['mouseup','mouseleave'].forEach(ev=>toggleButton.addEventListener(ev, () => {
+        ['mouseup', 'mouseleave'].forEach(ev => toggleButton.addEventListener(ev, () => {
             applyStateShadow(getToggleState(storageKey));
         }));
 
@@ -769,7 +769,7 @@ function createSettingsContent() {
         createToggleRow('Show Timecodes', 'lyrix_show_timecodes', 'Display time markers in lyrics lines', toggleTimecodeVisibility),
         createToggleRow('Show Song Title', 'lyrix_show_title', 'Display song title in lyrics view', toggleTitleVisibility),
         createToggleRow('Show Artist Name', 'lyrix_show_artist', 'Display artist name in lyrics view', toggleArtistVisibility),
-    // Experimental section removed
+        // Experimental section removed
     ];
 
     const audioSection = createSettingSection('Audio & Display', audioControls);
@@ -780,7 +780,7 @@ function createSettingsContent() {
         const storageKey = 'lyrix_purchase_midi_console';
         const label = 'MIDI Console';
         // Reuse toggle row layout but override behavior
-        const row = createToggleRow(label, storageKey, 'Unlock advanced MIDI inspection console', () => {});
+        const row = createToggleRow(label, storageKey, 'Unlock advanced MIDI inspection console', () => { });
         // Grab the actual button we created in createToggleRow
         const toggleBtn = row.querySelector('button');
         const applyOwnedUI = () => {
@@ -820,24 +820,24 @@ function createSettingsContent() {
         window.addEventListener('lyrix-purchase-updated', applyOwnedUI);
         return row;
     }
-    function createRestoreRow(){
-        const row = window.$('div', { css:{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px', backgroundColor:'rgb(52, 66, 86)', borderRadius:'5px', marginBottom:'10px' } });
+    function createRestoreRow() {
+        const row = window.$('div', { css: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', backgroundColor: 'rgb(52, 66, 86)', borderRadius: '5px', marginBottom: '10px' } });
         const left = window.$('div');
         left.append(
-            window.$('div',{ text:'Restore Purchases', css:{ fontWeight:'500', color:'#fff', marginBottom:'3px' }}),
-            window.$('div',{ text:'Re-activate previous purchases', css:{ fontSize:'12px', color:'#cbd5e1', fontStyle:'italic' }})
+            window.$('div', { text: 'Restore Purchases', css: { fontWeight: '500', color: '#fff', marginBottom: '3px' } }),
+            window.$('div', { text: 'Re-activate previous purchases', css: { fontSize: '12px', color: '#cbd5e1', fontStyle: 'italic' } })
         );
-        const btn = window.$('div', { text:'Restore', css:{ padding:'6px 14px', backgroundColor:'rgb(58,74,96)', color:'#fff', borderRadius:'4px', cursor:'pointer', userSelect:'none', boxShadow:'0 2px 4px rgba(0,0,0,0.5)' } });
-        btn.addEventListener('click', async ()=>{
-            btn.textContent='Restoring...'; btn.style.opacity='0.6';
+        const btn = window.$('div', { text: 'Restore', css: { padding: '6px 14px', backgroundColor: 'rgb(58,74,96)', color: '#fff', borderRadius: '4px', cursor: 'pointer', userSelect: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.5)' } });
+        btn.addEventListener('click', async () => {
+            btn.textContent = 'Restoring...'; btn.style.opacity = '0.6';
             const ok = await purchaseManager.restorePurchases();
-            btn.style.opacity='1'; btn.textContent = ok ? 'Restored' : 'Retry';
-            setTimeout(()=>{ if(ok) btn.textContent='Restore'; }, 2000);
+            btn.style.opacity = '1'; btn.textContent = ok ? 'Restored' : 'Retry';
+            setTimeout(() => { if (ok) btn.textContent = 'Restore'; }, 2000);
         });
         row.append(left, btn);
         return row;
     }
-    const iapSection = createSettingSection('In-App Purchases', [ createInAppPurchaseRow(), createRestoreRow() ]);
+    const iapSection = createSettingSection('In-App Purchases', [createInAppPurchaseRow(), createRestoreRow()]);
 
     // Font size control
     function createFontSizeControl() {
@@ -888,7 +888,7 @@ function createSettingsContent() {
 
         // Get current font size - check multiple sources
         let currentFontSize = parseInt(localStorage.getItem('lyrix_font_size'));
-        
+
         // If not in localStorage, try to get from actual lyrics container
         if (!currentFontSize || isNaN(currentFontSize)) {
             const lyricsContainer = document.querySelector('#lyrics-content, #lyrics_lines_container, .lyrics-container');
@@ -900,7 +900,7 @@ function createSettingsContent() {
                 }
             }
         }
-        
+
         // Fallback to default
         if (!currentFontSize || isNaN(currentFontSize)) {
             currentFontSize = 16;
@@ -928,7 +928,7 @@ function createSettingsContent() {
         });
 
         // Font size input
-    const fontInput = window.$('input', {
+        const fontInput = window.$('input', {
             type: 'number',
             min: '10',
             max: '255',
@@ -936,12 +936,12 @@ function createSettingsContent() {
             css: {
                 width: '60px',
                 padding: '5px',
-        border: 'none',
+                border: 'none',
                 borderRadius: '3px',
                 fontSize: '12px',
-        textAlign: 'center',
-        backgroundColor: 'rgb(48, 60, 78)',
-        color: '#fff'
+                textAlign: 'center',
+                backgroundColor: 'rgb(48, 60, 78)',
+                color: '#fff'
             }
         });
 
@@ -971,7 +971,7 @@ function createSettingsContent() {
             newSize = Math.max(10, Math.min(255, newSize)); // Clamp between 10-255
             fontInput.value = newSize;
             localStorage.setItem('lyrix_font_size', newSize);
-            
+
             // Prefer central API if available for consistent fullscreen behavior
             if (window.Lyrix && window.Lyrix.lyricsDisplay && typeof window.Lyrix.lyricsDisplay.setFontSize === 'function') {
                 window.Lyrix.lyricsDisplay.setFontSize(newSize);
@@ -1026,11 +1026,11 @@ function createSettingsContent() {
         }
 
         // Mouse / touch events for decrease
-        ['mousedown','touchstart'].forEach(evt => {
+        ['mousedown', 'touchstart'].forEach(evt => {
             decreaseButton.addEventListener(evt, (e) => { e.preventDefault(); startRepeat('dec'); });
             increaseButton.addEventListener(evt, (e) => { e.preventDefault(); startRepeat('inc'); });
         });
-        ['mouseup','mouseleave','touchend','touchcancel'].forEach(evt => {
+        ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(evt => {
             decreaseButton.addEventListener(evt, clearTimers);
             increaseButton.addEventListener(evt, clearTimers);
         });
@@ -1056,7 +1056,7 @@ function createSettingsContent() {
 
         rightColumn.append(decreaseButton, fontInput, increaseButton);
         container.append(leftColumn, rightColumn);
-        
+
         // Update input value when container is created (refresh current value)
         setTimeout(() => {
             let refreshedSize = parseInt(localStorage.getItem('lyrix_font_size'));
@@ -1074,7 +1074,7 @@ function createSettingsContent() {
                 fontInput.value = refreshedSize;
             }
         }, 100);
-        
+
         return container;
     }
 
@@ -1089,7 +1089,7 @@ function createSettingsContent() {
 
 // Show settings modal
 export function showSettingsModal() {
-    
+
     const modalContainer = window.UIManager.createEnhancedModalOverlay();
     const modal = window.UIManager.createEnhancedModalContainer({
         id: 'settings-modal',
@@ -1124,7 +1124,7 @@ export function showSettingsModal() {
 
     // Content - reuse shared content creation function
     const content = createSettingsContent();
-    
+
     // Update content styles for modal
     content.style.padding = window.UIManager.THEME.spacing.lg;
     content.style.maxHeight = '500px';
@@ -1184,7 +1184,7 @@ export function showSettingsModal() {
         } else {
         }
 
-    const midiInput = window.$('input', {
+        const midiInput = window.$('input', {
             type: 'number',
             min: '0',
             max: '127',
@@ -1193,12 +1193,12 @@ export function showSettingsModal() {
             css: {
                 width: '60px',
                 padding: '5px',
-        border: 'none',
+                border: 'none',
                 borderRadius: '3px',
                 fontSize: '12px',
-        textAlign: 'center',
-        backgroundColor: 'rgb(48, 60, 78)',
-        color: '#fff'
+                textAlign: 'center',
+                backgroundColor: 'rgb(48, 60, 78)',
+                color: '#fff'
             }
         });
 
@@ -1278,7 +1278,7 @@ export function showSettingsModal() {
 
         rightColumn.append(midiInput, midiLearnButton, clearButton);
         row.append(leftColumn, rightColumn);
-        
+
         return row;
     }
 
@@ -1348,15 +1348,15 @@ export function showSettingsModal() {
         toggleButton.addEventListener('click', () => {
             const currentState = getToggleState(storageKey);
             const newState = !currentState;
-            
+
             // Update localStorage
             localStorage.setItem(storageKey, newState.toString());
-            
+
             // Update button appearance
             toggleButton.textContent = newState ? 'ON' : 'OFF';
             toggleButton.style.backgroundColor = newState ? '#28a745' : '#6c757d';
             toggleButton.title = `${newState ? 'Disable' : 'Enable'} ${label}`;
-            
+
             // Call the toggle function
             if (onToggle) {
                 onToggle();
@@ -1555,7 +1555,7 @@ export function showSettingsModal() {
         if (window.currentSong) {
             const song = window.currentSong;
             const metadata = song.metadata || {};
-            
+
             metadataContent.innerHTML = `
                 <div><strong>Title:</strong> ${metadata.title || song.title || 'Unknown'}</div>
                 <div><strong>Artist:</strong> ${metadata.artist || song.artist || 'Unknown'}</div>
@@ -1645,7 +1645,7 @@ export function showSettingsModal() {
         const size = e.target.value;
         fontSizeValue.textContent = `${size}px`;
         localStorage.setItem('lyrix_font_size', size);
-        
+
         // Apply font size immediately
         const lyricsContainer = document.querySelector('.lyrics-container');
         if (lyricsContainer) {
@@ -1670,7 +1670,7 @@ export function showSettingsModal() {
 
     // Footer
     const footer = window.UIManager.createModalFooter({});
-    
+
     const resetButton = window.$('button', {
         text: 'Reset All MIDI',
         css: {
@@ -1713,7 +1713,7 @@ export function showSettingsModal() {
     // Assemble modal
     modal.append(header, content, footer);
     modalContainer.appendChild(modal);
-    
+
     // Add to DOM
     document.body.appendChild(modalContainer);
 
@@ -1761,31 +1761,31 @@ function addResizeListeners(panel, grip, storageKey) {
         isResizing = true;
         startY = e.clientY;
         startHeight = parseInt(window.getComputedStyle(panel).height, 10);
-        
+
         grip.style.backgroundColor = '#007acc';
         grip.querySelector('div').style.backgroundColor = 'white';
-        
+
         document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
-        
+
         e.preventDefault();
     });
 
     // Handle resizing
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
-        
+
         const deltaY = e.clientY - startY;
         const newHeight = startHeight + deltaY;
-        
+
         // Set minimum and maximum heights
         const minHeight = 150; // minimum 150px
         const maxHeight = window.innerHeight * 0.8; // maximum 80% of viewport height
-        
+
         const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight));
-        
+
         panel.style.height = `${clampedHeight}px`;
-        
+
         e.preventDefault();
     });
 
@@ -1793,24 +1793,24 @@ function addResizeListeners(panel, grip, storageKey) {
     document.addEventListener('mouseup', () => {
         if (isResizing) {
             isResizing = false;
-            
+
             // Save the new height
             const finalHeight = panel.style.height;
             localStorage.setItem(storageKey, finalHeight);
-            
+
             // Reset cursor and selection
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            
+
             // Reset grip appearance
             grip.style.backgroundColor = '#e0e0e0';
             grip.querySelector('div').style.backgroundColor = '#999';
-            
+
             // IMPORTANT: Trigger a resize event to update the lyrics content area
             // This forces the lyrics container to recalculate its height
             setTimeout(() => {
                 window.dispatchEvent(new Event('resize'));
-                
+
                 // Also directly update lyrics content area height if it exists
                 const lyricsContentArea = document.getElementById('lyrics_content_area');
                 if (lyricsContentArea) {
@@ -1823,11 +1823,11 @@ function addResizeListeners(panel, grip, storageKey) {
                             const containerHeight = container.offsetHeight;
                             const toolbar = container.querySelector('#lyrics-toolbar');
                             const settingsPanel = document.getElementById('lyrix_settings_panel');
-                            
+
                             let availableHeight = containerHeight;
                             if (toolbar) availableHeight -= toolbar.offsetHeight;
                             if (settingsPanel) availableHeight -= settingsPanel.offsetHeight;
-                            
+
                             lyricsContentArea.style.height = `${Math.max(200, availableHeight)}px`;
                             console.log('🔄 Updated lyrics content area height:', lyricsContentArea.style.height);
                         }
@@ -1841,10 +1841,10 @@ function addResizeListeners(panel, grip, storageKey) {
 // Function to update all MIDI input values in the modal
 function updateAllMidiInputValues(modal) {
     if (!window.midiUtilities) return;
-    
+
     // Find all MIDI inputs and update their values using the data-setting-key attribute
     const midiInputs = modal.querySelectorAll('input[data-setting-key]');
-    
+
     midiInputs.forEach((input) => {
         const settingKey = input.getAttribute('data-setting-key');
         if (settingKey) {
@@ -1857,40 +1857,40 @@ function updateAllMidiInputValues(modal) {
 }
 
 export class SettingsManager {
-    
+
     // Set font size with persistence and DOM updates
     static setFontSize(size) {
         if (size >= CONSTANTS.UI.MIN_FONT_SIZE && size <= CONSTANTS.UI.MAX_FONT_SIZE) {
             StorageManager.saveFontSize(size);
-            
+
             // Update all lyrics lines
             document.querySelectorAll('.lyrics-line').forEach(el => {
                 el.style.fontSize = size + 'px';
             });
-            
+
             // Update font size display
             const display = document.getElementById('font-size-display');
             if (display) display.textContent = size + 'px';
-            
+
             const slider = document.getElementById('font-size-slider');
             if (slider) slider.value = size;
-            
+
             return true;
         }
         return false;
     }
-    
+
     // Get current font size from storage
     static getFontSize() {
         return StorageManager.loadFontSize() || CONSTANTS.UI.DEFAULT_FONT_SIZE;
     }
-    
+
     // Apply saved settings on startup
     static applySavedSettings() {
         const savedFontSize = this.getFontSize();
         this.setFontSize(savedFontSize);
     }
-    
+
     // Reset settings to defaults
     static resetToDefaults() {
         this.setFontSize(CONSTANTS.UI.DEFAULT_FONT_SIZE);

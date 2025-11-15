@@ -55,7 +55,7 @@ const atomeSvg = $('svg', {
     viewBox: '0 0 237 237',
     xmlns: 'http://www.w3.org/2000/svg'
   },
-  svgSrc: '../../assets/images/logos/atome.svg',
+  svgSrc: './assets/images/logos/atome.svg',
   parent: svgContainer,
   css: {
     width: '200px',
@@ -92,7 +92,7 @@ const vieSvg = $('svg', {
     height: '200',
     xmlns: 'http://www.w3.org/2000/svg'
   },
-  svgSrc: '../../assets/images/logos/vie.svg',
+  svgSrc: './assets/images/logos/vie.svg',
   parent: svgContainer,
   css: {
     width: '200px',
@@ -345,7 +345,7 @@ $('div', {
     <h4>🔧 New Syntax:</h4>
     <pre style="background: #222; padding: 10px; border-radius: 5px; overflow-x: auto; font-size: 12px;">
 const svg = $('svg', {
-  svgSrc: '../../assets/images/logos/atome.svg',
+  svgSrc: './assets/images/logos/atome.svg',
   attrs: { width: '200', height: '200' },
   onClick: () => console.log('Click!'),
   css: { margin: '20px' }

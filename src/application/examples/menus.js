@@ -2,7 +2,6 @@
  * 🍽️ EXEMPLES MENU MODERNES - MATERIAL DESIGN DARK
  * Menus beaux, modernes et responsives avec espacement correct et sobre
  */
-import Menu from '../../squirrel/components/menu_builder.js';
 
 // Variable pour gérer l'état actif et menu mobile
 let currentActiveItem = null;
@@ -14,14 +13,14 @@ const modernHeaderMenu = Menu({
     attach: "#view",
     position: { x: 50, y: 30 },
     size: { width: "100%", maxWidth: 1200 },
-    
+
     layout: {
         direction: "horizontal",
         justify: "space-between",
         align: "center",
         gap: "32px"
     },
-    
+
     style: {
         background: "rgba(15, 15, 15, 0.98)",
         backdropFilter: "blur(24px)",
@@ -34,7 +33,7 @@ const modernHeaderMenu = Menu({
         position: "relative",
         zIndex: "1000"
     },
-    
+
     // Responsive design avec menu hamburger
     responsive: {
         breakpoints: {
@@ -54,7 +53,7 @@ const modernHeaderMenu = Menu({
             }
         }
     },
-    
+
     content: [
         {
             type: "item",
@@ -67,7 +66,7 @@ const modernHeaderMenu = Menu({
                     </div>
                 `
             },
-            style: { 
+            style: {
                 padding: "0",
                 cursor: "default"
             }
@@ -91,9 +90,9 @@ const modernHeaderMenu = Menu({
         {
             type: "group",
             id: "nav-links",
-            layout: { 
-                direction: "horizontal", 
-                gap: "4px" 
+            layout: {
+                direction: "horizontal",
+                gap: "4px"
             },
             style: {
                 display: "flex" // Sera caché sur mobile
@@ -102,7 +101,7 @@ const modernHeaderMenu = Menu({
                 {
                     id: "dashboard",
                     content: { text: "Dashboard" },
-                    style: { 
+                    style: {
                         color: "#f8f9fa",
                         fontWeight: "500",
                         fontSize: "13px",
@@ -111,7 +110,7 @@ const modernHeaderMenu = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.12)",
                             transform: "translateY(-1px)",
                             boxShadow: "0 2px 8px rgba(0,0,0,0.25)"
@@ -126,7 +125,7 @@ const modernHeaderMenu = Menu({
                 {
                     id: "projects",
                     content: { text: "Projets" },
-                    style: { 
+                    style: {
                         color: "#f8f9fa",
                         fontWeight: "500",
                         fontSize: "13px",
@@ -135,7 +134,7 @@ const modernHeaderMenu = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.12)"
                         }
                     },
@@ -155,10 +154,10 @@ const modernHeaderMenu = Menu({
                             zIndex: "1001"
                         },
                         items: [
-                            { 
-                                id: "new-project", 
+                            {
+                                id: "new-project",
                                 content: { text: "➕ Nouveau projet" },
-                                style: { 
+                                style: {
                                     color: "#4caf50",
                                     padding: "8px 12px",
                                     borderRadius: "6px",
@@ -168,10 +167,10 @@ const modernHeaderMenu = Menu({
                                     hover: { backgroundColor: "rgba(76, 175, 80, 0.1)" }
                                 }
                             },
-                            { 
-                                id: "my-projects", 
+                            {
+                                id: "my-projects",
                                 content: { text: "📁 Mes projets" },
-                                style: { 
+                                style: {
                                     padding: "8px 12px",
                                     borderRadius: "6px",
                                     fontSize: "14px"
@@ -180,10 +179,10 @@ const modernHeaderMenu = Menu({
                                     hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                                 }
                             },
-                            { 
-                                id: "shared-projects", 
+                            {
+                                id: "shared-projects",
                                 content: { text: "🤝 Projets partagés" },
-                                style: { 
+                                style: {
                                     padding: "8px 12px",
                                     borderRadius: "6px",
                                     fontSize: "14px"
@@ -192,17 +191,17 @@ const modernHeaderMenu = Menu({
                                     hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                                 }
                             },
-                            { 
+                            {
                                 type: "separator",
                                 style: {
                                     borderTop: "1px solid rgba(255, 255, 255, 0.1)",
                                     margin: "6px 0"
                                 }
                             },
-                            { 
-                                id: "archived", 
+                            {
+                                id: "archived",
                                 content: { text: "📦 Archivés" },
-                                style: { 
+                                style: {
                                     color: "#9e9e9e",
                                     padding: "8px 12px",
                                     borderRadius: "6px",
@@ -218,7 +217,7 @@ const modernHeaderMenu = Menu({
                 {
                     id: "team",
                     content: { text: "Équipe" },
-                    style: { 
+                    style: {
                         color: "#f8f9fa",
                         fontWeight: "500",
                         fontSize: "13px",
@@ -227,7 +226,7 @@ const modernHeaderMenu = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.12)"
                         }
                     }
@@ -235,7 +234,7 @@ const modernHeaderMenu = Menu({
                 {
                     id: "analytics",
                     content: { text: "Analytics" },
-                    style: { 
+                    style: {
                         color: "#f8f9fa",
                         fontWeight: "500",
                         fontSize: "13px",
@@ -244,7 +243,7 @@ const modernHeaderMenu = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.12)"
                         }
                     }
@@ -254,14 +253,14 @@ const modernHeaderMenu = Menu({
         {
             type: "group",
             id: "user-section",
-            layout: { 
-                direction: "horizontal", 
-                gap: "12px" 
+            layout: {
+                direction: "horizontal",
+                gap: "12px"
             },
             items: [
                 {
                     id: "notifications",
-                    content: { 
+                    content: {
                         html: `
                             <div style="position: relative;">
                                 🔔
@@ -282,7 +281,7 @@ const modernHeaderMenu = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.12)",
                             transform: "scale(1.05)"
                         }
@@ -290,7 +289,7 @@ const modernHeaderMenu = Menu({
                 },
                 {
                     id: "user-profile",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 6px;">
                                 <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle fill='%23667eea' cx='12' cy='12' r='12'/%3E%3Ctext x='12' y='16' text-anchor='middle' fill='white' font-size='10' font-weight='600'%3EJD%3C/text%3E%3C/svg%3E" style="border-radius: 50%; width: 24px; height: 24px;">
@@ -321,9 +320,9 @@ const modernHeaderMenu = Menu({
                             zIndex: "1001"
                         },
                         items: [
-                            { 
+                            {
                                 content: { text: "👤 Mon profil" },
-                                style: { 
+                                style: {
                                     padding: "8px 12px",
                                     borderRadius: "6px",
                                     fontSize: "14px"
@@ -332,9 +331,9 @@ const modernHeaderMenu = Menu({
                                     hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                                 }
                             },
-                            { 
+                            {
                                 content: { text: "⚙️ Paramètres" },
-                                style: { 
+                                style: {
                                     padding: "8px 12px",
                                     borderRadius: "6px",
                                     fontSize: "14px"
@@ -343,9 +342,9 @@ const modernHeaderMenu = Menu({
                                     hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                                 }
                             },
-                            { 
+                            {
                                 content: { text: "🎨 Thème" },
-                                style: { 
+                                style: {
                                     padding: "8px 12px",
                                     borderRadius: "6px",
                                     fontSize: "14px"
@@ -354,16 +353,16 @@ const modernHeaderMenu = Menu({
                                     hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                                 }
                             },
-                            { 
+                            {
                                 type: "separator",
                                 style: {
                                     borderTop: "1px solid rgba(255, 255, 255, 0.1)",
                                     margin: "6px 0"
                                 }
                             },
-                            { 
-                                content: { text: "🚪 Déconnexion" }, 
-                                style: { 
+                            {
+                                content: { text: "🚪 Déconnexion" },
+                                style: {
                                     color: "#f44336",
                                     padding: "8px 12px",
                                     borderRadius: "6px",
@@ -376,7 +375,7 @@ const modernHeaderMenu = Menu({
                         ]
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)",
                             borderColor: "rgba(255,255,255,0.25)"
                         }
@@ -385,17 +384,17 @@ const modernHeaderMenu = Menu({
             ]
         }
     ],
-    
+
     callbacks: {
         onItemClick: (itemId, event) => {
             console.log("🍽️ Menu Header - Clic sur:", itemId);
-            
+
             // Gestion du menu hamburger
             if (itemId === "hamburger-menu") {
                 toggleMobileMenu();
                 return;
             }
-            
+
             // Gestion de l'état actif
             if (currentActiveItem && currentActiveItem !== itemId) {
                 // Retirer l'état actif de l'ancien item
@@ -406,7 +405,7 @@ const modernHeaderMenu = Menu({
                     oldActiveElement.style.borderLeft = "";
                 }
             }
-            
+
             // Appliquer l'état actif au nouvel item
             const newActiveElement = document.querySelector(`[data-menu-id="${itemId}"]`);
             if (newActiveElement) {
@@ -414,9 +413,9 @@ const modernHeaderMenu = Menu({
                 newActiveElement.style.color = "#ffffff";
                 newActiveElement.style.borderLeft = "3px solid #ffffff";
             }
-            
+
             currentActiveItem = itemId;
-            
+
             if (itemId === "dashboard") {
                 console.log("📊 Redirection vers Dashboard");
             }
@@ -436,7 +435,7 @@ const mobileMenuOverlay = Menu({
     attach: "#view",
     position: { x: 0, y: 0 },
     size: { width: "100vw", height: "100vh" },
-    
+
     style: {
         position: "fixed",
         top: "0",
@@ -448,14 +447,14 @@ const mobileMenuOverlay = Menu({
         opacity: "0",
         transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
     },
-    
+
     layout: {
         direction: "vertical",
         justify: "center",
         align: "center",
         gap: "20px"
     },
-    
+
     content: [
         {
             type: "group",
@@ -583,19 +582,19 @@ const mobileMenuOverlay = Menu({
             ]
         }
     ],
-    
+
     callbacks: {
         onItemClick: (itemId, event) => {
             console.log("📱 Mobile Menu - Clic sur:", itemId);
-            
+
             if (itemId === "mobile-close") {
                 hideMobileMenu();
                 return;
             }
-            
+
             // Fermer le menu et traiter l'action
             hideMobileMenu();
-            
+
             // Mapper les actions mobile vers les actions desktop
             const desktopMapping = {
                 "mobile-dashboard": "dashboard",
@@ -603,7 +602,7 @@ const mobileMenuOverlay = Menu({
                 "mobile-team": "team",
                 "mobile-analytics": "analytics"
             };
-            
+
             const desktopItemId = desktopMapping[itemId];
             if (desktopItemId) {
                 // Trigger l'action correspondante sur le menu desktop
@@ -625,14 +624,14 @@ function toggleMobileMenu() {
 function showMobileMenu() {
     const mobileMenu = document.getElementById('mobile-menu-overlay');
     const hamburgerIcon = document.getElementById('hamburger-icon');
-    
+
     if (mobileMenu) {
         mobileMenu.style.display = 'flex';
         requestAnimationFrame(() => {
             mobileMenu.style.opacity = '1';
         });
     }
-    
+
     // Animation du hamburger vers X
     if (hamburgerIcon) {
         const lines = hamburgerIcon.querySelectorAll('div');
@@ -642,7 +641,7 @@ function showMobileMenu() {
             lines[2].style.transform = 'rotate(-45deg) translate(5px, -5px)';
         }
     }
-    
+
     isMobileMenuOpen = true;
     console.log("📱 Menu mobile ouvert");
 }
@@ -650,14 +649,14 @@ function showMobileMenu() {
 function hideMobileMenu() {
     const mobileMenu = document.getElementById('mobile-menu-overlay');
     const hamburgerIcon = document.getElementById('hamburger-icon');
-    
+
     if (mobileMenu) {
         mobileMenu.style.opacity = '0';
         setTimeout(() => {
             mobileMenu.style.display = 'none';
         }, 300);
     }
-    
+
     // Animation du X vers hamburger
     if (hamburgerIcon) {
         const lines = hamburgerIcon.querySelectorAll('div');
@@ -667,7 +666,7 @@ function hideMobileMenu() {
             lines[2].style.transform = 'none';
         }
     }
-    
+
     isMobileMenuOpen = false;
     console.log("📱 Menu mobile fermé");
 }
@@ -678,7 +677,7 @@ const modernSidebar = Menu({
     attach: "#view",
     position: { x: 50, y: 130 },
     size: { width: 260, height: 600 },
-    
+
     style: {
         background: "rgba(18, 18, 18, 0.98)",
         backdropFilter: "blur(20px)",
@@ -689,7 +688,7 @@ const modernSidebar = Menu({
         position: "relative",
         zIndex: "999"
     },
-    
+
     // Responsive design pour sidebar
     responsive: {
         breakpoints: {
@@ -704,19 +703,19 @@ const modernSidebar = Menu({
             }
         }
     },
-    
+
     layout: {
         direction: "vertical",
         justify: "flex-start",
         align: "stretch",
         gap: "6px"
     },
-    
+
     content: [
         {
             type: "item",
             id: "sidebar-header",
-            content: { 
+            content: {
                 html: `
                     <div style="display: flex; flex-direction: column; gap: 6px;">
                         <h3 style="margin: 0; color: #f5f5f5; font-size: 16px; font-weight: 600; letter-spacing: -0.01em;">Navigation</h3>
@@ -741,7 +740,7 @@ const modernSidebar = Menu({
             items: [
                 {
                     id: "overview",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 16px;">📊</span>
@@ -758,7 +757,7 @@ const modernSidebar = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)",
                             transform: "translateX(2px)"
                         },
@@ -772,7 +771,7 @@ const modernSidebar = Menu({
                 },
                 {
                     id: "projects-sidebar",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 16px;">📁</span>
@@ -789,7 +788,7 @@ const modernSidebar = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)",
                             transform: "translateX(2px)"
                         }
@@ -797,7 +796,7 @@ const modernSidebar = Menu({
                 },
                 {
                     id: "team-sidebar",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 16px;">👥</span>
@@ -814,7 +813,7 @@ const modernSidebar = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)",
                             transform: "translateX(2px)"
                         }
@@ -822,7 +821,7 @@ const modernSidebar = Menu({
                 },
                 {
                     id: "analytics-sidebar",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 16px;">📈</span>
@@ -839,7 +838,7 @@ const modernSidebar = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)",
                             transform: "translateX(2px)"
                         }
@@ -867,7 +866,7 @@ const modernSidebar = Menu({
             items: [
                 {
                     id: "settings",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 16px;">⚙️</span>
@@ -884,7 +883,7 @@ const modernSidebar = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)",
                             transform: "translateX(2px)"
                         }
@@ -892,7 +891,7 @@ const modernSidebar = Menu({
                 },
                 {
                     id: "help",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 16px;">❓</span>
@@ -909,7 +908,7 @@ const modernSidebar = Menu({
                         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)",
                             transform: "translateX(2px)"
                         }
@@ -918,11 +917,11 @@ const modernSidebar = Menu({
             ]
         }
     ],
-    
+
     callbacks: {
         onItemClick: (itemId, event) => {
             console.log("📱 Sidebar - Clic sur:", itemId);
-            
+
             // Gestion de l'état actif pour sidebar
             const sidebarItems = document.querySelectorAll('#modern-sidebar [data-menu-id]');
             sidebarItems.forEach(item => {
@@ -933,7 +932,7 @@ const modernSidebar = Menu({
                     item.style.transform = "";
                 }
             });
-            
+
             // Appliquer l'état actif
             const activeElement = document.querySelector(`#modern-sidebar [data-menu-id="${itemId}"]`);
             if (activeElement) {
@@ -952,7 +951,7 @@ const modernFAB = Menu({
     attach: "#view",
     position: { x: 1200, y: 500 },
     size: { width: 64, height: 64 },
-    
+
     style: {
         background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         borderRadius: "50%",
@@ -963,7 +962,7 @@ const modernFAB = Menu({
         position: "fixed",
         zIndex: "1002"
     },
-    
+
     // Responsive pour FAB
     responsive: {
         breakpoints: {
@@ -974,18 +973,18 @@ const modernFAB = Menu({
             }
         }
     },
-    
+
     layout: {
         direction: "vertical",
         justify: "center",
         align: "center"
     },
-    
+
     content: [
         {
             type: "item",
             id: "fab-main",
-            content: { 
+            content: {
                 html: `
                     <div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
                         <span style="font-size: 24px; color: white;">+</span>
@@ -1000,7 +999,7 @@ const modernFAB = Menu({
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
             },
             states: {
-                hover: { 
+                hover: {
                     transform: "scale(1.1) rotate(45deg)",
                     boxShadow: "0 12px 32px rgba(102, 126, 234, 0.5)"
                 }
@@ -1021,9 +1020,9 @@ const modernFAB = Menu({
                     zIndex: "1003"
                 },
                 items: [
-                    { 
+                    {
                         content: { text: "📄 Nouveau document" },
-                        style: { 
+                        style: {
                             padding: "10px 12px",
                             borderRadius: "6px",
                             fontSize: "14px",
@@ -1033,9 +1032,9 @@ const modernFAB = Menu({
                             hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                         }
                     },
-                    { 
+                    {
                         content: { text: "📁 Nouveau dossier" },
-                        style: { 
+                        style: {
                             padding: "10px 12px",
                             borderRadius: "6px",
                             fontSize: "14px",
@@ -1045,9 +1044,9 @@ const modernFAB = Menu({
                             hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                         }
                     },
-                    { 
+                    {
                         content: { text: "👥 Inviter utilisateur" },
-                        style: { 
+                        style: {
                             padding: "10px 12px",
                             borderRadius: "6px",
                             fontSize: "14px",
@@ -1057,16 +1056,16 @@ const modernFAB = Menu({
                             hover: { backgroundColor: "rgba(255,255,255,0.08)" }
                         }
                     },
-                    { 
+                    {
                         type: "separator",
                         style: {
                             borderTop: "1px solid rgba(255, 255, 255, 0.1)",
                             margin: "6px 0"
                         }
                     },
-                    { 
+                    {
                         content: { text: "⚙️ Paramètres rapides" },
-                        style: { 
+                        style: {
                             padding: "10px 12px",
                             borderRadius: "6px",
                             fontSize: "14px",
@@ -1080,7 +1079,7 @@ const modernFAB = Menu({
             }
         }
     ],
-    
+
     callbacks: {
         onItemClick: (itemId, event) => {
             console.log("🎯 FAB - Action:", itemId);
@@ -1094,7 +1093,7 @@ const modernContextMenu = Menu({
     attach: "#view",
     position: { x: 0, y: 0 }, // Position dynamique selon le clic
     size: { width: "auto", minWidth: 200 },
-    
+
     style: {
         background: "rgba(25, 25, 25, 0.98)",
         backdropFilter: "blur(20px)",
@@ -1109,12 +1108,12 @@ const modernContextMenu = Menu({
         transform: "scale(0.9)",
         transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
     },
-    
+
     layout: {
         direction: "vertical",
         gap: "2px"
     },
-    
+
     content: [
         {
             type: "group",
@@ -1126,7 +1125,7 @@ const modernContextMenu = Menu({
             items: [
                 {
                     id: "copy",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 14px;">📋</span>
@@ -1145,14 +1144,14 @@ const modernContextMenu = Menu({
                         cursor: "pointer"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)"
                         }
                     }
                 },
                 {
                     id: "paste",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 14px;">📄</span>
@@ -1171,14 +1170,14 @@ const modernContextMenu = Menu({
                         cursor: "pointer"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)"
                         }
                     }
                 },
                 {
                     id: "cut",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 14px;">✂️</span>
@@ -1197,7 +1196,7 @@ const modernContextMenu = Menu({
                         cursor: "pointer"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)"
                         }
                     }
@@ -1211,7 +1210,7 @@ const modernContextMenu = Menu({
                 },
                 {
                     id: "duplicate",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 14px;">📑</span>
@@ -1229,14 +1228,14 @@ const modernContextMenu = Menu({
                         cursor: "pointer"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)"
                         }
                     }
                 },
                 {
                     id: "rename",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 14px;">✏️</span>
@@ -1255,7 +1254,7 @@ const modernContextMenu = Menu({
                         cursor: "pointer"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)"
                         }
                     }
@@ -1269,7 +1268,7 @@ const modernContextMenu = Menu({
                 },
                 {
                     id: "properties",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 14px;">ℹ️</span>
@@ -1287,14 +1286,14 @@ const modernContextMenu = Menu({
                         cursor: "pointer"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(255,255,255,0.08)"
                         }
                     }
                 },
                 {
                     id: "delete",
-                    content: { 
+                    content: {
                         html: `
                             <div style="display: flex; align-items: center; gap: 12px;">
                                 <span style="font-size: 14px;">🗑️</span>
@@ -1313,7 +1312,7 @@ const modernContextMenu = Menu({
                         cursor: "pointer"
                     },
                     states: {
-                        hover: { 
+                        hover: {
                             backgroundColor: "rgba(244, 67, 54, 0.1)"
                         }
                     }
@@ -1321,12 +1320,12 @@ const modernContextMenu = Menu({
             ]
         }
     ],
-    
+
     callbacks: {
         onItemClick: (itemId, event) => {
             console.log("📋 Menu Contextuel - Action:", itemId);
             hideContextMenu();
-            
+
             // Actions spécifiques
             switch (itemId) {
                 case 'copy':
@@ -1364,22 +1363,22 @@ function showContextMenu(x, y) {
         const viewportHeight = window.innerHeight;
         const menuWidth = 200;
         const menuHeight = 280;
-        
+
         // Ajuster la position si le menu dépasse
         let finalX = x;
         let finalY = y;
-        
+
         if (x + menuWidth > viewportWidth) {
             finalX = viewportWidth - menuWidth - 10;
         }
         if (y + menuHeight > viewportHeight) {
             finalY = viewportHeight - menuHeight - 10;
         }
-        
+
         contextMenu.style.left = finalX + 'px';
         contextMenu.style.top = finalY + 'px';
         contextMenu.style.display = 'block';
-        
+
         // Animation d'apparition
         requestAnimationFrame(() => {
             contextMenu.style.opacity = '1';
@@ -1445,12 +1444,12 @@ function handleResponsiveMenus() {
     const viewportWidth = window.innerWidth;
     const isMobile = viewportWidth <= 768;
     const isTablet = viewportWidth <= 1024;
-    
+
     // Header responsive avec menu hamburger
     const headerMenu = document.getElementById('modern-header-menu');
     const navLinks = document.getElementById('nav-links');
     const hamburgerIcon = document.getElementById('hamburger-icon');
-    
+
     if (headerMenu) {
         if (isMobile) {
             // Mode mobile : menu hamburger
@@ -1459,27 +1458,27 @@ function handleResponsiveMenus() {
             headerMenu.style.width = '100%';
             headerMenu.style.left = '0';
             headerMenu.style.borderRadius = '0 0 12px 12px';
-            
+
             // Cacher les liens de navigation
             if (navLinks) {
                 navLinks.style.display = 'none';
             }
-            
+
             // Afficher le hamburger
             if (hamburgerIcon) {
                 hamburgerIcon.style.display = 'flex';
             }
-            
+
         } else if (isTablet) {
             // Mode tablette
             headerMenu.style.padding = '8px 18px';
             headerMenu.style.height = '44px';
-            
+
             // Afficher les liens
             if (navLinks) {
                 navLinks.style.display = 'flex';
             }
-            
+
             // Cacher le hamburger
             if (hamburgerIcon) {
                 hamburgerIcon.style.display = 'none';
@@ -1488,19 +1487,19 @@ function handleResponsiveMenus() {
             // Mode desktop
             headerMenu.style.padding = '8px 20px';
             headerMenu.style.height = '44px';
-            
+
             // Afficher les liens
             if (navLinks) {
                 navLinks.style.display = 'flex';
             }
-            
+
             // Cacher le hamburger
             if (hamburgerIcon) {
                 hamburgerIcon.style.display = 'none';
             }
         }
     }
-    
+
     // Sidebar responsive
     const sidebar = document.getElementById('modern-sidebar');
     if (sidebar) {
@@ -1522,7 +1521,7 @@ function handleResponsiveMenus() {
             sidebar.style.position = 'fixed';
         }
     }
-    
+
     // FAB responsive
     const fab = document.getElementById('modern-fab');
     if (fab) {

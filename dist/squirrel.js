@@ -11,98 +11,98 @@
 
   // Add the puts method to display in the console
   window.puts = function puts(val) {
-      console.log(val);
+    console.log(val);
   };
 
   // Add the print method to display in the console without newline (Ruby-like)
   window.print = function print(val) {
-      // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
-      console.log('[PRINT]', val);
+    // In browser, we can't avoid newline easily, so we use console.log but prefix with [PRINT]
+    console.log('[PRINT]', val);
   };
 
   // Add the grab method to retrieve DOM elements
   window.grab = (function () {
-      // Cache for recent results
-      const domCache = new Map();
+    // Cache for recent results
+    const domCache = new Map();
 
-      return function (id) {
-          if (!id) return null;
+    return function (id) {
+      if (!id) return null;
 
-          // Check the registry first (fast path)
-          const instance = _registry[id];
-          if (instance) return instance;
+      // Check the registry first (fast path)
+      const instance = _registry[id];
+      if (instance) return instance;
 
-          // Check the DOM cache
-          if (domCache.has(id)) {
-              const cached = domCache.get(id);
-              // Check if the element is still in the DOM
-              if (cached && cached.isConnected) {
-                  return cached;
-              } else {
-                  // Remove obsolete entry
-                  domCache.delete(id);
-              }
-          }
+      // Check the DOM cache
+      if (domCache.has(id)) {
+        const cached = domCache.get(id);
+        // Check if the element is still in the DOM
+        if (cached && cached.isConnected) {
+          return cached;
+        } else {
+          // Remove obsolete entry
+          domCache.delete(id);
+        }
+      }
 
-          // Search in the DOM
-          const element = document.getElementById(id);
-          if (!element) return null;
+      // Search in the DOM
+      const element = document.getElementById(id);
+      if (!element) return null;
 
-          // Add useful methods – only once!
-          if (!element._enhanced) {
-              // Mark as enhanced to avoid duplicates
-              element._enhanced = true;
+      // Add useful methods – only once!
+      if (!element._enhanced) {
+        // Mark as enhanced to avoid duplicates
+        element._enhanced = true;
 
-              const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
-              cssProperties.forEach(prop => {
-                  const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
+        const cssProperties = ['width', 'height', 'color', 'backgroundColor', 'x', 'y'];
+        cssProperties.forEach(prop => {
+          const styleProp = prop === 'x' ? 'left' : prop === 'y' ? 'top' : prop;
 
-                  element[prop] = function (value) {
-                      if (arguments.length === 0) {
-                          return getComputedStyle(this)[styleProp];
-                      }
+          element[prop] = function (value) {
+            if (arguments.length === 0) {
+              return getComputedStyle(this)[styleProp];
+            }
 
-                      this.style[styleProp] = window._isNumber && window._isNumber(value) ? 
-                          window._formatSize(value) : value;
-                      return this;
-                  };
-              });
-          }
+            this.style[styleProp] = window._isNumber && window._isNumber(value) ?
+              window._formatSize(value) : value;
+            return this;
+          };
+        });
+      }
 
-          // Store in the cache for future calls
-          domCache.set(id, element);
+      // Store in the cache for future calls
+      domCache.set(id, element);
 
-          return element;
-      };
+      return element;
+    };
   })();
 
   // Add extensions to native JavaScript objects (similar to Ruby)
   // Use non-enumerable properties to avoid contaminating for...in loops
   Object.defineProperty(Object.prototype, 'define_method', {
-      value: function (name, fn) {
-          this[name] = fn;
-          return this;
-      },
-      enumerable: false,    // Crucial: ne pas apparaître dans for...in
-      writable: false,
-      configurable: false
+    value: function (name, fn) {
+      this[name] = fn;
+      return this;
+    },
+    enumerable: false,    // Crucial: ne pas apparaître dans for...in
+    writable: false,
+    configurable: false
   });
 
   // Add methods to Array to mimic Ruby behavior
   Array.prototype.each = function (callback) {
-      this.forEach(callback);
-      return this;
+    this.forEach(callback);
+    return this;
   };
 
   // Extend the Object class to allow inspection  
   // Use non-enumerable property to avoid contaminating for...in loops
   Object.defineProperty(Object.prototype, 'inspect', {
-      value: function () {
-          return AJS.inspect(this);
-      },
-      enumerable: false,    // Crucial: ne pas apparaître dans for...in
-      writable: false,
-      configurable: false
+    value: function () {
+      return AJS.inspect(this);
+    },
+    enumerable: false,    // Crucial: ne pas apparaître dans for...in
+    writable: false,
+    configurable: false
   });
 
   // Add a wait function for delays (promisified version is more modern)
@@ -127,23 +127,23 @@
 
   // AJS object for inspect method
   window.AJS = window.AJS || {
-      inspect: function(obj) {
-          return JSON.stringify(obj, null, 2);
-      }
+    inspect: function (obj) {
+      return JSON.stringify(obj, null, 2);
+    }
   };
 
 
   // Function to completely clear the screen
   window.clearScreen = function () {
     const viewContainer = document.getElementById('view');
-    
+
     if (viewContainer) {
       // 1. Clean all events from children recursively
       cleanupElementEvents(viewContainer);
-      
+
       // 2. Empty the container
       viewContainer.innerHTML = '';
-      
+
       // 3. Clean global variables if needed
       cleanupGlobalVariables();
     }
@@ -159,7 +159,7 @@
       element.cloneNode(false);
       // Note: this method removes events but we'll rather use a manual approach
     }
-    
+
     // Recursively clean all children
     Array.from(element.children).forEach(child => {
       cleanupElementEvents(child);
@@ -173,13 +173,13 @@
       gsap.killTweensOf("*");
       gsap.globalTimeline.clear();
     }
-    
+
     // Clear timers
     if (window.rotationAnimation) {
       cancelAnimationFrame(window.rotationAnimation);
       window.rotationAnimation = null;
     }
-    
+
     // Clear deformation variables
     if (window.deformTweens) {
       window.deformTweens.forEach(tween => {
@@ -189,8 +189,616 @@
     }
   }
 
-  var Apis = /*#__PURE__*/Object.freeze({
-    __proto__: null
+  function current_platform() {
+    try {
+      if (typeof window === 'undefined') return 'serveur';
+      const ua = navigator.userAgent || '';
+      const vendor = navigator.vendor || '';
+      const lowerUA = ua.toLowerCase();
+      const isAppleVendor = /apple/i.test(vendor);
+      const touchCapable = (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+
+      const isTrueIOSUA = /iPad|iPhone|iPod/.test(ua);
+      // iPadOS 13+ can present itself as Mac; detect via touch + Apple vendor + 'Mac' in UA
+      const isIPadDesktopMode = (!isTrueIOSUA && isAppleVendor && touchCapable && /macintosh/i.test(ua));
+      const isIOS = isTrueIOSUA || isIPadDesktopMode;
+
+      const isTauri = !!window.__TAURI__ || ua.includes('Tauri');
+      if (isTauri) {
+        if (/Macintosh|Mac OS X/.test(ua)) return 'Tauri Mac';
+        if (/Windows/.test(ua)) return 'Taur Windows';
+        if (/Linux/.test(ua)) return 'Tauri Unix';
+        return 'Tauri';
+      }
+
+      // AUv3 bridge heuristics (extended)
+      let hasAUv3Bridge = false;
+      // Fast explicit flag (injected by Swift) or query param (?auv3=1 / ?mode=auv3)
+      const explicitAUv3 = !!(window.__AUV3_MODE__ || window.__AUV3__ || (typeof location !== 'undefined' && /[?&](auv3=1|mode=auv3)(?:&|$)/i.test(location.search)));
+      if (explicitAUv3 && isIOS) return 'ios_auv3';
+      if (isIOS && window.webkit && window.webkit.messageHandlers) {
+        try {
+          const mh = window.webkit.messageHandlers;
+          const names = Object.keys(mh);
+          if (names.length) {
+            // match typical naming patterns
+            const pattern = /(auv3|plug|audio|swift|host|bridge|atome)/i;
+            if (names.some(n => pattern.test(n))) hasAUv3Bridge = true;
+            // fallback: if running from file:// or embedded context with any handlers
+            if (!hasAUv3Bridge && (location.protocol === 'file:' || names.length > 1)) {
+              hasAUv3Bridge = true;
+            }
+          }
+        } catch (_) { }
+      }
+      if (window.forceAUv3Mode === true) hasAUv3Bridge = true;
+      if (hasAUv3Bridge) return 'ios_auv3';
+      if (isIOS) return 'ios';
+
+      // Distinguish Safari (desktop) from generic desktop Mac
+      const isSafari = isAppleVendor && /safari/i.test(ua) && !/chrome|crios|chromium|edg|opr|firefox|fxios|tauri|electron/i.test(lowerUA);
+
+      if (/Macintosh|Mac OS X/.test(ua)) return isSafari ? 'safari_mac' : 'desktop_mac';
+      if (/Windows/.test(ua)) return 'desktop_windows';
+      if (/Linux/.test(ua)) return 'desktop_linux';
+
+      return 'web';
+    } catch (_) {
+      return 'inconnu';
+    }
+  }
+
+  // expose globally
+  if (typeof window !== 'undefined') { window.current_platform = current_platform; }
+
+  // Minimal keyboard shortcut utility
+  // Usage:
+  //   const myFct = function atest(key){ console.log('you press: ' + key); };
+  //   shortcut('cmd-a', myFct);
+
+  (function(){
+  	const ORDER = ['ctrl','alt','shift','meta'];
+  	const MOD_SYNONYMS = new Map([
+  		['cmd','meta'], ['command','meta'], ['win','meta'], ['super','meta'],
+  		['ctl','ctrl'], ['control','ctrl'],
+  		['opt','alt'], ['option','alt']
+  	]);
+
+  	const registry = new Map(); // combo -> Set<callback>
+
+  	function normToken(tok){
+  		if (!tok) return '';
+  		tok = String(tok).trim().toLowerCase();
+  		if (MOD_SYNONYMS.has(tok)) tok = MOD_SYNONYMS.get(tok);
+  		// Normalize common key names
+  		if (tok === 'space' || tok === ' ') tok = 'space';
+  		if (tok === 'arrowup' || tok === 'up') tok = 'arrowup';
+  		if (tok === 'arrowdown' || tok === 'down') tok = 'arrowdown';
+  		if (tok === 'arrowleft' || tok === 'left') tok = 'arrowleft';
+  		if (tok === 'arrowright' || tok === 'right') tok = 'arrowright';
+  		return tok;
+  	}
+
+  	function normalizeCombo(input){
+  		if (!input) return '';
+  		const rawParts = String(input).split(/[-+]/).map(s => String(s).trim()).filter(Boolean);
+  		const mods = new Set();
+  		let key = '';
+  		let wantsShiftFromUpper = false;
+  		for (const raw of rawParts) {
+  			const p = normToken(raw);
+  			if (ORDER.includes(p)) {
+  				mods.add(p);
+  			} else {
+  				// Preserve intent for uppercase letter by translating to shift+lowercase
+  				if (/^[A-Z]$/.test(raw)) {
+  					wantsShiftFromUpper = true;
+  					key = raw.toLowerCase();
+  				} else {
+  					key = p; // last non-mod wins
+  				}
+  			}
+  		}
+  		if (wantsShiftFromUpper) mods.add('shift');
+  		const sortedMods = ORDER.filter(m => mods.has(m));
+  		return [...sortedMods, key].filter(Boolean).join('+');
+  	}
+
+  	function eventToCombo(e){
+  		// Build mods in canonical ORDER to match normalizeCombo
+  		const mods = [];
+  		if (e.ctrlKey) mods.push('ctrl');
+  		if (e.altKey) mods.push('alt');
+  		if (e.shiftKey) mods.push('shift');
+  		if (e.metaKey) mods.push('meta');
+
+  		let k = '';
+  		const code = e.code || '';
+  		// Prefer physical key for letters/digits so Alt/Option layout changes don't break matching
+  		if (/^Key[A-Z]$/.test(code)) {
+  			k = code.slice(3).toLowerCase(); // KeyB -> 'b'
+  		} else if (/^Digit[0-9]$/.test(code)) {
+  			k = code.slice(5); // Digit3 -> '3'
+  		} else {
+  			k = (e.key || '').toLowerCase();
+  			if (k === ' ') k = 'space';
+  			if (/^arrow(Up|Down|Left|Right)$/i.test(e.key)) k = e.key.toLowerCase();
+  		}
+
+  		return [...mods, k].filter(Boolean).join('+');
+  	}
+
+  	function addHandler(){
+  		if (addHandler._installed) return;
+  		window.addEventListener('keydown', (e) => {
+  			const combo = eventToCombo(e);
+  			const cbs = registry.get(combo);
+  			if (!cbs || cbs.size === 0) return;
+  			// Call all callbacks with the normalized combo and the event
+  			for (const cb of cbs) {
+  				try { cb(combo, e); } catch(_) {}
+  			}
+  		}, true);
+  		addHandler._installed = true;
+  	}
+
+  	function shortcut(key_cmb, fctToCall){
+  		const combo = normalizeCombo(key_cmb);
+  		if (!combo || typeof fctToCall !== 'function') return () => {};
+  		addHandler();
+  		let set = registry.get(combo);
+  		if (!set) { set = new Set(); registry.set(combo, set); }
+  		set.add(fctToCall);
+  		// return an unsubscribe function
+  		return function unsubscribe(){
+  			const s = registry.get(combo);
+  			if (!s) return;
+  			s.delete(fctToCall);
+  			if (s.size === 0) registry.delete(combo);
+  		};
+  	}
+
+  	// expose globally
+  	window.shortcut = shortcut;
+  })();
+
+  // --- Port persistence (survive refresh) -------------------------------------------------
+  (function persistLocalPort() {
+    if (typeof window === 'undefined') return;
+    const k = '__ATOME_LOCAL_HTTP_PORT__';
+    // Restore if lost after refresh
+    if (!window[k]) {
+      try { const saved = localStorage.getItem(k); if (saved) window[k] = parseInt(saved, 10); } catch (_) { }
+    }
+    // Save if present
+    if (window[k]) {
+      try { localStorage.setItem(k, String(window[k])); } catch (_) { }
+    }
+  })();
+
+  const __dataCache = {};
+
+  // Minimal placeholder to avoid ReferenceError if user keeps catch handlers with span
+  if (typeof window !== 'undefined' && typeof window.span === 'undefined') {
+    window.span = { textContent: '' };
+  }
+
+  const __inflightData = {};
+  function dataFetcher(path, opts = {}) {
+    const mode = (opts.mode || 'auto').toLowerCase();
+    const key = path + '::' + mode + '::' + (opts.preview || '');
+    if (__dataCache[key]) return Promise.resolve(__dataCache[key]);
+    if (__inflightData[key]) return __inflightData[key];
+    if (typeof fetch !== 'function') return Promise.reject(new Error('fetch indisponible'));
+
+    const p = (async () => {
+      // Normalize path: remove leading './' or '/', but keep first segment intact
+      let cleanPath = (path || '').trim();
+      // Remove any leading ./ sequences
+      cleanPath = cleanPath.replace(/^(?:\.\/)+/, '');
+      // Then strip remaining leading slashes
+      cleanPath = cleanPath.replace(/^\/+/, '');
+      // Avoid accidental empty segment turning './assets' into '/assets' (handled above)
+      if (!cleanPath) throw new Error('Chemin vide');
+      const filename = cleanPath.split('/').pop();
+      const ext = (filename.includes('.') ? filename.split('.').pop() : '').toLowerCase();
+      const looksSvg = ext === 'svg';
+      const hasSpace = cleanPath.includes(' ');
+      const port = (typeof window !== 'undefined') ? (window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT) : null;
+
+      const textExt = /^(txt|json|md|svg|xml|csv|log)$/;
+      const audioExt = /^(m4a|mp3|wav|ogg|flac|aac)$/;
+
+      const looksText = textExt.test(ext) || /^texts\//.test(cleanPath);
+      const looksAudio = audioExt.test(ext);
+
+      const serverCandidates = [];
+      if (port) {
+        serverCandidates.push(`http://127.0.0.1:${port}/file/${encodeURI(cleanPath)}`);
+        if (looksText) serverCandidates.push(`http://127.0.0.1:${port}/text/${encodeURI(cleanPath)}`);
+        if (looksAudio) {
+          serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURIComponent(filename)}`);
+          serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
+        }
+      }
+
+      let assetPath = cleanPath;
+      if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
+      const assetCandidates = [assetPath];
+      const altAsset = assetPath.replace(/^assets\//, 'src/assets/');
+      if (altAsset !== assetPath) assetCandidates.push(altAsset);
+
+      const done = v => { __dataCache[key] = v; delete __inflightData[key]; return v; };
+
+      // Helper: detect HTML fallback (index.html returned instead of asset)
+      const isHtmlFallback = (txt) => {
+        if (!txt) return false; const t = txt.slice(0, 120).toLowerCase(); return t.startsWith('<!doctype html') || t.startsWith('<html');
+      };
+
+      // Helper: attempt direct Tauri FS read for svg with space (server often rewrites to index)
+      async function tryTauriSvgSpace(fsRelPath) {
+        if (!(looksSvg && hasSpace)) return null;
+        if (typeof window === 'undefined' || !window.__TAURI__ || !window.__TAURI__.fs) return null;
+        const fs = window.__TAURI__.fs;
+        // Prefer original path; if starts with assets/ also try src/assets equivalent
+        const candidates = [fsRelPath];
+        if (/^assets\//.test(fsRelPath) && !/^src\/assets\//.test(fsRelPath)) {
+          candidates.unshift('src/' + fsRelPath);
+        }
+        for (const c of candidates) {
+          try {
+            const txt = await fs.readTextFile(c).catch(() => null);
+            if (txt && /^<svg[\s>]/i.test(txt.trim()) && !isHtmlFallback(txt)) return { txt, path: c };
+          } catch (_) { }
+        }
+        return null;
+      }
+
+      // 1) Direct FS read first for svg with space (most robust after refresh)
+      const directFs = await tryTauriSvgSpace(cleanPath);
+      if (directFs) {
+        if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0, max)); }
+        return done(directFs.txt);
+      }
+
+      // Immediate asset try if no port yet
+      if (!port) {
+        for (const u of assetCandidates) {
+          try {
+            if (looksText || mode === 'text' || mode === 'preview') {
+              const r = await fetch(u); if (!r.ok) continue;
+              const txt = await r.text();
+              if (looksSvg && isHtmlFallback(txt)) { continue; }
+              if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
+              return done(txt);
+            }
+            if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+            if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+            const r = await fetch(u); if (!r.ok) continue; return done(u);
+          } catch (_) { }
+        }
+      }
+
+      if (mode === 'url') {
+        const out = serverCandidates[0] || assetCandidates[0];
+        return done(out);
+      }
+
+      for (const u of serverCandidates) {
+        try {
+          const r = await fetch(u);
+          if (!r.ok) continue;
+          if (mode === 'arraybuffer') return done(await r.arrayBuffer());
+          if (mode === 'blob') return done(await r.blob());
+          if (looksText || mode === 'text' || mode === 'preview') {
+            const txt = await r.text();
+            if (looksSvg && isHtmlFallback(txt)) { continue; }
+            if (mode === 'preview' || opts.preview) {
+              const max = opts.preview || 120; return done(txt.slice(0, max));
+            }
+            return done(txt);
+          }
+          if (looksAudio && mode === 'auto') return done(u); // streaming URL path
+          return done(u);
+        } catch (_) { }
+      }
+
+      for (const u of assetCandidates) {
+        try {
+          if (looksText || mode === 'text' || mode === 'preview') {
+            const r = await fetch(u); if (!r.ok) continue;
+            const txt = await r.text();
+            if (looksSvg && isHtmlFallback(txt)) { continue; }
+            if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
+            return done(txt);
+          }
+          if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
+          if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+          return done(u);
+        } catch (_) { }
+      }
+
+      delete __inflightData[key];
+      throw new Error('Introuvable (candidats: ' + [...serverCandidates, ...assetCandidates].join(', ') + ')');
+    })();
+    __inflightData[key] = p;
+    return p;
+  }
+
+  // --- SVG Sanitizer ---------------------------------------------------------
+  // Lightweight whitelisting sanitizer (no external deps) to clean incoming SVG code
+  // before insertion. Removes dangerous elements/attributes and optionally normalizes
+  // width/height so our internal scaling logic can operate consistently.
+  // Sanitizer removed for performance: kept as identity to avoid ReferenceErrors.
+  function sanitizeSVG(raw) { return raw; }
+
+
+  //svg creator
+  // render_svg: inserts an SVG string.
+  // Signature étendue: sizeMode (dernier param) peut valoir:
+  //   null / undefined  => comportement fixe (taille px)
+  //   'responsive' ou '%' => width/height 100%, suit le parent
+  function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left = '0px', width = '100px', height = '100px', color = null, path_color = null, sizeMode = null) {
+    const parent = document.getElementById(parent_id);
+    if (!parent || !svgcontent) return null;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(svgcontent).trim();
+    const svgEl = tmp.querySelector('svg');
+    if (!svgEl) return null;
+    const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
+    try { svgEl.id = finalId; } catch (_) { }
+    svgEl.style.position = 'absolute';
+    svgEl.style.top = top; svgEl.style.left = left;
+    const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
+    const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
+    const responsive = (sizeMode === 'responsive' || sizeMode === '%');
+    try {
+      const existingViewBox = svgEl.getAttribute('viewBox');
+      const attrW = parseFloat(svgEl.getAttribute('width')) || null;
+      const attrH = parseFloat(svgEl.getAttribute('height')) || null;
+      if (!existingViewBox) {
+        const vbW = (attrW && attrW > 0) ? attrW : targetW;
+        const vbH = (attrH && attrH > 0) ? attrH : targetH;
+        svgEl.setAttribute('viewBox', `0 0 ${vbW} ${vbH}`);
+      }
+      if (!svgEl.getAttribute('preserveAspectRatio')) {
+        svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      }
+      if (responsive) {
+        // Mode responsive: largeur/hauteur 100%, parent contrôle la taille
+        if (svgEl.hasAttribute('width')) svgEl.removeAttribute('width');
+        if (svgEl.hasAttribute('height')) svgEl.removeAttribute('height');
+        svgEl.style.width = '100%';
+        svgEl.style.height = '100%';
+        try { svgEl.dataset.intuitionResponsive = '1'; } catch (_) { }
+      } else {
+        // Mode fixe: on applique aussi en attribut pour compat rétro + calculs getAttribute
+        try { svgEl.setAttribute('width', String(targetW)); } catch (_) { }
+        try { svgEl.setAttribute('height', String(targetH)); } catch (_) { }
+        svgEl.style.width = targetW + 'px';
+        svgEl.style.height = targetH + 'px';
+      }
+      svgEl.style.overflow = 'visible';
+      svgEl.style.display = 'block';
+    } catch (_) { }
+    if (color || path_color) {
+      const shapes = svgEl.querySelectorAll('path, rect, circle, ellipse, polygon, polyline, line');
+      shapes.forEach(node => {
+        if (path_color) {
+          try { if (node.style) node.style.stroke = path_color; } catch (_) { }
+          node.setAttribute('stroke', path_color);
+        }
+        if (color) {
+          // Inline styles (style="fill:#xxxx") override presentation attributes; force override via style API
+          try { if (node.style) node.style.fill = color; } catch (_) { }
+          const f = node.getAttribute('fill');
+          if (f === null || f.toLowerCase() !== 'none') node.setAttribute('fill', color);
+          // Remove gradient/URL fill if we want solid override
+          if (/^url\(/i.test(f || '')) node.removeAttribute('fill');
+        }
+      });
+      if (color) {
+        try { if (svgEl.style) svgEl.style.fill = color; } catch (_) { }
+        if (!svgEl.getAttribute('fill')) svgEl.setAttribute('fill', color);
+      }
+      if (path_color) {
+        try { if (svgEl.style) svgEl.style.stroke = path_color; } catch (_) { }
+        if (!svgEl.getAttribute('stroke')) svgEl.setAttribute('stroke', path_color);
+      }
+    }
+    parent.appendChild(svgEl);
+    return svgEl.id;
+  }
+
+
+  // fetch_and_render_svg: convenience wrapper specialized for SVG paths.
+  // Param order kept for existing calls: (path, id, parent_id, left, top, width, height, fill, stroke)
+  // Note: render_svg expects (top, left) order, so we swap when forwarding.
+  function fetch_and_render_svg(path, id, parent_id = 'view', left = '0px', top = '0px', width = '100px', height = '100px', fill = null, stroke = null, sizeMode = null) {
+    return dataFetcher(path, { mode: 'text' })
+      .then(svgData => {
+        // Remove prior element with same id to avoid duplicates
+        const prev = document.getElementById(id);
+        if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+        return render_svg(svgData, id, parent_id, top, left, width, height, fill, stroke, sizeMode);
+      })
+      .catch(err => { if (typeof span !== 'undefined') span.textContent = 'Erreur: ' + err.message; });
+  }
+
+
+
+
+
+  function resize(id, newWidth, newHeight, durationSec = 0, easing = 'ease') {
+    let el = document.getElementById(id);
+    if (!el) return false;
+    if (!(el instanceof SVGElement)) {
+      el = el.querySelector ? el.querySelector('svg') : null;
+    }
+    if (!el) return false;
+
+    const w = typeof newWidth === 'number' ? newWidth : parseFloat(newWidth);
+    const h = (newHeight == null) ? w : (typeof newHeight === 'number' ? newHeight : parseFloat(newHeight));
+    if (!isFinite(w) || !isFinite(h)) return false;
+
+    const ms = Math.max(0, (typeof durationSec === 'number' ? durationSec : parseFloat(durationSec)) * 1000);
+    // Special easings using WAAPI for bounce/elastic effects when available
+    if (ms && (easing === 'bounce' || easing === 'elastic') && typeof el.animate === 'function') {
+      const cs = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(el) : null;
+      const currentW = (cs ? parseFloat(cs.width) : 0) || parseFloat(el.getAttribute('width')) || w;
+      const currentH = (cs ? parseFloat(cs.height) : 0) || parseFloat(el.getAttribute('height')) || h;
+
+      let keyframes;
+      if (easing === 'bounce') {
+        keyframes = [
+          { offset: 0, width: `${currentW}px`, height: `${currentH}px` },
+          { offset: 0.6, width: `${w * 1.10}px`, height: `${h * 1.10}px` },
+          { offset: 0.8, width: `${w * 0.94}px`, height: `${h * 0.94}px` },
+          { offset: 0.92, width: `${w * 1.03}px`, height: `${h * 1.03}px` },
+          { offset: 1, width: `${w}px`, height: `${h}px` },
+        ];
+      } else { // elastic
+        keyframes = [
+          { offset: 0, width: `${currentW}px`, height: `${currentH}px` },
+          { offset: 0.5, width: `${w * 1.25}px`, height: `${h * 1.25}px` },
+          { offset: 0.7, width: `${w * 0.90}px`, height: `${h * 0.90}px` },
+          { offset: 0.85, width: `${w * 1.05}px`, height: `${h * 1.05}px` },
+          { offset: 1, width: `${w}px`, height: `${h}px` },
+        ];
+      }
+
+      const anim = el.animate(keyframes, { duration: ms, easing: 'linear', fill: 'forwards' });
+      const done = () => {
+        el.setAttribute('width', String(w));
+        el.setAttribute('height', String(h));
+        el.style.width = `${w}px`;
+        el.style.height = `${h}px`;
+      };
+      try {
+        // Some engines support addEventListener on Animation, others use onfinish
+        if (typeof anim.addEventListener === 'function') {
+          anim.addEventListener('finish', done, { once: true });
+        } else {
+          anim.onfinish = done;
+        }
+        setTimeout(done, ms + 50);
+      } catch (_) {
+        anim.onfinish = done;
+        setTimeout(done, ms + 50);
+      }
+      return true;
+    }
+    if (!ms) {
+      // instant resize
+      el.setAttribute('width', String(w));
+      el.setAttribute('height', String(h));
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+      return true;
+    }
+
+    const prevTransition = el.style.transition;
+    // Animate CSS width/height; attributes updated at the end to keep them in sync
+    el.style.transition = `width ${ms}ms ${easing}, height ${ms}ms ${easing}`;
+    // Force reflow to ensure transition takes effect
+    void el.offsetWidth; // eslint-disable-line no-unused-expressions
+
+    // Apply target sizes via CSS to animate
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+
+    const done = () => {
+      // Sync SVG attributes and cleanup transition
+      el.setAttribute('width', String(w));
+      el.setAttribute('height', String(h));
+      el.style.transition = prevTransition || '';
+    };
+
+    try {
+      el.addEventListener('transitionend', function handler(ev) {
+        if (ev.propertyName === 'width' || ev.propertyName === 'height') {
+          el.removeEventListener('transitionend', handler);
+          done();
+        }
+      });
+      // Safety timeout in case transitionend doesn't fire
+      setTimeout(done, ms + 50);
+    } catch (_) {
+      // Fallback: apply instantly if events not supported
+      done();
+    }
+    return true;
+  }
+
+
+  function strokeColor(id, color) {
+    let el = document.getElementById(id);
+    if (!el) return false;
+    if (!(el instanceof SVGElement)) {
+      el = el.querySelector ? el.querySelector('svg') : null;
+    }
+    if (!el) return false;
+    try {
+      const shapes = el.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+      shapes.forEach(node => {
+        node.setAttribute('stroke', color);
+      });
+      // Optionally set default stroke on root if shapes missing
+      if (!el.getAttribute('stroke')) el.setAttribute('stroke', color);
+    } catch (_) { return false; }
+    return true;
+  }
+
+
+  function fillColor(id, color) {
+    let el = document.getElementById(id);
+    if (!el) return false;
+    if (!(el instanceof SVGElement)) {
+      el = el.querySelector ? el.querySelector('svg') : null;
+    }
+    if (!el) return false;
+    try {
+      const shapes = el.querySelectorAll('path, rect, circle, ellipse, polygon, polyline');
+      shapes.forEach(node => {
+        node.setAttribute('fill', color);
+      });
+      // Optionally set default fill on root if shapes missing
+      if (!el.getAttribute('fill')) el.setAttribute('fill', color);
+    } catch (_) { return false; }
+    return true;
+  }
+
+  window.dataFetcher = dataFetcher;
+  window.render_svg = render_svg;
+  window.fetch_and_render_svg = fetch_and_render_svg;
+  window.resize = resize;
+  window.strokeColor = strokeColor;
+  window.fillColor = fillColor;
+
+  const Apis = {
+      wait,
+      current_platform,
+      dataFetcher,
+      render_svg,
+      fetch_and_render_svg,
+      resize,
+      strokeColor,
+      fillColor,
+      sanitizeSVG,
+  };
+
+  var Apis$1 = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    current_platform: current_platform,
+    dataFetcher: dataFetcher,
+    default: Apis,
+    fetch_and_render_svg: fetch_and_render_svg,
+    fillColor: fillColor,
+    render_svg: render_svg,
+    resize: resize,
+    sanitizeSVG: sanitizeSVG,
+    strokeColor: strokeColor,
+    wait: wait
   });
 
   // HyperSquirrel.js - Un framework minimaliste pour la création d'interfaces web
@@ -233,7 +841,7 @@
   // Fonction utilitaire pour ajouter des classes (évite la duplication de code)
   const addClasses = (element, classes) => {
     if (!classes) return;
-    
+
     if (typeof classes === 'string') {
       // Éviter split si une seule classe
       if (classes.indexOf(' ') === -1) {
@@ -254,10 +862,10 @@
   const $ = (id, props = {}) => {
     const config = templateRegistry.get(id) || {};
     const element = createElement(config.tag || props.tag || id || 'div');
-    
+
     // 🔧 FIX: Merge CSS intelligent
     const merged = { ...config, ...props };
-    
+
     // CSS merge corrigé
     if (config.css || props.css) {
       if (typeof config.css === 'string' && typeof props.css === 'string') {
@@ -268,20 +876,20 @@
         merged.css = props.css || config.css;
       }
     }
-    
+
     // 🔧 FIX: Attrs merge corrigé
     if (config.attrs || props.attrs) {
       merged.attrs = { ...(config.attrs || {}), ...(props.attrs || {}) };
     }
-    
+
     // Marquage optionnel
     if (merged.mark) element.setAttribute('data-hyperfactory', 'true');
-    
+
     // Attributs basiques
     merged.id && (element.id = merged.id);
     merged.text && (element.textContent = merged.text);
     merged.innerHTML && (element.innerHTML = merged.innerHTML);
-    
+
     // Chargement SVG depuis fichier
     if (merged.svgSrc) {
       fetch(merged.svgSrc)
@@ -293,10 +901,10 @@
           console.error(`Erreur lors du chargement du SVG ${merged.svgSrc}:`, error);
         });
     }
-    
+
     // Classes via classList (optimisé)
     addClasses(element, merged.class);
-    
+
     // Attributs personnalisés
     if (merged.attrs) {
       for (const [key, value] of Object.entries(merged.attrs)) {
@@ -309,7 +917,7 @@
         }
       }
     }
-    
+
     // Styles CSS
     if (merged.css) {
       if (typeof merged.css === 'string') {
@@ -319,14 +927,14 @@
           if (merged.css.hasOwnProperty(key)) {
             const value = merged.css[key];
             const kebabKey = toKebabCase(key);
-            value == null 
+            value == null
               ? element.style.removeProperty(kebabKey)
               : element.style.setProperty(kebabKey, value);
           }
         }
       }
     }
-    
+
     // Événements avec addEventListener
     eventRegistry.set(element, {});
     for (const key in merged) {
@@ -337,7 +945,7 @@
         eventRegistry.get(element)[eventName] = handler;
       }
     }
-    
+
     // Enfants imbriqués
     if (merged.children) {
       merged.children.forEach(childConfig => {
@@ -345,12 +953,12 @@
         element.appendChild(child);
       });
     }
-    
+
     // Méthode de mise à jour
     element.$ = updateProps => {
       if ('text' in updateProps) element.textContent = updateProps.text;
       if ('innerHTML' in updateProps) element.innerHTML = updateProps.innerHTML;
-      
+
       // Mise à jour SVG depuis fichier
       if ('svgSrc' in updateProps) {
         fetch(updateProps.svgSrc)
@@ -362,11 +970,11 @@
             console.error(`Erreur lors du chargement du SVG ${updateProps.svgSrc}:`, error);
           });
       }
-      
+
       if (updateProps.class) {
         addClasses(element, updateProps.class);
       }
-      
+
       if (updateProps.css) {
         if (typeof updateProps.css === 'string') {
           element.style.cssText = updateProps.css;
@@ -375,14 +983,14 @@
             if (updateProps.css.hasOwnProperty(key)) {
               const value = updateProps.css[key];
               const kebabKey = toKebabCase(key);
-              value == null 
+              value == null
                 ? element.style.removeProperty(kebabKey)
                 : element.style.setProperty(kebabKey, value);
             }
           }
         }
       }
-      
+
       if (updateProps.attrs) {
         for (const key in updateProps.attrs) {
           if (updateProps.attrs.hasOwnProperty(key)) {
@@ -397,47 +1005,90 @@
           }
         }
       }
-      
+
       // Mise à jour des événements
       const currentListeners = eventRegistry.get(element);
       for (const key in updateProps) {
         if (isEventHandler(key) && typeof updateProps[key] === 'function') {
           const eventName = key.slice(2).toLowerCase();
           const newHandler = updateProps[key];
-          
+
           if (currentListeners[eventName]) {
             element.removeEventListener(eventName, currentListeners[eventName]);
           }
-          
+
           element.addEventListener(eventName, newHandler);
           currentListeners[eventName] = newHandler;
         }
       }
-      
+
       return element;
     };
-    
+
     // Alias pour le style
     element._ = element.style;
-    
+
     // Parent (support des sélecteurs)
     const parent = merged.parent || '#view';
-    const appendToParent = () => {
-      if (typeof parent === 'string') {
+    const parentIsSelector = typeof parent === 'string';
+
+    const tryAppendToParent = () => {
+      if (parentIsSelector) {
         const target = document.querySelector(parent);
-        if (target) target.appendChild(element);
-        else console.warn(`Parent selector "${parent}" not found`);
-      } else {
-        parent.appendChild(element);
+        if (target) {
+          target.appendChild(element);
+          element._parentAttachPending = false;
+          if (element._parentAttachRaf) {
+            cancelAnimationFrame(element._parentAttachRaf);
+            element._parentAttachRaf = null;
+          }
+          return true;
+        }
+        return false;
       }
+      parent.appendChild(element);
+      element._parentAttachPending = false;
+      return true;
+    };
+
+    const scheduleParentRetry = () => {
+      if (!parentIsSelector) return;
+      if (element._parentAttachPending) return;
+      element._parentAttachPending = true;
+      let attempts = 0;
+      const retry = () => {
+        if (tryAppendToParent()) {
+          window.removeEventListener('squirrel:ready', retry, true);
+          document.removeEventListener('DOMContentLoaded', retry, true);
+          return;
+        }
+        attempts += 1;
+        if (attempts >= 120) {
+          console.warn(`Parent selector "${parent}" not found`);
+          element._parentAttachPending = false;
+          window.removeEventListener('squirrel:ready', retry, true);
+          document.removeEventListener('DOMContentLoaded', retry, true);
+          element._parentAttachRaf = null;
+          return;
+        }
+        element._parentAttachRaf = requestAnimationFrame(retry);
+      };
+      window.addEventListener('squirrel:ready', retry, true);
+      document.addEventListener('DOMContentLoaded', retry, true);
+      element._parentAttachRaf = requestAnimationFrame(retry);
+    };
+
+    const ensureParentAttachment = () => {
+      if (tryAppendToParent()) return;
+      scheduleParentRetry();
     };
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', appendToParent);
+      document.addEventListener('DOMContentLoaded', ensureParentAttachment, { once: true, capture: true });
     } else {
-      appendToParent();
+      ensureParentAttachment();
     }
-    
+
     // 🔧 FIX: Animation native intégrée
     element.animate = (keyframes, options = {}) => {
       const animation = nativeAnimate.call(element, keyframes, {
@@ -447,7 +1098,7 @@
       });
       return animation.finished;
     };
-    
+
     // 🔧 FIX: Cleanup des observers
     element.remove = () => {
       // Nettoyer les observers
@@ -456,7 +1107,7 @@
         observers.forEach(observer => observer.disconnect());
         mutationRegistry.delete(element);
       }
-      
+
       // Nettoyer les events
       const events = eventRegistry.get(element);
       if (events) {
@@ -467,10 +1118,10 @@
         }
         eventRegistry.delete(element);
       }
-      
+
       element.parentNode?.removeChild(element);
     };
-    
+
     return element;
   };
 
@@ -511,14 +1162,14 @@
     const observer = new MutationObserver((mutations) => {
       mutations.forEach(mutation => callback(mutation));
     });
-    
+
     observer.observe(element, {
       attributes: true,
       childList: true,
       subtree: true,
       ...options
     });
-    
+
     // Stocker l'observateur pour le nettoyage
     if (!mutationRegistry.has(element)) mutationRegistry.set(element, []);
     mutationRegistry.get(element).push(observer);
@@ -1582,15 +2233,32 @@
       });
 
       button.addEventListener('mouseleave', () => {
-        // Retourner au style de base
         const currentState = button.getState ? button.getState() : null;
+        const preserveSize = () => {
+          const css = {};
+          if (button && /_toggle$/.test(button.id)) {
+            let masterScale = 1;
+            try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+              const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+              if (baseSize) {
+                const scaled = Math.round(baseSize * masterScale) + 'px';
+                css.width = scaled;
+                css.height = scaled;
+              } else {
+                if (button.style.width) css.width = button.style.width;
+                if (button.style.height) css.height = button.style.height;
+              }
+            if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+          }
+          return css;
+        };
         if (currentState !== null) {
-          // Mode toggle - appliquer le style selon l'état
           const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-          button.$({ css: { ...template.css, ...stateStyle } });
+          const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+          button.$({ css: merged });
         } else {
-          // Mode normal - retourner au style de base
-          button.$({ css: template.css });
+          const baseCss = { ...template.css, ...preserveSize() };
+          button.$({ css: baseCss });
         }
       });
     }
@@ -1602,11 +2270,31 @@
 
       button.addEventListener('mouseup', () => {
         const currentState = button.getState ? button.getState() : null;
+        const preserveSize = () => {
+          const css = {};
+          if (button && /_toggle$/.test(button.id)) {
+            let masterScale = 1;
+            try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+            const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+            if (baseSize) {
+              const scaled = Math.round(baseSize * masterScale) + 'px';
+              css.width = scaled;
+              css.height = scaled;
+            } else {
+              if (button.style.width) css.width = button.style.width;
+              if (button.style.height) css.height = button.style.height;
+            }
+            if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
+          }
+          return css;
+        };
         if (currentState !== null) {
           const stateStyle = currentState ? button._config.onStyle : button._config.offStyle;
-          button.$({ css: { ...template.css, ...stateStyle } });
+          const merged = { ...template.css, ...stateStyle, ...preserveSize() };
+          button.$({ css: merged });
         } else {
-          button.$({ css: template.css });
+          const baseCss = { ...template.css, ...preserveSize() };
+          button.$({ css: baseCss });
         }
       });
     }
@@ -1618,14 +2306,15 @@
   define('button-container', {
     tag: 'button',
     class: 'hs-button',
-    text: 'hello',
+    text: '',
     css: {
       position: 'relative',
       display: 'inline-flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '8px 16px',
-      border: '1px solid #ccc',
+    // remove default contour
+    border: 'none',
       borderRadius: '4px',
       // backgroundColor: '#f8f9fa', // ❌ Retiré pour éviter les conflits
       // color: '#333', // ❌ Retiré pour éviter les conflits
@@ -1792,7 +2481,8 @@
    */
   const createButton = (config = {}) => {
     const {
-      text = 'Button',
+      // default to empty text: components will show no label unless explicitly provided
+      text = '',
       icon,
       badge,
       variant = 'default',
@@ -1836,7 +2526,16 @@
     }
 
     // Déterminer le mode de fonctionnement
-    const isToggleMode = onText !== undefined || offText !== undefined;
+    // Toggle mode if any of: onText/offText, onStyle/offStyle, onAction/offAction, or explicit toggle flag
+    const isToggleMode = (
+      onText !== undefined ||
+      offText !== undefined ||
+      (onStyle && Object.keys(onStyle).length > 0) ||
+      (offStyle && Object.keys(offStyle).length > 0) ||
+      typeof onAction === 'function' ||
+      typeof offAction === 'function' ||
+      processedConfig.toggle === true
+    );
     const isMultiStateMode = states && states.length > 0;
     
     // État interne pour le toggle
@@ -1899,6 +2598,12 @@
       if (userStateStyles && Object.keys(userStateStyles).length > 0) {
         containerStyles = { ...containerStyles, ...userStateStyles };
       }
+    } else if (isToggleMode) {
+      // Apply user-provided state styles even without a template
+      const userStateStylesOnly = currentToggleState ? (processedConfig.onStyle || {}) : (processedConfig.offStyle || {});
+      if (Object.keys(userStateStylesOnly).length > 0) {
+        containerStyles = { ...containerStyles, ...userStateStylesOnly };
+      }
     } else if (Object.keys(finalStyles).length > 0) {
       // Pour les modes non-toggle, appliquer finalStyles
       containerStyles = { ...containerStyles, ...finalStyles };
@@ -1909,6 +2614,44 @@
       containerStyles.opacity = '0.6';
       containerStyles.cursor = 'not-allowed';
       containerStyles.pointerEvents = 'none';
+    }
+
+    // Respect explicit small width/height: if the developer provided small dimensions
+    // prefer an icon-only compact button (no padding/minWidth that would expand it).
+    const parsePx = (v) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === 'number') return v;
+      const m = String(v).match(/^(-?\d+(?:\.\d+)?)(px)?$/);
+      return m ? Number(m[1]) : null;
+    };
+
+    const explicitW = parsePx(containerStyles.width || processedConfig.width || processedConfig.css && processedConfig.css.width);
+    const explicitH = parsePx(containerStyles.height || processedConfig.height || processedConfig.css && processedConfig.css.height);
+    const smallThreshold = 32; // px — consider buttons <= this size as icon-only
+    const isSmall = (explicitW !== null && explicitW <= smallThreshold) || (explicitH !== null && explicitH <= smallThreshold);
+
+    if (isSmall) {
+      // Force compact rendering by overriding template defaults so explicit sizes are respected
+      containerStyles.boxSizing = 'border-box';
+      containerStyles.padding = '0';
+      containerStyles.minWidth = '0';
+      containerStyles.minHeight = '0';
+      // ensure explicit width/height remain as provided (if numeric, add px)
+      if (explicitW !== null) containerStyles.width = String(explicitW) + 'px';
+      if (explicitH !== null) containerStyles.height = String(explicitH) + 'px';
+      // hide any text when small unless explicitly forced
+      if (!processedConfig.forceText) {
+        // this will make later checks like `if (finalText)` fail and avoid adding text nodes
+        finalText = '';
+      }
+      // reduce font-size influence
+      containerStyles.fontSize = '0px';
+      // make overflow hidden so inner content doesn't push size
+      containerStyles.overflow = 'hidden';
+      // ensure inline-flex alignment centers icon
+      containerStyles.display = 'inline-flex';
+      containerStyles.alignItems = 'center';
+      containerStyles.justifyContent = 'center';
     }
 
     // Fonction de gestion du clic
@@ -1938,12 +2681,35 @@
         
         // ✅ Fusionner les styles: template base + template state + user state + user css
         const templateBase = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
+        // Compose so state styles override base CSS. Base = template + user css; State = template state + user state.
         const finalStyles = {
-          ...templateBase,        // 1. Template base styles
-          ...templateStateStyles, // 2. Template state styles (onStyle/offStyle from template)
-          ...userStateStyles,     // 3. User state styles (onStyle/offStyle from config)
-          ...processedConfig.css  // 4. User CSS overrides (highest priority)
+          ...templateBase,        // 1) Template base styles
+          ...processedConfig.css, // 2) User base CSS
+          ...templateStateStyles, // 3) Template state styles
+          ...userStateStyles      // 4) User state styles (highest priority)
         };
+
+        // --- Preserve externally imposed size (e.g. Intuition master scale) ---
+        // If the button already has inline width/height coming from another system (and caller didn't explicitly set new ones in finalStyles), keep them.
+        if (button && button.id && /_toggle$/.test(button.id)) {
+          // Recompute width/height from stored base size * external master scale if available
+          const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+          let masterScale = 1;
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+          if (baseSize) {
+            const scaled = Math.round(baseSize * masterScale) + 'px';
+            finalStyles.width = scaled;
+            finalStyles.height = scaled;
+          } else {
+            const existingW = button.style.width;
+            const existingH = button.style.height;
+            if (existingW && finalStyles.width === undefined) finalStyles.width = existingW;
+            if (existingH && finalStyles.height === undefined) finalStyles.height = existingH;
+          }
+          // Also ensure borderRadius kept if externally scaled
+          const existingBR = button.style.borderRadius;
+          if (existingBR && finalStyles.borderRadius === undefined) finalStyles.borderRadius = existingBR;
+        }
         
         button.$({ css: finalStyles });
         
@@ -2028,6 +2794,15 @@
     // Empêcher la sélection/drag native pour que tout le bouton soit la cible
     button.addEventListener('dragstart', (e) => e.preventDefault());
     button.addEventListener('selectstart', (e) => e.preventDefault());
+
+    // Ensure no default outline/border remains (some templates or UA styles may inject them)
+    try {
+      // remove possible outline and border set later
+      button.style.setProperty('outline', 'none');
+      button.style.setProperty('border', 'none');
+    } catch (e) {
+      // ignore
+    }
 
     // ✅ FORCER TOUS les styles critiques manuellement
     Object.keys(cleanStyles).forEach(key => {
@@ -3539,17 +4314,18 @@
         position: { x: 0, y: 0, ...options.position },
         spacing: { horizontal: 8, vertical: 8, external: 16, ...options.spacing },
         attach: options.attach || 'body',
-        
+
         // Configuration des cellules
         cells: options.cells || {},
         states: options.states || {},
         containerStyle: options.containerStyle || {},
-        
+
         // Options avancées
         debug: options.debug || false,
         responsive: options.responsive !== false,
         autoResize: options.autoResize !== false,
-        maintainAspectRatio: options.maintainAspectRatio || false
+        maintainAspectRatio: options.maintainAspectRatio || false,
+        cellSize: typeof options.cellSize === 'number' ? options.cellSize : null
       };
 
       // Stockage interne
@@ -3594,8 +4370,8 @@
         this.isInitialized = true;
 
         if (this.config.debug) {
-  // console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
-  // console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
+          // console.log(`✅ Matrix "${this.config.id}" initialisée avec succès`);
+          // console.log(`📊 ${this.config.grid.x}×${this.config.grid.y} = ${this.getTotalCells()} cellules`);
         }
       } catch (error) {
         console.error(`❌ Erreur lors de l'initialisation de Matrix "${this.config.id}":`, error);
@@ -3604,8 +4380,8 @@
 
     createContainer() {
       // Attachement au DOM
-      const attachPoint = typeof this.config.attach === 'string' 
-        ? document.querySelector(this.config.attach) 
+      const attachPoint = typeof this.config.attach === 'string'
+        ? document.querySelector(this.config.attach)
         : this.config.attach;
 
       if (!attachPoint) {
@@ -3616,21 +4392,22 @@
       this.container = document.createElement('div');
       this.container.id = this.config.id;
       this.container.className = 'matrix-container';
-      
+
       // Application des styles
       this.applyContainerStyles();
-      
+
       attachPoint.appendChild(this.container);
     }
 
     applyContainerStyles() {
+      const trackSize = this.getTrackSize();
       const defaultStyles = {
         position: 'absolute',
         left: `${this.config.position.x}px`,
         top: `${this.config.position.y}px`,
         display: 'grid',
-        gridTemplateColumns: `repeat(${this.config.grid.x}, 1fr)`,
-        gridTemplateRows: `repeat(${this.config.grid.y}, 1fr)`,
+        gridTemplateColumns: `repeat(${this.config.grid.x}, ${trackSize})`,
+        gridTemplateRows: `repeat(${this.config.grid.y}, ${trackSize})`,
         gap: `${this.config.spacing.vertical}px ${this.config.spacing.horizontal}px`,
         background: '#f8f9fa',
         borderRadius: '12px',
@@ -3663,6 +4440,63 @@
       // Fusion avec les styles personnalisés
       const finalStyles = { ...defaultStyles, ...this.config.containerStyle };
       Object.assign(this.container.style, finalStyles);
+
+      this.updateGridTemplate();
+      this.updateContainerDimensions();
+    }
+
+    getTrackSize() {
+      return this.config.cellSize ? `${this.config.cellSize}px` : '1fr';
+    }
+
+    updateGridTemplate() {
+      if (!this.container) return;
+      const trackSize = this.getTrackSize();
+      this.container.style.gridTemplateColumns = `repeat(${this.config.grid.x}, ${trackSize})`;
+      this.container.style.gridTemplateRows = `repeat(${this.config.grid.y}, ${trackSize})`;
+    }
+
+    calculateContentDimension(axis) {
+      if (!this.config.cellSize) return 0;
+
+      const isHorizontal = axis === 'width';
+      const cellCount = isHorizontal ? this.config.grid.x : this.config.grid.y;
+      const spacing = isHorizontal ? this.config.spacing.horizontal : this.config.spacing.vertical;
+      const gaps = Math.max(0, cellCount - 1);
+
+      return (this.config.cellSize * cellCount) + (spacing * gaps);
+    }
+
+    updateContainerDimensions() {
+      if (!this.container) return;
+
+      if (!this.config.autoResize || this.config.cellSize) {
+        if (this.config.cellSize) {
+          const contentWidth = this.calculateContentDimension('width');
+          const contentHeight = this.calculateContentDimension('height');
+          const externalPadding = this.config.spacing?.external || 0;
+
+          if (contentWidth) {
+            const totalWidth = contentWidth + (externalPadding * 2);
+            this.container.style.width = `${totalWidth}px`;
+          }
+
+          if (contentHeight) {
+            const totalHeight = contentHeight + (externalPadding * 2);
+            this.container.style.height = `${totalHeight}px`;
+          }
+
+          return;
+        }
+
+        if (this.config.size.width) {
+          this.container.style.width = `${this.config.size.width}px`;
+        }
+
+        if (this.config.size.height) {
+          this.container.style.height = `${this.config.size.height}px`;
+        }
+      }
     }
 
     createCells() {
@@ -3673,11 +4507,11 @@
       }
     }
 
-    createCell(x, y) {
+    createCell(x, y, insertIndex) {
       const cellKey = `${x},${y}`;
       const cellConfig = this.config.cells[cellKey] || {};
       const defaultConfig = this.config.cells.default || {};
-      
+
       // ID de la cellule (personnalisé ou auto-généré)
       const cellId = cellConfig.id || `${this.config.id}-cell-${x}-${y}`;
 
@@ -3713,12 +4547,22 @@
       };
 
       // Application des styles (défaut + personnalisés)
-      const cellStyles = { 
-        ...defaultCellStyles, 
-        ...defaultConfig.style, 
-        ...cellConfig.style 
+      const cellStyles = {
+        ...defaultCellStyles,
+        ...defaultConfig.style,
+        ...cellConfig.style
       };
       Object.assign(cellElement.style, cellStyles);
+
+      if (this.config.cellSize) {
+        const sizePx = `${this.config.cellSize}px`;
+        cellElement.style.width = sizePx;
+        cellElement.style.height = sizePx;
+        cellElement.style.minWidth = sizePx;
+        cellElement.style.minHeight = sizePx;
+        cellElement.style.scrollSnapAlign = 'start';
+        cellElement.style.scrollSnapStop = 'always';
+      }
 
       // Stockage des données de la cellule
       this.cellsMap.set(cellKey, {
@@ -3744,7 +4588,17 @@
         cellElement.setAttribute('title', `Cellule (${x}, ${y}) - ID: ${cellId}`);
       }
 
-      this.container.appendChild(cellElement);
+      let reference = null;
+      if (typeof insertIndex === 'number' && insertIndex >= 0) {
+        reference = this.container.children[insertIndex] || null;
+      }
+      if (reference) {
+        this.container.insertBefore(cellElement, reference);
+      } else {
+        this.container.appendChild(cellElement);
+      }
+
+      return cellElement;
     }
 
     applyInitialStates() {
@@ -3880,7 +4734,7 @@
       const cellKey = `${x},${y}`;
       const states = this.cellStates.get(cellKey);
       if (!states || states.size === 0) return null;
-      
+
       // Retourne l'état principal (le dernier ajouté qui n'est pas 'normal')
       const statesArray = Array.from(states);
       return statesArray.find(state => state !== 'normal') || 'normal';
@@ -3950,15 +4804,15 @@
     clearCellStates(x, y) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (!cell) return;
 
       // Retour au style par défaut
       this.resetCellStyle(x, y);
-      
+
       // Réinitialisation avec état normal uniquement
       this.cellStates.set(cellKey, new Set(['normal']));
-      
+
       // Suppression de la sélection
       this.selectedCells.delete(cellKey);
       this.triggerSelectionChange();
@@ -3978,7 +4832,7 @@
     removeCellStateStyle(x, y, stateName) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (!cell) return;
 
       // Suppression spécifique des propriétés CSS de cet état
@@ -4025,15 +4879,15 @@
       if (width !== undefined && height !== undefined) {
         this.config.size.width = width;
         this.config.size.height = height;
-        
+
         if (!this.config.autoResize) {
           this.container.style.width = `${width}px`;
           this.container.style.height = `${height}px`;
         }
       }
-      
+
       this.updateCellSizes();
-      
+
       if (this.config.debug) ;
     }
 
@@ -4071,8 +4925,8 @@
      * @param {HTMLElement|string} parentElement - Élément parent ou sélecteur
      */
     fitToParent(parentElement) {
-      const parent = typeof parentElement === 'string' 
-        ? document.querySelector(parentElement) 
+      const parent = typeof parentElement === 'string'
+        ? document.querySelector(parentElement)
         : parentElement;
 
       if (!parent) {
@@ -4082,10 +4936,10 @@
 
       // Déplacement vers le nouveau parent
       parent.appendChild(this.container);
-      
+
       // Activation du redimensionnement automatique
       this.setAutoResize(true);
-      
+
       // Force une mise à jour immédiate
       const rect = parent.getBoundingClientRect();
       this.handleResize({ contentRect: rect });
@@ -4096,17 +4950,17 @@
      * @param {Object} options - Options d'ajustement
      */
     autoSizeCells(options = {}) {
-      const { 
-        minWidth = 40, 
-        minHeight = 40, 
+      const {
+        minWidth = 40,
+        minHeight = 40,
         padding = 8,
-        fontSize = null 
+        fontSize = null
       } = options;
 
       this.cellsMap.forEach((cell, cellKey) => {
         const element = cell.element;
         const content = element.textContent || '';
-        
+
         if (content.length > 0) {
           // Créer un élément temporaire pour mesurer le texte
           const measureEl = document.createElement('div');
@@ -4122,21 +4976,21 @@
         `;
           measureEl.textContent = content;
           document.body.appendChild(measureEl);
-          
+
           const textWidth = measureEl.offsetWidth;
           const textHeight = measureEl.offsetHeight;
-          
+
           document.body.removeChild(measureEl);
-          
+
           // Appliquer les nouvelles dimensions
           const newWidth = Math.max(textWidth + padding * 2, minWidth);
           const newHeight = Math.max(textHeight + padding * 2, minHeight);
-          
+
           element.style.width = `${newWidth}px`;
           element.style.height = `${newHeight}px`;
         }
       });
-      
+
       if (this.config.debug) ;
     }
 
@@ -4146,25 +5000,25 @@
      */
     fitToContent(options = {}) {
       this.autoSizeCells(options);
-      
+
       // Recalcul de la taille du container
       let maxWidth = 0;
       let maxHeight = 0;
-      
+
       this.cellsMap.forEach((cell) => {
         const rect = cell.element.getBoundingClientRect();
         maxWidth = Math.max(maxWidth, rect.width);
         maxHeight = Math.max(maxHeight, rect.height);
       });
-      
-      const totalWidth = (maxWidth * this.config.grid.x) + 
-                        (this.config.spacing.horizontal * (this.config.grid.x - 1)) + 
-                        (this.config.spacing.external * 2);
-                        
-      const totalHeight = (maxHeight * this.config.grid.y) + 
-                         (this.config.spacing.vertical * (this.config.grid.y - 1)) + 
-                         (this.config.spacing.external * 2);
-      
+
+      const totalWidth = (maxWidth * this.config.grid.x) +
+        (this.config.spacing.horizontal * (this.config.grid.x - 1)) +
+        (this.config.spacing.external * 2);
+
+      const totalHeight = (maxHeight * this.config.grid.y) +
+        (this.config.spacing.vertical * (this.config.grid.y - 1)) +
+        (this.config.spacing.external * 2);
+
       this.resize(totalWidth, totalHeight);
     }
 
@@ -4189,7 +5043,7 @@
       if (!this.config.autoResize) return;
 
       const { width, height } = entry.contentRect;
-      
+
       if (this.config.debug) ;
 
       // Mise à jour de la configuration interne
@@ -4206,15 +5060,30 @@
     }
 
     updateCellSizes() {
+      if (this.config.cellSize) {
+        const sizePx = `${this.config.cellSize}px`;
+        this.cellsMap.forEach((cell) => {
+          cell.element.style.width = sizePx;
+          cell.element.style.height = sizePx;
+          cell.element.style.minWidth = sizePx;
+          cell.element.style.minHeight = sizePx;
+          cell.element.style.scrollSnapAlign = 'start';
+          cell.element.style.scrollSnapStop = 'always';
+        });
+
+        this.updateContainerDimensions();
+        return;
+      }
+
       if (!this.config.autoResize) return;
 
       // Les cellules se redimensionnent automatiquement grâce au CSS Grid
       // Mais on peut ajuster certaines propriétés si nécessaire
-      
+
       const containerRect = this.container.getBoundingClientRect();
       const availableWidth = containerRect.width - (2 * this.config.spacing.external);
       const availableHeight = containerRect.height - (2 * this.config.spacing.external);
-      
+
       const cellWidth = (availableWidth - (this.config.spacing.horizontal * (this.config.grid.x - 1))) / this.config.grid.x;
       const cellHeight = (availableHeight - (this.config.spacing.vertical * (this.config.grid.y - 1))) / this.config.grid.y;
 
@@ -4228,6 +5097,39 @@
       }
 
       if (this.config.debug) ;
+    }
+
+    addColumn() {
+      const prevCols = this.config.grid.x;
+      const rows = this.config.grid.y;
+      const newColIndex = prevCols;
+
+      this.config.grid.x += 1;
+      this.updateGridTemplate();
+
+      for (let y = 0; y < rows; y += 1) {
+        const insertIndex = (y * this.config.grid.x) + newColIndex;
+        this.createCell(newColIndex, y, insertIndex);
+      }
+
+      this.updateCellSizes();
+      return this;
+    }
+
+    addRow() {
+      const prevRows = this.config.grid.y;
+      const cols = this.config.grid.x;
+      const newRowIndex = prevRows;
+
+      this.config.grid.y += 1;
+      this.updateGridTemplate();
+
+      for (let x = 0; x < cols; x += 1) {
+        this.createCell(x, newRowIndex);
+      }
+
+      this.updateCellSizes();
+      return this;
     }
     // ========================================
     // 🎨 UTILITAIRES DE STYLES
@@ -4263,7 +5165,7 @@
 
     getCellsByState(stateName) {
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         if (states.has(stateName)) {
           const [x, y] = cellKey.split(',').map(Number);
@@ -4277,17 +5179,17 @@
 
     getCellsWithAnyState(stateNames) {
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const hasAnyState = stateNames.some(stateName => states.has(stateName));
         if (hasAnyState) {
           const [x, y] = cellKey.split(',').map(Number);
           const cell = this.cellsMap.get(cellKey);
-          result.push({ 
-            x, y, 
-            id: cell.id, 
-            element: cell.element, 
-            states: Array.from(states) 
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element,
+            states: Array.from(states)
           });
         }
       });
@@ -4297,17 +5199,17 @@
 
     getCellsWithAllStates(stateNames) {
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const hasAllStates = stateNames.every(stateName => states.has(stateName));
         if (hasAllStates) {
           const [x, y] = cellKey.split(',').map(Number);
           const cell = this.cellsMap.get(cellKey);
-          result.push({ 
-            x, y, 
-            id: cell.id, 
-            element: cell.element, 
-            states: Array.from(states) 
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element,
+            states: Array.from(states)
           });
         }
       });
@@ -4347,7 +5249,7 @@
 
     findCells(criteria) {
       const result = [];
-      
+
       this.cellsMap.forEach((cell, cellKey) => {
         const [x, y] = cellKey.split(',').map(Number);
         let matches = true;
@@ -4356,14 +5258,14 @@
         if (criteria.state && !this.hasCellState(x, y, criteria.state)) {
           matches = false;
         }
-        
+
         if (criteria.hasContent !== undefined) {
           const hasContent = cell.content && cell.content.trim().length > 0;
           if (criteria.hasContent !== hasContent) {
             matches = false;
           }
         }
-        
+
         if (criteria.position) {
           if (criteria.position.x) {
             if (criteria.position.x.min !== undefined && x < criteria.position.x.min) matches = false;
@@ -4376,9 +5278,9 @@
         }
 
         if (matches) {
-          result.push({ 
-            x, y, 
-            id: cell.id, 
+          result.push({
+            x, y,
+            id: cell.id,
             element: cell.element,
             content: cell.content,
             states: this.getCellStates(x, y)
@@ -4401,10 +5303,10 @@
           const cellKey = `${x},${y}`;
           const cell = this.cellsMap.get(cellKey);
           if (cell) {
-            result.push({ 
-              x, y, 
-              id: cell.id, 
-              element: cell.element 
+            result.push({
+              x, y,
+              id: cell.id,
+              element: cell.element
             });
           }
         }
@@ -4419,11 +5321,11 @@
         const cellKey = `${x},${rowIndex}`;
         const cell = this.cellsMap.get(cellKey);
         if (cell) {
-          result.push({ 
-            x, 
-            y: rowIndex, 
-            id: cell.id, 
-            element: cell.element 
+          result.push({
+            x,
+            y: rowIndex,
+            id: cell.id,
+            element: cell.element
           });
         }
       }
@@ -4436,11 +5338,11 @@
         const cellKey = `${columnIndex},${y}`;
         const cell = this.cellsMap.get(cellKey);
         if (cell) {
-          result.push({ 
-            x: columnIndex, 
-            y, 
-            id: cell.id, 
-            element: cell.element 
+          result.push({
+            x: columnIndex,
+            y,
+            id: cell.id,
+            element: cell.element
           });
         }
       }
@@ -4450,64 +5352,64 @@
     compareCellStates(x1, y1, x2, y2) {
       const states1 = new Set(this.getCellStates(x1, y1));
       const states2 = new Set(this.getCellStates(x2, y2));
-      
-      const same = [...states1].every(state => states2.has(state)) && 
-                   [...states2].every(state => states1.has(state));
-      
+
+      const same = [...states1].every(state => states2.has(state)) &&
+        [...states2].every(state => states1.has(state));
+
       const common = [...states1].filter(state => states2.has(state));
       const different1 = [...states1].filter(state => !states2.has(state));
       const different2 = [...states2].filter(state => !states1.has(state));
-      
+
       return { same, common, different1, different2 };
     }
 
     findSimilarCells(x, y) {
       const referenceStates = new Set(this.getCellStates(x, y));
       const result = [];
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const [cellX, cellY] = cellKey.split(',').map(Number);
-        
+
         // Skip la cellule de référence
         if (cellX === x && cellY === y) return;
-        
+
         // Vérifier si les états sont identiques
-        const same = states.size === referenceStates.size && 
-                     [...states].every(state => referenceStates.has(state));
-        
+        const same = states.size === referenceStates.size &&
+          [...states].every(state => referenceStates.has(state));
+
         if (same) {
           const cell = this.cellsMap.get(cellKey);
-          result.push({ 
-            x: cellX, 
-            y: cellY, 
-            id: cell.id, 
-            element: cell.element 
+          result.push({
+            x: cellX,
+            y: cellY,
+            id: cell.id,
+            element: cell.element
           });
         }
       });
-      
+
       return result;
     }
 
     groupCellsByState() {
       const groups = {};
-      
+
       this.cellStates.forEach((states, cellKey) => {
         const [x, y] = cellKey.split(',').map(Number);
         const cell = this.cellsMap.get(cellKey);
-        
+
         states.forEach(stateName => {
           if (!groups[stateName]) {
             groups[stateName] = [];
           }
-          groups[stateName].push({ 
-            x, y, 
-            id: cell.id, 
-            element: cell.element 
+          groups[stateName].push({
+            x, y,
+            id: cell.id,
+            element: cell.element
           });
         });
       });
-      
+
       return groups;
     }
 
@@ -4530,7 +5432,7 @@
     setCellContent(x, y, content) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (cell) {
         cell.content = content;
         cell.element.textContent = content;
@@ -4546,7 +5448,7 @@
     setCellStyle(x, y, styles) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (cell) {
         Object.assign(cell.element.style, styles);
       }
@@ -4555,12 +5457,18 @@
     resetCellStyle(x, y) {
       const cellKey = `${x},${y}`;
       const cell = this.cellsMap.get(cellKey);
-      
+
       if (cell) {
+        const preserved = {
+          width: cell.element.style.width,
+          height: cell.element.style.height,
+          minWidth: cell.element.style.minWidth,
+          minHeight: cell.element.style.minHeight
+        };
         // Récupération des styles de base
         const cellConfig = cell.config;
         const defaultConfig = this.config.cells.default || {};
-        
+
         const defaultCellStyles = {
           display: 'flex',
           alignItems: 'center',
@@ -4576,17 +5484,23 @@
           userSelect: 'none'
         };
 
-        const baseStyles = { 
-          ...defaultCellStyles, 
-          ...defaultConfig.style, 
-          ...cellConfig.style 
+        const baseStyles = {
+          ...defaultCellStyles,
+          ...defaultConfig.style,
+          ...cellConfig.style
         };
 
         // Reset complet du style
         cell.element.removeAttribute('style');
-        
+
         // Réapplication des styles de base avec priorité normale
         this.applyStylesToElement(cell.element, baseStyles, false);
+
+        Object.entries(preserved).forEach(([prop, value]) => {
+          if (value && value.length) {
+            cell.element.style[prop] = value;
+          }
+        });
       }
     }
 
@@ -4599,10 +5513,10 @@
       this.selectedCells.forEach(cellKey => {
         const [x, y] = cellKey.split(',').map(Number);
         const cell = this.cellsMap.get(cellKey);
-        result.push({ 
-          x, y, 
-          id: cell.id, 
-          element: cell.element 
+        result.push({
+          x, y,
+          id: cell.id,
+          element: cell.element
         });
       });
       return result;
@@ -4681,7 +5595,7 @@
         // Reset des callbacks
         this.callbacks = {};
 
-  // console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
+        // console.log(`✅ Matrix "${this.config.id}" détruite avec succès`);
       } catch (error) {
         console.error(`❌ Erreur lors de la destruction de Matrix "${this.config.id}":`, error);
       }
@@ -7069,6 +7983,9 @@
     Badge: createBadge,
     Button: createButton,
     Draggable: draggable,
+    makeDraggable,
+    makeDraggableWithDrop,
+    makeDropZone,
     List: createList,
     Matrix: createMatrix,
     Menu: createMenu,
@@ -7081,28 +7998,35 @@
 
   // Expose drag&drop helpers as soon as possible for local and CDN builds
   if (typeof window !== 'undefined') {
+    window.makeDraggable = makeDraggable;
     window.makeDraggableWithDrop = makeDraggableWithDrop;
     window.makeDropZone = makeDropZone;
     // Empêche le tree-shaking de Rollup
-    window.__forceKeep = [makeDraggableWithDrop, makeDropZone];
+    window.__forceKeep = [makeDraggable, makeDraggableWithDrop, makeDropZone];
   }
 
   // Expose Squirrel globals immediately for both CDN and NPM builds
   if (typeof window !== 'undefined') {
-    // Expose Squirrel globals and bare component names immediately
-    window.Squirrel.Apis = Apis;
-  window.Apis = Apis;
-    window.$ = Squirrel.$;
     window.Squirrel = window.Squirrel || {};
+
+    // Expose Squirrel globals and bare component names immediately
+    window.Squirrel.Apis = Apis$1;
+    window.Apis = Apis$1;
+    window.$ = Squirrel.$;
     window.Squirrel.$ = Squirrel.$;
     window.Squirrel.define = Squirrel.define;
     window.Squirrel.batch = Squirrel.batch;
     window.Squirrel.observeMutations = Squirrel.observeMutations;
+    window.define = Squirrel.define;
+    window.batch = Squirrel.batch;
+    window.observeMutations = Squirrel.observeMutations;
     window.Squirrel.Slider = createSlider;
     window.Squirrel.Badge = createBadge;
     window.Squirrel.Button = createButton;
     window.Squirrel.Draggable = draggable;
-    window.makeDraggable = draggable.makeDraggable;
+    window.Squirrel.makeDraggable = makeDraggable;
+    window.Squirrel.makeDraggableWithDrop = makeDraggableWithDrop;
+    window.Squirrel.makeDropZone = makeDropZone;
     window.Squirrel.List = createList;
     window.Squirrel.Matrix = createMatrix;
     window.Squirrel.Menu = createMenu;
@@ -7149,7 +8073,24 @@
     });
   }
 
+  exports.Apis = Apis$1;
+  exports.Badge = createBadge;
+  exports.Button = createButton;
+  exports.Draggable = draggable;
+  exports.List = createList;
+  exports.Matrix = createMatrix;
+  exports.Menu = createMenu;
+  exports.Minimal = createMinimal;
+  exports.Slider = createSlider;
+  exports.Squirrel = Squirrel;
+  exports.Table = createTable;
+  exports.Template = createTemplate;
+  exports.Tooltip = createTooltip;
+  exports.Unit = createUnit;
   exports.default = Squirrel;
+  exports.makeDraggable = makeDraggable;
+  exports.makeDraggableWithDrop = makeDraggableWithDrop;
+  exports.makeDropZone = makeDropZone;
 
   Object.defineProperty(exports, '__esModule', { value: true });
 

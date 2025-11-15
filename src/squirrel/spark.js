@@ -2,9 +2,16 @@
  * 🚀 SQUIRREL APPLICATION - SIMPLIFIED ENTRY POINT
  * Version with static imports for CDN bundling compatibility
  */
+// atome imports
+import './atome/atome.js';
+import './atome/mcp.js';
 
 // === STATIC ES6 IMPORTS ===
-import './apis.js';
+import './apis/essentials.js';
+import './apis/utils.js';
+import './apis/loader.js';
+import './apis/shortcut.js';
+import DragDrop from './apis/dragdrop.js';
 import { $, define, observeMutations } from './squirrel.js';
 
 // === COMPONENT IMPORTS ===
@@ -15,22 +22,31 @@ import Matrix from './components/matrix_builder.js';
 import List from './components/List_builder.js';
 import Menu from './components/menu_builder.js';
 import Console from './components/console_builder.js';
-import Unit, { 
-  selectUnits, 
-  getSelectedUnits, 
-  deleteUnit, 
-  connectUnits, 
-  disconnectUnits, 
+import Unit, {
+  selectUnits,
+  getSelectedUnits,
+  deleteUnit,
+  connectUnits,
+  disconnectUnits,
   getAllConnections,
   getUnit,
-  getAllUnits 
+  getAllUnits
 } from './components/unit_builder.js';
 import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from './components/draggable_builder.js';
 import Badge from './components/badge_builder.js';
+import dropDown from './components/dropDown_builder.js';
 import Tooltip from './components/tooltip_builder.js';
 import Template from './components/template_builder.js';
 import Minimal from './components/minimal_builder.js';
 import Slice, { createSlice } from './components/slice_builder.js';
+import Intuition from './components/intuition_builder.js';
+
+
+// === default behavior ===
+import './default/shortcuts.js';
+
+// === OPTIONAL INTEGRATIONS ===
+import initIPlugWeb from './integrations/iplug_web.js';
 
 
 
@@ -56,11 +72,13 @@ window.makeDraggable = makeDraggable;
 window.makeDraggableWithDrop = makeDraggableWithDrop;
 window.makeDropZone = makeDropZone;
 window.Badge = Badge;
+window.dropDown = dropDown;
 window.Tooltip = Tooltip;
 window.Template = Template;
 window.Minimal = Minimal;
 window.Slice = Slice;
 window.createSlice = createSlice;
+window.Intuition = Intuition;
 
 window.Squirrel.Button = Button;
 window.Squirrel.Slider = Slider;
@@ -80,6 +98,9 @@ window.Squirrel.Template = Template;
 window.Squirrel.Minimal = Minimal;
 window.Squirrel.Slice = Slice;
 window.Squirrel.createSlice = createSlice;
+window.Squirrel.Intuition = Intuition;
+window.DragDrop = DragDrop;
+window.Squirrel.DragDrop = DragDrop;
 
 // === ADD STATIC METHODS TO UNIT FOR COMPATIBILITY ===
 Unit.selectUnits = selectUnits;
@@ -94,6 +115,8 @@ Unit.getAllUnits = getAllUnits;
 
 // === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
+  // Toggle iPlug Web integration here (enabled by default). Comment to disable.
+  try { initIPlugWeb(); } catch (e) { console.warn('iPlug init failed', e); }
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
 });

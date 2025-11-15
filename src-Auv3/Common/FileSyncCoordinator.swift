@@ -118,6 +118,76 @@ final class FileSyncCoordinator {
         }
     }
 
+    // MARK: - Tombstone / deletion hints
+    func markDeleted(url: URL) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.loadInventoryIfNeeded()
+            let rels = self.relativePaths(for: url)
+            let now = Date().timeIntervalSince1970
+            for rel in rels {
+                var rec = self.inventory[rel] ?? InventoryRecord(lastModified: now, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil, lastSeenVisibleRoot: nil)
+                rec.deletedAt = now
+                self.inventory[rel] = rec
+                self.inventoryDirty = true
+                print("\u{26B0}\u{FE0F} Mark tombstone rel=\(rel)")
+            }
+            self.persistInventoryIfNeeded()
+        }
+    }
+
+    private func relativePaths(for url: URL) -> [String] {
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        var rels: [String] = []
+        let roots = availableRoots()
+        for root in roots {
+            let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+            if path == rootPath { continue }
+            if path.hasPrefix(rootPath + "/") {
+                let rel = String(path.dropFirst(rootPath.count + 1))
+                if !rel.isEmpty { rels.append(rel) }
+            }
+        }
+        return Array(Set(rels))
+    }
+
+    // Record an explicit move/rename so the inventory doesn't interpret it as a deletion + recreation
+    func recordMove(oldURL: URL, newURL: URL) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.loadInventoryIfNeeded()
+            let oldRels = self.relativePaths(for: oldURL)
+            let newRels = self.relativePaths(for: newURL)
+            // Remove old entries from inventory and delete surviving copies across other roots
+            let roots = self.availableRoots()
+            for rel in oldRels {
+                // Delete copies in all roots except the new destination (if it matches)
+                for root in roots {
+                    let candidate = root.appendingPathComponent(rel)
+                    // Skip deleting if candidate.path == newURL.path
+                    if candidate.resolvingSymlinksInPath().standardizedFileURL.path == newURL.resolvingSymlinksInPath().standardizedFileURL.path { continue }
+                    self.deleteItemIfExists(candidate)
+                }
+                if self.inventory[rel] != nil {
+                    self.inventory.removeValue(forKey: rel)
+                    self.inventoryDirty = true
+                    print("🔁 Record move: removed old rel=\(rel)")
+                }
+            }
+
+            // Add/update all new relative paths discovered for the destination
+            for newRel in newRels {
+                if let attrs = try? self.fm.attributesOfItem(atPath: newURL.path), let mod = attrs[.modificationDate] as? Date {
+                    let rec = InventoryRecord(lastModified: mod.timeIntervalSince1970, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil, lastSeenVisibleRoot: nil)
+                    self.inventory[newRel] = rec
+                    self.inventoryDirty = true
+                    print("🔁 Record move: added new rel=\(newRel) mtime=\(mod.timeIntervalSince1970)")
+                }
+            }
+            self.persistInventoryIfNeeded()
+        }
+    }
+
     // MARK: - Core Sync Logic
     private func _runSync() {
         loadInventoryIfNeeded()
@@ -179,8 +249,12 @@ final class FileSyncCoordinator {
                 // 3. Deletion older than a grace window (2s) -> treat reappearance as recreation
                // let nowTs = now
                 let presentInVisible = (visibleRoot != nil) ? (inventories[visibleRoot!]?[rel] != nil) : false
-                // Resurrection désormais SEULEMENT si modification plus récente que la tombstone OU action explicite (visible)
-                let resurrect = (newestMTime > deletedAt) || presentInVisible
+                // Resurrection: for directories, require a strictly newer mtime than tombstone (ignore mere presence);
+                // for files, allow presence in visible root as explicit user action.
+                let resurrect: Bool = {
+                    if isDir { return (newestMTime > deletedAt) }
+                    return (newestMTime > deletedAt) || presentInVisible
+                }()
                 if resurrect {
                     existing.deletedAt = nil
                     existing.lastModified = max(existing.lastModified, newestMTime, deletedAt + 0.001)
@@ -250,7 +324,15 @@ final class FileSyncCoordinator {
                 }
             }
 
-            if isDir { for root in roots { ensureDirectory(root.appendingPathComponent(rel)) }; continue }
+            if isDir {
+                // If this directory has a tombstone, enforce deletion across all roots instead of recreating it
+                if let r = inventory[rel], r.deletedAt != nil {
+                    for root in roots { deleteItemIfExists(root.appendingPathComponent(rel)) }
+                    continue
+                }
+                for root in roots { ensureDirectory(root.appendingPathComponent(rel)) }
+                continue
+            }
             // Winner: canonical root file if exists, else newest
             let winner: (root: URL, meta: FileMeta) = {
                 if let canon = canonicalRoot, let meta = inventories[canon]?[rel] { return (canon, meta) }

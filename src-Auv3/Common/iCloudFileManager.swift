@@ -30,10 +30,8 @@ public class iCloudFileManager: ObservableObject {
     private func checkiCloudAvailability() {
         if let _ = FileManager.default.ubiquityIdentityToken {
             iCloudAvailable = true
-            print("📱 iCloud is available")
         } else {
             iCloudAvailable = false
-            print("⚠️ iCloud is not available or user not logged in")
         }
     }
     
@@ -47,10 +45,8 @@ public class iCloudFileManager: ObservableObject {
             // Pour l'extension AUv3 : utiliser App Groups MAIS synchroniser vers Documents visible
             if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") {
                 let documentsURL = groupURL.appendingPathComponent("Documents")
-                print("📁 [AUv3] App Groups Documents directory: \(documentsURL.path)")
                 return documentsURL
             } else {
-                print("⚠️ [AUv3] App Groups non disponible, fallback vers Documents standard")
                 let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
                 return paths[0]
             }
@@ -58,16 +54,12 @@ public class iCloudFileManager: ObservableObject {
             // Pour l'app principale : utiliser Documents standard (visible dans Files)
             let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
             let documentsURL = paths[0]
-            print("📁 [App] Standard Documents directory: \(documentsURL.path)")
             return documentsURL
         }
     }
     
     private func getiCloudDocumentsDirectory() -> URL? {
-        guard let iCloudURL = FileManager.default.url(forUbiquityContainerIdentifier: nil) else {
-            print("❌ Could not get iCloud container URL")
-            return nil
-        }
+    guard let iCloudURL = FileManager.default.url(forUbiquityContainerIdentifier: nil) else { return nil }
         return iCloudURL.appendingPathComponent("Documents")
     }
     
@@ -138,16 +130,13 @@ public class iCloudFileManager: ObservableObject {
     }
     
     private func initializeLocalFileStructure() {
-        print("=== INITIALIZING LOCAL FILE STRUCTURE ===")
-        
         let documentsURL = getLocalDocumentsDirectory()
         
         // Créer le dossier Documents s'il n'existe pas (pour App Groups)
         do {
             try FileManager.default.createDirectory(at: documentsURL, withIntermediateDirectories: true, attributes: nil)
-        } catch {
-            print("⚠️ Error creating Documents directory: \(error)")
-        }
+    } catch {
+    }
         
         // Utiliser directement Documents - PAS de sous-dossier AtomeFiles
         let baseURL = documentsURL
@@ -156,10 +145,7 @@ public class iCloudFileManager: ObservableObject {
     }
     
     private func initializeiCloudFileStructure() {
-        print("=== INITIALIZING ICLOUD FILE STRUCTURE ===")
-        
         guard let iCloudURL = getiCloudDocumentsDirectory() else {
-            print("❌ iCloud not available, falling back to local storage")
             initializeLocalFileStructure()
             return
         }
@@ -171,8 +157,6 @@ public class iCloudFileManager: ObservableObject {
     }
     
     private func createDirectoryStructure(at baseURL: URL, isLocal: Bool) {
-        print("📂 Creating directory structure at: \(baseURL.path)")
-        
         do {
             let fileManager = FileManager.default
             
@@ -202,7 +186,6 @@ public class iCloudFileManager: ObservableObject {
                         attributes: [FileAttributeKey.posixPermissions: 0o755]
                     )
                     makeDirectoryVisibleInFiles(subdirectoryURL)
-                    print("📁 Created subdirectory: \(subdirectory)")
                     
                     if !isLocal {
                         try fileManager.startDownloadingUbiquitousItem(at: subdirectoryURL)
@@ -218,11 +201,8 @@ public class iCloudFileManager: ObservableObject {
                 self.isInitialized = true
                 self.syncEnabled = !isLocal
             }
-            print("✅ File structure initialization successful (\(isLocal ? "Local" : "iCloud"))")
-            
-        } catch {
-            print("❌ Error during initialization: \(error)")
-        }
+    } catch {
+    }
     }
     
     private func createWelcomeFile(at baseURL: URL, isLocal: Bool) {
@@ -254,11 +234,9 @@ public class iCloudFileManager: ObservableObject {
                     try FileManager.default.startDownloadingUbiquitousItem(at: welcomeFileURL)
                 }
                 
-                print("📄 README.txt file created")
             }
-        } catch {
-            print("⚠️ Error creating welcome file: \(error)")
-        }
+    } catch {
+    }
     }
     
     private func makeDirectoryVisibleInFiles(_ url: URL) {
@@ -275,9 +253,8 @@ public class iCloudFileManager: ObservableObject {
                 var urlForAttributes = url
                 try urlForAttributes.setResourceValues(resourceValues)
             }
-        } catch {
-            print("⚠️ Error making directory visible: \(error)")
-        }
+    } catch {
+    }
     }
     
     // MARK: - File Operations
@@ -294,39 +271,30 @@ public class iCloudFileManager: ObservableObject {
     }
     
     public func saveFile(data: Data, to relativePath: String, completion: @escaping (Bool, Error?) -> Void) {
-        guard let baseURL = getCurrentStorageURL() else {
-            completion(false, NSError(domain: "iCloudFileManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Storage URL not available"]))
-            return
-        }
-        
-        let fileURL = baseURL.appendingPathComponent(relativePath)
-        print("💾 iCloudFileManager sauvegarde vers: \(fileURL.path)")
+        // Résoudre une destination absolue. Supporte les chemins relatifs classiques et le schéma appgroup:/...
+        let destResolution = resolveDestinationURL(for: relativePath)
+        let fileURL = destResolution.url
+    let relForVisible = destResolution.relativeForVisible
         
         do {
             // Create intermediate directories if needed
             let directoryURL = fileURL.deletingLastPathComponent()
-            print("📁 Création du dossier: \(directoryURL.path)")
             try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: nil)
             
             // Write the file
             try data.write(to: fileURL)
-            print("✅ Fichier sauvegardé dans: \(fileURL.path)")
             
             // For iCloud files, start uploading
-            if syncEnabled {
-                try FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
-                print("☁️ iCloud sync démarré pour: \(fileURL.lastPathComponent)")
-            }
+            do { try FileManager.default.startDownloadingUbiquitousItem(at: fileURL) } catch { /* may not be ubiquitous; ignore */ }
             
             // Si c'est une extension AUv3, aussi copier vers Documents visible
             let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
             if bundleIdentifier.contains(".appex") {
-                copyFileToVisibleDocuments(from: fileURL, relativePath: relativePath)
+                copyFileToVisibleDocuments(from: fileURL, relativePath: relForVisible)
             }
             
             completion(true, nil)
         } catch {
-            print("❌ Erreur sauvegarde iCloud: \(error)")
             completion(false, error)
         }
     }
@@ -341,11 +309,7 @@ public class iCloudFileManager: ObservableObject {
         
         // For iCloud files, ensure they're downloaded first
         if syncEnabled {
-            do {
-                try FileManager.default.startDownloadingUbiquitousItem(at: fileURL)
-            } catch {
-                print("⚠️ Could not start downloading iCloud file: \(error)")
-            }
+            do { try FileManager.default.startDownloadingUbiquitousItem(at: fileURL) } catch { }
         }
         
         do {
@@ -354,6 +318,57 @@ public class iCloudFileManager: ObservableObject {
         } catch {
             completion(nil, error)
         }
+    }
+
+    // MARK: - Destination resolution helpers
+    private func appGroupDocumentsURL() -> URL? {
+        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else { return nil }
+        return groupURL.appendingPathComponent("Documents", isDirectory: true)
+    }
+
+    // Resolve a destination URL for a given path string which may contain the custom scheme appgroup:/
+    // Also compute a relative path that makes sense for copying into the visible Documents area
+    private func resolveDestinationURL(for path: String) -> (url: URL, relativeForVisible: String) {
+        var trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("./") { trimmed.removeFirst(2) }
+        if trimmed == "." { trimmed = "" }
+
+        // appgroup:/Documents/... -> write inside App Group container
+        if trimmed.hasPrefix("appgroup:") {
+            var rest = String(trimmed.dropFirst("appgroup:".count))
+            if rest.hasPrefix("/") { rest.removeFirst() }
+            // Build absolute URL inside the App Group container root
+            if let groupRoot = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") {
+                let dest = groupRoot.appendingPathComponent(rest)
+                // Compute relative path from App Group Documents if possible
+                if let docs = appGroupDocumentsURL() {
+                    let rel = relativePathFrom(base: docs, to: dest)
+                    return (dest, rel)
+                }
+                return (dest, dest.lastPathComponent)
+            }
+            // Fallback: no App Group, write to current storage root
+            let base = getCurrentStorageURL() ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let dest = base.appendingPathComponent(rest)
+            return (dest, rest)
+        }
+
+        // Default behavior: relative to current storage root
+        let base = getCurrentStorageURL() ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dest = trimmed.isEmpty ? base : base.appendingPathComponent(trimmed)
+        return (dest, trimmed)
+    }
+
+    // Compute a relative path "inside" base if url is contained within base; else return last path component
+    private func relativePathFrom(base: URL, to url: URL) -> String {
+        let basePath = base.standardizedFileURL.path
+        let targetPath = url.standardizedFileURL.path
+        if targetPath.hasPrefix(basePath) {
+            var rel = String(targetPath.dropFirst(basePath.count))
+            if rel.hasPrefix("/") { rel.removeFirst() }
+            return rel
+        }
+        return url.lastPathComponent
     }
     
     // MARK: - Migration between Local and iCloud
@@ -386,7 +401,6 @@ public class iCloudFileManager: ObservableObject {
                 completion(true)
             }
         } catch {
-            print("❌ Migration to iCloud failed: \(error)")
             completion(false)
         }
     }
@@ -419,38 +433,22 @@ public class iCloudFileManager: ObservableObject {
                 completion(true)
             }
         } catch {
-            print("❌ Migration to local failed: \(error)")
             completion(false)
         }
     }
     
     // MARK: - Document Picker pour AUv3
     public func saveFileWithDocumentPicker(data: Data, fileName: String, from viewController: UIViewController, completion: @escaping (Bool, Error?) -> Void) {
-        print("🔥 SWIFT: saveFileWithDocumentPicker appelé")
-        print("🔥 SWIFT: fileName = \(fileName), data.count = \(data.count)")
-        print("🔥 SWIFT: viewController = \(type(of: viewController))")
-        
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-        print("🔥 SWIFT: bundleIdentifier = \(bundleIdentifier)")
-        
-        // FORCER l'utilisation du Document Picker iOS dans tous les cas
-        print("🔥 SWIFT: FORCER Document Picker iOS - toujours présenter à l'utilisateur")
-        
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-        print("🔥 SWIFT: tempURL = \(tempURL)")
         
         do {
             try data.write(to: tempURL)
-            print("🔥 SWIFT: Fichier temporaire écrit avec succès")
             
             // Stocker le delegate pour éviter qu'il soit libéré
             self.documentPickerDelegate = DocumentPickerDelegate { [weak self] success, error in
-                print("🔥 SWIFT: DocumentPickerDelegate callback - success: \(success), error: \(String(describing: error))")
                 self?.documentPickerDelegate = nil // Libérer après utilisation
                 completion(success, error)
             }
-            
-            print("🔥 SWIFT: DocumentPickerDelegate créé")
             
             // Replace creation to enable rename/edit inside picker
             let documentPicker: UIDocumentPickerViewController
@@ -464,49 +462,30 @@ public class iCloudFileManager: ObservableObject {
             
             documentPicker.delegate = self.documentPickerDelegate
             documentPicker.modalPresentationStyle = .formSheet
-            
-            print("🔥 SWIFT: Tentative de présentation du Document Picker...")
-            
             DispatchQueue.main.async {
-                print("🔥 SWIFT: Sur main thread - présentation du Document Picker")
-                viewController.present(documentPicker, animated: true) {
-                    print("🔥 SWIFT: Document Picker présenté avec succès !")
-                    print("📄 SWIFT: Le Document Picker iOS devrait maintenant être visible")
-                }
+                viewController.present(documentPicker, animated: true)
             }
             
         } catch {
-            print("❌ SWIFT: Erreur écriture fichier temporaire: \(error)")
             completion(false, error)
         }
     }
     
     // MARK: - Document Picker pour charger des fichiers AUv3
     public func loadFileWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, Data?, String?, Error?) -> Void) {
-        print("🔥 SWIFT: loadFileWithDocumentPicker appelé")
-        print("🔥 SWIFT: fileTypes = \(fileTypes)")
-        print("🔥 SWIFT: viewController = \(type(of: viewController))")
-        
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
-        print("🔥 SWIFT: bundleIdentifier = \(bundleIdentifier)")
-        
         // ÉTAPE CRITIQUE : Demander l'autorisation d'accès aux fichiers
         if fileAccessGrantedOnce {
-            print("🔐 SWIFT: Permission déjà accordée précédemment – skip alerte")
             DispatchQueue.main.async {
                 self.proceedWithDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
             }
         } else {
-            print("🔐 SWIFT: Demande d'autorisation d'accès aux fichiers...")
             self.requestFileAccessPermission(from: viewController) { [weak self] granted in
                 guard let self = self else { return }
                 guard granted else {
-                    print("❌ SWIFT: Autorisation d'accès aux fichiers refusée")
                     completion(false, nil, nil, NSError(domain: "FileAccess", code: -1, userInfo: [NSLocalizedDescriptionKey: "L'autorisation d'accès aux fichiers est requise"]))
                     return
                 }
                 self.fileAccessGrantedOnce = true
-                print("✅ SWIFT: Autorisation d'accès aux fichiers accordée (will present picker après petit délai)")
                 // Délai pour laisser l'alerte se dismiss proprement avant de présenter le picker
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                     self.proceedWithDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
@@ -517,7 +496,6 @@ public class iCloudFileManager: ObservableObject {
 
     // MARK: - Multiple files loader
     public func loadFilesWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
-        print("🔥 SWIFT: loadFilesWithDocumentPicker (multiple) appelé")
         if fileAccessGrantedOnce {
             DispatchQueue.main.async { self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion) }
         } else {
@@ -534,7 +512,6 @@ public class iCloudFileManager: ObservableObject {
 
     // MARK: - Import direct: picker -> stockage local (avec option renommage)
     public func importFileToRelativePath(fileTypes: [String], requestedDestPath: String, from viewController: UIViewController, completion: @escaping (Bool, String?, Error?) -> Void) {
-        print("📥 SWIFT: importFileToRelativePath demandé dest='\(requestedDestPath)' types=\(fileTypes)")
         self.loadFileWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, data, originalName, error in
             guard let self = self else { return }
             guard success, let data = data, let originalName = originalName else {
@@ -542,7 +519,6 @@ public class iCloudFileManager: ObservableObject {
                 return
             }
             let finalRelPath = self.normalizeDestination(originalName: originalName, requested: requestedDestPath)
-            print("📥 SWIFT: Import -> sauvegarde sous relPath='\(finalRelPath)'")
             self.saveFile(data: data, to: finalRelPath) { ok, saveErr in
                 completion(ok, ok ? finalRelPath : nil, saveErr)
             }
@@ -551,7 +527,6 @@ public class iCloudFileManager: ObservableObject {
 
     // MARK: - Import multiple vers un dossier
     public func importFilesToRelativeFolder(fileTypes: [String], requestedDestPath: String, from viewController: UIViewController, completion: @escaping (Bool, [String]?, Error?) -> Void) {
-        print("📥 SWIFT: importFilesToRelativeFolder demandé dest='\(requestedDestPath)' types=\(fileTypes)")
         self.loadFilesWithDocumentPicker(fileTypes: fileTypes, from: viewController) { [weak self] success, results, error in
             guard let self = self else { return }
             guard success, let results = results, !results.isEmpty else {
@@ -559,7 +534,6 @@ public class iCloudFileManager: ObservableObject {
                 return
             }
             let folder = self.normalizeFolderDestination(requested: requestedDestPath)
-            print("📥 SWIFT: Dossier destination normalisé = '\(folder)' (vide -> racine)")
             var saved: [String] = []
             var lastError: Error?
             let group = DispatchGroup()
@@ -604,12 +578,10 @@ public class iCloudFileManager: ObservableObject {
     
     // MARK: - Demande d'autorisation d'accès aux fichiers
     private func requestFileAccessPermission(from viewController: UIViewController, completion: @escaping (Bool) -> Void) {
-        if fileAccessGrantedOnce {
-            print("🔐 SWIFT: requestFileAccessPermission – déjà accordée")
+    if fileAccessGrantedOnce {
             completion(true)
             return
         }
-        print("🔐 SWIFT: Présentation de la demande d'autorisation...")
         let alert = UIAlertController(
             title: "Accès aux fichiers",
             message: "Atome va ouvrir le sélecteur de fichiers iOS pour choisir un fichier audio ou projet. Cette étape ne sera demandée qu'une seule fois (réinitialisable).",
@@ -617,16 +589,12 @@ public class iCloudFileManager: ObservableObject {
         )
         
         alert.addAction(UIAlertAction(title: "Continuer", style: .default) { [weak self] _ in
-            print("✅ SWIFT: Utilisateur a accepté - ouverture Document Picker (après dismissal)")
             self?.fileAccessGrantedOnce = true
             UserDefaults.standard.set(true, forKey: "AtomeFileAccessGranted")
             completion(true)
         })
         
-        alert.addAction(UIAlertAction(title: "Annuler", style: .cancel) { _ in
-            print("❌ SWIFT: Utilisateur a annulé la demande d'autorisation")
-            completion(false)
-        })
+    alert.addAction(UIAlertAction(title: "Annuler", style: .cancel) { _ in completion(false) })
         
         DispatchQueue.main.async {
             viewController.present(alert, animated: true)
@@ -635,28 +603,24 @@ public class iCloudFileManager: ObservableObject {
 
     // Réinitialiser l'autorisation personnalisée (pas une permission système, juste notre flag interne)
     public func resetFileAccessPermission() {
-        print("🔄 SWIFT: resetFileAccessPermission appelé")
         fileAccessGrantedOnce = false
         UserDefaults.standard.removeObject(forKey: "AtomeFileAccessGranted")
     }
     
     // MARK: - Procéder avec le Document Picker après autorisation
     private func proceedWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, Data?, String?, Error?) -> Void) {
-        print("🔥 SWIFT: proceedWithDocumentPicker (contexte unifié app/extension)")
         // Stocker le delegate pour éviter qu'il soit libéré
         self.documentPickerLoadDelegate = DocumentPickerLoadDelegate { [weak self] success, data, fileName, error in
-            print("🔥 SWIFT: DocumentPickerLoadDelegate callback - success: \(success), fileName: \(fileName ?? "nil"), error: \(String(describing: error))")
             self?.documentPickerLoadDelegate = nil // Libérer après utilisation
             completion(success, data, fileName, error)
         }
-        print("🔥 SWIFT: DocumentPickerLoadDelegate créé")
         // Créer UTTypes
         var utTypes: [UTType] = []
         for fileType in fileTypes {
             switch fileType.lowercased() {
             case "atome":
-                if let atomeType = UTType("one.atome.app.atome-project") { utTypes.append(atomeType); print("🔥 SWIFT: UTType personnalisé 'atome'") }
-                else if let genericAtome = UTType(filenameExtension: "atome") { utTypes.append(genericAtome); print("🔥 SWIFT: UTType générique 'atome'") }
+                if let atomeType = UTType("one.atome.app.atome-project") { utTypes.append(atomeType) }
+                else if let genericAtome = UTType(filenameExtension: "atome") { utTypes.append(genericAtome) }
                 else { utTypes.append(.data) }
             case "json": utTypes.append(.json)
             case "txt": utTypes.append(.text)
@@ -670,22 +634,14 @@ public class iCloudFileManager: ObservableObject {
         utTypes.append(.data)
         utTypes.append(.item)
         utTypes.append(.content)
-        print("🔥 SWIFT: Types UTType créés: \(utTypes)")
         let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
         documentPicker.delegate = self.documentPickerLoadDelegate
         documentPicker.modalPresentationStyle = .fullScreen
         documentPicker.allowsMultipleSelection = false
         documentPicker.shouldShowFileExtensions = true
-        print("🔥 SWIFT: DocumentPickerViewController prêt (unifié)")
-        DispatchQueue.main.async {
-            print("🔥 SWIFT: Présentation du Document Picker (unifié)")
-            viewController.present(documentPicker, animated: true) {
-                print("� SWIFT: Document Picker visible (app ou extension)")
-            }
-        }
+    DispatchQueue.main.async { viewController.present(documentPicker, animated: true) }
     }
     private func proceedWithMultipleDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
-        print("🔥 SWIFT: proceedWithMultipleDocumentPicker")
         let multipleDelegate = DocumentPickerLoadMultipleDelegate { success, results, error in
             completion(success, results, error)
         }
@@ -722,24 +678,19 @@ public class iCloudFileManager: ObservableObject {
     private func presentDocumentPickerSafely(_ picker: UIDocumentPickerViewController, from baseVC: UIViewController) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            if baseVC.presentedViewController is UIDocumentPickerViewController { print("⚠️ SWIFT: Picker déjà présenté"); return }
+            if baseVC.presentedViewController is UIDocumentPickerViewController { return }
             let top = self.topViewController(from: baseVC) ?? baseVC
             if let presented = top.presentedViewController, presented is UIAlertController {
-                print("⏳ SWIFT: Alerte encore affichée, retry dans 0.3s")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.presentDocumentPickerSafely(picker, from: baseVC) }
                 return
             }
-            print("🔥 SWIFT: Présentation Document Picker depuis: \(type(of: top)))")
-            top.present(picker, animated: true) { print("📱 SWIFT: Document Picker visible (confirmé)") }
+            top.present(picker, animated: true)
         }
     }
     
     // MARK: - App Groups Synchronization
     private func syncFromAppGroupsToVisibleDocuments() {
-        print("🔄 Synchronisation depuis App Groups vers Documents visible...")
-        
         guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
-            print("❌ App Groups non disponible pour synchronisation")
             return
         }
         
@@ -747,10 +698,7 @@ public class iCloudFileManager: ObservableObject {
         let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         
         // Vérifier si App Groups contient des fichiers
-        guard FileManager.default.fileExists(atPath: appGroupDocuments.path) else {
-            print("📂 Aucun fichier App Groups à synchroniser")
-            return
-        }
+    guard FileManager.default.fileExists(atPath: appGroupDocuments.path) else { return }
         
         do {
             let fileManager = FileManager.default
@@ -788,28 +736,16 @@ public class iCloudFileManager: ObservableObject {
                             }
                         }
                         
-                        if shouldCopy {
-                            try fileManager.copyItem(at: sourceFile, to: destFile)
-                            print("📄 Copié: \(sourceFile.lastPathComponent) vers Documents visible")
-                        }
+                        if shouldCopy { try fileManager.copyItem(at: sourceFile, to: destFile) }
                     }
                 }
             }
-            
-            print("✅ Synchronisation App Groups → Documents terminée")
-            
-        } catch {
-            print("❌ Erreur lors de la synchronisation: \(error)")
-        }
+        } catch { }
     }
 
     // MARK: - Reverse Synchronisation (Visible -> App Groups)
     private func syncFromVisibleDocumentsToAppGroups() {
-        print("🔄 Synchronisation depuis Documents visible vers App Groups...")
-        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
-            print("❌ App Groups non disponible pour reverse sync")
-            return
-        }
+        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else { return }
         let appGroupDocuments = groupURL.appendingPathComponent("Documents")
         let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
 
@@ -835,22 +771,14 @@ public class iCloudFileManager: ObservableObject {
                             let dstDate = try dstFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
                             if let s = srcDate, let d = dstDate, s > d { try fm.removeItem(at: dstFile); shouldCopy = true }
                         }
-                        if shouldCopy {
-                            try fm.copyItem(at: srcFile, to: dstFile)
-                            print("📄 Copié: \(srcFile.lastPathComponent) vers App Groups")
-                        }
+                        if shouldCopy { try fm.copyItem(at: srcFile, to: dstFile) }
                     }
                 }
             }
-            print("✅ Synchronisation Documents visible → App Groups terminée")
-        } catch {
-            print("❌ Erreur reverse sync: \(error)")
-        }
+        } catch { }
     }
     
     private func copyFileToVisibleDocuments(from sourceURL: URL, relativePath: String) {
-        print("📋 Copie vers Documents visible: \(relativePath)")
-        
         let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let destURL = visibleDocuments.appendingPathComponent(relativePath)
         
@@ -866,11 +794,8 @@ public class iCloudFileManager: ObservableObject {
             
             // Copier le fichier
             try FileManager.default.copyItem(at: sourceURL, to: destURL)
-            print("✅ Fichier copié vers Documents visible: \(destURL.path)")
             
-        } catch {
-            print("❌ Erreur copie vers Documents visible: \(error)")
-        }
+        } catch { }
     }
 }
 
@@ -879,17 +804,14 @@ class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate {
     private let completion: (Bool, Error?) -> Void
     
     init(completion: @escaping (Bool, Error?) -> Void) {
-        self.completion = completion
-        print("🔥 SWIFT: DocumentPickerDelegate init")
+    self.completion = completion
     }
     
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        print("🔥 SWIFT: documentPicker didPickDocumentsAt: \(urls)")
         completion(true, nil)
     }
     
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        print("🔥 SWIFT: documentPicker was cancelled")
         completion(false, NSError(domain: "DocumentPicker", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
     }
 }
@@ -899,12 +821,10 @@ class DocumentPickerLoadDelegate: NSObject, UIDocumentPickerDelegate {
     private let completion: (Bool, Data?, String?, Error?) -> Void
     
     init(completion: @escaping (Bool, Data?, String?, Error?) -> Void) {
-        self.completion = completion
-        print("🔥 SWIFT: DocumentPickerLoadDelegate init")
+    self.completion = completion
     }
     
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        print("🔥 SWIFT: documentPicker didPickDocumentsAt: \(urls)")
         
         guard let selectedURL = urls.first else {
             completion(false, nil, nil, NSError(domain: "DocumentPickerLoad", code: -1, userInfo: [NSLocalizedDescriptionKey: "No file selected"]))
@@ -922,16 +842,13 @@ class DocumentPickerLoadDelegate: NSObject, UIDocumentPickerDelegate {
         do {
             let data = try Data(contentsOf: selectedURL)
             let fileName = selectedURL.lastPathComponent
-            print("🔥 SWIFT: Fichier lu avec succès - \(fileName), \(data.count) bytes")
             completion(true, data, fileName, nil)
         } catch {
-            print("🔥 SWIFT: Erreur lecture fichier: \(error)")
             completion(false, nil, nil, error)
         }
     }
     
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        print("🔥 SWIFT: documentPickerLoad was cancelled")
         completion(false, nil, nil, NSError(domain: "DocumentPickerLoad", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"]))
     }
 }
@@ -941,7 +858,6 @@ class DocumentPickerLoadMultipleDelegate: NSObject, UIDocumentPickerDelegate {
     private let completion: (Bool, [(String, Data)]?, Error?) -> Void
     init(completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) { self.completion = completion }
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        print("🔥 SWIFT: multiple didPickDocumentsAt count=\(urls.count)")
         var results: [(String, Data)] = []
         for url in urls {
             let started = url.startAccessingSecurityScopedResource(); defer { if started { url.stopAccessingSecurityScopedResource() } }

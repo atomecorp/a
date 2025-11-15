@@ -1,11 +1,13 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024"  xml:space="preserve" id="fullscreenCanvas">
-    <g id="fullscreenCanvas-group" transform="translate(463.75, 464.5) rotate(-90)" >
-        <rect id="fullscreenCanvas-rectangle3" stroke="none" fill="rgb(128, 128, 128)" x="-559.75" y="-4.5" width="265" height="104" />
-        <rect id="fullscreenCanvas-rectangle4" stroke="none" fill="rgb(128, 128, 128)" x="199.75" y="-4.5" width="265" height="104" />
-        <rect id="fullscreenCanvas-rectangle" stroke="none" fill="rgb(128, 128, 128)" x="0" y="0" width="264.53" height="104.71"  transform="translate(4.85, -463.75) rotate(90)" />
-        <rect id="fullscreenCanvas-rectangle2" stroke="none" fill="rgb(128, 128, 128)" x="0" y="0" width="264.53" height="104.71"  transform="translate(4.85, 296.22) rotate(90)" />
-        <circle id="fullscreenCanvas-oval" stroke="none" fill="rgb(128, 128, 128)" cx="93.14" cy="93.14" r="93.14"  transform="translate(45.64, -46.01) rotate(90)" />
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g transform="translate(0, 0) scale(1) translate(0, 0)">
+<g transform="translate(0, 0) scale(0.125) translate(0, 0)">
+
+    <g transform="translate(463.75, 464.5) rotate(-90)" >
+        <rect stroke="none" fill="rgb(128, 128, 128)" x="-559.75" y="-4.5" width="265" height="104" />
+        <rect stroke="none" fill="rgb(128, 128, 128)" x="199.75" y="-4.5" width="265" height="104" />
+        <rect stroke="none" fill="rgb(128, 128, 128)" x="0" y="0" width="264.53" height="104.71"  transform="translate(4.85, -463.75) rotate(90)" />
+        <rect stroke="none" fill="rgb(128, 128, 128)" x="0" y="0" width="264.53" height="104.71"  transform="translate(4.85, 296.22) rotate(90)" />
+        <circle stroke="none" fill="rgb(128, 128, 128)" cx="93.14" cy="93.14" r="93.14"  transform="translate(45.64, -46.01) rotate(90)" />
     </g>
-</svg>
+
+</g>
+</g></svg>

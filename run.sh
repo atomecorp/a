@@ -1,34 +1,118 @@
 #!/bin/bash
+set -euo pipefail
+
+# Resolve script directory & project root so the helper scripts work from anywhere
+SOURCE="${BASH_SOURCE[0]:-$0}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
+
+compute_default_dsn() {
+    local host="${ADOLE_PG_HOST:-${PGHOST:-localhost}}"
+    local port="${ADOLE_PG_PORT:-${PGPORT:-5432}}"
+    local user="${ADOLE_PG_USER:-${PGUSER:-postgres}}"
+    local password="${ADOLE_PG_PASSWORD:-${PGPASSWORD:-postgres}}"
+    local database="${ADOLE_PG_DATABASE:-${PGDATABASE:-squirrel}}"
+
+    printf 'postgres://%s:%s@%s:%s/%s' "$user" "$password" "$host" "$port" "$database"
+}
+
+write_pg_dsn_to_env() {
+    local dsn="$1"
+    local env_file="$PROJECT_ROOT/.env"
+    local tmp
+
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' RETURN
+
+    if [[ -f "$env_file" ]]; then
+        grep -v '^ADOLE_PG_DSN=' "$env_file" >"$tmp" || true
+    else
+        : >"$tmp"
+    fi
+
+    printf 'ADOLE_PG_DSN=%s\n' "$dsn" >>"$tmp"
+    mv "$tmp" "$env_file"
+    trap - RETURN
+
+    chmod 600 "$env_file" 2>/dev/null || true
+    echo "INFO: Wrote PostgreSQL DSN to $(basename "$env_file")."
+}
+
+load_env_file() {
+    local env_file="$1"
+    if [ -f "$env_file" ]; then
+        echo "🌱 Chargement des variables depuis $(basename "$env_file")"
+        set -a
+        # shellcheck disable=SC1090
+        source "$env_file"
+        set +a
+    fi
+}
+
+load_env_file "$PROJECT_ROOT/.env"
+load_env_file "$PROJECT_ROOT/.env.local"
+
+if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
+    echo "INFO: No PostgreSQL connection string detected (ADOLE_PG_DSN/PG_CONNECTION_STRING/DATABASE_URL)."
+    local generated_dsn
+    generated_dsn="$(compute_default_dsn)"
+    if [[ -z "$generated_dsn" ]]; then
+        generated_dsn="postgres://postgres:postgres@localhost:5432/squirrel"
+    fi
+
+    echo "INFO: Writing default PostgreSQL connection string to .env."
+    if ! write_pg_dsn_to_env "$generated_dsn"; then
+        echo "ERROR: Failed to configure the PostgreSQL connection string automatically."
+        exit 1
+    fi
+
+    # Reload environment files to pick up the newly configured DSN
+    load_env_file "$PROJECT_ROOT/.env"
+    load_env_file "$PROJECT_ROOT/.env.local"
+fi
+
+if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
+    echo "ERROR: No PostgreSQL connection string detected even after automatic configuration."
+    echo "       Please configure it manually in .env or export it before running ./run.sh."
+    exit 1
+fi
+
+cd "$PROJECT_ROOT"
+
+FASTIFY_PID=""
+TAURI_PID=""
 
 # Fonction de nettoyage pour tuer les processus
 cleanup() {
     echo "🧹 Arrêt des serveurs..."
-    
-    # Tuer le processus Node.js (Fastify)
-    if [ ! -z "$FASTIFY_PID" ]; then
-        kill $FASTIFY_PID 2>/dev/null
-        echo "✅ Serveur Fastify arrêté"
+
+    if [[ -n "${FASTIFY_PID}" ]]; then
+        if kill "$FASTIFY_PID" 2>/dev/null; then
+            echo "✅ Serveur Fastify arrêté"
+        fi
     fi
-    
-    # Tuer le processus Tauri
-    if [ ! -z "$TAURI_PID" ]; then
-        kill $TAURI_PID 2>/dev/null
-        echo "✅ Tauri arrêté"
+
+    if [[ -n "${TAURI_PID}" ]]; then
+        if kill "$TAURI_PID" 2>/dev/null; then
+            echo "✅ Tauri arrêté"
+        fi
     fi
-    
+
     # Tuer tous les processus sur le port 3001 (sécurité)
-    lsof -ti:3001 | xargs kill -9 2>/dev/null
-    
+    lsof -ti:3001 | xargs kill -9 2>/dev/null || true
+
     exit 0
 }
 
-# Scanner les composants Squirrel
-echo "🔍 Scan des composants Squirrel..."
-npm run scan:components
-echo ""
-
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
+PROD_BUILD=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -36,16 +120,22 @@ while [[ $# -gt 0 ]]; do
             FORCE_DEPS=true
             shift
             ;;
+        --prod)
+            PROD_BUILD=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  -f, --force-deps      Force update all dependencies before starting"
+            echo "      --prod            Build a production Tauri bundle and exit"
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                   # Start server (install deps if needed)"
             echo "  $0 --force-deps      # Force update deps then start server"
+            echo "  $0 --prod            # Build Tauri production bundle"
             echo ""
             exit 0
             ;;
@@ -64,14 +154,19 @@ echo "📦 NPM: $(npm --version)"
 echo ""
 
 # Vérifier si les dépendances sont installées ou si elles ont besoin d'être mises à jour
+if [ "$FORCE_DEPS" = true ]; then
+    echo "⚠️  Forçage de la réinstallation des dépendances (--force)"
+    rm -f node_modules/.install_complete
+fi
+
 if [ ! -d "node_modules" ] || [ ! -f "node_modules/.install_complete" ]; then
     echo "📥 Installation/mise à jour des dépendances Squirrel Framework..."
     
     # Rendre le script exécutable s'il ne l'est pas
-    chmod +x scripts_utils/install_dependencies.sh
+    chmod +x "$SCRIPTS_DIR/install_dependencies.sh"
     
     # Lancer l'installation en mode non-interactif
-    ./scripts_utils/install_dependencies.sh --non-interactive
+    "$SCRIPTS_DIR/install_dependencies.sh" --non-interactive
     
     # Créer un marqueur pour éviter les installations répétées
     touch node_modules/.install_complete
@@ -81,6 +176,54 @@ else
     echo ""
 fi
 
+# Construction production si demandée
+if [ "$PROD_BUILD" = true ]; then
+    echo "🏗️  Construction production (Tauri)"
+    echo "🔍 Scan des composants Squirrel..."
+    npm run scan:components
+    echo ""
+
+    echo "📦 Build frontend..."
+    npm run build
+    echo ""
+
+    echo "🛠️  Build Tauri (production)..."
+    TAURI_SKIP_BUNDLE_OPEN=1 npm run tauri build
+    echo ""
+
+    echo "🗂️  Recherche du dernier DMG généré..."
+    dmg_dir="$PROJECT_ROOT/src-tauri/target/release/bundle/dmg"
+    if [ -d "$dmg_dir" ]; then
+        latest_dmg=$(ls -t "$dmg_dir"/*.dmg 2>/dev/null | head -n 1 || true)
+        if [ -n "${latest_dmg:-}" ] && [ -f "$latest_dmg" ]; then
+            echo "📦 DMG généré: $latest_dmg"
+            if hdiutil info | grep -q "$latest_dmg"; then
+                echo "ℹ️  DMG déjà monté. Laissez-le ouvert tant que nécessaire."
+            else
+                echo "📎 Montage du DMG (reste monté jusqu'à éjection manuelle)..."
+                if hdiutil attach "$latest_dmg"; then
+                    echo "✅ DMG monté. Consultez-le dans le Finder et éjectez-le quand vous avez terminé."
+                else
+                    echo "⚠️  Impossible de monter automatiquement le DMG. Ouvrez-le manuellement si nécessaire."
+                fi
+            fi
+        else
+            echo "⚠️  Aucun DMG trouvé dans $dmg_dir"
+        fi
+    else
+        echo "⚠️  Répertoire DMG introuvable: $dmg_dir"
+    fi
+    echo ""
+
+    echo "✅ Build Tauri production terminé"
+    exit 0
+fi
+
+# Scanner les composants Squirrel (sera relancé par run_fastify mais on garde l'appel initial)
+echo "🔍 Scan des composants Squirrel..."
+npm run scan:components
+echo ""
+
 # Capturer les signaux d'interruption
 trap cleanup SIGINT SIGTERM EXIT
 
@@ -88,7 +231,11 @@ echo "🚀 Démarrage des serveurs..."
 
 # Lancer Fastify en arrière-plan via le script
 echo "📡 Démarrage du serveur Fastify..."
-./run_fastify.sh &
+if [ "$FORCE_DEPS" = true ]; then
+    "$SCRIPTS_DIR/run_fastify.sh" --force-deps &
+else
+    "$SCRIPTS_DIR/run_fastify.sh" &
+fi
 FASTIFY_PID=$!
 
 # Attendre un peu que Fastify démarre
@@ -96,7 +243,11 @@ sleep 2
 
 # Lancer Tauri en arrière-plan via le script
 echo "🖥️  Démarrage de Tauri..."
-./run_tauri.sh &
+if [ "$FORCE_DEPS" = true ]; then
+    "$SCRIPTS_DIR/run_tauri.sh" --force-deps &
+else
+    "$SCRIPTS_DIR/run_tauri.sh" &
+fi
 TAURI_PID=$!
 
 echo "✅ Serveurs lancés:"

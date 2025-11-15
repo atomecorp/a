@@ -14,3 +14,7 @@ $('div', {
 });
 
 when using button or slider any other html components you must use squirel component, and take a look at all the examples availlable in sr/application/examples to understand how to use those components
+
+In certain circumstances, when the prompt explicitly specifies creating an HTML file, you may ignore the rules.
+
+All comments, warnings, errors  messages and documentations must always be written in English.

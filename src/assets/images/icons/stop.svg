@@ -1,5 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024"  xml:space="preserve" id="stopCanvas">
-    <path id="stopCanvas-path" stroke="none" fill="rgb(255, 255, 255)" d="M 0,85.33 L 0,85.33 C 0,38.21 38.21,-0 85.33,-0 L 938.67,-0 938.67,-0 C 985.79,-0 1024,38.21 1024,85.33 L 1024,938.67 1024,938.67 C 1024,985.79 985.79,1024 938.67,1024 L 85.33,1024 85.33,1024 C 38.21,1024 0,985.79 0,938.67 L 0,85.33 Z M 170.67,170.67 L 170.67,853.33 853.33,853.33 853.33,170.67 170.67,170.67 Z M 170.67,170.67" />
-</svg>
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g transform="translate(0, 0) scale(1) translate(0, 0)">
+<g transform="translate(0, 0) scale(0.125) translate(0, 0)">
+
+    <path stroke="none" fill="rgb(255, 255, 255)" d="M 0,85.33 L 0,85.33 C 0,38.21 38.21,-0 85.33,-0 L 938.67,-0 938.67,-0 C 985.79,-0 1024,38.21 1024,85.33 L 1024,938.67 1024,938.67 C 1024,985.79 985.79,1024 938.67,1024 L 85.33,1024 85.33,1024 C 38.21,1024 0,985.79 0,938.67 L 0,85.33 Z M 170.67,170.67 L 170.67,853.33 853.33,853.33 853.33,170.67 170.67,170.67 Z M 170.67,170.67" />
+
+</g>
+</g></svg>

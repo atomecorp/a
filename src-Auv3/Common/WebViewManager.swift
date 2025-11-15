@@ -6,11 +6,15 @@
 ////
 
 import WebKit
+import OSLog
 import QuartzCore
 import AudioToolbox
 
 public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     static let shared = WebViewManager()
+    private let log = Logger(subsystem: "atome", category: "WebViewManager")
+    // Share the WebContent process across WKWebViews to avoid relaunch cost
+    static let sharedProcessPool = WKWebViewFactory.sharedProcessPool
     static var webView: WKWebView?
     static weak var audioController: AudioControllerProtocol?
     static var fileSystemBridge: FileSystemBridge?
@@ -33,12 +37,21 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static var hostTimeStreamActiveFlag: Bool = false
     public static func isHostTimeStreamActive() -> Bool { return hostTimeStreamActiveFlag }
 
+    // Deferred main page load state
+    private static var mainLoadDone: Bool = false
+    private static var mainLoadAttempts: Int = 0
+    private static var mainLoadTimer: Timer?
+    private static var storedMainURL: URL?
+
     // ULTRA AGGRESSIVE: Rate limiting for non-critical JS calls (preserving timecode functionality)
     private static var lastMuteStateUpdate: CFTimeInterval = 0
     private static var lastTestStateUpdate: CFTimeInterval = 0
     private static let nonCriticalUpdateInterval: CFTimeInterval = 0.2 // ULTRA: 5 FPS for non-timecode updates (instead of 10)
 
     static func setupWebView(for webView: WKWebView, audioController: AudioControllerProtocol? = nil) {
+        if FeatureFlags.mainThreadPrecondition {
+            dispatchPrecondition(condition: .onQueue(.main))
+        }
         self.webView = webView
         self.audioController = audioController
         // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
@@ -53,12 +66,15 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             return false
         }()
     let execMode = isExtension ? "AUv3" : "APP"
-    // Include variable name used for JS environment flag
-    print("exec mode: \(execMode) (flag: __HOST_ENV)")
+    let poolPtr = Unmanaged.passUnretained(WKWebViewFactory.sharedProcessPool).toOpaque()
+    print("[Startup] exec mode: \(execMode); shared WKProcessPool=\(poolPtr)")
+    WebViewManager.shared.log.info("Setup webview; mode=\(execMode, privacy: .public) pool=\(String(describing: poolPtr), privacy: .public)")
 
         // Start lightweight embedded HTTP server (once) to serve audio via standard stack
-        if LocalHTTPServer.shared.port == nil {
-            LocalHTTPServer.shared.start()
+        if FeatureFlags.startLocalHTTPServer {
+            if LocalHTTPServer.shared.port == nil {
+                LocalHTTPServer.shared.start()
+            }
         }
 
         // If running in main app (not extension), force black backgrounds to avoid white flash
@@ -135,13 +151,18 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     let contentController = webView.configuration.userContentController
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         contentController.addUserScript(userScript)
+    // Always capture console for diagnostics
     contentController.add(WebViewManager.shared, name: "console")
-    contentController.add(WebViewManager.shared, name: "swiftBridge")
-    // Bridge for URL launching from Squirrel examples
-    contentController.add(WebViewManager.shared, name: "squirrel.openURL")
+    if FeatureFlags.enableJSBridge {
+        contentController.add(WebViewManager.shared, name: "swiftBridge")
+        // Bridge for URL launching from Squirrel examples
+        contentController.add(WebViewManager.shared, name: "squirrel.openURL")
+    }
         
         // Activation de l'API du système de fichiers (local storage)
-        addFileSystemAPI(to: webView)
+        if FeatureFlags.enableJSBridge {
+            addFileSystemAPI(to: webView)
+        }
         
         // Initialiser la structure de fichiers avec iCloudFileManager
         iCloudFileManager.shared.initializeFileStructure()
@@ -158,17 +179,99 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         @keyframes pulse{0%,100%{opacity:.25}50%{opacity:.75}}
         </style></head><body><div class=pulse>Loading…</div></body></html>
         """
-        webView.loadHTMLString(placeholderHTML, baseURL: nil)
+    webView.loadHTMLString(placeholderHTML, baseURL: nil)
         // Load real app shortly after to ensure WKWebView is on-screen with black already painted
         let myProjectBundle: Bundle = Bundle.main
-        if let mainURL = myProjectBundle.url(forResource: "src/index", withExtension: "html") {
+        let mainURL = myProjectBundle.url(forResource: "src/index", withExtension: "html")
+        if FeatureFlags.deferMainLoad {
+            WebViewManager.storedMainURL = mainURL
+            WebViewManager.mainLoadDone = false
+            WebViewManager.mainLoadAttempts = 0
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                // Safety: only load if still showing placeholder / not already navigated
+                _ = WebViewManager.attemptMainPageLoad(isExtension: isExtension, mainURL: mainURL)
+            }
+            WebViewManager.scheduleMainLoadRetry(isExtension: isExtension, mainURL: mainURL)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
                 if webView.url == nil || webView.url?.lastPathComponent != "index.html" {
-                    webView.loadFileURL(mainURL, allowingReadAccessTo: mainURL)
+                    if FeatureFlags.loadInlineOnly {
+                        let inline = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'></head><body style='margin:0;background:#000;color:#9cf;font:14px -apple-system,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'>Inline OK</body></html>"
+                        webView.loadHTMLString(inline, baseURL: nil)
+                    } else if isExtension && FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
+                        webView.load(URLRequest(url: schemeURL))
+                    } else if let fileURL = mainURL {
+                        webView.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+                    } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
+                        webView.load(URLRequest(url: schemeURL))
+                    }
                 }
             }
         }
+    }
+
+    private static func scheduleMainLoadRetry(isExtension: Bool, mainURL: URL?) {
+        mainLoadTimer?.invalidate(); mainLoadTimer = nil
+        mainLoadTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { _ in
+            if attemptMainPageLoad(isExtension: isExtension, mainURL: mainURL) {
+                mainLoadTimer?.invalidate(); mainLoadTimer = nil
+            }
+            if mainLoadAttempts > 50 { // ~6 seconds max
+                shared.log.error("Main load retry limit reached; giving up timer")
+                mainLoadTimer?.invalidate(); mainLoadTimer = nil
+            }
+        }
+    }
+
+    // Returns true if a load was initiated or already done
+    @discardableResult
+    private static func attemptMainPageLoad(isExtension: Bool, mainURL: URL?) -> Bool {
+        guard let webView = webView else { return false }
+        if mainLoadDone { return true }
+        mainLoadAttempts += 1
+        // Defer if not in window or zero-size
+        let inWindow = (webView.window != nil)
+        let size = webView.bounds.size
+        if !inWindow || size.width <= 1 || size.height <= 1 {
+            shared.log.debug("Attempt #\(mainLoadAttempts) defer: inWindow=\(inWindow) size=\(String(describing: webView.bounds.debugDescription))")
+            return false
+        }
+        if webView.url != nil && webView.url?.lastPathComponent == "index.html" {
+            mainLoadDone = true
+            return true
+        }
+        if FeatureFlags.loadInlineOnly {
+            let inline = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'></head><body style='margin:0;background:#000;color:#9cf;font:14px -apple-system,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'>Inline OK</body></html>"
+            shared.log.info("Attempt #\(mainLoadAttempts) loading inline-only test page")
+            webView.loadHTMLString(inline, baseURL: nil)
+            mainLoadDone = true
+            return true
+        } else if isExtension && FeatureFlags.registerCustomScheme {
+            if let schemeURL = URL(string: "atome:///src/index.html") {
+                shared.log.info("Attempt #\(mainLoadAttempts) loading AUv3 entry atome:///src/index.html")
+                webView.load(URLRequest(url: schemeURL))
+                return true
+            }
+        } else if let fileURL = mainURL {
+            shared.log.info("Attempt #\(mainLoadAttempts) loading App entry file URL src/index.html")
+            webView.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+            return true
+        } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
+            shared.log.info("Attempt #\(mainLoadAttempts) loading fallback atome:///src/index.html")
+            webView.load(URLRequest(url: schemeURL))
+            return true
+        }
+        return false
+    }
+
+    // Public trigger from controllers once view is visible and sized
+    public static func triggerMainLoadNow() {
+        let isExtension: Bool = {
+            let path = Bundle.main.bundlePath
+            if path.hasSuffix(".appex") { return true }
+            if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
+            return false
+        }()
+        _ = attemptMainPageLoad(isExtension: isExtension, mainURL: storedMainURL)
     }
 
     // MARK: - WKScriptMessageHandler
@@ -176,7 +279,14 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         switch message.name {
         case "console":
-            // logs désactivés
+            // Forward JS console messages to Xcode console
+            if let s = message.body as? String {
+                print(s)
+            } else if let dict = message.body as? [String: Any] {
+                print("[console]", dict)
+            } else {
+                print("[console] \(message.body)")
+            }
             break
         case "squirrel.openURL":
             if let body = message.body as? [String: Any], let urlString = body["url"] as? String {
@@ -217,9 +327,48 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             break
         case "swiftBridge":
             if let body = message.body as? [String: Any] {
+                // Quick path: iPlug-style param messages { type:'param', id:'gain|play|position', value:Number }
+                if let t = body["type"] as? String, t == "param" {
+                    let id = (body["id"] as? String) ?? ""
+                    let value: Float = {
+                        if let n = body["value"] as? NSNumber { return n.floatValue }
+                        if let d = body["value"] as? Double { return Float(d) }
+                        if let f = body["value"] as? Float { return f }
+                        if let s = body["value"] as? String, let d = Double(s) { return Float(d) }
+                        return 0
+                    }()
+                    if let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                        switch id {
+                        case "gain": au.setMasterGain(value)
+                        case "play": au.setPlayActive(value > 0.5)
+                        case "position": au.setPlaybackPositionNormalized(value)
+                        case "tone": au.setTestToneActive(value > 0.5)
+                        case "cap": au.setDebugCaptureEnabled(value > 0.5)
+                        default: break
+                        }
+                    }
+                    return
+                }
+                // Debug commands
+                if let cmd = body["debug"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                    if cmd == "dumpCapture" { au.dumpDebugCapture() }
+                    return
+                }
                 // Vérifier si c'est un message de système de fichiers
                 if let action = body["action"] as? String {
-                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "loadFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"];
+                    if action == "loadLocalPath" || (body["type"] as? String) == "iplug" {
+                        // Accept either { action:'loadLocalPath', relativePath } or { type:'iplug', action:'loadLocalPath', relativePath }
+                        if let rel = body["relativePath"] as? String, let au = WebViewManager.hostAudioUnit as? IPlugAUControl {
+                            if let base = iCloudFileManager.shared.getCurrentStorageURL() {
+                                let full = base.appendingPathComponent(rel)
+                                au.loadLocalFile(full.path)
+                            } else {
+                                au.loadLocalFile(rel) // try raw path
+                            }
+                        }
+                        return
+                    }
+                    let fileSystemActions = ["saveFile", "loadFile", "listFiles", "deleteFile", "getStorageInfo", "showStorageSettings", "saveFileWithDocumentPicker", "saveProjectInternal", "loadFileInternal"];
                     if fileSystemActions.contains(action) {
                         if let bridge = WebViewManager.fileSystemBridge {
                             bridge.userContentController(userContentController, didReceive: message)
@@ -521,27 +670,72 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - WKNavigationDelegate
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Only run full initialization on the real app page (ignore placeholder page)
-        guard let last = webView.url?.lastPathComponent, last == "index.html" else { return }
+    // Only run full initialization on the real app page (ignore placeholder page)
+    guard let last = webView.url?.lastPathComponent, last == "index.html" else { return }
+    // Log geometry to detect external monitor stage/scene issues
+    print("[WK] didFinish; webView.frame=\(webView.frame) bounds=\(webView.bounds)")
+    log.debug("didFinish; frame=\(String(describing: webView.frame.debugDescription)) bounds=\(String(describing: webView.bounds.debugDescription))")
         // Silent page loading for performance
         WebViewManager.sendToJS("test", "creerDivRouge")
         // Simplified initialization
-        if let p = LocalHTTPServer.shared.port {
-            let js = "window.__ATOME_LOCAL_HTTP_PORT__=" + String(p) + ";"
-            webView.evaluateJavaScript(js, completionHandler: nil)
-            print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")
-        } else {
-            print("⚠️ LocalHTTPServer port not ready at navigation finish")
+        if FeatureFlags.startLocalHTTPServer {
+            if let p = LocalHTTPServer.shared.port {
+                let js = "window.__ATOME_LOCAL_HTTP_PORT__=" + String(p) + ";"
+                webView.evaluateJavaScript(js, completionHandler: nil)
+                print("🌐 Injected LocalHTTPServer port: \(p). Example: http://127.0.0.1:\(p)/audio/Alive.m4a")
+            }
         }
-        // Inject notch information & class
+    // Inject AUv3 / App context flag early for JS platform detection
+    let isExtension: Bool = Bundle.main.bundlePath.hasSuffix(".appex")
+    let auv3JS = "window.__AUV3_MODE__=" + (isExtension ? "true" : "false") + ";"
+    webView.evaluateJavaScript(auv3JS, completionHandler: nil)
+    // Inject notch information & class
         let topInset = webView.safeAreaInsets.top
         let hasNotch = UIDevice.current.userInterfaceIdiom == .phone && topInset >= 44
         let notchJS = "window.__HAS_NOTCH__=\(hasNotch ? "true" : "false");(function(){try{if(window.__HAS_NOTCH__){document.documentElement.classList.add('has-notch');}else{document.documentElement.classList.remove('has-notch');} if(window.updateSafeAreaLayout){window.updateSafeAreaLayout();}}catch(e){}})();"
         webView.evaluateJavaScript(notchJS, completionHandler: nil)
         print("notch info: hasNotch=\(hasNotch) topInset=\(topInset)")
-        // Auto-restore entitlements to sync JS UI after load
-        if #available(iOS 15.0, *) {
-            Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }
+        // Auto-restore entitlements to sync JS UI after load (App only; AUv3 can't present auth UI)
+        if FeatureFlags.sendPurchaseRestoreOnDidFinish && !isExtension {
+            if #available(iOS 15.0, *) {
+                Task { await PurchaseManager.shared.restore(requestId: Int(Date().timeIntervalSince1970)) }
+            }
+        }
+    }
+
+    private var terminateRetryCount = 0
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard FeatureFlags.centralTerminationRetry else { return }
+        log.error("WebContent terminated; retryCount=\(self.terminateRetryCount)")
+        let backoff = pow(2.0, Double(terminateRetryCount)) * 0.2
+        DispatchQueue.main.asyncAfter(deadline: .now() + backoff) { [weak self, weak webView] in
+            guard let self = self, let wv = webView else { return }
+            if self.terminateRetryCount >= 1 {
+                self.log.error("Max retries reached; stopping reload attempts")
+                return
+            }
+            self.terminateRetryCount += 1
+            if wv.url != nil {
+                self.log.info("Retry reload() after termination; backoff=\(backoff)")
+                wv.reload()
+            } else {
+                let isExtension: Bool = {
+                    let path = Bundle.main.bundlePath
+                    if path.hasSuffix(".appex") { return true }
+                    if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
+                    return false
+                }()
+                if isExtension, let entry = URL(string: "atome:///src/index.html") {
+                    self.log.info("Retry load atome:///src/index.html after termination; backoff=\(backoff)")
+                    wv.load(URLRequest(url: entry))
+                } else if let fileURL = Bundle.main.url(forResource: "src/index", withExtension: "html") {
+                    self.log.info("Retry load file src/index.html after termination; backoff=\(backoff)")
+                    wv.loadFileURL(fileURL, allowingReadAccessTo: fileURL)
+                } else if let entry = URL(string: "atome:///src/index.html") {
+                    self.log.info("Retry fallback atome:///src/index.html after termination; backoff=\(backoff)")
+                    wv.load(URLRequest(url: entry))
+                }
+            }
         }
     }
     

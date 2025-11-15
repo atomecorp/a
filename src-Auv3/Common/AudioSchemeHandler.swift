@@ -18,10 +18,20 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
     }()
     
     private let scheme = "atome" // <SCHEME>
+    private lazy var bundleSrcRoot: URL? = {
+        // Root of packaged web assets (expects 'src' folder in bundle resources)
+        let root = Bundle.main.resourceURL
+        return root?.appendingPathComponent("src", isDirectory: true)
+    }()
     
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url else { return }
-        let path = url.path
+        // Normalize request path; include host when used as path segment (e.g., atome://index.html)
+        var path = url.path
+        if let host = url.host, !host.isEmpty {
+            if path == "/" { path = "/" + host }
+            else if !host.contains(".") && !path.hasPrefix("/audio/") { path = "/" + host + path }
+        }
         print("[AudioSchemeHandler] start request url=\(url.absoluteString) path=\(path) range=\(urlSchemeTask.request.value(forHTTPHeaderField: "Range") ?? "<none>")")
         let host = url.host
         if host != nil { print("[AudioSchemeHandler] host=\(host!)") }
@@ -55,8 +65,10 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             return
         }
         
-        print("[AudioSchemeHandler] 404 for path=\(path)")
-        respond404(task: urlSchemeTask)
+    // Fallback: serve any static asset under 'src' in the bundle (e.g., /src/index.html, /js/..., /squirrel/..., /application/...)
+    if serveStatic(path: path, task: urlSchemeTask) { return }
+    print("[AudioSchemeHandler] 404 for path=\(path)")
+    respond404(task: urlSchemeTask)
     }
     
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
@@ -159,6 +171,14 @@ document.getElementById('player').addEventListener('error', e => {
         case "m4a", "mp4": return "audio/mp4"
         case "mp3": return "audio/mpeg"
         case "wav": return "audio/wav"
+    case "js": return "application/javascript"
+    case "mjs": return "application/javascript"
+    case "json": return "application/json"
+    case "css": return "text/css"
+    case "html", "htm": return "text/html"
+    case "svg": return "image/svg+xml"
+    case "png": return "image/png"
+    case "jpg", "jpeg": return "image/jpeg"
         default: return "application/octet-stream"
         }
     }
@@ -184,5 +204,29 @@ document.getElementById('player').addEventListener('error', e => {
         task.didReceive(response)
         task.didReceive(data)
         task.didFinish()
+    }
+
+    // MARK: - Static asset serving from bundle 'src'
+    private func serveStatic(path: String, task: WKURLSchemeTask) -> Bool {
+        // Remove leading '/'
+        var rel = path
+        if rel.hasPrefix("/") { rel.removeFirst() }
+        // Ensure paths are under 'src'
+        if !rel.hasPrefix("src/") {
+            rel = "src/" + rel
+        }
+        guard let root = Bundle.main.resourceURL else { return false }
+        let fileURL = root.appendingPathComponent(rel)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return false }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let ext = fileURL.pathExtension.lowercased()
+            let mime = mimeType(for: ext)
+            respondData(data, mime: mime, task: task)
+            return true
+        } catch {
+            print("[AudioSchemeHandler] Static serve error for \(fileURL.path): \(error)")
+            return false
+        }
     }
 }
