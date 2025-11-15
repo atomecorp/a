@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="EN">
+<head>
+    <meta charset="UTF-8">
+    <title>VIE</title>
+
+    <style>
+        .not-initialized {
+            display: none;
+        }
+        .initialized {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 class="not-initialized">Web view initialized</h1>
+    <h1 class="initialized">Web view not yet initialized</h1>
+    
+    <input type="checkbox" id="bypass" onchange="updateBypassValue()"></input>
+    <span>Bypass value : <strong id="bypassValue">false</strong></span>
+    
+    <hr>
+
+    <p>Gain (0–100) :</p>
+    <input type="range" id="gain" min="0" max="100" value="50" oninput="updateGainValue()"></input>
+    <span>Gain value : <strong id="gainValue">50</strong></span>
+    
+    <p>List of modules definitions</p>
+    <div id="list_of_modules_definitions"></div>
+    
+    <label>
+      Load project
+      <input type="file" id="load_project" onchange="loadProject(event)">
+    </label>
+    
+    <p>List of modules instances</p>
+    <div id="list_of_modules_instances"></div>
+    
+    <p>Host messages</p>
+    <div id="host_messages"></div>
+</body>
+<script>
+    let definitions = [];
+    
+    window.console.error = (function(legacyConsoleError) {
+        return function(message) {
+            legacyConsoleError(message)
+            try{
+                window.webkit.messageHandlers.console.postMessage("ERROR: " + message)
+            }
+            catch(e){
+                legacyConsoleError.error("Cannot send this error to controller: ", e);
+           }
+        }
+    })(window.console.error)
+    
+    window.console.warn = (function(legacyConsoleWarn) {
+        return function(message) {
+            legacyConsoleWarn(message)
+            try{
+                window.webkit.messageHandlers.console.postMessage("WARN: " + message)
+            }
+            catch(e){
+                console.error("Cannot send this warn to controller: ", e);
+           }
+        }
+    })(window.console.warn)
+    
+    window.console.debug = (function(legacyConsoleDebug) {
+        return function(message) {
+            legacyConsoleDebug(message)
+            try{
+                window.webkit.messageHandlers.console.postMessage("DEBUG: " + message)
+            } catch(e){
+                console.error("Cannot send this error to controller: ", e);
+            }
+        }
+    })(window.console.debug)
+    
+    window.console.log = (function(legacyConsoleLog) {
+        return function(message) {
+            legacyConsoleLog(message)
+            try{
+                window.webkit.messageHandlers.console.postMessage("LOG: " + message)
+            } catch(e){
+                console.error("Cannot send this error to controller: ", e);
+            }
+        }
+    })(window.console.log)
+    
+    window.onerror = function(message, source, lineno, colno, error) {
+        var message = "Error: " + message + " at " + source + ":" + lineno + ":" + colno + (error && error.stack ? " stack: " + error.stack : "");
+        try {
+            console.error(message);
+        } catch(e) {
+            console.error("Error sending message to Swift:", e);
+        }
+    };
+    
+    window.addEventListener("unhandledrejection", function(error) {
+        var message = "Unhandled Promise: " + error.reason + (error.reason && error.reason.stack ? " stack: " + error.reason.stack : "");
+        try {
+            console.error(message);
+        } catch(e) {
+            console.error("Error sending to Swift:", e);
+        }
+    });
+    
+    console.log("JavaScript loaded successfully!");
+
+    document.addEventListener("DOMContentLoaded", function() {
+        console.log("DOM fully loaded and parsed");
+    });
+    
+    function log(level, message) {
+        console.log("Log from host> level: " + level + "message: " + message);
+        
+        var container = document.getElementById("host_messages");
+        
+        var errorMessage = document.createElement("p");
+        errorMessage.innerHTML = message;
+        
+        container.append(errorMessage);
+    }
+    
+    function viewInitialized() {
+        console.log("View successfully initialized!");
+        
+        var notInitialized = document.querySelectorAll(".not-initialized");
+        var initialized = document.querySelectorAll(".initialized");
+        
+        console.log("notInitialized: " + notInitialized);
+        console.log("initialized: " + initialized);
+        
+        [...notInitialized].forEach(element => {
+            element.classList.add("initialized");
+            element.classList.remove("not-initialized");
+        });
+        
+        [...initialized].forEach(element => {
+            element.classList.add("not-initialized");
+            element.classList.remove("initialized");
+        });
+        
+        console.log("View successfully initialized!");
+    }
+    
+    function loadProject(event) {
+        console.log("Load project called.");
+        
+        const files = event.target.files;
+        if (files.length > 0) {
+            const file = event.target.files[0];
+            
+            const reader = new FileReader();
+            
+            reader.onload = () => {
+                const parametersJson = {
+                    messageId: 0,
+                    content: reader.result
+                }
+                
+                sendActionToController("load_project", parametersJson);
+            };
+            
+            reader.onerror = () => {
+                console.error("Error reading project file.");
+            };
+            
+            reader.readAsText(file);
+        }
+    }
+    
+    function projectLoaded() {
+        console.log("Project loaded.");
+    }
+    
+    function setModulesDefinitions(modulesDefinitions) {
+        console.log("Modules definitions set: " + modulesDefinitions);
+        
+        var container = document.getElementById("list_of_modules_definitions");
+        
+        modulesDefinitions.forEach((moduleDefinition) => {
+            definitions[moduleDefinition.id] = moduleDefinition;
+            
+            b = document.createElement("button");
+            b.innerHTML = "Add " + moduleDefinition.name + " module";
+            b.type = "button"
+            b.onclick = function() { addModuleInstance(moduleDefinition.id) };
+            container.append(b);
+        });
+    }
+    
+    function sendActionToController(action, parameters) {
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.vieController) {
+            try {
+                let payload = {
+                    action: action,
+                    parameters: parameters
+                };
+                window.webkit.messageHandlers.vieController.postMessage(payload);
+            } catch (error) {
+                console.error("Error sending message to Swift:", error);
+            }
+        } else {
+            console.warn("Vie controller is not available.");
+        }
+    }
+    
+    function parameterValueUpdated(moduleId, parameterId, value) {
+        switch(parameterId) {
+            case 0:
+                document.getElementById('bypass').checked = value === 1 ? true : false;
+                document.getElementById('bypassValue').textContent = value === 1 ? true : false;
+                console.debug("Bypas value set to " + document.getElementById('bypass').checked);
+                break;
+            case 1:
+                document.getElementById('gain').value = value * 100;
+                document.getElementById('gainValue').textContent = value * 100;
+                console.debug("Gain value set to " + document.getElementById('gain').value);
+                break;
+        }
+    }
+    
+    function updateBypassValue() {
+        const bypass = document.getElementById('bypass');
+        document.getElementById('bypassValue').textContent = bypass.checked;
+        const value = bypass.checked ? 1 : 0;
+        
+        const parametersJson = {
+            messageId: 0,
+            parameterId: 0,
+            value: value
+        }
+        sendActionToController("set_dsp_parameter_value", parametersJson);
+    }
+
+    function updateGainValue() {
+        const gain = document.getElementById('gain');
+        document.getElementById('gainValue').textContent = gain.value;
+        const gainValue = gain.value / 100;
+        
+        const parametersJson = {
+            messageId: 0,
+            moduleId: 0,
+            parameterId: 1,
+            value: gainValue
+        }
+        sendActionToController("set_module_parameter_value", parametersJson);
+    }
+    
+    function addModuleInstance(typeId) {
+        console.log("Sending order to controller to add a module instance");
+        
+        const parametersJson = {
+            messageId: 0,
+            typeId: typeId,
+            position: {
+                x: 0,
+                y: 1,
+                z: 2
+            }
+        };
+        
+        sendActionToController("add_module_instance", parametersJson);
+    }
+    
+    function moduleInstanceAdded(moduleId, moduleType) {
+        console.debug('Module instance added. Module id: ' + moduleId + ' Module type: ' + moduleType)
+        
+        var container = document.getElementById("list_of_modules_instances");
+        
+        var p = document.createElement("p");
+        p.id = 'module-' + moduleId;
+        p.innerHTML = 'Module id: ' + moduleId;
+        container.append(p);
+        
+        var p = document.createElement("p");
+        p.id = 'module-' + moduleId + '-' + moduleType;
+        p.innerHTML = 'Module type: ' + moduleType;
+        container.append(p);
+        
+        var deleteButton = document.createElement("button");
+        deleteButton.id = 'delete-module-' + moduleId;
+        deleteButton.onclick = function() {
+            deleteModuleInstance(moduleId);
+        };
+        deleteButton.innerHTML = 'Delete';
+        container.append(deleteButton);
+        
+        var moveButton = document.createElement("button");
+        moveButton.id = 'move-module-' + moduleId;
+        moveButton.onclick = function() {
+            moveModuleInstance(moduleId, 2, 2, 2);
+        };
+        moveButton.innerHTML = 'Move';
+        container.append(moveButton);
+        
+        var renameButton = document.createElement("button");
+        renameButton.id = 'rename-module-' + moduleId;
+        renameButton.onclick = function() {
+            renameModuleInstance(moduleId, "New name");
+        };
+        renameButton.innerHTML = 'Rename';
+        container.append(renameButton);
+        
+        if(moduleId > 0) {
+            var linkButton = document.createElement("button");
+            linkButton.id = 'link-module-' + moduleId;
+            linkButton.onclick = function() {
+                linkModulesInstances(moduleId, 0, 0, 0);
+            };
+            linkButton.innerHTML = 'Link to module 0 slot 0';
+            container.append(linkButton);
+            
+            var unlinkButton = document.createElement("button");
+            unlinkButton.id = 'unlink-module-' + moduleId;
+            unlinkButton.onclick = function() {
+                unlinkModulesInstances(moduleId, 0, 0, 0);
+            };
+            unlinkButton.innerHTML = 'Unlink from module 0 slot 0';
+            container.append(unlinkButton);
+        }
+        
+        let definition = definitions[moduleType];
+        console.log("ModuleInstanceAdded> Definition: " + JSON.stringify(definition, null, 2));
+        let properties = definition.properties;
+        
+        properties.forEach(property => {
+            if(property.property_type == 1) {
+                b = document.createElement("button");
+                b.innerHTML = "Load file";
+                b.type = "button"
+                b.onclick = function() { setModuleProperty(1, moduleId, property.id); };
+                container.append(b);
+            } else {
+                p = document.createElement("p");
+                p.innerHTML = property.name + " : " + property.property_type;
+                container.append(p);
+            }
+        });
+        
+        let functions = definition.functions;
+        
+        functions.forEach(module_function => {
+            b = document.createElement("button");
+            b.innerHTML = module_function.name;
+            b.type = "button"
+            b.onclick = function() { callModuleFunction(1, moduleId, module_function.id); };
+            container.append(b);
+        });
+    }
+    
+    function setModuleProperty(messageId, moduleId, propertyId) {
+        console.debug('Sending order to controller to set a module property');
+        
+        const parametersJson = {
+            messageId: 0,
+            moduleId: moduleId,
+            propertyId: propertyId
+        };
+
+        sendActionToController("set_module_property", parametersJson);
+    }
+    
+    function callModuleFunction(messageId, moduleId, functionId) {
+        console.debug('Sending order to controller to call a module function');
+        
+        const parametersJson = {
+            messageId: 0,
+            moduleId: moduleId,
+            functionId: functionId
+        };
+
+        sendActionToController("call_module_function", parametersJson);
+    }
+    
+    function deleteModuleInstance(moduleId) {
+        console.log("Sending order to controller to delete a module instance");
+        
+        const parametersJson = {
+            messageId: 0,
+            moduleId: moduleId
+        };
+
+        sendActionToController("delete_module_instance", parametersJson);
+    }
+    
+    function moduleInstanceDeleted(moduleId) {
+        console.debug('Module instance deleted. Id: ' + moduleId)
+        
+        const module = document.getElementById('module-' + moduleId);
+        module.remove();
+        
+        const delete_button = document.getElementById('delete-module-' + moduleId);
+        delete_button.remove();
+        
+        const move_button = document.getElementById('move-module-' + moduleId);
+        move_button.remove();
+        
+        const rename_button = document.getElementById('rename-module-' + moduleId);
+        rename_button.remove();
+        
+        const link_button = document.getElementById('link-module-' + moduleId);
+        if(link_button) {
+            link_button.remove();
+        }
+        
+        const unlink_button = document.getElementById('unlink-module-' + moduleId);
+        if(unlink_button) {
+            unlink_button.remove();
+        }
+    }
+    	
+    function moveModuleInstance(moduleId, x, y, z) {
+        console.log("Sending order to controller to move a module instance");
+        
+        const parametersJson = {
+            messageId: 0,
+            moduleId: moduleId,
+            x: x,
+            y: y,
+            z: z
+        };
+
+        sendActionToController("move_module_instance", parametersJson);
+    }
+    
+    function moduleInstanceMoved(moduleId, x, y, z) {
+        console.debug('Module instance moved. Id: ' + moduleId + ' x: ' + x + ' y: ' + y + ' z: ' + z)
+        
+        const module = document.getElementById('module-' + moduleId);
+        module.innerHTML = ' module id: ' + moduleId + ' x: ' + x + ' y: ' + y + ' z: ' + z;
+    }
+    
+    function renameModuleInstance(moduleId, name) {
+        console.log("Sending order to controller to rename a module instance");
+        
+        const parametersJson = {
+            messageId: 0,
+            moduleId: moduleId,
+            name: name
+        };
+
+        sendActionToController("rename_module_instance", parametersJson);
+    }
+    
+    function moduleInstanceRenamed(moduleId, name) {
+        console.debug('Module instance renamed. Module id: ' + moduleId + ' name: ' + name);
+        
+        const module = document.getElementById('module-' + moduleId);
+        module.innerHTML = ' module id: ' + moduleId + ' name: ' + name;
+    }
+    
+    function linkModulesInstances(sourceModuleId, sourceSlotId, targetModuleId, targetSlotId) {
+        console.debug('Sending order to controller to link two modules instances');
+        
+        const parametersJson = {
+            messageId: 0,
+            sourceModuleId: sourceModuleId,
+            sourceSlotId: sourceSlotId,
+            targetModuleId: targetModuleId,
+            targetSlotId: targetSlotId
+        };
+
+        sendActionToController("link_modules_instances", parametersJson);
+    }
+    
+    function modulesInstancesLinked(sourceModuleId, sourceSlotId, targetModuleId, targetSlotId) {
+        console.debug('Modules instances linked. Source module id: ' + sourceModuleId + ' Source slot id: ' + sourceSlotId + ' target module id: ' + targetModuleId + ' Target slot id: ' + targetSlotId);
+        
+        var container = document.getElementById("list_of_modules_instances");
+        
+        var p = document.createElement("p");
+        p.innerHTML = 'Module ' + sourceModuleId + ' and slot ' + sourceSlotId + ' linked to module : ' + targetModuleId + ' and slot ' + targetSlotId;
+        container.append(p);
+    }
+    
+    function unlinkModulesInstances(sourceModuleId, sourceSlotId, targetModuleId, targetSlotId) {
+        console.debug('Sending order to controller to unlink two modules instances');
+        
+        const parametersJson = {
+            messageId: 0,
+            sourceModuleId: sourceModuleId,
+            sourceSlotId: sourceSlotId,
+            targetModuleId: targetModuleId,
+            targetSlotId: targetSlotId
+        };
+
+        sendActionToController("unlink_modules_instances", parametersJson);
+    }
+    
+    function modulesInstancesUnlinked(sourceModuleId, sourceSlotId, targetModuleId, targetSlotId) {
+        console.debug('Modules instances unlinked. Source module id: ' + sourceModuleId + ' Source slot id: ' + sourceSlotId + ' target module id: ' + targetModuleId + ' Target slot id: ' + targetSlotId);
+        
+        const sourceModule = document.getElementById('module-' + sourceModuleId);
+        sourceModule.innerHTML = 'Slot ' + sourceSlotId + ' unlinked from module : ' + targetModuleId + ' and slot' + targetSlotId;
+        
+        const targetModule = document.getElementById('module-' + targetModuleId);
+        sourceModule.innerHTML = 'Slot ' + targetSlotId + ' unlinked from module : ' + sourceModuleId + ' and slot' + sourceSlotId;
+    }
+</script>
+</html>	
