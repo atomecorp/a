@@ -2,24 +2,18 @@
 
 ## 🎯 Overview
 
-Modern hybrid framework combining the flexibility of an ES6 module system, audio processing capabilities with WaveSurfer.js, and Rust performance via Tauri.
+Modern hybrid framework combining the flexibility of an ES6 module system, audio processing capabilities with  Rust performance via Tauri.
 
 ## 🏗️ Architecture
 
 ### **Frontend (JavaScript + Audio)**
+
 - **Squirrel Framework** - ES6 modular system with dynamic loading
-- **WaveSurfer.js Integration** - Professional audio waveform visualization
-- **WebComponent** -  WaveSurfer Module, Slider, Matrix,
+- **WebComponent** -   Slider, Matrix, intuition ...
 - **Tauri Integration** - Native desktop application
 
-### **Audio Features**
-- **WaveSurfer Component** - Complete audio player with waveform display
-- **Audio Controls** - Play, pause, stop, volume, mute, seek
-- **Regions Support** - Audio editing with visual regions
-- **Real-time Visualization** - Dynamic waveform rendering
-- **Audio Processing** - EQ, effects, speed control
-
 ### **Backend (Rust)**
+
 - **Axum Server** - High-performance API
 - **Fastify Server** - Static file server
 - **Tauri Runtime** - Native desktop integration
@@ -34,15 +28,6 @@ Modern hybrid framework combining the flexibility of an ES6 module system, audio
 npm install             # Install dependencies (includes WaveSurfer.js)
 npm run start:server    # Fastify server
 npm run tauri dev       # Tauri application
-```
-
-## 🎵 Audio Integration Examples
-
-```bash
-# Basic demos
-http://localhost:9000/demo-wavesurfer.html        # Interactive demo
-http://localhost:9000/audio-workstation.html     # Advanced workstation
-http://localhost:9000/test-wavesurfer.html       # Integration tests
 ```
 
 ## 📁 Structure
@@ -69,63 +54,15 @@ demos:
 └── test-wavesurfer.html      # Integration validation
 ```
 
-* **Performance**: Rust handles critical tasks, JavaScript manages the UI—resulting in high overall performance.
-* **Flexibility**: The scripting language enables intuitive, powerful code with advanced metaprogramming capabilities.
-* **Interoperability**: A performant bridge between frontend and backend leverages each technology’s strengths.
+- **Performance**: Rust handles critical tasks, JavaScript manages the UI—resulting in high overall performance.
+- **Flexibility**: The scripting language enables intuitive, powerful code with advanced metaprogramming capabilities.
+- **Interoperability**: A performant bridge between frontend and backend leverages each technology’s strengths.
 
 ## Minimal DSL Example (Editable Text Inline, Events, Metaprogramming)
 
 ```text
 page = box(id: :main, width: :full, height: :full, attach: :body)
 
-## 🎵 WaveSurfer Usage Examples
-
-### Basic Audio Player
-```javascript
-import { WaveSurfer } from './src/application/index.js';
-
-const player = new WaveSurfer({
-    container: document.getElementById('waveform'),
-    waveColor: '#4A90E2',
-    progressColor: '#2ECC71',
-    height: 80,
-    showControls: true
-});
-
-await player.loadAudio('./audio/song.mp3');
-player.play();
-```
-
-### Advanced Audio Workstation
-```javascript
-// Create multiple components working together
-const wavePlayer = new WaveSurfer({...});
-const volumeSlider = new Slider({...});
-const eqModule = new Module({...});
-
-// Connect components with callbacks
-volumeSlider.callback = (value) => {
-    wavePlayer.setVolume(value / 100);
-};
-```
-
-### Audio Regions for Editing
-```javascript
-// Add regions for audio editing
-const intro = player.addRegion({
-    start: 0,
-    end: 30,
-    color: 'rgba(255, 255, 0, 0.3)',
-    content: 'Intro'
-});
-
-// Loop a specific region
-player.playRegion(intro);
-```
-
-* **Audio Performance**: WaveSurfer.js handles audio processing efficiently, while Squirrel manages the UI components.
-* **Component Integration**: Audio components seamlessly integrate with existing Module, Slider, and Matrix components.
-* **Real-time Visualization**: Dynamic waveform rendering with customizable styling and effects.
 
 ## Minimal DSL Example (Editable Text Inline, Events, Metaprogramming)
 
@@ -133,12 +70,12 @@ player.playRegion(intro);
 page = box(id: :main, width: :full, height: :full, attach: :body)
 
 note = text(id: :note,
-			content: "✎ Edit me inline",
-			editable: true,         # maps to contenteditable
-			draggable: true,
-			left: 88,
-			top: 88,
-			style: { font_size: 20, color: :blue })
+   content: "✎ Edit me inline",
+   editable: true,         # maps to contenteditable
+   draggable: true,
+   left: 88,
+   top: 88,
+   style: { font_size: 20, color: :blue })
 
 note.on(:key_down) do |e|
   puts "Key: #{e[:key]}"
@@ -165,9 +102,9 @@ puts "Rust response: \#{result}"
 
 This file contains the minimal Rust code to:
 
-* Parse a simple DSL object
-* Convert it into JavaScript
-* Handle a backend method `process_data` exposed to Tauri frontend
+- Parse a simple DSL object
+- Convert it into JavaScript
+- Handle a backend method `process_data` exposed to Tauri frontend
 
 ---
 
@@ -236,11 +173,11 @@ pub fn process_data(data: HashMap<String, serde_json::Value>) -> String {
 This file contains the full JavaScript auto-generated by the DSL-to-JS Rust parser.
 It includes:
 
-* Creation of a `div` for text with `contenteditable`
-* Drag and drop
-* Keyboard event capture
-* Dynamic style application
-* A simulated `.highlight()` method
+- Creation of a `div` for text with `contenteditable`
+- Drag and drop
+- Keyboard event capture
+- Dynamic style application
+- A simulated `.highlight()` method
 
 ```js
 // dsl_generated.js — Auto-generated from DSL parser in Rust
@@ -300,7 +237,6 @@ createNode("note", "text", {
 ```
 
 You can embed this file into an HTML file to test behavior directly in the browser.
-
 
 ---
 
