@@ -66,6 +66,7 @@ Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastif
 
 - Default uploads: both servers write to `src/assets/uploads` inside the repo (change `DEFAULT_UPLOADS_PATH` if needed).
 - Default monitored inbox: `DEFAULT_MONITORED_PATH` is `/Users/Shared/monitored`, kept separate from the uploads folder so the watcher never loops on freshly written files.
+- Mirror behavior: every file dropped into `SQUIRREL_MONITORED_DIR` is copied into `SQUIRREL_UPLOADS_DIR`, and deletions remove the mirrored copy. This keeps the uploads list updated without touching the monitored inbox manually.
 - `./run.sh` now exports `SQUIRREL_UPLOADS_DIR` to that repo folder automatically, so both runtimes share it without extra steps during local dev.
 - Custom path: set `SQUIRREL_UPLOADS_DIR` before launching either server (or edit the `DEFAULT_UPLOADS_PATH` constant near the top of `run.sh`). Relative values are resolved from the project root; absolute paths are used as-is.
 - No fallback: if the configured path cannot be created, Fastify/Tauri abort startup so you can fix the permission issue immediately.
