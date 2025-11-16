@@ -101,3 +101,19 @@ If all four checks work, the "dropbox" flow is fully operational.
 | Dropped folders skipped | The current drag/drop helper flattens files. Use a zip if the host browser does not expose directory entries. |
 
 With this setup you have a lightweight Dropbox-style pipeline: chokidar detects local edits, Fastify/Tauri relays structured deltas, and the aBox UI keeps the upload list in sync.
+
+## 7. Bidirectional sync details
+
+- `SQUIRREL_MONITORED_DIR` is the inbox you drag files into (defaults to `/Users/Shared/monitored`). `SQUIRREL_UPLOADS_DIR` is where Fastify writes the blobs (defaults to `src/assets/uploads`).
+- The watcher fires for both directories even if `SQUIRREL_SYNC_WATCH` was customized, because `server/aBoxServer.js` calls `watcher.add([monitoredDir, uploadsDir])` at startup.
+- When chokidar emits an add/change/unlink from either directory, the Fastify layer mirrors the change into the other directory (adds copy the file, deletes remove the mirrored copy). A short-lived guard prevents infinite loops when the mirrored write triggers another file event.
+- To verify in both directions, run Fastify, then:
+
+   ```bash
+   touch "$SQUIRREL_MONITORED_DIR/test.txt"
+   rm "$SQUIRREL_MONITORED_DIR/test.txt"
+   touch "$SQUIRREL_UPLOADS_DIR/test.txt"
+   rm "$SQUIRREL_UPLOADS_DIR/test.txt"
+   ```
+
+   You should see `test.txt` appear/disappear in the opposite directory after each pair of commands, and the Fastify log will print the mirror actions.
