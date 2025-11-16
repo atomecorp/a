@@ -64,7 +64,7 @@ Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastif
 
 - Default (Fastify & Tauri): both servers write to `src/assets/uploads` inside the repo so the watcher can see every drop.
 - `./run.sh` now exports `SQUIRREL_UPLOADS_DIR` to that repo folder automatically, so both runtimes share it without extra steps during local dev.
-- Custom path: set `SQUIRREL_UPLOADS_DIR` before launching either server (or edit it in `run.sh`). Relative values are resolved from the project root; absolute paths are used as-is.
+- Custom path: set `SQUIRREL_UPLOADS_DIR` before launching either server (or edit the `DEFAULT_UPLOADS_PATH` constant near the top of `run.sh`). Relative values are resolved from the project root; absolute paths are used as-is.
 - Sandboxed fallback: if Tauri cannot write to the shared path (e.g., a packaged, read-only bundle), it falls back to its app-data directory and logs the override.
 
 ## 5. Verifying the pipeline

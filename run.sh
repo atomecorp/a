@@ -12,6 +12,11 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 
+# --- Editable defaults -------------------------------------------------------
+# Change DEFAULT_UPLOADS_PATH to point uploads elsewhere. Use an absolute path
+# or a path relative to the project root (default keeps files inside the repo).
+DEFAULT_UPLOADS_PATH="src/assets/uploads"
+
 compute_default_dsn() {
     local host="${ADOLE_PG_HOST:-${PGHOST:-localhost}}"
     local port="${ADOLE_PG_PORT:-${PGPORT:-5432}}"
@@ -63,14 +68,14 @@ prepare_uploads_dir() {
     local absolute
 
     if [[ -z "$raw" ]]; then
-        absolute="$PROJECT_ROOT/src/assets/uploads"
-        echo "INFO: SQUIRREL_UPLOADS_DIR not set. Defaulting to repo uploads folder."
+        raw="$DEFAULT_UPLOADS_PATH"
+        echo "INFO: SQUIRREL_UPLOADS_DIR not set. Using DEFAULT_UPLOADS_PATH ($raw)."
+    fi
+
+    if [[ "$raw" != /* ]]; then
+        absolute="$PROJECT_ROOT/$raw"
     else
-        if [[ "$raw" != /* ]]; then
-            absolute="$PROJECT_ROOT/$raw"
-        else
-            absolute="$raw"
-        fi
+        absolute="$raw"
     fi
 
     if mkdir -p "$absolute" 2>/dev/null; then
