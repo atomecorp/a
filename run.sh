@@ -95,6 +95,30 @@ prepare_uploads_dir() {
     fi
 }
 
+compute_watch_glob() {
+    local absolute="$1"
+    local pattern=""
+
+    if [[ -z "$absolute" ]]; then
+        return 1
+    fi
+
+    if [[ "$absolute" == "$PROJECT_ROOT" ]]; then
+        pattern="./**/*"
+    elif [[ "$absolute" == "$PROJECT_ROOT"/* ]]; then
+        local relative="${absolute#$PROJECT_ROOT/}"
+        if [[ -z "$relative" ]]; then
+            pattern="./**/*"
+        else
+            pattern="$relative/**/*"
+        fi
+    else
+        pattern="$absolute/**/*"
+    fi
+
+    printf '%s' "$pattern"
+}
+
 prepare_monitored_dir() {
     local raw="${SQUIRREL_MONITORED_DIR:-$DEFAULT_MONITORED_PATH}"
     local absolute
@@ -118,20 +142,33 @@ prepare_monitored_dir() {
     export SQUIRREL_MONITORED_DIR="$absolute"
 
     if [[ -z "${SQUIRREL_SYNC_WATCH:-}" ]]; then
-        local watch_pattern
-        case "$absolute" in
-            "$PROJECT_ROOT"*)
-                local relative="${absolute#$PROJECT_ROOT/}"
-                if [[ -z "$relative" ]]; then
-                    watch_pattern="./**/*"
-                else
-                    watch_pattern="$relative/**/*"
+        local watch_patterns=()
+        local monitored_pattern
+        monitored_pattern="$(compute_watch_glob "$absolute")"
+        watch_patterns+=("$monitored_pattern")
+
+        if [[ -n "${SQUIRREL_UPLOADS_DIR:-}" ]]; then
+            local uploads_pattern
+            uploads_pattern="$(compute_watch_glob "$SQUIRREL_UPLOADS_DIR")"
+            local duplicate=false
+            for existing in "${watch_patterns[@]}"; do
+                if [[ "$existing" == "$uploads_pattern" ]]; then
+                    duplicate=true
+                    break
                 fi
-                ;;
-            *)
-                watch_pattern="$absolute/**/*"
-                ;;
-        esac
+            done
+            if [[ "$duplicate" == false ]]; then
+                watch_patterns+=("$uploads_pattern")
+            fi
+        fi
+
+        local watch_pattern="${watch_patterns[0]}"
+        if [[ ${#watch_patterns[@]} -gt 1 ]]; then
+            for pattern in "${watch_patterns[@]:1}"; do
+                watch_pattern+=",$pattern"
+            done
+        fi
+
         export SQUIRREL_SYNC_WATCH="$watch_pattern"
     fi
 

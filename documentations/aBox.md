@@ -51,7 +51,7 @@ You can override the watch list without touching the code:
 
 - To ignore extra folders, set `SQUIRREL_SYNC_IGNORE` with glob patterns (same comma-separated format).
 
-`./run.sh` now exposes `DEFAULT_MONITORED_PATH` next to `DEFAULT_UPLOADS_PATH`. Update those two lines (or export `SQUIRREL_UPLOADS_DIR` / `SQUIRREL_MONITORED_DIR` yourself) and the script will export the matching `SQUIRREL_SYNC_WATCH` glob automatically before launching Fastify/Tauri. The default monitored inbox is `/Users/Shared/monitored` and Fastify logs `📂 Watcher detected ...` when a change occurs there.
+`./run.sh` now exposes `DEFAULT_MONITORED_PATH` next to `DEFAULT_UPLOADS_PATH`. Update those two lines (or export `SQUIRREL_UPLOADS_DIR` / `SQUIRREL_MONITORED_DIR` yourself) and the script will export the matching `SQUIRREL_SYNC_WATCH` globs for both folders automatically before launching Fastify/Tauri. Even if you customize `SQUIRREL_SYNC_WATCH`, the Fastify watcher forcibly adds both directories so uploads stay mirrored. The default monitored inbox is `/Users/Shared/monitored` and Fastify logs `📂 Watcher detected ...` when a change occurs there.
 
 Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastify-host>:3001/ws/events`. The browser-side SyncEngine (see `src/squirrel/integrations/sync_engine.js`) converts them into `squirrel:adole-delta` events so you can listen for deltas anywhere in the UI.
 
@@ -66,7 +66,7 @@ Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastif
 
 - Default uploads: both servers write to `src/assets/uploads` inside the repo (change `DEFAULT_UPLOADS_PATH` if needed).
 - Default monitored inbox: `DEFAULT_MONITORED_PATH` is `/Users/Shared/monitored`, kept separate from the uploads folder so the watcher never loops on freshly written files.
-- Mirror behavior: every file dropped into `SQUIRREL_MONITORED_DIR` is copied into `SQUIRREL_UPLOADS_DIR`, and deletions remove the mirrored copy. This keeps the uploads list updated without touching the monitored inbox manually.
+- Mirror behavior: changes in either `SQUIRREL_MONITORED_DIR` or `SQUIRREL_UPLOADS_DIR` are mirrored to the other side (adds/changes copy the file, deletions remove it) so both folders stay in sync.
 - `./run.sh` now exports `SQUIRREL_UPLOADS_DIR` to that repo folder automatically, so both runtimes share it without extra steps during local dev.
 - Custom path: set `SQUIRREL_UPLOADS_DIR` before launching either server (or edit the `DEFAULT_UPLOADS_PATH` constant near the top of `run.sh`). Relative values are resolved from the project root; absolute paths are used as-is.
 - No fallback: if the configured path cannot be created, Fastify/Tauri abort startup so you can fix the permission issue immediately.

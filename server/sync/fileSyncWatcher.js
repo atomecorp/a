@@ -24,8 +24,7 @@ const DEFAULT_IGNORE = [
     '**/.DS_Store',
     'dist/**',
     'target/**',
-    'src-tauri/target/**',
-    'src/assets/uploads/**'
+    'src-tauri/target/**'
 ];
 
 const MAX_HASH_BYTES = 1024 * 1024; // 1 MiB safeguard

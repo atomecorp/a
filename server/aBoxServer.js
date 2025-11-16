@@ -6,6 +6,12 @@ let watcherHandle = null;
 let watcherLogListener = null;
 let watcherSyncListener = null;
 let watcherSyncConfig = null;
+let watcherPathsEnsured = false;
+const MIRROR_GUARD_TTL_MS = 2000;
+const pendingMirrorGuards = {
+    uploads: new Map(),
+    monitored: new Map()
+};
 
 function resolveDirectoryFromEnv(envVarName) {
     const rawValue = typeof process.env[envVarName] === 'string'
@@ -39,44 +45,108 @@ function ensureSyncConfig() {
     return watcherSyncConfig;
 }
 
-function isInsideMonitoredFolder(targetPath, monitoredDir) {
-    const relative = path.relative(monitoredDir, targetPath);
+function isInsideFolder(targetPath, folderPath) {
+    const relative = path.relative(folderPath, targetPath);
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
         return false;
     }
     return true;
 }
 
-async function mirrorFileIntoUploads(fsEvent, config) {
-    if (!fsEvent || !config) {
+function registerMirrorGuard(map, absolutePath) {
+    if (!absolutePath) {
         return;
     }
 
-    const { monitoredDir, uploadsDir } = config;
+    const existing = map.get(absolutePath);
+    if (existing) {
+        clearTimeout(existing);
+    }
+
+    const timeout = setTimeout(() => {
+        map.delete(absolutePath);
+    }, MIRROR_GUARD_TTL_MS);
+
+    if (typeof timeout.unref === 'function') {
+        timeout.unref();
+    }
+
+    map.set(absolutePath, timeout);
+}
+
+function clearMirrorGuard(map, absolutePath) {
+    const timeout = map.get(absolutePath);
+    if (timeout) {
+        clearTimeout(timeout);
+        map.delete(absolutePath);
+    }
+}
+
+function shouldSkipMirror(map, absolutePath) {
+    if (!absolutePath || !map.has(absolutePath)) {
+        return false;
+    }
+    clearMirrorGuard(map, absolutePath);
+    return true;
+}
+
+function describeEventLocation(fsEvent, config) {
+    if (!fsEvent || !config) {
+        return null;
+    }
+
     const absolutePath = fsEvent.absolutePath
         ? path.resolve(fsEvent.absolutePath)
         : null;
-    if (!absolutePath || !isInsideMonitoredFolder(absolutePath, monitoredDir)) {
-        return;
+    if (!absolutePath) {
+        return null;
     }
 
-    const relativePath = path.relative(monitoredDir, absolutePath);
-    if (!relativePath || relativePath.startsWith('..')) {
-        return;
+    if (isInsideFolder(absolutePath, config.monitoredDir)) {
+        const relativePath = path.relative(config.monitoredDir, absolutePath);
+        if (!relativePath || relativePath.startsWith('..')) {
+            return null;
+        }
+        return {
+            origin: 'monitored',
+            absolutePath,
+            relativePath
+        };
     }
 
-    const destinationPath = path.join(uploadsDir, relativePath);
+    if (isInsideFolder(absolutePath, config.uploadsDir)) {
+        const relativePath = path.relative(config.uploadsDir, absolutePath);
+        if (!relativePath || relativePath.startsWith('..')) {
+            return null;
+        }
+        return {
+            origin: 'uploads',
+            absolutePath,
+            relativePath
+        };
+    }
+
+    return null;
+}
+
+async function mirrorBetweenFolders(fsEvent, location, sourceDir, targetDir, guardMap, targetLabel) {
+    const relativePath = location.relativePath;
+    const sourcePath = path.join(sourceDir, relativePath);
+    const destinationPath = path.join(targetDir, relativePath);
     const kind = fsEvent.kind;
 
     if (kind === 'add' || kind === 'change') {
         if (fsEvent.metadata?.isDirectory) {
             return;
         }
-        await fs.mkdir(path.dirname(destinationPath), { recursive: true });
+
+        registerMirrorGuard(guardMap, destinationPath);
         try {
-            await fs.copyFile(absolutePath, destinationPath);
-            console.log(`📤 Mirrored ${relativePath} to uploads directory.`);
+            await fs.mkdir(path.dirname(destinationPath), { recursive: true });
+            await fs.copyFile(sourcePath, destinationPath);
+            console.log(`📤 Mirrored ${relativePath} to ${targetLabel} directory.`);
         } catch (error) {
+            clearMirrorGuard(guardMap, destinationPath);
             if (error && error.code === 'ENOENT') {
                 console.warn(`⚠️  Skipped mirroring ${relativePath} because the source vanished.`);
                 return;
@@ -87,10 +157,12 @@ async function mirrorFileIntoUploads(fsEvent, config) {
     }
 
     if (kind === 'unlink') {
+        registerMirrorGuard(guardMap, destinationPath);
         try {
             await fs.unlink(destinationPath);
-            console.log(`🗑️  Removed mirrored file ${relativePath} from uploads directory.`);
+            console.log(`🗑️  Removed mirrored file ${relativePath} from ${targetLabel} directory.`);
         } catch (error) {
+            clearMirrorGuard(guardMap, destinationPath);
             if (error && error.code === 'ENOENT') {
                 return;
             }
@@ -99,10 +171,37 @@ async function mirrorFileIntoUploads(fsEvent, config) {
     }
 }
 
+function ensureWatcherTargets() {
+    if (!watcherHandle || watcherPathsEnsured) {
+        return;
+    }
+
+    const config = ensureSyncConfig();
+    if (!config) {
+        return;
+    }
+
+    const targets = [];
+    if (config.monitoredDir) {
+        targets.push(config.monitoredDir);
+    }
+    if (config.uploadsDir && config.uploadsDir !== config.monitoredDir) {
+        targets.push(config.uploadsDir);
+    }
+
+    if (targets.length && watcherHandle.watcher && typeof watcherHandle.watcher.add === 'function') {
+        watcherHandle.watcher.add(targets);
+        watcherPathsEnsured = true;
+        console.log('🔄 aBox watcher tracking:', targets);
+    }
+}
+
 function attachWatcherSync() {
     if (watcherSyncListener) {
         return;
     }
+
+    ensureWatcherTargets();
 
     const config = ensureSyncConfig();
     if (!config) {
@@ -113,9 +212,30 @@ function attachWatcherSync() {
         if (!payload || payload.type !== 'sync:file-event') {
             return;
         }
-        mirrorFileIntoUploads(payload.payload, config).catch((error) => {
-            console.warn('⚠️  Failed to mirror monitored file:', error?.message || error);
-        });
+        const location = describeEventLocation(payload.payload, config);
+        if (!location) {
+            return;
+        }
+
+        const sourceGuard = location.origin === 'uploads'
+            ? pendingMirrorGuards.uploads
+            : pendingMirrorGuards.monitored;
+
+        if (shouldSkipMirror(sourceGuard, location.absolutePath)) {
+            return;
+        }
+
+        const targetDir = location.origin === 'uploads' ? config.monitoredDir : config.uploadsDir;
+        const guardMap = location.origin === 'uploads'
+            ? pendingMirrorGuards.monitored
+            : pendingMirrorGuards.uploads;
+        const targetLabel = location.origin === 'uploads' ? 'monitored' : 'uploads';
+        const sourceDir = location.origin === 'uploads' ? config.uploadsDir : config.monitoredDir;
+
+        mirrorBetweenFolders(payload.payload, location, sourceDir, targetDir, guardMap, targetLabel)
+            .catch((error) => {
+                console.warn('⚠️  Failed to mirror aBox file:', error?.message || error);
+            });
     };
 
     getSyncEventBus().on('event', watcherSyncListener);
@@ -158,10 +278,13 @@ function detachWatcherLogging() {
 
 export function startABoxMonitoring(options = {}) {
     if (watcherHandle) {
+        ensureWatcherTargets();
         return watcherHandle;
     }
 
     watcherHandle = startFileSyncWatcher(options);
+    watcherPathsEnsured = false;
+    ensureWatcherTargets();
     attachWatcherLogging();
     attachWatcherSync();
     return watcherHandle;
@@ -177,6 +300,7 @@ export async function stopABoxMonitoring() {
     } finally {
         detachWatcherLogging();
         detachWatcherSync();
+        watcherPathsEnsured = false;
         watcherHandle = null;
     }
 }
