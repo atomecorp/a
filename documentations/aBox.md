@@ -51,6 +51,8 @@ You can override the watch list without touching the code:
 
 - To ignore extra folders, set `SQUIRREL_SYNC_IGNORE` with glob patterns (same comma-separated format).
 
+`./run.sh` now exposes `DEFAULT_MONITORED_PATH` next to `DEFAULT_UPLOADS_PATH`. Update those two lines (or export `SQUIRREL_UPLOADS_DIR` / `SQUIRREL_MONITORED_DIR` yourself) and the script will export the matching `SQUIRREL_SYNC_WATCH` glob automatically before launching Fastify/Tauri. The default monitored inbox is `/Users/Shared/monitored` and Fastify logs `📂 Watcher detected ...` when a change occurs there.
+
 Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastify-host>:3001/ws/events`. The browser-side SyncEngine (see `src/squirrel/integrations/sync_engine.js`) converts them into `squirrel:adole-delta` events so you can listen for deltas anywhere in the UI.
 
 ## 4. Using the drag-and-drop UI
@@ -62,10 +64,11 @@ Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastif
 
 ### Storage locations
 
-- Default (Fastify & Tauri): both servers write to `src/assets/uploads` inside the repo so the watcher can see every drop.
+- Default uploads: both servers write to `src/assets/uploads` inside the repo (change `DEFAULT_UPLOADS_PATH` if needed).
+- Default monitored inbox: `DEFAULT_MONITORED_PATH` is `/Users/Shared/monitored`, kept separate from the uploads folder so the watcher never loops on freshly written files.
 - `./run.sh` now exports `SQUIRREL_UPLOADS_DIR` to that repo folder automatically, so both runtimes share it without extra steps during local dev.
 - Custom path: set `SQUIRREL_UPLOADS_DIR` before launching either server (or edit the `DEFAULT_UPLOADS_PATH` constant near the top of `run.sh`). Relative values are resolved from the project root; absolute paths are used as-is.
-- Sandboxed fallback: if Tauri cannot write to the shared path (e.g., a packaged, read-only bundle), it falls back to its app-data directory and logs the override.
+- No fallback: if the configured path cannot be created, Fastify/Tauri abort startup so you can fix the permission issue immediately.
 
 ## 5. Verifying the pipeline
 

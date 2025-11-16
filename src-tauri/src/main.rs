@@ -12,25 +12,24 @@ use std::time::Duration;
 use tauri::Manager; // pour get_webview_window
 
 fn resolve_shared_uploads_dir(static_dir: &Path) -> PathBuf {
-    if let Ok(custom_dir) = std::env::var("SQUIRREL_UPLOADS_DIR") {
-        let trimmed = custom_dir.trim();
-        if !trimmed.is_empty() {
-            let candidate = PathBuf::from(trimmed);
-            if candidate.is_absolute() {
-                return candidate;
-            }
-
-            let project_root = static_dir
-                .parent()
-                .map(|p| p.to_path_buf())
-                .or_else(|| std::env::current_dir().ok())
-                .unwrap_or_else(|| PathBuf::from("."));
-
-            return project_root.join(candidate);
-        }
+    let raw = std::env::var("SQUIRREL_UPLOADS_DIR")
+        .expect("SQUIRREL_UPLOADS_DIR must be set before launching Tauri");
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        panic!("SQUIRREL_UPLOADS_DIR is empty. Configure it via run.sh or export it before running Tauri.");
     }
 
-    static_dir.join("assets").join("uploads")
+    let mut candidate = PathBuf::from(trimmed);
+    if !candidate.is_absolute() {
+        let project_root = static_dir
+            .parent()
+            .map(|p| p.to_path_buf())
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        candidate = project_root.join(candidate);
+    }
+
+    candidate
 }
 
 fn main() {
@@ -71,27 +70,12 @@ fn main() {
 
             println!("📂 Static assets directory: {:?}", static_dir);
 
-            let mut uploads_dir = resolve_shared_uploads_dir(&static_dir);
+            let uploads_dir = resolve_shared_uploads_dir(&static_dir);
             if let Err(err) = fs::create_dir_all(&uploads_dir) {
-                eprintln!(
-                    "⚠️  Unable to prepare shared uploads directory {:?}: {}",
+                panic!(
+                    "Unable to prepare shared uploads directory {:?}: {}",
                     uploads_dir, err
                 );
-                let uploads_root = match path_resolver.app_data_dir() {
-                    Ok(dir) => dir,
-                    Err(_) => {
-                        let mut fallback = std::env::temp_dir();
-                        fallback.push("squirrel");
-                        fallback
-                    }
-                };
-                uploads_dir = uploads_root.join("uploads");
-                if let Err(fallback_err) = fs::create_dir_all(&uploads_dir) {
-                    eprintln!(
-                        "⚠️  Unable to prepare fallback uploads directory {:?}: {}",
-                        uploads_dir, fallback_err
-                    );
-                }
             }
             println!("📁 Uploads directory: {:?}", uploads_dir);
 

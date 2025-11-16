@@ -18,13 +18,43 @@ import Atome from '../database/Atome.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 const staticRoot = path.join(projectRoot, 'src');
-const DEFAULT_UPLOADS_DIR = path.join(staticRoot, 'assets/uploads');
-const uploadsDir = resolveUploadsDir();
+const uploadsDir = (() => {
+  try {
+    return resolveUploadsDir();
+  } catch (error) {
+    const message = error?.message || error;
+    console.error('❌ Unable to resolve uploads directory:', message);
+    process.exit(1);
+  }
+})();
 const VERSION_FILE = path.join(projectRoot, 'version.txt');
 let SERVER_VERSION = 'unknown';
 const SERVER_TYPE = 'Fastify';
 const syncEventBus = getSyncEventBus();
 let fileSyncWatcherHandle = null;
+let watcherLogListener = null;
+
+function attachWatcherLogging() {
+  if (watcherLogListener) {
+    return;
+  }
+  watcherLogListener = (payload) => {
+    if (!payload || payload.type !== 'sync:file-event') {
+      return;
+    }
+    const event = payload.payload || {};
+    const targetPath = event.normalizedPath || event.relativePath || event.absolutePath;
+    console.log(`📂 Watcher detected ${event.kind} on ${targetPath}`);
+  };
+  syncEventBus.on('event', watcherLogListener);
+}
+
+function detachWatcherLogging() {
+  if (watcherLogListener) {
+    syncEventBus.off('event', watcherLogListener);
+    watcherLogListener = null;
+  }
+}
 
 async function loadServerVersion() {
   try {
@@ -45,14 +75,14 @@ function resolveUploadsDir() {
     ? process.env.SQUIRREL_UPLOADS_DIR.trim()
     : '';
 
-  if (customDir) {
-    const absolute = path.isAbsolute(customDir)
-      ? customDir
-      : path.join(projectRoot, customDir);
-    return path.resolve(absolute);
+  if (!customDir) {
+    throw new Error('SQUIRREL_UPLOADS_DIR is not defined. Set it via run.sh or export it before starting the server.');
   }
 
-  return DEFAULT_UPLOADS_DIR;
+  const absolute = path.isAbsolute(customDir)
+    ? customDir
+    : path.join(projectRoot, customDir);
+  return path.resolve(absolute);
 }
 
 const sanitizeFileName = (name) => {
@@ -141,6 +171,7 @@ async function startServer() {
         fileSyncWatcherHandle = startFileSyncWatcher({
           projectRoot
         });
+        attachWatcherLogging();
         console.log('👀 File sync watcher ready:', fileSyncWatcherHandle.config);
       } catch (error) {
         console.warn('⚠️  Unable to start file sync watcher:', error?.message || error);
@@ -812,6 +843,7 @@ async function stopFileWatcher() {
   }
   try {
     await fileSyncWatcherHandle.stop();
+    detachWatcherLogging();
     console.log('✅ File sync watcher stopped');
   } catch (error) {
     console.warn('⚠️  Error while stopping file watcher:', error?.message || error);

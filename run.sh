@@ -16,6 +16,9 @@ SCRIPTS_DIR="$PROJECT_ROOT/scripts_utils"
 # Change DEFAULT_UPLOADS_PATH to point uploads elsewhere. Use an absolute path
 # or a path relative to the project root (default keeps files inside the repo).
 DEFAULT_UPLOADS_PATH="src/assets/uploads"
+# Change DEFAULT_MONITORED_PATH to pick the folder watched by chokidar.
+# Absolute paths are supported; relative values are resolved from the project root.
+DEFAULT_MONITORED_PATH="/Users/Shared/monitored"
 
 compute_default_dsn() {
     local host="${ADOLE_PG_HOST:-${PGHOST:-localhost}}"
@@ -72,6 +75,11 @@ prepare_uploads_dir() {
         echo "INFO: SQUIRREL_UPLOADS_DIR not set. Using DEFAULT_UPLOADS_PATH ($raw)."
     fi
 
+    if [[ -z "$raw" ]]; then
+        echo "ERROR: DEFAULT_UPLOADS_PATH is empty. Set it or export SQUIRREL_UPLOADS_DIR before running ./run.sh."
+        exit 1
+    fi
+
     if [[ "$raw" != /* ]]; then
         absolute="$PROJECT_ROOT/$raw"
     else
@@ -82,14 +90,53 @@ prepare_uploads_dir() {
         export SQUIRREL_UPLOADS_DIR="$absolute"
         echo "📁 Uploads directory: $SQUIRREL_UPLOADS_DIR"
     else
-        echo "⚠️  Unable to create uploads directory at $absolute"
-        echo "⚠️  Falling back to OS temp directory. Please adjust SQUIRREL_UPLOADS_DIR manually."
-        local fallback
-        fallback="$(mktemp -d 2>/dev/null || echo "$PROJECT_ROOT/temp/uploads")"
-        mkdir -p "$fallback" 2>/dev/null || true
-        export SQUIRREL_UPLOADS_DIR="$fallback"
-        echo "📁 Uploads fallback directory: $SQUIRREL_UPLOADS_DIR"
+        echo "ERROR: Unable to create uploads directory at $absolute"
+        exit 1
     fi
+}
+
+prepare_monitored_dir() {
+    local raw="${SQUIRREL_MONITORED_DIR:-$DEFAULT_MONITORED_PATH}"
+    local absolute
+
+    if [[ -z "$raw" ]]; then
+        echo "ERROR: DEFAULT_MONITORED_PATH is empty. Set it or export SQUIRREL_MONITORED_DIR before running ./run.sh."
+        exit 1
+    fi
+
+    if [[ "$raw" != /* ]]; then
+        absolute="$PROJECT_ROOT/$raw"
+    else
+        absolute="$raw"
+    fi
+
+    if ! mkdir -p "$absolute" 2>/dev/null; then
+        echo "ERROR: Unable to create monitored directory at $absolute"
+        exit 1
+    fi
+
+    export SQUIRREL_MONITORED_DIR="$absolute"
+
+    if [[ -z "${SQUIRREL_SYNC_WATCH:-}" ]]; then
+        local watch_pattern
+        case "$absolute" in
+            "$PROJECT_ROOT"*)
+                local relative="${absolute#$PROJECT_ROOT/}"
+                if [[ -z "$relative" ]]; then
+                    watch_pattern="./**/*"
+                else
+                    watch_pattern="$relative/**/*"
+                fi
+                ;;
+            *)
+                watch_pattern="$absolute/**/*"
+                ;;
+        esac
+        export SQUIRREL_SYNC_WATCH="$watch_pattern"
+    fi
+
+    echo "👀 Monitored directory: $SQUIRREL_MONITORED_DIR"
+    echo "👀 SQUIRREL_SYNC_WATCH=$SQUIRREL_SYNC_WATCH"
 }
 
 if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
@@ -118,6 +165,7 @@ if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE
 fi
 
 prepare_uploads_dir
+prepare_monitored_dir
 
 cd "$PROJECT_ROOT"
 
