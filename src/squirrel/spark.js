@@ -47,6 +47,7 @@ import './default/shortcuts.js';
 
 // === OPTIONAL INTEGRATIONS ===
 import initIPlugWeb from './integrations/iplug_web.js';
+import initSyncEngine from './integrations/sync_engine.js';
 
 
 
@@ -115,8 +116,9 @@ Unit.getAllUnits = getAllUnits;
 
 // === IMPORT KICKSTART AFTER EXPOSURE ===
 import('./kickstart.js').then(() => {
-  // Toggle iPlug Web integration here (enabled by default). Comment to disable.
+  // Toggle optional integrations once core runtime is ready
   try { initIPlugWeb(); } catch (e) { console.warn('iPlug init failed', e); }
+  try { initSyncEngine(); } catch (e) { console.warn('SyncEngine init failed', e); }
 }).catch(err => {
   console.error('❌ Kickstart error:', err);
 });

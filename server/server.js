@@ -6,6 +6,7 @@ import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { promises as fs, createReadStream } from 'fs';
+import { startFileSyncWatcher, getSyncEventBus } from './sync/fileSyncWatcher.js';
 
 // Database imports
 import { knex, ensureAdoleSchema, PG_URL } from '../database/db.js';
@@ -15,10 +16,15 @@ import Project from '../database/Project.js';
 import Atome from '../database/Atome.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDir = path.join(__dirname, '../src/assets/uploads');
-const VERSION_FILE = path.join(__dirname, '../version.txt');
+const projectRoot = path.join(__dirname, '..');
+const staticRoot = path.join(projectRoot, 'src');
+const DEFAULT_UPLOADS_DIR = path.join(staticRoot, 'assets/uploads');
+const uploadsDir = resolveUploadsDir();
+const VERSION_FILE = path.join(projectRoot, 'version.txt');
 let SERVER_VERSION = 'unknown';
 const SERVER_TYPE = 'Fastify';
+const syncEventBus = getSyncEventBus();
+let fileSyncWatcherHandle = null;
 
 async function loadServerVersion() {
   try {
@@ -32,6 +38,21 @@ async function loadServerVersion() {
     console.warn('⚠️ Impossible de lire version.txt:', details);
     return 'unknown';
   }
+}
+
+function resolveUploadsDir() {
+  const customDir = typeof process.env.SQUIRREL_UPLOADS_DIR === 'string'
+    ? process.env.SQUIRREL_UPLOADS_DIR.trim()
+    : '';
+
+  if (customDir) {
+    const absolute = path.isAbsolute(customDir)
+      ? customDir
+      : path.join(projectRoot, customDir);
+    return path.resolve(absolute);
+  }
+
+  return DEFAULT_UPLOADS_DIR;
 }
 
 const sanitizeFileName = (name) => {
@@ -111,6 +132,20 @@ async function startServer() {
     console.log(`📦 Version applicative: ${SERVER_VERSION}`);
 
     await fs.mkdir(uploadsDir, { recursive: true });
+    console.log('📁 Uploads directory:', uploadsDir);
+
+    if (process.env.SQUIRREL_DISABLE_WATCHER === '1') {
+      console.log('🛑 File sync watcher disabled via SQUIRREL_DISABLE_WATCHER=1');
+    } else {
+      try {
+        fileSyncWatcherHandle = startFileSyncWatcher({
+          projectRoot
+        });
+        console.log('👀 File sync watcher ready:', fileSyncWatcherHandle.config);
+      } catch (error) {
+        console.warn('⚠️  Unable to start file sync watcher:', error?.message || error);
+      }
+    }
 
     // ===========================
     // 0. DATABASE INITIALIZATION
@@ -170,9 +205,9 @@ async function startServer() {
       allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
     });
 
-    // Servir les fichiers statiques depuis ../src
+    // Servir les fichiers statiques depuis staticRoot (../src en dev)
     await server.register(fastifyStatic, {
-      root: path.join(__dirname, '../src'),
+      root: staticRoot,
       prefix: '/'
     });
 
@@ -186,34 +221,6 @@ async function startServer() {
     // ===========================
     // 2. ROUTES API
     // ===========================
-
-    // Health check
-    server.get('/health', async (request, reply) => {
-      return {
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        fastify: server.version,
-        uptime: process.uptime()
-      };
-    });
-
-    // API de test
-    server.get('/api/status', async (request, reply) => {
-      return {
-        status: 'ok',
-        server: 'Fastify v5',
-        timestamp: new Date().toISOString()
-      };
-    });
-
-    server.get('/api/test', async (request, reply) => {
-      return {
-        message: 'Test réussi avec Fastify v5! 🎉',
-        server: 'Fastify',
-        version: server.version,
-        websocket: 'Natif intégré'
-      };
-    });
 
     server.get('/api/server-info', async () => {
       return {
@@ -461,93 +468,6 @@ async function startServer() {
       }
     });
 
-    // YouTube Search proxy (requires YOUTUBE_API_KEY)
-    server.get('/api/youtube/search', async (request, reply) => {
-      try {
-        const q = (request.query.q || '').toString();
-        const pageToken = (request.query.pageToken || '').toString();
-        if (!q) {
-          reply.code(400);
-          return { success: false, error: 'Missing query parameter q' };
-        }
-
-        const apiKey = process.env.YOUTUBE_API_KEY;
-        if (!apiKey) {
-          // Minimal mocked fallback so UI can still render
-          return {
-            success: true,
-            info: 'No YOUTUBE_API_KEY configured. Returning mocked results.',
-            items: [
-              {
-                id: { videoId: 'dQw4w9WgXcQ' },
-                snippet: {
-                  title: `Résultats simulés pour "${q}" (exemple 1)`,
-                  channelTitle: 'Mock Channel',
-                  publishedAt: new Date().toISOString(),
-                  thumbnails: {
-                    default: { url: 'https://img.youtube.com/vi/dQw4w9WgXcQ/default.jpg' },
-                    medium: { url: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg' },
-                    high: { url: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg' }
-                  }
-                }
-              },
-              {
-                id: { videoId: '9bZkp7q19f0' },
-                snippet: {
-                  title: `Résultats simulés pour "${q}" (exemple 2)`,
-                  channelTitle: 'Mock Channel',
-                  publishedAt: new Date().toISOString(),
-                  thumbnails: {
-                    default: { url: 'https://img.youtube.com/vi/9bZkp7q19f0/default.jpg' },
-                    medium: { url: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg' },
-                    high: { url: 'https://img.youtube.com/vi/9bZkp7q19f0/hqdefault.jpg' }
-                  }
-                }
-              },
-              {
-                id: { videoId: 'kUMe1FH4CHE' },
-                snippet: {
-                  title: `Résultats simulés pour "${q}" (exemple 3)`,
-                  channelTitle: 'Mock Channel',
-                  publishedAt: new Date().toISOString(),
-                  thumbnails: {
-                    default: { url: 'https://img.youtube.com/vi/kUMe1FH4CHE/default.jpg' },
-                    medium: { url: 'https://img.youtube.com/vi/kUMe1FH4CHE/mqdefault.jpg' },
-                    high: { url: 'https://img.youtube.com/vi/kUMe1FH4CHE/hqdefault.jpg' }
-                  }
-                }
-              }
-            ],
-            pageInfo: { totalResults: 3, resultsPerPage: 3 }
-          };
-        }
-
-        const params = new URLSearchParams({
-          key: apiKey,
-          part: 'snippet',
-          type: 'video',
-          maxResults: '12',
-          q,
-          videoEmbeddable: 'true'
-        });
-        if (pageToken) params.set('pageToken', pageToken);
-
-        const url = `https://www.googleapis.com/youtube/v3/search?${params.toString()}`;
-        const res = await fetch(url);
-        const text = await res.text();
-        if (!res.ok) {
-          let parsed;
-          try { parsed = JSON.parse(text); } catch { parsed = { error: text }; }
-          reply.code(res.status);
-          return { success: false, status: res.status, ...parsed };
-        }
-        const data = JSON.parse(text);
-        return data; // Keep original YouTube shape
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
 
     // ===========================
     // 3. DATABASE API ROUTES
@@ -817,76 +737,53 @@ async function startServer() {
     // 3. WEBSOCKET NATIF
     // ===========================
 
-    // Route WebSocket principale
+    // Route WebSocket pour les événements temps réel
     server.register(async function (fastify) {
-      fastify.get('/ws', { websocket: true }, (connection, req) => {
-        console.log('🔌 Nouvelle connexion WebSocket');
+      fastify.get('/ws/events', { websocket: true }, (connection) => {
+        console.log('📡 Connexion WebSocket Events');
 
-        // Envoyer un message de bienvenue
-        connection.send(JSON.stringify({
-          type: 'welcome',
-          message: 'Connexion WebSocket établie avec Fastify v5!',
-          timestamp: new Date().toISOString()
-        }));
-
-        // Écouter les messages du client
-        connection.on('message', (message) => {
+        const safeSend = (payload) => {
           try {
-            const data = JSON.parse(message);
-            console.log('📨 Message reçu:', data);
-
-            // Echo du message avec enrichissement
-            const response = {
-              type: 'echo',
-              original: data,
-              timestamp: new Date().toISOString(),
-              server: 'Fastify v5'
-            };
-
-            connection.send(JSON.stringify(response));
+            connection.send(JSON.stringify(payload));
           } catch (error) {
-            console.error('❌ Erreur parsing message:', error);
-            connection.send(JSON.stringify({
-              type: 'error',
-              message: 'Format de message invalide'
-            }));
+            console.error('❌ Impossible d\'envoyer un événement sync:', error);
+          }
+        };
+
+        safeSend({
+          type: 'sync:handshake',
+          version: 1,
+          runtime: SERVER_TYPE,
+          timestamp: new Date().toISOString(),
+          payload: {
+            watcherEnabled: Boolean(fileSyncWatcherHandle),
+            watcherConfig: fileSyncWatcherHandle?.config ?? null
           }
         });
 
-        // Gestion de la déconnexion
-        connection.on('close', () => {
-          console.log('👋 Connexion WebSocket fermée');
-        });
+        if (fileSyncWatcherHandle) {
+          const forward = (payload) => safeSend(payload);
+          syncEventBus.on('event', forward);
 
-        // Gestion des erreurs
-        connection.on('error', (error) => {
-          console.error('❌ Erreur WebSocket:', error);
-        });
-      });
-    });
+          connection.on('close', () => {
+            syncEventBus.off('event', forward);
+            console.log('🛑 Client events déconnecté');
+          });
 
-    // Route WebSocket pour les événements temps réel
-    server.register(async function (fastify) {
-      fastify.get('/ws/events', { websocket: true }, (connection, req) => {
-        console.log('📡 Connexion WebSocket Events');
-
-        // Simuler des événements périodiques
-        const interval = setInterval(() => {
-          const event = {
-            type: 'event',
-            data: {
-              timestamp: new Date().toISOString(),
-              random: Math.random(),
-              uptime: process.uptime()
-            }
-          };
-          connection.send(JSON.stringify(event));
-        }, 5000); // Toutes les 5 secondes
-
-        connection.on('close', () => {
-          clearInterval(interval);
-          console.log('🛑 Arrêt des événements périodiques');
-        });
+          connection.on('error', (error) => {
+            syncEventBus.off('event', forward);
+            console.error('❌ Erreur WebSocket events:', error);
+          });
+        } else {
+          safeSend({
+            type: 'sync:warning',
+            timestamp: new Date().toISOString(),
+            payload: { message: 'File watcher disabled server-side' }
+          });
+          connection.on('close', () => {
+            console.log('🛑 Client events déconnecté (watcher inactif)');
+          });
+        }
       });
     });
 
@@ -900,13 +797,26 @@ async function startServer() {
     });
 
     console.log(`✅ Serveur Fastify v${server.version} (app ${SERVER_VERSION}) démarré sur http://localhost:${PORT}`);
-    console.log(`🔌 WebSocket disponible sur ws://localhost:${PORT}/ws`);
     console.log(`📡 Events WebSocket sur ws://localhost:${PORT}/ws/events`);
     console.log(`🌐 Frontend servi depuis: http://localhost:${PORT}/`);
 
   } catch (error) {
     console.error('❌ Erreur démarrage serveur:', error);
     process.exit(1);
+  }
+}
+
+async function stopFileWatcher() {
+  if (!fileSyncWatcherHandle) {
+    return;
+  }
+  try {
+    await fileSyncWatcherHandle.stop();
+    console.log('✅ File sync watcher stopped');
+  } catch (error) {
+    console.warn('⚠️  Error while stopping file watcher:', error?.message || error);
+  } finally {
+    fileSyncWatcherHandle = null;
   }
 }
 
@@ -918,6 +828,7 @@ process.on('SIGINT', async () => {
   console.log('\n🛑 Arrêt du serveur...');
   try {
     await server.close();
+    await stopFileWatcher();
     console.log('✅ Serveur arrêté proprement');
     process.exit(0);
   } catch (error) {
@@ -928,7 +839,15 @@ process.on('SIGINT', async () => {
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Signal SIGTERM reçu, arrêt...');
-  await server.close();
+  try {
+    await server.close();
+    await stopFileWatcher();
+    console.log('✅ Serveur arrêté proprement');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Erreur lors de l\'arrêt:', error);
+    process.exit(1);
+  }
 });
 
 // Démarrer le serveur

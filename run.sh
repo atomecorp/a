@@ -58,6 +58,35 @@ load_env_file() {
 load_env_file "$PROJECT_ROOT/.env"
 load_env_file "$PROJECT_ROOT/.env.local"
 
+prepare_uploads_dir() {
+    local raw="${SQUIRREL_UPLOADS_DIR:-}"
+    local absolute
+
+    if [[ -z "$raw" ]]; then
+        absolute="$PROJECT_ROOT/src/assets/uploads"
+        echo "INFO: SQUIRREL_UPLOADS_DIR not set. Defaulting to repo uploads folder."
+    else
+        if [[ "$raw" != /* ]]; then
+            absolute="$PROJECT_ROOT/$raw"
+        else
+            absolute="$raw"
+        fi
+    fi
+
+    if mkdir -p "$absolute" 2>/dev/null; then
+        export SQUIRREL_UPLOADS_DIR="$absolute"
+        echo "📁 Uploads directory: $SQUIRREL_UPLOADS_DIR"
+    else
+        echo "⚠️  Unable to create uploads directory at $absolute"
+        echo "⚠️  Falling back to OS temp directory. Please adjust SQUIRREL_UPLOADS_DIR manually."
+        local fallback
+        fallback="$(mktemp -d 2>/dev/null || echo "$PROJECT_ROOT/temp/uploads")"
+        mkdir -p "$fallback" 2>/dev/null || true
+        export SQUIRREL_UPLOADS_DIR="$fallback"
+        echo "📁 Uploads fallback directory: $SQUIRREL_UPLOADS_DIR"
+    fi
+}
+
 if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
     echo "INFO: No PostgreSQL connection string detected (ADOLE_PG_DSN/PG_CONNECTION_STRING/DATABASE_URL)."
     local generated_dsn
@@ -82,6 +111,8 @@ if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE
     echo "       Please configure it manually in .env or export it before running ./run.sh."
     exit 1
 fi
+
+prepare_uploads_dir
 
 cd "$PROJECT_ROOT"
 
