@@ -6,7 +6,12 @@ import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { promises as fs, createReadStream } from 'fs';
-import { startFileSyncWatcher, getSyncEventBus } from './sync/fileSyncWatcher.js';
+import {
+  startABoxMonitoring,
+  stopABoxMonitoring,
+  getABoxWatcherHandle,
+  getABoxEventBus
+} from './aBoxServer.js';
 
 // Database imports
 import { knex, ensureAdoleSchema, PG_URL } from '../database/db.js';
@@ -30,31 +35,8 @@ const uploadsDir = (() => {
 const VERSION_FILE = path.join(projectRoot, 'version.txt');
 let SERVER_VERSION = 'unknown';
 const SERVER_TYPE = 'Fastify';
-const syncEventBus = getSyncEventBus();
+const syncEventBus = getABoxEventBus();
 let fileSyncWatcherHandle = null;
-let watcherLogListener = null;
-
-function attachWatcherLogging() {
-  if (watcherLogListener) {
-    return;
-  }
-  watcherLogListener = (payload) => {
-    if (!payload || payload.type !== 'sync:file-event') {
-      return;
-    }
-    const event = payload.payload || {};
-    const targetPath = event.normalizedPath || event.relativePath || event.absolutePath;
-    console.log(`📂 Watcher detected ${event.kind} on ${targetPath}`);
-  };
-  syncEventBus.on('event', watcherLogListener);
-}
-
-function detachWatcherLogging() {
-  if (watcherLogListener) {
-    syncEventBus.off('event', watcherLogListener);
-    watcherLogListener = null;
-  }
-}
 
 async function loadServerVersion() {
   try {
@@ -168,10 +150,9 @@ async function startServer() {
       console.log('🛑 File sync watcher disabled via SQUIRREL_DISABLE_WATCHER=1');
     } else {
       try {
-        fileSyncWatcherHandle = startFileSyncWatcher({
+        fileSyncWatcherHandle = startABoxMonitoring({
           projectRoot
         });
-        attachWatcherLogging();
         console.log('👀 File sync watcher ready:', fileSyncWatcherHandle.config);
       } catch (error) {
         console.warn('⚠️  Unable to start file sync watcher:', error?.message || error);
@@ -842,8 +823,7 @@ async function stopFileWatcher() {
     return;
   }
   try {
-    await fileSyncWatcherHandle.stop();
-    detachWatcherLogging();
+    await stopABoxMonitoring();
     console.log('✅ File sync watcher stopped');
   } catch (error) {
     console.warn('⚠️  Error while stopping file watcher:', error?.message || error);
