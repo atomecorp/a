@@ -30,6 +30,11 @@ function openSettingsPanel() {
 }
 
 function openSongLibrary() {
+    puts('Opening song library from menu');
+    toggleSongLibrary('settings_button');
+}
+
+function closeSongLibrary() {
     toggleSongLibrary('settings_button');
 }
 
@@ -126,7 +131,7 @@ const intuition_content = {
     meta: { namespace: "vie.menu", defaultLocale: "en" },
     toolbox: { children: ['file', 'tools', 'capture', 'perform', 'songs', 'settings'] },
     //
-    file: { type: 'palette', children: ['import', 'save', 'export'], touch: openSongLibrary },
+    file: { type: 'palette', children: ['import', 'save', 'export'], touch: openSongLibrary, close: closeSongLibrary },
     songs: { type: 'tool', touch: openSongLibrary, icon: null },
     tools: { type: 'palette', children: ['edit', 'new'] },
     settings: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel },

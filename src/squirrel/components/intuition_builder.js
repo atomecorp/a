@@ -3171,6 +3171,34 @@ function runContentHandler(def, handlerName, payload = {}) {
     }
 }
 
+// Allow palette definitions to run a `touch` handler even though palettes normally act as containers.
+function triggerPaletteTouchHandler(el, def, nameKey) {
+    const resolvedKey = nameKey || (el && el.dataset && el.dataset.nameKey) || null;
+    const resolvedDef = def || (resolvedKey ? intuition_content[resolvedKey] : null);
+    if (!resolvedDef) {
+        return;
+    }
+    runContentHandler(resolvedDef, 'touch', {
+        el,
+        nameKey: resolvedKey,
+        kind: 'touch'
+    });
+}
+
+// Allow palette definitions to run a `close` handler whenever their satellite collapses.
+function triggerPaletteCloseHandler(el, def, nameKey) {
+    const resolvedKey = nameKey || (el && el.dataset && el.dataset.nameKey) || null;
+    const resolvedDef = def || (resolvedKey ? intuition_content[resolvedKey] : null);
+    if (!resolvedDef) {
+        return;
+    }
+    runContentHandler(resolvedDef, 'close', {
+        el,
+        nameKey: resolvedKey,
+        kind: 'close'
+    });
+}
+
 function handleToolSemanticEvent(kind, el, def, rawEvent) {
     if (!el) return;
     if (isEditModeActive()) return;
@@ -5640,6 +5668,11 @@ function handlePaletteClick(el, cfg) {
         return;
     }
 
+    const key = (el && el.dataset && el.dataset.nameKey)
+        || (cfg && cfg.nameKey)
+        || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
+    const desc = key ? intuition_content[key] : null;
+
     // Exclusif: ramener l'ancien palette si présent
     const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
     el.style.height = parseFloat(currentTheme.item_size) / 2 + 'px';
@@ -5647,6 +5680,7 @@ function handlePaletteClick(el, cfg) {
     // el.style.width = '300px';
 
     if (wasActive) {
+        triggerPaletteCloseHandler(el, desc, key);
         // BACK: go up one level in the stack and rebuild
         if (menuStack.length > 1) {
             const prevEntry = menuStack[menuStack.length - 2];
@@ -5673,9 +5707,12 @@ function handlePaletteClick(el, cfg) {
         }
         return;
     } else if (handlePaletteClick.active) {
+        triggerPaletteCloseHandler(handlePaletteClick.active.el);
         // Another palette was active; restore it before proceeding forward
         restorePalette(handlePaletteClick.active);
     }
+
+    triggerPaletteTouchHandler(el, desc, key);
 
     const supportEl = grab('toolbox_support');
     if (!supportEl || !el) return;
@@ -5714,7 +5751,6 @@ function handlePaletteClick(el, cfg) {
     setLabelCentered(el, true);
     // Apply palette icon/label visibility rules while outside
     setPaletteVisualState(el, true);
-    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
     const themeBg = (currentTheme && currentTheme.satellite_bg);
     const paletteType = inferDefinitionType(key ? intuition_content[key] : undefined);
     applyThemeToFloatingEntry(el, currentTheme, paletteType);
@@ -5729,7 +5765,7 @@ function handlePaletteClick(el, cfg) {
     const targetPos = computeExtractedPaletteTarget(phRect, supportRect, elW, elH, currentTheme);
     const targetLeft = targetPos.left;
     const targetTop = targetPos.top;
-    const desc = intuition_content[key];
+    // desc already resolved earlier
 
     // Animer le glissement de la position placeholder vers la position externe
     const dx = targetLeft - phRect.left;
@@ -5793,6 +5829,7 @@ function handleFloatingPaletteClick(el, cfg) {
     const activeMap = hostInfo.activeSatellites;
     const existingState = activeMap.get(nameKey);
     if (existingState) {
+        triggerPaletteCloseHandler(el, def, nameKey);
         if (Array.isArray(hostInfo.menuStack) && hostInfo.menuStack.length) {
             const idx = hostInfo.menuStack.findIndex((entry) => entry && entry.parent === nameKey);
             if (idx >= 0) {
@@ -5807,6 +5844,8 @@ function handleFloatingPaletteClick(el, cfg) {
         renderFloatingBody(hostInfo, fallbackKeys);
         return;
     }
+
+    triggerPaletteTouchHandler(el, def, nameKey);
 
     const floatingMenuKey = def && def.floatingMenuKey;
     const floatingDef = floatingMenuKey ? intuition_content[floatingMenuKey] : null;

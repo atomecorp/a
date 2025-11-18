@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "generatedAt": "2025-11-18T13:36:47.007Z",
+  "generatedAt": "2025-11-18T20:13:42.971Z",
   "scope": "src/application/examples",
   "description": "Hot-update manifest limited strictly to src/application/examples/**. Do not touch other src/application modules.",
   "rules": {
@@ -148,7 +148,7 @@
       "sha256": "29f9823836bba2edd8e298437b01bd6c467fee539040823642a7a39a2d0f9673"
     },
     {
-      "path": "src/application/examples/input example.js",
+      "path": "src/application/examples/input_example.js",
       "size": 1801,
       "sha256": "f38c386b9d234ae8a232c01dc8b9da61998f130da1ae67514aa0202f770f1d69"
     },

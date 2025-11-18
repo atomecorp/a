@@ -53,7 +53,8 @@
 // import('./examples/user_creation.js');
 
 
-import('./lyrix/index.js');
+// import('./lyrix/index.js');
+import('./examples/input_file.js');
 // import('./examples/iOS_app_launcher.js');
 // import('./examples/ios_audio_bridge.js');
 // import('./examples/iplug_ios.js');
@@ -77,7 +78,8 @@ import('./lyrix/index.js');
 // import('./vie/index.js');
 
 // import('./examples/events.js');
-
+//import('./examples/input_example.js');
+// 
 
 // import('./examples/drag_drop_files.js');
 // import('./examples/svg_fetch_usage.js');
