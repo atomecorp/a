@@ -1,247 +1,272 @@
-const demoCard = $('div', {
-	parent: '#view',
-	css: {
-		width: 'min(520px, 90vw)',
-		padding: '24px',
-		borderRadius: '18px',
-		backgroundColor: 'rgba(13, 18, 28, 0.9)',
-		color: '#f6f6f6',
-		fontFamily: 'Inter, system-ui, sans-serif',
-		lineHeight: '1.5',
-		boxShadow: '0 20px 60px rgba(0, 0, 0, 0.45)',
-		border: '1px solid rgba(255, 255, 255, 0.08)',
-		margin: '32px auto'
-	}
+const hiddenInputHost = document.querySelector('#view') || document.body || document.documentElement;
+const hiddenFilePicker = $('input', {
+    parent: hiddenInputHost,
+    css: { display: 'none' },
+    attrs: { type: 'file' }
 });
 
-$('div', {
-	parent: demoCard,
-	text: 'Local file loader',
-	css: {
-		fontSize: '20px',
-		fontWeight: '600',
-		marginBottom: '6px'
-	}
+let pendingInputRequest = null;
+const LONG_PRESS_DEFAULT_MS = 600;
+
+hiddenFilePicker.addEventListener('change', async (event) => {
+    const files = event.target?.files;
+    const file = files && files[0];
+    event.target.value = '';
+    const pending = pendingInputRequest;
+    pendingInputRequest = null;
+    if (!pending) return;
+    const { resolve, reject, meta } = pending;
+    if (!file) {
+        reject?.(new Error('User canceled the file selection.'));
+        return;
+    }
+    try {
+        const payload = await serializeFile(file);
+        resolve?.({ payload, meta, file });
+    } catch (error) {
+        reject?.(error);
+    }
 });
 
-$('div', {
-	parent: demoCard,
-	text: 'Pick any file from your disk and inspect its name, MIME type and contents. The full payload is also exposed on window.lastSelectedLocalFile for scripting.',
-	css: {
-		fontSize: '13px',
-		color: 'rgba(255, 255, 255, 0.75)',
-		marginBottom: '16px'
-	}
-});
-
-const actionsRow = $('div', {
-	parent: demoCard,
-	css: {
-		display: 'flex',
-		alignItems: 'center',
-		gap: '12px',
-		marginBottom: '18px'
-	}
-});
-
-const fileInput = $('input', {
-	parent: demoCard,
-	css: { display: 'none' },
-	attrs: { type: 'file' },
-	onChange: async (event) => {
-		const target = event.target;
-		const file = target?.files && target.files[0];
-		if (!file) return;
-		await handleSelectedFile(file);
-		target.value = '';
-	}
-});
-
-Button({
-	parent: actionsRow,
-	text: 'Choose a file',
-	css: {
-		padding: '10px 18px',
-		borderRadius: '10px',
-		border: 'none',
-		fontWeight: '600',
-		background: 'linear-gradient(120deg, #3f8efc, #9457ff)',
-		color: '#fff',
-		cursor: 'pointer',
-		letterSpacing: '0.3px'
-	},
-	onClick: () => openFilePicker()
-});
-
-$('div', {
-	parent: actionsRow,
-	text: 'or drop a file directly onto this window.',
-	css: {
-		fontSize: '12px',
-		color: 'rgba(255, 255, 255, 0.65)'
-	}
-});
-
-const metaPanel = $('div', {
-	parent: demoCard,
-	css: {
-		display: 'grid',
-		gridTemplateColumns: 'max-content 1fr',
-		rowGap: '6px',
-		columnGap: '10px',
-		fontSize: '13px',
-		padding: '14px 16px',
-		backgroundColor: 'rgba(255, 255, 255, 0.03)',
-		borderRadius: '12px',
-		border: '1px solid rgba(255, 255, 255, 0.08)',
-		marginBottom: '16px'
-	}
-});
-
-const metaNameValue = $('div', { parent: metaPanel, text: 'No file selected', css: { gridColumn: 'span 2', color: 'rgba(255,255,255,0.6)' } });
-const metaTypeLabel = $('div', { parent: metaPanel, text: 'Type', css: { color: 'rgba(255,255,255,0.6)' } });
-const metaTypeValue = $('div', { parent: metaPanel, text: '-', css: { fontWeight: '500' } });
-const metaSizeLabel = $('div', { parent: metaPanel, text: 'Size', css: { color: 'rgba(255,255,255,0.6)' } });
-const metaSizeValue = $('div', { parent: metaPanel, text: '-', css: { fontWeight: '500' } });
-const metaEncodingLabel = $('div', { parent: metaPanel, text: 'Encoding', css: { color: 'rgba(255,255,255,0.6)' } });
-const metaEncodingValue = $('div', { parent: metaPanel, text: '-', css: { fontWeight: '500' } });
-
-$('div', {
-	parent: demoCard,
-	text: 'Content preview',
-	css: {
-		fontSize: '12px',
-		letterSpacing: '0.12em',
-		textTransform: 'uppercase',
-		color: 'rgba(255, 255, 255, 0.5)',
-		marginBottom: '6px'
-	}
-});
-
-const contentPreview = $('pre', {
-	parent: demoCard,
-	text: 'Select a file to display its contents here. Large binary files will be shown as base64.',
-	css: {
-		minHeight: '180px',
-		maxHeight: '320px',
-		overflow: 'auto',
-		padding: '16px',
-		borderRadius: '12px',
-		backgroundColor: 'rgba(0, 0, 0, 0.55)',
-		fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-		fontSize: '12px',
-		whiteSpace: 'pre-wrap',
-		wordBreak: 'break-word',
-		border: '1px solid rgba(255, 255, 255, 0.08)'
-	}
-});
-
-async function openFilePicker() {
-	const hasNativePicker = typeof window.showOpenFilePicker === 'function';
-	if (hasNativePicker) {
-		try {
-			const [handle] = await window.showOpenFilePicker({ multiple: false });
-			if (!handle) return;
-			const file = await handle.getFile();
-			if (file) {
-				await handleSelectedFile(file);
-				return;
-			}
-		} catch (err) {
-			if (err?.name === 'AbortError') return;
-			console.warn('Native picker unavailable, falling back to hidden input.', err);
-		}
-	}
-	fileInput?.click();
+function requestHiddenInputFile(meta) {
+    if (pendingInputRequest) {
+        pendingInputRequest.reject?.(new Error('A file selection is already pending.'));
+    }
+    return new Promise((resolve, reject) => {
+        pendingInputRequest = { resolve, reject, meta };
+        hiddenFilePicker.click();
+    });
 }
 
-async function handleSelectedFile(file) {
-	metaNameValue.textContent = 'Loading...';
-	metaTypeValue.textContent = '-';
-	metaSizeValue.textContent = '-';
-	metaEncodingValue.textContent = '-';
-	contentPreview.textContent = 'Reading file contents...';
-
-	try {
-		const payload = await serializeFile(file);
-		updatePreview(payload);
-		window.lastSelectedLocalFile = payload;
-		console.log('Loaded file payload', payload);
-	} catch (error) {
-		console.error('Failed to read file', error);
-		metaNameValue.textContent = 'Error while reading file';
-		contentPreview.textContent = String(error?.message || error || 'Unknown error');
-	}
+async function requestNativePicker(meta) {
+    if (typeof window.showOpenFilePicker !== 'function') {
+        return requestHiddenInputFile(meta);
+    }
+    try {
+        const [handle] = await window.showOpenFilePicker({ multiple: false });
+        const file = await handle?.getFile();
+        if (!file) throw new Error('No file selected.');
+        const payload = await serializeFile(file);
+        return { payload, meta, file };
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw new Error('User canceled the file selection.');
+        }
+        return requestHiddenInputFile(meta);
+    }
 }
 
-function shouldReadAsText(file) {
-	const mime = (file?.type || '').toLowerCase();
-	if (!mime && typeof file?.name === 'string') {
-		return /\.(txt|md|json|csv|xml|html?|css|js|ts|lrc)$/i.test(file.name);
-	}
-	if (mime.startsWith('text/')) return true;
-	return ['application/json', 'application/xml', 'application/javascript', 'application/x-javascript', 'application/x-sh'].includes(mime);
+function resolveTarget(target) {
+    if (!target) return null;
+    if (typeof target === 'string') return document.querySelector(target);
+    if (target instanceof Element) return target;
+    return null;
 }
 
 async function serializeFile(file) {
-	if (!file) throw new Error('No file provided');
-	const readAsText = shouldReadAsText(file);
-	if (readAsText && typeof file.text === 'function') {
-		const textContent = await file.text();
-		return {
-			name: file.name,
-			type: file.type || 'text/plain',
-			size: file.size,
-			encoding: 'utf-8',
-			content: textContent
-		};
-	}
+    if (!file) throw new Error('No file provided');
+    const preferText = shouldReadAsText(file);
+    if (preferText && typeof file.text === 'function') {
+        const textContent = await file.text();
+        return {
+            name: file.name,
+            type: file.type || 'text/plain',
+            size: file.size,
+            encoding: 'utf-8',
+            content: textContent
+        };
+    }
+    const buffer = await file.arrayBuffer();
+    const base64 = arrayBufferToBase64(buffer);
+    return {
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        encoding: 'base64',
+        content: base64
+    };
+}
 
-	const buffer = await file.arrayBuffer();
-	const base64 = arrayBufferToBase64(buffer);
-	return {
-		name: file.name,
-		type: file.type || 'application/octet-stream',
-		size: file.size,
-		encoding: 'base64',
-		content: base64
-	};
+function shouldReadAsText(file) {
+    const mime = (file?.type || '').toLowerCase();
+    if (mime.startsWith('text/')) return true;
+    if (!mime && typeof file?.name === 'string') {
+        return /\.(txt|md|json|csv|xml|html?|css|js|ts|lrc)$/i.test(file.name);
+    }
+    return ['application/json', 'application/xml', 'application/javascript', 'application/x-javascript', 'application/x-sh'].includes(mime);
 }
 
 function arrayBufferToBase64(buffer) {
-	const bytes = new Uint8Array(buffer);
-	let binary = '';
-	const chunk = 0x8000;
-	for (let i = 0; i < bytes.length; i += chunk) {
-		const slice = bytes.subarray(i, i + chunk);
-		binary += String.fromCharCode.apply(null, slice);
-	}
-	return btoa(binary);
+    const bytes = new Uint8Array(buffer);
+    const chunk = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunk) {
+        const slice = bytes.subarray(i, i + chunk);
+        binary += String.fromCharCode.apply(null, slice);
+    }
+    return btoa(binary);
 }
 
-function formatBytes(bytes) {
-	if (!Number.isFinite(bytes)) return 'Unknown';
-	if (bytes === 0) return '0 B';
-	const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-	const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-	const value = bytes / Math.pow(1024, exponent);
-	return `${value.toFixed(exponent === 0 ? 0 : 2)} ${units[exponent]}`;
+function ensureArray(value) {
+    if (!value) return [];
+    return Array.isArray(value) ? value : [value];
 }
 
-function updatePreview(payload) {
-	metaNameValue.textContent = payload.name || 'Unnamed file';
-	metaTypeValue.textContent = payload.type || 'Unknown';
-	metaSizeValue.textContent = formatBytes(payload.size);
-	metaEncodingValue.textContent = payload.encoding;
-
-	if (typeof payload.content === 'string' && payload.content.length) {
-		const limit = 4000;
-		const truncated = payload.content.length > limit;
-		const preview = truncated ? `${payload.content.slice(0, limit)}\n... (${payload.content.length - limit} more characters)` : payload.content;
-		contentPreview.textContent = preview;
-	} else {
-		contentPreview.textContent = '(Empty file)';
-	}
+function createLongPressController(element, delay, handler) {
+    let timer = null;
+    const start = (event) => {
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        timer = setTimeout(() => {
+            timer = null;
+            handler(event);
+        }, delay);
+    };
+    const clear = () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    };
+    element.addEventListener('pointerdown', start);
+    element.addEventListener('pointerup', clear);
+    element.addEventListener('pointerleave', clear);
+    element.addEventListener('pointercancel', clear);
+    return () => {
+        element.removeEventListener('pointerdown', start);
+        element.removeEventListener('pointerup', clear);
+        element.removeEventListener('pointerleave', clear);
+        element.removeEventListener('pointercancel', clear);
+    };
 }
 
-window.handleLocalFileSelection = handleSelectedFile;
+function createFileInteractionBridge(target, options = {}) {
+    const element = resolveTarget(target);
+    if (!element) throw new Error('Target element not found.');
+
+    const {
+        triggers = ['click', 'longpress'],
+        holdDelay = LONG_PRESS_DEFAULT_MS,
+        onFile,
+        preventDefault = true
+    } = options;
+
+    const activeHandlers = [];
+
+    const dispatchPayload = async (source, rawEvent, explicitFile) => {
+        try {
+            const fileRecord = explicitFile
+                ? { payload: await serializeFile(explicitFile), meta: { source, event: rawEvent }, file: explicitFile }
+                : await requestNativePicker({ source, event: rawEvent });
+            const enrichedPayload = {
+                ...fileRecord.payload,
+                source,
+                event: rawEvent || null
+            };
+            window.lastSelectedLocalFile = enrichedPayload;
+            onFile?.(enrichedPayload, fileRecord.file);
+            return enrichedPayload;
+        } catch (error) {
+            console.warn(`[file-interaction] ${source} failed:`, error);
+            return null;
+        }
+    };
+
+    const makeClickHandler = (type) => (event) => {
+        if (preventDefault) event.preventDefault();
+        dispatchPayload(type, event);
+    };
+
+    ensureArray(triggers).forEach((trigger) => {
+        if (trigger === 'click') {
+            const handler = makeClickHandler('click');
+            element.addEventListener('click', handler);
+            activeHandlers.push(() => element.removeEventListener('click', handler));
+        } else if (trigger === 'doubleclick') {
+            const handler = makeClickHandler('doubleclick');
+            element.addEventListener('dblclick', handler);
+            activeHandlers.push(() => element.removeEventListener('dblclick', handler));
+        } else if (trigger === 'contextmenu') {
+            const handler = makeClickHandler('contextmenu');
+            element.addEventListener('contextmenu', handler);
+            activeHandlers.push(() => element.removeEventListener('contextmenu', handler));
+        } else if (trigger === 'longpress') {
+            const disposer = createLongPressController(element, holdDelay, (event) => {
+                if (preventDefault) event.preventDefault();
+                dispatchPayload('longpress', event);
+            });
+            activeHandlers.push(disposer);
+        }
+    });
+
+    const onDragOver = (event) => {
+        if (preventDefault) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        }
+    };
+
+    const onDrop = async (event) => {
+        if (preventDefault) event.preventDefault();
+        const files = event.dataTransfer?.files;
+        if (!files || !files.length) return;
+        const file = files[0];
+        await dispatchPayload('drop', event, file);
+    };
+
+    element.addEventListener('dragover', onDragOver);
+    element.addEventListener('drop', onDrop);
+    activeHandlers.push(() => {
+        element.removeEventListener('dragover', onDragOver);
+        element.removeEventListener('drop', onDrop);
+    });
+
+    return {
+        async pick(options = {}) {
+            const result = options.file
+                ? { payload: await serializeFile(options.file), meta: { source: 'manual', event: null }, file: options.file }
+                : await requestNativePicker({ source: 'manual', event: null });
+            const enriched = { ...result.payload, source: 'manual', event: null };
+            window.lastSelectedLocalFile = enriched;
+            onFile?.(enriched, result.file);
+            return enriched;
+        },
+        dispose() {
+            activeHandlers.splice(0).forEach((fn) => {
+                try { fn(); } catch (error) { console.error('[file-interaction] Cleanup failed:', error); }
+            });
+        }
+    };
+}
+
+window.createFileInteractionBridge = createFileInteractionBridge;
+window.serializeLocalFile = serializeFile;
+
+const demoTarget = $('div', {
+    parent: '#view',
+    id: 'file_bridge_demo',
+    text: 'Click, long-press or drop a file here',
+    css: {
+        marginTop: '48px',
+        width: 'min(420px, 90vw)',
+        padding: '28px',
+        borderRadius: '18px',
+        border: '1px dashed rgba(255, 255, 255, 0.35)',
+        textAlign: 'center',
+        color: '#f5f5f5',
+        fontWeight: '600',
+        fontSize: '15px',
+        letterSpacing: '0.6px',
+        backgroundColor: 'rgba(8, 12, 20, 0.85)',
+        marginLeft: 'auto',
+        marginRight: 'auto'
+    }
+});
+
+createFileInteractionBridge(demoTarget, {
+    triggers: ['click', 'longpress'],
+    onFile: (payload) => {
+        console.log('[file-bridge demo] received payload:', payload);
+        const summary = `Loaded: ${payload.name} (type: ${payload.type}, size: ${payload.size} bytes)`;
+        demoTarget.textContent = `${summary}\nContent preview: ${String(payload.content).slice(0, 120)}...`;
+    }
+});
