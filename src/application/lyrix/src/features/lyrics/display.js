@@ -2326,8 +2326,9 @@ export class LyricsDisplay {
         this.fullscreenMode = !this.fullscreenMode;
 
         if (this.fullscreenMode) {
-            grab('intuition').style.display = 'none';
 
+            grab('intuition').style.display = 'none';
+            grab("_intuition_perform").style.display = 'none';
             // Hide everything except lyrics content
             const leftPanel = document.getElementById('control_panel');
             const statusBar = document.querySelector('[style*="position: fixed"][style*="bottom"]');
@@ -2351,6 +2352,7 @@ export class LyricsDisplay {
         } else {
             // Remove click handler
             grab('intuition').style.display = 'flex';
+            grab("_intuition_perform").style.display = 'inline-flex';
             if (this.fullscreenClickHandler) {
                 this.lyricsContent.removeEventListener('click', this.fullscreenClickHandler);
                 this.fullscreenClickHandler = null;

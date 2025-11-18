@@ -2636,7 +2636,7 @@ function createMainInterface() {
                 padding: '0 8px', // Slightly reduced horizontal + no extra vertical height
                 boxSizing: 'border-box',
                 position: 'absolute',
-                top: '52px',
+                top: '3px',
                 left: '0',
                 right: '0',
                 width: '100%'

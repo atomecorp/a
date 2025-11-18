@@ -432,12 +432,12 @@ export function showSongLibrary() {
             console.error('❌ Export LRX failed', error);
         }
     }
-    const exportLRXButton = makeMiniBtn({
-        id: 'export-lrx-format',
-        onClick: exportSongLibraryAsLRX
-    });
+    // const exportLRXButton = makeMiniBtn({
+    //     id: 'export-lrx-format',
+    //     onClick: exportSongLibraryAsLRX
+    // });
     // Replace emoji with SVG save icon
-    try { exportLRXButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/save.svg'; img.alt = 'save'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Save'; span.style.fontSize = UNIFIED_FONT_SIZE; exportLRXButton.append(img, span); } catch (e) { }
+    // try { exportLRXButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/save.svg'; img.alt = 'save'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Save'; span.style.fontSize = UNIFIED_FONT_SIZE; exportLRXButton.append(img, span); } catch (e) { }
 
     const exportTextButton = makeMiniBtn({
         id: 'export-songs-as-text',
@@ -727,7 +727,7 @@ export function showSongLibrary() {
         originalSettings.style.display = 'none';
     }
 
-    actionButtons.append(exportLRXButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
+    actionButtons.append(autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     modal.append(headerTitle, actionButtons);
 
     // Content with search and song list

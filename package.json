@@ -64,6 +64,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "manifest:update": "node scripts_utils/update-hot-manifest.mjs",
     "update:libs": "./update_all_libraries.sh --mode latest",
     "update:libs:no-iplug": "./update_all_libraries.sh --mode latest --skip-iplug",
     "update:libs:basic": "./update_all_libraries.sh --mode latest --skip-tauri --skip-fastify",

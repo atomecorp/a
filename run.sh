@@ -204,6 +204,17 @@ fi
 prepare_uploads_dir
 prepare_monitored_dir
 
+update_hot_manifest() {
+    echo "🧾 Vérification du manifest de mise à jour à chaud..."
+    if npm run manifest:update; then
+        echo "✅ Manifest synchronisé (src/manifest.json)"
+    else
+        echo "❌ Impossible de synchroniser le manifest (src/manifest.json)."
+        exit 1
+    fi
+    echo ""
+}
+
 cd "$PROJECT_ROOT"
 
 FASTIFY_PID=""
@@ -296,6 +307,8 @@ else
     echo "✅ Dépendances déjà installées (utilisez --force pour forcer la mise à jour)"
     echo ""
 fi
+
+update_hot_manifest
 
 # Construction production si demandée
 if [ "$PROD_BUILD" = true ]; then

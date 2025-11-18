@@ -104,6 +104,7 @@ function nextMode() {
 }
 
 function fullscreenMode() {
+
     const button = document.getElementById('fullscreen_mode');
     if (button) {
         button.click();
@@ -116,7 +117,7 @@ function fullscreenMode() {
 
 
 function saveLRXFormat() {
-
+    exportSongLibraryAsLRX();
 }
 
 
@@ -125,7 +126,7 @@ const intuition_content = {
     meta: { namespace: "vie.menu", defaultLocale: "en" },
     toolbox: { children: ['file', 'tools', 'capture', 'perform', 'songs', 'settings'] },
     //
-    file: { type: 'palette', children: ['import', 'load', 'save', 'export'] },
+    file: { type: 'palette', children: ['import', 'save', 'export'], touch: openSongLibrary },
     songs: { type: 'tool', touch: openSongLibrary, icon: null },
     tools: { type: 'palette', children: ['edit', 'new'] },
     settings: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel },
@@ -133,18 +134,18 @@ const intuition_content = {
     perform: { label: 'perform', type: 'palette', children: ['play', 'pause', 'prev', 'next', 'fullscreen'], icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
-    import: { type: 'tool', touch_down: importFilesIntoLyrix },
+    import: { type: 'tool', touch_down: importFilesIntoLyrix, action: 'momentary' },
     load: { type: 'tool', touch: openSongLibrary },
-    save: { type: 'tool', touch: saveLRXFormat },
+    save: { type: 'tool', touch: saveLRXFormat, action: 'momentary' },
     export: { type: 'tool', touch: exportAsTxt, icon: false },
 
     edit: { type: 'tool', touch: activate_Edition, icon: 'edit' },
     new: { type: 'tool', icon: 'envelope', touch: createNewSongFromMenu, lock: tools_lock_test_touch },
-    play: { type: 'tool', touch: playMode },
+    play: { type: 'tool', touch: playMode, action: 'momentary' },
     pause: { type: 'tool', touch: pauseMode },
-    prev: { type: 'tool', touch: prevMode, icon: 'previous' },
-    next: { type: 'tool', touch: nextMode, icon: 'next' },
-    fullscreen: { type: 'tool', touch: fullscreenMode },
+    prev: { type: 'tool', touch: prevMode, icon: 'previous', action: 'momentary' },
+    next: { type: 'tool', touch: nextMode, icon: 'next', action: 'momentary' },
+    fullscreen: { type: 'tool', touch: fullscreenMode, action: 'momentary' },
 
 };
 

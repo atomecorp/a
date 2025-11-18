@@ -17,11 +17,11 @@ export class MidiUtilities {
 
     // Initialize the MIDI display container
     setupMidiDisplay() {
-        
+
         // Check MIDI inspector mode state
         const isMidiInspectorEnabled = localStorage.getItem('lyrix_midi_inspector_enabled') === 'true';
         const initialDisplay = isMidiInspectorEnabled ? 'block' : 'none'; // Show/hide based on MIDI inspector setting
-        
+
         // Create MIDI display container
         this.midiContainer = $('div', {
             id: 'midi-logger-container',
@@ -41,7 +41,7 @@ export class MidiUtilities {
                 display: 'none'
             }
         });
-        
+
         // Add data attribute for identification
         this.midiContainer.setAttribute('data-element', 'midi-logger');
 
@@ -133,7 +133,7 @@ export class MidiUtilities {
                 gap: '5px'
             }
         });
-        
+
         buttonContainer.append(clearButton, testButton);
         header.append(midiTitle, buttonContainer);
         this.midiContainer.append(header, this.statusLine, this.logContent);
@@ -147,10 +147,10 @@ export class MidiUtilities {
         const status = data1;
         const data1Byte = data2;
         const data2Byte = data3;
-        
+
         const channel = (status & 0x0F) + 1; // MIDI channels are 1-16
         const messageType = status & 0xF0;
-        
+
         let messageText = '';
         let messageColor = '#00ff00';
 
@@ -228,10 +228,10 @@ export class MidiUtilities {
         }
 
         const formattedMessage = this.formatMidiMessage(data1, data2, data3, timestamp);
-        
+
         // Add to messages array
         this.midiMessages.push(formattedMessage);
-        
+
         // Limit number of messages
         if (this.midiMessages.length > this.maxLogEntries) {
             this.midiMessages.shift();
@@ -239,7 +239,7 @@ export class MidiUtilities {
 
         // Update display
         this.updateMidiDisplay();
-        
+
         // Update status
         this.updateStatus();
     }
@@ -253,11 +253,11 @@ export class MidiUtilities {
 
         // Add recent messages (reverse order to show newest first)
         const recentMessages = this.midiMessages.slice(-20).reverse();
-        
+
         recentMessages.forEach(message => {
             const timestamp = new Date(message.timestamp);
             const timeString = `${timestamp.getHours().toString().padStart(2, '0')}:${timestamp.getMinutes().toString().padStart(2, '0')}:${timestamp.getSeconds().toString().padStart(2, '0')}.${timestamp.getMilliseconds().toString().padStart(3, '0')}`;
-            
+
             const messageDiv = $('div', {
                 css: {
                     marginBottom: '1px',
@@ -302,7 +302,7 @@ export class MidiUtilities {
 
         const totalMessages = this.midiMessages.length;
         const lastMessage = this.midiMessages[this.midiMessages.length - 1];
-        
+
         if (lastMessage) {
             const timeSince = Date.now() - lastMessage.timestamp;
             this.statusLine.textContent = `Messages: ${totalMessages} | Last: ${timeSince}ms ago`;
@@ -322,7 +322,7 @@ export class MidiUtilities {
 
     // Method to be called from Swift via JavaScript bridge
     receiveMidiData(data1, data2, data3, timestamp = null) {
-        
+
         // Handle MIDI learning mode
         if (this.isLearning && this.learnCallback) {
             // Check if it's a Note On message (0x90-0x9F)
@@ -333,17 +333,17 @@ export class MidiUtilities {
                 return;
             }
         }
-        
+
         // Handle song loading from MIDI
         if ((data1 & 0xF0) === 0x90 && data3 > 0) { // Note On with velocity > 0
             const midiNote = data2;
             this.handleMidiSongTrigger(midiNote);
             this.handleMidiSpecialTrigger(midiNote);
         }
-        
+
         this.logMidiMessage(data1, data2, data3, timestamp);
     }
-    
+
     // Test method to simulate MIDI data
     testMidiData() {
         this.receiveMidiData(0x90, 60, 127); // Note On
@@ -381,7 +381,7 @@ export class MidiUtilities {
     startMidiLearn(callback) {
         this.isLearning = true;
         this.learnCallback = callback;
-        
+
         // Update status
         if (this.statusLine) {
             this.statusLine.textContent = 'MIDI Learning: Press a key on your MIDI device...';
@@ -392,7 +392,7 @@ export class MidiUtilities {
     stopMidiLearn() {
         this.isLearning = false;
         this.learnCallback = null;
-        
+
         // Update status
         if (this.statusLine) {
             this.statusLine.textContent = 'Waiting for MIDI data...';
@@ -428,7 +428,7 @@ export class MidiUtilities {
     handleMidiSongTrigger(midiNote) {
         const songKey = this.midiAssignments.get(midiNote);
         if (songKey) {
-            
+
             // Call the global loadAndDisplaySong function if available
             if (window.loadAndDisplaySong) {
                 window.loadAndDisplaySong(songKey);
@@ -465,12 +465,12 @@ export class MidiUtilities {
 
     // Special Assignment Methods (for fullscreen, etc.)
     setMidiSpecialAssignment(actionKey, midiNote) {
-        
+
         // For fullscreen actions, remove any existing assignment to prevent accumulation
         if (actionKey === 'fullscreen_activate' || actionKey === 'fullscreen_deactivate') {
             this.removeMidiSpecialAssignment(actionKey);
         }
-        
+
         this.specialAssignments.set(parseInt(midiNote), actionKey);
         this.saveSpecialAssignments();
     }
@@ -495,10 +495,10 @@ export class MidiUtilities {
     }
 
     handleMidiSpecialTrigger(midiNote) {
-        
+
         const actionKey = this.specialAssignments.get(midiNote);
         if (actionKey) {
-            
+
             switch (actionKey) {
                 case 'enter_fullscreen':
                     this.toggleFullscreen(true);
@@ -530,21 +530,7 @@ export class MidiUtilities {
         }
     }
 
-    // Unified fullscreen toggle method
-    toggleFullscreen(enterFullscreen = null) {
-        
-        // Try to call the display instance method directly
-        if (window.Lyrix && window.Lyrix.lyricsDisplay) {
-            window.Lyrix.lyricsDisplay.toggleFullscreen(enterFullscreen);
-        } else {
-            // Fallback to button click (but this won't support the parameter)
-            const fullscreenButton = document.getElementById('fullscreen_mode');
-            if (fullscreenButton) {
-                fullscreenButton.click();
-            } else {
-            }
-        }
-    }
+
 
     // Special assignments storage methods
     saveSpecialAssignments() {
@@ -575,13 +561,13 @@ export class MidiUtilities {
     // Test fullscreen functionality manually (for debugging)
     testFullscreenManually() {
         this.toggleFullscreen(true);  // Enter fullscreen
-        
+
         setTimeout(() => {
             this.toggleFullscreen(false);  // Exit fullscreen
         }, 3000);
     }
 
-        // Trigger play/pause functionality
+    // Trigger play/pause functionality
     triggerPlayPause() {
         // Try to call the audio controller directly first
         if (window.Lyrix && window.Lyrix.audioController) {

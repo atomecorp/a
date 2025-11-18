@@ -301,30 +301,26 @@ function normalizeFloatingSnapshotStates(payload) {
 
 
 
-setTimeout(() => {
-  const test_elem = {
-    content: { key: "tools", title: "tools", children: ["volume", "ADSR", "controller"] },
+const test_elem = {
+  content: { key: "tools", title: "tools", children: ["volume", "ADSR", "controller"] },
 
-    id: "intuition-floating-1",
+  id: "intuition-floating-1",
 
-    orientation: "top_left_vertical",
+  orientation: "top_left_vertical",
 
-    state: 'close',
+  state: 'close',
 
 
-    position: { left: 0, top: 183 },
+  position: { left: 0, top: 183 },
 
-    reference: "toolbox",
+  reference: "toolbox",
 
-    toolboxOffsetEdge: 19,
+  toolboxOffsetEdge: 19,
 
-    toolboxOffsetMain: 7
-  }
-
-  Intuition({ type: 'extract', content: test_elem });
-  puts('restore extract in 2s')
+  toolboxOffsetMain: 7
 }
-  , 2000);
+
+Intuition({ type: 'extract', content: test_elem });
 
 
 
@@ -395,34 +391,6 @@ setTimeout(() => {
   }
 }, 7500);
 
-
-
-// $('span', {
-//   id: 'checker',
-//   css: {
-//     backgroundColor: '#00f',
-//     marginLeft: '0',
-//     padding: '10px',
-//     color: 'white',
-//     margin: '10px',
-//     display: 'inline-block',
-//     left: '50%',
-//     top: '50%',
-//     position: 'relative',
-//     transform: 'translateX(-50%)'
-//   },
-//   text: 'intuition content',
-//   onclick: () => {
-//     const snapshot = typeof window.getFloatingPalettePersistenceSnapshot === 'function'
-//       ? window.getFloatingPalettePersistenceSnapshot()
-//       : null;
-//     if (snapshot && typeof snapshot === 'object') {
-//       console.log('📦 Extracted palette metadata snapshot:', snapshot);
-//     } else {
-//       console.log('⚠️ Aucun extrait enregistré pour le moment (snapshot indisponible).');
-//     }
-//   },
-// });
 
 
 $('div', {
