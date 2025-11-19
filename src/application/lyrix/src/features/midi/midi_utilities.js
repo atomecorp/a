@@ -513,16 +513,16 @@ export class MidiUtilities {
 
             switch (actionKey) {
                 case 'enter_fullscreen':
-                    this.toggleFullscreen(true);
-                    break;
                 case 'exit_fullscreen':
-                    this.toggleFullscreen(false);
-                    break;
                 case 'fullscreen_activate':
-                    this.toggleFullscreen(true);
-                    break;
                 case 'fullscreen_deactivate':
-                    this.toggleFullscreen(false);
+                    if (typeof window.fullscreenMode === 'function') {
+                        window.fullscreenMode();
+                    } else if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleFullscreen === 'function') {
+                        window.lyricsDisplay.toggleFullscreen();
+                    } else {
+                        console.warn('[midi] Fullscreen shortcut triggered but no handler available');
+                    }
                     break;
                 case 'play_pause':
                     this.triggerPlayPause();
@@ -584,11 +584,15 @@ export class MidiUtilities {
 
     // Test fullscreen functionality manually (for debugging)
     testFullscreenManually() {
-        this.toggleFullscreen(true);  // Enter fullscreen
-
-        setTimeout(() => {
-            this.toggleFullscreen(false);  // Exit fullscreen
-        }, 3000);
+        if (typeof window.fullscreenMode === 'function') {
+            window.fullscreenMode();
+            setTimeout(() => window.fullscreenMode(), 3000);
+        } else if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleFullscreen === 'function') {
+            window.lyricsDisplay.toggleFullscreen();
+            setTimeout(() => window.lyricsDisplay.toggleFullscreen(), 3000);
+        } else {
+            console.warn('[midi] Unable to test fullscreen manually—no handler found');
+        }
     }
 
     // Trigger play/pause functionality
