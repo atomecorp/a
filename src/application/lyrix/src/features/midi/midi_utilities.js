@@ -458,6 +458,18 @@ export class MidiUtilities {
         }
     }
 
+    restoreMidiAssignments(assignmentsObj = {}) {
+        try {
+            this.midiAssignments = new Map(Object.entries(assignmentsObj).map(([k, v]) => [parseInt(k, 10), v]));
+            this.saveMidiAssignments();
+        } catch (error) {
+        }
+    }
+
+    getAssignmentSnapshot() {
+        return Object.fromEntries(this.midiAssignments);
+    }
+
     // Get all assignments for debugging
     getAllAssignments() {
         return Object.fromEntries(this.midiAssignments);
@@ -551,6 +563,18 @@ export class MidiUtilities {
         } catch (error) {
             this.specialAssignments = new Map();
         }
+    }
+
+    restoreSpecialAssignments(assignmentsObj = {}) {
+        try {
+            this.specialAssignments = new Map(Object.entries(assignmentsObj).map(([k, v]) => [parseInt(k, 10), v]));
+            this.saveSpecialAssignments();
+        } catch (error) {
+        }
+    }
+
+    getSpecialAssignmentSnapshot() {
+        return Object.fromEntries(this.specialAssignments);
     }
 
     // Get all special assignments for debugging

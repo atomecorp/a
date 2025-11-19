@@ -12,7 +12,7 @@ import { debugLog, extractCleanFileName } from '../audio/audio.js';
 function dragLog(message) {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const prefixedMessage = `⚛️ ATOME-APP: [DRAG-DROP] ${message}`;
-    
+
     if (isIOS) {
         try {
             if (window.webkit?.messageHandlers?.console) {
@@ -57,7 +57,7 @@ export class DragDropManager {
     // Show custom alert using Modal system (currently disabled to avoid pop-ups)
     showCustomAlert(title, message) {
         // Just log to console instead of showing modal
-        
+
         // Uncomment below to re-enable modal alerts
         /*
         Modal({
@@ -175,9 +175,9 @@ export class DragDropManager {
                 this.handleDroppedFiles(files);
             }
         });
-        
+
     }
-    
+
     isDraggedFileText(event) {
         const items = event.dataTransfer.items;
         if (!items) return false;
@@ -187,7 +187,7 @@ export class DragDropManager {
             if (item.kind === 'file') {
                 const type = item.type;
                 // Check MIME types for text files
-                if (type.startsWith('text/') || 
+                if (type.startsWith('text/') ||
                     type === 'application/json' ||
                     type === '' || // Fichiers sans extension ou .txt
                     item.getAsFile()?.name.match(/\.(txt|lrc|json|md|lyrics)$/i)) {
@@ -207,7 +207,7 @@ export class DragDropManager {
             if (item.kind === 'file') {
                 const type = item.type;
                 // Check MIME types for audio files
-                if (type.startsWith('audio/') || 
+                if (type.startsWith('audio/') ||
                     type.startsWith('video/') ||
                     item.getAsFile()?.name.match(/\.(mp3|mp4|wav|m4a|aac|flac|ogg|webm)$/i)) {
                     return true;
@@ -223,10 +223,10 @@ export class DragDropManager {
 
     async handleDroppedFiles(files) {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        
+
         // Show processing indicator
         this.showProcessingIndicator(true);
-        
+
         try {
             if (isIOS) {
                 // iOS: Process files sequentially with delays to minimize system conflicts
@@ -244,13 +244,13 @@ export class DragDropManager {
     async processFilesSequentiallyWithDelay(files) {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            
+
             try {
                 // Add delay between files on iOS to prevent view service issues
                 if (i > 0) {
                     await new Promise(resolve => setTimeout(resolve, 200));
                 }
-                
+
                 await this.processFile(file);
             } catch (error) {
                 // More specific error handling for iOS
@@ -270,9 +270,9 @@ export class DragDropManager {
 
     async importLRXFile(content) {
         try {
-            
+
             const importData = JSON.parse(content);
-            
+
             // Validate LRX format
             if (!importData.songs || !Array.isArray(importData.songs)) {
                 throw new Error('Invalid LRX format: missing songs array');
@@ -296,33 +296,33 @@ export class DragDropManager {
 
                     // Create SyncedLyrics instance with standard constructor
                     const syncedLyrics = new SyncedLyrics(title, artist, album, duration, songId);
-                    
+
                     // Add other properties
                     syncedLyrics.lines = songData.lines || [];
-                    
+
                     // Assign audioPath in metadata (not directly on the object)
                     if (songData.audioPath) {
                         // MIGRATION: Clean old audioPath format to new format (filename only with spaces)
                         const cleanAudioPath = extractCleanFileName(songData.audioPath);
                         syncedLyrics.metadata.audioPath = cleanAudioPath;
-                        
+
                         dragLog(`📦 Audio path assigned: ${cleanAudioPath}`);
-                        
+
                         // Log migration status
                         if (songData.audioPath !== cleanAudioPath) {
                             dragLog(`🔄 MIGRATED audioPath from: "${songData.audioPath}" to: "${cleanAudioPath}"`);
                         } else {
                             dragLog(`✅ Audio path already in correct format: ${cleanAudioPath}`);
                         }
-                        
+
                         dragLog(`📦 Audio path contains spaces: ${cleanAudioPath.includes(' ')}`);
                         dragLog(`📦 Audio path contains %20: ${cleanAudioPath.includes('%20')}`);
                     }
-                    
+
                     if (songData.syncData) {
                         syncedLyrics.syncData = songData.syncData;
                     }
-                    
+
                     // Merge complete metadata if present
                     if (songData.metadata) {
                         syncedLyrics.metadata = {
@@ -351,6 +351,21 @@ export class DragDropManager {
             } else {
             }
 
+            // Restore MIDI assignments if present in the LRX payload
+            if (importData.midiAssignments || importData.midiSpecialAssignments) {
+                const midiUtils = window.Lyrix?.midiUtilities;
+                if (midiUtils) {
+                    if (importData.midiAssignments) {
+                        midiUtils.restoreMidiAssignments(importData.midiAssignments);
+                        dragLog('🎛️ Restored song MIDI assignments from LRX file');
+                    }
+                    if (importData.midiSpecialAssignments) {
+                        midiUtils.restoreSpecialAssignments(importData.midiSpecialAssignments);
+                        dragLog('🎛️ Restored MIDI shortcut assignments from LRX file');
+                    }
+                }
+            }
+
             return { success: true, imported: importedCount, errors };
 
         } catch (error) {
@@ -360,7 +375,7 @@ export class DragDropManager {
 
     async processFile(file) {
         dragLog(`📂 Processing file: ${file.name} (${file.type}) - ${(file.size / 1024).toFixed(1)} KB`);
-        
+
         // Check if it's an LRX file (Lyrix library)
         if (this.isLRXFile(file)) {
             try {
@@ -399,7 +414,7 @@ export class DragDropManager {
     async processTextFile(file) {
         try {
             const content = await this.readFileContent(file);
-            
+
             const filename = file.name;
             await this.createSongFromText(filename, content);
         } catch (error) {
@@ -417,7 +432,7 @@ export class DragDropManager {
                 if (destPath) {
                     await this.refreshSongAudioBinding(destPath, file.name);
                 }
-            } catch(copyErr) {
+            } catch (copyErr) {
                 dragLog(`⚠️ Audio copy skipped: ${copyErr.message}`);
             }
         } catch (error) {
@@ -428,7 +443,7 @@ export class DragDropManager {
     // Afficher/masquer l'indicateur de traitement
     showProcessingIndicator(show) {
         if (!this.dropZone) return;
-        
+
         if (show) {
             // No visual feedback during processing
         } else {
@@ -440,9 +455,9 @@ export class DragDropManager {
     // Create drop zone content
     createDropZoneContent() {
         if (!this.dropZone) return;
-        
+
         this.dropZone.innerHTML = '';
-        
+
         const dropText = $('div', {
             text: '📄 Déposez un fichier texte (.txt, .lrc) ici pour créer une nouvelle chanson',
             css: {
@@ -482,7 +497,7 @@ export class DragDropManager {
 
     isTextFile(file) {
         // Check MIME type
-        if (file.type.startsWith('text/') || 
+        if (file.type.startsWith('text/') ||
             file.type === 'application/json' ||
             file.type === '') {
             return true;
@@ -512,7 +527,7 @@ export class DragDropManager {
     readFileContent(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            
+
             // iOS: Add timeout to prevent hanging
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             if (isIOS) {
@@ -520,12 +535,12 @@ export class DragDropManager {
                     reader.abort();
                     reject(new Error('iOS file read timeout'));
                 }, 10000); // 10 second timeout for iOS
-                
+
                 reader.onload = (e) => {
                     clearTimeout(timeout);
                     resolve(e.target.result);
                 };
-                
+
                 reader.onerror = (e) => {
                     clearTimeout(timeout);
                     reject(new Error('iOS file read error'));
@@ -534,12 +549,12 @@ export class DragDropManager {
                 reader.onload = (e) => resolve(e.target.result);
                 reader.onerror = (e) => reject(new Error('Erreur de lecture du fichier'));
             }
-            
+
             reader.readAsText(file, 'UTF-8');
         });
     }
 
-  
+
 
     async createSongFromText(filename, content) {
         try {
@@ -561,7 +576,7 @@ export class DragDropManager {
 
     async createSongFromLRC(title, lrcContent) {
         try {
-            
+
             // Use existing method to parse LRC
             const syncedLyrics = SyncedLyrics.fromLRC(lrcContent);
 
@@ -575,25 +590,25 @@ export class DragDropManager {
 
             // Regenerate ID with new metadata
             syncedLyrics.songId = this.lyricsLibrary.generateSongId(
-                syncedLyrics.metadata.title, 
+                syncedLyrics.metadata.title,
                 syncedLyrics.metadata.artist
             );
 
 
             // Sauvegarder et charger
             const saved = this.lyricsLibrary.saveSong(syncedLyrics);
-            
+
             if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
                 this.lyricsDisplay.displayLyrics(syncedLyrics);
                 this.currentLyrics = syncedLyrics;
-                
+
                 // Notify main application that a song was loaded
                 if (this.onSongLoaded) {
                     this.onSongLoaded(syncedLyrics);
                 }
             } else {
             }
-            
+
             // Success message in console instead of modal
             return syncedLyrics;
 
@@ -605,7 +620,7 @@ export class DragDropManager {
 
     async createSongFromPlainText(title, textContent) {
         try {
-            
+
             // Create new song directly via library
             const newSong = this.lyricsLibrary.createSong(title, 'Artiste Inconnu', '');
 
@@ -634,21 +649,21 @@ export class DragDropManager {
 
             // Sauvegarder et charger
             const saved = this.lyricsLibrary.saveSong(newSong);
-            
+
             if (this.lyricsDisplay && this.lyricsDisplay.displayLyrics) {
                 this.lyricsDisplay.displayLyrics(newSong);
                 this.currentLyrics = newSong;
-                
+
                 // Notify main application that a song was loaded
                 if (this.onSongLoaded) {
                     this.onSongLoaded(newSong);
                 }
             } else {
             }
-            
+
             // Success message in console instead of modal
             return newSong;
-            
+
         } catch (error) {
             throw error;
         }
@@ -659,13 +674,13 @@ export class DragDropManager {
         const fileName = file.name;
         const fileSize = file.size;
         const lastModified = file.lastModified;
-        
+
         // Create the audio file path with BASE_PATH prefix for storage
         const audioFilePath = `${CONSTANTS.AUDIO.BASE_PATH}${fileName}`;
-        
+
         // Create unique identifier for file based on its properties
         const fileId = `${fileName}_${fileSize}_${lastModified}`;
-        
+
         // Create file metadata with path
         const audioMetadata = {
             fileName: fileName,
@@ -674,7 +689,7 @@ export class DragDropManager {
             fileId: fileId,
             filePath: audioFilePath
         };
-        
+
         // If a song is currently loaded, associate the file path
         if (this.currentLyrics) {
             // Store ONLY the filename (not the full path) for .lrx files
@@ -682,33 +697,33 @@ export class DragDropManager {
             const cleanFileName = extractCleanFileName(fileName);
             this.currentLyrics.setAudioPath(cleanFileName);
             debugLog('AUDIO-LOAD', 'Set audioPath to clean filename', { original: fileName, clean: cleanFileName });
-            
+
             // Sauvegarder les changements
             if (this.lyricsLibrary) {
                 this.lyricsLibrary.saveSong(this.currentLyrics);
             }
-            
+
             // Notify main application that the song was updated with audio
             if (this.onSongLoaded) {
                 this.onSongLoaded(this.currentLyrics);
             }
         }
-        
+
         // Load the audio for playback using just the filename (AudioManager will handle the URL creation)
         if (this.audioController && this.audioController.loadAudio) {
             this.audioController.loadAudio(fileName);
         }
-        
+
         // Store references
         this.audioPath = audioFilePath;
         this.currentAudioFileName = fileName;
         this.currentAudioMetadata = audioMetadata;
-        
+
         // Afficher le nom de fichier avec la taille
         const sizeInMB = (fileSize / (1024 * 1024)).toFixed(1);
-        
+
         // Audio file loaded successfully - update the audio player title
-        
+
         // Update the audio player title directly
         this.updateAudioPlayerTitle(fileName);
     }
@@ -716,19 +731,19 @@ export class DragDropManager {
     // iOS-enhanced audio file loading with retry mechanism
     async loadAudioFileWithRetry(file, maxRetries = 2) {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        
+
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 // On iOS, add delay for first attempt to prevent view service issues
                 if (isIOS && attempt === 1) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
-                
+
                 await this.loadAudioFileAsync(file);
                 return; // Success, exit retry loop
-                
+
             } catch (error) {
-                
+
                 // Check for iOS-specific errors
                 if (isIOS && (error.message.includes('view service') || error.message.includes('thumbnail'))) {
                     if (attempt < maxRetries) {
@@ -738,7 +753,7 @@ export class DragDropManager {
                         throw new Error(`iOS file loading failed after ${maxRetries} attempts. Try selecting one file at a time.`);
                     }
                 }
-                
+
                 // For other errors, don't retry
                 throw error;
             }
@@ -751,7 +766,7 @@ export class DragDropManager {
         return new Promise((resolve, reject) => {
             try {
                 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-                
+
                 if (isIOS) {
                     // iOS-specific file handling
                     this.loadAudioFileIOS(file, resolve, reject);
@@ -769,11 +784,11 @@ export class DragDropManager {
     // iOS-specific audio file loading with enhanced memory management
     loadAudioFileIOS(file, resolve, reject) {
         try {
-            
+
             // Check memory constraints before processing
             if (file.size > 50 * 1024 * 1024) { // 50MB limit for iOS
             }
-            
+
             // Enhanced object URL creation with error handling
             let fileURL;
             try {
@@ -782,11 +797,11 @@ export class DragDropManager {
                 reject(new Error(`iOS file URL creation failed: ${urlError.message}`));
                 return;
             }
-            
+
             const fileName = file.name;
             const fileSize = file.size;
             const lastModified = file.lastModified;
-            
+
             // Create file metadata for iOS with enhanced error checking
             const audioMetadata = {
                 fileName: fileName,
@@ -798,7 +813,7 @@ export class DragDropManager {
                 platform: 'iOS',
                 created: new Date().toISOString()
             };
-            
+
             // Associate with current lyrics if available
             if (this.currentLyrics) {
                 try {
@@ -807,11 +822,11 @@ export class DragDropManager {
                     const cleanFileName = extractCleanFileName(fileName);
                     this.currentLyrics.setAudioPath(cleanFileName);
                     debugLog('iOS-AUDIO-LOAD', 'Set audioPath to clean filename', { original: fileName, clean: cleanFileName });
-                    
+
                     if (this.lyricsLibrary) {
                         this.lyricsLibrary.saveSong(this.currentLyrics);
                     }
-                    
+
                     if (this.onSongLoaded) {
                         this.onSongLoaded(this.currentLyrics);
                     }
@@ -819,17 +834,17 @@ export class DragDropManager {
                     // Continue processing despite save error
                 }
             }
-            
+
             // Load audio with iOS-specific handling and timeout
             if (this.audioController) {
                 const loadTimeout = setTimeout(() => {
                     reject(new Error('iOS audio loading timeout after 30 seconds'));
                 }, 30000);
-                
+
                 try {
                     // Enhanced iOS audio loading
                     if (this.audioController.loadFromUrl) {
-                        
+
                         // Add success listener before loading
                         const loadSuccessHandler = () => {
                             clearTimeout(loadTimeout);
@@ -837,20 +852,20 @@ export class DragDropManager {
                             this.audioController.off('error', loadErrorHandler);
                             resolve();
                         };
-                        
+
                         const loadErrorHandler = (error) => {
                             clearTimeout(loadTimeout);
                             this.audioController.off('loaded', loadSuccessHandler);
                             this.audioController.off('error', loadErrorHandler);
-                            
+
                             // Clean up object URL on error
                             URL.revokeObjectURL(fileURL);
                             reject(error);
                         };
-                        
+
                         this.audioController.on('loaded', loadSuccessHandler);
                         this.audioController.on('error', loadErrorHandler);
-                        
+
                         // Load with delay for iOS stability
                         setTimeout(() => {
                             const loadResult = this.audioController.loadFromUrl(fileURL);
@@ -861,7 +876,7 @@ export class DragDropManager {
                                 reject(new Error('Failed to initiate iOS audio loading'));
                             }
                         }, 300);
-                        
+
                     } else {
                         // Fallback to standard loading
                         clearTimeout(loadTimeout);
@@ -878,14 +893,14 @@ export class DragDropManager {
                 reject(new Error('Audio controller not available'));
                 return;
             }
-            
+
             // Store references
             this.audioPath = fileURL;
             this.currentAudioFileName = fileName;
             this.currentAudioMetadata = audioMetadata;
-            
+
             const sizeInMB = (fileSize / (1024 * 1024)).toFixed(1);
-            
+
         } catch (error) {
             reject(error);
         }
@@ -924,14 +939,14 @@ export class DragDropManager {
         }
         this.audioPath = null;
         this.currentAudioFileName = null;
-        
+
         if (this.currentLyrics) {
             this.currentLyrics.setAudioPath('');
             if (this.lyricsLibrary) {
                 this.lyricsLibrary.saveSong(this.currentLyrics);
             }
         }
-        
+
         if (this.audioController && this.audioController.clearAudio) {
             this.audioController.clearAudio();
         }
@@ -960,11 +975,11 @@ export class DragDropManager {
     // Cleanup method
     destroy() {
         this.clearAudio();
-        
+
         if (this.container && this.dropZone) {
             this.dropZone.remove();
         }
-        
+
         this.container = null;
         this.dropZone = null;
         this.audioController = null;
@@ -975,74 +990,74 @@ export class DragDropManager {
     // -------------------------------------------------------------
     // Copie du fichier audio importé dans le stockage local iOS/Files
     // -------------------------------------------------------------
-    async copyAudioFileToLocal(file){
-        if(!file){ dragLog('🚫 copyAudioFileToLocal: file null'); return; }
-        if(!this.isAudioFile(file)){ dragLog('🚫 copyAudioFileToLocal: pas audio'); return; }
+    async copyAudioFileToLocal(file) {
+        if (!file) { dragLog('🚫 copyAudioFileToLocal: file null'); return; }
+        if (!this.isAudioFile(file)) { dragLog('🚫 copyAudioFileToLocal: pas audio'); return; }
         const bridgeOk = !!(window.AtomeFileSystem && window.webkit?.messageHandlers?.fileSystem);
-        if(!bridgeOk){
+        if (!bridgeOk) {
             dragLog('⚠️ copyAudioFileToLocal: bridge fileSystem absent -> fallback (pas de copie native)');
             return; // on pourrait ajouter un fallback download si nécessaire
         }
         // Ne pas copier > 120MB (limite arbitraire pour éviter mémoire excessive)
-        if(file.size > 120 * 1024 * 1024) throw new Error('fichier trop volumineux pour copie');
-    // Enregistrer désormais directement à la racine du dossier local (pas dans Recordings/)
-    const baseFolder = ''; // racine
-    const originalName = file.name;
-    const finalName = await this.computeAvailableFileName(baseFolder, originalName);
-    const relPath = finalName; // pas de préfixe dossier
-    dragLog(`📥 Préparation copie audio vers racine: ${relPath} (size=${(file.size/1024).toFixed(1)}KB type=${file.type||'n/a'})`);
+        if (file.size > 120 * 1024 * 1024) throw new Error('fichier trop volumineux pour copie');
+        // Enregistrer désormais directement à la racine du dossier local (pas dans Recordings/)
+        const baseFolder = ''; // racine
+        const originalName = file.name;
+        const finalName = await this.computeAvailableFileName(baseFolder, originalName);
+        const relPath = finalName; // pas de préfixe dossier
+        dragLog(`📥 Préparation copie audio vers racine: ${relPath} (size=${(file.size / 1024).toFixed(1)}KB type=${file.type || 'n/a'})`);
 
         const arrayBuffer = await file.arrayBuffer();
         const b64 = this.arrayBufferToBase64(arrayBuffer);
         // Utiliser le marqueur __BASE64__ pour déclencher décodage côté Swift
         try {
-            await this.saveViaBridge(relPath, '__BASE64__'+b64);
+            await this.saveViaBridge(relPath, '__BASE64__' + b64);
             dragLog(`✅ Audio copié localement: ${relPath}`);
-        } catch(err){
+        } catch (err) {
             dragLog(`❌ Echec saveViaBridge: ${err.message}`);
             return;
         }
-    // Déclenche une synchronisation serveur pour exposer immédiatement ce fichier via /audio & /tree
-    this.triggerServerSync();
+        // Déclenche une synchronisation serveur pour exposer immédiatement ce fichier via /audio & /tree
+        this.triggerServerSync();
         return relPath;
     }
 
-    async computeAvailableFileName(folder, desiredName){
+    async computeAvailableFileName(folder, desiredName) {
         // Récup liste existante
-    const existing = await this.listFilesPromise(folder || '.').catch(()=>[]);
-        const existingNames = new Set(existing.map(f=>f.name));
-        if(!existingNames.has(desiredName)) return desiredName;
+        const existing = await this.listFilesPromise(folder || '.').catch(() => []);
+        const existingNames = new Set(existing.map(f => f.name));
+        if (!existingNames.has(desiredName)) return desiredName;
         const dot = desiredName.lastIndexOf('.');
-        const base = dot>0 ? desiredName.slice(0,dot) : desiredName;
-        const ext = dot>0 ? desiredName.slice(dot) : '';
+        const base = dot > 0 ? desiredName.slice(0, dot) : desiredName;
+        const ext = dot > 0 ? desiredName.slice(dot) : '';
         let idx = 1;
-        while(existingNames.has(base+`_${idx}`+ext)) idx++;
-        return base+`_${idx}`+ext;
+        while (existingNames.has(base + `_${idx}` + ext)) idx++;
+        return base + `_${idx}` + ext;
     }
 
-    listFilesPromise(folder){
-        return new Promise((resolve,reject)=>{
-            window.fileSystemCallback = function(res){
-                if(res.success) resolve(res.data.files||[]); else reject(new Error(res.error||'listFiles error'));
+    listFilesPromise(folder) {
+        return new Promise((resolve, reject) => {
+            window.fileSystemCallback = function (res) {
+                if (res.success) resolve(res.data.files || []); else reject(new Error(res.error || 'listFiles error'));
             };
-            window.webkit.messageHandlers.fileSystem.postMessage({action:'listFiles', folder});
+            window.webkit.messageHandlers.fileSystem.postMessage({ action: 'listFiles', folder });
         });
     }
 
-    saveViaBridge(path, data){
-        return new Promise((resolve,reject)=>{
-            window.fileSystemCallback = function(res){
-                if(res.success) resolve(); else reject(new Error(res.error||'save error'));
+    saveViaBridge(path, data) {
+        return new Promise((resolve, reject) => {
+            window.fileSystemCallback = function (res) {
+                if (res.success) resolve(); else reject(new Error(res.error || 'save error'));
             };
-            window.webkit.messageHandlers.fileSystem.postMessage({action:'saveFile', path, data});
+            window.webkit.messageHandlers.fileSystem.postMessage({ action: 'saveFile', path, data });
         });
     }
 
-    arrayBufferToBase64(buffer){
+    arrayBufferToBase64(buffer) {
         let binary = '';
         const bytes = new Uint8Array(buffer);
         const len = bytes.length;
-        for(let i=0;i<len;i++) binary += String.fromCharCode(bytes[i]);
+        for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
         // btoa peut échouer si très large; segmentation possible si besoin futur
         return btoa(binary);
     }
@@ -1050,40 +1065,40 @@ export class DragDropManager {
     // -------------------------------------------------------------
     // Déclenche un /sync_now sur le serveur local (si port connu)
     // -------------------------------------------------------------
-    triggerServerSync(){
+    triggerServerSync() {
         try {
             const port = (window.ATOME_LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null);
-            if(!port) { dragLog('ℹ️ Port serveur inconnu, sync immédiate sautée'); return; }
-            fetch(`http://127.0.0.1:${port}/sync_now`).then(r=>{
-                if(!r.ok) dragLog('⚠️ /sync_now HTTP '+r.status); else dragLog('🔄 /sync_now déclenché');
-            }).catch(err=> dragLog('⚠️ /sync_now erreur: '+err.message));
-        } catch(err){ /* ignore */ }
+            if (!port) { dragLog('ℹ️ Port serveur inconnu, sync immédiate sautée'); return; }
+            fetch(`http://127.0.0.1:${port}/sync_now`).then(r => {
+                if (!r.ok) dragLog('⚠️ /sync_now HTTP ' + r.status); else dragLog('🔄 /sync_now déclenché');
+            }).catch(err => dragLog('⚠️ /sync_now erreur: ' + err.message));
+        } catch (err) { /* ignore */ }
     }
 
     // -------------------------------------------------------------
     // Rafraîchit la chanson courante si le nom final diffère (collision renommée)
     // et recharge l'audio avec le nom réel copié sur disque.
     // -------------------------------------------------------------
-    async refreshSongAudioBinding(destPath, originalName){
+    async refreshSongAudioBinding(destPath, originalName) {
         try {
             const newFileName = destPath.split('/').pop();
-            if(!newFileName) return;
-            if(this.currentLyrics){
+            if (!newFileName) return;
+            if (this.currentLyrics) {
                 const currentStored = this.currentLyrics.getAudioPath && this.currentLyrics.getAudioPath();
                 // currentStored peut être l'ancien nom (originalName) – si différent on met à jour
-                if(!currentStored || extractCleanFileName(currentStored) !== extractCleanFileName(newFileName)){
+                if (!currentStored || extractCleanFileName(currentStored) !== extractCleanFileName(newFileName)) {
                     this.currentLyrics.setAudioPath(newFileName);
-                    if(this.lyricsLibrary){ this.lyricsLibrary.saveSong(this.currentLyrics); }
+                    if (this.lyricsLibrary) { this.lyricsLibrary.saveSong(this.currentLyrics); }
                     dragLog(`🔁 Song audioPath mis à jour -> ${newFileName}`);
                     // Recharger l'audio avec le vrai nom final si différent
-                    if(this.audioController && this.audioController.loadAudio){
+                    if (this.audioController && this.audioController.loadAudio) {
                         this.audioController.loadAudio(newFileName);
                     }
                     // Notifier UI
-                    if(this.onSongLoaded){ this.onSongLoaded(this.currentLyrics); }
+                    if (this.onSongLoaded) { this.onSongLoaded(this.currentLyrics); }
                 }
             }
-        } catch(e){
+        } catch (e) {
             dragLog(`⚠️ refreshSongAudioBinding erreur: ${e.message}`);
         }
     }
