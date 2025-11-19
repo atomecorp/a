@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "generatedAt": "2025-11-18T20:13:42.971Z",
+  "generatedAt": "2025-11-19T16:10:28.131Z",
   "scope": "src/application/examples",
   "description": "Hot-update manifest limited strictly to src/application/examples/**. Do not touch other src/application modules.",
   "rules": {
@@ -153,6 +153,11 @@
       "sha256": "f38c386b9d234ae8a232c01dc8b9da61998f130da1ae67514aa0202f770f1d69"
     },
     {
+      "path": "src/application/examples/input_file.js",
+      "size": 9428,
+      "sha256": "c5bf7953bf45daca5ae714e52d5e263fa04c502baa29d3dbd195111b3d8190c5"
+    },
+    {
       "path": "src/application/examples/intuition.js",
       "size": 5936,
       "sha256": "266cbd5082217c17c559de8378075d86678d7220d0f18f60214995035758b516"
@@ -279,8 +284,8 @@
     },
     {
       "path": "src/application/examples/tools.js",
-      "size": 16512,
-      "sha256": "20a605b4ada132ec42f6789c7748ed37b17ef9023ee416f611ab83c4a99e401d"
+      "size": 16534,
+      "sha256": "abfcfb8d6e2ff630791ce5e9452ff385424eeb2b18639f11061206a24e7c1e24"
     },
     {
       "path": "src/application/examples/unit.js",

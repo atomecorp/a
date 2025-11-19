@@ -3383,6 +3383,36 @@ mainArea.style.top = '52px'
 // }, 1500);
 
 
+function getExecutionModeLabel() {
+    try {
+        if (typeof window.__IS_AUV3__ === 'boolean') {
+            return window.__IS_AUV3__ ? 'AUv3' : 'Host';
+        }
+        const raw = ((window.__EXECUTION_MODE__ || window.__HOST_ENV || '') + '').toLowerCase();
+        if (raw.includes('auv3')) return 'AUv3';
+        if (raw.includes('host') || raw.includes('app')) return 'Host';
+    } catch (error) {
+        console.warn('[dev-tools] Failed to resolve execution mode', error);
+    }
+    return 'Unknown';
+}
+
+if (getExecutionModeLabel() === 'AUv3') {
+    const hideToolbar = () => {
+        const toolbar = document.getElementById('lyrics-toolbar');
+        if (toolbar) {
+            toolbar.style.display = 'none';
+            return true;
+        }
+        return false;
+    };
+
+    if (!hideToolbar()) {
+        document.addEventListener('DOMContentLoaded', hideToolbar, { once: true });
+        setTimeout(hideToolbar, 500);
+    }
+}
+
 function readLyrixSongsFromLocalStorage() {
     if (typeof localStorage === 'undefined') {
         console.warn('localStorage unavailable: cannot inspect Lyrix songs.');
@@ -3423,9 +3453,6 @@ function readLyrixSongsFromLocalStorage() {
 
     return records;
 }
-
-
-
 // $('span', {
 //     id: 'write',
 //     css: {
@@ -3440,20 +3467,25 @@ function readLyrixSongsFromLocalStorage() {
 //         transform: 'translate(-50%, -50%)',
 //         cursor: 'grab'
 //     },
-//     text: 'write',
+//     text: `write (${getExecutionModeLabel()})`,
 //     onclick: () => {
 //         try {
+//             const modeLabel = getExecutionModeLabel();
+//             const spanEl = document.getElementById('write');
+//             if (spanEl) {
+//                 spanEl.textContent = `write (${modeLabel})`;
+//             }
 //             if (typeof localStorage === 'undefined') {
 //                 console.warn('localStorage unavailable: cannot save intuition content payload.');
 //                 return;
 //             }
 //             localStorage.setItem('intuition_content_payload', 'hello');
 //             const stored = localStorage.getItem('intuition_content_payload');
-//             console.log('[checker] Saved payload ->', stored);
+//             console.log('[checker] Saved payload ->', stored, '| mode ->', modeLabel);
 //         } catch (error) {
 //             console.error('[checker] Failed to persist payload:', error);
 //         }
-//     },
+//     }
 
 // });
 
@@ -3506,4 +3538,3 @@ function readLyrixSongsFromLocalStorage() {
 //     },
 
 // });
-
