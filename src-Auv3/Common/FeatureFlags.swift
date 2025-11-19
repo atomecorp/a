@@ -12,4 +12,5 @@ enum FeatureFlags {
     static let enableJSBridge: Bool = true
     static let sendPurchaseRestoreOnDidFinish: Bool = true
     static let loadInlineOnly: Bool = false
+    static let verboseLyrixStorageLogs: Bool = false
 }

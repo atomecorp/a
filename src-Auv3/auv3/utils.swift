@@ -372,10 +372,20 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
                         }
                     }
             } else {
-                // Generator/silence path: zero-fill output instead of pulling input (prevents host garbage)
-                for i in 0..<bufferList.numberOfBuffers {
-                    let buffer = bufferList.buffer(at: i)
-                    if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
+                // Passthrough path: pull upstream audio when we are idle
+                if let pull = pullInputBlock {
+                    let status = pull(actionFlags, timestamp, frameCount, outputBusNumber, outputData)
+                    if status != noErr {
+                        for i in 0..<bufferList.numberOfBuffers {
+                            let buffer = bufferList.buffer(at: i)
+                            if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
+                        }
+                    }
+                } else {
+                    for i in 0..<bufferList.numberOfBuffers {
+                        let buffer = bufferList.buffer(at: i)
+                        if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
+                    }
                 }
             }
 

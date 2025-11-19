@@ -1,3 +1,5 @@
+import { LowTrafficMode } from '../core/lowTrafficMode.js';
+
 const CONTROL_KEY = '__lyrix_integrity_anchor__';
 const PROBE_KEY = '__lyrix_integrity_probe__';
 const HEARTBEAT_MS = 20000;
@@ -8,6 +10,10 @@ class StorageIntegrityMonitor {
         this.heartbeatTimer = null;
         this.hostInfo = null;
         this.pendingHostRequest = null;
+        const debouncer = LowTrafficMode && typeof LowTrafficMode.debounce === 'function'
+            ? LowTrafficMode.debounce((reason) => this.runCheck(reason), 420)
+            : (reason) => this.runCheck(reason);
+        this.scheduleCheck = debouncer;
     }
 
     init() {
@@ -25,12 +31,12 @@ class StorageIntegrityMonitor {
     }
 
     registerLifecycleEvents() {
-        window.addEventListener('pageshow', () => this.runCheck('pageshow'));
+        window.addEventListener('pageshow', () => this.scheduleCheck('pageshow'));
         window.addEventListener('pagehide', () => this.snapshot('pagehide'));
-        window.addEventListener('visibilitychange', () => this.runCheck(`visibility:${document.visibilityState}`));
+        window.addEventListener('visibilitychange', () => this.scheduleCheck(`visibility:${document.visibilityState}`));
         window.addEventListener('storage', (event) => {
             this.log(`storage event key=${event.key}`);
-            this.runCheck('storage-event');
+            this.scheduleCheck('storage-event');
         });
         window.addEventListener('beforeunload', () => this.snapshot('beforeunload'));
     }

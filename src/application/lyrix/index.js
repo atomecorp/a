@@ -39,6 +39,7 @@ import { getPurchaseManager } from './src/features/purchase/purchase_manager.js'
 
 // Import all modules
 import { CONSTANTS } from './src/core/constants.js';
+import { LowTrafficMode } from './src/core/lowTrafficMode.js';
 import './src/intuition/menu.js';
 import { StorageManager } from './src/services/storage.js';
 import { StorageIntegrity } from './src/services/storageIntegrity.js';
@@ -52,6 +53,8 @@ import { DragDropManager } from './src/features/import/dragDrop.js';
 import { Modal, InputModal, FormModal, SelectModal, ConfirmModal } from './src/components/modal.js';
 import { MidiUtilities } from './src/features/midi/midi_utilities.js';
 import { exportSongsToLRX } from './src/features/lyrics/SongUtils.js';
+
+LowTrafficMode.initialize();
 
 // Initialize global objects
 window.dragDropManager = new DragDropManager();
@@ -3241,6 +3244,13 @@ function bootstrapLyrix() {
         console.error('Lyrix storage integrity init failed', error);
     }
     initializeLyrix();
+    if (LowTrafficMode && typeof LowTrafficMode.markAppReady === 'function') {
+        try {
+            LowTrafficMode.markAppReady();
+        } catch (error) {
+            console.warn('LowTrafficMode markAppReady failed', error);
+        }
+    }
 }
 
 if (document.readyState === 'loading') {

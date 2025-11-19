@@ -6,12 +6,27 @@ import Foundation
 
 final class FileSyncCoordinator {
     static let shared = FileSyncCoordinator()
+    private static let runningInExtension: Bool = {
+        let path = Bundle.main.bundlePath
+        if path.hasSuffix(".appex") { return true }
+        if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
+        return false
+    }()
+    private let lowTrafficModeEnabled = FileSyncCoordinator.runningInExtension
     private let fm = FileManager.default
     private let queue = DispatchQueue(label: "filesync.coordinator.queue", qos: .utility)
     private var syncing = false
     private(set) var lastSync: Date? = nil
     private var pending = false
     private var timer: DispatchSourceTimer? = nil
+    private var safeModeActive = false
+    private var shouldResumeAutoSync = false
+    private var configuredAutoInterval: TimeInterval = 10
+    private var webViewStable = !FileSyncCoordinator.runningInExtension
+    private var deferredSyncRequested = false
+    private var pendingDeletionURLs: [URL] = []
+    private var deletionFlushScheduled = false
+    private let deletionBatchInterval: TimeInterval = 0.35
 
     // MARK: - Inventory / Tombstones (Option A canonical storage)
     // lastSeenVisibleRoot: identifiant (path) du visible root qui a vu le fichier pour la dernière fois.
@@ -63,14 +78,27 @@ final class FileSyncCoordinator {
                 self.pending = true
                 return
             }
-            // Throttle window réduit (5s -> 2s) pour une propagation plus rapide entre app & extension
-            if !force, let last = self.lastSync, Date().timeIntervalSince(last) < 2 { return }
+            if (self.safeModeActive || (self.lowTrafficModeEnabled && !self.webViewStable)) && !force {
+                self.deferredSyncRequested = true
+                return
+            }
+            let throttleWindow = self.currentSyncInterval()
+            if !force, let last = self.lastSync, Date().timeIntervalSince(last) < throttleWindow {
+                return
+            }
             self.syncing = true
             self.pending = false
             self._runSync()
             self.syncing = false
             self.lastSync = Date()
-            if self.pending { self.pending = false; self.syncAll(force: true) }
+            if self.pending {
+                self.pending = false
+                self.syncAll(force: true)
+            }
+            if self.deferredSyncRequested && !self.safeModeActive && (self.webViewStable || !self.lowTrafficModeEnabled) {
+                self.deferredSyncRequested = false
+                self.syncAll(force: true)
+            }
         }
     }
 
@@ -101,20 +129,74 @@ final class FileSyncCoordinator {
     func startAutoSync(every interval: TimeInterval = 10) {
         queue.async { [weak self] in
             guard let self = self else { return }
+            self.configuredAutoInterval = interval
+            if self.safeModeActive {
+                self.shouldResumeAutoSync = true
+                return
+            }
+            let effectiveInterval: TimeInterval
+            if self.lowTrafficModeEnabled {
+                effectiveInterval = max(interval, 8)
+            } else {
+                effectiveInterval = max(interval, 3)
+            }
             self.timer?.cancel(); self.timer = nil
             let t = DispatchSource.makeTimerSource(queue: self.queue)
-            t.schedule(deadline: .now() + interval, repeating: interval)
+            t.schedule(deadline: .now() + effectiveInterval, repeating: effectiveInterval)
             t.setEventHandler { [weak self] in self?.syncAll() }
             t.resume()
             self.timer = t
-            print("⏱️ FileSyncCoordinator auto-sync started interval=\(interval)s")
+            print("⏱️ FileSyncCoordinator auto-sync started interval=\(effectiveInterval)s")
         }
     }
 
     func stopAutoSync() {
         queue.async { [weak self] in
-            self?.timer?.cancel(); self?.timer = nil
+            self?.stopAutoSyncLocked(log: true)
+        }
+    }
+
+    private func stopAutoSyncLocked(log: Bool) {
+        timer?.cancel(); timer = nil
+        if log {
             print("⏹️ FileSyncCoordinator auto-sync stopped")
+        }
+    }
+
+    func setWebViewReady(_ ready: Bool) {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.webViewStable = ready || !self.lowTrafficModeEnabled
+            if self.webViewStable, self.deferredSyncRequested, !self.safeModeActive {
+                self.deferredSyncRequested = false
+                self.syncAll(force: true)
+            }
+        }
+    }
+
+    func enterSafeMode() {
+        queue.async { [weak self] in
+            guard let self = self, !self.safeModeActive else { return }
+            self.safeModeActive = true
+            self.shouldResumeAutoSync = self.timer != nil
+            self.stopAutoSyncLocked(log: false)
+            print("⚠️ FileSyncCoordinator safe mode enabled")
+        }
+    }
+
+    func exitSafeMode() {
+        queue.async { [weak self] in
+            guard let self = self, self.safeModeActive else { return }
+            self.safeModeActive = false
+            print("✅ FileSyncCoordinator safe mode cleared")
+            if self.shouldResumeAutoSync {
+                self.shouldResumeAutoSync = false
+                self.startAutoSync(every: self.configuredAutoInterval)
+            }
+            if self.deferredSyncRequested {
+                self.deferredSyncRequested = false
+                self.syncAll(force: true)
+            }
         }
     }
 
@@ -122,17 +204,39 @@ final class FileSyncCoordinator {
     func markDeleted(url: URL) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            self.loadInventoryIfNeeded()
-            let rels = self.relativePaths(for: url)
-            let now = Date().timeIntervalSince1970
-            for rel in rels {
-                var rec = self.inventory[rel] ?? InventoryRecord(lastModified: now, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil, lastSeenVisibleRoot: nil)
-                rec.deletedAt = now
-                self.inventory[rel] = rec
-                self.inventoryDirty = true
-                print("\u{26B0}\u{FE0F} Mark tombstone rel=\(rel)")
+            self.pendingDeletionURLs.append(url)
+            if !self.deletionFlushScheduled {
+                self.deletionFlushScheduled = true
+                let delay = self.lowTrafficModeEnabled ? max(0.5, self.deletionBatchInterval) : self.deletionBatchInterval
+                self.queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.flushPendingDeletions()
+                }
             }
-            self.persistInventoryIfNeeded()
+        }
+    }
+
+    private func flushPendingDeletions() {
+        self.deletionFlushScheduled = false
+        guard !pendingDeletionURLs.isEmpty else { return }
+        loadInventoryIfNeeded()
+        let urls = pendingDeletionURLs
+        pendingDeletionURLs.removeAll()
+        for url in urls {
+            processDeletionMarkers(for: url)
+        }
+        persistInventoryIfNeeded()
+    }
+
+    private func processDeletionMarkers(for url: URL) {
+        let rels = self.relativePaths(for: url)
+        if rels.isEmpty { return }
+        let now = Date().timeIntervalSince1970
+        for rel in rels {
+            var rec = self.inventory[rel] ?? InventoryRecord(lastModified: now, deletedAt: nil, lastSeenVisible: nil, missingVisibleSince: nil, lastSeenVisibleRoot: nil)
+            rec.deletedAt = now
+            self.inventory[rel] = rec
+            self.inventoryDirty = true
+            print("\u{26B0}\u{FE0F} Mark tombstone rel=\(rel)")
         }
     }
 
@@ -366,6 +470,13 @@ final class FileSyncCoordinator {
         for r in roots { print("   • \(r.path)") }
     cleanupSpuriousArtifacts(in: roots)
         persistInventoryIfNeeded()
+    }
+
+    private func currentSyncInterval() -> TimeInterval {
+        if safeModeActive {
+            return lowTrafficModeEnabled ? 4.0 : 2.5
+        }
+        return lowTrafficModeEnabled ? 1.2 : 2.0
     }
 
     private struct FileMeta { let isDir: Bool; let size: UInt64; let modDate: Date }

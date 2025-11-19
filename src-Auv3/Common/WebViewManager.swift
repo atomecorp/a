@@ -36,6 +36,29 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static var hostStateTimer: Timer?
     private static var hostTimeStreamActiveFlag: Bool = false
     public static func isHostTimeStreamActive() -> Bool { return hostTimeStreamActiveFlag }
+    private enum IPCPriority {
+        case critical
+        case high
+        case normal
+        case low
+
+        var baseInterval: CFTimeInterval {
+            switch self {
+            case .critical: return 0.08
+            case .high: return 0.15
+            case .normal: return 0.26
+            case .low: return 0.4
+            }
+        }
+    }
+    private static let throttleQueue = DispatchQueue(label: "webview.ipc.throttle", qos: .userInitiated)
+    private static var throttleTimestamps: [String: CFTimeInterval] = [:]
+    private static var throttleWorkItems: [String: DispatchWorkItem] = [:]
+    private static let inboundQueue = DispatchQueue(label: "webview.ipc.inbound", qos: .utility)
+    private static var inboundSamples: [CFTimeInterval] = []
+    private static var safeModeActive: Bool = false
+    private static var safeModeExitWork: DispatchWorkItem?
+    private static let inboundLimit: Int = 24
 
     // Deferred main page load state
     private static var mainLoadDone: Bool = false
@@ -70,6 +93,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     let execMode = isExtension ? "AUv3" : "APP"
     let poolPtr = Unmanaged.passUnretained(WKWebViewFactory.sharedProcessPool).toOpaque()
     print("[Startup] exec mode: \(execMode); shared WKProcessPool=\(poolPtr)")
+    if isExtension {
+        FileSyncCoordinator.shared.setWebViewReady(false)
+    }
     WebViewManager.shared.log.info("Setup webview; mode=\(execMode, privacy: .public) pool=\(String(describing: poolPtr), privacy: .public)")
 
         // Start lightweight embedded HTTP server (once) to serve audio via standard stack
@@ -292,8 +318,12 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // MARK: - WKScriptMessageHandler
 
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        WebViewManager.recordInboundMessage(source: message.name)
         switch message.name {
         case "console":
+            if WebViewManager.runningInExtension {
+                return
+            }
             // Forward JS console messages to Xcode console
             if let s = message.body as? String {
                 print(s)
@@ -391,11 +421,13 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         return
                     }
                     if action == "lyrixStorageIntegrityReport" {
-                        if let payload = body["payload"] as? [String: Any] {
-                            let payloadDescription = String(describing: payload)
-                            WebViewManager.shared.log.info("Lyrix storage report: \(payloadDescription, privacy: .public)")
-                        } else {
-                            WebViewManager.shared.log.info("Lyrix storage report ping")
+                        if FeatureFlags.verboseLyrixStorageLogs {
+                            if let payload = body["payload"] as? [String: Any] {
+                                let payloadDescription = String(describing: payload)
+                                WebViewManager.shared.log.info("Lyrix storage report: \(payloadDescription, privacy: .public)")
+                            } else {
+                                WebViewManager.shared.log.info("Lyrix storage report ping")
+                            }
                         }
                         return
                     }
@@ -608,7 +640,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private func sendSampleRateToJS() {
         // Send sample rate back to JavaScript
         let jsCode = "if (typeof window.updateSampleRate === 'function') { window.updateSampleRate(44100); }"
-        Self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+        WebViewManager.performIPC(label: "sampleRate", priority: .low) {
+            Self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+        }
     }
     
     // MARK: - MIDI Communication
@@ -624,10 +658,11 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             console.log('🎹 MIDI received but no handler available:', \(data1), \(data2), \(data3));
         }
         """
-        
-        webView?.evaluateJavaScript(jsCode) { result, error in
-            if let error = error {
-                print("❌ MIDI JS Error: \(error.localizedDescription)")
+        performIPC(label: "midi", priority: .high) {
+            self.webView?.evaluateJavaScript(jsCode) { _, error in
+                if let error = error {
+                    print("❌ MIDI JS Error: \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -644,7 +679,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             let state = ["muted": isMuted]
             if let jsonData = try? JSONSerialization.data(withJSONObject: state),
                let jsonString = String(data: jsonData, encoding: .utf8) {
-                WebViewManager.sendToJS(jsonString, "updateAudioState")
+                Self.dispatchToJS(jsonString, function: "updateAudioState", priority: .low)
             }
         }
     }
@@ -666,7 +701,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         
         if let jsonData = try? JSONSerialization.data(withJSONObject: state),
            let jsonString = String(data: jsonData, encoding: .utf8) {
-            WebViewManager.sendToJS(jsonString, "updateTestState")
+            Self.dispatchToJS(jsonString, function: "updateTestState", priority: .low)
         }
     }
     
@@ -675,26 +710,26 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     public static func sendTransportDataToJS(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
         updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadPosition)
         let jsCode = "if (typeof updateTransportFromSwift === 'function') { updateTransportFromSwift({\"isPlaying\": \(isPlaying ? "true" : "false"), \"playheadPosition\": \(Int(playheadPosition)), \"sampleRate\": \(Int(sampleRate))}); }"
-        webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+        performIPC(label: "transport", priority: .critical) {
+            self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+        }
     }
 
     public static func sendToJS(_ message: Any, _ function: String) {
-        // ULTRA-AGGRESSIVE: Simplified JS execution for maximum performance
+        dispatchToJS(message, function: function, priority: .normal)
+    }
+
+    private static func dispatchToJS(_ message: Any, function: String, priority: IPCPriority) {
         var jsValue: String
-        
-        // Fast path for strings (most common case)
         if let stringValue = message as? String {
-            // Skip escaping for performance - assume clean data
             jsValue = "\"\(stringValue)\""
         } else {
-            // For JSON objects, pass as string and parse in JS
             jsValue = "'\(message)'"
         }
-
-        // Minimal JS code without error checking for performance
         let jsCode = "if (typeof \(function) === 'function') { \(function)(\(jsValue)); }"
-
-        webView?.evaluateJavaScript(jsCode, completionHandler: nil) // Skip completion handler for performance
+        performIPC(label: "fn.\(function)", priority: priority) {
+            self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
+        }
     }
 
     // MARK: - WKNavigationDelegate
@@ -717,6 +752,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         }
     // Inject AUv3 / App context flag early for JS platform detection
     let isExtension: Bool = Bundle.main.bundlePath.hasSuffix(".appex")
+    if isExtension {
+        FileSyncCoordinator.shared.setWebViewReady(true)
+    }
     let auv3JS = "window.__AUV3_MODE__=" + (isExtension ? "true" : "false") + ";"
     webView.evaluateJavaScript(auv3JS, completionHandler: nil)
     // Inject notch information & class
@@ -785,12 +823,105 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     
     // MARK: - Bridge JSON helper
     public static func sendBridgeJSON(_ dict: [String: Any]) {
-        guard let webView = webView else { return }
         guard let data = try? JSONSerialization.data(withJSONObject: dict),
               let json = String(data: data, encoding: .utf8) else { return }
         // Inject raw JSON object (already valid JS), matching FileSystemBridge usage
         let js = "window.AUv3API && AUv3API._receiveFromSwift(\(json));"
-        webView.evaluateJavaScript(js, completionHandler: nil)
+        performIPC(label: "bridge.json", priority: .normal) {
+            self.webView?.evaluateJavaScript(js, completionHandler: nil)
+        }
+    }
+
+    private static func performIPC(label: String, priority: IPCPriority, block: @escaping () -> Void) {
+        if !runningInExtension {
+            DispatchQueue.main.async(execute: block)
+            return
+        }
+        throttleQueue.async {
+            let now = CACurrentMediaTime()
+            let minGap = priority.baseInterval * (safeModeActive ? 1.8 : 1.0)
+            let last = throttleTimestamps[label] ?? 0
+            let delta = now - last
+            if delta >= minGap {
+                throttleTimestamps[label] = now
+                DispatchQueue.main.async(execute: block)
+            } else {
+                let delay = minGap - delta
+                throttleWorkItems[label]?.cancel()
+                let work = DispatchWorkItem {
+                    throttleQueue.async {
+                        throttleTimestamps[label] = CACurrentMediaTime()
+                    }
+                    DispatchQueue.main.async(execute: block)
+                }
+                throttleWorkItems[label] = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            }
+        }
+    }
+
+    private static func recordInboundMessage(source: String) {
+        guard runningInExtension else { return }
+        let now = CACurrentMediaTime()
+        inboundQueue.async {
+            inboundSamples.append(now)
+            inboundSamples = inboundSamples.filter { now - $0 < 1.0 }
+            if inboundSamples.count > inboundLimit {
+                DispatchQueue.main.async {
+                    enterGlobalSafeMode(reason: source)
+                }
+            } else if safeModeActive {
+                DispatchQueue.main.async {
+                    scheduleSafeModeExitCheck()
+                }
+            }
+        }
+    }
+
+    private static func enterGlobalSafeMode(reason: String) {
+        guard !safeModeActive else { return }
+        safeModeActive = true
+        FileSyncCoordinator.shared.enterSafeMode()
+        shared.log.error("Entering AUv3 safe mode: \(reason)")
+        notifyJSSafeMode()
+        scheduleSafeModeExitCheck()
+    }
+
+    private static func scheduleSafeModeExitCheck() {
+        guard safeModeActive else { return }
+        safeModeExitWork?.cancel()
+        let work = DispatchWorkItem {
+            inboundQueue.async {
+                let now = CACurrentMediaTime()
+                inboundSamples = inboundSamples.filter { now - $0 < 1.0 }
+                let calm = inboundSamples.count < max(1, inboundLimit / 4)
+                DispatchQueue.main.async {
+                    if calm {
+                        exitGlobalSafeMode()
+                    } else if safeModeActive {
+                        scheduleSafeModeExitCheck()
+                    }
+                }
+            }
+        }
+        safeModeExitWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: work)
+    }
+
+    private static func exitGlobalSafeMode() {
+        guard safeModeActive else { return }
+        safeModeActive = false
+        safeModeExitWork?.cancel(); safeModeExitWork = nil
+        inboundSamples.removeAll()
+        FileSyncCoordinator.shared.exitSafeMode()
+        shared.log.info("AUv3 safe mode cleared")
+    }
+
+    private static func notifyJSSafeMode() {
+        performIPC(label: "safe-mode", priority: .low) {
+            let js = "try{if(window.LowTrafficMode&&typeof window.LowTrafficMode.enterSafeMode==='function'){window.LowTrafficMode.enterSafeMode('swift');}window.__LYRIX_SAFE_MODE__=true;}catch(e){}"
+            self.webView?.evaluateJavaScript(js, completionHandler: nil)
+        }
     }
     
     // MARK: - Streams
