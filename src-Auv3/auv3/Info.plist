@@ -2,42 +2,47 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+
     <key>CFBundleShortVersionString</key>
     <string>$(MARKETING_VERSION)</string>
+
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+
     <key>NSExtension</key>
     <dict>
+
+        <!-- Extension UI AUv3 (ton architecture actuelle) -->
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.AudioUnit-UI</string>
+
+        <!-- Ton ViewController = point d’entrée -->
+        <key>NSExtensionPrincipalClass</key>
+        <string>$(PRODUCT_MODULE_NAME).AudioUnitViewController</string>
+
         <key>NSExtensionAttributes</key>
         <dict>
             <key>AudioComponents</key>
             <array>
                 <dict>
-                    <key>UIFileSharingEnabled</key>
-                    <true/>
-                    <key>LSSupportsOpeningDocumentsInPlace</key>
-                    <true/>
-                    <key>UIApplicationSupportsLocalStorage</key>
-                    <true/>
+
+                    <!-- Description AU : OK -->
                     <key>description</key>
                     <string>atomeauv3</string>
-                    <key>factoryFunction</key>
-                    <string>$(PRODUCT_MODULE_NAME).AudioUnitViewController</string>
-                    <key>manufacturer</key>
-                    <string>ATOM</string>
+
                     <key>name</key>
                     <string>atome: atome</string>
-                    <key>sandboxSafe</key>
-                    <true/>
+
+                    <key>manufacturer</key>
+                    <string>ATOM</string>
+
                     <key>subtype</key>
                     <string>atom</string>
-                    <key>tags</key>
-                    <array>
-                        <string>Effects</string>
-                        <string>MIDI</string>
-                    </array>
+
                     <key>type</key>
                     <string>aumf</string>
+
+                    <!-- Capacités MIDI -->
                     <key>supportsMIDI</key>
                     <true/>
                     <key>supportsMIDIInput</key>
@@ -46,15 +51,26 @@
                     <true/>
                     <key>hasMIDIOutput</key>
                     <true/>
+
+                    <key>sandboxSafe</key>
+                    <true/>
+
+                    <key>tags</key>
+                    <array>
+                        <string>Effects</string>
+                        <string>MIDI</string>
+                    </array>
+
                     <key>version</key>
                     <integer>67072</integer>
+
+                    <!-- Clés app iOS supprimées : avant elles parasitaient l’analyse AudioUnit -->
+                    <!-- UIFileSharingEnabled, UIApplicationSupportsLocalStorage, LSSupportsOpeningDocumentsInPlace → supprimées -->
+
                 </dict>
             </array>
         </dict>
-        <key>NSExtensionPointIdentifier</key>
-        <string>com.apple.AudioUnit-UI</string>
-        <key>NSExtensionPrincipalClass</key>
-        <string>$(PRODUCT_MODULE_NAME).AudioUnitViewController</string>
     </dict>
+
 </dict>
 </plist>

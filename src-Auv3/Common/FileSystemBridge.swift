@@ -13,6 +13,9 @@ import SwiftUI
 class FileSystemBridge: NSObject, WKScriptMessageHandler {
     
     private weak var currentWebView: WKWebView?
+    private func isAllowedPath(url: URL) -> Bool {
+        SandboxPathValidator.isAllowed(url: url)
+    }
     
     // Map iCloud downloading status to a concise string for JS/UI
     private func simpleDownloadingStatus(_ status: URLUbiquitousItemDownloadingStatus?) -> String {
@@ -33,36 +36,33 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
     //  - "appgroup:/" => <AppGroup>
     private func resolveURL(for path: String, isDirectory: Bool = false) -> URL? {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        func normalize(_ s: String) -> String {
-            var out = s
-            while out.hasPrefix("./") { out.removeFirst(2) }
-            // Remove redundant current-dir markers in middle
-            out = out.replacingOccurrences(of: "/./", with: "/")
-            // Collapse duplicate slashes (except potential scheme part which we don't have here)
-            while out.contains("//") { out = out.replacingOccurrences(of: "//", with: "/") }
-            return out
+
+        func buildURL(from base: URL, relative: String) -> URL? {
+            guard let sanitized = SandboxPathValidator.sanitizedRelativePath(relative) else { return nil }
+            let resolved = sanitized.isEmpty ? base : base.appendingPathComponent(sanitized, isDirectory: isDirectory)
+            return SandboxPathValidator.isAllowed(url: resolved) ? resolved : nil
         }
-        // Handle appgroup: scheme explicitly
+
         if trimmed.hasPrefix("appgroup:") {
-            guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
-                return nil
-            }
             var rest = String(trimmed.dropFirst("appgroup:".count))
             if rest.hasPrefix("/") { rest.removeFirst() }
-            rest = normalize(rest)
-            let url = rest.isEmpty ? groupURL : groupURL.appendingPathComponent(rest, isDirectory: isDirectory)
-            return url
+            guard let groupRoot = SandboxPathValidator.allowedRoots().first else { return nil }
+            return buildURL(from: groupRoot, relative: rest)
         }
-        // Default: relative to current storage root
-        guard let storageURL = iCloudFileManager.shared.getCurrentStorageURL() else {
-            return nil
-        }
+
         if trimmed.isEmpty || trimmed == "." || trimmed == "./" || trimmed == "/" {
-            return storageURL
+            return SandboxPathValidator.primaryRoot()
         }
-        let norm = normalize(trimmed)
-        let url = storageURL.appendingPathComponent(norm, isDirectory: isDirectory)
-        return url
+
+        let preferredBase: URL? = {
+            if let storage = iCloudFileManager.shared.getCurrentStorageURL(), SandboxPathValidator.isAllowed(url: storage) {
+                return storage
+            }
+            return SandboxPathValidator.primaryRoot()
+        }()
+
+        guard let base = preferredBase else { return nil }
+        return buildURL(from: base, relative: trimmed)
     }
     
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {

@@ -23,8 +23,8 @@ final class WKWebViewFactory {
         let config = WKWebViewConfiguration()
         config.processPool = processPool
         if #available(iOS 11.0, *) {
-            // AUv3: reduce state overhead; App: default persistent
-            config.websiteDataStore = (mode == .auv3) ? .nonPersistent() : .default()
+            // Align AUv3 with companion app so DOM storage survives host relaunches
+            config.websiteDataStore = .default()
         }
         if FeatureFlags.registerCustomScheme {
             config.setURLSchemeHandler(AudioSchemeHandler(), forURLScheme: "atome")

@@ -42,6 +42,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static var mainLoadAttempts: Int = 0
     private static var mainLoadTimer: Timer?
     private static var storedMainURL: URL?
+    private static var runningInExtension: Bool = false
 
     // ULTRA AGGRESSIVE: Rate limiting for non-critical JS calls (preserving timecode functionality)
     private static var lastMuteStateUpdate: CFTimeInterval = 0
@@ -65,6 +66,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             if Bundle.main.infoDictionary?["NSExtension"] != nil { return true }
             return false
         }()
+    WebViewManager.runningInExtension = isExtension
     let execMode = isExtension ? "AUv3" : "APP"
     let poolPtr = Unmanaged.passUnretained(WKWebViewFactory.sharedProcessPool).toOpaque()
     print("[Startup] exec mode: \(execMode); shared WKProcessPool=\(poolPtr)")
@@ -263,6 +265,19 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         return false
     }
 
+    private static func storageModeInfo(requestId: Int) -> [String: Any] {
+        let isExtension = runningInExtension
+        let info: [String: Any] = [
+            "action": "lyrixStorageHostInfo",
+            "requestId": requestId,
+            "mode": isExtension ? "auv3" : "app",
+            "dataStore": isExtension ? "nonPersistent" : "default",
+            "persistent": !isExtension,
+            "reason": isExtension ? "AUv3 WKWebViewFactory uses WKWebsiteDataStore.nonPersistent(); recreating the view drops localStorage." : "Main app uses persistent WKWebsiteDataStore.default(), so localStorage survives reloads."
+        ]
+        return info
+    }
+
     // Public trigger from controllers once view is visible and sized
     public static func triggerMainLoadNow() {
         let isExtension: Bool = {
@@ -373,6 +388,21 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                         if let bridge = WebViewManager.fileSystemBridge {
                             bridge.userContentController(userContentController, didReceive: message)
                         }
+                        return
+                    }
+                    if action == "lyrixStorageIntegrityReport" {
+                        if let payload = body["payload"] as? [String: Any] {
+                            let payloadDescription = String(describing: payload)
+                            WebViewManager.shared.log.info("Lyrix storage report: \(payloadDescription, privacy: .public)")
+                        } else {
+                            WebViewManager.shared.log.info("Lyrix storage report ping")
+                        }
+                        return
+                    }
+                    if action == "lyrixQueryStorageMode" {
+                        let requestId = body["requestId"] as? Int ?? -1
+                        let info = WebViewManager.storageModeInfo(requestId: requestId)
+                        WebViewManager.sendBridgeJSON(info)
                         return
                     }
                     if action == "purchaseProduct" || action == "restorePurchases" {

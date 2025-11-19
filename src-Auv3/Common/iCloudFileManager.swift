@@ -21,6 +21,9 @@ public class iCloudFileManager: ObservableObject {
     private var documentPickerLoadDelegate: DocumentPickerLoadDelegate?
     // Persisté pour ne pas redemander à chaque lancement
     private var fileAccessGrantedOnce: Bool = UserDefaults.standard.bool(forKey: "AtomeFileAccessGranted")
+    private var isRunningInsideExtension: Bool {
+        (Bundle.main.bundleIdentifier ?? "").contains(".appex")
+    }
     
     private init() {
         checkiCloudAvailability()
@@ -42,14 +45,14 @@ public class iCloudFileManager: ObservableObject {
         let isAUv3Extension = bundleIdentifier.contains(".appex")
         
         if isAUv3Extension {
-            // Pour l'extension AUv3 : utiliser App Groups MAIS synchroniser vers Documents visible
-            if let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") {
-                let documentsURL = groupURL.appendingPathComponent("Documents")
-                return documentsURL
-            } else {
-                let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
-                return paths[0]
+            if let preferred = SandboxPathValidator.primaryRoot() {
+                return preferred
             }
+            if let pluginRoot = SandboxPathValidator.pluginContainerRoot() {
+                return pluginRoot
+            }
+            let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+            return paths[0]
         } else {
             // Pour l'app principale : utiliser Documents standard (visible dans Files)
             let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
@@ -259,6 +262,9 @@ public class iCloudFileManager: ObservableObject {
     
     // MARK: - File Operations
     public func getCurrentStorageURL() -> URL? {
+        if isRunningInsideExtension {
+            return SandboxPathValidator.primaryRoot() ?? getLocalDocumentsDirectory()
+        }
         let useICloud = UserDefaults.standard.bool(forKey: "AtomeUseICloud")
         
         if useICloud && iCloudAvailable {
@@ -333,30 +339,38 @@ public class iCloudFileManager: ObservableObject {
         if trimmed.hasPrefix("./") { trimmed.removeFirst(2) }
         if trimmed == "." { trimmed = "" }
 
+        func writableBase() -> URL {
+            if let storage = getCurrentStorageURL() {
+                return storage
+            }
+            if let fallback = SandboxPathValidator.primaryRoot() {
+                return fallback
+            }
+            return getLocalDocumentsDirectory()
+        }
+
         // appgroup:/Documents/... -> write inside App Group container
         if trimmed.hasPrefix("appgroup:") {
             var rest = String(trimmed.dropFirst("appgroup:".count))
             if rest.hasPrefix("/") { rest.removeFirst() }
-            // Build absolute URL inside the App Group container root
-            if let groupRoot = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") {
-                let dest = groupRoot.appendingPathComponent(rest)
-                // Compute relative path from App Group Documents if possible
-                if let docs = appGroupDocumentsURL() {
-                    let rel = relativePathFrom(base: docs, to: dest)
-                    return (dest, rel)
-                }
-                return (dest, dest.lastPathComponent)
+            guard let sanitized = SandboxPathValidator.sanitizedRelativePath(rest) else {
+                let base = SandboxPathValidator.appGroupDocumentsRoot() ?? writableBase()
+                return (base, base.lastPathComponent)
             }
-            // Fallback: no App Group, write to current storage root
-            let base = getCurrentStorageURL() ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            let dest = base.appendingPathComponent(rest)
-            return (dest, rest)
+            let groupRoot = SandboxPathValidator.appGroupDocumentsRoot() ?? writableBase()
+            let dest = sanitized.isEmpty ? groupRoot : groupRoot.appendingPathComponent(sanitized)
+            return (dest, sanitized)
         }
 
-        // Default behavior: relative to current storage root
-        let base = getCurrentStorageURL() ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dest = trimmed.isEmpty ? base : base.appendingPathComponent(trimmed)
-        return (dest, trimmed)
+        let sanitizedValue = SandboxPathValidator.sanitizedRelativePath(trimmed)
+        if sanitizedValue == nil && !trimmed.isEmpty {
+            let base = writableBase()
+            return (base, base.lastPathComponent)
+        }
+        let safeRelative = sanitizedValue ?? ""
+        let base = writableBase()
+        let dest = safeRelative.isEmpty ? base : base.appendingPathComponent(safeRelative)
+        return (dest, safeRelative)
     }
 
     // Compute a relative path "inside" base if url is contained within base; else return last path component

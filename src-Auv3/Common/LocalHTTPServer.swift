@@ -197,47 +197,20 @@ final class LocalHTTPServer {
     }
 
     private func candidateFileURLs(for name: String) -> [URL] {
+        guard let sanitized = SandboxPathValidator.sanitizedRelativePath(name) else {
+            return []
+        }
         var ordered: [URL] = []
-        var seen: Set<String> = []
-        func add(_ url: URL?) { guard let u = url else { return }; let p = u.path; if !seen.contains(p) { seen.insert(p); ordered.append(u) } }
-
-        // Base paths
-        let fileOnly = (name as NSString).lastPathComponent
-        let lower = name.lowercased()
-
-        // App Group + Documents
-        if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true) { add(group.appendingPathComponent(name)) }
-        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { add(docs.appendingPathComponent(name)) }
-
-        // Direct bundle resource (works if added as loose file)
-        let baseName = (name as NSString).deletingPathExtension
-        let ext = (name as NSString).pathExtension
-        if !ext.isEmpty { add(Bundle.main.url(forResource: baseName, withExtension: ext)) }
-        // Legacy audio direct (if name missing path parts)
-        if lower.hasSuffix(".m4a") { add(Bundle.main.url(forResource: baseName, withExtension: "m4a")) }
-
-        // Bundle assets tree
-        if let assetsRoot = Bundle.main.url(forResource: "assets", withExtension: nil) {
-            add(assetsRoot.appendingPathComponent(name))
-            // Common subfolders
-            add(assetsRoot.appendingPathComponent("audios/" + fileOnly))
-            add(assetsRoot.appendingPathComponent("audios/" + name))
-            add(assetsRoot.appendingPathComponent("texts/" + name))
-            add(assetsRoot.appendingPathComponent("images/" + name))
-            add(assetsRoot.appendingPathComponent("images/logos/" + fileOnly))
+        let roots = SandboxPathValidator.allowedRoots()
+        for root in roots {
+            let url = sanitized.isEmpty ? root : root.appendingPathComponent(sanitized)
+            if FileManager.default.fileExists(atPath: url.path) {
+                ordered.append(url)
+            }
         }
-
-        // src/assets packaged
-        if let srcRoot = Bundle.main.url(forResource: "src", withExtension: nil) {
-            let srcAssets = srcRoot.appendingPathComponent("assets", isDirectory: true)
-            add(srcAssets.appendingPathComponent(name))
-            add(srcAssets.appendingPathComponent("audios/" + fileOnly))
-            add(srcAssets.appendingPathComponent("audios/" + name))
-            add(srcAssets.appendingPathComponent("texts/" + name))
-            add(srcAssets.appendingPathComponent("images/logos/" + fileOnly))
-            add(srcRoot.appendingPathComponent(name)) // raw inside src/
+        if ordered.isEmpty, let materialized = SandboxAssetManager.shared.materializeAssetIfNeeded(relativePath: sanitized) {
+            ordered.append(materialized)
         }
-
         return ordered
     }
 
@@ -406,7 +379,7 @@ final class LocalHTTPServer {
     private func ensureLocalReadableCopy(for url: URL) -> URL {
         let path = url.path
         if !path.contains(".app/") { return url }
-        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return url }
+        guard let docs = SandboxPathValidator.allowedRoots().last else { return url }
         let target = docs.appendingPathComponent(url.lastPathComponent)
         if FileManager.default.fileExists(atPath: target.path) { return target }
         do { try FileManager.default.copyItem(at: url, to: target); print("📄 Copied bundle resource to Documents: \(target.lastPathComponent)") } catch { print("⚠️ Copy failed: \(error)") }
@@ -506,18 +479,15 @@ final class LocalHTTPServer {
     }
 
     private func serveTree(on connection: NWConnection) {
-        // Root preference: App Group canonical Documents (Option A) else fallback to process-local Documents
-        let fm = FileManager.default
-        let groupRoot = fm.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one")?.appendingPathComponent("Documents", isDirectory: true)
-        let docsRoot = fm.urls(for: .documentDirectory, in: .userDomainMask).first
-        guard let root = groupRoot ?? docsRoot else {
-            sendSimple(status: 500, reason: "Internal Server Error", body: "no root", on: connection); return
+        let roots = SandboxPathValidator.allowedRoots()
+        guard let root = roots.first else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "no allowed roots", on: connection); return
         }
         let rootNode = buildNode(url: root, depth: 0, maxDepth: 12)
         let obj: [String: Any] = [
             "root": root.lastPathComponent,
-            "group": groupRoot != nil,
-            "tree": encodeNodeDict(node: rootNode)
+            "tree": encodeNodeDict(node: rootNode),
+            "allowedRoots": roots.map { $0.path }
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: obj, options: []) else {
             sendSimple(status: 500, reason: "Internal Server Error", body: "json fail", on: connection); return
@@ -528,12 +498,16 @@ final class LocalHTTPServer {
     }
 
     private func buildNode(url: URL, depth: Int, maxDepth: Int) -> FileNode {
+        guard SandboxPathValidator.isAllowed(url: url) else {
+            return FileNode(name: url.lastPathComponent, isDirectory: false, size: nil, children: nil)
+        }
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
         if !exists { return FileNode(name: url.lastPathComponent, isDirectory: false, size: nil, children: nil) }
         if isDir.boolValue {
             if depth >= maxDepth { return FileNode(name: url.lastPathComponent, isDirectory: true, size: nil, children: []) }
-            let childrenURLs = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey], options: [.skipsHiddenFiles])) ?? []
+            let childrenURLs = ((try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey], options: [.skipsHiddenFiles])) ?? [])
+                .filter { SandboxPathValidator.isAllowed(url: $0) }
             let nodes = childrenURLs.map { buildNode(url: $0, depth: depth + 1, maxDepth: maxDepth) }.sorted { $0.name.lowercased() < $1.name.lowercased() }
             return FileNode(name: url.lastPathComponent, isDirectory: true, size: nil, children: nodes)
         } else {

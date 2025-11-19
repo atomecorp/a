@@ -41,6 +41,7 @@ import { getPurchaseManager } from './src/features/purchase/purchase_manager.js'
 import { CONSTANTS } from './src/core/constants.js';
 import './src/intuition/menu.js';
 import { StorageManager } from './src/services/storage.js';
+import { StorageIntegrity } from './src/services/storageIntegrity.js';
 import { AudioManager, AudioController, extractCleanFileName } from './src/features/audio/audio.js';
 import { UIManager } from './src/components/ui.js';
 import { SongManager } from './src/features/lyrics/songs.js';
@@ -3233,15 +3234,19 @@ function updateTimecodeDisplay(timecodeMs) {
     }
 }
 
-// DOM ready initialization
-document.addEventListener('DOMContentLoaded', initializeLyrix);
-
-// Also initialize immediately if DOM is already ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeLyrix);
-} else {
-    // DOM is already ready, initialize immediately
+function bootstrapLyrix() {
+    try {
+        StorageIntegrity.init();
+    } catch (error) {
+        console.error('Lyrix storage integrity init failed', error);
+    }
     initializeLyrix();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrapLyrix, { once: true });
+} else {
+    bootstrapLyrix();
 }
 
 // AUv3 Host compatibility functions
@@ -3374,8 +3379,131 @@ export {
 const mainArea = document.getElementById('display-container');
 
 mainArea.style.top = '52px'
-console.log('patched mainArea top to 120px')
+//console.log('patched mainArea top to 120px')
 // }, 1500);
 
 
+function readLyrixSongsFromLocalStorage() {
+    if (typeof localStorage === 'undefined') {
+        console.warn('localStorage unavailable: cannot inspect Lyrix songs.');
+        return [];
+    }
+
+    const prefix = (CONSTANTS && CONSTANTS.STORAGE && CONSTANTS.STORAGE.LIBRARY_PREFIX) || 'lyrics_';
+    const records = [];
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key || !key.startsWith(prefix)) {
+            continue;
+        }
+
+        try {
+            const rawValue = localStorage.getItem(key);
+            if (!rawValue) {
+                continue;
+            }
+
+            const parsed = JSON.parse(rawValue);
+            records.push({
+                key,
+                songId: parsed?.songId || parsed?.id || key.replace(prefix, ''),
+                title: parsed?.metadata?.title || parsed?.title || 'Untitled',
+                artist: parsed?.metadata?.artist || parsed?.artist || 'Unknown Artist',
+                album: parsed?.metadata?.album || null,
+                hasAudio: !!(parsed?.metadata?.audioPath),
+                linesCount: Array.isArray(parsed?.lines) ? parsed.lines.length : 0,
+                lastModified: parsed?.metadata?.lastModified || parsed?.updatedAt || null,
+                data: parsed
+            });
+        } catch (error) {
+            console.warn(`[checker2] Failed to parse song stored under "${key}"`, error);
+        }
+    }
+
+    return records;
+}
+
+
+
+// $('span', {
+//     id: 'write',
+//     css: {
+//         backgroundColor: '#00f',
+//         padding: '10px',
+//         color: 'white',
+//         margin: '10px',
+//         display: 'inline-block',
+//         position: 'absolute',
+//         left: '25%',
+//         top: '0px',
+//         transform: 'translate(-50%, -50%)',
+//         cursor: 'grab'
+//     },
+//     text: 'write',
+//     onclick: () => {
+//         try {
+//             if (typeof localStorage === 'undefined') {
+//                 console.warn('localStorage unavailable: cannot save intuition content payload.');
+//                 return;
+//             }
+//             localStorage.setItem('intuition_content_payload', 'hello');
+//             const stored = localStorage.getItem('intuition_content_payload');
+//             console.log('[checker] Saved payload ->', stored);
+//         } catch (error) {
+//             console.error('[checker] Failed to persist payload:', error);
+//         }
+//     },
+
+// });
+
+
+// $('span', {
+//     id: 'read',
+//     css: {
+//         backgroundColor: '#00f',
+//         padding: '10px',
+//         color: 'white',
+//         margin: '10px',
+//         display: 'inline-block',
+//         position: 'absolute',
+//         left: '75%',
+//         top: '0px',
+//         transform: 'translate(-50%, -50%)',
+//         cursor: 'grab'
+//     },
+//     text: 'read',
+//     onclick: () => {
+//         try {
+//             const songs = readLyrixSongsFromLocalStorage();
+//             if (!songs.length) {
+//                 console.warn('[checker2] Aucun song Lyrix trouvé dans localStorage.');
+//                 return;
+//             }
+
+//             const summary = songs.map(({ key, songId, title, artist, album, hasAudio, linesCount, lastModified }) => ({
+//                 key,
+//                 songId,
+//                 title,
+//                 artist,
+//                 album,
+//                 lines: linesCount,
+//                 hasAudio,
+//                 lastModified
+//             }));
+
+//             if (typeof console.table === 'function') {
+//                 console.table(summary);
+//             } else {
+//                 console.log('[checker2] Lyrix songs summary ->', summary);
+//             }
+
+//             const payloads = songs.map(({ key, data }) => ({ key, data }));
+//             console.log('[checker2] Full Lyrix song payloads:', payloads);
+//         } catch (error) {
+//             console.error('[checker2] Failed to read Lyrix songs from localStorage:', error);
+//         }
+//     },
+
+// });
 
