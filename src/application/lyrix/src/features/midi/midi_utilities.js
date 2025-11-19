@@ -513,16 +513,12 @@ export class MidiUtilities {
 
             switch (actionKey) {
                 case 'enter_fullscreen':
-                case 'exit_fullscreen':
                 case 'fullscreen_activate':
+                    this.triggerFullscreenEntry();
+                    break;
+                case 'exit_fullscreen':
                 case 'fullscreen_deactivate':
-                    if (typeof window.fullscreenMode === 'function') {
-                        window.fullscreenMode();
-                    } else if (window.lyricsDisplay && typeof window.lyricsDisplay.toggleFullscreen === 'function') {
-                        window.lyricsDisplay.toggleFullscreen();
-                    } else {
-                        console.warn('[midi] Fullscreen shortcut triggered but no handler available');
-                    }
+                    this.triggerFullscreenExit();
                     break;
                 case 'play_pause':
                     this.triggerPlayPause();
@@ -541,6 +537,52 @@ export class MidiUtilities {
         } else {
         }
     }
+    triggerFullscreenEntry() {
+        const display = window.lyricsDisplay || (window.Lyrix && window.Lyrix.lyricsDisplay);
+        const enterLayout = window.enterLyrixFullscreenLayout;
+        if (display && typeof enterLayout === 'function') {
+            if (display.fullscreenMode !== true) {
+                display.fullscreenMode = true;
+            }
+            display.fullscreenClickHandler = () => display.toggleFullscreen && display.toggleFullscreen(false);
+            enterLayout({
+                toolbar: display.toolbar || null,
+                lyricsContent: display.lyricsContent || null,
+                applyModeStyles: () => display.applyModeStyles && display.applyModeStyles(true),
+                onExit: display.fullscreenClickHandler
+            });
+            if (display.currentLyrics && typeof display.renderLyrics === 'function') {
+                display.renderLyrics();
+            }
+        } else if (typeof window.fullscreenMode === 'function') {
+            window.fullscreenMode();
+        } else {
+            console.warn('[midi] Unable to enter fullscreen – helper not available');
+        }
+    }
+
+    triggerFullscreenExit() {
+        const display = window.lyricsDisplay || (window.Lyrix && window.Lyrix.lyricsDisplay);
+        const exitLayout = window.exitLyrixFullscreenLayout;
+        if (display && typeof exitLayout === 'function') {
+            exitLayout({
+                toolbar: display.toolbar || null,
+                lyricsContent: display.lyricsContent || null,
+                applyModeStyles: () => display.applyModeStyles && display.applyModeStyles(false),
+                removeHandler: display.fullscreenClickHandler
+            });
+            display.fullscreenMode = false;
+            display.fullscreenClickHandler = null;
+            if (display.currentLyrics && typeof display.renderLyrics === 'function') {
+                display.renderLyrics();
+            }
+        } else if (typeof window.fullscreenMode === 'function') {
+            window.fullscreenMode();
+        } else {
+            console.warn('[midi] Unable to exit fullscreen – helper not available');
+        }
+    }
+
 
 
 
