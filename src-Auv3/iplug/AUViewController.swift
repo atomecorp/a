@@ -13,7 +13,7 @@ class AUViewController: UIViewController, WKScriptMessageHandler, UIDocumentPick
         try{ if(typeof window.__fromDSP==='function'){ window.__fromDSP({ type:'clip_ready', payload: { clip_id: '\(id)', path: '\(path)' } }); }
              else { window.dispatchEvent(new CustomEvent('clip_ready', { detail: { clip_id: '\(id)', path: '\(path)' } })); } }catch(e){}
         """
-        webView?.evaluateJavaScript(js, completionHandler: nil)
+        WebViewManager.evaluateJS(js, label: "clip_ready")
     }
 
     override func viewDidLoad() {
@@ -62,7 +62,7 @@ class AUViewController: UIViewController, WKScriptMessageHandler, UIDocumentPick
 
     func sendMeter(tag: String, level: Float) {
         let js = "window.dispatchEvent(new CustomEvent('meter', { detail: { tag: '" + tag + "', level: " + String(level) + " } }))"
-        webView.evaluateJavaScript(js, completionHandler: nil)
+        WebViewManager.evaluateJS(js, label: "meter", priority: .low)
     }
 }
 

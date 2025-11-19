@@ -27,6 +27,9 @@ final class LocalHTTPServer {
     private var faststartFailed: Set<String> = []
     private let faststartQueue = DispatchQueue(label: "local.http.server.faststart", qos: .utility)
     private let allowedAudioExtensions: Set<String> = ["m4a", "mp3", "wav"]
+    private var activeAudioKeys: Set<String> = []
+    private var pendingAudioWork: [String: [() -> Void]] = [:]
+    private var cancelledConnections: Set<ObjectIdentifier> = []
 
     func start(preferredPort: UInt16? = nil) {
         guard !started else { return }
@@ -75,10 +78,13 @@ final class LocalHTTPServer {
         connection.stateUpdateHandler = { state in
             switch state {
             case .ready:
+                self.clearConnectionState(connection)
                 self.receive(on: connection)
             case .failed(let error):
                 print("❌ Conn failed: \(error)")
+                self.clearConnectionState(connection)
             case .cancelled:
+                self.clearConnectionState(connection)
                 break
             default: break
             }
@@ -92,18 +98,18 @@ final class LocalHTTPServer {
             if let data = data, !data.isEmpty {
                 self.processRequest(data, on: connection)
             }
-            if isComplete || error != nil { connection.cancel(); return }
+            if isComplete || error != nil { self.requestCancel(connection); return }
             self.receive(on: connection) // keep reading pipelined data (simple)
         }
     }
 
     private func processRequest(_ data: Data, on connection: NWConnection) {
-        guard let request = String(data: data, encoding: .utf8) else { connection.cancel(); return }
+        guard let request = String(data: data, encoding: .utf8) else { requestCancel(connection); return }
         // Very small parser
         let lines = request.split(separator: "\r\n", omittingEmptySubsequences: false)
-        guard let requestLine = lines.first else { connection.cancel(); return }
+        guard let requestLine = lines.first else { requestCancel(connection); return }
         let parts = requestLine.split(separator: " ")
-        guard parts.count >= 2 else { connection.cancel(); return }
+        guard parts.count >= 2 else { requestCancel(connection); return }
         let method = parts[0]
         let path = String(parts[1])
         print("📥 HTTP req: \(method) \(path)")
@@ -147,6 +153,8 @@ final class LocalHTTPServer {
             serveTree(on: connection)
         } else if path == "/sync_now" {
             serveSyncNow(on: connection)
+        } else if path == "/api/server-info" {
+            serveServerInfo(on: connection)
         } else {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
         }
@@ -243,6 +251,15 @@ final class LocalHTTPServer {
             sendSimple(status: 415, reason: "Unsupported Media Type", body: "Extension not allowed", on: connection)
             return
         }
+        enqueueAudioWork(key: fileURL.path) { [weak self] in
+            guard let self = self else { return }
+            self.processAudioStream(fileURL: fileURL, name: name, rangeHeader: rangeHeader, connection: connection)
+        }
+    }
+
+    private func processAudioStream(fileURL: URL, name: String, rangeHeader: String?, connection: NWConnection) {
+        let key = fileURL.path
+        defer { completeAudioWork(key: key) }
         // If file is inside bundle (read-only), copy once to Documents to help AVFoundation in extension context
         let effectiveURL = ensureLocalReadableCopy(for: fileURL)
         // Header diagnostics
@@ -372,7 +389,7 @@ final class LocalHTTPServer {
         let payload = Data(body.utf8)
         let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
         var data = Data(head.utf8); data.append(payload)
-        connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: data, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
     }
 
     // Copy bundle resource to Documents for sandbox-friendly AVAsset usage (once)
@@ -403,7 +420,7 @@ final class LocalHTTPServer {
         let payload = Data(body.utf8)
         let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(payload.count)\r\nConnection: close\r\n\r\n"
         var data = Data(head.utf8); data.append(payload)
-        connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: data, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
     }
 
     private func sendAudioResponse(data: Data, totalLength: UInt64, start: UInt64, end: UInt64, partial: Bool, on connection: NWConnection) {
@@ -424,8 +441,8 @@ final class LocalHTTPServer {
         let headerStr = statusLine + "\r\n" + headers.joined(separator: "\r\n") + "\r\n\r\n"
         var response = Data(headerStr.utf8)
         response.append(data)
-        connection.send(content: response, completion: .contentProcessed { _ in
-            connection.cancel()
+        connection.send(content: response, completion: .contentProcessed { [weak self] _ in
+            self?.requestCancel(connection)
         })
     }
 
@@ -434,7 +451,7 @@ final class LocalHTTPServer {
     let head = "HTTP/1.1 \(status) \(reason)\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(payload.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n"
         var data = Data(head.utf8)
         data.append(payload)
-        connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: data, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
     }
 
     private func sendRaw(status: Int, reason: String, headers: [String:String], body: Data, on connection: NWConnection) {
@@ -449,7 +466,7 @@ final class LocalHTTPServer {
         headerLines.append("Connection: close")
         let head = "HTTP/1.1 \(status) \(reason)\r\n" + headerLines.joined(separator: "\r\n") + "\r\n\r\n"
         var out = Data(head.utf8); out.append(body)
-        connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
     }
 
     // MARK: - Health & Tree Endpoints
@@ -468,7 +485,18 @@ final class LocalHTTPServer {
         }
         let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: \(data.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n"
         var out = Data(head.utf8); out.append(data)
-        connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
+    }
+
+    private func serveServerInfo(on connection: NWConnection) {
+        guard let data = ServerInfoProvider.jsonData(source: "local-http") else {
+            sendSimple(status: 500, reason: "Internal Server Error", body: "server info unavailable", on: connection)
+            return
+        }
+        sendRaw(status: 200, reason: "OK", headers: [
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store"
+        ], body: data, on: connection)
     }
 
     private struct FileNode: Codable {
@@ -494,7 +522,7 @@ final class LocalHTTPServer {
         }
         let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: \(data.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n"
         var out = Data(head.utf8); out.append(data)
-        connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+        connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
     }
 
     private func buildNode(url: URL, depth: Int, maxDepth: Int) -> FileNode {
@@ -526,6 +554,25 @@ final class LocalHTTPServer {
         return dict
     }
 
+    private func requestCancel(_ connection: NWConnection) {
+        queue.async { self.cancelConnectionIfNeededLocked(connection) }
+    }
+
+    private func cancelConnectionIfNeededLocked(_ connection: NWConnection) {
+        let id = ObjectIdentifier(connection)
+        if cancelledConnections.contains(id) { return }
+        cancelledConnections.insert(id)
+        requestCancel(connection)
+    }
+
+    private func clearConnectionState(_ connection: NWConnection) {
+        queue.async { self.clearConnectionStateLocked(connection) }
+    }
+
+    private func clearConnectionStateLocked(_ connection: NWConnection) {
+        cancelledConnections.remove(ObjectIdentifier(connection))
+    }
+
     // MARK: - Text file serving
     private func serveText(named name: String, on connection: NWConnection) {
     let candidates = candidateFileURLs(for: name)
@@ -540,7 +587,7 @@ final class LocalHTTPServer {
             let data = try Data(contentsOf: url)
             let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(data.count)\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Headers: *\r\nConnection: close\r\n\r\n"
             var out = Data(head.utf8); out.append(data)
-            connection.send(content: out, completion: .contentProcessed { _ in connection.cancel() })
+            connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
             print("🗎 Served text file: \(url.lastPathComponent) bytes=\(data.count)")
         } catch {
             sendSimple(status: 500, reason: "Internal Server Error", body: "read fail", on: connection)
@@ -658,6 +705,30 @@ final class LocalHTTPServer {
         if writer.status == .completed { print("✅ Re-encode success: \(outURL.lastPathComponent)") ; return outURL }
         print("❌ Re-encode failed: status=\(writer.status) error=\(writer.error?.localizedDescription ?? "unknown")")
         return nil
+    }
+}
+
+extension LocalHTTPServer {
+    private func enqueueAudioWork(key: String, work: @escaping () -> Void) {
+        if activeAudioKeys.contains(key) {
+            pendingAudioWork[key, default: []].append(work)
+            return
+        }
+        activeAudioKeys.insert(key)
+        work()
+    }
+
+    private func completeAudioWork(key: String) {
+        if var queue = pendingAudioWork[key], !queue.isEmpty {
+            let next = queue.removeFirst()
+            pendingAudioWork[key] = queue.isEmpty ? nil : queue
+            self.queue.async {
+                next()
+            }
+            return
+        }
+        pendingAudioWork[key] = nil
+        activeAudioKeys.remove(key)
     }
 }
 

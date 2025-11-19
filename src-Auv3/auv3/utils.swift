@@ -97,7 +97,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
         try{ if(typeof window.__fromDSP==='function'){ window.__fromDSP({ type:'clip_ready', payload: { clip_id: '\(id)', path: '\(path)' } }); }
              else { window.dispatchEvent(new CustomEvent('clip_ready', { detail: { clip_id: '\(id)', path: '\(path)' } })); } }catch(e){}
         """
-        DispatchQueue.main.async { WebViewManager.webView?.evaluateJavaScript(js, completionHandler: nil) }
+        DispatchQueue.main.async {
+            WebViewManager.evaluateJS(js, label: "auv3.clip_ready", priority: WebViewManager.IPCPriority.high)
+        }
     }
 
     // Custom AudioBufferList wrapper
@@ -534,7 +536,9 @@ public class auv3Utils: AUAudioUnit, IPlugAUControl {
             // Fallback direct pour Lyrix si les streams JS (ios_apis.js) ne sont pas présents
             DispatchQueue.main.async { [weak self] in
                 let js = "(function(){if(typeof displayTransportInfo==='function'){try{displayTransportInfo(\(isPlaying ? "true":"false"),\(currentSampleTime),\(sr));}catch(e){}}else if(typeof updateTimecode==='function'){try{updateTimecode(\(currentSampleTime / sr * 1000.0));}catch(e){}}})();"
-                WebViewManager.webView?.evaluateJavaScript(js, completionHandler: nil)
+                WebViewManager.evaluateJS(js,
+                                          label: "auv3.transportFallback",
+                                          priority: WebViewManager.IPCPriority.critical)
                 self?.transportDataDelegate?.didReceiveTransportData(isPlaying: isPlaying, playheadPosition: currentSampleTime, sampleRate: sr)
             }
         }

@@ -125,7 +125,7 @@ final class FullscreenWebViewController: UIViewController {
           } catch(e) { console.log('fullscreen fix error', e); }
         })();
         """
-        webView.evaluateJavaScript(js, completionHandler: nil)
+        WebViewManager.evaluateJS(js, label: "fullscreenFix", targetWebView: self.webView)
     }
 }
 

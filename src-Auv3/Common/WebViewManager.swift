@@ -36,7 +36,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static var hostStateTimer: Timer?
     private static var hostTimeStreamActiveFlag: Bool = false
     public static func isHostTimeStreamActive() -> Bool { return hostTimeStreamActiveFlag }
-    private enum IPCPriority {
+    enum IPCPriority {
         case critical
         case high
         case normal
@@ -56,6 +56,14 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static var throttleWorkItems: [String: DispatchWorkItem] = [:]
     private static let inboundQueue = DispatchQueue(label: "webview.ipc.inbound", qos: .utility)
     private static var inboundSamples: [CFTimeInterval] = []
+    private static var pageReady: Bool = false
+    private struct PendingIPC {
+        let label: String
+        let priority: IPCPriority
+        let block: () -> Void
+    }
+    private static var pendingIPCQueue: [PendingIPC] = []
+    private static let pendingIPCLimit = 120
     private static var safeModeActive: Bool = false
     private static var safeModeExitWork: DispatchWorkItem?
     private static let inboundLimit: Int = 24
@@ -94,7 +102,10 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     let poolPtr = Unmanaged.passUnretained(WKWebViewFactory.sharedProcessPool).toOpaque()
     print("[Startup] exec mode: \(execMode); shared WKProcessPool=\(poolPtr)")
     if isExtension {
+        markPageLoading()
         FileSyncCoordinator.shared.setWebViewReady(false)
+    } else {
+        pageReady = true
     }
     WebViewManager.shared.log.info("Setup webview; mode=\(execMode, privacy: .public) pool=\(String(describing: poolPtr), privacy: .public)")
 
@@ -640,9 +651,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private func sendSampleRateToJS() {
         // Send sample rate back to JavaScript
         let jsCode = "if (typeof window.updateSampleRate === 'function') { window.updateSampleRate(44100); }"
-        WebViewManager.performIPC(label: "sampleRate", priority: .low) {
-            Self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
-        }
+        WebViewManager.evaluateJS(jsCode, label: "sampleRate", priority: .low)
     }
     
     // MARK: - MIDI Communication
@@ -658,13 +667,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             console.log('🎹 MIDI received but no handler available:', \(data1), \(data2), \(data3));
         }
         """
-        performIPC(label: "midi", priority: .high) {
-            self.webView?.evaluateJavaScript(jsCode) { _, error in
-                if let error = error {
-                    print("❌ MIDI JS Error: \(error.localizedDescription)")
-                }
-            }
-        }
+        evaluateJS(jsCode, label: "midi", priority: .high)
     }
 
     private func sendMuteStateToJS() {
@@ -710,9 +713,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     public static func sendTransportDataToJS(isPlaying: Bool, playheadPosition: Double, sampleRate: Double) {
         updateTransportCache(isPlaying: isPlaying, playheadSeconds: playheadPosition)
         let jsCode = "if (typeof updateTransportFromSwift === 'function') { updateTransportFromSwift({\"isPlaying\": \(isPlaying ? "true" : "false"), \"playheadPosition\": \(Int(playheadPosition)), \"sampleRate\": \(Int(sampleRate))}); }"
-        performIPC(label: "transport", priority: .critical) {
-            self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
-        }
+        evaluateJS(jsCode, label: "transport", priority: .critical)
     }
 
     public static func sendToJS(_ message: Any, _ function: String) {
@@ -722,21 +723,30 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     private static func dispatchToJS(_ message: Any, function: String, priority: IPCPriority) {
         var jsValue: String
         if let stringValue = message as? String {
-            jsValue = "\"\(stringValue)\""
+            // Escape quotes and backslashes to ensure valid JS string literal
+            let escaped = stringValue
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
+            jsValue = "\"\(escaped)\""
         } else {
             jsValue = "'\(message)'"
         }
         let jsCode = "if (typeof \(function) === 'function') { \(function)(\(jsValue)); }"
-        performIPC(label: "fn.\(function)", priority: priority) {
-            self.webView?.evaluateJavaScript(jsCode, completionHandler: nil)
-        }
+        evaluateJS(jsCode, label: "fn.\(function)", priority: priority)
     }
 
     // MARK: - WKNavigationDelegate
 
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        WebViewManager.markPageLoading()
+    }
+
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     // Only run full initialization on the real app page (ignore placeholder page)
     guard let last = webView.url?.lastPathComponent, last == "index.html" else { return }
+    WebViewManager.markPageReady()
     // Log geometry to detect external monitor stage/scene issues
     print("[WK] didFinish; webView.frame=\(webView.frame) bounds=\(webView.bounds)")
     log.debug("didFinish; frame=\(String(describing: webView.frame.debugDescription)) bounds=\(String(describing: webView.bounds.debugDescription))")
@@ -773,6 +783,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
 
     private var terminateRetryCount = 0
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        WebViewManager.markPageLoading()
         guard FeatureFlags.centralTerminationRetry else { return }
         log.error("WebContent terminated; retryCount=\(self.terminateRetryCount)")
         let backoff = pow(2.0, Double(terminateRetryCount)) * 0.2
@@ -833,6 +844,38 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     }
 
     private static func performIPC(label: String, priority: IPCPriority, block: @escaping () -> Void) {
+        if runningInExtension && !pageReady {
+            enqueuePendingIPC(label: label, priority: priority, block: block)
+            return
+        }
+        executeIPC(label: label, priority: priority, block: block)
+    }
+
+    static func evaluateJS(_ js: String,
+                           label: String = "js.eval",
+                           priority: IPCPriority = .normal,
+                           targetWebView: WKWebView? = nil,
+                           completion: ((Any?, Error?) -> Void)? = nil) {
+        weak var explicitWebView = targetWebView
+        performIPC(label: label, priority: priority) {
+            guard let webView = explicitWebView ?? self.webView else {
+                if runningInExtension {
+                    shared.log.error("evaluateJS missing webView for label=\(label, privacy: .public)")
+                }
+                completion?(nil, nil)
+                return
+            }
+            webView.evaluateJavaScript(js) { result, error in
+                if let error = error {
+                    let jsSnippet = js.count > 200 ? String(js.prefix(200)) + "..." : js
+                    shared.log.error("evaluateJS failed label=\(label, privacy: .public) error=\(error.localizedDescription, privacy: .public) js=\(jsSnippet, privacy: .public)")
+                }
+                completion?(result, error)
+            }
+        }
+    }
+
+    private static func executeIPC(label: String, priority: IPCPriority, block: @escaping () -> Void) {
         if !runningInExtension {
             DispatchQueue.main.async(execute: block)
             return
@@ -857,6 +900,48 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 throttleWorkItems[label] = work
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
             }
+        }
+    }
+
+    private static func enqueuePendingIPC(label: String, priority: IPCPriority, block: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            if pendingIPCQueue.count >= pendingIPCLimit {
+                pendingIPCQueue.removeFirst(pendingIPCQueue.count - pendingIPCLimit + 1)
+            }
+            pendingIPCQueue.append(PendingIPC(label: label, priority: priority, block: block))
+        }
+    }
+
+    private static func flushPendingIPC() {
+        DispatchQueue.main.async {
+            guard !pendingIPCQueue.isEmpty else { return }
+            let queued = pendingIPCQueue
+            pendingIPCQueue.removeAll()
+            
+            func processNext(_ items: [PendingIPC]) {
+                guard let first = items.first else { return }
+                executeIPC(label: first.label, priority: first.priority, block: first.block)
+                
+                // Small delay between items to prevent flooding WebKit
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                    processNext(Array(items.dropFirst()))
+                }
+            }
+            
+            processNext(queued)
+        }
+    }
+
+    private static func markPageReady() {
+        guard runningInExtension else { return }
+        pageReady = true
+        flushPendingIPC()
+    }
+
+    private static func markPageLoading() {
+        guard runningInExtension else { return }
+        if pageReady {
+            pageReady = false
         }
     }
 

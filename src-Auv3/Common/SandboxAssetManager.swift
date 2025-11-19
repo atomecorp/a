@@ -54,14 +54,24 @@ final class SandboxAssetManager {
     /// it can be copied into the sandbox.
     private func locateBundleAsset(for relativePath: String) -> URL? {
         guard let bundleRoot = Bundle.main.resourceURL else { return nil }
-        let nameNSString = relativePath as NSString
+        let normalized = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nameNSString = normalized as NSString
         let baseName = nameNSString.deletingPathExtension
         let ext = nameNSString.pathExtension
         let fileOnly = nameNSString.lastPathComponent
-        let lower = relativePath.lowercased()
+        let lower = normalized.lowercased()
 
         var candidates: [URL?] = []
         let add: (URL?) -> Void = { candidates.append($0) }
+
+        // Direct relative path from bundle root (covers src/** and assets/** trees)
+        add(bundleRoot.appendingPathComponent(normalized))
+
+        // If path already includes leading "src/", also try without that prefix to avoid duplicates
+        if normalized.hasPrefix("src/") {
+            let trimmed = String(normalized.dropFirst(4))
+            add(bundleRoot.appendingPathComponent(trimmed))
+        }
 
         if !ext.isEmpty {
             add(Bundle.main.url(forResource: baseName, withExtension: ext))

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Centralizes the sandbox policy for the AUv3 extension.
 /// Only two roots are permitted:
@@ -7,6 +8,9 @@ import Foundation
 /// Any path outside these roots must be rejected to avoid sandbox violations.
 enum SandboxPathValidator {
     private static let appGroupIdentifier = "group.atome.one"
+    private static let violationLog = OSLog(subsystem: "atome", category: "SandboxPathValidator")
+    private static let violationQueue = DispatchQueue(label: "sandbox.validator.violation")
+    private static var violationCounter: UInt = 0
 
     /// Returns the list of allowed root directories, in priority order.
     /// Directories are created if missing to avoid later writes failing due to nonexistent folders.
@@ -21,6 +25,11 @@ enum SandboxPathValidator {
         if let pluginDocs = pluginContainerRoot() {
             roots.append(pluginDocs)
             createDirectoryIfNeeded(at: pluginDocs)
+        }
+
+        if let temp = temporaryRoot() {
+            roots.append(temp)
+            createDirectoryIfNeeded(at: temp)
         }
 
         var unique: [URL] = []
@@ -52,6 +61,12 @@ enum SandboxPathValidator {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.standardizedFileURL
     }
 
+    /// Returns the process temporary directory (NSTemporaryDirectory) as an allowed root.
+    static func temporaryRoot() -> URL? {
+        let tmp = FileManager.default.temporaryDirectory
+        return tmp.standardizedFileURL
+    }
+
     /// Ensures the provided URL resides strictly inside one of the allowed roots.
     static func isAllowed(url: URL) -> Bool {
         let resolved = url.resolvingSymlinksInPath().standardizedFileURL
@@ -63,6 +78,23 @@ enum SandboxPathValidator {
                 return true
             }
         }
+        return false
+    }
+
+    /// Logs a rejected attempt with context for later diagnosis.
+    static func reportViolation(path: String, context: String) {
+        violationQueue.async {
+            violationCounter &+= 1
+            let msg = "Blocked sandbox access (#\(violationCounter)) context=\(context) path=\(path)"
+            os_log("%{public}@", log: violationLog, type: .fault, msg)
+        }
+    }
+
+    /// Validates a URL and reports if it is not allowed.
+    @discardableResult
+    static func enforce(url: URL, context: String) -> Bool {
+        if isAllowed(url: url) { return true }
+        reportViolation(path: url.path, context: context)
         return false
     }
 

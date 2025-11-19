@@ -1,44 +1,31 @@
 import Foundation
 import WebKit
 
-// WKURLSchemeHandler to serve local audio (Alive.m4a) and HTML via custom scheme
+// WKURLSchemeHandler to serve local audio and static assets via custom scheme
 class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
-    // Root search paths: Documents + App Group (if any)
     private let fileManager = FileManager.default
-    private lazy var documentsURL: URL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    private lazy var appGroupURL: URL? = {
-        // Replace with actual App Group identifier if configured
-        let possibleIds = ["group.atome.one", "group.com.atomecorp.atome"]
-        for id in possibleIds {
-            if let url = fileManager.containerURL(forSecurityApplicationGroupIdentifier: id) {
-                return url
-            }
-        }
-        return nil
-    }()
-    
-    private let scheme = "atome" // <SCHEME>
-    private lazy var bundleSrcRoot: URL? = {
-        // Root of packaged web assets (expects 'src' folder in bundle resources)
-        let root = Bundle.main.resourceURL
-        return root?.appendingPathComponent("src", isDirectory: true)
-    }()
+    private let scheme = "atome"
+    private lazy var bundleRoot: URL? = Bundle.main.resourceURL
     
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url else { return }
-        // Normalize request path; include host when used as path segment (e.g., atome://index.html)
-        var path = url.path
-        if let host = url.host, !host.isEmpty {
-            if path == "/" { path = "/" + host }
-            else if !host.contains(".") && !path.hasPrefix("/audio/") { path = "/" + host + path }
+        let (path, host, hadQuery) = normalize(url: url)
+        print("[AudioSchemeHandler] start request url=\(url.absoluteString) sanitizedPath=\(path) range=\(urlSchemeTask.request.value(forHTTPHeaderField: "Range") ?? "<none>")")
+
+        if hadQuery {
+            let redirect = buildCleanURLString(path: path, host: host)
+            respondRedirect(location: redirect, task: urlSchemeTask)
+            return
         }
-        print("[AudioSchemeHandler] start request url=\(url.absoluteString) path=\(path) range=\(urlSchemeTask.request.value(forHTTPHeaderField: "Range") ?? "<none>")")
-        let host = url.host
-        if host != nil { print("[AudioSchemeHandler] host=\(host!)") }
-        
+
         if path == "/" || path == "/index.html" {
             print("[AudioSchemeHandler] Serving index.html")
             serveIndexHTML(task: urlSchemeTask)
+            return
+        }
+
+        if path == "/api/server-info" {
+            serveServerInfo(task: urlSchemeTask)
             return
         }
         
@@ -46,29 +33,19 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
         // 1) atome:///audio/Alive.m4a   -> path starts with /audio/
         // 2) atome://audio/Alive.m4a    -> host == "audio", path == "/Alive.m4a"
         if path.hasPrefix("/audio/") {
-            let fileName = String(path.dropFirst("/audio/".count))
-            print("[AudioSchemeHandler] Audio request (triple-slash form) fileName=\(fileName)")
-            serveAudio(fileName: fileName, task: urlSchemeTask)
+            let relative = String(path.dropFirst("/audio/".count))
+            serveAudio(relativePath: relative, task: urlSchemeTask)
             return
         }
-        if host == "audio" && path.count > 1 { // path like /Alive.m4a
-            let fileName = String(path.dropFirst())
-            print("[AudioSchemeHandler] Audio request (host form) fileName=\(fileName)")
-            serveAudio(fileName: fileName, task: urlSchemeTask)
-            return
-        }
-        
-        if path.hasPrefix("/audio/") {
-            let fileName = String(path.dropFirst("/audio/".count))
-            print("[AudioSchemeHandler] Audio request fileName=\(fileName)")
-            serveAudio(fileName: fileName, task: urlSchemeTask)
+        if host == "audio" && path.count > 1 {
+            let relative = String(path.dropFirst())
+            serveAudio(relativePath: relative, task: urlSchemeTask)
             return
         }
         
-    // Fallback: serve any static asset under 'src' in the bundle (e.g., /src/index.html, /js/..., /squirrel/..., /application/...)
-    if serveStatic(path: path, task: urlSchemeTask) { return }
-    print("[AudioSchemeHandler] 404 for path=\(path)")
-    respond404(task: urlSchemeTask)
+        if serveStatic(path: path, task: urlSchemeTask) { return }
+        print("[AudioSchemeHandler] 404 for path=\(path)")
+        respond404(task: urlSchemeTask)
     }
     
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
@@ -93,25 +70,30 @@ document.getElementById('player').addEventListener('error', e => {
         respondData(html.data(using: .utf8)!, mime: "text/html", task: task)
     }
     
-    private func serveAudio(fileName: String, task: WKURLSchemeTask) {
-        let candidates: [URL] = {
-            var arr: [URL] = []
-            arr.append(documentsURL.appendingPathComponent(fileName))
-            if let appGroup = appGroupURL { arr.append(appGroup.appendingPathComponent(fileName)) }
-            return arr
-        }()
-        print("[AudioSchemeHandler] Candidate paths: \(candidates.map{ $0.path })")
-        guard let fileURL = candidates.first(where: { fileManager.fileExists(atPath: $0.path) }) else {
-            print("[AudioSchemeHandler] File not found in any candidate path")
+    private func serveAudio(relativePath rawPath: String, task: WKURLSchemeTask) {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let sanitized = SandboxPathValidator.sanitizedRelativePath(trimmed) else {
+            SandboxPathValidator.reportViolation(path: rawPath, context: "AudioSchemeHandler.audio")
             respond404(task: task)
             return
         }
-        print("[AudioSchemeHandler] Found file at path=\(fileURL.path)")
+        let candidates = SandboxPathValidator.allowedRoots().map { root -> URL in
+            sanitized.isEmpty ? root : root.appendingPathComponent(sanitized)
+        }
+        let fileURL = candidates.first(where: { fileManager.fileExists(atPath: $0.path) })
+            ?? SandboxAssetManager.shared.materializeAssetIfNeeded(relativePath: sanitized)
+
+        guard let locatedURL = fileURL else {
+            print("[AudioSchemeHandler] Audio missing for \(sanitized)")
+            respond404(task: task)
+            return
+        }
+        print("[AudioSchemeHandler] Found audio at path=\(locatedURL.path)")
         
         do {
-            let attr = try fileManager.attributesOfItem(atPath: fileURL.path)
+            let attr = try fileManager.attributesOfItem(atPath: locatedURL.path)
             let fileSize = (attr[.size] as? NSNumber)?.int64Value ?? 0
-            let mime = mimeType(for: fileURL.pathExtension.lowercased())
+            let mime = mimeType(for: locatedURL.pathExtension.lowercased())
             print("[AudioSchemeHandler] fileSize=\(fileSize) mime=\(mime)")
             
             // Check for Range header
@@ -119,7 +101,7 @@ document.getElementById('player').addEventListener('error', e => {
                let range = parseRange(rangeHeader: rangeHeader, fileLength: fileSize) {
                 print("[AudioSchemeHandler] Handling Range request header=\(rangeHeader) resolved=\(range.lowerBound)-\(range.upperBound - 1)")
                 // Partial response
-                let handle = try FileHandle(forReadingFrom: fileURL)
+                let handle = try FileHandle(forReadingFrom: locatedURL)
                 try handle.seek(toOffset: UInt64(range.lowerBound))
                 let length = range.count
                 let data = handle.readData(ofLength: length)
@@ -139,7 +121,7 @@ document.getElementById('player').addEventListener('error', e => {
             
             // Full file
             print("[AudioSchemeHandler] Serving full file (no Range)")
-            let data = try Data(contentsOf: fileURL)
+            let data = try Data(contentsOf: locatedURL)
             let response = HTTPURLResponse(url: task.request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
                 "Content-Type": mime,
                 "Content-Length": String(data.count),
@@ -208,25 +190,91 @@ document.getElementById('player').addEventListener('error', e => {
 
     // MARK: - Static asset serving from bundle 'src'
     private func serveStatic(path: String, task: WKURLSchemeTask) -> Bool {
-        // Remove leading '/'
         var rel = path
         if rel.hasPrefix("/") { rel.removeFirst() }
-        // Ensure paths are under 'src'
+        if rel.isEmpty { rel = "src/index.html" }
         if !rel.hasPrefix("src/") {
             rel = "src/" + rel
         }
-        guard let root = Bundle.main.resourceURL else { return false }
-        let fileURL = root.appendingPathComponent(rel)
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return false }
+        guard let sanitized = SandboxPathValidator.sanitizedRelativePath(rel) else {
+            SandboxPathValidator.reportViolation(path: rel, context: "AudioSchemeHandler.static")
+            return false
+        }
+
+        // Prefer sandboxed copy
+        let sandboxURL = SandboxAssetManager.shared.materializeAssetIfNeeded(relativePath: sanitized)
+
+        // Fallback to bundled asset only if copy unavailable
+        let finalURL: URL?
+        if let sandboxURL {
+            finalURL = sandboxURL
+        } else if let bundleRoot = bundleRoot {
+            finalURL = bundleRoot.appendingPathComponent(sanitized)
+        } else {
+            finalURL = nil
+        }
+
+        guard let resolvedURL = finalURL, fileManager.fileExists(atPath: resolvedURL.path) else {
+            return false
+        }
         do {
-            let data = try Data(contentsOf: fileURL)
-            let ext = fileURL.pathExtension.lowercased()
+            let data = try Data(contentsOf: resolvedURL)
+            let ext = resolvedURL.pathExtension.lowercased()
             let mime = mimeType(for: ext)
             respondData(data, mime: mime, task: task)
             return true
         } catch {
-            print("[AudioSchemeHandler] Static serve error for \(fileURL.path): \(error)")
+            print("[AudioSchemeHandler] Static serve error for \(resolvedURL.path): \(error)")
             return false
         }
+    }
+
+    private func serveServerInfo(task: WKURLSchemeTask) {
+        guard let data = ServerInfoProvider.jsonData(source: "scheme") else {
+            respond404(task: task)
+            return
+        }
+        let response = HTTPURLResponse(url: task.request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+            "Content-Type": "application/json",
+            "Content-Length": String(data.count),
+            "Cache-Control": "no-store"
+        ])!
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    private func normalize(url: URL) -> (path: String, host: String?, hasQuery: Bool) {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let hadQuery = (components?.query != nil)
+        components?.query = nil
+        components?.percentEncodedQuery = nil
+        var path = components?.percentEncodedPath ?? url.path
+        if path.isEmpty { path = "/" }
+        let decodedPath = path.removingPercentEncoding ?? path
+        var adjusted = decodedPath
+        if let host = components?.host, !host.isEmpty {
+            if adjusted == "/" { adjusted = "/" + host }
+            else if !host.contains(".") && !adjusted.hasPrefix("/audio/") { adjusted = "/" + host + adjusted }
+        }
+        return (adjusted, components?.host ?? url.host, hadQuery)
+    }
+
+    private func buildCleanURLString(path: String, host: String?) -> String {
+        let targetHost = host ?? ""
+        if targetHost.isEmpty {
+            return "\(scheme)://\(path)"
+        }
+        return "\(scheme)://\(targetHost)\(path)"
+    }
+
+    private func respondRedirect(location: String, task: WKURLSchemeTask) {
+        let headers = [
+            "Location": location,
+            "Cache-Control": "no-store"
+        ]
+        let response = HTTPURLResponse(url: task.request.url!, statusCode: 308, httpVersion: "HTTP/1.1", headerFields: headers)!
+        task.didReceive(response)
+        task.didFinish()
     }
 }

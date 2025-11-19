@@ -38,9 +38,12 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
 
         func buildURL(from base: URL, relative: String) -> URL? {
-            guard let sanitized = SandboxPathValidator.sanitizedRelativePath(relative) else { return nil }
+            guard let sanitized = SandboxPathValidator.sanitizedRelativePath(relative) else {
+                SandboxPathValidator.reportViolation(path: relative, context: "FileSystemBridge.resolveURL.sanitize")
+                return nil
+            }
             let resolved = sanitized.isEmpty ? base : base.appendingPathComponent(sanitized, isDirectory: isDirectory)
-            return SandboxPathValidator.isAllowed(url: resolved) ? resolved : nil
+            return SandboxPathValidator.enforce(url: resolved, context: "FileSystemBridge.resolveURL") ? resolved : nil
         }
 
         if trimmed.hasPrefix("appgroup:") {
@@ -50,8 +53,19 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             return buildURL(from: groupRoot, relative: rest)
         }
 
+        if trimmed.hasPrefix("temp:") || trimmed.hasPrefix("tmp:") {
+            var rest = String(trimmed.dropFirst(trimmed.hasPrefix("temp:") ? 5 : 4))
+            while rest.hasPrefix("/") { rest.removeFirst() }
+            guard let tempRoot = SandboxPathValidator.temporaryRoot() else { return nil }
+            return buildURL(from: tempRoot, relative: rest)
+        }
+
         if trimmed.isEmpty || trimmed == "." || trimmed == "./" || trimmed == "/" {
-            return SandboxPathValidator.primaryRoot()
+            let root = SandboxPathValidator.primaryRoot()
+            if root == nil {
+                SandboxPathValidator.reportViolation(path: trimmed, context: "FileSystemBridge.resolveURL.primaryRootMissing")
+            }
+            return root
         }
 
         let preferredBase: URL? = {
@@ -378,6 +392,14 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             viewController.present(alert, animated: true)
         }
     }
+
+    private func dispatchJS(_ js: String,
+                            label: String,
+                            priority: WebViewManager.IPCPriority = .normal,
+                            webView: WKWebView?) {
+        guard let webView = webView else { return }
+        WebViewManager.evaluateJS(js, label: label, priority: priority, targetWebView: webView)
+    }
     
     private func sendSuccessResponse(to webView: WKWebView?, data: [String: Any]) {
         guard let webView = webView else { return }
@@ -392,7 +414,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                     data: \(jsonString)
                 });
             """
-            webView.evaluateJavaScript(js)
+            dispatchJS(js, label: "filesystem.success", webView: webView)
         } catch {
             sendErrorResponse(to: webView, error: "Failed to serialize response")
         }
@@ -408,7 +430,7 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                 error: "\(escapedError)"
             });
         """
-        webView.evaluateJavaScript(js)
+        dispatchJS(js, label: "filesystem.error", webView: webView)
     }
     
     func addFileSystemAPI(to webView: WKWebView) {
@@ -794,16 +816,12 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
                 if success {
                     // Notifier JavaScript du succès
                     let js = "if (window.documentPickerResult) window.documentPickerResult(true, null);"
-                    webView.evaluateJavaScript(js) { (result, error) in
-                        _ = result; _ = error
-                    }
+                    self?.dispatchJS(js, label: "filesystem.documentPicker", webView: webView)
                 } else {
                     let errorMessage = error?.localizedDescription ?? "Unknown error"
                     // Notifier JavaScript de l'erreur
                     let js = "if (window.documentPickerResult) window.documentPickerResult(false, '\(errorMessage)');"
-                    webView.evaluateJavaScript(js) { (result, error) in
-                        _ = result; _ = error
-                    }
+                    self?.dispatchJS(js, label: "filesystem.documentPicker", webView: webView)
                 }
             }
         }
@@ -882,6 +900,6 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
               let json = String(data: data, encoding: .utf8) else { return }
         let js = "window.AUv3API && AUv3API._receiveFromSwift(\(json));"
-        webView.evaluateJavaScript(js)
+        dispatchJS(js, label: "filesystem.bridge", webView: webView)
     }
 }
