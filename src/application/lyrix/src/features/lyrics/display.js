@@ -4,6 +4,70 @@ import { StorageManager } from '../../services/storage.js';
 import { UIManager } from '../../components/ui.js';
 import { default_theme } from '../../components/style.js';
 
+const setElementDisplay = (id, displayValue) => {
+    try {
+        const target = (typeof grab === 'function' ? grab(id) : document.getElementById(id));
+        if (target && target.style) {
+            target.style.display = displayValue;
+        }
+    } catch (error) {
+        console.warn('[lyricsDisplay] Failed to toggle display for', id, error);
+    }
+};
+
+export function enterLyrixFullscreenLayout({
+    toolbar = null,
+    lyricsContent = null,
+    applyModeStyles = null,
+    onExit = null
+} = {}) {
+    setElementDisplay('intuition', 'none');
+    setElementDisplay('_intuition_perform', 'none');
+
+    const leftPanel = document.getElementById('control_panel');
+    const statusBar = document.querySelector('[style*="position: fixed"][style*="bottom"]');
+    if (leftPanel) leftPanel.style.display = 'none';
+    if (statusBar) statusBar.style.display = 'none';
+    if (toolbar) toolbar.style.display = 'none';
+
+    if (typeof applyModeStyles === 'function') {
+        applyModeStyles();
+    }
+
+    if (lyricsContent && typeof onExit === 'function') {
+        lyricsContent.addEventListener('click', onExit);
+    }
+}
+
+export function exitLyrixFullscreenLayout({
+    toolbar = null,
+    lyricsContent = null,
+    applyModeStyles = null,
+    removeHandler = null
+} = {}) {
+    setElementDisplay('intuition', 'flex');
+    setElementDisplay('_intuition_perform', 'inline-flex');
+
+    const leftPanel = document.getElementById('control_panel');
+    const statusBar = document.querySelector('[style*="position: fixed"][style*="bottom"]');
+    if (leftPanel) leftPanel.style.display = 'block';
+    if (statusBar) statusBar.style.display = 'block';
+    if (toolbar) toolbar.style.display = 'flex';
+
+    if (lyricsContent && removeHandler) {
+        lyricsContent.removeEventListener('click', removeHandler);
+    }
+
+    if (typeof applyModeStyles === 'function') {
+        applyModeStyles();
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.enterLyrixFullscreenLayout = enterLyrixFullscreenLayout;
+    window.exitLyrixFullscreenLayout = exitLyrixFullscreenLayout;
+}
+
 export class LyricsDisplay {
     constructor(container, audioController = null) {
         this.container = container; // May be null now since we append directly to lyrix_app
@@ -2326,49 +2390,25 @@ export class LyricsDisplay {
         this.fullscreenMode = !this.fullscreenMode;
 
         if (this.fullscreenMode) {
-
-            grab('intuition').style.display = 'none';
-            grab("_intuition_perform").style.display = 'none';
-            // Hide everything except lyrics content
-            const leftPanel = document.getElementById('control_panel');
-            const statusBar = document.querySelector('[style*="position: fixed"][style*="bottom"]');
-
-            // Hide other elements
-            if (leftPanel) leftPanel.style.display = 'none';
-            if (statusBar) statusBar.style.display = 'none';
-
-            // Hide the toolbar but NOT the display container
-            if (this.toolbar) this.toolbar.style.display = 'none';
-
-            // Apply fullscreen styles
-            this.applyModeStyles(true);
-
-            // Add click handler to exit fullscreen
             this.fullscreenClickHandler = () => {
-                this.toggleFullscreen(false);  // Explicitly exit fullscreen
+                this.toggleFullscreen(false);
             };
-            this.lyricsContent.addEventListener('click', this.fullscreenClickHandler);
+
+            enterLyrixFullscreenLayout({
+                toolbar: this.toolbar,
+                lyricsContent: this.lyricsContent,
+                applyModeStyles: () => this.applyModeStyles(true),
+                onExit: this.fullscreenClickHandler
+            });
 
         } else {
-            // Remove click handler
-            grab('intuition').style.display = 'flex';
-            grab("_intuition_perform").style.display = 'inline-flex';
-            if (this.fullscreenClickHandler) {
-                this.lyricsContent.removeEventListener('click', this.fullscreenClickHandler);
-                this.fullscreenClickHandler = null;
-            }
-
-            // Restore everything
-            const leftPanel = document.getElementById('control_panel');
-            const statusBar = document.querySelector('[style*="position: fixed"][style*="bottom"]');
-
-            // Show hidden elements
-            if (leftPanel) leftPanel.style.display = 'block';
-            if (statusBar) statusBar.style.display = 'block';
-            if (this.toolbar) this.toolbar.style.display = 'flex';
-
-            // Apply normal styles
-            this.applyModeStyles(false);
+            exitLyrixFullscreenLayout({
+                toolbar: this.toolbar,
+                lyricsContent: this.lyricsContent,
+                applyModeStyles: () => this.applyModeStyles(false),
+                removeHandler: this.fullscreenClickHandler
+            });
+            this.fullscreenClickHandler = null;
         }
 
 
