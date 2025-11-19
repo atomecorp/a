@@ -211,8 +211,8 @@ const intuition_content = {
   file: { type: 'palette', children: ['import', 'load', 'save'] },
   tools: { type: 'palette', children: ['volume', 'ADSR', 'controller'], touch_up: tools_test_touch, floatingMenuKey: 'record_child_tools' },
   settings: { type: 'palette', children: ['orientation'], icon: false },
-  capture: { label: 'record', type: 'tool', icon: 'record' },
-  perform: { label: 'perform', type: 'tool', icon: null, action: 'momentary', active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
+  capture: { label: 'record', type: 'tool', icon: 'record', action: 'momentary', },
+  perform: { label: 'perform', type: 'tool', icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
   import: { type: 'tool', children: ['audio', 'modules', 'projects'] },
@@ -235,7 +235,7 @@ const intuition_content = {
   },
   volume: { type: 'particle', helper: 'slider', value: 3 },
   ADSR: { type: 'tool', children: ['A', 'D', 'S', 'R'], icon: 'envelope', touch: tools_test_touch, lock: tools_lock_test_touch },
-  controller: { type: 'zonespecial', touch: function () { puts('Controller touch triggered'); } },
+  controller: { type: 'zonespecial', touch: function () { puts('Controller touch triggered'); }, action: 'momentary' },
   A: {
     type: 'particle',
     helper: 'slider',

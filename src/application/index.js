@@ -54,7 +54,7 @@
 
 
 // import('./lyrix/index.js');
-import('./examples/input_file.js');
+// import('./examples/input_file.js');
 // import('./examples/iOS_app_launcher.js');
 // import('./examples/ios_audio_bridge.js');
 // import('./examples/iplug_ios.js');
@@ -71,7 +71,7 @@ import('./examples/input_file.js');
 // import('./examples/a_svg.js');
 
 // import('./examples/basic.js');
-//import('./examples/tools.js'); //intuition menu
+import('./examples/tools.js'); //intuition menu
 // import('./examples/atome.js');
 // import('./jeezs/demo.js');
 // import('./examples/!test_taurie-path.js');

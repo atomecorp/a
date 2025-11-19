@@ -3222,7 +3222,7 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             if (typeof parsedThemeValue === 'number' && isFinite(parsedThemeValue)) {
                 return Math.max(0, parsedThemeValue);
             }
-            return 0;
+            return 90;
         })();
         const previousTransition = el.style.transition;
         if (!previousTransition || !/background/i.test(previousTransition)) {
