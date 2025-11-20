@@ -677,7 +677,7 @@ export function showSongLibrary() {
         newSongButton.textContent = 'New song';
     }
 
-    const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'Base note:', css: { fontSize: UNIFIED_FONT_SIZE, color: '#fff', userSelect: 'none' } });
+    const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'midi note', css: { fontSize: UNIFIED_FONT_SIZE, color: '#fff', userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
         id: 'auto-fill-midi-input',
@@ -716,7 +716,7 @@ export function showSongLibrary() {
         },
         onClick: () => autoFillMidiNotes()
     });
-    try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Midi bindings'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
+    try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Auto Fill'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
 
     autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 
