@@ -625,6 +625,55 @@ export function showSongLibrary() {
 
     // Auto Fill MIDI container
     const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: UNIFIED_BTN_BG, height: '28px', padding: '0 8px', borderRadius: default_theme.borderRadius.sm, border: 'none', boxSizing: 'border-box' } });
+
+    const newSongButton = window.$('button', {
+        id: 'new-song-button',
+        css: {
+            backgroundColor: 'transparent',
+            border: 'none',
+            color: default_theme.colors.textMuted,
+            fontSize: UNIFIED_FONT_SIZE,
+            cursor: 'pointer',
+            padding: '0',
+            marginRight: '15px',
+
+            display: 'flex',
+            alignItems: 'center'
+        },
+        onClick: () => {
+            // Try window scope first
+            if (typeof window.createNewSongFromMenu === 'function') {
+                window.createNewSongFromMenu();
+                return;
+            }
+            // Fallback to direct implementation if function is missing
+            if (window.createNewEmptySong) {
+                window.createNewEmptySong();
+                if (window.toggleLyricsEditMode) window.toggleLyricsEditMode();
+            } else if (window.lyricsDisplay && typeof window.lyricsDisplay.createNewEmptySong === 'function') {
+                window.lyricsDisplay.createNewEmptySong();
+                if (window.toggleLyricsEditMode) window.toggleLyricsEditMode();
+            } else {
+                console.warn('❌ Impossible de créer une chanson : createNewEmptySong non disponible');
+            }
+        }
+    });
+    try {
+        const img = document.createElement('img');
+        img.src = 'assets/images/icons/new.svg';
+        img.style.width = '14px';
+        img.style.height = '14px';
+        img.style.marginRight = '4px';
+        img.style.pointerEvents = 'none'; // Ensure click passes through
+        newSongButton.appendChild(img);
+        const span = document.createElement('span');
+        span.textContent = 'New song';
+        span.style.pointerEvents = 'none'; // Ensure click passes through
+        newSongButton.appendChild(span);
+    } catch (e) {
+        newSongButton.textContent = 'New song';
+    }
+
     const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'Base note:', css: { fontSize: UNIFIED_FONT_SIZE, color: default_theme.colors.textMuted, userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
@@ -666,7 +715,7 @@ export function showSongLibrary() {
     });
     try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Fill bindings'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
 
-    autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
+    autoFillContainer.append(newSongButton, autoFillLabel, autoFillInput, autoFillButton);
 
     // Sort alphabetically button
     const sortAlphabeticallyButton = window.$('button', {
