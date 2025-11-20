@@ -39,6 +39,9 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     public override func viewDidLoad() {
         super.viewDidLoad()
         
+        // Ensure the host view background is black to match the WebView
+        view.backgroundColor = .black
+        
     log.info("Startup AUv3 AudioUnitViewController")
         assert(ExternalDisplayGuards.isRunningInExtension, "AudioUnitViewController must run inside extension")
 
@@ -57,8 +60,18 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     // Create WKWebView via factory to guarantee shared process pool and config
     if FeatureFlags.mainThreadPrecondition { dispatchPrecondition(condition: .onQueue(.main)) }
     webView = WKWebViewFactory.shared.createWebView(frame: view.bounds, mode: .auv3)
-        webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        
+        // FIX: Use Auto Layout instead of autoresizingMask to prevent layout tearing
+        webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
+        
+        NSLayoutConstraint.activate([
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+        
         WebViewManager.setupWebView(for: webView, audioController: self)
     // Register JS -> Swift handler for safe URL launching (idempotent)
     let cc = webView.configuration.userContentController

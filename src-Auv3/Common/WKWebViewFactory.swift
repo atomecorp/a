@@ -33,7 +33,9 @@ final class WKWebViewFactory {
         if #available(iOS 10.0, *) { config.mediaTypesRequiringUserActionForPlayback = [.audio] }
 
         let webView = WKWebView(frame: frame, configuration: config)
-        webView.isOpaque = false
+        // FIX: Set isOpaque to true to prevent rendering artifacts/black screens in AUv3
+        // especially when multiple instances are loaded.
+        webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
         let poolPtr = Unmanaged.passUnretained(processPool).toOpaque()
