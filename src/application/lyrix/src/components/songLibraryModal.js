@@ -629,16 +629,19 @@ export function showSongLibrary() {
     const newSongButton = window.$('button', {
         id: 'new-song-button',
         css: {
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: default_theme.colors.textMuted,
+            ...default_theme.button,
+            backgroundColor: UNIFIED_BTN_BG,
+            width: 'auto',
+            padding: '0 10px',
             fontSize: UNIFIED_FONT_SIZE,
-            cursor: 'pointer',
-            padding: '0',
-            marginRight: '15px',
-
+            border: 'none',
             display: 'flex',
-            alignItems: 'center'
+            alignItems: 'center',
+            gap: '4px',
+            height: '28px',
+            lineHeight: '28px',
+            boxSizing: 'border-box',
+            cursor: 'pointer'
         },
         onClick: () => {
             // Try window scope first
@@ -674,7 +677,7 @@ export function showSongLibrary() {
         newSongButton.textContent = 'New song';
     }
 
-    const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'Base note:', css: { fontSize: UNIFIED_FONT_SIZE, color: default_theme.colors.textMuted, userSelect: 'none' } });
+    const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'Base note:', css: { fontSize: UNIFIED_FONT_SIZE, color: '#fff', userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
         id: 'auto-fill-midi-input',
@@ -713,9 +716,9 @@ export function showSongLibrary() {
         },
         onClick: () => autoFillMidiNotes()
     });
-    try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Fill bindings'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
+    try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Midi bindings'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
 
-    autoFillContainer.append(newSongButton, autoFillLabel, autoFillInput, autoFillButton);
+    autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 
     // Sort alphabetically button
     const sortAlphabeticallyButton = window.$('button', {
@@ -728,7 +731,7 @@ export function showSongLibrary() {
             }
         }
     });
-    try { sortAlphabeticallyButton.innerHTML = ''; const span = document.createElement('span'); span.textContent = 'A-Z'; span.style.fontSize = UNIFIED_FONT_SIZE; sortAlphabeticallyButton.append(span); } catch (e) { }
+    try { sortAlphabeticallyButton.innerHTML = ''; const span = document.createElement('span'); span.textContent = 'Sort'; span.style.fontSize = UNIFIED_FONT_SIZE; sortAlphabeticallyButton.append(span); } catch (e) { }
 
     // Bouton supprimer toutes les chansons
     const deleteAllButton = window.$('button', {
@@ -778,7 +781,7 @@ export function showSongLibrary() {
         originalSettings.style.display = 'none';
     }
 
-    actionButtons.append(autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
+    actionButtons.append(newSongButton, autoFillContainer, sortAlphabeticallyButton, deleteAllButton);
     modal.append(headerTitle, actionButtons);
 
     // Content with search and song list

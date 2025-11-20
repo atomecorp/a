@@ -149,11 +149,11 @@ const performChildren = (getExecutionModeLabel() === 'AUv3')
 intuition_content = {
     version: "1.1",
     meta: { namespace: "vie.menu", defaultLocale: "en" },
-    toolbox: { children: ['file', 'tools', 'capture', 'perform', 'songs', 'settings'] },
+    toolbox: { children: ['file', 'edit', 'capture', 'perform', 'songs', 'settings'] },
     //
     file: { type: 'palette', children: ['import', 'save', 'export'], touch: openSongLibrary, close: closeSongLibrary },
     songs: { type: 'tool', touch: openSongLibrary, icon: null },
-    tools: { type: 'palette', children: ['edit', 'new'] },
+    edit: { type: 'palette', children: ['new'], touch: activate_Edition, },
     settings: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel },
     capture: { label: 'capture', type: 'tool', icon: 'record', touch: recordLyrixTimecode },
     perform: { label: 'perform', type: 'palette', children: performChildren, icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
