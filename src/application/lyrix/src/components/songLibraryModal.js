@@ -342,6 +342,8 @@ export function showSongLibrary() {
     const modal = window.$('div', {
         id: 'song-library-modal',
         css: {
+            top: '36px',
+            position: 'relative',
             width: '100%',
             height: '100%',
             display: 'flex',
@@ -374,7 +376,7 @@ export function showSongLibrary() {
     });
 
     // Action buttons container (clean rebuild)
-    const actionButtons = window.$('div', { id: 'songs_panel_tools', css: { position: 'absolute', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', left: '27px', top: '30px' } });
+    const actionButtons = window.$('div', { id: 'songs_panel_tools', css: { position: 'absolute', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', left: '23px', top: '-15px' } });
 
     // Unified small button factory (consistent bg, font, sizing)
     const UNIFIED_BTN_BG = default_theme.colors.surfaceAlt;
@@ -623,7 +625,7 @@ export function showSongLibrary() {
 
     // Auto Fill MIDI container
     const autoFillContainer = window.$('div', { id: 'auto-fill-midi-container', css: { display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: UNIFIED_BTN_BG, height: '28px', padding: '0 8px', borderRadius: default_theme.borderRadius.sm, border: 'none', boxSizing: 'border-box' } });
-    const autoFillLabel = window.$('span', { text: 'Base note:', css: { fontSize: UNIFIED_FONT_SIZE, color: default_theme.colors.textMuted, userSelect: 'none' } });
+    const autoFillLabel = window.$('span', { id: 'autoFillLabel', text: 'Base note:', css: { fontSize: UNIFIED_FONT_SIZE, color: default_theme.colors.textMuted, userSelect: 'none' } });
 
     const autoFillInput = window.$('input', {
         id: 'auto-fill-midi-input',
