@@ -662,7 +662,7 @@ export function showSongLibrary() {
         },
         onClick: () => autoFillMidiNotes()
     });
-    try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'Fill'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
+    try { autoFillButton.innerHTML = ''; const img = document.createElement('img'); img.src = 'assets/images/icons/target.svg'; img.alt = 'auto fill'; img.style.width = '14px'; img.style.height = '14px'; img.style.pointerEvents = 'none'; const span = document.createElement('span'); span.textContent = 'AutoFill'; span.style.fontSize = UNIFIED_FONT_SIZE; autoFillButton.append(img, span); } catch (e) { }
 
     autoFillContainer.append(autoFillLabel, autoFillInput, autoFillButton);
 

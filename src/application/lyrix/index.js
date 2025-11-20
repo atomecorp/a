@@ -27,6 +27,22 @@
 //
 //
 // Import modal modules from new organized structure
+
+
+// function getExecutionModeLabel() {
+//     try {
+//         if (typeof window.__IS_AUV3__ === 'boolean') {
+//             return window.__IS_AUV3__ ? 'AUv3' : 'Host';
+//         }
+//         const raw = ((window.__EXECUTION_MODE__ || window.__HOST_ENV || '') + '').toLowerCase();
+//         if (raw.includes('auv3')) return 'AUv3';
+//         if (raw.includes('host') || raw.includes('app')) return 'Host';
+//     } catch (error) {
+//         console.warn('[dev-tools] Failed to resolve execution mode', error);
+//     }
+//     return 'Unknown';
+// }
+// window.getExecutionModeLabel = getExecutionModeLabel;
 import { showSongLibrary, toggleSongLibrary } from './src/components/songLibraryModal.js';
 import { showSettingsModal, toggleSettingsPanel, toggleAudioPlayerControls, toggleAudioSync, toggleMidiInspector, toggleTimecodeVisibility } from './src/components/settings.js';
 import { getPurchaseManager } from './src/features/purchase/purchase_manager.js';
@@ -3393,25 +3409,25 @@ mainArea.style.top = '52px'
 // }, 1500);
 
 
-function getExecutionModeLabel() {
-    try {
-        if (typeof window.__IS_AUV3__ === 'boolean') {
-            return window.__IS_AUV3__ ? 'AUv3' : 'Host';
-        }
-        const raw = ((window.__EXECUTION_MODE__ || window.__HOST_ENV || '') + '').toLowerCase();
-        if (raw.includes('auv3')) return 'AUv3';
-        if (raw.includes('host') || raw.includes('app')) return 'Host';
-    } catch (error) {
-        console.warn('[dev-tools] Failed to resolve execution mode', error);
-    }
-    return 'Unknown';
-}
+
 
 if (getExecutionModeLabel() === 'AUv3') {
     const hideToolbar = () => {
-        const toolbar = document.getElementById('lyrics-toolbar');
-        if (toolbar) {
-            toolbar.style.display = 'none';
+        const sliderlbar = document.getElementById('audio-scrub-slider-container');
+        const play = document.getElementById('_intuition_play');
+        const pause = document.getElementById('_intuition_pause');
+
+
+        if (sliderlbar) {
+            sliderlbar.style.display = 'none';
+            sliderlbar.remove();
+
+            play.style.display = 'none';
+            play.remove();
+
+            pause.style.display = 'none';
+            pause.remove();
+
             return true;
         }
         return false;
@@ -3423,46 +3439,46 @@ if (getExecutionModeLabel() === 'AUv3') {
     }
 }
 
-function readLyrixSongsFromLocalStorage() {
-    if (typeof localStorage === 'undefined') {
-        console.warn('localStorage unavailable: cannot inspect Lyrix songs.');
-        return [];
-    }
+// function readLyrixSongsFromLocalStorage() {
+//     if (typeof localStorage === 'undefined') {
+//         console.warn('localStorage unavailable: cannot inspect Lyrix songs.');
+//         return [];
+//     }
 
-    const prefix = (CONSTANTS && CONSTANTS.STORAGE && CONSTANTS.STORAGE.LIBRARY_PREFIX) || 'lyrics_';
-    const records = [];
+//     const prefix = (CONSTANTS && CONSTANTS.STORAGE && CONSTANTS.STORAGE.LIBRARY_PREFIX) || 'lyrics_';
+//     const records = [];
 
-    for (let index = 0; index < localStorage.length; index += 1) {
-        const key = localStorage.key(index);
-        if (!key || !key.startsWith(prefix)) {
-            continue;
-        }
+//     for (let index = 0; index < localStorage.length; index += 1) {
+//         const key = localStorage.key(index);
+//         if (!key || !key.startsWith(prefix)) {
+//             continue;
+//         }
 
-        try {
-            const rawValue = localStorage.getItem(key);
-            if (!rawValue) {
-                continue;
-            }
+//         try {
+//             const rawValue = localStorage.getItem(key);
+//             if (!rawValue) {
+//                 continue;
+//             }
 
-            const parsed = JSON.parse(rawValue);
-            records.push({
-                key,
-                songId: parsed?.songId || parsed?.id || key.replace(prefix, ''),
-                title: parsed?.metadata?.title || parsed?.title || 'Untitled',
-                artist: parsed?.metadata?.artist || parsed?.artist || 'Unknown Artist',
-                album: parsed?.metadata?.album || null,
-                hasAudio: !!(parsed?.metadata?.audioPath),
-                linesCount: Array.isArray(parsed?.lines) ? parsed.lines.length : 0,
-                lastModified: parsed?.metadata?.lastModified || parsed?.updatedAt || null,
-                data: parsed
-            });
-        } catch (error) {
-            console.warn(`[checker2] Failed to parse song stored under "${key}"`, error);
-        }
-    }
+//             const parsed = JSON.parse(rawValue);
+//             records.push({
+//                 key,
+//                 songId: parsed?.songId || parsed?.id || key.replace(prefix, ''),
+//                 title: parsed?.metadata?.title || parsed?.title || 'Untitled',
+//                 artist: parsed?.metadata?.artist || parsed?.artist || 'Unknown Artist',
+//                 album: parsed?.metadata?.album || null,
+//                 hasAudio: !!(parsed?.metadata?.audioPath),
+//                 linesCount: Array.isArray(parsed?.lines) ? parsed.lines.length : 0,
+//                 lastModified: parsed?.metadata?.lastModified || parsed?.updatedAt || null,
+//                 data: parsed
+//             });
+//         } catch (error) {
+//             console.warn(`[checker2] Failed to parse song stored under "${key}"`, error);
+//         }
+//     }
 
-    return records;
-}
+//     return records;
+// }
 // $('span', {
 //     id: 'write',
 //     css: {
@@ -3548,3 +3564,4 @@ function readLyrixSongsFromLocalStorage() {
 //     },
 
 // });
+

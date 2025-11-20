@@ -124,9 +124,29 @@ function fullscreenMode() {
 function saveLRXFormat() {
     exportSongLibraryAsLRX();
 }
+function getExecutionModeLabel() {
+    try {
+        if (typeof window.__IS_AUV3__ === 'boolean') {
+            return window.__IS_AUV3__ ? 'AUv3' : 'Host';
+        }
+        const raw = ((window.__EXECUTION_MODE__ || window.__HOST_ENV || '') + '').toLowerCase();
+        if (raw.includes('auv3')) return 'AUv3';
+        if (raw.includes('host') || raw.includes('app')) return 'Host';
+    } catch (error) {
+        console.warn('[dev-tools] Failed to resolve execution mode', error);
+    }
+    return 'Unknown';
+}
 
+window.getExecutionModeLabel = getExecutionModeLabel;
 
-const intuition_content = {
+let intuition_content = {};
+
+const performChildren = (getExecutionModeLabel() === 'AUv3')
+    ? ['prev', 'next', 'fullscreen']
+    : ['play', 'pause', 'prev', 'next', 'fullscreen'];
+
+intuition_content = {
     version: "1.1",
     meta: { namespace: "vie.menu", defaultLocale: "en" },
     toolbox: { children: ['file', 'tools', 'capture', 'perform', 'songs', 'settings'] },
@@ -136,7 +156,7 @@ const intuition_content = {
     tools: { type: 'palette', children: ['edit', 'new'] },
     settings: { type: 'tool', touch: option_test_touch, touch: openSettingsPanel },
     capture: { label: 'capture', type: 'tool', icon: 'record', touch: recordLyrixTimecode },
-    perform: { label: 'perform', type: 'palette', children: ['play', 'pause', 'prev', 'next', 'fullscreen'], icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
+    perform: { label: 'perform', type: 'palette', children: performChildren, icon: null, active: performing, inactive: stopPerforming, lock: tools_lock_test_touch, unlock: stop_lock_test_touch },
 
 
     import: { type: 'tool', touch_down: importFilesIntoLyrix, action: 'momentary' },
@@ -145,7 +165,7 @@ const intuition_content = {
     export: { type: 'tool', touch: exportAsTxt, icon: false },
 
     edit: { type: 'tool', touch: activate_Edition, icon: 'edit' },
-    new: { type: 'tool', icon: 'envelope', touch: createNewSongFromMenu, lock: tools_lock_test_touch },
+    new: { type: 'tool', icon: 'new', touch: createNewSongFromMenu, lock: tools_lock_test_touch },
     play: { type: 'tool', touch: playMode, action: 'momentary' },
     pause: { type: 'tool', touch: pauseMode },
     prev: { type: 'tool', touch: prevMode, icon: 'previous', action: 'momentary' },

@@ -22,22 +22,45 @@ final class SandboxAssetManager {
             return nil
         }
         let destination = sanitized.isEmpty ? root : root.appendingPathComponent(sanitized)
-        if fm.fileExists(atPath: destination.path) {
+
+        // 1. Locate source in bundle first
+        let source = locateBundleAsset(for: relativePath)
+
+        // 2. If no source in bundle, fall back to existing destination
+        if source == nil {
+            return fm.fileExists(atPath: destination.path) ? destination : nil
+        }
+
+        // 3. If source exists, check if we need to update destination
+        // We update if destination is missing OR if source is newer
+        let shouldUpdate: Bool = {
+            guard fm.fileExists(atPath: destination.path) else { return true }
+            // Compare modification dates
+            guard let srcAttrs = try? fm.attributesOfItem(atPath: source!.path),
+                  let dstAttrs = try? fm.attributesOfItem(atPath: destination.path),
+                  let srcDate = srcAttrs[.modificationDate] as? Date,
+                  let dstDate = dstAttrs[.modificationDate] as? Date else {
+                return false // Keep existing if we can't read dates
+            }
+            // If source is newer than destination, update
+            return srcDate.timeIntervalSince1970 > dstDate.timeIntervalSince1970
+        }()
+
+        if !shouldUpdate {
             return destination
         }
-        guard let source = locateBundleAsset(for: relativePath) else {
-            return nil
-        }
+
         copyQueue.sync {
             do {
                 try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 if fm.fileExists(atPath: destination.path) {
-                    return
+                    try fm.removeItem(at: destination)
                 }
-                try fm.copyItem(at: source, to: destination)
+                try fm.copyItem(at: source!, to: destination)
                 setDefaultPermissions(at: destination)
+                print("♻️ SandboxAssetManager updated \(relativePath)")
             } catch {
-                print("⚠️ SandboxAssetManager failed to copy \(source.lastPathComponent) -> \(destination.path): \(error)")
+                print("⚠️ SandboxAssetManager failed to copy \(source!.lastPathComponent) -> \(destination.path): \(error)")
             }
         }
         return fm.fileExists(atPath: destination.path) ? destination : nil
