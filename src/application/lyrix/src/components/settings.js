@@ -598,34 +598,7 @@ function createSettingsContent() {
             }
         });
 
-        const clearButton = window.$('button', {
-            text: '✕',
-            type: 'button',
-            css: {
-                width: '25px',
-                height: '25px',
-                border: 'none',
-                borderRadius: '3px',
-                backgroundColor: 'rgb(58, 74, 96)',
-                color: '#fff',
-                cursor: 'pointer',
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0'
-            },
-            title: `Clear MIDI assignment for ${label}`
-        });
-
-        clearButton.addEventListener('click', () => {
-            if (window.midiUtilities) {
-                window.midiUtilities.removeMidiSpecialAssignment(settingKey);
-                midiInput.value = '';
-            }
-        });
-
-        rightColumn.append(midiInput, midiLearnButton, clearButton);
+        rightColumn.append(midiInput, midiLearnButton);
         row.append(leftColumn, rightColumn);
 
         return row;
