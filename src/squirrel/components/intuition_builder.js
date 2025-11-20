@@ -5617,6 +5617,7 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     setLabelCentered(el, true);
     setPaletteVisualState(el, true);
     applyThemeToFloatingEntry(el, themeRef, inferDefinitionType(intuition_content[nameKey]));
+    const themeBg = (themeRef && themeRef.satellite_bg);
     if (themeBg) {
         el.style.background = themeBg;
     }
