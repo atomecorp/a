@@ -373,6 +373,22 @@ update_fastify_stack() {
   log_ok "✅ Fastify stack bumped to latest"
 }
 
+install_extra_tools() {
+  log_info "🔧 Installing extra tools (NativeScript, NodeGui, Ruby WASM)"
+
+  log_info "  • Installing NativeScript globally"
+  npm install -g nativescript || log_warn "⚠️  Global install of nativescript failed (try with sudo?)"
+
+  log_info "  • Installing NodeGui and Ruby WASM packages"
+  (
+    cd "$PROJECT_ROOT" &&
+    npm install \
+      @nodegui/nodegui \
+      @ruby/wasm-wasi
+  )
+  log_ok "✅ Extra tools installed"
+}
+
 ensure_chokidar_dependency() {
   local desired="${1:-^3.6.0}"
   log_info "👀 Checking chokidar dependency"
@@ -568,6 +584,7 @@ esac
 
 update_tauri_cli
 update_fastify_stack
+install_extra_tools
 ensure_chokidar_dependency
 reinstall_project_dependencies
 

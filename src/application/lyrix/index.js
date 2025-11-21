@@ -3013,7 +3013,7 @@ function setupDeferredAudioRebind() {
         if (attempts < maxAttempts) {
             setTimeout(tryBind, intervalMs);
         } else {
-            console.log('⏱️ Fin des tentatives de rebind audio (port ou fichier indisponible)');
+            console.log("⏱️ End of audio rebind attempts (port or file unavailable)");
         }
     }
     setTimeout(tryBind, intervalMs);
