@@ -96,7 +96,9 @@
     "@ruby/wasm-wasi": "^2.7.2",
     "chokidar": "^3.6.0",
     "codemirror": "^6.0.2",
+    "events": "^3.3.0",
     "fastify": "^5.6.2",
+    "glslify": "^7.1.1",
     "gsap": "^3.13.0",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.1.0",
@@ -105,7 +107,10 @@
     "pg": "^8.16.3",
     "sequelize": "^6.37.1",
     "sqlite3": "^5.1.6",
+    "three": "^0.181.2",
+    "tone": "^15.1.22",
+    "tslib": "^2.8.1",
     "uuid": "^9.0.1",
-    "wavesurfer.js": "^7.9.5"
+    "wavesurfer.js": "^7.11.1"
   }
 }

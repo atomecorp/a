@@ -373,21 +373,6 @@ update_fastify_stack() {
   log_ok "✅ Fastify stack bumped to latest"
 }
 
-install_extra_tools() {
-  log_info "🔧 Installing extra tools (NativeScript, NodeGui, Ruby WASM)"
-
-  log_info "  • Installing NativeScript globally"
-  npm install -g nativescript || log_warn "⚠️  Global install of nativescript failed (try with sudo?)"
-
-  log_info "  • Installing NodeGui and Ruby WASM packages"
-  (
-    cd "$PROJECT_ROOT" &&
-    npm install \
-      @nodegui/nodegui \
-      @ruby/wasm-wasi
-  )
-  log_ok "✅ Extra tools installed"
-}
 
 ensure_chokidar_dependency() {
   local desired="${1:-^3.6.0}"
@@ -448,6 +433,69 @@ update_iplug2() {
     log_error "❌ iPlug2 update failed"
     return 1
   fi
+}
+
+# --- Skia Stack Installation -----------------------------------------------
+install_skia_stack() {
+  log_info "🎨 Installing Skia-based stack dependencies..."
+
+  # 1. Basic Checks (Homebrew)
+  if ! command -v brew >/dev/null 2>&1; then
+    log_error "❌ Homebrew is required. Please install it first."
+    exit 1
+  fi
+
+  log_info "🍺 Updating Homebrew..."
+  brew update
+
+  # 2. Graphics Dependencies: Skia
+  log_info "🎨 Installing Skia..."
+  brew install skia || log_warn "⚠️  Skia installation failed or already installed"
+
+  # 3. 3D Dependencies: bgfx, bx, bimg
+  log_info "🧊 Installing bgfx (Native WebGL)..."
+  brew install bgfx || log_warn "⚠️  bgfx installation failed or already installed"
+
+  log_info "📦 Installing bx and bimg..."
+  brew install bimg bx || log_warn "⚠️  bx / bimg installation failed or already installed"
+
+  # 4. Text Dependencies
+  log_info "📝 Installing freetype, harfbuzz, icu4c..."
+  brew install freetype harfbuzz icu4c
+
+  # 5. Build Tools
+  log_info "🛠  Installing cmake and ninja..."
+  brew install cmake ninja
+
+  # 6. QuickJS
+  log_info "⚡ Installing QuickJS..."
+  brew install quickjs || log_warn "⚠️  quickjs installation failed or already installed"
+
+  # 7. Node.js & N-API
+  log_info "🟢 Installing Node.js LTS..."
+  brew install node
+
+  log_info "🔌 Installing node-addon-api (global)..."
+  npm install -g node-addon-api
+
+  # 8. Native Audio (CoreAudio)
+  log_ok "🔊 CoreAudio is natively available."
+
+  # 9. JS Dependencies
+  log_info "📦 Installing essential JS dependencies..."
+  (
+    cd "$PROJECT_ROOT" &&
+    npm install \
+      gsap \
+      three \
+      tone \
+      wavesurfer.js \
+      events \
+      uuid \
+      tslib \
+      glslify
+  )
+  log_ok "✅ Skia stack dependencies installed."
 }
 
 # --- Stable mode -----------------------------------------------------------
@@ -584,7 +632,7 @@ esac
 
 update_tauri_cli
 update_fastify_stack
-install_extra_tools
+install_skia_stack
 ensure_chokidar_dependency
 reinstall_project_dependencies
 
