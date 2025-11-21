@@ -79,30 +79,20 @@ load_env_file() {
 }
 
 ensure_env_configured() {
+  log_info "⚙️  Configuring environment variables..."
+
+  export ADOLE_PG_SUPERUSER="postgres"
+  export ADOLE_PG_SUPERUSER_PASSWORD=""
+  export ADOLE_PG_SUPERUSER_DB="postgres"
+
+  # Force DSN expected by the server (no interaction)
+  export ADOLE_PG_DSN="postgres://postgres:postgres@localhost:5432/squirrel"
+
+  write_pg_dsn_to_env "$ADOLE_PG_DSN"
   load_env_file "$PROJECT_ROOT/.env"
   load_env_file "$PROJECT_ROOT/.env.local"
 
-  if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    local generated_dsn
-    generated_dsn="$(compute_default_dsn)"
-    if [[ -z "$generated_dsn" ]]; then
-      generated_dsn="$DEFAULT_PG_DSN"
-    fi
-
-    log_info "ℹ️  No PostgreSQL DSN found. Writing default DSN to .env."
-    if ! write_pg_dsn_to_env "$generated_dsn"; then
-      log_error "❌ Failed to persist PostgreSQL DSN in .env."
-      exit 1
-    fi
-
-    load_env_file "$PROJECT_ROOT/.env"
-    load_env_file "$PROJECT_ROOT/.env.local"
-  fi
-
-  if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    log_error "❌ PostgreSQL DSN still missing after attempting automatic configuration."
-    exit 1
-  fi
+  log_ok "✅ Environment configured with DSN: $ADOLE_PG_DSN"
 }
 
 # --- Install Functions -----------------------------------------------------
@@ -218,83 +208,35 @@ install_postgres_client() {
 }
 
 setup_postgres_role_and_database() {
-  local dsn
-  dsn="${ADOLE_PG_DSN:-${PG_CONNECTION_STRING:-${DATABASE_URL:-}}}"
+  log_info "🗄️  Auto-configuring PostgreSQL role + database..."
 
-  if [[ -z "$dsn" ]]; then
-    log_warn "⚠️  No PostgreSQL DSN available. Skipping database setup."
-    return
-  fi
-
-  install_postgres_client
-
+  # 1. Check psql presence
   if ! command -v psql >/dev/null 2>&1; then
-    log_warn "⚠️  psql not available. Skipping automatic database setup."
-    return
+    log_error "❌ psql not installed. Install PostgreSQL first."
+    exit 1
   fi
 
-  if ! parse_dsn_components "$dsn"; then
-    log_warn "⚠️  Unable to parse PostgreSQL DSN. Skipping automatic database setup."
-    return
+  # 2. Try to connect as the real system superuser
+  if ! sudo -u postgres psql -Atc "SELECT 1" >/dev/null 2>&1; then
+    log_error "❌ Could not connect as system user 'postgres' (Debian default)"
+    exit 1
   fi
 
-  local super_user super_password super_db
-  super_user="${ADOLE_PG_SUPERUSER:-$USER}"
-  super_password="${ADOLE_PG_SUPERUSER_PASSWORD:-}"
-  super_db="${ADOLE_PG_SUPERUSER_DB:-postgres}"
+  # 3. Create postgres role (if not exists)
+  sudo -u postgres psql -c "DO \$\$
+  BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'postgres') THEN
+      CREATE ROLE postgres WITH LOGIN SUPERUSER PASSWORD 'postgres';
+    END IF;
+  END
+  \$\$;" && log_ok "✅ Role 'postgres' OK"
 
-  local original_pgpassword="${PGPASSWORD-}"
-  if [[ -n "$super_password" ]]; then
-    export PGPASSWORD="$super_password"
-  else
-    unset PGPASSWORD
-  fi
+  # 4. Create database squirrel
+  sudo -u postgres psql -c "CREATE DATABASE squirrel OWNER postgres;" 2>/dev/null \
+    && log_ok "✅ Database 'squirrel' created" \
+    || log_info "ℹ️  Database 'squirrel' already exists"
 
-  local psql_cmd=(psql -h "$DB_HOST" -p "$DB_PORT" -U "$super_user" "$super_db")
-
-  if ! "${psql_cmd[@]}" -Atc "SELECT 1" >/dev/null 2>&1; then
-    log_warn "⚠️  Unable to connect to PostgreSQL as '$super_user'. Skipping automatic database setup."
-    if [[ -n "$original_pgpassword" ]]; then
-      export PGPASSWORD="$original_pgpassword"
-    else
-      unset PGPASSWORD
-    fi
-    return
-  fi
-
-  local role_exists
-  role_exists="$("${psql_cmd[@]}" -Atc "SELECT 1 FROM pg_roles WHERE rolname = '$(escape_sql_literal "$DB_USER")'")" || true
-  if [[ "$role_exists" != "1" ]]; then
-    log_info "👤 Creating PostgreSQL role '$DB_USER'"
-    if ! "${psql_cmd[@]}" -c "CREATE ROLE \"$(escape_sql_identifier "$DB_USER")\" WITH LOGIN PASSWORD '$(escape_sql_literal "$DB_PASSWORD")';"; then
-      log_warn "⚠️  Unable to create role '$DB_USER'."
-    else
-      log_ok "✅ Role '$DB_USER' created"
-    fi
-  else
-    log_info "👤 Role '$DB_USER' already exists"
-  fi
-
-  "${psql_cmd[@]}" -c "ALTER ROLE \"$(escape_sql_identifier "$DB_USER")\" CREATEDB;" >/dev/null 2>&1 || true
-
-  local db_exists
-  db_exists="$("${psql_cmd[@]}" -Atc "SELECT 1 FROM pg_database WHERE datname = '$(escape_sql_literal "$DB_NAME")'")" || true
-  if [[ "$db_exists" != "1" ]]; then
-    log_info "🗄️  Creating database '$DB_NAME'"
-    if ! "${psql_cmd[@]}" -c "CREATE DATABASE \"$(escape_sql_identifier "$DB_NAME")\" OWNER \"$(escape_sql_identifier "$DB_USER")\";"; then
-      log_warn "⚠️  Unable to create database '$DB_NAME'."
-    else
-      log_ok "✅ Database '$DB_NAME' created"
-    fi
-  else
-    log_info "🗄️  Database '$DB_NAME' already exists"
-  fi
-
-  if [[ -n "$original_pgpassword" ]]; then
-    export PGPASSWORD="$original_pgpassword"
-  else
-    unset PGPASSWORD
-  fi
+  log_ok "✅ PostgreSQL setup complete"
 }
 
 # --- Main Execution --------------------------------------------------------
