@@ -33,6 +33,13 @@ if [ -z "$SQUIRREL_MONITORED_DIR" ]; then
   mkdir -p "$SQUIRREL_MONITORED_DIR"
 fi
 
+# HTTPS Setup
+if [ ! -f "certs/key.pem" ] || [ ! -f "certs/cert.pem" ]; then
+  echo -e "${BLUE}🔐 Generating SSL certificates...${NC}"
+  ./scripts_utils/generate_cert.sh
+fi
+export USE_HTTPS=true
+
 echo -e "${BLUE}🚀 Starting Fastify Server (Node.js only)...${NC}"
 
 # Détection du point d'entrée du serveur avec plus de chemins possibles

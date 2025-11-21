@@ -5,7 +5,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { promises as fs, createReadStream } from 'fs';
+import { promises as fs, createReadStream, readFileSync, existsSync } from 'fs';
 import {
   startABoxMonitoring,
   stopABoxMonitoring,
@@ -121,8 +121,30 @@ async function listUploads() {
   return files;
 }
 
+// HTTPS Configuration
+let httpsOptions = null;
+if (process.env.USE_HTTPS === 'true') {
+  const keyPath = path.join(projectRoot, 'certs', 'key.pem');
+  const certPath = path.join(projectRoot, 'certs', 'cert.pem');
+
+  if (existsSync(keyPath) && existsSync(certPath)) {
+    try {
+      httpsOptions = {
+        key: readFileSync(keyPath),
+        cert: readFileSync(certPath)
+      };
+      console.log('🔐 HTTPS enabled');
+    } catch (e) {
+      console.error('❌ Failed to load SSL certificates:', e.message);
+    }
+  } else {
+    console.warn('⚠️ USE_HTTPS is true but certificates not found in certs/');
+  }
+}
+
 // Créer l'instance Fastify
 const server = fastify({
+  https: httpsOptions,
   bodyLimit: 1024 * 1024 * 1024, // 1 GiB
   logger: {
     level: 'info',
