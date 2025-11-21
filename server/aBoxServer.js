@@ -261,7 +261,17 @@ function attachWatcherLogging() {
 
         const event = payload.payload || {};
         const targetPath = event.normalizedPath || event.relativePath || event.absolutePath;
-        console.log(`📂 Watcher detected ${event.kind} on ${targetPath}`);
+
+        // Filter logs to only show events related to aBox sync (uploads or monitored dir)
+        const config = ensureSyncConfig();
+        if (config) {
+            const isUploads = isInsideFolder(event.absolutePath, config.uploadsDir);
+            const isMonitored = isInsideFolder(event.absolutePath, config.monitoredDir);
+
+            if (isUploads || isMonitored) {
+                console.log(`📂 aBox Watcher detected ${event.kind} on ${targetPath}`);
+            }
+        }
     };
 
     getSyncEventBus().on('event', watcherLogListener);

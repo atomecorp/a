@@ -222,14 +222,16 @@ setup_postgres_role_and_database() {
     exit 1
   fi
 
-  # 3. Create postgres role (if not exists)
+  # 3. Create postgres role (if not exists) or update password
   sudo -u postgres psql -c "DO \$\$
   BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'postgres') THEN
       CREATE ROLE postgres WITH LOGIN SUPERUSER PASSWORD 'postgres';
+    ELSE
+      ALTER ROLE postgres WITH PASSWORD 'postgres';
     END IF;
   END
-  \$\$;" && log_ok "✅ Role 'postgres' OK"
+  \$\$;" && log_ok "✅ Role 'postgres' configured"
 
   # 4. Create database squirrel
   sudo -u postgres psql -c "CREATE DATABASE squirrel OWNER postgres;" 2>/dev/null \

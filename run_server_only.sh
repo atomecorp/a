@@ -22,6 +22,17 @@ if [ -z "$SQUIRREL_UPLOADS_DIR" ]; then
   mkdir -p "$SQUIRREL_UPLOADS_DIR"
 fi
 
+# Ensure SQUIRREL_MONITORED_DIR is set (to silence warnings)
+if [ -z "$SQUIRREL_MONITORED_DIR" ]; then
+  # Default path matching run.sh configuration
+  export SQUIRREL_MONITORED_DIR="/Users/Shared/monitored"
+  # On Linux server, adapt if needed, or just keep it to silence the warning
+  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+     export SQUIRREL_MONITORED_DIR="/tmp/monitored"
+  fi
+  mkdir -p "$SQUIRREL_MONITORED_DIR"
+fi
+
 echo -e "${BLUE}🚀 Starting Fastify Server (Node.js only)...${NC}"
 
 # Détection du point d'entrée du serveur avec plus de chemins possibles
