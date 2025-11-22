@@ -9,7 +9,8 @@
 
 set -e
 
-DOMAIN="atome.one"
+# Default domain
+DEFAULT_DOMAIN="atome.one"
 PROJECT_ROOT="$(pwd)"
 CERT_DIR="$PROJECT_ROOT/scripts_utils/certs"
 
@@ -41,8 +42,11 @@ else
     exit 1
 fi
 
-# 2. Demande de l'email pour Let's Encrypt
-read -p "Entrez votre email pour les notifications de renouvellement (ex: admin@atome.one): " EMAIL
+# 2. Configuration du domaine et de l'email
+read -p "Entrez le nom de domaine (ex: $DEFAULT_DOMAIN) [$DEFAULT_DOMAIN]: " INPUT_DOMAIN
+DOMAIN="${INPUT_DOMAIN:-$DEFAULT_DOMAIN}"
+
+read -p "Entrez votre email pour les notifications de renouvellement (ex: admin@$DOMAIN): " EMAIL
 if [ -z "$EMAIL" ]; then
     log_error "L'email est obligatoire."
     exit 1

@@ -527,11 +527,7 @@ install_skia_stack() {
       uuid \
       tslib \
       glslify \
-      animejs \
-      sokol \
-      stb-image \
-      imgui-js \
-      spdlog
+      animejs
   )
   log_ok "✅ Skia stack dependencies installed."
 }
