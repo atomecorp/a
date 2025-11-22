@@ -87,23 +87,15 @@ fi
 
 # Copie des certificats (pour éviter les problèmes de permissions avec les liens symboliques vers /etc/letsencrypt)
 # Note: Idéalement, on utiliserait un hook de renouvellement pour recopier ces fichiers.
-cp "$LE_LIVE_DIR/privkey.pem" "$CERT_DIR/key.pem"
-cp "$LE_LIVE_DIR/fullchain.pem" "$CERT_DIR/cert.pem"
+# On va créer le hook maintenant et l'utiliser pour la copie initiale.
 
 # Ajustement des permissions pour que l'utilisateur non-root puisse les lire
 # On suppose que l'utilisateur propriétaire du dossier courant est celui qui lance le serveur
 OWNER_UID=$(stat -c '%u' "$PROJECT_ROOT")
 OWNER_GID=$(stat -c '%g' "$PROJECT_ROOT")
 
-chown "$OWNER_UID:$OWNER_GID" "$CERT_DIR/key.pem"
-chown "$OWNER_UID:$OWNER_GID" "$CERT_DIR/cert.pem"
-chmod 600 "$CERT_DIR/key.pem"
-chmod 644 "$CERT_DIR/cert.pem"
-
-log_ok "Certificats installés dans $CERT_DIR"
-
 # 5. Création d'un script de renouvellement automatique
-HOOK_SCRIPT="$PROJECT_ROOT/scripts_utils/renew_cert_hook.sh"
+HOOK_SCRIPT="/opt/a/scripts_utils/renew_cert_hook.sh"
 cat > "$HOOK_SCRIPT" <<EOF
 #!/bin/bash
 # Hook exécuté après le renouvellement Certbot
@@ -118,6 +110,12 @@ EOF
 chmod +x "$HOOK_SCRIPT"
 
 log_info "Script de hook créé : $HOOK_SCRIPT"
+
+# Exécution immédiate du hook pour installer les certificats
+log_info "Exécution du hook pour installer les certificats..."
+"$HOOK_SCRIPT"
+
+log_ok "Certificats installés dans $CERT_DIR"
 log_info "Pour automatiser le renouvellement, ajoutez ce hook à la configuration certbot ou cron."
 
 log_ok "✅ Configuration HTTPS terminée pour $DOMAIN !"
