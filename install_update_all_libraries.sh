@@ -439,49 +439,82 @@ update_iplug2() {
 install_skia_stack() {
   log_info "🎨 Installing Skia-based stack dependencies..."
 
-  # 1. Basic Checks (Homebrew)
-  if ! command -v brew >/dev/null 2>&1; then
-    log_error "❌ Homebrew is required. Please install it first."
-    exit 1
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    # --- macOS (Homebrew) ---
+    if ! command -v brew >/dev/null 2>&1; then
+      log_error "❌ Homebrew is required on macOS. Please install it first."
+      exit 1
+    fi
+
+    log_info "🍺 Updating Homebrew..."
+    brew update
+
+    log_info "🎨 Installing Skia..."
+    brew install skia || log_warn "⚠️  Skia installation failed or already installed"
+
+    log_info "🧊 Installing bgfx (Native WebGL)..."
+    brew install bgfx || log_warn "⚠️  bgfx installation failed or already installed"
+
+    log_info "📦 Installing bx and bimg..."
+    brew install bimg bx || log_warn "⚠️  bx / bimg installation failed or already installed"
+
+    log_info "📝 Installing freetype, harfbuzz, icu4c..."
+    brew install freetype harfbuzz icu4c
+
+    log_info "🛠  Installing cmake and ninja..."
+    brew install cmake ninja
+
+    log_info "⚡ Installing QuickJS..."
+    brew install quickjs || log_warn "⚠️  quickjs installation failed or already installed"
+
+    log_info "🟢 Installing Node.js LTS..."
+    brew install node
+
+  elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # --- Linux (Debian/Ubuntu) ---
+    log_info "🐧 Linux detected. Installing dependencies via apt-get..."
+    
+    if [ "$EUID" -ne 0 ]; then
+       log_warn "⚠️  Root privileges required for apt-get. Please run with sudo if packages are missing."
+    fi
+
+    # Update package list
+    if command -v sudo >/dev/null 2>&1; then
+       sudo apt-get update
+    else
+       apt-get update
+    fi
+
+    # Install build tools & libs
+    # Note: Skia/bgfx are often not in standard repos, we install build deps instead
+    local DEPS=(
+      build-essential
+      cmake
+      ninja-build
+      libfreetype6-dev
+      libharfbuzz-dev
+      libicu-dev
+      libgl1-mesa-dev
+      libglu1-mesa-dev
+    )
+    
+    log_info "📦 Installing build dependencies: ${DEPS[*]}"
+    if command -v sudo >/dev/null 2>&1; then
+       sudo apt-get install -y "${DEPS[@]}"
+    else
+       apt-get install -y "${DEPS[@]}"
+    fi
+    
+    log_info "ℹ️  Note: Skia and bgfx usually need to be built from source on Linux or provided by the project."
+    
+  else
+    log_warn "⚠️  Unsupported OS for Skia stack auto-install."
   fi
 
-  log_info "🍺 Updating Homebrew..."
-  brew update
-
-  # 2. Graphics Dependencies: Skia
-  log_info "🎨 Installing Skia..."
-  brew install skia || log_warn "⚠️  Skia installation failed or already installed"
-
-  # 3. 3D Dependencies: bgfx, bx, bimg
-  log_info "🧊 Installing bgfx (Native WebGL)..."
-  brew install bgfx || log_warn "⚠️  bgfx installation failed or already installed"
-
-  log_info "📦 Installing bx and bimg..."
-  brew install bimg bx || log_warn "⚠️  bx / bimg installation failed or already installed"
-
-  # 4. Text Dependencies
-  log_info "📝 Installing freetype, harfbuzz, icu4c..."
-  brew install freetype harfbuzz icu4c
-
-  # 5. Build Tools
-  log_info "🛠  Installing cmake and ninja..."
-  brew install cmake ninja
-
-  # 6. QuickJS
-  log_info "⚡ Installing QuickJS..."
-  brew install quickjs || log_warn "⚠️  quickjs installation failed or already installed"
-
-  # 7. Node.js & N-API
-  log_info "🟢 Installing Node.js LTS..."
-  brew install node
-
+  # Common JS Dependencies (npm)
   log_info "🔌 Installing node-addon-api (global)..."
-  npm install -g node-addon-api
+  npm install -g node-addon-api || log_warn "⚠️  Global install failed, trying local..."
 
-  # 8. Native Audio (CoreAudio)
-  log_ok "🔊 CoreAudio is natively available."
-
-  # 9. JS Dependencies
   log_info "📦 Installing essential JS dependencies..."
   (
     cd "$PROJECT_ROOT" &&
@@ -493,7 +526,12 @@ install_skia_stack() {
       events \
       uuid \
       tslib \
-      glslify
+      glslify \
+      animejs \
+      sokol \
+      stb-image \
+      imgui-js \
+      spdlog
   )
   log_ok "✅ Skia stack dependencies installed."
 }
