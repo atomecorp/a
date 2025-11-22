@@ -92,9 +92,17 @@ log_info "Installation des dépendances du projet dans $PROJECT_ROOT..."
 if [ -f "$PROJECT_ROOT/package.json" ]; then
   cd "$PROJECT_ROOT"
   
-  # Installation des dépendances (y compris pg, fastify, etc.)
-  # On utilise --unsafe-perm car on est en root, parfois nécessaire pour certains scripts de post-install
-  npm install --unsafe-perm
+  # MODIFICATION : Utilisation du script dédié 'install_server.sh' s'il existe
+  # Cela permet d'installer uniquement la stack serveur et de configurer la DB automatiquement
+  if [ -f "install_server.sh" ]; then
+      log_info "🚀 Détection de install_server.sh : Installation de la version Server Only..."
+      chmod +x install_server.sh
+      # Le script install_server.sh gère les dépendances NPM et la config .env/DB
+      ./install_server.sh
+  else
+      log_info "⚠️ install_server.sh non trouvé. Installation standard NPM..."
+      npm install --unsafe-perm
+  fi
   
   log_ok "Dépendances NPM installées."
   

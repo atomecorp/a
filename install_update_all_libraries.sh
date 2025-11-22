@@ -505,6 +505,7 @@ run_stable_updates() {
   declare -a STABLE_LIBS=(
     "gsap.min.js|https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"
     "tone.min.js|https://unpkg.com/tone@15.1.22/build/Tone.js"
+    "Tone.js.map|https://unpkg.com/tone@15.1.22/build/Tone.js.map"
     "leaflet.min.js|https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
     "leaflet.min.css|https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
     "wavesurfer.min.js|https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.10.1/wavesurfer.min.js"
@@ -577,6 +578,12 @@ run_latest_updates() {
 
   total=$((total + 1))
   if download_latest_asset "tone.min.js" "https://unpkg.com/tone@$TONE_VERSION/build/Tone.js" "tone" "$TONE_VERSION"; then
+    success=$((success + 1))
+  fi
+
+  # Download Tone.js map for latest version
+  total=$((total + 1))
+  if download_latest_asset "Tone.js.map" "https://unpkg.com/tone@$TONE_VERSION/build/Tone.js.map" "tone" "$TONE_VERSION"; then
     success=$((success + 1))
   fi
 
@@ -779,7 +786,42 @@ setup_postgres_role_and_database() {
   fi
 }
 
+ensure_runtime_directories() {
+  log_info "📁 Ensuring runtime directories exist..."
+
+  # Uploads directory
+  local uploads_dir="$PROJECT_ROOT/src/assets/uploads"
+  if [ ! -d "$uploads_dir" ]; then
+    mkdir -p "$uploads_dir"
+    log_ok "Directory 'src/assets/uploads' created"
+  fi
+
+  # Libs directory
+  local libs_dir="$PROJECT_ROOT/src/assets/libs"
+  if [ ! -d "$libs_dir" ]; then
+    mkdir -p "$libs_dir"
+    log_ok "Directory 'src/assets/libs' created"
+  fi
+
+  # Monitored directory (OS specific)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    local monitored_dir="/Users/Shared/monitored"
+    if [ ! -d "$monitored_dir" ]; then
+      mkdir -p "$monitored_dir"
+      chmod 777 "$monitored_dir" 2>/dev/null || true
+      log_ok "Directory '$monitored_dir' created"
+    fi
+  elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    local monitored_dir="/tmp/monitored"
+    if [ ! -d "$monitored_dir" ]; then
+      mkdir -p "$monitored_dir"
+      log_ok "Directory '$monitored_dir' created"
+    fi
+  fi
+}
+
 install_pg_module
 setup_postgres_role_and_database
 update_iplug2
+ensure_runtime_directories
 log_ok "✅ All updates complete"

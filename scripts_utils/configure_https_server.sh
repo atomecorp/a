@@ -119,4 +119,4 @@ log_ok "Certificats installés dans $CERT_DIR"
 log_info "Pour automatiser le renouvellement, ajoutez ce hook à la configuration certbot ou cron."
 
 log_ok "✅ Configuration HTTPS terminée pour $DOMAIN !"
-echo "Vous pouvez maintenant lancer ./run_server_only.sh"
+echo "Vous pouvez maintenant lancer ./run_server.sh"

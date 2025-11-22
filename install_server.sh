@@ -241,13 +241,100 @@ setup_postgres_role_and_database() {
   log_ok "✅ PostgreSQL setup complete"
 }
 
+# --- System Dependencies Check & Install -----------------------------------
+check_and_install_system_deps() {
+  log_info "🔍 Checking system dependencies..."
+
+  # 1. Node.js Check
+  if ! command -v node >/dev/null 2>&1; then
+    log_warn "⚠️  Node.js not found."
+    if [[ "$OSTYPE" == "linux-gnu"* ]] && [ -f /etc/debian_version ]; then
+       log_info "🐧 Debian/Ubuntu detected. Installing Node.js LTS..."
+       if [ "$EUID" -ne 0 ]; then
+          log_warn "⚠️  Root privileges required to install Node.js. Please run with sudo or install Node.js manually."
+          # On ne bloque pas, mais la suite risque d'échouer
+       else
+          curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+          apt-get install -y nodejs build-essential git
+          log_ok "✅ Node.js installed: $(node -v)"
+       fi
+    else
+       log_error "❌ Node.js is missing and auto-install is only supported on Debian/Ubuntu. Please install Node.js manually."
+       exit 1
+    fi
+  else
+    log_ok "✅ Node.js found: $(node -v)"
+  fi
+
+  # 2. PostgreSQL Check
+  if ! command -v psql >/dev/null 2>&1; then
+    log_warn "⚠️  PostgreSQL not found."
+    if [[ "$OSTYPE" == "linux-gnu"* ]] && [ -f /etc/debian_version ]; then
+       log_info "🐧 Debian/Ubuntu detected. Installing PostgreSQL..."
+       if [ "$EUID" -ne 0 ]; then
+          log_warn "⚠️  Root privileges required to install PostgreSQL. Please run with sudo or install PostgreSQL manually."
+       else
+          apt-get update
+          apt-get install -y postgresql postgresql-contrib
+          systemctl enable postgresql
+          systemctl start postgresql
+          log_ok "✅ PostgreSQL installed."
+       fi
+    else
+       log_error "❌ PostgreSQL is missing. Please install it manually."
+       exit 1
+    fi
+  else
+    log_ok "✅ PostgreSQL found."
+  fi
+}
+
 # --- Main Execution --------------------------------------------------------
 
 log_info "🚀 Starting Server Environment Setup..."
 
+check_and_install_system_deps
 ensure_env_configured
 update_fastify_stack
 install_pg_module
 setup_postgres_role_and_database
+
+# --- Frontend Libraries Installation ---------------------------------------
+if [ -f "$PROJECT_ROOT/install_update_all_libraries.sh" ]; then
+  log_info "📦 Installing frontend libraries (Tone.js, Leaflet, etc.)..."
+  chmod +x "$PROJECT_ROOT/install_update_all_libraries.sh"
+  "$PROJECT_ROOT/install_update_all_libraries.sh" --skip-tauri --skip-fastify --skip-iplug
+else
+  log_warn "⚠️  install_update_all_libraries.sh not found. Frontend libraries might be missing."
+fi
+
+# --- HTTPS Configuration (Optional) ----------------------------------------
+# On propose de configurer HTTPS si on est sur un serveur (pas en local dev macOS)
+# et si le script de configuration existe.
+if [[ "$OSTYPE" == "linux-gnu"* ]] && [ -f "$PROJECT_ROOT/scripts_utils/configure_https_server.sh" ]; then
+  log_info "🔐 HTTPS Configuration Check..."
+  
+  # Vérifie si les certificats existent déjà
+  if [ -f "$PROJECT_ROOT/scripts_utils/certs/key.pem" ] && [ -f "$PROJECT_ROOT/scripts_utils/certs/cert.pem" ]; then
+     log_ok "✅ HTTPS certificates already present."
+  else
+     echo ""
+     log_info "Would you like to configure Let's Encrypt HTTPS now? (Requires domain name pointing to this server)"
+     read -p "Run HTTPS setup? (y/N): " -r
+     if [[ $REPLY =~ ^[Yy]$ ]]; then
+        chmod +x "$PROJECT_ROOT/scripts_utils/configure_https_server.sh"
+        # On lance le script. Note: configure_https_server.sh demande sudo s'il n'est pas root,
+        # mais server_install.sh est souvent lancé en user normal.
+        # On tente de le lancer avec sudo si nécessaire.
+        if [ "$EUID" -ne 0 ]; then
+           sudo "$PROJECT_ROOT/scripts_utils/configure_https_server.sh"
+        else
+           "$PROJECT_ROOT/scripts_utils/configure_https_server.sh"
+        fi
+     else
+        log_info "⏭️  Skipping HTTPS setup."
+     fi
+  fi
+fi
 
 log_ok "✅ Server setup complete! You can now run the server."
