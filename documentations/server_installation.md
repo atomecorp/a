@@ -1,62 +1,62 @@
-# Installation Serveur (Standalone)
+# Server Installation (Standalone)
 
-Ce guide explique comment installer et lancer le serveur **Atome** sur une machine Linux (Debian/Ubuntu recommandé) ou macOS, sans l'interface graphique (Tauri).
+This guide explains how to install and run the **Atome** server on a Linux machine (Debian/Ubuntu recommended) or macOS, without the graphical interface (Tauri).
 
-## Prérequis
+## Prerequisites
 
-* **Git** installé (`sudo apt install git` ou `brew install git`)
-* **Accès Internet** (pour télécharger Node.js, PostgreSQL, et les librairies)
-* *(Optionnel)* Un nom de domaine pointant vers le serveur pour le HTTPS (ex: `atome.one`)
+* **Git** installed (`sudo apt install git` or `brew install git`)
+* **Internet Access** (to download Node.js, PostgreSQL, and libraries)
+* *(Optional)* A domain name pointing to the server for HTTPS (e.g., `atome.one`)
 
-## Installation Rapide
+## Quick Installation
 
-Exécutez simplement ces commandes :
+Simply run these commands:
 
 ```bash
-# 1. Récupérer le code
+# 1. Clone the repository
 git clone https://github.com/atomecorp/a
 cd a
 
-# 2. Lancer le script d'installation automatisé
-# Ce script va :
-# - Installer Node.js et les dépendances
-# - Installer et configurer PostgreSQL (création user/db)
-# - Télécharger les librairies frontend (Tone.js, Leaflet, etc.)
-# - Proposer de configurer le HTTPS (Let's Encrypt)
+# 2. Run the automated installation script
+# This script will:
+# - Install Node.js and dependencies
+# - Install and configure PostgreSQL (user/db creation)
+# - Download frontend libraries (Tone.js, Leaflet, etc.)
+# - Propose HTTPS configuration (Let's Encrypt)
 ./install_server.sh
 ```
 
-## Lancement du Serveur
+## Running the Server
 
-Une fois l'installation terminée, lancez le serveur avec :
+Once the installation is complete, start the server with:
 
 ```bash
 ./run_server.sh
 ```
 
-Le serveur sera accessible sur :
+The server will be accessible at:
 
-* **HTTP** : `http://votre-ip:3001`
-* **HTTPS** : `https://votre-domaine:3001` (si configuré)
+* **HTTP**: `http://your-ip:3001`
+* **HTTPS**: `https://your-domain:3001` (if configured)
 
-## Détails techniques
+## Technical Details
 
-### Ce que fait `install_server.sh`
+### What `install_server.sh` does
 
-* Vérifie et installe les dépendances système (psql, etc.).
-* Configure automatiquement la base de données `squirrel` avec l'utilisateur `postgres`.
-* Appelle `install_update_all_libraries.sh` pour récupérer les assets JS/CSS.
-* Détecte si vous êtes sur Linux pour proposer la génération de certificats SSL via Certbot.
+* Checks and installs system dependencies (psql, etc.).
+* Automatically configures the `squirrel` database with the `postgres` user.
+* Calls `install_update_all_libraries.sh` to fetch JS/CSS assets.
+* Detects if you are on Linux to propose SSL certificate generation via Certbot.
 
-### Ce que fait `run_server.sh`
+### What `run_server.sh` does
 
-* Charge les variables d'environnement (`.env`).
-* Détecte les certificats SSL (Production ou Auto-signés).
-* Lance le serveur Fastify (`server/server.js`).
+* Loads environment variables (`.env`).
+* Detects SSL certificates (Production or Self-signed).
+* Starts the Fastify server (`server/server.js`).
 
-## Mise à jour
+## Updates
 
-Pour mettre à jour le serveur plus tard :
+To update the server later:
 
 ```bash
 git pull
