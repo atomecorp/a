@@ -124,21 +124,48 @@ async function listUploads() {
 // HTTPS Configuration
 let httpsOptions = null;
 if (process.env.USE_HTTPS === 'true') {
-  const keyPath = path.join(projectRoot, 'certs', 'key.pem');
-  const certPath = path.join(projectRoot, 'certs', 'cert.pem');
+  // Check multiple locations for certificates
+  // 1. Production path (scripts_utils/certs)
+  // 2. Legacy/Local path (certs/)
+  const possibleDirs = [
+    path.join(projectRoot, 'scripts_utils', 'certs'),
+    path.join(projectRoot, 'certs')
+  ];
 
-  if (existsSync(keyPath) && existsSync(certPath)) {
+  let certConfig = null;
+
+  for (const dir of possibleDirs) {
+    // Check for standard names (key.pem, cert.pem) - used by our scripts
+    if (existsSync(path.join(dir, 'key.pem')) && existsSync(path.join(dir, 'cert.pem'))) {
+      certConfig = {
+        key: path.join(dir, 'key.pem'),
+        cert: path.join(dir, 'cert.pem')
+      };
+      break;
+    }
+    // Check for Let's Encrypt names (privkey.pem, fullchain.pem) - if copied directly
+    if (existsSync(path.join(dir, 'privkey.pem')) && existsSync(path.join(dir, 'fullchain.pem'))) {
+      certConfig = {
+        key: path.join(dir, 'privkey.pem'),
+        cert: path.join(dir, 'fullchain.pem')
+      };
+      break;
+    }
+  }
+
+  if (certConfig) {
     try {
+      console.log(`🔐 Loading HTTPS certificates from: ${path.dirname(certConfig.key)}`);
       httpsOptions = {
-        key: readFileSync(keyPath),
-        cert: readFileSync(certPath)
+        key: readFileSync(certConfig.key),
+        cert: readFileSync(certConfig.cert)
       };
       console.log('🔐 HTTPS enabled');
     } catch (e) {
       console.error('❌ Failed to load SSL certificates:', e.message);
     }
   } else {
-    console.warn('⚠️ USE_HTTPS is true but certificates not found in certs/');
+    console.warn('⚠️ USE_HTTPS is true but no valid certificates found in scripts_utils/certs/ or certs/');
   }
 }
 

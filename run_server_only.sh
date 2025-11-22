@@ -34,8 +34,12 @@ if [ -z "$SQUIRREL_MONITORED_DIR" ]; then
 fi
 
 # HTTPS Setup
-if [ ! -f "certs/key.pem" ] || [ ! -f "certs/cert.pem" ]; then
-  echo -e "${BLUE}🔐 Generating SSL certificates...${NC}"
+if [ -f "scripts_utils/certs/key.pem" ] && [ -f "scripts_utils/certs/cert.pem" ]; then
+  echo -e "${GREEN}✅ Using production certificates from scripts_utils/certs/${NC}"
+elif [ -f "certs/key.pem" ] && [ -f "certs/cert.pem" ]; then
+  echo -e "${GREEN}✅ Using existing certificates from certs/${NC}"
+else
+  echo -e "${BLUE}🔐 No certificates found. Generating self-signed SSL certificates...${NC}"
   ./scripts_utils/generate_cert.sh
 fi
 export USE_HTTPS=true

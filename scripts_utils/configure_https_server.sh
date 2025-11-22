@@ -11,7 +11,7 @@ set -e
 
 DOMAIN="atome.one"
 PROJECT_ROOT="$(pwd)"
-CERT_DIR="$PROJECT_ROOT/certs"
+CERT_DIR="$PROJECT_ROOT/scripts_utils/certs"
 
 # Couleurs
 GREEN='\033[0;32m'
