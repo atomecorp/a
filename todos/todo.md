@@ -1,4 +1,15 @@
+1 : make HTTPS works
+
+2: add an ORM for  Mongo Sqlite Postgres
+
+3: create native app with skia and BGFX
+
+4: OS mode automatise Freebsd image creation
+
+5 :  Tools programatic mode
+
 # ✅ atome Framework – Full Technical Roadmap & Priority Tracker (with Descriptions)
+
 Urgent : debug - simplify - factorise - optimise - audit
 ---
 
