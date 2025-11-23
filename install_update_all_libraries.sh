@@ -854,8 +854,8 @@ ensure_runtime_directories() {
   fi
 }
 
-install_pg_module
-setup_postgres_role_and_database
+# install_pg_module
+# setup_postgres_role_and_database
 update_iplug2
 ensure_runtime_directories
 log_ok "✅ All updates complete"
