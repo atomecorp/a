@@ -97,6 +97,12 @@ ensure_env_configured() {
 
 # --- Install Functions -----------------------------------------------------
 
+install_all_dependencies() {
+  log_info "📦 Installing all project dependencies (npm install)..."
+  (cd "$PROJECT_ROOT" && npm install)
+  log_ok "✅ All dependencies installed"
+}
+
 update_fastify_stack() {
   log_info "🛠  Installing/Updating Fastify stack..."
   (
@@ -295,6 +301,7 @@ log_info "🚀 Starting Server Environment Setup..."
 
 check_and_install_system_deps
 ensure_env_configured
+install_all_dependencies
 update_fastify_stack
 install_pg_module
 setup_postgres_role_and_database
