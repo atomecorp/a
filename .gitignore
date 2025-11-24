@@ -8,6 +8,7 @@ src-Auv3/build/
 # Development files
 package-lock.json
 **/.DS_Store
+.DS_Store
 *.tmp
 *.bak
 *.old
@@ -45,14 +46,9 @@ src/assets/audios/Big Brother.m4a
 src/assets/audios/Alive.m4a
 src/assets/audios/After The War.m4a
 src/assets/audios/Change the world.m4a
-.DS_Store
-src-tauri/Cargo.lock
 src-tauri/Cargo.lock
 src-tauri/gen/schemas/acl-manifests.json
 src-tauri/gen/schemas/desktop-schema.json
 src/assets/audios/Ices From Hells.m4a
 src/assets/videos/avengers.mp4
 src-Auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
-src-Auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
-src-Auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
-.DS_Store
