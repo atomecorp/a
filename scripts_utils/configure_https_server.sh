@@ -53,7 +53,7 @@ if [ -z "$EMAIL" ]; then
 fi
 
 # 3. Génération du certificat
-log_info "Génération du certificat pour $DOMAIN..."
+log_info "Génération du certificat pour $DOMAIN et www.$DOMAIN..."
 # On utilise --standalone, ce qui nécessite que le port 80 soit libre.
 # Si un serveur tourne déjà sur le 80, il faudra l'arrêter avant.
 if lsof -Pi :80 -sTCP:LISTEN -t >/dev/null ; then
@@ -65,8 +65,10 @@ fi
 certbot certonly --standalone \
   --non-interactive \
   --agree-tos \
+  --expand \
   --email "$EMAIL" \
-  -d "$DOMAIN"
+  -d "$DOMAIN" \
+  -d "www.$DOMAIN"
 
 LE_LIVE_DIR="/etc/letsencrypt/live/$DOMAIN"
 
