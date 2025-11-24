@@ -142,24 +142,28 @@ log_ok "✅ Database configured."
 
 log_info "🌐 Configuring Nginx Reverse Proxy..."
 
-cat > /etc/nginx/sites-available/$DOMAIN <<EOF
+# Check if we already have SSL certs to decide which config to generate
+SSL_CERT="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+SSL_KEY="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+
+if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then
+    log_info "ℹ️  SSL certificates found. Generating full HTTPS configuration."
+    
+    cat > /etc/nginx/sites-available/$DOMAIN <<EOF
 server {
     listen 80;
     listen [::]:80;
     server_name $DOMAIN $WWW_DOMAIN;
-
-    # Redirect HTTP to HTTPS
     return 301 https://\$host\$request_uri;
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name $DOMAIN $WWW_DOMAIN;
 
-    # SSL Config (Managed by Certbot later)
-    # ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate $SSL_CERT;
+    ssl_certificate_key $SSL_KEY;
 
     location / {
         proxy_pass http://127.0.0.1:$NODE_PORT;
@@ -174,6 +178,30 @@ server {
     }
 }
 EOF
+
+else
+    log_info "ℹ️  No SSL certificates found yet. Generating HTTP-only configuration (Certbot will upgrade this)."
+
+    cat > /etc/nginx/sites-available/$DOMAIN <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN $WWW_DOMAIN;
+
+    location / {
+        proxy_pass http://127.0.0.1:$NODE_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+    }
+}
+EOF
+fi
 
 # Enable site
 ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
