@@ -112,7 +112,15 @@ fi
 # --- 3. Project Dependencies -----------------------------------------------
 
 log_info "📦 Installing Project Dependencies (npm install)..."
-npm install --omit=dev
+
+# Hack: Remove desktop-only dependencies that cause build issues on headless servers
+if grep -q "@nodegui/nodegui" package.json; then
+    log_warn "⚠️  Removing @nodegui/nodegui from package.json (not needed for server)..."
+    sed -i '/"@nodegui\/nodegui"/d' package.json
+fi
+
+# Install dependencies with verbose output to debug hangs
+npm install --omit=dev --verbose
 log_ok "✅ npm dependencies installed."
 
 # --- 4. Database Setup -----------------------------------------------------

@@ -30,11 +30,20 @@ show_help() {
 }
 
 if [ $# -eq 0 ]; then
-    show_help
-    exit 0
+    echo -e "${BLUE}ℹ️  Aucune commande fournie. Affichage du statut...${NC}"
+    CMD="status"
+else
+    CMD=$1
 fi
 
-CMD=$1
+# Check if service is installed
+if [ ! -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+     echo -e "${RED}❌ Le service '$SERVICE_NAME' n'est pas installé.${NC}"
+     echo -e "${YELLOW}👉 C'est normal si l'installation a planté avant la fin.${NC}"
+     echo -e "${YELLOW}👉 Veuillez relancer l'installation complète :${NC}"
+     echo -e "   sudo ./install_production_server.sh"
+     exit 1
+fi
 
 case "$CMD" in
     start)
