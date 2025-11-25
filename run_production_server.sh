@@ -62,6 +62,17 @@ case "$CMD" in
         ;;
     status)
         sudo systemctl status $SERVICE_NAME
+
+        # Auto-diagnostic if service is not active
+        if ! systemctl is-active --quiet $SERVICE_NAME; then
+            echo ""
+            echo -e "${RED}⚠️  ALERTE : Le serveur plante ou redémarre en boucle.${NC}"
+            echo -e "${YELLOW}🔍 Analyse des logs récents (30 dernières lignes) :${NC}"
+            echo "----------------------------------------------------------------"
+            sudo journalctl -u $SERVICE_NAME -n 30 --no-pager
+            echo "----------------------------------------------------------------"
+            echo -e "${BLUE}👉 Astuce : Lancez './run_production_server.sh logs' pour voir le direct.${NC}"
+        fi
         ;;
     logs)
         echo -e "${BLUE}Following logs (Ctrl+C to exit)...${NC}"
