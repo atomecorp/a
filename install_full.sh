@@ -572,20 +572,8 @@ run_latest_updates() {
 }
 
 # --- Main -----------------------------------------------------------------
-case "$MODE" in
-  stable)
-    run_stable_updates
-    ;;
-  latest)
-    run_latest_updates
-    ;;
-esac
+# Execution logic moved to main() at the end of script
 
-update_tauri_cli
-update_fastify_stack
-install_skia_stack
-ensure_chokidar_dependency
-reinstall_project_dependencies
 
 install_pg_module() {
   log_info "🧩 Ensuring pg driver is installed"
@@ -764,8 +752,60 @@ ensure_runtime_directories() {
   fi
 }
 
-# install_pg_module
-# setup_postgres_role_and_database
-update_iplug2
-ensure_runtime_directories
-log_ok "✅ All updates complete"
+# --- Main Execution --------------------------------------------------------
+
+main() {
+  log_info "🚀 Starting Atome Full Installation/Update..."
+  log_info "ℹ️  Mode: $MODE"
+
+  # 1. Call install_server.sh to handle system dependencies and server setup
+  if [[ -f "$PROJECT_ROOT/install_server.sh" ]]; then
+      log_info "🔗 Calling install_server.sh..."
+      # We might need sudo for install_server.sh if it installs system packages
+      if [ "$EUID" -ne 0 ]; then
+          log_warn "⚠️  install_server.sh usually requires root. You might be prompted for password."
+          sudo "$PROJECT_ROOT/install_server.sh"
+      else
+          "$PROJECT_ROOT/install_server.sh"
+      fi
+  else
+      log_error "❌ install_server.sh not found in $PROJECT_ROOT"
+      exit 1
+  fi
+
+  ensure_env_configured
+
+  if [[ "$SKIP_TAURI" == "false" ]]; then
+    update_tauri_cli
+  else
+    log_info "⏭️  Skipping Tauri CLI update"
+  fi
+
+  if [[ "$SKIP_FASTIFY" == "false" ]]; then
+    update_fastify_stack
+  else
+    log_info "⏭️  Skipping Fastify plugins update"
+  fi
+
+  if [[ "$SKIP_IPLUG" == "false" ]]; then
+    update_iplug2
+  else
+    log_info "⏭️  Skipping iPlug2 update"
+  fi
+
+  if [[ "$MODE" == "stable" ]]; then
+    run_stable_updates
+  else
+    run_latest_updates
+  fi
+
+  ensure_chokidar_dependency
+  reinstall_project_dependencies
+  install_pg_module
+  setup_postgres_role_and_database
+  ensure_runtime_directories
+
+  log_ok "🎉 All updates complete!"
+}
+
+main

@@ -171,13 +171,29 @@ VM_DIR="$APP_DIR/vm/freebsd"
 mkdir -p "$VM_DIR"
 
 # Note: Full automated FreeBSD installation is complex.
-# We prepare the environment here. The actual VM creation would typically
-# involve downloading an ISO and running an install script or using a pre-built cloud image.
+# We prepare the environment here.
 log_info "ℹ️  FreeBSD VM directory prepared at $VM_DIR"
-log_info "ℹ️  To complete FreeBSD setup, a base image needs to be downloaded."
-# Placeholder for image download
-# wget -nc https://download.freebsd.org/releases/VM-IMAGES/14.0-RELEASE/amd64/Latest/FreeBSD-14.0-RELEASE-amd64.qcow2.xz -O "$VM_DIR/base.qcow2.xz"
-# unxz "$VM_DIR/base.qcow2.xz"
+
+FREEBSD_IMG_URL="https://download.freebsd.org/releases/VM-IMAGES/14.0-RELEASE/amd64/Latest/FreeBSD-14.0-RELEASE-amd64.qcow2.xz"
+FREEBSD_IMG_XZ="$VM_DIR/base.qcow2.xz"
+FREEBSD_IMG="$VM_DIR/base.qcow2"
+
+if [ ! -f "$FREEBSD_IMG" ]; then
+    log_info "⬇️  Downloading FreeBSD 14.0 VM Image..."
+    if curl -L "$FREEBSD_IMG_URL" -o "$FREEBSD_IMG_XZ"; then
+        log_info "📦 Extracting image..."
+        if command -v unxz >/dev/null 2>&1; then
+            unxz "$FREEBSD_IMG_XZ"
+            log_ok "✅ FreeBSD image ready: $FREEBSD_IMG"
+        else
+            log_warn "⚠️  'unxz' not found. Please install xz-utils to extract the image."
+        fi
+    else
+        log_error "❌ Failed to download FreeBSD image."
+    fi
+else
+    log_info "✅ FreeBSD image already exists."
+fi
 
 log_ok "✅ Virtualization environment ready."
 
