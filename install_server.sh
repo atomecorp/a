@@ -66,6 +66,11 @@ ensure_command() {
 
 # --- Pre-flight Checks -----------------------------------------------------
 
+if [[ "$OSTYPE" != "linux-gnu"* ]]; then
+  log_error "❌ This script is intended for Linux servers only."
+  exit 1
+fi
+
 if [ "$EUID" -ne 0 ]; then
   log_error "❌ This script must be run as root. Please use: sudo ./install_production_server.sh"
   exit 1
@@ -75,10 +80,10 @@ fi
 if [ ! -d "$APP_DIR" ]; then
     log_warn "⚠️  App directory $APP_DIR not found."
     if [ -d "$(pwd)/.git" ]; then
-        log_info "ℹ️  Current directory seems to be the repo. Moving it to $APP_DIR..."
-        mkdir -p /opt
-        mv "$(pwd)" "$APP_DIR"
-        cd "$APP_DIR"
+        log_warn "ℹ️  Current directory seems to be the repo."
+        log_error "❌ Please move this repository to $APP_DIR manually before running this script."
+        log_error "   sudo mv \"$(pwd)\" \"$APP_DIR\""
+        exit 1
     else
         log_error "❌ Please clone the repository to $APP_DIR first, or run this script from the repo root."
         exit 1

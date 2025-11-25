@@ -280,7 +280,10 @@ EOF
 
 require_jq() {
   if ! command -v jq >/dev/null 2>&1; then
-    log_error "❌ 'jq' is required to resolve latest versions. Install it via 'brew install jq' or your package manager."
+    log_error "❌ 'jq' is required to resolve latest versions."
+    log_error "   - macOS: brew install jq"
+    log_error "   - Debian/Ubuntu: sudo apt-get install jq"
+    log_error "   - FreeBSD: pkg install jq"
     exit 1
   fi
 }
@@ -743,12 +746,14 @@ ensure_runtime_directories() {
       chmod 777 "$monitored_dir" 2>/dev/null || true
       log_ok "Directory '$monitored_dir' created"
     fi
-  elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+  elif [[ "$OSTYPE" == "linux-gnu"* || "$OSTYPE" == "linux"* || "$OSTYPE" == "freebsd"* ]]; then
     local monitored_dir="/tmp/monitored"
     if [ ! -d "$monitored_dir" ]; then
       mkdir -p "$monitored_dir"
       log_ok "Directory '$monitored_dir' created"
     fi
+  else
+    log_warn "⚠️  Unknown OS '$OSTYPE'. Skipping monitored directory creation."
   fi
 }
 
@@ -758,19 +763,23 @@ main() {
   log_info "🚀 Starting Atome Full Installation/Update..."
   log_info "ℹ️  Mode: $MODE"
 
-  # 1. Call install_server.sh to handle system dependencies and server setup
-  if [[ -f "$PROJECT_ROOT/install_server.sh" ]]; then
-      log_info "🔗 Calling install_server.sh..."
-      # We might need sudo for install_server.sh if it installs system packages
-      if [ "$EUID" -ne 0 ]; then
-          log_warn "⚠️  install_server.sh usually requires root. You might be prompted for password."
-          sudo "$PROJECT_ROOT/install_server.sh"
-      else
-          "$PROJECT_ROOT/install_server.sh"
-      fi
+  # 1. Call install_server.sh to handle system dependencies and server setup (Linux only)
+  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    if [[ -f "$PROJECT_ROOT/install_server.sh" ]]; then
+        log_info "🔗 Calling install_server.sh..."
+        # We might need sudo for install_server.sh if it installs system packages
+        if [ "$EUID" -ne 0 ]; then
+            log_warn "⚠️  install_server.sh usually requires root. You might be prompted for password."
+            sudo "$PROJECT_ROOT/install_server.sh"
+        else
+            "$PROJECT_ROOT/install_server.sh"
+        fi
+    else
+        log_error "❌ install_server.sh not found in $PROJECT_ROOT"
+        # We don't exit here because we might want to continue with other updates
+    fi
   else
-      log_error "❌ install_server.sh not found in $PROJECT_ROOT"
-      exit 1
+    log_info "ℹ️  Skipping install_server.sh (not on Linux)"
   fi
 
   ensure_env_configured
