@@ -220,7 +220,8 @@ if ! nginx -t; then
     log_error "❌ Nginx configuration is invalid. Please check /etc/nginx/sites-available/$DOMAIN"
     exit 1
 fi
-systemctl reload nginx
+# Use restart instead of reload to handle cases where Nginx is not running
+systemctl restart nginx
 log_ok "✅ Nginx configured."
 
 # --- 6. Systemd Service Setup ----------------------------------------------
