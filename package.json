@@ -101,15 +101,14 @@
     "glslify": "^7.1.1",
     "gsap": "^3.13.0",
     "jsonwebtoken": "^9.0.2",
-    "knex": "^3.1.0",
     "leaflet": "^1.9.4",
-    "objection": "^3.1.5",
     "pg": "^8.16.3",
-    "sequelize": "^6.37.1",
+    "reflect-metadata": "^0.2.1",
     "sqlite3": "^5.1.6",
     "three": "^0.181.2",
     "tone": "^15.1.22",
     "tslib": "^2.8.1",
+    "typeorm": "^0.3.20",
     "uuid": "^9.0.1",
     "wavesurfer.js": "^7.11.1"
   }

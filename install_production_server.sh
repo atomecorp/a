@@ -61,16 +61,38 @@ cd "$APP_DIR"
 
 # --- 1. System Dependencies ------------------------------------------------
 
-log_info "📦 Installing System Dependencies (Node.js, PostgreSQL, Nginx, Certbot)..."
+log_info "📦 Installing System Dependencies..."
 
 # Update apt
 apt-get update
+
+# Install basic tools
+apt-get install -y curl git build-essential
 
 # Install Node.js 20.x if not present
 if ! command -v node >/dev/null 2>&1; then
     log_info "Installing Node.js..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y nodejs build-essential git
+    apt-get install -y nodejs
+fi
+
+# Install Rust (via rustup)
+if ! command -v rustc >/dev/null 2>&1; then
+    log_info "Installing Rust..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source "$HOME/.cargo/env" || true
+    export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
+# Install GitHub CLI (gh)
+if ! command -v gh >/dev/null 2>&1; then
+    log_info "Installing GitHub CLI..."
+    mkdir -p -m 755 /etc/apt/keyrings
+    wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null
+    chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    apt-get update
+    apt-get install -y gh
 fi
 
 # Install PostgreSQL
@@ -119,8 +141,19 @@ if grep -q "@nodegui/nodegui" package.json; then
     sed -i '/"@nodegui\/nodegui"/d' package.json
 fi
 
+# Ensure we are using TypeORM and not old ORMs (Sequelize/Knex)
+# We run uninstall just in case they are still in package.json on the server
+log_info "🧹 Cleaning up old ORMs (Sequelize, Knex, Objection)..."
+npm uninstall sequelize knex objection --save || true
+
 # Install dependencies with verbose output to debug hangs
+log_info "📥 Installing dependencies..."
 npm install --omit=dev --verbose
+
+# Explicitly ensure TypeORM and drivers are present
+log_info "➕ Adding TypeORM and drivers..."
+npm install typeorm reflect-metadata pg fastify chokidar --save
+
 log_ok "✅ npm dependencies installed."
 
 # --- 4. Database Setup -----------------------------------------------------
