@@ -1,88 +1,111 @@
 #!/usr/bin/env bash
-# filepath: run_server_only.sh
+#
+# run_server.sh
+# -------------
+# Helper script to manage the production server lifecycle.
+# This is a wrapper around systemctl commands for convenience.
+
 set -e
 
-BLUE='\033[0;34m'
+SERVICE_NAME="squirrel"
+
+# Colors
 GREEN='\033[0;32m'
+BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BLUE}🌱 Loading environment variables...${NC}"
-if [ -f .env ]; then
-  set -a
-  source .env
-  set +a
-fi
+show_help() {
+    echo "Usage: ./run_server.sh [command|--prod]"
+    echo ""
+    echo "Commands:"
+    echo "  --prod   - Start the server service (alias for start)"
+    echo "  start    - Start the server service"
+    echo "  stop     - Stop the server service"
+    echo "  restart  - Restart the server service"
+    echo "  status   - Show service status"
+    echo "  logs     - Follow service logs"
+    echo "  kill     - Force kill all node processes (emergency)"
+    echo "  check    - Run system checks (Nginx, SSL, Service)"
+    echo ""
+}
 
-# Ensure SQUIRREL_UPLOADS_DIR is set
-if [ -z "$SQUIRREL_UPLOADS_DIR" ]; then
-  # Default path matching run.sh configuration
-  export SQUIRREL_UPLOADS_DIR="$(pwd)/src/assets/uploads"
-  echo -e "${BLUE}ℹ️  SQUIRREL_UPLOADS_DIR not set. Defaulting to: $SQUIRREL_UPLOADS_DIR${NC}"
-  mkdir -p "$SQUIRREL_UPLOADS_DIR"
-fi
-
-# Ensure SQUIRREL_MONITORED_DIR is set (to silence warnings)
-if [ -z "$SQUIRREL_MONITORED_DIR" ]; then
-  # Default path matching run.sh configuration
-  export SQUIRREL_MONITORED_DIR="/Users/Shared/monitored"
-  # On Linux server, adapt if needed, or just keep it to silence the warning
-  if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-     export SQUIRREL_MONITORED_DIR="/tmp/monitored"
-  fi
-  mkdir -p "$SQUIRREL_MONITORED_DIR"
-fi
-
-# HTTPS Setup
-if [ -f "scripts_utils/certs/key.pem" ] && [ -f "scripts_utils/certs/cert.pem" ]; then
-  echo -e "${GREEN}✅ Using production certificates from scripts_utils/certs/${NC}"
-elif [ -f "certs/key.pem" ] && [ -f "certs/cert.pem" ]; then
-  echo -e "${GREEN}✅ Using existing certificates from certs/${NC}"
+if [ $# -eq 0 ]; then
+    echo -e "${BLUE}ℹ️  Aucune commande fournie. Affichage du statut...${NC}"
+    CMD="status"
 else
-  echo -e "${BLUE}🔐 No certificates found. Generating self-signed SSL certificates...${NC}"
-  ./scripts_utils/generate_cert.sh
+    CMD=$1
 fi
-export USE_HTTPS=true
 
-echo -e "${BLUE}🚀 Starting Fastify Server (Node.js only)...${NC}"
-
-# Détection du point d'entrée du serveur avec plus de chemins possibles
-if [ -f "server.js" ]; then
-  echo -e "${GREEN}✅ Found server.js${NC}"
-  node server.js
-elif [ -f "src/server.js" ]; then
-  echo -e "${GREEN}✅ Found src/server.js${NC}"
-  node src/server.js
-elif [ -f "server/server.js" ]; then
-  echo -e "${GREEN}✅ Found server/server.js${NC}"
-  node server/server.js
-elif [ -f "src/server/index.js" ]; then
-  echo -e "${GREEN}✅ Found src/server/index.js${NC}"
-  node src/server/index.js
-elif [ -f "server/index.js" ]; then
-  echo -e "${GREEN}✅ Found server/index.js${NC}"
-  node server/index.js
-elif [ -f "app.js" ]; then
-  echo -e "${GREEN}✅ Found app.js${NC}"
-  node app.js
-else
-  echo -e "${BLUE}⚠️  Fichier serveur principal non trouvé via les chemins standards.${NC}"
-  echo -e "${BLUE}Tentative via npm scripts...${NC}"
-
-  # Vérifie les scripts disponibles avant de lancer
-  # On utilise || true pour éviter que le script s'arrête si grep ne trouve rien
-  if npm run 2>/dev/null | grep -q "server"; then
-    echo -e "${GREEN}✅ Running 'npm run server'${NC}"
-    npm run server
-  elif npm run 2>/dev/null | grep -q "start"; then
-    echo -e "${GREEN}✅ Running 'npm start'${NC}"
-    npm start
-  elif npm run 2>/dev/null | grep -q "dev"; then
-    echo -e "${GREEN}✅ Running 'npm run dev'${NC}"
-    npm run dev
-  else
-    echo -e "${RED}❌ Erreur : Impossible de trouver le fichier serveur.${NC}"
-    echo "   Veuillez vérifier que votre code serveur est bien dans 'server/server.js', 'src/server.js' ou 'server.js'."
-    exit 1
-  fi
+# Handle --prod flag
+if [ "$CMD" == "--prod" ]; then
+    CMD="start"
 fi
+
+# Check if service is installed
+if [ ! -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
+     echo -e "${RED}❌ Le service '$SERVICE_NAME' n'est pas installé.${NC}"
+     echo -e "${YELLOW}👉 C'est normal si l'installation a planté avant la fin.${NC}"
+     echo -e "${YELLOW}👉 Veuillez relancer l'installation complète :${NC}"
+     echo -e "   sudo ./install_server.sh"
+     exit 1
+fi
+
+case "$CMD" in
+    start)
+        echo -e "${BLUE}Starting $SERVICE_NAME (Production Mode)...${NC}"
+        sudo systemctl start $SERVICE_NAME
+        sudo systemctl status $SERVICE_NAME --no-pager
+        ;;
+    stop)
+        echo -e "${BLUE}Stopping $SERVICE_NAME...${NC}"
+        sudo systemctl stop $SERVICE_NAME
+        ;;
+    restart)
+        echo -e "${BLUE}Restarting $SERVICE_NAME...${NC}"
+        sudo systemctl restart $SERVICE_NAME
+        sudo systemctl status $SERVICE_NAME --no-pager
+        ;;
+    status)
+        sudo systemctl status $SERVICE_NAME
+
+        # Auto-diagnostic if service is not active
+        if ! systemctl is-active --quiet $SERVICE_NAME; then
+            echo ""
+            echo -e "${RED}⚠️  ALERTE : Le serveur plante ou redémarre en boucle.${NC}"
+            echo -e "${YELLOW}🔍 Analyse des logs récents (30 dernières lignes) :${NC}"
+            echo "----------------------------------------------------------------"
+            sudo journalctl -u $SERVICE_NAME -n 30 --no-pager
+            echo "----------------------------------------------------------------"
+            echo -e "${BLUE}👉 Astuce : Lancez './run_server.sh logs' pour voir le direct.${NC}"
+        fi
+        ;;
+    logs)
+        echo -e "${BLUE}Following logs (Ctrl+C to exit)...${NC}"
+        sudo journalctl -u $SERVICE_NAME -f
+        ;;
+    kill)
+        echo -e "${RED}⚠️  Force killing all Node.js processes...${NC}"
+        sudo pkill -f node || true
+        echo "Done."
+        ;;
+    check)
+        echo -e "${BLUE}🔍 Running System Checks...${NC}"
+        
+        echo -n "1. Nginx Syntax: "
+        if sudo nginx -t >/dev/null 2>&1; then echo -e "${GREEN}OK${NC}"; else echo -e "${RED}FAIL${NC}"; fi
+        
+        echo -n "2. Service Status: "
+        if systemctl is-active --quiet $SERVICE_NAME; then echo -e "${GREEN}ACTIVE${NC}"; else echo -e "${RED}INACTIVE${NC}"; fi
+        
+        echo -n "3. Port 3001 (Should be hidden): "
+        if sudo lsof -i :3001 | grep -q "127.0.0.1"; then echo -e "${GREEN}OK (Localhost only)${NC}"; else echo -e "${YELLOW}WARNING (Might be exposed)${NC}"; fi
+        
+        echo -n "4. SSL Certificate: "
+        if [ -d "/etc/letsencrypt/live" ]; then echo -e "${GREEN}FOUND${NC}"; else echo -e "${YELLOW}MISSING${NC}"; fi
+        ;;
+    *)
+        show_help
+        exit 1
+        ;;
+esac
