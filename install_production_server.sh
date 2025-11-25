@@ -37,6 +37,33 @@ log_ok() { echo -e "${GREEN}[SUCCESS] $1${NC}"; }
 log_warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
 log_error() { echo -e "${RED}[ERROR] $1${NC}"; }
 
+# --- Helper Functions ------------------------------------------------------
+
+is_apt_installed() {
+    dpkg -s "$1" >/dev/null 2>&1
+}
+
+ensure_apt_package() {
+    local pkg="$1"
+    if is_apt_installed "$pkg"; then
+        log_info "✅ Package '$pkg' is already installed."
+    else
+        log_info "📦 Installing package '$pkg'..."
+        apt-get install -y "$pkg"
+    fi
+}
+
+ensure_command() {
+    local cmd="$1"
+    local install_cmd="$2"
+    if command -v "$cmd" >/dev/null 2>&1; then
+        log_info "✅ Command '$cmd' is available."
+    else
+        log_info "📦 Command '$cmd' missing. Installing..."
+        eval "$install_cmd"
+    fi
+}
+
 # --- Pre-flight Checks -----------------------------------------------------
 
 if [ "$EUID" -ne 0 ]; then
@@ -62,19 +89,26 @@ cd "$APP_DIR"
 
 # --- 1. System Dependencies ------------------------------------------------
 
-log_info "📦 Installing System Dependencies..."
+log_info "📦 Checking System Dependencies..."
 
 # Update apt
+log_info "🔄 Updating apt repositories..."
 apt-get update
 
 # Install basic tools
-apt-get install -y curl git build-essential
+ensure_apt_package "curl"
+ensure_apt_package "git"
+ensure_apt_package "build-essential"
 
 # Install Node.js 20.x if not present
 if ! command -v node >/dev/null 2>&1; then
     log_info "Installing Node.js..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
+else
+    NODE_VERSION=$(node -v)
+    log_info "✅ Node.js is installed ($NODE_VERSION)."
+    # Optional: Check version and upgrade if too old
 fi
 
 # Install Rust (via rustup)
@@ -83,6 +117,9 @@ if ! command -v rustc >/dev/null 2>&1; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     source "$HOME/.cargo/env" || true
     export PATH="$HOME/.cargo/bin:$PATH"
+else
+    RUST_VERSION=$(rustc --version)
+    log_info "✅ Rust is installed ($RUST_VERSION)."
 fi
 
 # Install GitHub CLI (gh)
@@ -94,6 +131,9 @@ if ! command -v gh >/dev/null 2>&1; then
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
     apt-get update
     apt-get install -y gh
+else
+    GH_VERSION=$(gh --version | head -n 1)
+    log_info "✅ GitHub CLI is installed ($GH_VERSION)."
 fi
 
 # Install PostgreSQL
@@ -102,13 +142,17 @@ if ! command -v psql >/dev/null 2>&1; then
     apt-get install -y postgresql postgresql-contrib
     systemctl enable postgresql
     systemctl start postgresql
+else
+    PSQL_VERSION=$(psql --version)
+    log_info "✅ PostgreSQL is installed ($PSQL_VERSION)."
 fi
 
 # Install Nginx & Certbot
-log_info "Installing Nginx & Certbot..."
-apt-get install -y nginx certbot python3-certbot-nginx
+ensure_apt_package "nginx"
+ensure_apt_package "certbot"
+ensure_apt_package "python3-certbot-nginx"
 
-log_ok "✅ System dependencies installed."
+log_ok "✅ System dependencies check complete."
 
 # --- 2. Environment Configuration ------------------------------------------
 
