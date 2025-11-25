@@ -182,7 +182,7 @@ const server = fastify({
 });
 
 const PORT = process.env.PORT || 3001;
-const DATABASE_ENABLED = Boolean(knex);
+const DATABASE_ENABLED = Boolean(PG_URL);
 const DB_REQUIRED_MESSAGE = 'Database not configured. Set ADOLE_PG_DSN or PG_CONNECTION_STRING/DATABASE_URL.';
 
 async function startServer() {
@@ -215,9 +215,11 @@ async function startServer() {
     if (DATABASE_ENABLED) {
       console.log('📊 Initialisation de la base de données...');
 
-      // Run migrations
       try {
-        await knex.migrate.latest();
+        if (!AppDataSource.isInitialized) {
+          await AppDataSource.initialize();
+        }
+        console.log('✅ Connexion à la base de données établie (TypeORM)');
       } catch (error) {
         if (error && error.code === 'ECONNREFUSED') {
           console.error('❌ PostgreSQL connection refused. Start the database and retry.');
@@ -229,23 +231,6 @@ async function startServer() {
         }
         throw error;
       }
-      console.log('✅ Migrations exécutées');
-
-      // Test database connection
-      try {
-        await knex.raw('SELECT 1');
-      } catch (error) {
-        if (error && error.code === 'ECONNREFUSED') {
-          console.error('❌ PostgreSQL connection refused. Start the database and retry.');
-          console.error('   macOS (Homebrew): brew services start postgresql@16');
-          console.error('   macOS (manual):  pg_ctl -D /usr/local/var/postgresql@16 start');
-          console.error('   Linux (systemd): sudo systemctl start postgresql');
-          console.error('   Windows:         Services.msc → start "PostgreSQL 16" or run "net start postgresql-x64-16"');
-          console.error('   Docker (any OS): docker run --name squirrel-db -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=squirrel -p 5432:5432 -d postgres:16');
-        }
-        throw error;
-      }
-      console.log('✅ Connexion à la base de données établie');
 
       console.log('🗄️  Initialisation du schéma ADOLE (PostgreSQL)...');
       await ensureAdoleSchema();
@@ -355,65 +340,36 @@ async function startServer() {
       };
 
       try {
-        await knex.transaction(async (trx) => {
-          await trx('tenants')
-            .insert({ tenant_id, name: tenantName || username || 'tenant' })
-            .onConflict('tenant_id')
-            .merge({ name: tenantName || username || 'tenant' });
+        await AppDataSource.manager.transaction(async (transactionalEntityManager) => {
+          await transactionalEntityManager.query(
+            `INSERT INTO tenants (tenant_id, name) VALUES ($1, $2) ON CONFLICT (tenant_id) DO UPDATE SET name = EXCLUDED.name`,
+            [tenant_id, tenantName || username || 'tenant']
+          );
 
-          await trx('principals')
-            .insert({ tenant_id, principal_id, kind, email })
-            .onConflict('principal_id')
-            .merge({ email, kind });
+          await transactionalEntityManager.query(
+            `INSERT INTO principals (tenant_id, principal_id, kind, email) VALUES ($1, $2, $3, $4) ON CONFLICT (principal_id) DO UPDATE SET email = EXCLUDED.email, kind = EXCLUDED.kind`,
+            [tenant_id, principal_id, kind, email]
+          );
 
-          await trx('objects')
-            .insert({
-              object_id: principal_id,
-              tenant_id,
-              type: 'user_profile',
-              created_by: principal_id
-            })
-            .onConflict('object_id')
-            .merge({ type: 'user_profile', created_by: principal_id });
+          await transactionalEntityManager.query(
+            `INSERT INTO objects (object_id, tenant_id, type, created_by) VALUES ($1, $2, $3, $4) ON CONFLICT (object_id) DO UPDATE SET type = EXCLUDED.type, created_by = EXCLUDED.created_by`,
+            [principal_id, tenant_id, 'user_profile', principal_id]
+          );
 
-          await trx('branches')
-            .insert({
-              branch_id,
-              tenant_id,
-              object_id: principal_id,
-              name: 'main',
-              is_default: true
-            })
-            .onConflict('branch_id')
-            .ignore();
+          await transactionalEntityManager.query(
+            `INSERT INTO branches (branch_id, tenant_id, object_id, name, is_default) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (branch_id) DO NOTHING`,
+            [branch_id, tenant_id, principal_id, 'main', true]
+          );
 
-          await trx('commits')
-            .insert({
-              commit_id,
-              tenant_id,
-              object_id: principal_id,
-              branch_id,
-              author_id: principal_id,
-              logical_clock,
-              message: 'profile upsert'
-            })
-            .onConflict('commit_id')
-            .ignore();
+          await transactionalEntityManager.query(
+            `INSERT INTO commits (commit_id, tenant_id, object_id, branch_id, author_id, logical_clock, message) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (commit_id) DO NOTHING`,
+            [commit_id, tenant_id, principal_id, branch_id, principal_id, logical_clock, 'profile upsert']
+          );
 
-          await trx('object_state')
-            .insert({
-              tenant_id,
-              object_id: principal_id,
-              branch_id,
-              version_seq: logical_clock,
-              snapshot: trx.raw('?::jsonb', [JSON.stringify(snapshot)])
-            })
-            .onConflict(['tenant_id', 'object_id', 'branch_id'])
-            .merge({
-              version_seq: logical_clock,
-              snapshot: trx.raw('?::jsonb', [JSON.stringify(snapshot)]),
-              updated_at: trx.fn.now()
-            });
+          await transactionalEntityManager.query(
+            `INSERT INTO object_state (tenant_id, object_id, branch_id, version_seq, snapshot) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (tenant_id, object_id, branch_id) DO UPDATE SET version_seq = EXCLUDED.version_seq, snapshot = EXCLUDED.snapshot, updated_at = now()`,
+            [tenant_id, principal_id, branch_id, logical_clock, JSON.stringify(snapshot)]
+          );
         });
 
         return {
@@ -438,14 +394,14 @@ async function startServer() {
 
       try {
         const principalId = request.params.principalId;
-        const row = await knex('principals as p')
-          .leftJoin('object_state as os', function joinProfiles() {
-            this.on('os.object_id', '=', 'p.principal_id')
-              .andOn('os.tenant_id', '=', 'p.tenant_id');
-          })
-          .select('p.principal_id', 'p.tenant_id', 'p.email', 'p.kind', 'os.snapshot')
-          .where('p.principal_id', principalId)
-          .first();
+        const rows = await AppDataSource.query(
+          `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
+           FROM principals p 
+           LEFT JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id 
+           WHERE p.principal_id = $1 LIMIT 1`,
+          [principalId]
+        );
+        const row = rows[0];
 
         if (!row) {
           reply.code(404);
@@ -476,13 +432,12 @@ async function startServer() {
       }
 
       try {
-        const rows = await knex('principals as p')
-          .leftJoin('object_state as os', function joinProfiles() {
-            this.on('os.object_id', '=', 'p.principal_id')
-              .andOn('os.tenant_id', '=', 'p.tenant_id');
-          })
-          .select('p.principal_id', 'p.tenant_id', 'p.email', 'p.kind', 'os.snapshot')
-          .orderBy('p.created_at', 'desc');
+        const rows = await AppDataSource.query(
+          `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
+           FROM principals p 
+           LEFT JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id 
+           ORDER BY p.created_at DESC`
+        );
 
         return {
           success: true,
@@ -547,22 +502,23 @@ async function startServer() {
       }
 
       try {
-        await knex.raw('SELECT 1');
+        await AppDataSource.query('SELECT 1');
 
-        const tableRows = await knex('pg_catalog.pg_tables')
-          .select('tablename')
-          .where('schemaname', 'public')
-          .orderBy('tablename');
+        const tableRows = await AppDataSource.query(`
+          SELECT tablename FROM pg_catalog.pg_tables 
+          WHERE schemaname = 'public' 
+          ORDER BY tablename
+        `);
 
         let connectionInfo = {
-          type: knex.client.config.client || 'pg'
+          type: 'postgres'
         };
 
         if (PG_URL) {
           try {
             const parsed = new URL(PG_URL);
             connectionInfo = {
-              type: knex.client.config.client || 'pg',
+              type: 'postgres',
               host: parsed.hostname,
               port: parsed.port || '5432',
               database: parsed.pathname.replace(/^\//, ''),
@@ -572,7 +528,7 @@ async function startServer() {
           } catch (parseError) {
             request.log.warn({ err: parseError }, 'Unable to parse PG connection string');
             connectionInfo = {
-              type: knex.client.config.client || 'pg',
+              type: 'postgres',
               dsn: PG_URL
             };
           }
@@ -608,7 +564,7 @@ async function startServer() {
       }
 
       try {
-        const users = await User.query();
+        const users = await AppDataSource.getRepository(UserEntity).find();
         return { success: true, data: users };
       } catch (error) {
         reply.code(500);
@@ -623,7 +579,7 @@ async function startServer() {
       }
 
       try {
-        const user = await User.query().insert(request.body);
+        const user = await AppDataSource.getRepository(UserEntity).save(request.body);
         return { success: true, data: user };
       } catch (error) {
         reply.code(500);
@@ -638,9 +594,10 @@ async function startServer() {
       }
 
       try {
-        const user = await User.query()
-          .findById(request.params.id)
-          .withGraphFetched('[project, atomes]');
+        const user = await AppDataSource.getRepository(UserEntity).findOne({
+          where: { id: parseInt(request.params.id) },
+          relations: ['project']
+        });
 
         if (!user) {
           reply.code(404);
@@ -661,9 +618,9 @@ async function startServer() {
       }
 
       try {
-        const deletedCount = await User.query().deleteById(request.params.id);
+        const result = await AppDataSource.getRepository(UserEntity).delete(request.params.id);
 
-        if (deletedCount === 0) {
+        if (result.affected === 0) {
           reply.code(404);
           return { success: false, error: 'User not found' };
         }
@@ -687,7 +644,9 @@ async function startServer() {
       }
 
       try {
-        const projects = await Project.query().withGraphFetched('[users, owner, atomes]');
+        const projects = await AppDataSource.getRepository(ProjectEntity).find({
+          relations: ['users', 'owner', 'atomes']
+        });
         return { success: true, data: projects };
       } catch (error) {
         reply.code(500);
@@ -702,7 +661,7 @@ async function startServer() {
       }
 
       try {
-        const project = await Project.query().insert(request.body);
+        const project = await AppDataSource.getRepository(ProjectEntity).save(request.body);
         return { success: true, data: project };
       } catch (error) {
         reply.code(500);
@@ -717,9 +676,10 @@ async function startServer() {
       }
 
       try {
-        const project = await Project.query()
-          .findById(request.params.id)
-          .withGraphFetched('[users, owner, atomes]');
+        const project = await AppDataSource.getRepository(ProjectEntity).findOne({
+          where: { id: parseInt(request.params.id) },
+          relations: ['users', 'owner', 'atomes']
+        });
 
         if (!project) {
           reply.code(404);
@@ -741,7 +701,9 @@ async function startServer() {
       }
 
       try {
-        const atomes = await Atome.query().withGraphFetched('[user, project]');
+        const atomes = await AppDataSource.getRepository(AtomeEntity).find({
+          relations: ['user', 'project']
+        });
         return { success: true, data: atomes };
       } catch (error) {
         reply.code(500);
@@ -756,7 +718,7 @@ async function startServer() {
       }
 
       try {
-        const atome = await Atome.query().insert(request.body);
+        const atome = await AppDataSource.getRepository(AtomeEntity).save(request.body);
         return { success: true, data: atome };
       } catch (error) {
         reply.code(500);
@@ -773,9 +735,9 @@ async function startServer() {
 
       try {
         const [userCount, projectCount, atomeCount] = await Promise.all([
-          User.query().resultSize(),
-          Project.query().resultSize(),
-          Atome.query().resultSize()
+          AppDataSource.getRepository(UserEntity).count(),
+          AppDataSource.getRepository(ProjectEntity).count(),
+          AppDataSource.getRepository(AtomeEntity).count()
         ]);
 
         return {
@@ -784,7 +746,7 @@ async function startServer() {
             users: userCount,
             projects: projectCount,
             atomes: atomeCount,
-            database: 'PostgreSQL + Objection.js',
+            database: 'PostgreSQL + TypeORM',
             timestamp: new Date().toISOString()
           }
         };

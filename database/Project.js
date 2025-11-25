@@ -1,64 +1,14 @@
-import { Model } from 'objection';
+import { EntitySchema } from 'typeorm';
 
-class Project extends Model {
-  static get tableName() {
-    return 'project';
+export class Project {
+  constructor(id, name_project, history_action, autorisation, user_id) {
+    this.id = id;
+    this.name_project = name_project;
+    this.history_action = history_action;
+    this.autorisation = autorisation;
+    this.user_id = user_id;
   }
 
-  static get idColumn() {
-    return 'id';
-  }
-
-  static get jsonSchema() {
-    return {
-      type: 'object',
-      required: ['name_project'],
-      properties: {
-        id: { type: 'integer' },
-        name_project: { type: 'string', maxLength: 255 },
-        history_action: { 
-          type: 'string',
-          description: 'JSON string containing action history for version control'
-        },
-        autorisation: { 
-          type: 'string', 
-          enum: ['private', 'public', 'restricted'],
-          default: 'private'
-        },
-        user_id: { type: ['integer', 'null'] }
-      }
-    };
-  }  static get relationMappings() {
-    // Use dynamic imports to avoid circular dependencies
-    return {
-      users: {
-        relation: Model.HasManyRelation,
-        modelClass: () => require('./User.js'),
-        join: {
-          from: 'project.id',
-          to: 'user.project_id'
-        }
-      },
-      owner: {
-        relation: Model.BelongsToOneRelation,
-        modelClass: () => require('./User.js'),
-        join: {
-          from: 'project.user_id',
-          to: 'user.id'
-        }
-      },
-      atomes: {
-        relation: Model.HasManyRelation,
-        modelClass: () => require('./Atome.js'),
-        join: {
-          from: 'project.id',
-          to: 'atome.project_id'
-        }
-      }
-    };
-  }
-
-  // Method to add action to history
   addToHistory(action, userId, changes) {
     const history = this.getHistory();
     const historyEntry = {
@@ -75,7 +25,6 @@ class Project extends Model {
     return historyEntry;
   }
 
-  // Method to get parsed history
   getHistory() {
     try {
       return this.history_action ? JSON.parse(this.history_action) : [];
@@ -85,23 +34,20 @@ class Project extends Model {
     }
   }
 
-  // Method to get specific version
   getVersion(versionNumber) {
     const history = this.getHistory();
     return history.find(entry => entry.version === versionNumber);
   }
 
-  // Method to rollback to version
   canRollback(targetVersion, userId) {
-    const user = this.users?.find(u => u.id === userId);    if (!user || !user.hasPermission('edit')) {
+    const user = this.users?.find(u => u.id === userId);
+    if (!user || !user.hasPermission('edit')) {
       return false;
     }
-    
     const history = this.getHistory();
     return history.some(entry => entry.version === targetVersion);
   }
 
-  // Method to check if user has access based on authorization
   hasAccess(user) {
     if (this.autorisation === 'public') return true;
     if (this.autorisation === 'private') return this.user_id === user.id;
@@ -110,4 +56,49 @@ class Project extends Model {
   }
 }
 
-export default Project;
+export const ProjectEntity = new EntitySchema({
+  name: 'Project',
+  target: Project,
+  tableName: 'project',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    name_project: {
+      type: 'varchar',
+      length: 255,
+    },
+    history_action: {
+      type: 'text',
+      nullable: true,
+    },
+    autorisation: {
+      type: 'varchar',
+      default: 'private',
+    },
+    user_id: {
+      type: 'int',
+      nullable: true,
+    },
+  },
+  relations: {
+    owner: {
+      target: 'User',
+      type: 'many-to-one',
+      joinColumn: { name: 'user_id' },
+      inverseSide: 'projects',
+    },
+    users: {
+      target: 'User',
+      type: 'one-to-many',
+      inverseSide: 'project',
+    },
+    atomes: {
+      target: 'Atome',
+      type: 'one-to-many',
+      inverseSide: 'project',
+    },
+  },
+});
