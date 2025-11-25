@@ -19,7 +19,7 @@ export class Project {
       changes: changes,
       version: history.length + 1
     };
-    
+
     history.push(historyEntry);
     this.history_action = JSON.stringify(history);
     return historyEntry;
