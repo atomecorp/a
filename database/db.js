@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import knex from 'knex';
-import { Model } from 'objection';
+import { DataSource } from 'typeorm';
+import { UserEntity } from './User.js';
+import { ProjectEntity } from './Project.js';
+import { AtomeEntity } from './Atome.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,38 +52,35 @@ function loadEnvFile(filePath, { override = false } = {}) {
 loadEnvFile(path.join(PROJECT_ROOT, '.env'));
 loadEnvFile(path.join(PROJECT_ROOT, '.env.local'), { override: true });
 
-const PG_URL = process.env.ADOLE_PG_DSN || process.env.PG_CONNECTION_STRING || process.env.DATABASE_URL;
+export const PG_URL = process.env.ADOLE_PG_DSN || process.env.PG_CONNECTION_STRING || process.env.DATABASE_URL;
 
 if (!PG_URL) {
   throw new Error('ADOLE_PG_DSN (or PG_CONNECTION_STRING/DATABASE_URL) must be defined. Add it to .env or export it before starting Squirrel.');
 }
 
-const migrationsDir = path.join(__dirname, 'migrations');
+export const AppDataSource = new DataSource({
+  type: "postgres",
+  url: PG_URL,
+  synchronize: true, // Attention: à désactiver en prod une fois stable, utiliser les migrations
+  logging: false,
+  entities: [UserEntity, ProjectEntity, AtomeEntity],
+  subscribers: [],
+  migrations: [],
+});
 
-const knexConfig = {
-  client: 'pg',
-  connection: PG_URL,
-  pool: {
-    min: 2,
-    max: 10
-  },
-  migrations: {
-    directory: migrationsDir
+export const ensureAdoleSchema = async () => {
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
   }
+  // TypeORM synchronize: true handles schema creation automatically
+  console.log("✅ Database schema synchronized via TypeORM");
+
+  // Execute raw SQL for ADOLE specific tables if needed (legacy support)
+  await AppDataSource.query(ADOLE_SCHEMA_SQL);
 };
 
-// Initialize knex
-const knexInstance = knex(knexConfig);
-
-// Give the knex instance to objection
-Model.knex(knexInstance);
-
-// Export for use in tests and app
-export {
-  knexInstance as knex,
-  knexConfig,
-  PG_URL
-};
+// Helper pour garder la compatibilité si besoin, mais idéalement utiliser AppDataSource.getRepository(Entity)
+export const db = AppDataSource;
 
 const ADOLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS tenants (
@@ -200,6 +199,3 @@ CREATE INDEX IF NOT EXISTS acls_idx          ON acls (tenant_id, object_id, prop
 
 export const isPostgres = true;
 
-export async function ensureAdoleSchema(instance = knexInstance) {
-  await instance.raw(ADOLE_SCHEMA_SQL);
-}

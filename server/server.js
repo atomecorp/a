@@ -14,11 +14,11 @@ import {
 } from './aBoxServer.js';
 
 // Database imports
-import { knex, ensureAdoleSchema, PG_URL } from '../database/db.js';
+import { AppDataSource, ensureAdoleSchema, PG_URL } from '../database/db.js';
 import { v4 as uuidv4 } from 'uuid';
-import User from '../database/User.js';
-import Project from '../database/Project.js';
-import Atome from '../database/Atome.js';
+import { UserEntity } from '../database/User.js';
+import { ProjectEntity } from '../database/Project.js';
+import { AtomeEntity } from '../database/Atome.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
