@@ -23,6 +23,7 @@ APP_DIR="/opt/a"
 SERVICE_NAME="squirrel"
 NODE_PORT="3001"
 USER="www-data"
+UPLOADS_DIR="$APP_DIR/uploads"
 
 # --- Colors ----------------------------------------------------------------
 GREEN='\033[0;32m'
@@ -113,12 +114,20 @@ log_ok "✅ System dependencies installed."
 
 log_info "⚙️  Configuring Environment..."
 
+# Ensure uploads directory exists
+if [ ! -d "$UPLOADS_DIR" ]; then
+    log_info "Creating uploads directory at $UPLOADS_DIR..."
+    mkdir -p "$UPLOADS_DIR"
+    # We will fix permissions later with chown -R
+fi
+
 if [ ! -f .env ]; then
     log_info "Creating .env from defaults..."
     # Default DSN for local postgres
     echo "ADOLE_PG_DSN=postgres://postgres:postgres@localhost:5432/squirrel" > .env
     echo "NODE_ENV=production" >> .env
     echo "PORT=$NODE_PORT" >> .env
+    echo "SQUIRREL_UPLOADS_DIR=$UPLOADS_DIR" >> .env
     # Bind to localhost only (Nginx will proxy)
     echo "HOST=127.0.0.1" >> .env
     chmod 600 .env
@@ -128,6 +137,10 @@ else
     # Ensure HOST is 127.0.0.1 to prevent outside access to port 3001
     if ! grep -q "HOST=127.0.0.1" .env; then
         echo "HOST=127.0.0.1" >> .env
+    fi
+    # Ensure SQUIRREL_UPLOADS_DIR is set
+    if ! grep -q "SQUIRREL_UPLOADS_DIR" .env; then
+        echo "SQUIRREL_UPLOADS_DIR=$UPLOADS_DIR" >> .env
     fi
 fi
 
