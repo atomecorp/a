@@ -1,64 +1,116 @@
-# Server Installation (Standalone)
+# Server Installation & Management Guide
 
-This guide explains how to install and run the **Atome** server on a Linux machine (Debian/Ubuntu recommended) or macOS, without the graphical interface (Tauri).
+This guide explains how to install, configure, and manage the **Atome/Squirrel** server.
+The installation process is fully automated and supports both **Linux (Debian/Ubuntu)** and **FreeBSD**.
 
-## Prerequisites
+## 🌍 Supported Platforms
 
-* **Git** installed (`sudo apt install git` or `brew install git`)
-* **Internet Access** (to download Node.js, PostgreSQL, and libraries)
-* *(Optional)* A domain name pointing to the server for HTTPS (e.g., `atome.one`)
+* **Linux**: Debian 11/12, Ubuntu 20.04/22.04/24.04 (Recommended)
+* **FreeBSD**: 13.x, 14.x
 
-## Quick Installation
+## 🚀 Installation
 
-Simply run these commands:
+The `install_server.sh` script handles everything: system dependencies, Node.js, PostgreSQL, Nginx, SSL certificates, and service creation.
+
+### 1. Clone the Repository
+
+Connect to your server via SSH and clone the project to `/opt/a` (Linux) or `/usr/local/a` (FreeBSD).
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/atomecorp/a
-cd a
-
-# 2. Run the automated installation script
-# This script will:
-# - Install Node.js and dependencies
-# - Install and configure PostgreSQL (user/db creation)
-# - Download frontend libraries (Tone.js, Leaflet, etc.)
-# - Propose HTTPS configuration (Let's Encrypt)
-./install_server.sh
+# Example for Linux
+sudo git clone https://github.com/atomecorp/a /opt/a
+cd /opt/a
 ```
 
-## Running the Server
+### 2. Run the Installer
 
-Once the installation is complete, start the server with:
+Run the script as root. It will detect your OS and adapt accordingly.
 
 ```bash
-./run_server.sh
+sudo ./install_server.sh
 ```
 
-The server will be accessible at:
+**What this script does:**
 
-* **HTTP**: `http://your-ip:3001`
-* **HTTPS**: `https://your-domain:3001` (if configured)
+* **Detects OS**: Adapts commands (`apt` vs `pkg`, `systemd` vs `rc.d`).
+* **Installs Dependencies**: Node.js 20, PostgreSQL 16, Nginx, Certbot, Rust, etc.
+* **Configures Database**: Creates `squirrel` database and `postgres` user.
+* **Sets up Nginx**: Configures a reverse proxy (Port 80/443 -> 3001).
+* **Enables SSL**: Automatically generates Let's Encrypt certificates if a domain is pointed.
+* **Installs Service**: Creates a system service (`squirrel`) for auto-restart.
 
-## Technical Details
+---
 
-### What `install_server.sh` does
+## ⚙️ Configuration
 
-* Checks and installs system dependencies (psql, etc.).
-* Automatically configures the `squirrel` database with the `postgres` user.
-* Calls `install_update_all_libraries.sh` to fetch JS/CSS assets.
-* Detects if you are on Linux to propose SSL certificate generation via Certbot.
-
-### What `run_server.sh` does
-
-* Loads environment variables (`.env`).
-* Detects SSL certificates (Production or Self-signed).
-* Starts the Fastify server (`server/server.js`).
-
-## Updates
-
-To update the server later:
+The configuration is stored in the `.env` file in the project root.
+The installer generates a default one for you.
 
 ```bash
+# .env example
+NODE_ENV=production
+PORT=3001
+HOST=127.0.0.1
+ADOLE_PG_DSN=postgres://postgres:postgres@localhost:5432/squirrel
+SQUIRREL_UPLOADS_DIR=/opt/a/uploads
+```
+
+* **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).
+* **PORT**: Internal port (default 3001).
+
+---
+
+## 🎮 Managing the Server
+
+Once installed, the server runs in the background as a system service.
+Use the helper script `run_server.sh` to manage it easily on any platform.
+
+### Common Commands
+
+| Action | Command | Description |
+| :--- | :--- | :--- |
+| **Status** | `./run_server.sh status` | Check if server is running & view recent logs |
+| **Start** | `./run_server.sh start` | Start the service |
+| **Stop** | `./run_server.sh stop` | Stop the service |
+| **Restart** | `./run_server.sh restart` | Restart the service (e.g. after updates) |
+| **Logs** | `./run_server.sh logs` | View live logs (Ctrl+C to exit) |
+| **Check** | `./run_server.sh check` | Run system diagnostics (Nginx, SSL, Ports) |
+
+### Manual Service Management (Advanced)
+
+If you prefer using native system commands:
+
+**Linux (systemd):**
+
+```bash
+systemctl status squirrel
+systemctl start squirrel
+systemctl stop squirrel
+journalctl -u squirrel -f  # Logs
+```
+
+**FreeBSD (rc.d):**
+
+```bash
+service squirrel status
+service squirrel start
+service squirrel stop
+tail -f /var/log/messages  # Logs (or specific app log if configured)
+```
+
+---
+
+## 🔄 Updating the Server
+
+To update the application code and dependencies:
+
+```bash
+# 1. Pull latest changes
 git pull
-./install_server.sh
+
+# 2. Update dependencies (if needed)
+./install_full.sh
+
+# 3. Restart the server
+./run_server.sh restart
 ```
