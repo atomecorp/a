@@ -13,6 +13,9 @@ package-lock.json
 *.bak
 *.old
 
+# Test files
+src/assets/uploads/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
