@@ -179,22 +179,31 @@ mkdir -p "$VM_DIR"
 # We prepare the environment here.
 log_info "ℹ️  FreeBSD VM directory prepared at $VM_DIR"
 
-FREEBSD_IMG_URL="https://download.freebsd.org/releases/VM-IMAGES/14.0-RELEASE/amd64/Latest/FreeBSD-14.0-RELEASE-amd64.qcow2.xz"
+FREEBSD_VERSION="14.1-RELEASE"
+FREEBSD_IMG_URL="https://download.freebsd.org/releases/VM-IMAGES/$FREEBSD_VERSION/amd64/Latest/FreeBSD-$FREEBSD_VERSION-amd64.qcow2.xz"
 FREEBSD_IMG_XZ="$VM_DIR/base.qcow2.xz"
 FREEBSD_IMG="$VM_DIR/base.qcow2"
 
 if [ ! -f "$FREEBSD_IMG" ]; then
-    log_info "⬇️  Downloading FreeBSD 14.0 VM Image..."
-    if curl -L "$FREEBSD_IMG_URL" -o "$FREEBSD_IMG_XZ"; then
+    log_info "⬇️  Downloading FreeBSD $FREEBSD_VERSION VM Image..."
+    # Use -f to fail on HTTP errors (404), -L to follow redirects
+    if curl -fL "$FREEBSD_IMG_URL" -o "$FREEBSD_IMG_XZ"; then
         log_info "📦 Extracting image..."
         if command -v unxz >/dev/null 2>&1; then
-            unxz "$FREEBSD_IMG_XZ"
-            log_ok "✅ FreeBSD image ready: $FREEBSD_IMG"
+            # Test archive integrity before extracting to avoid script exit on error
+            if unxz -t "$FREEBSD_IMG_XZ" >/dev/null 2>&1; then
+                unxz "$FREEBSD_IMG_XZ"
+                log_ok "✅ FreeBSD image ready: $FREEBSD_IMG"
+            else
+                log_warn "⚠️  Downloaded file is not a valid xz archive. Skipping FreeBSD VM setup."
+                rm -f "$FREEBSD_IMG_XZ"
+            fi
         else
             log_warn "⚠️  'unxz' not found. Please install xz-utils to extract the image."
         fi
     else
-        log_error "❌ Failed to download FreeBSD image."
+        log_warn "⚠️  Failed to download FreeBSD image. Skipping VM setup."
+        rm -f "$FREEBSD_IMG_XZ"
     fi
 else
     log_info "✅ FreeBSD image already exists."
@@ -373,6 +382,11 @@ systemctl stop $SERVICE_NAME || true
 chown -R $USER:$USER $APP_DIR
 
 # Create Service File
+NODE_EXEC=$(command -v node)
+if [ -z "$NODE_EXEC" ]; then
+    NODE_EXEC="/usr/bin/node"
+fi
+
 cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=Squirrel Node.js Server
@@ -384,7 +398,7 @@ Type=simple
 User=$USER
 Group=$USER
 WorkingDirectory=$APP_DIR
-ExecStart=$(which node) server/server.js
+ExecStart=$NODE_EXEC server/server.js
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production

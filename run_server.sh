@@ -67,7 +67,8 @@ case "$CMD" in
         sudo systemctl status $SERVICE_NAME --no-pager
         ;;
     status)
-        sudo systemctl status $SERVICE_NAME
+        # We use '|| true' to prevent the script from exiting if status returns non-zero
+        sudo systemctl status $SERVICE_NAME || true
 
         # Auto-diagnostic if service is not active
         if ! systemctl is-active --quiet $SERVICE_NAME; then
