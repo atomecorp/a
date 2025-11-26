@@ -32,6 +32,10 @@ src-tauri/target/
 .env
 .env.local
 
+# Security
+*.pem
+*.key
+
 # Process files
 .watcher.pid
 src/assets/audios/Alive.mp3
