@@ -213,7 +213,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             );
 
             if (existingRows.length > 0) {
-                return reply.code(409).send({ success: false, error: 'Phone number already registered' });
+                // Return 200 with success:false to avoid browser console error
+                return { success: false, error: 'Phone number already registered' };
             }
 
             // Hash password
@@ -686,7 +687,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             );
 
             if (existingRows.length > 0) {
-                return reply.code(409).send({ success: false, error: 'Phone number already in use' });
+                // Return 200 with success:false to avoid browser console error
+                return { success: false, error: 'Phone number already in use' };
             }
 
             // Generate and store OTP for the NEW phone

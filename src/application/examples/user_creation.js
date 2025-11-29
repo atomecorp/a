@@ -181,10 +181,26 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 async function apiRegister(username, phone, password, optional = {}) {
-    return apiRequest('/api/auth/register', {
+    const url = apiBase ? `${apiBase}/api/auth/register` : '/api/auth/register';
+    const response = await fetch(url, {
         method: 'POST',
-        body: JSON.stringify({ username, phone, password, optional })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, phone, password, optional }),
+        credentials: 'include'
     });
+
+    const data = await response.json().catch(() => ({}));
+
+    // Don't throw on expected errors (409 = conflict/already exists, 400 = validation)
+    if (response.status === 409 || response.status === 400) {
+        return { success: false, error: data.error || 'Registration failed' };
+    }
+
+    if (!response.ok) {
+        return { success: false, error: data.error || `HTTP ${response.status}` };
+    }
+
+    return { success: true, ...data };
 }
 
 async function apiLogin(phone, password) {
@@ -1344,11 +1360,13 @@ async function handleSignup() {
                 setTimeout(() => renderAccountPanel(AccountState.LOGIN), 1500);
             }
         } else {
+            puts('[auth] Registration failed: ' + (result.error || 'Unknown error'));
             showError(result.error || 'Registration failed');
         }
     } catch (e) {
-        console.error('Signup error:', e);
-        showError(e.message || 'Registration failed');
+        // Only log unexpected errors (network issues, etc.)
+        console.warn('[auth] Registration network error:', e.message);
+        showError('Connection error. Please try again.');
     }
 }
 

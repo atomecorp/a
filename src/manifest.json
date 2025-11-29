@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "generatedAt": "2025-11-29T15:50:31.061Z",
+  "generatedAt": "2025-11-29T16:07:22.468Z",
   "scope": "src/application/examples",
   "description": "Hot-update manifest limited strictly to src/application/examples/**. Do not touch other src/application modules.",
   "rules": {
@@ -294,8 +294,8 @@
     },
     {
       "path": "src/application/examples/user_creation.js",
-      "size": 70357,
-      "sha256": "e03dbb3b6d59ef9c9669ecf8103bc42bd0f7f869c1bc1fa6909f64c8dd0debf3"
+      "size": 71371,
+      "sha256": "7d8e4ca72ebab1f4aafe75a5a4e9999c4aaae74d6d6de6f286d50fca437bad3f"
     },
     {
       "path": "src/application/examples/wavesurfer.js",
