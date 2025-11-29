@@ -379,7 +379,6 @@ function buildInput({ id, label, type = 'text', value = '', placeholder = '', on
     $('input', {
         id: id,
         parent: `#${inputContainerId}`,
-        type: type,
         value: value,
         placeholder: placeholder,
         css: {
@@ -395,6 +394,14 @@ function buildInput({ id, label, type = 'text', value = '', placeholder = '', on
         },
         onInput: onInput
     });
+
+    // Force the input type after creation (Squirrel may not handle 'type' attribute properly)
+    setTimeout(() => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.type = type;
+        }
+    }, 0);
 
     // Add password visibility toggle
     if (isPassword && !disabled) {
