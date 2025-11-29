@@ -68,7 +68,9 @@
     "update:libs": "./install_full.sh --mode latest",
     "update:libs:no-iplug": "./install_full.sh --mode latest --skip-iplug",
     "update:libs:basic": "./install_full.sh --mode latest --skip-tauri --skip-fastify",
-    "update:libs:stable": "./install_full.sh --mode stable"
+    "update:libs:stable": "./install_full.sh --mode stable",
+    "generate-keys": "node scripts_utils/generate-server-keys.js",
+    "test:server-verification": "node scripts_utils/test-server-verification.js"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
@@ -89,11 +91,14 @@
     "@codemirror/state": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.37.2",
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.1.0",
+    "@fastify/jwt": "^10.0.0",
     "@fastify/static": "^8.3.0",
     "@fastify/websocket": "^11.2.0",
     "@nodegui/nodegui": "^0.73.0",
     "@ruby/wasm-wasi": "^2.7.2",
+    "bcrypt": "^6.0.0",
     "chokidar": "^3.6.0",
     "codemirror": "^6.0.2",
     "events": "^3.3.0",

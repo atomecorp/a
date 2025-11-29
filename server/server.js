@@ -12,6 +12,7 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
+import { registerAuthRoutes } from './auth.js';
 
 // Database imports
 import { AppDataSource, ensureAdoleSchema, PG_URL } from '../database/db.js';
@@ -243,11 +244,11 @@ async function startServer() {
     // 1. PLUGINS DE BASE
     // ===========================
 
-    // CORS pour le développement
+    // CORS for development and cross-origin requests
     await server.register(fastifyCors, {
       origin: true,
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
       allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
     });
 
@@ -267,6 +268,24 @@ async function startServer() {
     // ===========================
     // 2. ROUTES API
     // ===========================
+
+    // Register authentication routes (login, register, logout, OTP, etc.)
+    if (DATABASE_ENABLED) {
+      await registerAuthRoutes(server, AppDataSource, {
+        jwtSecret: process.env.JWT_SECRET,
+        cookieSecret: process.env.COOKIE_SECRET,
+        isProduction: process.env.NODE_ENV === 'production'
+      });
+    } else {
+      // Provide stub routes that return 503 when DB is not configured
+      server.post('/api/auth/register', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/login', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/logout', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+      server.get('/api/auth/me', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+      server.put('/api/auth/update', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/request-otp', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+      server.post('/api/auth/reset-password', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
+    }
 
     server.get('/api/server-info', async () => {
       return {

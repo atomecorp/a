@@ -17,6 +17,9 @@ use std::{
 use tokio::fs;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
 
+// Local authentication module
+pub mod local_auth;
+
 #[derive(Clone)]
 struct AppState {
     uploads_dir: Arc<PathBuf>,
@@ -286,9 +289,14 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     println!("📦 Version applicative: {}", version);
 
     let state = AppState {
-        uploads_dir: Arc::new(uploads_dir),
+        uploads_dir: Arc::new(uploads_dir.clone()),
         version: Arc::new(version.clone()),
     };
+
+    // Create local auth router (independent state)
+    let local_auth_router = local_auth::create_local_auth_router(
+        uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf(),
+    );
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
@@ -303,10 +311,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .layer(CorsLayer::permissive())
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
-        .with_state(state);
+        .with_state(state)
+        // Merge local auth routes AFTER with_state (uses its own state)
+        .merge(local_auth_router);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Serveur Axum {} démarré: http://localhost:3000", version);
+    println!("🔐 Local authentication enabled: /api/auth/local/*");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

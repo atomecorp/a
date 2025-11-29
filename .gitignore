@@ -35,9 +35,14 @@ src-tauri/target/
 .env
 .env.local
 
-# Security
+# Security - Private keys and certificates
 *.pem
 *.key
+*.p12
+*.pfx
+server/certificates/
+!server/certificates/.gitkeep
+!src/application/security/trusted_keys.js
 
 # Process files
 .watcher.pid
