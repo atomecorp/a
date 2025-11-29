@@ -188,10 +188,26 @@ async function apiRegister(username, phone, password, optional = {}) {
 }
 
 async function apiLogin(phone, password) {
-    return apiRequest('/api/auth/login', {
+    const url = apiBase ? `${apiBase}/api/auth/login` : '/api/auth/login';
+    const response = await fetch(url, {
         method: 'POST',
-        body: JSON.stringify({ phone, password })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password }),
+        credentials: 'include'
     });
+    
+    const data = await response.json().catch(() => ({}));
+    
+    // Don't throw on 401 - it's expected for wrong credentials
+    if (response.status === 401) {
+        return { success: false, error: data.error || 'Invalid credentials' };
+    }
+    
+    if (!response.ok) {
+        return { success: false, error: data.error || `HTTP ${response.status}` };
+    }
+    
+    return data;
 }
 
 async function apiLogout() {
@@ -1261,11 +1277,13 @@ async function handleLogin() {
             puts(`[auth] Login successful: ${result.user.username}`);
             renderAccountPanel(AccountState.PROFILE);
         } else {
+            puts('[auth] Login failed: ' + (result.error || 'Invalid credentials'));
             showError(result.error || 'Login failed');
         }
     } catch (e) {
-        console.error('Login error:', e);
-        showError(e.message || 'Login failed');
+        // Only log unexpected errors (network issues, etc.)
+        console.warn('[auth] Login network error:', e.message);
+        showError('Connection error. Please try again.');
     }
 }
 

@@ -284,6 +284,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     /**
      * POST /api/auth/login
      * Authenticate user and create session
+     * Returns 200 with success:false for invalid credentials (avoids browser console errors)
      */
     server.post('/api/auth/login', async (request, reply) => {
         const { phone, password } = request.body || {};
@@ -305,7 +306,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             );
 
             if (rows.length === 0) {
-                return reply.code(401).send({ success: false, error: 'Invalid credentials' });
+                // Return 200 with success:false to avoid browser console error
+                return { success: false, error: 'Invalid credentials' };
             }
 
             const user = rows[0];
@@ -314,7 +316,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             // Verify password
             const passwordValid = await verifyPassword(password, snapshot.password_hash);
             if (!passwordValid) {
-                return reply.code(401).send({ success: false, error: 'Invalid credentials' });
+                // Return 200 with success:false to avoid browser console error
+                return { success: false, error: 'Invalid credentials' };
             }
 
             // Generate JWT
