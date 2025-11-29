@@ -804,7 +804,12 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             try {
                 decoded = server.jwt.verify(token);
             } catch {
-                reply.clearCookie('access_token', { path: '/' });
+                reply.clearCookie('access_token', {
+                    path: '/',
+                    httpOnly: true,
+                    secure: isProduction,
+                    sameSite: 'strict'
+                });
                 return reply.code(401).send({ success: false, error: 'Invalid session' });
             }
 
@@ -814,50 +819,82 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(400).send({ success: false, error: 'Password is required for account deletion' });
             }
 
-            // Get current user data
-            const userPrincipal = await principalRepository.findOne({
-                where: { id: decoded.id }
-            });
+            // Get current user data with snapshot
+            const rows = await dataSource.query(
+                `SELECT p.principal_id, p.tenant_id, os.snapshot
+                 FROM principals p
+                 JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id
+                 WHERE p.principal_id = $1 LIMIT 1`,
+                [decoded.id]
+            );
 
-            if (!userPrincipal) {
-                reply.clearCookie('access_token', { path: '/' });
+            if (rows.length === 0) {
+                reply.clearCookie('access_token', {
+                    path: '/',
+                    httpOnly: true,
+                    secure: isProduction,
+                    sameSite: 'strict'
+                });
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            // Get user snapshot to verify password
-            const objectState = await objectStateRepository.findOne({
-                where: { principal_id: decoded.id },
-                order: { created_at: 'DESC' }
-            });
-
-            if (!objectState || !objectState.snapshot) {
-                return reply.code(500).send({ success: false, error: 'User data not found' });
-            }
-
-            const snapshot = typeof objectState.snapshot === 'string'
-                ? JSON.parse(objectState.snapshot)
-                : objectState.snapshot;
+            const user = rows[0];
+            const snapshot = user.snapshot;
 
             // Verify password
-            const passwordMatch = await verifyPassword(password, snapshot.password);
+            const passwordMatch = await verifyPassword(password, snapshot.password_hash);
             if (!passwordMatch) {
                 return reply.code(401).send({ success: false, error: 'Incorrect password' });
             }
 
-            // Delete all user data
-            // 1. Delete all object_state entries for this principal
-            await objectStateRepository.delete({ principal_id: decoded.id });
+            // Delete all user data using a transaction
+            await dataSource.manager.transaction(async (tx) => {
+                // 1. Delete object_state entries
+                await tx.query(
+                    `DELETE FROM object_state WHERE object_id = $1`,
+                    [decoded.id]
+                );
 
-            // 2. Delete the principal (user)
-            await principalRepository.delete({ id: decoded.id });
+                // 2. Delete commits
+                await tx.query(
+                    `DELETE FROM commits WHERE object_id = $1`,
+                    [decoded.id]
+                );
 
-            // 3. Optionally: Delete tenant if user was the only principal
-            // (keeping tenant for now as it might be shared)
+                // 3. Delete branches
+                await tx.query(
+                    `DELETE FROM branches WHERE object_id = $1`,
+                    [decoded.id]
+                );
+
+                // 4. Delete the object
+                await tx.query(
+                    `DELETE FROM objects WHERE object_id = $1`,
+                    [decoded.id]
+                );
+
+                // 5. Delete the principal (user)
+                await tx.query(
+                    `DELETE FROM principals WHERE principal_id = $1`,
+                    [decoded.id]
+                );
+
+                // 6. Delete the tenant (if this user was the owner)
+                await tx.query(
+                    `DELETE FROM tenants WHERE tenant_id = $1`,
+                    [user.tenant_id]
+                );
+            });
 
             // Clear the authentication cookie
-            reply.clearCookie('access_token', { path: '/' });
+            reply.clearCookie('access_token', {
+                path: '/',
+                httpOnly: true,
+                secure: isProduction,
+                sameSite: 'strict'
+            });
 
-            console.log(`🗑️ Account deleted: user ${decoded.id} (${userPrincipal.name})`);
+            console.log(`🗑️ Account deleted: user ${decoded.id}`);
 
             return {
                 success: true,
@@ -866,7 +903,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
         } catch (error) {
             request.log.error({ err: error }, 'Account deletion failed');
-            return reply.code(500).send({ success: false, error: 'Account deletion failed' });
+            return reply.code(500).send({ success: false, error: 'Account deletion failed: ' + error.message });
         }
     });
 

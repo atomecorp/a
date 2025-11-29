@@ -195,18 +195,18 @@ async function apiLogin(phone, password) {
         body: JSON.stringify({ phone, password }),
         credentials: 'include'
     });
-    
+
     const data = await response.json().catch(() => ({}));
-    
+
     // Don't throw on 401 - it's expected for wrong credentials
     if (response.status === 401) {
         return { success: false, error: data.error || 'Invalid credentials' };
     }
-    
+
     if (!response.ok) {
         return { success: false, error: data.error || `HTTP ${response.status}` };
     }
-    
+
     return data;
 }
 
