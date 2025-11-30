@@ -188,12 +188,22 @@ const accountStore = {
 async function apiRequest(endpoint, options = {}) {
     const url = apiBase ? `${apiBase}${endpoint}` : endpoint;
 
+    const headers = { 'Content-Type': 'application/json', ...options.headers };
+    
+    // Add Authorization header for local auth
+    if (useLocalAuth) {
+        const token = localStorage.getItem('local_auth_token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+    }
+
     const defaultOptions = {
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         credentials: 'include' // Important for cookies
     };
 
-    const response = await fetch(url, { ...defaultOptions, ...options });
+    const response = await fetch(url, { ...defaultOptions, ...options, headers });
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {

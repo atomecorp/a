@@ -369,7 +369,7 @@ async fn login_handler(
         Some(u) => u,
         None => {
             return (
-                StatusCode::UNAUTHORIZED,
+                StatusCode::OK,
                 Json(AuthResponse {
                     success: false,
                     error: Some("Invalid phone or password".into()),
@@ -384,7 +384,7 @@ async fn login_handler(
     // Verify password
     if !verify(&req.password, &user.password_hash).unwrap_or(false) {
         return (
-            StatusCode::UNAUTHORIZED,
+            StatusCode::OK,
             Json(AuthResponse {
                 success: false,
                 error: Some("Invalid phone or password".into()),
@@ -573,7 +573,7 @@ async fn delete_handler(
                 val[7..].to_string()
             } else {
                 return (
-                    StatusCode::UNAUTHORIZED,
+                    StatusCode::OK,
                     Json(AuthResponse {
                         success: false,
                         error: Some("Not authenticated".into()),
@@ -586,7 +586,7 @@ async fn delete_handler(
         }
         None => {
             return (
-                StatusCode::UNAUTHORIZED,
+                StatusCode::OK,
                 Json(AuthResponse {
                     success: false,
                     error: Some("Not authenticated".into()),
@@ -602,7 +602,7 @@ async fn delete_handler(
         Ok(c) => c,
         Err(_) => {
             return (
-                StatusCode::UNAUTHORIZED,
+                StatusCode::OK,
                 Json(AuthResponse {
                     success: false,
                     error: Some("Invalid session".into()),
@@ -641,7 +641,7 @@ async fn delete_handler(
         Some(u) => u,
         None => {
             return (
-                StatusCode::NOT_FOUND,
+                StatusCode::OK,
                 Json(AuthResponse {
                     success: false,
                     error: Some("User not found".into()),
@@ -656,7 +656,7 @@ async fn delete_handler(
     // Verify password
     if !verify(&req.password, &user.password_hash).unwrap_or(false) {
         return (
-            StatusCode::UNAUTHORIZED,
+            StatusCode::OK,
             Json(AuthResponse {
                 success: false,
                 error: Some("Incorrect password".into()),
@@ -763,7 +763,7 @@ async fn update_cloud_id_handler(
                 val[7..].to_string()
             } else {
                 return (
-                    StatusCode::UNAUTHORIZED,
+                    StatusCode::OK,
                     Json(AuthResponse {
                         success: false,
                         error: Some("Not authenticated".into()),
@@ -776,7 +776,7 @@ async fn update_cloud_id_handler(
         }
         None => {
             return (
-                StatusCode::UNAUTHORIZED,
+                StatusCode::OK,
                 Json(AuthResponse {
                     success: false,
                     error: Some("Not authenticated".into()),
@@ -792,7 +792,7 @@ async fn update_cloud_id_handler(
         Ok(c) => c,
         Err(_) => {
             return (
-                StatusCode::UNAUTHORIZED,
+                StatusCode::OK,
                 Json(AuthResponse {
                     success: false,
                     error: Some("Invalid session".into()),
