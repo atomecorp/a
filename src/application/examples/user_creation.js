@@ -261,7 +261,7 @@ async function apiLogin(phone, password) {
 
 async function apiLogout() {
     const url = apiBase ? `${apiBase}${authPrefix}/logout` : `${authPrefix}/logout`;
-    
+
     // Build headers - include Authorization for local auth
     const headers = { 'Content-Type': 'application/json' };
     if (useLocalAuth) {
@@ -272,7 +272,7 @@ async function apiLogout() {
         // Clear local token
         localStorage.removeItem('local_auth_token');
     }
-    
+
     const response = await fetch(url, {
         method: 'POST',
         headers,
@@ -285,7 +285,7 @@ async function apiLogout() {
 async function apiGetMe() {
     try {
         const url = apiBase ? `${apiBase}${authPrefix}/me` : `${authPrefix}/me`;
-        
+
         // Build headers - include Authorization for local auth
         const headers = {};
         if (useLocalAuth) {
@@ -294,7 +294,7 @@ async function apiGetMe() {
                 headers['Authorization'] = `Bearer ${token}`;
             }
         }
-        
+
         const response = await fetch(url, {
             method: 'GET',
             headers,
