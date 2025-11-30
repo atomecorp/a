@@ -15,7 +15,11 @@ use std::{
     sync::Arc,
 };
 use tokio::fs;
-use tower_http::{cors::{Any, CorsLayer}, limit::RequestBodyLimitLayer, services::ServeDir};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    limit::RequestBodyLimitLayer,
+    services::ServeDir,
+};
 
 // Local authentication module
 pub mod local_auth;
@@ -303,7 +307,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
             "http://localhost:3000".parse::<HeaderValue>().unwrap(),
             "tauri://localhost".parse::<HeaderValue>().unwrap(),
         ])
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT])
         .allow_credentials(true);
 

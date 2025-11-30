@@ -56,12 +56,12 @@ function resolveApiConfig() {
 
     // Auto-detect Tauri platform
     let isTauri = false;
-    
+
     // Method 1: Check window.__TAURI__ (Tauri v1 and v2)
     if (typeof window !== 'undefined' && window.__TAURI__) {
         isTauri = true;
     }
-    
+
     // Method 2: Check current_platform() function
     if (!isTauri) {
         try {
@@ -71,9 +71,9 @@ function resolveApiConfig() {
             }
         } catch (_) { }
     }
-    
+
     console.log('[auth] Platform detection: isTauri =', isTauri);
-    
+
     if (isTauri) {
         // Tauri/iOS: use local Axum server with SQLite on port 3000
         return { base: 'http://127.0.0.1:3000', isLocal: true };
@@ -246,14 +246,36 @@ async function apiLogin(phone, password) {
         return { success: false, error: data.error || `HTTP ${response.status}` };
     }
 
+    // Store JWT token for local auth (Axum returns token in body, not cookie)
+    if (useLocalAuth && data.token) {
+        try {
+            localStorage.setItem('local_auth_token', data.token);
+            console.log('[auth] Local token stored');
+        } catch (e) {
+            console.warn('[auth] Could not store token:', e);
+        }
+    }
+
     return data;
 }
 
 async function apiLogout() {
     const url = apiBase ? `${apiBase}${authPrefix}/logout` : `${authPrefix}/logout`;
+    
+    // Build headers - include Authorization for local auth
+    const headers = { 'Content-Type': 'application/json' };
+    if (useLocalAuth) {
+        const token = localStorage.getItem('local_auth_token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        // Clear local token
+        localStorage.removeItem('local_auth_token');
+    }
+    
     const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: '{}',
         credentials: 'include'
     });
@@ -263,8 +285,19 @@ async function apiLogout() {
 async function apiGetMe() {
     try {
         const url = apiBase ? `${apiBase}${authPrefix}/me` : `${authPrefix}/me`;
+        
+        // Build headers - include Authorization for local auth
+        const headers = {};
+        if (useLocalAuth) {
+            const token = localStorage.getItem('local_auth_token');
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+        }
+        
         const response = await fetch(url, {
             method: 'GET',
+            headers,
             credentials: 'include'
         });
 
@@ -1315,10 +1348,12 @@ async function handleLogin() {
         puts('[auth] Logging in...');
 
         const result = await apiLogin(phone, password);
+        console.log('[auth] Login result:', result);
 
         if (result.success) {
             accountStore.isLoggedIn = true;
             accountStore.currentUser = result.user;
+            console.log('[auth] accountStore updated:', accountStore.isLoggedIn, accountStore.currentUser);
             accountStore.formData.password = ''; // Clear password from memory
             puts(`[auth] Login successful: ${result.user.username}`);
             renderAccountPanel(AccountState.PROFILE);
@@ -1853,7 +1888,7 @@ async function handleCloudSync() {
     }
 
     accountStore.loading = true;
-    clearError();
+    showError(null);
 
     // Show loading state
     $('div', {
@@ -1873,6 +1908,9 @@ async function handleCloudSync() {
         // Get local token from storage
         const localToken = localStorage.getItem('local_auth_token');
         const user = accountStore.currentUser;
+
+        console.log('[sync] accountStore.currentUser:', user);
+        console.log('[sync] accountStore.isLoggedIn:', accountStore.isLoggedIn);
 
         if (!user) {
             throw new Error('No user logged in');
