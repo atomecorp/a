@@ -40,32 +40,55 @@ const rootId = 'userAccountExampleRoot';
 /**
  * Resolves the API base URL based on platform and environment.
  * Supports local development, Tauri apps, and remote servers.
+ * @returns {{ base: string, isLocal: boolean }}
  */
-function resolveApiBase() {
+function resolveApiConfig() {
     // Check if a custom API URL is configured (for remote server)
     if (typeof window !== 'undefined' && window.SQUIRREL_API_BASE) {
-        return window.SQUIRREL_API_BASE;
+        return { base: window.SQUIRREL_API_BASE, isLocal: false };
     }
 
     // Check localStorage for user-configured remote server
     try {
         const stored = localStorage.getItem('squirrel_api_base');
-        if (stored) return stored;
+        if (stored) return { base: stored, isLocal: false };
     } catch (e) { /* localStorage not available */ }
 
-    // Auto-detect platform
-    try {
-        const platform = typeof current_platform === 'function' ? current_platform() : '';
-        if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
-            return 'http://127.0.0.1:3001';
-        }
-    } catch (_) { }
+    // Auto-detect Tauri platform
+    let isTauri = false;
+    
+    // Method 1: Check window.__TAURI__ (Tauri v1 and v2)
+    if (typeof window !== 'undefined' && window.__TAURI__) {
+        isTauri = true;
+    }
+    
+    // Method 2: Check current_platform() function
+    if (!isTauri) {
+        try {
+            const platform = typeof current_platform === 'function' ? current_platform() : '';
+            if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) {
+                isTauri = true;
+            }
+        } catch (_) { }
+    }
+    
+    console.log('[auth] Platform detection: isTauri =', isTauri);
+    
+    if (isTauri) {
+        // Tauri/iOS: use local Axum server with SQLite on port 3000
+        return { base: 'http://127.0.0.1:3000', isLocal: true };
+    }
 
-    // Default: same origin (relative URLs)
-    return '';
+    // Default: same origin (relative URLs) - assumes Fastify cloud server
+    return { base: '', isLocal: false };
 }
 
-let apiBase = resolveApiBase();
+const apiConfig = resolveApiConfig();
+let apiBase = apiConfig.base;
+const useLocalAuth = apiConfig.isLocal; // true = Axum/SQLite, false = Fastify/PostgreSQL
+
+// Auth route prefix: local Axum uses /api/auth/local/*, cloud Fastify uses /api/auth/*
+const authPrefix = useLocalAuth ? '/api/auth/local' : '/api/auth';
 
 // Server verification state
 let serverVerificationStatus = {
@@ -181,7 +204,7 @@ async function apiRequest(endpoint, options = {}) {
 }
 
 async function apiRegister(username, phone, password, optional = {}) {
-    const url = apiBase ? `${apiBase}/api/auth/register` : '/api/auth/register';
+    const url = apiBase ? `${apiBase}${authPrefix}/register` : `${authPrefix}/register`;
     const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,7 +227,7 @@ async function apiRegister(username, phone, password, optional = {}) {
 }
 
 async function apiLogin(phone, password) {
-    const url = apiBase ? `${apiBase}/api/auth/login` : '/api/auth/login';
+    const url = apiBase ? `${apiBase}${authPrefix}/login` : `${authPrefix}/login`;
     const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,7 +250,7 @@ async function apiLogin(phone, password) {
 }
 
 async function apiLogout() {
-    const url = apiBase ? `${apiBase}/api/auth/logout` : '/api/auth/logout';
+    const url = apiBase ? `${apiBase}${authPrefix}/logout` : `${authPrefix}/logout`;
     const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,7 +262,7 @@ async function apiLogout() {
 
 async function apiGetMe() {
     try {
-        const url = apiBase ? `${apiBase}/api/auth/me` : '/api/auth/me';
+        const url = apiBase ? `${apiBase}${authPrefix}/me` : `${authPrefix}/me`;
         const response = await fetch(url, {
             method: 'GET',
             credentials: 'include'
@@ -261,21 +284,21 @@ async function apiGetMe() {
 }
 
 async function apiUpdateProfile(userData) {
-    return apiRequest('/api/auth/update', {
+    return apiRequest(`${authPrefix}/update`, {
         method: 'PUT',
         body: JSON.stringify(userData)
     });
 }
 
 async function apiRequestOtp(phone) {
-    return apiRequest('/api/auth/request-otp', {
+    return apiRequest(`${authPrefix}/request-otp`, {
         method: 'POST',
         body: JSON.stringify({ phone })
     });
 }
 
 async function apiResetPassword(phone, code, newPassword) {
-    return apiRequest('/api/auth/reset-password', {
+    return apiRequest(`${authPrefix}/reset-password`, {
         method: 'POST',
         body: JSON.stringify({ phone, code, newPassword })
     });
@@ -1465,7 +1488,7 @@ async function handleChangePassword() {
         showError(null);
         puts('[auth] Changing password...');
 
-        const result = await apiRequest('/api/auth/change-password', {
+        const result = await apiRequest(`${authPrefix}/change-password`, {
             method: 'POST',
             body: JSON.stringify({
                 currentPassword,
@@ -1503,7 +1526,7 @@ async function handleRequestPhoneChange() {
         showError(null);
         puts('[auth] Requesting phone change OTP...');
 
-        const result = await apiRequest('/api/auth/request-phone-change', {
+        const result = await apiRequest(`${authPrefix}/request-phone-change`, {
             method: 'POST',
             body: JSON.stringify({ newPhone })
         });
@@ -1576,7 +1599,7 @@ async function handleVerifyPhoneChange() {
         showError(null);
         puts('[auth] Verifying phone change...');
 
-        const result = await apiRequest('/api/auth/verify-phone-change', {
+        const result = await apiRequest(`${authPrefix}/verify-phone-change`, {
             method: 'POST',
             body: JSON.stringify({ newPhone, code })
         });
@@ -2252,7 +2275,9 @@ async function handleDeleteAccount() {
         showError(null);
         puts('[auth] Deleting account...');
 
-        const result = await apiRequest('/api/auth/delete-account', {
+        // Local auth uses /delete, cloud uses /delete-account
+        const deleteEndpoint = useLocalAuth ? `${authPrefix}/delete` : `${authPrefix}/delete-account`;
+        const result = await apiRequest(deleteEndpoint, {
             method: 'DELETE',
             body: JSON.stringify({ password })
         });

@@ -1,7 +1,7 @@
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path as AxumPath, State},
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     response::IntoResponse,
     routing::{get, get_service},
     Json, Router,
@@ -15,7 +15,7 @@ use std::{
     sync::Arc,
 };
 use tokio::fs;
-use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
+use tower_http::{cors::{Any, CorsLayer}, limit::RequestBodyLimitLayer, services::ServeDir};
 
 // Local authentication module
 pub mod local_auth;
@@ -293,10 +293,25 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         version: Arc::new(version.clone()),
     };
 
-    // Create local auth router (independent state)
+    // CORS configuration that allows credentials (required for cookie-based auth)
+    // Must specify exact origins when credentials are used (not wildcard *)
+    let cors = CorsLayer::new()
+        .allow_origin([
+            "http://127.0.0.1:1430".parse::<HeaderValue>().unwrap(),
+            "http://localhost:1430".parse::<HeaderValue>().unwrap(),
+            "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
+            "http://localhost:3000".parse::<HeaderValue>().unwrap(),
+            "tauri://localhost".parse::<HeaderValue>().unwrap(),
+        ])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT])
+        .allow_credentials(true);
+
+    // Create local auth router (independent state) with CORS layer
     let local_auth_router = local_auth::create_local_auth_router(
         uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf(),
-    );
+    )
+    .layer(cors.clone());
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
@@ -308,11 +323,11 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
         .with_state(state)
-        // Merge local auth routes AFTER with_state (uses its own state)
+        // Merge local auth routes AFTER with_state (uses its own state with CORS)
         .merge(local_auth_router);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
