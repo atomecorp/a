@@ -381,25 +381,32 @@ async function checkUpdates() {
 async function startUpdate() {
     if (updateState.updating) return;
 
+    console.log('[Update] Starting update...');
     updateState.updating = true;
     showProgressPanel();
 
     // Configure callbacks
     AtomeUpdater.setCallbacks({
         onProgress: ({ step, progress, message }) => {
+            console.log('[Update] Progress:', step, progress, message);
             updateProgress(progress, message);
         },
         onComplete: (result) => {
+            console.log('[Update] Complete:', result);
             showUpdateResult(true, result);
         },
         onError: (error) => {
+            console.log('[Update] Error:', error);
             showUpdateResult(false, { error: error.message });
         }
     });
 
     try {
-        await AtomeUpdater.applyUpdate();
+        console.log('[Update] Calling AtomeUpdater.applyUpdate()...');
+        const result = await AtomeUpdater.applyUpdate();
+        console.log('[Update] applyUpdate returned:', result);
     } catch (error) {
+        console.error('[Update] applyUpdate threw:', error);
         showUpdateResult(false, { error: error.message });
     } finally {
         updateState.updating = false;

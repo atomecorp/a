@@ -23,6 +23,7 @@ pub mod local_auth;
 #[derive(Clone)]
 struct AppState {
     uploads_dir: Arc<PathBuf>,
+    static_dir: Arc<PathBuf>,
     version: Arc<String>,
 }
 
@@ -259,7 +260,8 @@ async fn update_file_handler(
     Json(payload): Json<WriteUpdateFileRequest>,
 ) -> impl IntoResponse {
     // Security: Only allow writes within src/ directory
-    let base_path = state.uploads_dir.parent().unwrap_or(&state.uploads_dir);
+    // static_dir points to 'src', so parent is project root
+    let base_path = state.static_dir.parent().unwrap_or(&state.static_dir);
     let target_path = base_path.join(&payload.path);
 
     // Validate path is within allowed directories
@@ -360,7 +362,11 @@ async fn batch_update_handler(
     State(state): State<AppState>,
     Json(payload): Json<BatchUpdateRequest>,
 ) -> impl IntoResponse {
-    let base_path = state.uploads_dir.parent().unwrap_or(&state.uploads_dir);
+    // static_dir points to 'src', so parent is project root
+    let base_path = state.static_dir.parent().unwrap_or(&state.static_dir);
+
+    println!("📥 Batch update: {} files to download", payload.files.len());
+    println!("📂 Base path: {:?}", base_path);
 
     let allowed_prefixes = [
         "src/squirrel",
@@ -527,6 +533,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
 
     let state = AppState {
         uploads_dir: Arc::new(uploads_dir.clone()),
+        static_dir: Arc::new(base_dir.clone()),
         version: Arc::new(version.clone()),
     };
 

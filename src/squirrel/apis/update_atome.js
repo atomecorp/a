@@ -369,34 +369,46 @@ const AtomeUpdater = (function () {
         const baseUrl = 'http://127.0.0.1:3000';
         const { rawBaseUrl } = CONFIG.github;
 
+        log('applyUpdateTauri: Preparing batch update request...');
+        log('Files to update:', files.length);
+        log('Raw base URL:', rawBaseUrl);
+
         notifyProgress('download', 0, 'Sending update request to server...');
+
+        const requestBody = {
+            files: files.map(f => ({
+                path: f.path,
+                url: `${rawBaseUrl}/${f.path}`
+            })),
+            version: {
+                path: CONFIG.versionFile,
+                content: JSON.stringify({
+                    version: latestVersion.version,
+                    updatedAt: new Date().toISOString()
+                }, null, 2)
+            }
+        };
+
+        log('Request body:', JSON.stringify(requestBody, null, 2));
 
         // Send all files to Axum server for download and installation
         // Axum will download from GitHub (no CORS) and write files
         const response = await fetch(`${baseUrl}/api/admin/batch-update`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                files: files.map(f => ({
-                    path: f.path,
-                    url: `${rawBaseUrl}/${f.path}`
-                })),
-                version: {
-                    path: CONFIG.versionFile,
-                    content: JSON.stringify({
-                        version: latestVersion.version,
-                        updatedAt: new Date().toISOString()
-                    }, null, 2)
-                }
-            })
+            body: JSON.stringify(requestBody)
         });
+
+        log('Response status:', response.status);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            log('Error response:', errorData);
             throw new Error(errorData.error || `Server error: ${response.status}`);
         }
 
         const result = await response.json();
+        log('Success response:', result);
 
         notifyProgress('complete', 100, 'Update complete!');
 
