@@ -530,10 +530,10 @@ async fn sync_from_zip_handler(
     // static_dir is something like: .../src-tauri/target/debug/_up_/src
     // We need to go up to find the real project root
     let static_dir = state.static_dir.as_ref();
-    
+
     // Try to find project root by looking for Cargo.toml or package.json
     let mut base_path = static_dir.to_path_buf();
-    
+
     // Go up until we find the project root (where src-tauri exists)
     for _ in 0..10 {
         if base_path.join("src-tauri").exists() || base_path.join("package.json").exists() {
@@ -545,12 +545,15 @@ async fn sync_from_zip_handler(
             break;
         }
     }
-    
+
     // Canonicalize for absolute path
     base_path = base_path.canonicalize().unwrap_or(base_path);
-    
+
     println!("📂 Project root: {:?}", base_path);
-    println!("📂 Will write to: {:?}", base_path.join(&payload.extract_path));
+    println!(
+        "📂 Will write to: {:?}",
+        base_path.join(&payload.extract_path)
+    );
 
     // Download ZIP from GitHub
     let client = reqwest::Client::new();
