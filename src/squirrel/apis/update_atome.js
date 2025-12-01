@@ -120,41 +120,39 @@ const AtomeUpdater = (function () {
         }
     }
 
+    // Cache for remote version data (includes files list)
+    let _remoteVersionData = null;
+
     /**
-     * Get latest version from GitHub
-     * Uses GitHub API to bypass CDN cache (rate limit: 60/hour)
+     * Get latest version.json from GitHub (raw URL - no rate limit)
+     * Returns the full version.json including the files list
      */
     async function getLatestVersion() {
-        const { owner, repo, branch } = CONFIG.github;
+        const { rawBaseUrl } = CONFIG.github;
+        log('Fetching latest version from GitHub (raw URL)...');
 
         try {
-            // Use GitHub API to get file content - NO CACHE!
-            // Timestamp in URL bypasses any caching
-            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/src/version.json?ref=${branch}&_=${Date.now()}`;
-            const response = await fetch(apiUrl, {
-                headers: {
-                    'Accept': 'application/vnd.github.v3+json'
-                }
-            });
+            // Use raw URL with cache-busting timestamp
+            const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
+            log(`Fetching: ${versionUrl}`);
+
+            const response = await fetch(versionUrl);
 
             if (!response.ok) {
-                if (response.status === 403) {
-                    throw new Error('GitHub API rate limit - try again later');
-                }
-                throw new Error(`GitHub API error: ${response.status}`);
+                throw new Error(`Failed to fetch version.json: ${response.status}`);
             }
 
-            const fileData = await response.json();
+            const data = await response.json();
+            log(`Remote version: ${data.version}, files: ${(data.files || []).length}`);
 
-            // Content is base64 encoded
-            const content = atob(fileData.content);
-            const data = JSON.parse(content);
-
-            log(`Remote version from GitHub API: ${data.version}`);
+            // Cache the full data including files list
+            _remoteVersionData = data;
 
             return {
                 version: data.version || '0.0.0',
-                updatedAt: data.updatedAt || new Date().toISOString()
+                updatedAt: data.updatedAt || new Date().toISOString(),
+                files: data.files || [],
+                protectedPaths: data.protectedPaths || []
             };
 
         } catch (error) {
@@ -228,205 +226,65 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Fetch all files in a folder recursively via GitHub API
-     */
-    async function fetchFolderContentsRecursive(folderPath, protectedPaths = []) {
-        const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
-        const files = [];
-
-        try {
-            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${folderPath}?ref=${branch}`;
-            log(`Scanning folder: ${folderPath}`);
-
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/vnd.github.v3+json',
-                    'User-Agent': 'AtomeUpdater/1.0'
-                }
-            });
-
-            if (!response.ok) {
-                log(`Failed to fetch folder: ${folderPath} (${response.status})`);
-                return files;
-            }
-
-            const contents = await response.json();
-
-            for (const item of contents) {
-                // Check if path is protected
-                const isProtected = protectedPaths.some(p => item.path.startsWith(p));
-                if (isProtected) {
-                    log(`Skipping protected: ${item.path}`);
-                    continue;
-                }
-
-                if (item.type === 'file') {
-                    files.push({
-                        path: item.path,
-                        downloadUrl: `${rawBaseUrl}/${item.path}`,
-                        sha: item.sha,
-                        size: item.size
-                    });
-                } else if (item.type === 'dir') {
-                    // Recursively fetch subdirectories
-                    const subFiles = await fetchFolderContentsRecursive(item.path, protectedPaths);
-                    files.push(...subFiles);
-                }
-            }
-
-        } catch (error) {
-            log(`Error fetching folder ${folderPath}:`, error.message);
-        }
-
-        return files;
-    }
-
-    /**
      * Get file list to update from GitHub
-     * Supports: scanFolders (scan entire directories) and files (explicit list)
+     * SIMPLIFIED: Uses the "files" array from version.json (no API scanning)
      */
-    async function getFileList(path = null) {
-        // TEMPORARILY DISABLE CACHE FOR DEBUGGING
-        // if (!path && _fileListCache && (Date.now() - _fileListCacheTime < CONFIG.cacheDuration)) {
-        //     log('Using cached file list');
-        //     return _fileListCache;
-        // }
+    async function getFileList() {
+        const { rawBaseUrl } = CONFIG.github;
+        log('getFileList: Using files list from version.json');
 
-        log('getFileList called, cache disabled for debugging');
+        // Use cached remote version data if available
+        let versionData = _remoteVersionData;
 
-        const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
-        let files = [];
-
-        // Get version.json from GitHub (no rate limit for raw URLs)
-        if (!path) {
+        // If not cached, fetch it
+        if (!versionData) {
             try {
                 const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
                 log(`Fetching version.json from: ${versionUrl}`);
-                const versionResponse = await fetch(versionUrl);
-
-                if (versionResponse.ok) {
-                    const versionData = await versionResponse.json();
-                    const protectedPaths = versionData.protectedPaths || CONFIG.protectedPaths || [];
-
-                    log('version.json loaded:', JSON.stringify(versionData, null, 2));
-
-                    // 1. If scanFolders is defined, scan those folders recursively via API
-                    if (versionData.scanFolders && Array.isArray(versionData.scanFolders) && versionData.scanFolders.length > 0) {
-                        log(`Scanning ${versionData.scanFolders.length} folders...`);
-                        notifyProgress('scan', 12, `Scanning ${versionData.scanFolders.length} folders...`);
-
-                        for (const folder of versionData.scanFolders) {
-                            log(`Scanning folder: ${folder}`);
-                            const folderFiles = await fetchFolderContentsRecursive(folder, protectedPaths);
-                            log(`Found ${folderFiles.length} files in ${folder}`);
-                            files.push(...folderFiles);
-                        }
-                    }
-
-                    // 2. Add explicit files from the files array
-                    if (versionData.files && Array.isArray(versionData.files) && versionData.files.length > 0) {
-                        log(`Adding ${versionData.files.length} explicit files`);
-                        const explicitFiles = versionData.files
-                            .filter(filePath => {
-                                const p = typeof filePath === 'string' ? filePath : filePath.path;
-                                const isProtected = protectedPaths.some(prot => p.startsWith(prot));
-                                return !isProtected;
-                            })
-                            .map(filePath => {
-                                const p = typeof filePath === 'string' ? filePath : filePath.path;
-                                return {
-                                    path: p,
-                                    downloadUrl: `${rawBaseUrl}/${p}`,
-                                    sha: null,
-                                    size: 0
-                                };
-                            });
-                        files.push(...explicitFiles);
-                    }
-
-                    // Remove duplicates by path
-                    const uniquePaths = new Set();
-                    files = files.filter(f => {
-                        if (uniquePaths.has(f.path)) return false;
-                        uniquePaths.add(f.path);
-                        return true;
-                    });
-
-                    log(`Total files to update: ${files.length}`);
-
-                    if (files.length > 0) {
-                        _fileListCache = files;
-                        _fileListCacheTime = Date.now();
-                        return files;
-                    }
-                }
-            } catch (e) {
-                log('Error loading version.json:', e.message);
-            }
-        }
-
-        // Fallback: use GitHub API with CONFIG.updatePaths (rate limited)
-        log('Using fallback: CONFIG.updatePaths');
-        const pathsToScan = path ? [path] : CONFIG.updatePaths;
-
-        for (const scanPath of pathsToScan) {
-            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${scanPath}?ref=${branch}`;
-
-            try {
-                const response = await fetch(url, {
-                    headers: {
-                        'Accept': 'application/vnd.github.v3+json',
-                        'User-Agent': 'AtomeUpdater/1.0'
-                    }
-                });
+                const response = await fetch(versionUrl);
 
                 if (!response.ok) {
-                    if (response.status === 403) {
-                        log(`Rate limit hit for ${scanPath}, using raw URLs`);
-                        // Fallback: cannot list files without API, skip this path
-                        continue;
-                    }
-                    log(`Failed to list ${scanPath}: ${response.status}`);
-                    continue;
+                    throw new Error(`Failed to fetch version.json: ${response.status}`);
                 }
 
-                const items = await response.json();
-
-                for (const item of items) {
-                    // Check if path is protected
-                    const relativePath = item.path;
-                    const isProtected = CONFIG.protectedPaths.some(p => relativePath.startsWith(p));
-
-                    if (isProtected) {
-                        log(`Skipping protected path: ${relativePath}`);
-                        continue;
-                    }
-
-                    if (item.type === 'file') {
-                        // Use raw.githubusercontent.com URL instead of API download_url
-                        files.push({
-                            path: item.path,
-                            downloadUrl: `${rawBaseUrl}/${item.path}`,
-                            sha: item.sha,
-                            size: item.size
-                        });
-                    } else if (item.type === 'dir') {
-                        // Recursion for subdirectories
-                        const subFiles = await getFileList(item.path);
-                        files = files.concat(subFiles);
-                    }
-                }
-            } catch (error) {
-                log(`Error scanning ${scanPath}:`, error.message);
+                versionData = await response.json();
+                _remoteVersionData = versionData;
+            } catch (e) {
+                log('Error loading version.json:', e.message);
+                return [];
             }
         }
 
-        // Cache the result (only for full list)
-        if (!path) {
-            _fileListCache = files;
-            _fileListCacheTime = Date.now();
+        const protectedPaths = versionData.protectedPaths || CONFIG.protectedPaths || [];
+        log('version.json loaded, version:', versionData.version);
+        log('Files in version.json:', (versionData.files || []).length);
+
+        // Use the "files" array from version.json
+        if (!versionData.files || !Array.isArray(versionData.files) || versionData.files.length === 0) {
+            log('WARNING: No files in version.json. Add files to src/version.json on GitHub.');
+            return [];
         }
 
+        const files = versionData.files
+            .filter(filePath => {
+                const p = typeof filePath === 'string' ? filePath : filePath.path;
+                const isProtected = protectedPaths.some(prot => p.startsWith(prot));
+                if (isProtected) {
+                    log(`Skipping protected: ${p}`);
+                }
+                return !isProtected;
+            })
+            .map(filePath => {
+                const p = typeof filePath === 'string' ? filePath : filePath.path;
+                return {
+                    path: p,
+                    downloadUrl: `${rawBaseUrl}/${p}`,
+                    sha: null,
+                    size: 0
+                };
+            });
+
+        log(`Total files to update: ${files.length}`);
         return files;
     }
 
