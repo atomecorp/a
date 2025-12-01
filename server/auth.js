@@ -1302,52 +1302,61 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     : name;
 
                 // Only process files in extractPath (src/)
-                if (!relativePath.startsWith(extractPath)) continue;
+                if (!relativePath.startsWith(extractPath)) {
+                    continue;
+                }
 
                 // Check if protected
                 const isProtected = protectedPaths.some(p => relativePath.startsWith(p));
-                if (isProtected) continue;
+                if (isProtected) {
+                    console.log('🛡️ Skipping protected:', relativePath);
+                    continue;
+                }
 
                 // Write file
                 const targetPath = path.join(process.cwd(), relativePath);
                 const targetDir = path.dirname(targetPath);
+
+                console.log('📝 Writing:', relativePath, '→', targetPath);
 
                 try {
                     await fs.mkdir(targetDir, { recursive: true });
                     await fs.writeFile(targetPath, entry.getData());
                     updatedFiles.push(relativePath);
                 } catch (e) {
+                    console.log('❌ Error writing:', relativePath, e.message);
                     errors.push({ path: relativePath, error: e.message });
                 }
             }
+        }
 
             console.log('✅ Updated', updatedFiles.length, 'files');
-            if (errors.length > 0) {
-                console.log('⚠️', errors.length, 'errors');
-            }
-
-            return {
-                success: errors.length === 0,
-                filesUpdated: updatedFiles.length,
-                updated: updatedFiles,
-                errors: errors.length > 0 ? errors : null
-            };
-
-        } catch (error) {
-            console.error('❌ Sync from ZIP failed:', error.message);
-            return reply.code(500).send({ success: false, error: error.message });
+        if (errors.length > 0) {
+            console.log('⚠️', errors.length, 'errors');
         }
-    });
 
-    console.log('🔐 Authentication routes registered');
-    console.log('🔧 Admin update route registered: /api/admin/apply-update');
-    console.log('🔧 Admin batch-update route registered: /api/admin/batch-update');
-    console.log('🔧 Admin sync-from-zip route registered: /api/admin/sync-from-zip');
-    if (serverIdentityConfigured()) {
-        console.log('🔑 Server identity verification enabled');
-    } else {
-        console.log('⚠️  Server identity not configured (run npm run generate-keys)');
+        return {
+            success: errors.length === 0,
+            filesUpdated: updatedFiles.length,
+            updated: updatedFiles,
+            errors: errors.length > 0 ? errors : null
+        };
+
+    } catch (error) {
+        console.error('❌ Sync from ZIP failed:', error.message);
+        return reply.code(500).send({ success: false, error: error.message });
     }
+});
+
+console.log('🔐 Authentication routes registered');
+console.log('🔧 Admin update route registered: /api/admin/apply-update');
+console.log('🔧 Admin batch-update route registered: /api/admin/batch-update');
+console.log('🔧 Admin sync-from-zip route registered: /api/admin/sync-from-zip');
+if (serverIdentityConfigured()) {
+    console.log('🔑 Server identity verification enabled');
+} else {
+    console.log('⚠️  Server identity not configured (run npm run generate-keys)');
+}
 }
 
 export default { registerAuthRoutes, hashPassword, verifyPassword, generateOTP, sendSMS };

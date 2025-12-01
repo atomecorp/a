@@ -18,21 +18,8 @@ const AtomeUpdater = (function () {
             branch: 'main',
             srcPath: 'src',
             // Use refs/heads/main to bypass CDN cache!
-            rawBaseUrl: 'https://raw.githubusercontent.com/atomecorp/a/refs/heads/main',
-            // API still needed for file listing (but cached)
-            apiBaseUrl: 'https://api.github.com/repos/atomecorp/a'
+            rawBaseUrl: 'https://raw.githubusercontent.com/atomecorp/a/refs/heads/main'
         },
-        // Directories to update
-        updatePaths: [
-            'src/squirrel',
-            'src/application/core',
-            'src/application/security'
-        ],
-        // Protected files/directories (do not overwrite)
-        protectedPaths: [
-            'src/application/examples',
-            'src/application/config'
-        ],
         // Current version file path (relative to project root)
         versionFile: 'src/version.json',
         // Cache duration for file list (5 minutes)
@@ -265,6 +252,11 @@ const AtomeUpdater = (function () {
         log('applyUpdateTauri: Using ZIP download method');
         log('ZIP URL:', zipUrl);
 
+        // Get protectedPaths from GitHub version.json
+        const versionData = _remoteVersionData || await getLatestVersion();
+        const protectedPaths = versionData.protectedPaths || [];
+        log('Protected paths from GitHub:', protectedPaths);
+
         notifyProgress('download', 10, 'Downloading repository ZIP...');
 
         // Ask Axum to download ZIP, extract src/, and clean up
@@ -274,7 +266,7 @@ const AtomeUpdater = (function () {
             body: JSON.stringify({
                 zipUrl: zipUrl,
                 extractPath: 'src',
-                protectedPaths: CONFIG.protectedPaths
+                protectedPaths: protectedPaths
             })
         });
 
@@ -307,6 +299,11 @@ const AtomeUpdater = (function () {
         const { owner, repo, branch } = CONFIG.github;
         const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
 
+        // Get protectedPaths from GitHub version.json
+        const versionData = _remoteVersionData || await getLatestVersion();
+        const protectedPaths = versionData.protectedPaths || [];
+        log('Protected paths from GitHub:', protectedPaths);
+
         // Ask Fastify to download ZIP, extract src/, and clean up
         const response = await fetch('/api/admin/sync-from-zip', {
             method: 'POST',
@@ -315,7 +312,7 @@ const AtomeUpdater = (function () {
             body: JSON.stringify({
                 zipUrl: zipUrl,
                 extractPath: 'src',
-                protectedPaths: CONFIG.protectedPaths
+                protectedPaths: protectedPaths
             })
         });
 
@@ -439,8 +436,7 @@ const AtomeUpdater = (function () {
             platform: getPlatform(),
             config: {
                 source: `https://github.com/${CONFIG.github.owner}/${CONFIG.github.repo}`,
-                branch: CONFIG.github.branch,
-                updatePaths: CONFIG.updatePaths
+                branch: CONFIG.github.branch
             }
         };
     }

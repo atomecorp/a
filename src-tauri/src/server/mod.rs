@@ -661,6 +661,7 @@ async fn sync_from_zip_handler(
             .iter()
             .any(|p| relative_path.starts_with(p));
         if is_protected {
+            println!("🛡️ Skipping protected: {}", relative_path);
             continue;
         }
 
@@ -676,6 +677,7 @@ async fn sync_from_zip_handler(
 
         // Write file to disk
         let target_path = base_path.join(relative_path);
+        println!("📝 Writing: {} → {:?}", relative_path, target_path);
 
         // Create parent directories
         if let Some(parent) = target_path.parent() {
