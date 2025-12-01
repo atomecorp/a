@@ -356,6 +356,7 @@ const AtomeUpdater = (function () {
 
     /**
      * Apply update on Tauri (via HTTP Axum route)
+     * Downloads are done by Axum server to avoid CORS issues
      */
     async function applyUpdateTauri(files, latestVersion) {
         const platform = getPlatform();
@@ -364,74 +365,45 @@ const AtomeUpdater = (function () {
             throw new Error('Tauri platform not detected');
         }
 
-        // Use local HTTP route (port 3000) to write files
+        // Use local HTTP route (port 3000)
         const baseUrl = 'http://127.0.0.1:3000';
+        const { rawBaseUrl } = CONFIG.github;
 
-        notifyProgress('download', 0, 'Preparing download...');
+        notifyProgress('download', 0, 'Sending update request to server...');
 
-        const totalFiles = files.length;
-        let processedFiles = 0;
-        let errors = [];
-
-        for (const file of files) {
-            try {
-                notifyProgress('download', Math.round((processedFiles / totalFiles) * 50),
-                    `Downloading: ${file.path}`);
-
-                const content = await downloadFile(file.downloadUrl);
-
-                notifyProgress('install', 50 + Math.round((processedFiles / totalFiles) * 45),
-                    `Installing: ${file.path}`);
-
-                // Write file via HTTP Axum route
-                const response = await fetch(`${baseUrl}/api/admin/apply-update`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        path: file.path,
-                        content: content
-                    })
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.error || `HTTP ${response.status}`);
-                }
-
-                processedFiles++;
-            } catch (error) {
-                log(`Error processing ${file.path}:`, error.message);
-                errors.push({ path: file.path, error: error.message });
-            }
-        }
-
-        // Update version file
-        notifyProgress('finalize', 95, 'Updating version file...');
-
-        const versionContent = JSON.stringify({
-            version: latestVersion.version,
-            updatedAt: new Date().toISOString()
-        }, null, 2);
-
-        const versionResponse = await fetch(`${baseUrl}/api/admin/apply-update`, {
+        // Send all files to Axum server for download and installation
+        // Axum will download from GitHub (no CORS) and write files
+        const response = await fetch(`${baseUrl}/api/admin/batch-update`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                path: CONFIG.versionFile,
-                content: versionContent
+                files: files.map(f => ({
+                    path: f.path,
+                    url: `${rawBaseUrl}/${f.path}`
+                })),
+                version: {
+                    path: CONFIG.versionFile,
+                    content: JSON.stringify({
+                        version: latestVersion.version,
+                        updatedAt: new Date().toISOString()
+                    }, null, 2)
+                }
             })
         });
 
-        if (!versionResponse.ok) {
-            log('Failed to update version file');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server error: ${response.status}`);
         }
 
+        const result = await response.json();
+        
         notifyProgress('complete', 100, 'Update complete!');
 
         return {
-            success: errors.length === 0,
-            filesUpdated: processedFiles,
-            errors: errors.length > 0 ? errors : null
+            success: result.success,
+            filesUpdated: result.filesUpdated || files.length,
+            errors: result.errors || null
         };
     }
 

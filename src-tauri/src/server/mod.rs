@@ -335,6 +335,150 @@ async fn update_file_handler(
     }
 }
 
+// === BATCH UPDATE HANDLER ===
+
+#[derive(serde::Deserialize)]
+pub struct BatchUpdateFile {
+    pub path: String,
+    pub url: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct VersionUpdate {
+    pub path: String,
+    pub content: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct BatchUpdateRequest {
+    pub files: Vec<BatchUpdateFile>,
+    pub version: VersionUpdate,
+}
+
+/// Handler for batch downloading and updating files from GitHub
+async fn batch_update_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<BatchUpdateRequest>,
+) -> impl IntoResponse {
+    let base_path = state.uploads_dir.parent().unwrap_or(&state.uploads_dir);
+    
+    let allowed_prefixes = [
+        "src/squirrel",
+        "src/application/core",
+        "src/application/security",
+    ];
+    let allowed_files = ["src/version.json"];
+    let protected_prefixes = ["src/application/examples", "src/application/config"];
+
+    let client = reqwest::Client::new();
+    let mut updated_files = Vec::new();
+    let mut errors = Vec::new();
+
+    for file in &payload.files {
+        let path_str = file.path.as_str();
+        
+        // Check protected paths
+        let is_protected = protected_prefixes.iter().any(|p| path_str.starts_with(p));
+        if is_protected {
+            errors.push(json!({
+                "path": file.path,
+                "error": "Path is protected"
+            }));
+            continue;
+        }
+
+        // Check allowed paths
+        let is_allowed = allowed_prefixes.iter().any(|p| path_str.starts_with(p))
+            || allowed_files.contains(&path_str);
+        if !is_allowed {
+            errors.push(json!({
+                "path": file.path,
+                "error": "Path not in allowed directories"
+            }));
+            continue;
+        }
+
+        // Download file from GitHub
+        let download_result = client.get(&file.url).send().await;
+        match download_result {
+            Ok(response) => {
+                if !response.status().is_success() {
+                    errors.push(json!({
+                        "path": file.path,
+                        "error": format!("GitHub returned status {}", response.status())
+                    }));
+                    continue;
+                }
+                
+                match response.bytes().await {
+                    Ok(content) => {
+                        let target_path = base_path.join(&file.path);
+                        
+                        // Create parent directories
+                        if let Some(parent) = target_path.parent() {
+                            if let Err(e) = fs::create_dir_all(parent).await {
+                                errors.push(json!({
+                                    "path": file.path,
+                                    "error": format!("Failed to create directory: {}", e)
+                                }));
+                                continue;
+                            }
+                        }
+                        
+                        // Write file
+                        match fs::write(&target_path, &content).await {
+                            Ok(_) => {
+                                updated_files.push(file.path.clone());
+                            }
+                            Err(e) => {
+                                errors.push(json!({
+                                    "path": file.path,
+                                    "error": format!("Failed to write file: {}", e)
+                                }));
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        errors.push(json!({
+                            "path": file.path,
+                            "error": format!("Failed to read response: {}", e)
+                        }));
+                    }
+                }
+            }
+            Err(e) => {
+                errors.push(json!({
+                    "path": file.path,
+                    "error": format!("Failed to download: {}", e)
+                }));
+            }
+        }
+    }
+
+    // Update version file
+    let version_path = base_path.join(&payload.version.path);
+    if let Some(parent) = version_path.parent() {
+        let _ = fs::create_dir_all(parent).await;
+    }
+    if let Err(e) = fs::write(&version_path, payload.version.content.as_bytes()).await {
+        errors.push(json!({
+            "path": payload.version.path,
+            "error": format!("Failed to update version file: {}", e)
+        }));
+    }
+
+    let success = errors.is_empty();
+    (
+        if success { StatusCode::OK } else { StatusCode::PARTIAL_CONTENT },
+        Json(json!({
+            "success": success,
+            "filesUpdated": updated_files.len(),
+            "updated": updated_files,
+            "errors": if errors.is_empty() { None } else { Some(errors) }
+        })),
+    )
+}
+
 pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
@@ -416,6 +560,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         )
         .route("/api/uploads/:file", get(download_upload_handler))
         .route("/api/admin/apply-update", post(update_file_handler))
+        .route("/api/admin/batch-update", post(batch_update_handler))
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)
