@@ -2761,12 +2761,12 @@ async function handleDeleteAccount() {
 
             // Logout from all servers
             puts('[auth] Logging out from all servers...');
-            
+
             // Logout from local Axum server (port 3000)
             try {
                 await fetch('http://localhost:3000/api/auth/local/logout', {
                     method: 'POST',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${localStorage.getItem('local_auth_token') || ''}`
                     }
@@ -2775,7 +2775,7 @@ async function handleDeleteAccount() {
             } catch (e) {
                 puts('[auth] Local logout skipped:', e.message);
             }
-            
+
             // Logout from cloud Fastify server (port 3001)
             try {
                 await fetch('http://localhost:3001/api/auth/logout', {
