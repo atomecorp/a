@@ -365,16 +365,14 @@ async fn batch_update_handler(
     // static_dir points to 'src' bundle directory
     // We need to write to the bundle, not the source
     let static_dir = state.static_dir.as_ref();
-    
+
     // Canonicalize to get absolute path
     let base_path = match static_dir.parent() {
-        Some(parent) => {
-            match parent.canonicalize() {
-                Ok(abs) => abs,
-                Err(_) => parent.to_path_buf()
-            }
-        }
-        None => static_dir.to_path_buf()
+        Some(parent) => match parent.canonicalize() {
+            Ok(abs) => abs,
+            Err(_) => parent.to_path_buf(),
+        },
+        None => static_dir.to_path_buf(),
     };
 
     println!("📥 Batch update: {} files to download", payload.files.len());
