@@ -129,12 +129,11 @@ const AtomeUpdater = (function () {
 
         try {
             // Use GitHub API to get file content - NO CACHE!
-            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/src/version.json?ref=${branch}&t=${Date.now()}`;
+            // Timestamp in URL bypasses any caching
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/src/version.json?ref=${branch}&_=${Date.now()}`;
             const response = await fetch(apiUrl, {
                 headers: {
-                    'Accept': 'application/vnd.github.v3+json',
-                    'User-Agent': 'AtomeUpdater/1.0',
-                    'Cache-Control': 'no-cache'
+                    'Accept': 'application/vnd.github.v3+json'
                 }
             });
 
