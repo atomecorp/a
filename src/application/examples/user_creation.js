@@ -2759,6 +2759,35 @@ async function handleDeleteAccount() {
                 SyncQueue.removeCredentials(user.id);
             }
 
+            // Logout from all servers
+            puts('[auth] Logging out from all servers...');
+            
+            // Logout from local Axum server (port 3000)
+            try {
+                await fetch('http://localhost:3000/api/auth/local/logout', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('local_auth_token') || ''}`
+                    }
+                });
+                puts('[auth] Logged out from local server');
+            } catch (e) {
+                puts('[auth] Local logout skipped:', e.message);
+            }
+            
+            // Logout from cloud Fastify server (port 3001)
+            try {
+                await fetch('http://localhost:3001/api/auth/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include'
+                });
+                puts('[auth] Logged out from cloud server');
+            } catch (e) {
+                puts('[auth] Cloud logout skipped:', e.message);
+            }
+
             // Clear local token
             localStorage.removeItem('local_auth_token');
 
