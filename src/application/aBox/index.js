@@ -1,3 +1,5 @@
+
+puts('aBox example loaded');
 // on mac files are stored here : ~/Library/Application Support/com.squirrel.app/uploads
 const dropZoneId = 'aBox_drop_zone';
 const dropZoneDefaultBg = '#00f';
