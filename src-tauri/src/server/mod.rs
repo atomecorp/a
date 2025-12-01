@@ -361,7 +361,7 @@ async fn batch_update_handler(
     Json(payload): Json<BatchUpdateRequest>,
 ) -> impl IntoResponse {
     let base_path = state.uploads_dir.parent().unwrap_or(&state.uploads_dir);
-    
+
     let allowed_prefixes = [
         "src/squirrel",
         "src/application/core",
@@ -376,7 +376,7 @@ async fn batch_update_handler(
 
     for file in &payload.files {
         let path_str = file.path.as_str();
-        
+
         // Check protected paths
         let is_protected = protected_prefixes.iter().any(|p| path_str.starts_with(p));
         if is_protected {
@@ -409,11 +409,11 @@ async fn batch_update_handler(
                     }));
                     continue;
                 }
-                
+
                 match response.bytes().await {
                     Ok(content) => {
                         let target_path = base_path.join(&file.path);
-                        
+
                         // Create parent directories
                         if let Some(parent) = target_path.parent() {
                             if let Err(e) = fs::create_dir_all(parent).await {
@@ -424,7 +424,7 @@ async fn batch_update_handler(
                                 continue;
                             }
                         }
-                        
+
                         // Write file
                         match fs::write(&target_path, &content).await {
                             Ok(_) => {
@@ -469,7 +469,11 @@ async fn batch_update_handler(
 
     let success = errors.is_empty();
     (
-        if success { StatusCode::OK } else { StatusCode::PARTIAL_CONTENT },
+        if success {
+            StatusCode::OK
+        } else {
+            StatusCode::PARTIAL_CONTENT
+        },
         Json(json!({
             "success": success,
             "filesUpdated": updated_files.len(),

@@ -397,7 +397,7 @@ const AtomeUpdater = (function () {
         }
 
         const result = await response.json();
-        
+
         notifyProgress('complete', 100, 'Update complete!');
 
         return {
