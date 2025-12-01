@@ -83,19 +83,36 @@ const AtomeUpdater = (function () {
      */
     async function getCurrentVersion() {
         try {
-            const response = await fetch(`/${CONFIG.versionFile}?t=${Date.now()}`);
-            if (response.ok) {
-                const data = await response.json();
-                return {
-                    version: data.version || '0.0.0',
-                    commit: data.commit || null,
-                    updatedAt: data.updatedAt || null
-                };
+            // Essayer plusieurs chemins possibles
+            const paths = [
+                `/version.json`,
+                `/src/version.json`,
+                `/${CONFIG.versionFile}`
+            ];
+            
+            for (const path of paths) {
+                try {
+                    const response = await fetch(`${path}?t=${Date.now()}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        return {
+                            version: data.version || '0.0.0',
+                            commit: data.commit || null,
+                            updatedAt: data.updatedAt || null
+                        };
+                    }
+                } catch (e) {
+                    // Essayer le chemin suivant
+                }
             }
+            
+            // Fallback: pas de fichier version trouvé
+            log('Version file not found, assuming first install');
+            return { version: '0.0.0', commit: null, updatedAt: null };
         } catch (e) {
             log('Could not read version file:', e.message);
+            return { version: '0.0.0', commit: null, updatedAt: null };
         }
-        return { version: '0.0.0', commit: null, updatedAt: null };
     }
 
     /**
@@ -114,6 +131,16 @@ const AtomeUpdater = (function () {
             });
 
             if (!response.ok) {
+                if (response.status === 403) {
+                    // Rate limit atteint - vérifier le header
+                    const remaining = response.headers.get('X-RateLimit-Remaining');
+                    const resetTime = response.headers.get('X-RateLimit-Reset');
+                    const resetDate = resetTime ? new Date(parseInt(resetTime) * 1000) : null;
+                    const message = remaining === '0' 
+                        ? `Rate limit GitHub atteint. Réessayez après ${resetDate?.toLocaleTimeString() || '1 heure'}`
+                        : 'Accès GitHub refusé (403)';
+                    throw new Error(message);
+                }
                 throw new Error(`GitHub API error: ${response.status}`);
             }
 
