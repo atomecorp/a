@@ -17,8 +17,8 @@ const AtomeUpdater = (function () {
             repo: 'a',
             branch: 'main',
             srcPath: 'src',
-            // Use raw.githubusercontent.com to avoid rate limits
-            rawBaseUrl: 'https://raw.githubusercontent.com/atomecorp/a/main',
+            // Use refs/heads/main to bypass CDN cache!
+            rawBaseUrl: 'https://raw.githubusercontent.com/atomecorp/a/refs/heads/main',
             // API still needed for file listing (but cached)
             apiBaseUrl: 'https://api.github.com/repos/atomecorp/a'
         },
