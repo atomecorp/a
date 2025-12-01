@@ -122,20 +122,36 @@ const AtomeUpdater = (function () {
 
     /**
      * Get latest version from GitHub
-     * Uses ONLY raw.githubusercontent.com - NO API, NO rate limit
+     * Uses GitHub API to bypass CDN cache (rate limit: 60/hour)
      */
     async function getLatestVersion() {
-        const { rawBaseUrl } = CONFIG.github;
+        const { owner, repo, branch } = CONFIG.github;
 
         try {
-            const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
-            const response = await fetch(versionUrl);
+            // Use GitHub API to get file content - NO CACHE!
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/src/version.json?ref=${branch}&t=${Date.now()}`;
+            const response = await fetch(apiUrl, {
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'AtomeUpdater/1.0',
+                    'Cache-Control': 'no-cache'
+                }
+            });
 
             if (!response.ok) {
-                throw new Error(`Failed to fetch remote version: ${response.status}`);
+                if (response.status === 403) {
+                    throw new Error('GitHub API rate limit - try again later');
+                }
+                throw new Error(`GitHub API error: ${response.status}`);
             }
 
-            const data = await response.json();
+            const fileData = await response.json();
+            
+            // Content is base64 encoded
+            const content = atob(fileData.content);
+            const data = JSON.parse(content);
+
+            log(`Remote version from GitHub API: ${data.version}`);
 
             return {
                 version: data.version || '0.0.0',
