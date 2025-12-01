@@ -12,6 +12,12 @@ import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as s
 import { getABoxEventBus } from './aBoxServer.js';
 import path from 'path';
 import fs from 'fs/promises';
+import { fileURLToPath } from 'url';
+
+// Get project root (parent of server/)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 // =============================================================================
 // CONSTANTS
@@ -1258,6 +1264,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         console.log('📦 Sync from ZIP:', zipUrl);
         console.log('📂 Extract path:', extractPath);
         console.log('🛡️ Protected paths:', protectedPaths);
+        console.log('📂 Project root:', PROJECT_ROOT);
 
         try {
             // Download ZIP
@@ -1315,8 +1322,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     continue;
                 }
 
-                // Write file
-                const targetPath = path.join(process.cwd(), relativePath);
+                // Write file to PROJECT_ROOT (not process.cwd which might be server/)
+                const targetPath = path.join(PROJECT_ROOT, relativePath);
                 const targetDir = path.dirname(targetPath);
 
                 console.log('📝 Writing:', relativePath, '→', targetPath);
