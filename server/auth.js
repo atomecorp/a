@@ -1349,15 +1349,15 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
     });
 
-console.log('🔐 Authentication routes registered');
-console.log('🔧 Admin update route registered: /api/admin/apply-update');
-console.log('🔧 Admin batch-update route registered: /api/admin/batch-update');
-console.log('🔧 Admin sync-from-zip route registered: /api/admin/sync-from-zip');
-if (serverIdentityConfigured()) {
-    console.log('🔑 Server identity verification enabled');
-} else {
-    console.log('⚠️  Server identity not configured (run npm run generate-keys)');
-}
+    console.log('🔐 Authentication routes registered');
+    console.log('🔧 Admin update route registered: /api/admin/apply-update');
+    console.log('🔧 Admin batch-update route registered: /api/admin/batch-update');
+    console.log('🔧 Admin sync-from-zip route registered: /api/admin/sync-from-zip');
+    if (serverIdentityConfigured()) {
+        console.log('🔑 Server identity verification enabled');
+    } else {
+        console.log('⚠️  Server identity not configured (run npm run generate-keys)');
+    }
 }
 
 export default { registerAuthRoutes, hashPassword, verifyPassword, generateOTP, sendSMS };
