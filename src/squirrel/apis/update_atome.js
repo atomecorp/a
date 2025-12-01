@@ -233,25 +233,25 @@ const AtomeUpdater = (function () {
     async function fetchFolderContentsRecursive(folderPath, protectedPaths = []) {
         const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
         const files = [];
-        
+
         try {
             const url = `https://api.github.com/repos/${owner}/${repo}/contents/${folderPath}?ref=${branch}`;
             log(`Scanning folder: ${folderPath}`);
-            
+
             const response = await fetch(url, {
                 headers: {
                     'Accept': 'application/vnd.github.v3+json',
                     'User-Agent': 'AtomeUpdater/1.0'
                 }
             });
-            
+
             if (!response.ok) {
                 log(`Failed to fetch folder: ${folderPath} (${response.status})`);
                 return files;
             }
-            
+
             const contents = await response.json();
-            
+
             for (const item of contents) {
                 // Check if path is protected
                 const isProtected = protectedPaths.some(p => item.path.startsWith(p));
@@ -259,7 +259,7 @@ const AtomeUpdater = (function () {
                     log(`Skipping protected: ${item.path}`);
                     continue;
                 }
-                
+
                 if (item.type === 'file') {
                     files.push({
                         path: item.path,
@@ -273,11 +273,11 @@ const AtomeUpdater = (function () {
                     files.push(...subFiles);
                 }
             }
-            
+
         } catch (error) {
             log(`Error fetching folder ${folderPath}:`, error.message);
         }
-        
+
         return files;
     }
 
@@ -291,7 +291,7 @@ const AtomeUpdater = (function () {
         //     log('Using cached file list');
         //     return _fileListCache;
         // }
-        
+
         log('getFileList called, cache disabled for debugging');
 
         const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
@@ -307,14 +307,14 @@ const AtomeUpdater = (function () {
                 if (versionResponse.ok) {
                     const versionData = await versionResponse.json();
                     const protectedPaths = versionData.protectedPaths || CONFIG.protectedPaths || [];
-                    
+
                     log('version.json loaded:', JSON.stringify(versionData, null, 2));
-                    
+
                     // 1. If scanFolders is defined, scan those folders recursively via API
                     if (versionData.scanFolders && Array.isArray(versionData.scanFolders) && versionData.scanFolders.length > 0) {
                         log(`Scanning ${versionData.scanFolders.length} folders...`);
                         notifyProgress('scan', 12, `Scanning ${versionData.scanFolders.length} folders...`);
-                        
+
                         for (const folder of versionData.scanFolders) {
                             log(`Scanning folder: ${folder}`);
                             const folderFiles = await fetchFolderContentsRecursive(folder, protectedPaths);
@@ -322,7 +322,7 @@ const AtomeUpdater = (function () {
                             files.push(...folderFiles);
                         }
                     }
-                    
+
                     // 2. Add explicit files from the files array
                     if (versionData.files && Array.isArray(versionData.files) && versionData.files.length > 0) {
                         log(`Adding ${versionData.files.length} explicit files`);
@@ -343,7 +343,7 @@ const AtomeUpdater = (function () {
                             });
                         files.push(...explicitFiles);
                     }
-                    
+
                     // Remove duplicates by path
                     const uniquePaths = new Set();
                     files = files.filter(f => {
@@ -351,9 +351,9 @@ const AtomeUpdater = (function () {
                         uniquePaths.add(f.path);
                         return true;
                     });
-                    
+
                     log(`Total files to update: ${files.length}`);
-                    
+
                     if (files.length > 0) {
                         _fileListCache = files;
                         _fileListCacheTime = Date.now();
