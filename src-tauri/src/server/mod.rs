@@ -526,16 +526,31 @@ async fn sync_from_zip_handler(
     println!("📂 Extract path: {}", payload.extract_path);
     println!("🛡️ Protected paths: {:?}", payload.protected_paths);
 
-    // Get base path (parent of static_dir which is src/)
+    // Get the PROJECT ROOT (not the bundle!)
+    // static_dir is something like: .../src-tauri/target/debug/_up_/src
+    // We need to go up to find the real project root
     let static_dir = state.static_dir.as_ref();
-    let base_path = match static_dir.parent() {
-        Some(parent) => match parent.canonicalize() {
-            Ok(abs) => abs,
-            Err(_) => parent.to_path_buf(),
-        },
-        None => static_dir.to_path_buf(),
-    };
-    println!("📂 Base path: {:?}", base_path);
+    
+    // Try to find project root by looking for Cargo.toml or package.json
+    let mut base_path = static_dir.to_path_buf();
+    
+    // Go up until we find the project root (where src-tauri exists)
+    for _ in 0..10 {
+        if base_path.join("src-tauri").exists() || base_path.join("package.json").exists() {
+            break;
+        }
+        if let Some(parent) = base_path.parent() {
+            base_path = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+    
+    // Canonicalize for absolute path
+    base_path = base_path.canonicalize().unwrap_or(base_path);
+    
+    println!("📂 Project root: {:?}", base_path);
+    println!("📂 Will write to: {:?}", base_path.join(&payload.extract_path));
 
     // Download ZIP from GitHub
     let client = reqwest::Client::new();
