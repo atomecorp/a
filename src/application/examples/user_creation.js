@@ -1404,24 +1404,14 @@ async function handleLogin() {
             accountStore.currentUser = result.user;
             console.log('[auth] accountStore updated:', accountStore.isLoggedIn, accountStore.currentUser);
 
-            // Store credentials for auto-sync if enabled (local auth only)
+            // AUTO-SYNC on login (local auth only)
             if (useLocalAuth && SyncQueue && result.user?.id) {
-                const config = SyncQueue.getSyncConfig();
-                if (config.autoSyncEnabled && SyncQueue.isAutoSyncEnabled(result.user.id)) {
-                    // Update stored password (in case it changed)
-                    SyncQueue.storeCredentialsForSync(result.user.id, password, true);
-                }
-
-                // Check for pending sync actions and process them
-                if (config.cloudServerUrl) {
-                    SyncQueue.processAllPendingActions(config.cloudServerUrl)
-                        .then(result => {
-                            if (result.processed > 0) {
-                                console.log(`[auth] Processed ${result.succeeded}/${result.processed} pending sync actions`);
-                            }
-                        })
-                        .catch(e => console.warn('[auth] Background sync error:', e));
-                }
+                // Store/update credentials for future syncs
+                SyncQueue.storeCredentialsForSync(result.user.id, password, true);
+                
+                // Perform auto-sync in background
+                performAutoCloudSync(result.user, result.user.username, phone, password, 'SYNC_DATA')
+                    .catch(e => console.warn('[auth] Background sync error:', e));
             }
 
             accountStore.formData.password = ''; // Clear password from memory
@@ -1481,6 +1471,12 @@ async function handleSignup() {
                 accountStore.currentUser = loginResult.user;
                 accountStore.formData.password = '';
                 accountStore.formData.passwordConfirm = '';
+
+                // AUTO-SYNC: If local auth, automatically sync to cloud
+                if (useLocalAuth && SyncQueue && loginResult.user?.id) {
+                    await performAutoCloudSync(loginResult.user, username, phone, password, 'CREATE_ACCOUNT');
+                }
+
                 renderAccountPanel(AccountState.PROFILE);
             } else {
                 // Registration succeeded but login failed, go to login page
@@ -2080,6 +2076,121 @@ async function handleVerifyCloudServer() {
         statusDiv.style.backgroundColor = '#3d1a1a';
         statusDiv.textContent = `❌ Verification error: ${err.message}`;
     }
+}
+
+/**
+ * Perform automatic cloud sync - called on signup/login
+ * If cloud server is unavailable, queue the action for later
+ * 
+ * @param {object} user - User object with id, username
+ * @param {string} username - Username
+ * @param {string} phone - Phone number
+ * @param {string} password - Password (for cloud account creation)
+ * @param {string} actionType - 'CREATE_ACCOUNT' | 'SYNC_DATA'
+ */
+async function performAutoCloudSync(user, username, phone, password, actionType) {
+    if (!SyncQueue || !CloudSync) {
+        console.warn('[auto-sync] Sync modules not loaded');
+        return;
+    }
+
+    // Get or set default cloud server URL
+    let config = SyncQueue.getSyncConfig();
+    const cloudServerUrl = config.cloudServerUrl || 'http://localhost:3001';
+    
+    // Save config with URL if not set
+    if (!config.cloudServerUrl) {
+        SyncQueue.saveSyncConfig({ ...config, cloudServerUrl, autoSyncEnabled: true });
+        config = SyncQueue.getSyncConfig();
+    }
+
+    console.log(`[auto-sync] Starting ${actionType} sync to ${cloudServerUrl}...`);
+
+    // Store credentials for future syncs
+    SyncQueue.storeCredentialsForSync(user.id, password, true);
+
+    // Check if cloud server is available
+    const serverAvailable = await SyncQueue.isCloudServerAvailable(cloudServerUrl);
+
+    if (serverAvailable) {
+        // Server available - sync immediately
+        console.log('[auto-sync] Cloud server available, syncing now...');
+        
+        try {
+            const result = await CloudSync.syncToCloud({
+                cloudServerUrl,
+                localToken: localStorage.getItem('local_auth_token'),
+                username,
+                phone,
+                password,
+                verifyServer: true
+            });
+
+            if (result.success) {
+                console.log('[auto-sync] ✅ Sync successful, cloudId:', result.cloudId);
+                
+                // Update user with cloud info
+                if (accountStore.currentUser) {
+                    accountStore.currentUser.cloudId = result.cloudId;
+                    accountStore.currentUser.synced = true;
+                }
+
+                // Store cloud token
+                if (result.cloudToken) {
+                    localStorage.setItem('cloud_auth_token', result.cloudToken);
+                }
+
+                // Update config with last sync time
+                SyncQueue.saveSyncConfig({
+                    ...config,
+                    lastSuccessfulSync: new Date().toISOString()
+                });
+
+                // Process any pending actions in queue
+                const pendingResult = await SyncQueue.processAllPendingActions(cloudServerUrl);
+                if (pendingResult.processed > 0) {
+                    console.log(`[auto-sync] Processed ${pendingResult.succeeded}/${pendingResult.processed} pending actions`);
+                }
+
+            } else if (result.result === CloudSync.SyncResult.CREDENTIALS_MISMATCH) {
+                console.warn('[auto-sync] Credentials mismatch - account exists with different password');
+                // Don't queue, user needs to resolve manually
+            } else {
+                console.warn('[auto-sync] Sync failed:', result.error);
+                // Queue for retry
+                queueSyncAction(user, username, phone, password, actionType);
+            }
+        } catch (err) {
+            console.error('[auto-sync] Sync error:', err.message);
+            // Queue for retry
+            queueSyncAction(user, username, phone, password, actionType);
+        }
+    } else {
+        // Server unavailable - queue for later
+        console.log('[auto-sync] Cloud server unavailable, queuing action...');
+        queueSyncAction(user, username, phone, password, actionType);
+    }
+}
+
+/**
+ * Queue a sync action for later processing
+ */
+function queueSyncAction(user, username, phone, password, actionType) {
+    if (!SyncQueue) return;
+
+    const syncActionType = actionType === 'CREATE_ACCOUNT' 
+        ? SyncQueue.SyncAction.CREATE_ACCOUNT 
+        : SyncQueue.SyncAction.SYNC_DATA;
+
+    SyncQueue.addToQueue({
+        type: syncActionType,
+        userId: user.id,
+        username: username,
+        phone: phone,
+        data: { password } // Password stored encrypted in queue
+    });
+
+    console.log(`[auto-sync] Action queued: ${actionType} for user ${user.id}`);
 }
 
 async function handleCloudSync() {

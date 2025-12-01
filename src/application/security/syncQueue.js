@@ -381,12 +381,14 @@ export async function isCloudServerAvailable(serverUrl) {
     if (!serverUrl) return false;
 
     try {
-        const response = await fetch(`${serverUrl}/api/health`, {
+        // Use /api/server-info which exists on Fastify
+        const response = await fetch(`${serverUrl}/api/server-info`, {
             method: 'GET',
             signal: AbortSignal.timeout(5000)
         });
         return response.ok;
     } catch (e) {
+        console.log('[syncQueue] Server availability check failed:', e.message);
         return false;
     }
 }
@@ -424,6 +426,11 @@ export async function processAction(action, cloudServerUrl) {
 
             case SyncAction.DELETE_ACCOUNT:
                 result = await syncDeleteAccount(action, credentials, cloudServerUrl);
+                break;
+
+            case SyncAction.SYNC_DATA:
+                // SYNC_DATA is same as CREATE_ACCOUNT - ensures account exists on cloud
+                result = await syncCreateAccount(action, credentials, cloudServerUrl);
                 break;
 
             default:
