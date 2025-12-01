@@ -153,10 +153,10 @@ const AtomeUpdater = (function () {
      */
     function hasUpdate(current, latest) {
         log(`Comparing: local=${current.version}, remote=${latest.version}`);
-        
+
         const result = compareVersions(latest.version, current.version);
         const updateAvailable = result > 0;
-        
+
         log(`Result: ${updateAvailable ? 'UPDATE AVAILABLE' : 'up to date'}`);
         return updateAvailable;
     }
