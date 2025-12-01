@@ -146,7 +146,7 @@ const AtomeUpdater = (function () {
             }
 
             const fileData = await response.json();
-            
+
             // Content is base64 encoded
             const content = atob(fileData.content);
             const data = JSON.parse(content);
