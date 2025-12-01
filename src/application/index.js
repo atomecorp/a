@@ -48,7 +48,7 @@
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-puts('Yes, yes, cool and yes again !');
+puts('Yes!');
 import('./aBox/index.js');
 // import('./examples/user_creation.js');
 import('./examples/update.js');
@@ -145,3 +145,4 @@ import('./examples/input_file.js');
 // puts (a);
 
 // a.style.left= '100px';
+// TEST MODIF Mon Dec  1 23:46:19 CET 2025

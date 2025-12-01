@@ -308,7 +308,8 @@ else
     echo ""
 fi
 
-update_hot_manifest
+# Manifest hot-update désactivé - on utilise maintenant le sync ZIP depuis GitHub
+# update_hot_manifest
 
 # Construction production si demandée
 if [ "$PROD_BUILD" = true ]; then
