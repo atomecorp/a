@@ -342,6 +342,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             return {
                 success: true,
+                token: token, // Also return token in response for cross-origin requests
                 user: {
                     id: user.principal_id,
                     username: snapshot.username,
@@ -797,7 +798,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
     // =====================================================
     server.delete('/api/auth/delete-account', async (request, reply) => {
         try {
-            const token = request.cookies?.access_token;
+            // Check for token in cookie OR Authorization header (for cross-origin requests)
+            let token = request.cookies?.access_token;
+            
+            if (!token) {
+                const authHeader = request.headers?.authorization;
+                if (authHeader && authHeader.startsWith('Bearer ')) {
+                    token = authHeader.substring(7);
+                }
+            }
+            
             if (!token) {
                 return reply.code(401).send({ success: false, error: 'Not authenticated' });
             }

@@ -2680,31 +2680,79 @@ async function handleDeleteAccount() {
         if (result.success) {
             puts('[auth] Local account deleted');
 
-            // If using local auth, queue the deletion for cloud sync
+            // If using local auth, sync deletion to cloud
             if (useLocalAuth && SyncQueue) {
                 const config = SyncQueue.getSyncConfig();
+                const cloudServerUrl = config.cloudServerUrl || 'http://localhost:3001';
 
-                if (config.cloudServerUrl) {
-                    // Add deletion to sync queue
+                // Try to delete from cloud immediately
+                const serverAvailable = await SyncQueue.isCloudServerAvailable(cloudServerUrl);
+                
+                if (serverAvailable) {
+                    puts('[auth] Cloud server available, deleting from cloud...');
+                    
+                    try {
+                        // Login first to get token (cookies don't work cross-origin)
+                        const loginResponse = await fetch(`${cloudServerUrl}/api/auth/login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone: user.phone, password })
+                        });
+                        
+                        const loginData = await loginResponse.json().catch(() => ({}));
+                        
+                        if (loginData.success && loginData.token) {
+                            // Now delete using the token from login
+                            const deleteResponse = await fetch(`${cloudServerUrl}/api/auth/delete-account`, {
+                                method: 'DELETE',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${loginData.token}`
+                                },
+                                body: JSON.stringify({ password })
+                            });
+                            
+                            const deleteData = await deleteResponse.json().catch(() => ({}));
+                            
+                            if (deleteData.success) {
+                                puts('[auth] ✅ Account deleted from cloud');
+                            } else {
+                                puts('[auth] Cloud deletion failed:', deleteData.error);
+                            }
+                        } else if (loginData.error?.includes('Invalid') || loginData.error?.includes('not found')) {
+                            puts('[auth] Account not found on cloud (already deleted or never synced)');
+                        } else {
+                            // Queue for later
+                            puts('[auth] Cloud login failed, queuing deletion...');
+                            SyncQueue.addToQueue({
+                                type: SyncQueue.SyncAction.DELETE_ACCOUNT,
+                                userId: user.id,
+                                username: user.username,
+                                phone: user.phone,
+                                data: { password }
+                            });
+                        }
+                    } catch (err) {
+                        puts('[auth] Cloud deletion error:', err.message);
+                        // Queue for later
+                        SyncQueue.addToQueue({
+                            type: SyncQueue.SyncAction.DELETE_ACCOUNT,
+                            userId: user.id,
+                            username: user.username,
+                            phone: user.phone,
+                            data: { password }
+                        });
+                    }
+                } else {
+                    puts('[auth] Cloud server not available, queuing deletion...');
+                    // Queue for later sync
                     SyncQueue.addToQueue({
                         type: SyncQueue.SyncAction.DELETE_ACCOUNT,
                         userId: user.id,
                         username: user.username,
                         phone: user.phone,
-                        data: { password } // Store password for cloud deletion
+                        data: { password }
                     });
-
-                    // Try to sync immediately if server is available
-                    const serverAvailable = await SyncQueue.isCloudServerAvailable(config.cloudServerUrl);
-                    if (serverAvailable) {
-                        puts('[auth] Cloud server available, syncing deletion...');
-                        const syncResult = await SyncQueue.processAllPendingActions(config.cloudServerUrl);
-                        if (syncResult.succeeded > 0) {
-                            puts('[auth] Account deleted from cloud');
-                        }
-                    } else {
-                        puts('[auth] Cloud server not available, deletion queued for later sync');
-                    }
                 }
 
                 // Remove stored credentials for this user
