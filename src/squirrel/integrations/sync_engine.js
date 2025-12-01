@@ -26,21 +26,20 @@ function resolveWsCandidates() {
     const location = window.location || {};
     const protocol = location.protocol || 'http:';
     const host = location.host || '';
+    const port = location.port || '';
 
-    if (!isTauri && host && protocol.startsWith('http')) {
-        const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
-        pushBase(`${wsProtocol}//${host}`);
-    }
+    // Log for debugging
+    console.log('[sync_engine] resolveWsCandidates: isTauri =', isTauri, ', port =', port);
 
-    pushBase('ws://127.0.0.1:3001'); // Fastify (watcher stream)
+    // For both Tauri and browser dev mode, WebSocket is only available on Fastify (port 3001)
+    // - Port 3000 (Squirrel static server or Axum) doesn't have WebSocket
+    // - Port 1420/1430 (Tauri dev server / Vite) doesn't have WebSocket
+    // Only Fastify on 3001 has the /ws/events endpoint
+    
     pushBase('ws://localhost:3001');
-    pushBase('ws://127.0.0.1:3000'); // Axum fallback
+    pushBase('ws://127.0.0.1:3001');
 
-    const tauriPort = Number(window.__ATOME_LOCAL_HTTP_PORT__);
-    if (isTauri && Number.isFinite(tauriPort) && tauriPort > 0 && tauriPort !== 3001) {
-        pushBase(`ws://127.0.0.1:${tauriPort}`);
-    }
-
+    console.log('[sync_engine] WebSocket candidates:', bases);
     return bases.map((base) => ensureWsPath(base));
 }
 

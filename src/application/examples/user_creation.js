@@ -13,12 +13,13 @@
  */
 
 // =============================================================================
-// IMPORTS - Server Verification
+// IMPORTS - Server Verification & Sync Queue
 // =============================================================================
 
 // Import server verification module (loaded dynamically if available)
 let ServerVerification = null;
 let TrustedKeys = null;
+let SyncQueue = null;
 
 // Try to load security modules
 (async function loadSecurityModules() {
@@ -28,6 +29,16 @@ let TrustedKeys = null;
         console.log('[auth] Security modules loaded');
     } catch (e) {
         console.warn('[auth] Security modules not available:', e.message);
+    }
+    
+    // Load sync queue module
+    try {
+        SyncQueue = await import('../security/syncQueue.js');
+        // Initialize sync queue (starts auto-sync if enabled)
+        SyncQueue.initSyncQueue();
+        console.log('[auth] Sync queue module loaded');
+    } catch (e) {
+        console.warn('[auth] Sync queue module not available:', e.message);
     }
 })();
 
@@ -72,20 +83,44 @@ function resolveApiConfig() {
         } catch (_) { }
     }
 
+    // Method 3: Check if we're on Tauri dev server port (1420)
+    if (!isTauri && typeof window !== 'undefined') {
+        const port = window.location?.port;
+        if (port === '1420') {
+            isTauri = true;
+        }
+    }
+
     console.log('[auth] Platform detection: isTauri =', isTauri);
+    console.log('[auth] Location:', window.location?.hostname, window.location?.port, window.location?.href);
 
     if (isTauri) {
         // Tauri/iOS: use local Axum server with SQLite on port 3000
         return { base: 'http://127.0.0.1:3000', isLocal: true };
     }
 
+    // Check if we're on localhost development (not Tauri)
+    // Safari/Chrome on localhost should use Fastify on port 3001
+    if (typeof window !== 'undefined') {
+        const hostname = window.location?.hostname;
+        const port = window.location?.port;
+        
+        // If on localhost:3000 (Squirrel dev server) → use Fastify on 3001
+        if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
+            console.log('[auth] Dev mode detected (localhost:3000), using Fastify on port 3001');
+            return { base: 'http://localhost:3001', isLocal: false };
+        }
+    }
+
     // Default: same origin (relative URLs) - assumes Fastify cloud server
+    console.log('[auth] Using same origin (Fastify cloud server mode)');
     return { base: '', isLocal: false };
 }
 
 const apiConfig = resolveApiConfig();
 let apiBase = apiConfig.base;
 const useLocalAuth = apiConfig.isLocal; // true = Axum/SQLite, false = Fastify/PostgreSQL
+console.log('[auth] Final config: apiBase =', apiBase, ', useLocalAuth =', useLocalAuth, ', authPrefix =', useLocalAuth ? '/api/auth/local' : '/api/auth');
 
 // Auth route prefix: local Axum uses /api/auth/local/*, cloud Fastify uses /api/auth/*
 const authPrefix = useLocalAuth ? '/api/auth/local' : '/api/auth';
@@ -189,7 +224,7 @@ async function apiRequest(endpoint, options = {}) {
     const url = apiBase ? `${apiBase}${endpoint}` : endpoint;
 
     const headers = { 'Content-Type': 'application/json', ...options.headers };
-    
+
     // Add Authorization header for local auth
     if (useLocalAuth) {
         const token = localStorage.getItem('local_auth_token');
@@ -295,6 +330,7 @@ async function apiLogout() {
 async function apiGetMe() {
     try {
         const url = apiBase ? `${apiBase}${authPrefix}/me` : `${authPrefix}/me`;
+        console.log('[auth] apiGetMe calling:', url);
 
         // Build headers - include Authorization for local auth
         const headers = {};
@@ -311,6 +347,8 @@ async function apiGetMe() {
             credentials: 'include'
         });
 
+        console.log('[auth] apiGetMe response:', response.status, response.ok);
+
         // 401 is expected when not logged in - don't treat as error
         if (response.status === 401) {
             return { success: false, notAuthenticated: true };
@@ -322,6 +360,7 @@ async function apiGetMe() {
 
         return await response.json();
     } catch (e) {
+        console.error('[auth] apiGetMe error:', e);
         return { success: false, error: e.message };
     }
 }
@@ -1364,6 +1403,27 @@ async function handleLogin() {
             accountStore.isLoggedIn = true;
             accountStore.currentUser = result.user;
             console.log('[auth] accountStore updated:', accountStore.isLoggedIn, accountStore.currentUser);
+            
+            // Store credentials for auto-sync if enabled (local auth only)
+            if (useLocalAuth && SyncQueue && result.user?.id) {
+                const config = SyncQueue.getSyncConfig();
+                if (config.autoSyncEnabled && SyncQueue.isAutoSyncEnabled(result.user.id)) {
+                    // Update stored password (in case it changed)
+                    SyncQueue.storeCredentialsForSync(result.user.id, password, true);
+                }
+                
+                // Check for pending sync actions and process them
+                if (config.cloudServerUrl) {
+                    SyncQueue.processAllPendingActions(config.cloudServerUrl)
+                        .then(result => {
+                            if (result.processed > 0) {
+                                console.log(`[auth] Processed ${result.succeeded}/${result.processed} pending sync actions`);
+                            }
+                        })
+                        .catch(e => console.warn('[auth] Background sync error:', e));
+                }
+            }
+            
             accountStore.formData.password = ''; // Clear password from memory
             puts(`[auth] Login successful: ${result.user.username}`);
             renderAccountPanel(AccountState.PROFILE);
@@ -1782,6 +1842,95 @@ function renderCloudSyncPanel() {
 
     buildDivider();
 
+    // Auto-sync option (only in local mode)
+    if (useLocalAuth && SyncQueue) {
+        const config = SyncQueue.getSyncConfig();
+        const user = accountStore.currentUser;
+        const hasStoredCreds = user && SyncQueue.isAutoSyncEnabled(user.id);
+        
+        $('div', {
+            parent: `#${rootId}`,
+            text: '🔄 Automatic Synchronization',
+            css: {
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#4caf50',
+                marginBottom: '8px'
+            }
+        });
+
+        $('div', {
+            parent: `#${rootId}`,
+            text: 'Enable auto-sync to automatically synchronize your account when the cloud server is available. Your password will be stored securely on this device.',
+            css: {
+                fontSize: '12px',
+                color: '#888',
+                marginBottom: '12px'
+            }
+        });
+
+        // Auto-sync toggle
+        const autoSyncContainer = $('div', {
+            parent: `#${rootId}`,
+            css: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                marginBottom: '12px'
+            }
+        });
+
+        $('input', {
+            id: 'auto_sync_checkbox',
+            parent: autoSyncContainer,
+            type: 'checkbox',
+            checked: config.autoSyncEnabled && hasStoredCreds,
+            css: {
+                width: '18px',
+                height: '18px',
+                cursor: 'pointer'
+            },
+            onChange: (e) => {
+                const enabled = e.target.checked;
+                const currentConfig = SyncQueue.getSyncConfig();
+                SyncQueue.saveSyncConfig({ ...currentConfig, autoSyncEnabled: enabled });
+                console.log(`[auth] Auto-sync ${enabled ? 'enabled' : 'disabled'}`);
+            }
+        });
+
+        $('label', {
+            parent: autoSyncContainer,
+            for: 'auto_sync_checkbox',
+            text: 'Enable automatic sync',
+            css: {
+                fontSize: '13px',
+                color: '#ccc',
+                cursor: 'pointer'
+            }
+        });
+
+        // Pending actions count
+        if (user) {
+            const pendingActions = SyncQueue.getPendingActionsForUser(user.id);
+            if (pendingActions.length > 0) {
+                $('div', {
+                    parent: `#${rootId}`,
+                    text: `📋 ${pendingActions.length} action(s) pending sync`,
+                    css: {
+                        fontSize: '12px',
+                        color: '#ff9800',
+                        backgroundColor: '#3d2e1a',
+                        padding: '8px',
+                        borderRadius: '4px',
+                        marginBottom: '12px'
+                    }
+                });
+            }
+        }
+
+        buildDivider();
+    }
+
     // Password required for sync
     $('div', {
         parent: `#${rootId}`,
@@ -1950,6 +2099,17 @@ async function handleCloudSync() {
             // Store cloud token if available
             if (result.cloudToken) {
                 localStorage.setItem('cloud_auth_token', result.cloudToken);
+            }
+
+            // Store credentials for auto-sync if checkbox is checked
+            const autoSyncCheckbox = document.getElementById('auto_sync_checkbox');
+            if (autoSyncCheckbox && autoSyncCheckbox.checked && SyncQueue && accountStore.currentUser) {
+                try {
+                    await SyncQueue.storeCredentialsForSync(accountStore.currentUser.id, password, true);
+                    console.log('[auth] Credentials stored for auto-sync');
+                } catch (credErr) {
+                    console.warn('[auth] Failed to store credentials for auto-sync:', credErr);
+                }
             }
 
             // Show success
@@ -2313,9 +2473,15 @@ function renderDeleteConfirmation() {
 
 async function handleDeleteAccount() {
     const password = accountStore.formData.deleteConfirmPassword;
+    const user = accountStore.currentUser;
 
     if (!password) {
         showError('Password is required to confirm deletion');
+        return;
+    }
+
+    if (!user) {
+        showError('No user logged in');
         return;
     }
 
@@ -2331,7 +2497,41 @@ async function handleDeleteAccount() {
         });
 
         if (result.success) {
-            puts('[auth] Account deleted');
+            puts('[auth] Local account deleted');
+
+            // If using local auth, queue the deletion for cloud sync
+            if (useLocalAuth && SyncQueue) {
+                const config = SyncQueue.getSyncConfig();
+                
+                if (config.cloudServerUrl) {
+                    // Add deletion to sync queue
+                    SyncQueue.addToQueue({
+                        type: SyncQueue.SyncAction.DELETE_ACCOUNT,
+                        userId: user.id,
+                        username: user.username,
+                        phone: user.phone,
+                        data: { password } // Store password for cloud deletion
+                    });
+                    
+                    // Try to sync immediately if server is available
+                    const serverAvailable = await SyncQueue.isCloudServerAvailable(config.cloudServerUrl);
+                    if (serverAvailable) {
+                        puts('[auth] Cloud server available, syncing deletion...');
+                        const syncResult = await SyncQueue.processAllPendingActions(config.cloudServerUrl);
+                        if (syncResult.succeeded > 0) {
+                            puts('[auth] Account deleted from cloud');
+                        }
+                    } else {
+                        puts('[auth] Cloud server not available, deletion queued for later sync');
+                    }
+                }
+                
+                // Remove stored credentials for this user
+                SyncQueue.removeCredentials(user.id);
+            }
+
+            // Clear local token
+            localStorage.removeItem('local_auth_token');
 
             // Clear everything
             accountStore.isLoggedIn = false;
