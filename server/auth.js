@@ -1077,6 +1077,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
         // Security: Define allowed and protected paths
         const allowedPrefixes = ['src/squirrel', 'src/application/core', 'src/application/security'];
+        const allowedFiles = ['src/version.json']; // Fichiers spécifiques autorisés
         const protectedPrefixes = ['src/application/examples', 'src/application/config'];
 
         // Check if path is protected
@@ -1089,8 +1090,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             }
         }
 
-        // Check if path is allowed
-        const isAllowed = allowedPrefixes.some(prefix => filePath.startsWith(prefix));
+        // Check if path is allowed (prefix ou fichier spécifique)
+        const isAllowed = allowedPrefixes.some(prefix => filePath.startsWith(prefix)) 
+            || allowedFiles.includes(filePath);
         if (!isAllowed) {
             return reply.code(403).send({
                 success: false,

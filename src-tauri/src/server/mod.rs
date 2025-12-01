@@ -268,6 +268,8 @@ async fn update_file_handler(
         "src/application/core",
         "src/application/security",
     ];
+    // Fichiers spécifiques autorisés (en dehors des préfixes)
+    let allowed_files = ["src/version.json"];
     let protected_prefixes = ["src/application/examples", "src/application/config"];
 
     let path_str = payload.path.as_str();
@@ -285,10 +287,11 @@ async fn update_file_handler(
         }
     }
 
-    // Check if path is allowed
+    // Check if path is allowed (prefix ou fichier spécifique)
     let is_allowed = allowed_prefixes
         .iter()
-        .any(|prefix| path_str.starts_with(prefix));
+        .any(|prefix| path_str.starts_with(prefix))
+        || allowed_files.contains(&path_str);
     if !is_allowed {
         return (
             StatusCode::FORBIDDEN,

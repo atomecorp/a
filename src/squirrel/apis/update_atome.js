@@ -29,8 +29,8 @@ const AtomeUpdater = (function () {
             'src/application/examples',
             'src/application/config'
         ],
-        // Version actuelle (chemin relatif depuis la racine web)
-        versionFile: 'version.json'
+        // Version actuelle (chemin relatif depuis la racine du projet)
+        versionFile: 'src/version.json'
     };
 
     // État interne
@@ -183,46 +183,58 @@ const AtomeUpdater = (function () {
 
     /**
      * Récupère la liste des fichiers à mettre à jour depuis GitHub
+     * Ne récupère que les fichiers dans updatePaths
      */
-    async function getFileList(path = CONFIG.github.srcPath) {
+    async function getFileList(path = null) {
         const { owner, repo, branch } = CONFIG.github;
-        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
-
-        const response = await fetch(url, {
-            headers: {
-                'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'AtomeUpdater/1.0'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Failed to list ${path}: ${response.status}`);
-        }
-
-        const items = await response.json();
         let files = [];
 
-        for (const item of items) {
-            // Vérifier si le chemin est protégé
-            const relativePath = item.path;
-            const isProtected = CONFIG.protectedPaths.some(p => relativePath.startsWith(p));
+        // Si pas de path spécifié, parcourir uniquement les updatePaths
+        const pathsToScan = path ? [path] : CONFIG.updatePaths;
 
-            if (isProtected) {
-                log(`Skipping protected path: ${relativePath}`);
-                continue;
-            }
+        for (const scanPath of pathsToScan) {
+            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${scanPath}?ref=${branch}`;
 
-            if (item.type === 'file') {
-                files.push({
-                    path: item.path,
-                    downloadUrl: item.download_url,
-                    sha: item.sha,
-                    size: item.size
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/vnd.github.v3+json',
+                        'User-Agent': 'AtomeUpdater/1.0'
+                    }
                 });
-            } else if (item.type === 'dir') {
-                // Récursion pour les sous-dossiers
-                const subFiles = await getFileList(item.path);
-                files = files.concat(subFiles);
+
+                if (!response.ok) {
+                    log(`Failed to list ${scanPath}: ${response.status}`);
+                    continue;
+                }
+
+                const items = await response.json();
+
+                for (const item of items) {
+                    // Vérifier si le chemin est protégé
+                    const relativePath = item.path;
+                    const isProtected = CONFIG.protectedPaths.some(p => relativePath.startsWith(p));
+
+                    if (isProtected) {
+                        log(`Skipping protected path: ${relativePath}`);
+                        continue;
+                    }
+
+                    if (item.type === 'file') {
+                        files.push({
+                            path: item.path,
+                            downloadUrl: item.download_url,
+                            sha: item.sha,
+                            size: item.size
+                        });
+                    } else if (item.type === 'dir') {
+                        // Récursion pour les sous-dossiers
+                        const subFiles = await getFileList(item.path);
+                        files = files.concat(subFiles);
+                    }
+                }
+            } catch (error) {
+                log(`Error scanning ${scanPath}:`, error.message);
             }
         }
 
@@ -241,21 +253,17 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Applique la mise à jour sur Tauri (via commandes Tauri)
+     * Applique la mise à jour sur Tauri (via route HTTP Axum)
      */
     async function applyUpdateTauri(files, latestCommit) {
         const platform = getPlatform();
 
         if (!platform.isTauri) {
-            throw new Error('Tauri API not available');
+            throw new Error('Tauri platform not detected');
         }
 
-        const invoke = window.__TAURI__?.invoke ||
-            window.__TAURI_INTERNALS__?.invoke;
-
-        if (!invoke) {
-            throw new Error('Tauri invoke not available');
-        }
+        // Utiliser la route HTTP locale (port 3000) pour écrire les fichiers
+        const baseUrl = 'http://127.0.0.1:3000';
 
         notifyProgress('download', 0, 'Préparation du téléchargement...');
 
@@ -273,11 +281,20 @@ const AtomeUpdater = (function () {
                 notifyProgress('install', 50 + Math.round((processedFiles / totalFiles) * 45),
                     `Installation: ${file.path}`);
 
-                // Écrire le fichier via Tauri
-                await invoke('write_update_file', {
-                    path: file.path,
-                    content: content
+                // Écrire le fichier via la route HTTP Axum
+                const response = await fetch(`${baseUrl}/api/admin/apply-update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        path: file.path,
+                        content: content
+                    })
                 });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                }
 
                 processedFiles++;
             } catch (error) {
@@ -295,15 +312,23 @@ const AtomeUpdater = (function () {
             updatedAt: new Date().toISOString()
         }, null, 2);
 
-        await invoke('write_update_file', {
-            path: CONFIG.versionFile,
-            content: versionContent
+        const versionResponse = await fetch(`${baseUrl}/api/admin/apply-update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                path: CONFIG.versionFile,
+                content: versionContent
+            })
         });
+
+        if (!versionResponse.ok) {
+            log('Failed to update version file');
+        }
 
         notifyProgress('complete', 100, 'Mise à jour terminée!');
 
         return {
-            success: true,
+            success: errors.length === 0,
             filesUpdated: processedFiles,
             errors: errors.length > 0 ? errors : null
         };
