@@ -1408,7 +1408,7 @@ async function handleLogin() {
             if (useLocalAuth && SyncQueue && result.user?.id) {
                 // Store/update credentials for future syncs
                 SyncQueue.storeCredentialsForSync(result.user.id, password, true);
-                
+
                 // Perform auto-sync in background
                 performAutoCloudSync(result.user, result.user.username, phone, password, 'SYNC_DATA')
                     .catch(e => console.warn('[auth] Background sync error:', e));
@@ -2097,7 +2097,7 @@ async function performAutoCloudSync(user, username, phone, password, actionType)
     // Get or set default cloud server URL
     let config = SyncQueue.getSyncConfig();
     const cloudServerUrl = config.cloudServerUrl || 'http://localhost:3001';
-    
+
     // Save config with URL if not set
     if (!config.cloudServerUrl) {
         SyncQueue.saveSyncConfig({ ...config, cloudServerUrl, autoSyncEnabled: true });
@@ -2115,7 +2115,7 @@ async function performAutoCloudSync(user, username, phone, password, actionType)
     if (serverAvailable) {
         // Server available - sync immediately
         console.log('[auto-sync] Cloud server available, syncing now...');
-        
+
         try {
             const result = await CloudSync.syncToCloud({
                 cloudServerUrl,
@@ -2128,7 +2128,7 @@ async function performAutoCloudSync(user, username, phone, password, actionType)
 
             if (result.success) {
                 console.log('[auto-sync] ✅ Sync successful, cloudId:', result.cloudId);
-                
+
                 // Update user with cloud info
                 if (accountStore.currentUser) {
                     accountStore.currentUser.cloudId = result.cloudId;
@@ -2178,8 +2178,8 @@ async function performAutoCloudSync(user, username, phone, password, actionType)
 function queueSyncAction(user, username, phone, password, actionType) {
     if (!SyncQueue) return;
 
-    const syncActionType = actionType === 'CREATE_ACCOUNT' 
-        ? SyncQueue.SyncAction.CREATE_ACCOUNT 
+    const syncActionType = actionType === 'CREATE_ACCOUNT'
+        ? SyncQueue.SyncAction.CREATE_ACCOUNT
         : SyncQueue.SyncAction.SYNC_DATA;
 
     SyncQueue.addToQueue({
