@@ -203,14 +203,14 @@ function showCheckResult(result) {
         $('div', {
             parent: infoContainer,
             css: { fontSize: '13px', color: '#888', marginBottom: '8px' },
-            text: `Current version: ${result.currentCommit?.substring(0, 7) || 'unknown'}`
+            text: `Current version: ${result.currentVersion || result.currentCommit?.substring(0, 7) || 'unknown'}`
         });
 
         if (result.hasUpdate) {
             $('div', {
                 parent: infoContainer,
                 css: { fontSize: '13px', color: '#4aff9e', marginBottom: '8px' },
-                text: `New version: ${result.latestCommitShort}`
+                text: `New version: ${result.latestVersion || result.latestCommitShort}`
             });
 
             $('div', {

@@ -124,8 +124,8 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Get latest commit from main branch
-     * Uses raw.githubusercontent.com to avoid rate limits
+     * Get latest version from GitHub (raw URL - no rate limit)
+     * Only uses raw.githubusercontent.com, never the API
      */
     async function getLatestCommit() {
         const { rawBaseUrl } = CONFIG.github;
@@ -135,74 +135,58 @@ const AtomeUpdater = (function () {
             const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
             const response = await fetch(versionUrl);
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.commit) {
-                    return {
-                        sha: data.commit,
-                        shortSha: data.commit.substring(0, 7),
-                        message: data.message || 'Update available',
-                        date: data.updatedAt || new Date().toISOString(),
-                        author: data.author || 'atomecorp'
-                    };
-                }
+            if (!response.ok) {
+                throw new Error(`Failed to fetch remote version: ${response.status}`);
             }
 
-            // Fallback: try GitHub API with rate limit handling
-            return await getLatestCommitFromAPI();
+            const data = await response.json();
+            
+            // Use version as identifier (no API needed)
+            return {
+                sha: data.commit || data.version, // Use commit if available, else version
+                shortSha: data.commit?.substring(0, 7) || data.version,
+                version: data.version || '0.0.0',
+                message: data.message || `Version ${data.version}`,
+                date: data.updatedAt || new Date().toISOString(),
+                author: data.author || 'atomecorp'
+            };
 
         } catch (error) {
-            log('Failed to get latest commit:', error.message);
-            throw error;
+            log('Failed to get latest version:', error.message);
+            throw new Error(`Cannot check for updates: ${error.message}`);
         }
-    }
-
-    /**
-     * Fallback: Get latest commit from GitHub API
-     */
-    async function getLatestCommitFromAPI() {
-        const { owner, repo, branch } = CONFIG.github;
-        const url = `https://api.github.com/repos/${owner}/${repo}/commits/${branch}`;
-
-        const response = await fetch(url, {
-            headers: {
-                'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'AtomeUpdater/1.0'
-            }
-        });
-
-        if (!response.ok) {
-            if (response.status === 403) {
-                const remaining = response.headers.get('X-RateLimit-Remaining');
-                const resetTime = response.headers.get('X-RateLimit-Reset');
-                const resetDate = resetTime ? new Date(parseInt(resetTime) * 1000) : null;
-                const message = remaining === '0'
-                    ? `GitHub rate limit reached. Try again after ${resetDate?.toLocaleTimeString() || '1 hour'}`
-                    : 'GitHub access denied (403)';
-                throw new Error(message);
-            }
-            throw new Error(`GitHub API error: ${response.status}`);
-        }
-
-        const commit = await response.json();
-
-        return {
-            sha: commit.sha,
-            shortSha: commit.sha.substring(0, 7),
-            message: commit.commit.message.split('\n')[0],
-            date: commit.commit.committer.date,
-            author: commit.commit.author.name
-        };
     }
 
     /**
      * Compare two versions/commits
      */
     function hasUpdate(current, latest) {
-        if (current.commit && latest.sha) {
+        // Compare by commit if both have it
+        if (current.commit && latest.sha && latest.sha !== latest.version) {
             return current.commit !== latest.sha;
         }
-        return true; // If no local commit, assume update is available
+        // Compare by version number
+        if (current.version && latest.version) {
+            return compareVersions(latest.version, current.version) > 0;
+        }
+        return true; // If can't compare, assume update available
+    }
+
+    /**
+     * Compare semantic versions
+     * Returns: 1 if a > b, -1 if a < b, 0 if equal
+     */
+    function compareVersions(a, b) {
+        const partsA = a.split('.').map(n => parseInt(n, 10) || 0);
+        const partsB = b.split('.').map(n => parseInt(n, 10) || 0);
+        
+        for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+            const numA = partsA[i] || 0;
+            const numB = partsB[i] || 0;
+            if (numA > numB) return 1;
+            if (numA < numB) return -1;
+        }
+        return 0;
     }
 
     /**
@@ -227,10 +211,12 @@ const AtomeUpdater = (function () {
             };
 
             log('Check complete:', updateAvailable ? 'Update available' : 'Up to date');
+            log(`Local: ${current.version}, Remote: ${latest.version}`);
 
             return {
                 hasUpdate: updateAvailable,
                 currentVersion: current.version,
+                latestVersion: latest.version,
                 currentCommit: current.commit,
                 latestCommit: latest.sha,
                 latestCommitShort: latest.shortSha,
@@ -246,11 +232,11 @@ const AtomeUpdater = (function () {
 
     /**
      * Get file list to update from GitHub
-     * Only retrieves files in updatePaths
-     * Uses cache to avoid rate limits
+     * Uses manifest.json from raw URL (no rate limit)
+     * Falls back to API only if manifest not found
      */
     async function getFileList(path = null) {
-        // Check cache first (only for full list, not recursive calls)
+        // Return cache if valid (not for recursive calls)
         if (!path && _fileListCache && (Date.now() - _fileListCacheTime < CONFIG.cacheDuration)) {
             log('Using cached file list');
             return _fileListCache;
@@ -259,7 +245,42 @@ const AtomeUpdater = (function () {
         const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
         let files = [];
 
-        // If no path specified, scan only updatePaths
+        // Try to get manifest first (no rate limit)
+        if (!path) {
+            try {
+                const manifestUrl = `${rawBaseUrl}/src/core_manifest.json?t=${Date.now()}`;
+                const manifestResponse = await fetch(manifestUrl);
+                
+                if (manifestResponse.ok) {
+                    const manifest = await manifestResponse.json();
+                    if (manifest.files && Array.isArray(manifest.files)) {
+                        log('Using manifest.json for file list');
+                        files = manifest.files
+                            .filter(f => {
+                                // Only include files from updatePaths
+                                const inUpdatePath = CONFIG.updatePaths.some(p => f.path.startsWith(p));
+                                // Exclude protected paths
+                                const isProtected = CONFIG.protectedPaths.some(p => f.path.startsWith(p));
+                                return inUpdatePath && !isProtected;
+                            })
+                            .map(f => ({
+                                path: f.path,
+                                downloadUrl: `${rawBaseUrl}/${f.path}`,
+                                sha: f.sha || null,
+                                size: f.size || 0
+                            }));
+                        
+                        _fileListCache = files;
+                        _fileListCacheTime = Date.now();
+                        return files;
+                    }
+                }
+            } catch (e) {
+                log('Manifest not available, falling back to API');
+            }
+        }
+
+        // Fallback: use GitHub API (rate limited)
         const pathsToScan = path ? [path] : CONFIG.updatePaths;
 
         for (const scanPath of pathsToScan) {
