@@ -48,7 +48,7 @@
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-puts('Yes and yes');
+puts('Yes and yesand yes again !');
 import('./aBox/index.js');
 // import('./examples/user_creation.js');
 import('./examples/update.js');
