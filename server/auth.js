@@ -1091,7 +1091,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
 
         // Check if path is allowed (prefix ou fichier spécifique)
-        const isAllowed = allowedPrefixes.some(prefix => filePath.startsWith(prefix)) 
+        const isAllowed = allowedPrefixes.some(prefix => filePath.startsWith(prefix))
             || allowedFiles.includes(filePath);
         if (!isAllowed) {
             return reply.code(403).send({
