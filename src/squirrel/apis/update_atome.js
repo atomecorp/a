@@ -228,58 +228,145 @@ const AtomeUpdater = (function () {
     }
 
     /**
+     * Fetch all files in a folder recursively via GitHub API
+     */
+    async function fetchFolderContentsRecursive(folderPath, protectedPaths = []) {
+        const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
+        const files = [];
+        
+        try {
+            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${folderPath}?ref=${branch}`;
+            log(`Scanning folder: ${folderPath}`);
+            
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'AtomeUpdater/1.0'
+                }
+            });
+            
+            if (!response.ok) {
+                log(`Failed to fetch folder: ${folderPath} (${response.status})`);
+                return files;
+            }
+            
+            const contents = await response.json();
+            
+            for (const item of contents) {
+                // Check if path is protected
+                const isProtected = protectedPaths.some(p => item.path.startsWith(p));
+                if (isProtected) {
+                    log(`Skipping protected: ${item.path}`);
+                    continue;
+                }
+                
+                if (item.type === 'file') {
+                    files.push({
+                        path: item.path,
+                        downloadUrl: `${rawBaseUrl}/${item.path}`,
+                        sha: item.sha,
+                        size: item.size
+                    });
+                } else if (item.type === 'dir') {
+                    // Recursively fetch subdirectories
+                    const subFiles = await fetchFolderContentsRecursive(item.path, protectedPaths);
+                    files.push(...subFiles);
+                }
+            }
+            
+        } catch (error) {
+            log(`Error fetching folder ${folderPath}:`, error.message);
+        }
+        
+        return files;
+    }
+
+    /**
      * Get file list to update from GitHub
-     * Uses version.json from raw URL (no rate limit) - single source of truth
-     * Falls back to API only if file list not in version.json
+     * Supports: scanFolders (scan entire directories) and files (explicit list)
      */
     async function getFileList(path = null) {
-        // Return cache if valid (not for recursive calls)
-        if (!path && _fileListCache && (Date.now() - _fileListCacheTime < CONFIG.cacheDuration)) {
-            log('Using cached file list');
-            return _fileListCache;
-        }
+        // TEMPORARILY DISABLE CACHE FOR DEBUGGING
+        // if (!path && _fileListCache && (Date.now() - _fileListCacheTime < CONFIG.cacheDuration)) {
+        //     log('Using cached file list');
+        //     return _fileListCache;
+        // }
+        
+        log('getFileList called, cache disabled for debugging');
 
         const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
         let files = [];
 
-        // Get file list from version.json (no rate limit, single source of truth)
+        // Get version.json from GitHub (no rate limit for raw URLs)
         if (!path) {
             try {
                 const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
+                log(`Fetching version.json from: ${versionUrl}`);
                 const versionResponse = await fetch(versionUrl);
 
                 if (versionResponse.ok) {
                     const versionData = await versionResponse.json();
-                    if (versionData.files && Array.isArray(versionData.files)) {
-                        log('Using version.json for file list');
-                        files = versionData.files
+                    const protectedPaths = versionData.protectedPaths || CONFIG.protectedPaths || [];
+                    
+                    log('version.json loaded:', JSON.stringify(versionData, null, 2));
+                    
+                    // 1. If scanFolders is defined, scan those folders recursively via API
+                    if (versionData.scanFolders && Array.isArray(versionData.scanFolders) && versionData.scanFolders.length > 0) {
+                        log(`Scanning ${versionData.scanFolders.length} folders...`);
+                        notifyProgress('scan', 12, `Scanning ${versionData.scanFolders.length} folders...`);
+                        
+                        for (const folder of versionData.scanFolders) {
+                            log(`Scanning folder: ${folder}`);
+                            const folderFiles = await fetchFolderContentsRecursive(folder, protectedPaths);
+                            log(`Found ${folderFiles.length} files in ${folder}`);
+                            files.push(...folderFiles);
+                        }
+                    }
+                    
+                    // 2. Add explicit files from the files array
+                    if (versionData.files && Array.isArray(versionData.files) && versionData.files.length > 0) {
+                        log(`Adding ${versionData.files.length} explicit files`);
+                        const explicitFiles = versionData.files
                             .filter(filePath => {
-                                const path = typeof filePath === 'string' ? filePath : filePath.path;
-                                // Exclude protected paths
-                                const isProtected = CONFIG.protectedPaths.some(p => path.startsWith(p));
+                                const p = typeof filePath === 'string' ? filePath : filePath.path;
+                                const isProtected = protectedPaths.some(prot => p.startsWith(prot));
                                 return !isProtected;
                             })
                             .map(filePath => {
-                                const path = typeof filePath === 'string' ? filePath : filePath.path;
+                                const p = typeof filePath === 'string' ? filePath : filePath.path;
                                 return {
-                                    path: path,
-                                    downloadUrl: `${rawBaseUrl}/${path}`,
+                                    path: p,
+                                    downloadUrl: `${rawBaseUrl}/${p}`,
                                     sha: null,
                                     size: 0
                                 };
                             });
-
+                        files.push(...explicitFiles);
+                    }
+                    
+                    // Remove duplicates by path
+                    const uniquePaths = new Set();
+                    files = files.filter(f => {
+                        if (uniquePaths.has(f.path)) return false;
+                        uniquePaths.add(f.path);
+                        return true;
+                    });
+                    
+                    log(`Total files to update: ${files.length}`);
+                    
+                    if (files.length > 0) {
                         _fileListCache = files;
                         _fileListCacheTime = Date.now();
                         return files;
                     }
                 }
             } catch (e) {
-                log('version.json not available or no files list, falling back to API');
+                log('Error loading version.json:', e.message);
             }
         }
 
-        // Fallback: use GitHub API (rate limited)
+        // Fallback: use GitHub API with CONFIG.updatePaths (rate limited)
+        log('Using fallback: CONFIG.updatePaths');
         const pathsToScan = path ? [path] : CONFIG.updatePaths;
 
         for (const scanPath of pathsToScan) {
@@ -517,6 +604,61 @@ const AtomeUpdater = (function () {
     }
 
     /**
+     * Force sync all files from GitHub without version check
+     * Downloads and replaces all files in src/ (except protected paths)
+     */
+    async function forceSync() {
+        if (_updateInProgress) {
+            throw new Error('Update already in progress');
+        }
+
+        _updateInProgress = true;
+        const platform = getPlatform();
+
+        log(`Force sync starting on ${platform.name}...`);
+
+        try {
+            // Get file list (scans folders from version.json)
+            notifyProgress('list', 10, 'Scanning files to sync...');
+            const files = await getFileList();
+            log(`Found ${files.length} files to sync`);
+
+            if (files.length === 0) {
+                throw new Error('No files found to sync. Check version.json scanFolders or files array.');
+            }
+
+            // Get version info (just for the version number, not for comparison)
+            notifyProgress('check', 15, 'Getting version info...');
+            const latestVersion = await getLatestVersion();
+
+            let result;
+
+            if (platform.isTauri) {
+                result = await applyUpdateTauri(files, latestVersion);
+            } else {
+                result = await applyUpdateServer(files, latestVersion);
+            }
+
+            if (_callbacks.onComplete) {
+                _callbacks.onComplete(result);
+            }
+
+            return result;
+
+        } catch (error) {
+            log('Force sync failed:', error.message);
+
+            if (_callbacks.onError) {
+                _callbacks.onError(error);
+            }
+
+            throw error;
+        } finally {
+            _updateInProgress = false;
+        }
+    }
+
+    /**
      * Configure callbacks
      */
     function setCallbacks(callbacks) {
@@ -545,6 +687,7 @@ const AtomeUpdater = (function () {
     return {
         checkForUpdates,
         applyUpdate,
+        forceSync,
         getCurrentVersion,
         getLatestVersion,
         setCallbacks,

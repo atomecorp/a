@@ -413,6 +413,44 @@ async function startUpdate() {
     }
 }
 
+/**
+ * Force sync all files from GitHub without version check
+ */
+async function forceSync() {
+    if (updateState.updating) return;
+
+    console.log('[Update] Force sync starting...');
+    updateState.updating = true;
+    showProgressPanel();
+
+    // Configure callbacks
+    AtomeUpdater.setCallbacks({
+        onProgress: ({ step, progress, message }) => {
+            console.log('[Update] Progress:', step, progress, message);
+            updateProgress(progress, message);
+        },
+        onComplete: (result) => {
+            console.log('[Update] Force sync complete:', result);
+            showUpdateResult(true, result);
+        },
+        onError: (error) => {
+            console.log('[Update] Force sync error:', error);
+            showUpdateResult(false, { error: error.message });
+        }
+    });
+
+    try {
+        console.log('[Update] Calling AtomeUpdater.forceSync()...');
+        const result = await AtomeUpdater.forceSync();
+        console.log('[Update] forceSync returned:', result);
+    } catch (error) {
+        console.error('[Update] forceSync threw:', error);
+        showUpdateResult(false, { error: error.message });
+    } finally {
+        updateState.updating = false;
+    }
+}
+
 // Create main button
 const updateBtn = $('button', {
     parent: updateContainer,
@@ -440,6 +478,36 @@ const updateBtn = $('button', {
         this.style.boxShadow = '0 4px 12px rgba(74, 158, 255, 0.4)';
     },
     onclick: checkUpdates
+});
+
+// Create force sync button
+const forceSyncBtn = $('button', {
+    parent: updateContainer,
+    id: 'atome-force-sync-btn',
+    text: '⚡',
+    title: 'Force Sync (download all files from GitHub)',
+    css: {
+        width: '50px',
+        height: '50px',
+        borderRadius: '50%',
+        border: 'none',
+        backgroundColor: '#ff6b35',
+        color: 'white',
+        fontSize: '20px',
+        cursor: 'pointer',
+        boxShadow: '0 4px 12px rgba(255, 107, 53, 0.4)',
+        transition: 'all 0.2s ease',
+        marginTop: '10px'
+    },
+    onmouseover: function () {
+        this.style.transform = 'scale(1.1)';
+        this.style.boxShadow = '0 6px 16px rgba(255, 107, 53, 0.6)';
+    },
+    onmouseout: function () {
+        this.style.transform = 'scale(1)';
+        this.style.boxShadow = '0 4px 12px rgba(255, 107, 53, 0.4)';
+    },
+    onclick: forceSync
 });
 
 // Startup log
