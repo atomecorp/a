@@ -40,3 +40,6 @@ hex = "0.4"
 # HTTP client for GitHub downloads
 reqwest = { version = "0.11", features = ["json"] }
 
+# ZIP extraction for updates
+zip = "0.6"
+tempfile = "3"

@@ -1242,9 +1242,105 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         };
     });
 
+    /**
+     * POST /api/admin/sync-from-zip
+     * Downloads ZIP from GitHub, extracts src/, syncs files
+     */
+    server.post('/api/admin/sync-from-zip', async (request, reply) => {
+        const { zipUrl, extractPath, protectedPaths = [] } = request.body;
+
+        if (!zipUrl) {
+            return reply.code(400).send({ success: false, error: 'Missing zipUrl' });
+        }
+
+        console.log('📦 Sync from ZIP:', zipUrl);
+        console.log('📂 Extract path:', extractPath);
+        console.log('🛡️ Protected paths:', protectedPaths);
+
+        try {
+            // Download ZIP
+            const response = await fetch(zipUrl);
+            if (!response.ok) {
+                throw new Error(`GitHub returned status ${response.status}`);
+            }
+
+            const zipBuffer = Buffer.from(await response.arrayBuffer());
+            console.log('📥 Downloaded ZIP:', zipBuffer.length, 'bytes');
+
+            // Use AdmZip to extract
+            const AdmZip = (await import('adm-zip')).default;
+            const zip = new AdmZip(zipBuffer);
+            const entries = zip.getEntries();
+
+            console.log('📦 ZIP contains', entries.length, 'entries');
+
+            // Find root prefix (e.g., "a-main/")
+            let rootPrefix = '';
+            if (entries.length > 0) {
+                const firstName = entries[0].entryName;
+                const idx = firstName.indexOf('/');
+                if (idx > 0) {
+                    rootPrefix = firstName.substring(0, idx + 1);
+                }
+            }
+            console.log('📁 ZIP root prefix:', rootPrefix);
+
+            const updatedFiles = [];
+            const errors = [];
+
+            for (const entry of entries) {
+                // Skip directories
+                if (entry.isDirectory) continue;
+
+                const name = entry.entryName;
+
+                // Strip root prefix
+                const relativePath = name.startsWith(rootPrefix)
+                    ? name.substring(rootPrefix.length)
+                    : name;
+
+                // Only process files in extractPath (src/)
+                if (!relativePath.startsWith(extractPath)) continue;
+
+                // Check if protected
+                const isProtected = protectedPaths.some(p => relativePath.startsWith(p));
+                if (isProtected) continue;
+
+                // Write file
+                const targetPath = path.join(process.cwd(), relativePath);
+                const targetDir = path.dirname(targetPath);
+
+                try {
+                    await fs.mkdir(targetDir, { recursive: true });
+                    await fs.writeFile(targetPath, entry.getData());
+                    updatedFiles.push(relativePath);
+                } catch (e) {
+                    errors.push({ path: relativePath, error: e.message });
+                }
+            }
+
+            console.log('✅ Updated', updatedFiles.length, 'files');
+            if (errors.length > 0) {
+                console.log('⚠️', errors.length, 'errors');
+            }
+
+            return {
+                success: errors.length === 0,
+                filesUpdated: updatedFiles.length,
+                updated: updatedFiles,
+                errors: errors.length > 0 ? errors : null
+            };
+
+        } catch (error) {
+            console.error('❌ Sync from ZIP failed:', error.message);
+            return reply.code(500).send({ success: false, error: error.message });
+        }
+    });
+
     console.log('🔐 Authentication routes registered');
     console.log('🔧 Admin update route registered: /api/admin/apply-update');
     console.log('🔧 Admin batch-update route registered: /api/admin/batch-update');
+    console.log('🔧 Admin sync-from-zip route registered: /api/admin/sync-from-zip');
     if (serverIdentityConfigured()) {
         console.log('🔑 Server identity verification enabled');
     } else {

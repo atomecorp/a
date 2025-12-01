@@ -98,6 +98,7 @@
     "@fastify/websocket": "^11.2.0",
     "@nodegui/nodegui": "^0.73.0",
     "@ruby/wasm-wasi": "^2.7.2",
+    "adm-zip": "^0.5.16",
     "bcrypt": "^6.0.0",
     "chokidar": "^3.6.0",
     "codemirror": "^6.0.2",

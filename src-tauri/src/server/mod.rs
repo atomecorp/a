@@ -10,12 +10,14 @@ use serde_json::json;
 use std::{
     borrow::Cow,
     fs as stdfs,
+    io::{Cursor, Read},
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
 };
 use tokio::fs;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
+use zip::ZipArchive;
 
 // Local authentication module
 pub mod local_auth;
@@ -503,6 +505,215 @@ async fn batch_update_handler(
     )
 }
 
+// === SYNC FROM ZIP HANDLER ===
+
+#[derive(serde::Deserialize)]
+pub struct SyncFromZipRequest {
+    #[serde(rename = "zipUrl")]
+    pub zip_url: String,
+    #[serde(rename = "extractPath")]
+    pub extract_path: String,
+    #[serde(rename = "protectedPaths", default)]
+    pub protected_paths: Vec<String>,
+}
+
+/// Handler for downloading ZIP from GitHub, extracting src/, and syncing
+async fn sync_from_zip_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<SyncFromZipRequest>,
+) -> impl IntoResponse {
+    println!("📦 Sync from ZIP: {}", payload.zip_url);
+    println!("📂 Extract path: {}", payload.extract_path);
+    println!("🛡️ Protected paths: {:?}", payload.protected_paths);
+
+    // Get base path (parent of static_dir which is src/)
+    let static_dir = state.static_dir.as_ref();
+    let base_path = match static_dir.parent() {
+        Some(parent) => match parent.canonicalize() {
+            Ok(abs) => abs,
+            Err(_) => parent.to_path_buf(),
+        },
+        None => static_dir.to_path_buf(),
+    };
+    println!("📂 Base path: {:?}", base_path);
+
+    // Download ZIP from GitHub
+    let client = reqwest::Client::new();
+    let response = match client.get(&payload.zip_url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to download ZIP: {}", e)
+                })),
+            );
+        }
+    };
+
+    if !response.status().is_success() {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(json!({
+                "success": false,
+                "error": format!("GitHub returned status {}", response.status())
+            })),
+        );
+    }
+
+    let zip_bytes = match response.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to read ZIP: {}", e)
+                })),
+            );
+        }
+    };
+
+    println!("📥 Downloaded ZIP: {} bytes", zip_bytes.len());
+
+    // Extract ZIP in memory
+    let cursor = Cursor::new(zip_bytes.as_ref());
+    let mut archive = match ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to read ZIP archive: {}", e)
+                })),
+            );
+        }
+    };
+
+    println!("📦 ZIP contains {} files", archive.len());
+
+    let mut updated_files: Vec<String> = Vec::new();
+    let mut errors: Vec<serde_json::Value> = Vec::new();
+
+    // The ZIP from GitHub has a root folder like "a-main/"
+    // We need to find it and strip it
+    let mut root_prefix = String::new();
+    if let Ok(first_entry) = archive.by_index(0) {
+        let name = first_entry.name();
+        if let Some(idx) = name.find('/') {
+            root_prefix = name[..=idx].to_string();
+        }
+    }
+    println!("📁 ZIP root prefix: {}", root_prefix);
+
+    // Re-create archive (it was consumed)
+    let cursor = Cursor::new(zip_bytes.as_ref());
+    let mut archive = match ZipArchive::new(cursor) {
+        Ok(a) => a,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to re-read ZIP archive: {}", e)
+                })),
+            );
+        }
+    };
+
+    // Extract files
+    for i in 0..archive.len() {
+        let mut file = match archive.by_index(i) {
+            Ok(f) => f,
+            Err(e) => {
+                errors.push(json!({
+                    "index": i,
+                    "error": format!("Failed to read entry: {}", e)
+                }));
+                continue;
+            }
+        };
+
+        let name = file.name().to_string();
+
+        // Skip directories
+        if name.ends_with('/') {
+            continue;
+        }
+
+        // Strip root prefix and check if it's in src/
+        let relative_path = if name.starts_with(&root_prefix) {
+            &name[root_prefix.len()..]
+        } else {
+            &name
+        };
+
+        // Only process files in the extract_path (src/)
+        if !relative_path.starts_with(&payload.extract_path) {
+            continue;
+        }
+
+        // Check if path is protected
+        let is_protected = payload.protected_paths.iter().any(|p| relative_path.starts_with(p));
+        if is_protected {
+            continue;
+        }
+
+        // Read file content
+        let mut content = Vec::new();
+        if let Err(e) = file.read_to_end(&mut content) {
+            errors.push(json!({
+                "path": relative_path,
+                "error": format!("Failed to read content: {}", e)
+            }));
+            continue;
+        }
+
+        // Write file to disk
+        let target_path = base_path.join(relative_path);
+
+        // Create parent directories
+        if let Some(parent) = target_path.parent() {
+            if let Err(e) = stdfs::create_dir_all(parent) {
+                errors.push(json!({
+                    "path": relative_path,
+                    "error": format!("Failed to create directory: {}", e)
+                }));
+                continue;
+            }
+        }
+
+        // Write file
+        if let Err(e) = stdfs::write(&target_path, &content) {
+            errors.push(json!({
+                "path": relative_path,
+                "error": format!("Failed to write file: {}", e)
+            }));
+            continue;
+        }
+
+        updated_files.push(relative_path.to_string());
+    }
+
+    println!("✅ Updated {} files", updated_files.len());
+    if !errors.is_empty() {
+        println!("⚠️ {} errors", errors.len());
+    }
+
+    let success = errors.is_empty();
+    (
+        if success { StatusCode::OK } else { StatusCode::PARTIAL_CONTENT },
+        Json(json!({
+            "success": success,
+            "filesUpdated": updated_files.len(),
+            "updated": updated_files,
+            "errors": if errors.is_empty() { None } else { Some(errors) }
+        })),
+    )
+}
+
 pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
@@ -590,6 +801,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .route("/api/uploads/:file", get(download_upload_handler))
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))
+        .route("/api/admin/sync-from-zip", post(sync_from_zip_handler))
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)
