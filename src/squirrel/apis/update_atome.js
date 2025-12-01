@@ -161,14 +161,20 @@ const AtomeUpdater = (function () {
      * Compare two versions/commits
      */
     function hasUpdate(current, latest) {
+        log(`Comparing versions: local=${current.version}, remote=${latest.version}`);
+        
+        // Compare by version number
+        if (current.version && latest.version) {
+            const result = compareVersions(latest.version, current.version);
+            log(`Version comparison result: ${result} (1=update available, 0=same, -1=local newer)`);
+            return result > 0;
+        }
+        
         // Compare by commit if both have it
         if (current.commit && latest.sha && latest.sha !== latest.version) {
             return current.commit !== latest.sha;
         }
-        // Compare by version number
-        if (current.version && latest.version) {
-            return compareVersions(latest.version, current.version) > 0;
-        }
+        
         return true; // If can't compare, assume update available
     }
 
@@ -232,8 +238,8 @@ const AtomeUpdater = (function () {
 
     /**
      * Get file list to update from GitHub
-     * Uses manifest.json from raw URL (no rate limit)
-     * Falls back to API only if manifest not found
+     * Uses version.json from raw URL (no rate limit) - single source of truth
+     * Falls back to API only if file list not in version.json
      */
     async function getFileList(path = null) {
         // Return cache if valid (not for recursive calls)
@@ -245,30 +251,32 @@ const AtomeUpdater = (function () {
         const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
         let files = [];
 
-        // Try to get manifest first (no rate limit)
+        // Get file list from version.json (no rate limit, single source of truth)
         if (!path) {
             try {
-                const manifestUrl = `${rawBaseUrl}/src/core_manifest.json?t=${Date.now()}`;
-                const manifestResponse = await fetch(manifestUrl);
+                const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
+                const versionResponse = await fetch(versionUrl);
 
-                if (manifestResponse.ok) {
-                    const manifest = await manifestResponse.json();
-                    if (manifest.files && Array.isArray(manifest.files)) {
-                        log('Using manifest.json for file list');
-                        files = manifest.files
-                            .filter(f => {
-                                // Only include files from updatePaths
-                                const inUpdatePath = CONFIG.updatePaths.some(p => f.path.startsWith(p));
+                if (versionResponse.ok) {
+                    const versionData = await versionResponse.json();
+                    if (versionData.files && Array.isArray(versionData.files)) {
+                        log('Using version.json for file list');
+                        files = versionData.files
+                            .filter(filePath => {
+                                const path = typeof filePath === 'string' ? filePath : filePath.path;
                                 // Exclude protected paths
-                                const isProtected = CONFIG.protectedPaths.some(p => f.path.startsWith(p));
-                                return inUpdatePath && !isProtected;
+                                const isProtected = CONFIG.protectedPaths.some(p => path.startsWith(p));
+                                return !isProtected;
                             })
-                            .map(f => ({
-                                path: f.path,
-                                downloadUrl: `${rawBaseUrl}/${f.path}`,
-                                sha: f.sha || null,
-                                size: f.size || 0
-                            }));
+                            .map(filePath => {
+                                const path = typeof filePath === 'string' ? filePath : filePath.path;
+                                return {
+                                    path: path,
+                                    downloadUrl: `${rawBaseUrl}/${path}`,
+                                    sha: null,
+                                    size: 0
+                                };
+                            });
 
                         _fileListCache = files;
                         _fileListCacheTime = Date.now();
@@ -276,7 +284,7 @@ const AtomeUpdater = (function () {
                     }
                 }
             } catch (e) {
-                log('Manifest not available, falling back to API');
+                log('version.json not available or no files list, falling back to API');
             }
         }
 
