@@ -162,19 +162,19 @@ const AtomeUpdater = (function () {
      */
     function hasUpdate(current, latest) {
         log(`Comparing versions: local=${current.version}, remote=${latest.version}`);
-        
+
         // Compare by version number
         if (current.version && latest.version) {
             const result = compareVersions(latest.version, current.version);
             log(`Version comparison result: ${result} (1=update available, 0=same, -1=local newer)`);
             return result > 0;
         }
-        
+
         // Compare by commit if both have it
         if (current.commit && latest.sha && latest.sha !== latest.version) {
             return current.commit !== latest.sha;
         }
-        
+
         return true; // If can't compare, assume update available
     }
 
