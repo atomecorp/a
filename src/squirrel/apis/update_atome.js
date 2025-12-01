@@ -226,66 +226,62 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Get file list to update from GitHub
-     * SIMPLIFIED: Uses the "files" array from version.json (no API scanning)
+     * Get file list from GitHub using Tree API (1 request = all files)
+     * Scans the entire src/ folder on GitHub
      */
     async function getFileList() {
-        const { rawBaseUrl } = CONFIG.github;
-        log('getFileList: Using files list from version.json');
+        const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
+        const protectedPaths = CONFIG.protectedPaths || [];
+        
+        log('getFileList: Fetching complete src/ tree from GitHub...');
 
-        // Use cached remote version data if available
-        let versionData = _remoteVersionData;
-
-        // If not cached, fetch it
-        if (!versionData) {
-            try {
-                const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
-                log(`Fetching version.json from: ${versionUrl}`);
-                const response = await fetch(versionUrl);
-
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch version.json: ${response.status}`);
+        try {
+            // Use GitHub Tree API with recursive=1 (single request for entire tree)
+            const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+            log(`Fetching tree from: ${treeUrl}`);
+            
+            const response = await fetch(treeUrl, {
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'User-Agent': 'AtomeUpdater/1.0'
                 }
-
-                versionData = await response.json();
-                _remoteVersionData = versionData;
-            } catch (e) {
-                log('Error loading version.json:', e.message);
-                return [];
-            }
-        }
-
-        const protectedPaths = versionData.protectedPaths || CONFIG.protectedPaths || [];
-        log('version.json loaded, version:', versionData.version);
-        log('Files in version.json:', (versionData.files || []).length);
-
-        // Use the "files" array from version.json
-        if (!versionData.files || !Array.isArray(versionData.files) || versionData.files.length === 0) {
-            log('WARNING: No files in version.json. Add files to src/version.json on GitHub.');
-            return [];
-        }
-
-        const files = versionData.files
-            .filter(filePath => {
-                const p = typeof filePath === 'string' ? filePath : filePath.path;
-                const isProtected = protectedPaths.some(prot => p.startsWith(prot));
-                if (isProtected) {
-                    log(`Skipping protected: ${p}`);
-                }
-                return !isProtected;
-            })
-            .map(filePath => {
-                const p = typeof filePath === 'string' ? filePath : filePath.path;
-                return {
-                    path: p,
-                    downloadUrl: `${rawBaseUrl}/${p}`,
-                    sha: null,
-                    size: 0
-                };
             });
 
-        log(`Total files to update: ${files.length}`);
-        return files;
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('GitHub API rate limit exceeded');
+                }
+                throw new Error(`GitHub API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            log(`Tree loaded: ${data.tree.length} total items`);
+
+            // Filter: only files in src/ folder, exclude protected paths
+            const files = data.tree
+                .filter(item => {
+                    // Only files (not directories)
+                    if (item.type !== 'blob') return false;
+                    // Only src/ folder
+                    if (!item.path.startsWith('src/')) return false;
+                    // Exclude protected paths
+                    const isProtected = protectedPaths.some(prot => item.path.startsWith(prot));
+                    return !isProtected;
+                })
+                .map(item => ({
+                    path: item.path,
+                    downloadUrl: `${rawBaseUrl}/${item.path}`,
+                    sha: item.sha,
+                    size: item.size || 0
+                }));
+
+            log(`Files to sync: ${files.length} (from src/)`);
+            return files;
+
+        } catch (error) {
+            log('Error fetching tree:', error.message);
+            throw error;
+        }
     }
 
     /**
