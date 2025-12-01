@@ -129,12 +129,12 @@ const AtomeUpdater = (function () {
      */
     async function getLatestCommit() {
         const { rawBaseUrl } = CONFIG.github;
-        
+
         try {
             // Fetch version.json from raw GitHub (no rate limit)
             const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
             const response = await fetch(versionUrl);
-            
+
             if (response.ok) {
                 const data = await response.json();
                 if (data.commit) {
@@ -147,16 +147,16 @@ const AtomeUpdater = (function () {
                     };
                 }
             }
-            
+
             // Fallback: try GitHub API with rate limit handling
             return await getLatestCommitFromAPI();
-            
+
         } catch (error) {
             log('Failed to get latest commit:', error.message);
             throw error;
         }
     }
-    
+
     /**
      * Fallback: Get latest commit from GitHub API
      */
@@ -255,7 +255,7 @@ const AtomeUpdater = (function () {
             log('Using cached file list');
             return _fileListCache;
         }
-        
+
         const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
         let files = [];
 
