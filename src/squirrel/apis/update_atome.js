@@ -91,7 +91,6 @@ const AtomeUpdater = (function () {
      */
     async function getCurrentVersion() {
         try {
-            // Try multiple possible paths
             const paths = [
                 `/version.json`,
                 `/src/version.json`,
@@ -105,7 +104,6 @@ const AtomeUpdater = (function () {
                         const data = await response.json();
                         return {
                             version: data.version || '0.0.0',
-                            commit: data.commit || null,
                             updatedAt: data.updatedAt || null
                         };
                     }
@@ -114,24 +112,22 @@ const AtomeUpdater = (function () {
                 }
             }
 
-            // Fallback: version file not found
             log('Version file not found, assuming first install');
-            return { version: '0.0.0', commit: null, updatedAt: null };
+            return { version: '0.0.0', updatedAt: null };
         } catch (e) {
             log('Could not read version file:', e.message);
-            return { version: '0.0.0', commit: null, updatedAt: null };
+            return { version: '0.0.0', updatedAt: null };
         }
     }
 
     /**
-     * Get latest version from GitHub (raw URL - no rate limit)
-     * Only uses raw.githubusercontent.com, never the API
+     * Get latest version from GitHub
+     * Uses ONLY raw.githubusercontent.com - NO API, NO rate limit
      */
-    async function getLatestCommit() {
+    async function getLatestVersion() {
         const { rawBaseUrl } = CONFIG.github;
 
         try {
-            // Fetch version.json from raw GitHub (no rate limit)
             const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
             const response = await fetch(versionUrl);
 
@@ -141,14 +137,9 @@ const AtomeUpdater = (function () {
 
             const data = await response.json();
 
-            // Use version as identifier (no API needed)
             return {
-                sha: data.commit || data.version, // Use commit if available, else version
-                shortSha: data.commit?.substring(0, 7) || data.version,
                 version: data.version || '0.0.0',
-                message: data.message || `Version ${data.version}`,
-                date: data.updatedAt || new Date().toISOString(),
-                author: data.author || 'atomecorp'
+                updatedAt: data.updatedAt || new Date().toISOString()
             };
 
         } catch (error) {
@@ -158,24 +149,16 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Compare two versions/commits
+     * Simple version comparison
      */
     function hasUpdate(current, latest) {
-        log(`Comparing versions: local=${current.version}, remote=${latest.version}`);
-
-        // Compare by version number
-        if (current.version && latest.version) {
-            const result = compareVersions(latest.version, current.version);
-            log(`Version comparison result: ${result} (1=update available, 0=same, -1=local newer)`);
-            return result > 0;
-        }
-
-        // Compare by commit if both have it
-        if (current.commit && latest.sha && latest.sha !== latest.version) {
-            return current.commit !== latest.sha;
-        }
-
-        return true; // If can't compare, assume update available
+        log(`Comparing: local=${current.version}, remote=${latest.version}`);
+        
+        const result = compareVersions(latest.version, current.version);
+        const updateAvailable = result > 0;
+        
+        log(`Result: ${updateAvailable ? 'UPDATE AVAILABLE' : 'up to date'}`);
+        return updateAvailable;
     }
 
     /**
@@ -204,7 +187,7 @@ const AtomeUpdater = (function () {
         try {
             const [current, latest] = await Promise.all([
                 getCurrentVersion(),
-                getLatestCommit()
+                getLatestVersion()
             ]);
 
             const updateAvailable = hasUpdate(current, latest);
@@ -217,18 +200,11 @@ const AtomeUpdater = (function () {
             };
 
             log('Check complete:', updateAvailable ? 'Update available' : 'Up to date');
-            log(`Local: ${current.version}, Remote: ${latest.version}`);
 
             return {
                 hasUpdate: updateAvailable,
                 currentVersion: current.version,
-                latestVersion: latest.version,
-                currentCommit: current.commit,
-                latestCommit: latest.sha,
-                latestCommitShort: latest.shortSha,
-                commitMessage: latest.message,
-                commitDate: latest.date,
-                commitAuthor: latest.author
+                latestVersion: latest.version
             };
         } catch (error) {
             log('Check failed:', error.message);
@@ -556,7 +532,7 @@ const AtomeUpdater = (function () {
         checkForUpdates,
         applyUpdate,
         getCurrentVersion,
-        getLatestCommit,
+        getLatestVersion,
         setCallbacks,
         getStatus,
         getPlatform,
