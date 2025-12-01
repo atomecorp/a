@@ -9,6 +9,7 @@
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
+import { getABoxEventBus } from './aBoxServer.js';
 
 // =============================================================================
 // CONSTANTS
@@ -269,6 +270,27 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             });
 
             console.log(`✅ User registered: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
+
+            // Emit account creation event for sync
+            try {
+                const eventBus = getABoxEventBus();
+                if (eventBus) {
+                    eventBus.emit('event', {
+                        type: 'sync:account-created',
+                        timestamp: new Date().toISOString(),
+                        runtime: 'Fastify',
+                        payload: {
+                            userId: principalId,
+                            username: cleanUsername,
+                            phone: cleanPhone,
+                            optional: optional || {}
+                        }
+                    });
+                    console.log('[auth] Emitted sync:account-created event');
+                }
+            } catch (e) {
+                console.warn('[auth] Could not emit account-created event:', e.message);
+            }
 
             return {
                 success: true,
@@ -907,6 +929,26 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             });
 
             console.log(`🗑️ Account deleted: user ${decoded.id}`);
+
+            // Emit account deletion event for sync
+            try {
+                const eventBus = getABoxEventBus();
+                if (eventBus) {
+                    eventBus.emit('event', {
+                        type: 'sync:account-deleted',
+                        timestamp: new Date().toISOString(),
+                        runtime: 'Fastify',
+                        payload: {
+                            userId: decoded.id,
+                            phone: snapshot.phone,
+                            username: snapshot.username
+                        }
+                    });
+                    console.log('[auth] Emitted sync:account-deleted event');
+                }
+            } catch (e) {
+                console.warn('[auth] Could not emit account-deleted event:', e.message);
+            }
 
             return {
                 success: true,

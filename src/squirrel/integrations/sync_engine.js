@@ -187,6 +187,27 @@ class SyncEngineClient {
                 this.state.lastDelta = delta;
                 this.broadcast(delta);
             }
+        } else if (payload.type === 'sync:account-created') {
+            // Account created on cloud server - sync to local
+            console.log('[sync_engine] Account created on cloud:', payload.payload);
+            this.broadcast({
+                type: 'account-created',
+                userId: payload.payload?.userId,
+                username: payload.payload?.username,
+                phone: payload.payload?.phone,
+                optional: payload.payload?.optional,
+                rawEvent: payload
+            });
+        } else if (payload.type === 'sync:account-deleted') {
+            // Account deleted on cloud server - sync to local
+            console.log('[sync_engine] Account deleted on cloud:', payload.payload);
+            this.broadcast({
+                type: 'account-deleted',
+                userId: payload.payload?.userId,
+                username: payload.payload?.username,
+                phone: payload.payload?.phone,
+                rawEvent: payload
+            });
         } else if (payload.type === 'sync:warning') {
             this.broadcast({ warning: payload.payload?.message, rawEvent: payload });
         } else if (payload.type === 'sync:ready') {

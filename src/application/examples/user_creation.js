@@ -1396,8 +1396,70 @@ async function handleLogin() {
         showError(null);
         puts('[auth] Logging in...');
 
-        const result = await apiLogin(phone, password);
+        let result = await apiLogin(phone, password);
         console.log('[auth] Login result:', result);
+
+        // If local login failed and we're using local auth, try cloud login and sync
+        if (!result.success && useLocalAuth) {
+            puts('[auth] Local login failed, trying cloud sync...');
+
+            const cloudServerUrl = 'http://localhost:3001';
+
+            // Check if cloud server is available
+            try {
+                const cloudLoginResponse = await fetch(`${cloudServerUrl}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, password })
+                });
+
+                const cloudLoginData = await cloudLoginResponse.json().catch(() => ({}));
+
+                if (cloudLoginData.success && cloudLoginData.user) {
+                    puts('[auth] Cloud login successful, creating local account...');
+
+                    // Create local account with same credentials
+                    const localRegisterResponse = await fetch(`${apiBase}/api/auth/local/register`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: cloudLoginData.user.username,
+                            phone: cloudLoginData.user.phone,
+                            password: password
+                        })
+                    });
+
+                    const localRegisterData = await localRegisterResponse.json().catch(() => ({}));
+
+                    if (localRegisterData.success || localRegisterData.error?.includes('already exists')) {
+                        puts('[auth] Local account created/exists, logging in locally...');
+
+                        // Now login locally
+                        result = await apiLogin(phone, password);
+
+                        if (result.success) {
+                            // Update cloud_id on local account
+                            try {
+                                await fetch(`${apiBase}/api/auth/local/update-cloud-id`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${result.token || localStorage.getItem('local_auth_token')}`
+                                    },
+                                    body: JSON.stringify({ cloudId: cloudLoginData.user.id })
+                                });
+                            } catch (e) {
+                                console.warn('[auth] Could not update cloud ID:', e.message);
+                            }
+                        }
+                    } else {
+                        puts('[auth] Failed to create local account:', localRegisterData.error);
+                    }
+                }
+            } catch (cloudErr) {
+                puts('[auth] Cloud server not available:', cloudErr.message);
+            }
+        }
 
         if (result.success) {
             accountStore.isLoggedIn = true;
@@ -3072,3 +3134,145 @@ if (typeof window !== 'undefined') {
         checkSession: checkSessionOnLoad
     };
 }
+
+// =====================================================
+// SYNC ENGINE LISTENER - Cloud → Local synchronization
+// =====================================================
+
+/**
+ * Handle account sync events from the cloud server
+ * When accounts are created/deleted on the cloud, sync to local Tauri/Axum
+ */
+async function handleAccountSyncEvent(delta) {
+    // Only process account events
+    if (!delta || !delta.type) return;
+
+    // Check if we're on Tauri (need local auth)
+    const isTauri = Boolean(
+        window.__TAURI__ ||
+        window.__TAURI_INTERNALS__ ||
+        (typeof navigator !== 'undefined' && /tauri/i.test(navigator.userAgent || ''))
+    );
+
+    const port = window.location?.port || '';
+    const useLocalAuth = isTauri || port === '1420' || port === '1430';
+
+    if (!useLocalAuth) {
+        // No local auth server to sync to
+        return;
+    }
+
+    if (delta.type === 'account-created') {
+        puts('[sync] Cloud account created, syncing to local...', delta);
+
+        // Check if we have stored credentials for this user to create locally
+        // This handles the case where the account was created on another device
+        // and we need to sync it to the local Tauri instance
+
+        // For now, we just log it - the user will need to login locally
+        // which will create the local account automatically via handleLogin
+        puts('[sync] Account created on cloud:', delta.username, delta.phone);
+        puts('[sync] User can login locally to sync this account');
+
+    } else if (delta.type === 'account-deleted') {
+        puts('[sync] Cloud account deleted, syncing to local...', delta);
+
+        // If this is the currently logged-in user, logout and delete locally
+        if (accountStore.currentUser &&
+            (accountStore.currentUser.phone === delta.phone ||
+                accountStore.currentUser.id === delta.userId)) {
+
+            puts('[sync] Current user account deleted from cloud, cleaning up locally...');
+
+            // Try to delete the local account (without password since cloud already verified)
+            try {
+                const localApiBase = 'http://127.0.0.1:3000';
+
+                // Get the local auth token
+                const localToken = localStorage.getItem('local_auth_token');
+
+                if (localToken) {
+                    // Delete local account using admin-level deletion (synced from cloud)
+                    const deleteResponse = await fetch(`${localApiBase}/api/auth/local/delete-synced`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localToken}`
+                        },
+                        body: JSON.stringify({
+                            userId: delta.userId,
+                            phone: delta.phone,
+                            syncedFromCloud: true
+                        })
+                    });
+
+                    const deleteResult = await deleteResponse.json().catch(() => ({}));
+
+                    if (deleteResult.success) {
+                        puts('[sync] ✅ Local account deleted (synced from cloud)');
+                    } else {
+                        puts('[sync] Local deletion response:', deleteResult);
+                    }
+                }
+            } catch (err) {
+                puts('[sync] Error syncing deletion to local:', err.message);
+            }
+
+            // Clear local state
+            localStorage.removeItem('local_auth_token');
+            accountStore.isLoggedIn = false;
+            accountStore.currentUser = null;
+
+            // Reset button
+            const btn = document.getElementById('account_entry_btn');
+            if (btn) {
+                btn.style.backgroundColor = '#1976d2';
+                btn.title = '';
+            }
+
+            // Close panel if open
+            const panel = document.getElementById('account_panel_overlay');
+            if (panel) {
+                clearRoot();
+                $('div', {
+                    parent: `#${rootId}`,
+                    text: '⚠️ Your account was deleted from another device',
+                    css: {
+                        fontSize: '14px',
+                        textAlign: 'center',
+                        color: '#f44336',
+                        padding: '20px'
+                    }
+                });
+                setTimeout(() => {
+                    panel.remove();
+                }, 3000);
+            }
+        }
+    }
+}
+
+// Subscribe to sync engine events when available
+function initAccountSyncListener() {
+    // Listen via window event
+    window.addEventListener('squirrel:adole-delta', (event) => {
+        handleAccountSyncEvent(event.detail);
+    });
+
+    // Also subscribe via SyncEngine API if available
+    if (window.Squirrel?.SyncEngine?.subscribe) {
+        window.Squirrel.SyncEngine.subscribe(handleAccountSyncEvent);
+        puts('[auth] Subscribed to SyncEngine for account events');
+    } else {
+        // Wait for SyncEngine to be ready
+        window.addEventListener('squirrel:sync-ready', () => {
+            if (window.Squirrel?.SyncEngine?.subscribe) {
+                window.Squirrel.SyncEngine.subscribe(handleAccountSyncEvent);
+                puts('[auth] Subscribed to SyncEngine for account events (delayed)');
+            }
+        }, { once: true });
+    }
+}
+
+// Initialize sync listener
+initAccountSyncListener();

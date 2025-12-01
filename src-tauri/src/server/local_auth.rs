@@ -98,6 +98,17 @@ pub struct DeleteAccountRequest {
     pub password: String,
 }
 
+/// Request for synced deletion from cloud (no password needed, cloud already verified)
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct DeleteSyncedRequest {
+    #[serde(rename = "userId")]
+    pub user_id: Option<String>,
+    pub phone: Option<String>,
+    #[serde(rename = "syncedFromCloud")]
+    pub synced_from_cloud: Option<bool>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
     pub success: bool,
@@ -701,6 +712,161 @@ async fn delete_handler(
     )
 }
 
+/// DELETE /api/auth/local/delete-synced
+/// Delete local account synced from cloud (no password verification needed)
+/// This is called when an account is deleted from the cloud server
+async fn delete_synced_handler(
+    State(state): State<LocalAuthState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<DeleteSyncedRequest>,
+) -> impl IntoResponse {
+    // Must have a valid JWT (to prove they were logged in)
+    let token = match headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+    {
+        Some(t) => t,
+        None => {
+            return (
+                StatusCode::OK,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some("Authorization required".into()),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Verify token
+    let claims = match decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+        &Validation::default(),
+    ) {
+        Ok(data) => data.claims,
+        Err(_) => {
+            return (
+                StatusCode::OK,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some("Invalid or expired session".into()),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Verify this is a synced deletion request
+    if !req.synced_from_cloud.unwrap_or(false) {
+        return (
+            StatusCode::OK,
+            Json(AuthResponse {
+                success: false,
+                error: Some("Invalid sync request".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        );
+    }
+
+    // Find user by phone or userId from the request, or use the token's user
+    let user_id_to_delete = req.user_id.unwrap_or_else(|| claims.sub.clone());
+    let phone_to_check = req.phone.unwrap_or_else(|| claims.phone.clone());
+
+    // Verify the token user matches the deletion target (security check)
+    if claims.sub != user_id_to_delete && claims.phone != phone_to_check {
+        return (
+            StatusCode::OK,
+            Json(AuthResponse {
+                success: false,
+                error: Some("Unauthorized to delete this account".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        );
+    }
+
+    // Get user info for logging
+    let user = {
+        let db = state.db.lock().unwrap();
+        let mut stmt = db
+            .prepare("SELECT id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync FROM users WHERE id = ?1 OR phone = ?2")
+            .unwrap();
+
+        stmt.query_row(params![&user_id_to_delete, &phone_to_check], |row| {
+            Ok(LocalUser {
+                id: row.get(0)?,
+                username: row.get(1)?,
+                phone: row.get(2)?,
+                password_hash: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+                cloud_id: row.get(6)?,
+                last_sync: row.get(7)?,
+            })
+        })
+        .ok()
+    };
+
+    let user = match user {
+        Some(u) => u,
+        None => {
+            // User not found - might already be deleted
+            return (
+                StatusCode::OK,
+                Json(AuthResponse {
+                    success: true,
+                    message: Some("Account already deleted or not found locally".into()),
+                    error: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Delete user
+    {
+        let db = state.db.lock().unwrap();
+        if let Err(e) = db.execute("DELETE FROM users WHERE id = ?1", [&user.id]) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some(format!("Failed to delete account: {}", e)),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    }
+
+    println!(
+        "🗑️ Local account deleted (synced from cloud): {} ({})",
+        user.username, user.phone
+    );
+
+    (
+        StatusCode::OK,
+        Json(AuthResponse {
+            success: true,
+            message: Some("Account deleted successfully (synced from cloud)".into()),
+            error: None,
+            user: None,
+            token: None,
+        }),
+    )
+}
+
 // =============================================================================
 // JWT HELPERS
 // =============================================================================
@@ -863,6 +1029,10 @@ pub fn create_local_auth_router(data_dir: PathBuf) -> Router {
         .route("/api/auth/local/logout", post(logout_handler))
         .route("/api/auth/local/me", get(me_handler))
         .route("/api/auth/local/delete", delete(delete_handler))
+        .route(
+            "/api/auth/local/delete-synced",
+            delete(delete_synced_handler),
+        )
         .route(
             "/api/auth/local/update-cloud-id",
             post(update_cloud_id_handler),
