@@ -1,51 +1,12 @@
 {
   "version": "1.2.8",
-  "poil": "poiluche",
   "updatedAt": "2025-12-01T00:00:00Z",
   "description": "Atome/Squirrel core version and update manifest",
-  "updatePaths": [
-    "src/squirrel",
-    "src/application/security"
+  "scanFolders": [
+    "src"
   ],
   "protectedPaths": [
-    "src/application/examples",
-    "src/application/config"
+    "src/application/temp"
   ],
-  "files": [
-    "src/squirrel/apis.js",
-    "src/squirrel/apis/dragdrop.js",
-    "src/squirrel/apis/essentials.js",
-    "src/squirrel/apis/loader.js",
-    "src/squirrel/apis/shortcut.js",
-    "src/squirrel/apis/update_atome.js",
-    "src/squirrel/apis/utils.js",
-    "src/squirrel/atome/atome.js",
-    "src/squirrel/atome/mcp.js",
-    "src/squirrel/components/List_builder.js",
-    "src/squirrel/components/badge_builder.js",
-    "src/squirrel/components/button_builder.js",
-    "src/squirrel/components/console_builder.js",
-    "src/squirrel/components/draggable_builder.js",
-    "src/squirrel/components/dropDown_builder.js",
-    "src/squirrel/components/intuition_builder.js",
-    "src/squirrel/components/matrix_builder.js",
-    "src/squirrel/components/menu_builder.js",
-    "src/squirrel/components/minimal_builder.js",
-    "src/squirrel/components/slice_builder.js",
-    "src/squirrel/components/slider_builder.js",
-    "src/squirrel/components/table_builder.js",
-    "src/squirrel/components/template_builder.js",
-    "src/squirrel/components/tooltip_builder.js",
-    "src/squirrel/components/unit_builder.js",
-    "src/squirrel/default/shortcuts.js",
-    "src/squirrel/integrations/iplug_web.js",
-    "src/squirrel/integrations/sync_engine.js",
-    "src/squirrel/kickstart.js",
-    "src/squirrel/spark.js",
-    "src/squirrel/squirrel.js",
-    "src/application/security/cloudSync.js",
-    "src/application/security/serverVerification.js",
-    "src/application/security/syncQueue.js",
-    "src/application/security/trusted_keys.js"
-  ]
+  "files": []
 }
