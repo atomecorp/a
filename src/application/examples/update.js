@@ -1,14 +1,14 @@
 /**
  * Atome Update Button
  * 
- * Bouton de mise à jour du core Squirrel/Atome depuis GitHub
- * Utilise l'API update_atome.js
+ * Update button for Squirrel/Atome core from GitHub
+ * Uses the update_atome.js API
  */
 
-// Charger l'API de mise à jour
+// Load the update API
 await import('../../squirrel/apis/update_atome.js');
 
-// État local
+// Local state
 const updateState = {
     checking: false,
     updating: false,
@@ -17,7 +17,7 @@ const updateState = {
     progressMessage: ''
 };
 
-// Conteneur principal
+// Main container
 const updateContainer = $('div', {
     id: 'atome-update-container',
     css: {
@@ -28,11 +28,11 @@ const updateContainer = $('div', {
     }
 });
 
-// Panneau de progression (caché par défaut)
+// Progress panel (hidden by default)
 let progressPanel = null;
 
 /**
- * Affiche le panneau de progression
+ * Show progress panel
  */
 function showProgressPanel() {
     if (progressPanel) return;
@@ -55,7 +55,7 @@ function showProgressPanel() {
         }
     });
 
-    // Titre
+    // Title
     $('div', {
         parent: progressPanel,
         id: 'update-title',
@@ -66,7 +66,7 @@ function showProgressPanel() {
             marginBottom: '16px',
             textAlign: 'center'
         },
-        text: '🔄 Mise à jour Atome'
+        text: '🔄 Atome Update'
     });
 
     // Message
@@ -79,10 +79,10 @@ function showProgressPanel() {
             marginBottom: '16px',
             textAlign: 'center'
         },
-        text: 'Préparation...'
+        text: 'Preparing...'
     });
 
-    // Barre de progression
+    // Progress bar
     const progressBarContainer = $('div', {
         parent: progressPanel,
         css: {
@@ -107,7 +107,7 @@ function showProgressPanel() {
         }
     });
 
-    // Pourcentage
+    // Percentage
     $('div', {
         parent: progressPanel,
         id: 'update-percent',
@@ -121,7 +121,7 @@ function showProgressPanel() {
 }
 
 /**
- * Met à jour le panneau de progression
+ * Update progress panel
  */
 function updateProgress(progress, message) {
     const bar = document.getElementById('update-progress-bar');
@@ -134,7 +134,7 @@ function updateProgress(progress, message) {
 }
 
 /**
- * Ferme le panneau de progression
+ * Hide progress panel
  */
 function hideProgressPanel() {
     if (progressPanel) {
@@ -144,10 +144,10 @@ function hideProgressPanel() {
 }
 
 /**
- * Affiche le résultat de la vérification
+ * Show check result
  */
 function showCheckResult(result) {
-    // Supprimer l'ancien panneau si existe
+    // Remove old panel if exists
     const oldPanel = document.getElementById('update-check-panel');
     if (oldPanel) oldPanel.remove();
 
@@ -169,7 +169,7 @@ function showCheckResult(result) {
         }
     });
 
-    // Titre
+    // Title
     $('div', {
         parent: panel,
         css: {
@@ -179,17 +179,17 @@ function showCheckResult(result) {
             marginBottom: '20px',
             textAlign: 'center'
         },
-        text: result.hasUpdate ? '✨ Mise à jour disponible!' : '✅ Atome est à jour'
+        text: result.hasUpdate ? '✨ Update available!' : '✅ Atome is up to date'
     });
 
     if (result.error) {
         $('div', {
             parent: panel,
             css: { color: '#ff6b6b', marginBottom: '16px', textAlign: 'center' },
-            text: `Erreur: ${result.error}`
+            text: `Error: ${result.error}`
         });
     } else {
-        // Infos version
+        // Version info
         const infoContainer = $('div', {
             parent: panel,
             css: {
@@ -203,14 +203,14 @@ function showCheckResult(result) {
         $('div', {
             parent: infoContainer,
             css: { fontSize: '13px', color: '#888', marginBottom: '8px' },
-            text: `Version actuelle: ${result.currentCommit?.substring(0, 7) || 'inconnue'}`
+            text: `Current version: ${result.currentCommit?.substring(0, 7) || 'unknown'}`
         });
 
         if (result.hasUpdate) {
             $('div', {
                 parent: infoContainer,
                 css: { fontSize: '13px', color: '#4aff9e', marginBottom: '8px' },
-                text: `Nouvelle version: ${result.latestCommitShort}`
+                text: `New version: ${result.latestCommitShort}`
             });
 
             $('div', {
@@ -222,12 +222,12 @@ function showCheckResult(result) {
             $('div', {
                 parent: infoContainer,
                 css: { fontSize: '11px', color: '#666' },
-                text: `Par ${result.commitAuthor} - ${new Date(result.commitDate).toLocaleDateString('fr-FR')}`
+                text: `By ${result.commitAuthor} - ${new Date(result.commitDate).toLocaleDateString('en-US')}`
             });
         }
     }
 
-    // Boutons
+    // Buttons
     const buttonContainer = $('div', {
         parent: panel,
         css: {
@@ -237,10 +237,10 @@ function showCheckResult(result) {
         }
     });
 
-    // Bouton Fermer
+    // Close button
     $('button', {
         parent: buttonContainer,
-        text: 'Fermer',
+        text: 'Close',
         css: {
             padding: '10px 20px',
             borderRadius: '8px',
@@ -253,11 +253,11 @@ function showCheckResult(result) {
         onclick: () => panel.remove()
     });
 
-    // Bouton Mettre à jour (si MAJ dispo)
+    // Update button (if update available)
     if (result.hasUpdate && !result.error) {
         $('button', {
             parent: buttonContainer,
-            text: '⬇️ Installer',
+            text: '⬇️ Install',
             css: {
                 padding: '10px 20px',
                 borderRadius: '8px',
@@ -277,7 +277,7 @@ function showCheckResult(result) {
 }
 
 /**
- * Affiche le résultat de la mise à jour
+ * Show update result
  */
 function showUpdateResult(success, result) {
     hideProgressPanel();
@@ -308,14 +308,14 @@ function showUpdateResult(success, result) {
             marginBottom: '16px',
             textAlign: 'center'
         },
-        text: success ? '✅ Mise à jour réussie!' : '❌ Échec de la mise à jour'
+        text: success ? '✅ Update successful!' : '❌ Update failed'
     });
 
     if (success && result.filesUpdated) {
         $('div', {
             parent: panel,
             css: { color: '#ccc', marginBottom: '16px', textAlign: 'center' },
-            text: `${result.filesUpdated} fichiers mis à jour`
+            text: `${result.filesUpdated} files updated`
         });
     }
 
@@ -323,7 +323,7 @@ function showUpdateResult(success, result) {
         $('div', {
             parent: panel,
             css: { color: '#ff6b6b', marginBottom: '16px', textAlign: 'center', fontSize: '13px' },
-            text: result.message || result.error || 'Une erreur est survenue'
+            text: result.message || result.error || 'An error occurred'
         });
     }
 
@@ -334,7 +334,7 @@ function showUpdateResult(success, result) {
 
     $('button', {
         parent: buttonContainer,
-        text: success ? '🔄 Recharger' : 'Fermer',
+        text: success ? '🔄 Reload' : 'Close',
         css: {
             padding: '10px 20px',
             borderRadius: '8px',
@@ -355,7 +355,7 @@ function showUpdateResult(success, result) {
 }
 
 /**
- * Vérifie les mises à jour
+ * Check for updates
  */
 async function checkUpdates() {
     if (updateState.checking || updateState.updating) return;
@@ -376,7 +376,7 @@ async function checkUpdates() {
 }
 
 /**
- * Lance la mise à jour
+ * Start the update
  */
 async function startUpdate() {
     if (updateState.updating) return;
@@ -384,7 +384,7 @@ async function startUpdate() {
     updateState.updating = true;
     showProgressPanel();
 
-    // Configurer les callbacks
+    // Configure callbacks
     AtomeUpdater.setCallbacks({
         onProgress: ({ step, progress, message }) => {
             updateProgress(progress, message);
@@ -406,12 +406,12 @@ async function startUpdate() {
     }
 }
 
-// Créer le bouton principal
+// Create main button
 const updateBtn = $('button', {
     parent: updateContainer,
     id: 'atome-update-btn',
     text: '🔄',
-    title: 'Mettre à jour Atome',
+    title: 'Update Atome',
     css: {
         width: '50px',
         height: '50px',
@@ -435,6 +435,6 @@ const updateBtn = $('button', {
     onclick: checkUpdates
 });
 
-// Log de démarrage
+// Startup log
 console.log('[Update] Atome Update button initialized');
 console.log('[Update] Platform:', AtomeUpdater.getPlatform().name);

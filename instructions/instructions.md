@@ -17,6 +17,6 @@ when using button or slider any other html components you must use squirel compo
 
 In certain circumstances, when the prompt explicitly specifies creating an HTML file, you may ignore the rules.
 
-All comments, warnings, errors  messages and documentations must always be written in English.
+All comments, warnings, errors,   messages, console logs and documentations, you must always be write in English, and only in english.
 
 never use any fallback unless specified

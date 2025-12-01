@@ -1,7 +1,7 @@
 /**
  * Atome/Squirrel Core Updater API
  * 
- * Système de mise à jour du core depuis GitHub
+ * Core update system from GitHub
  * Source: https://github.com/atomecorp/a/tree/main/src
  * 
  * @module update_atome
@@ -16,26 +16,34 @@ const AtomeUpdater = (function () {
             owner: 'atomecorp',
             repo: 'a',
             branch: 'main',
-            srcPath: 'src'
+            srcPath: 'src',
+            // Use raw.githubusercontent.com to avoid rate limits
+            rawBaseUrl: 'https://raw.githubusercontent.com/atomecorp/a/main',
+            // API still needed for file listing (but cached)
+            apiBaseUrl: 'https://api.github.com/repos/atomecorp/a'
         },
-        // Dossiers à mettre à jour
+        // Directories to update
         updatePaths: [
             'src/squirrel',
             'src/application/core',
             'src/application/security'
         ],
-        // Fichiers/dossiers protégés (ne pas écraser)
+        // Protected files/directories (do not overwrite)
         protectedPaths: [
             'src/application/examples',
             'src/application/config'
         ],
-        // Version actuelle (chemin relatif depuis la racine du projet)
-        versionFile: 'src/version.json'
+        // Current version file path (relative to project root)
+        versionFile: 'src/version.json',
+        // Cache duration for file list (5 minutes)
+        cacheDuration: 5 * 60 * 1000
     };
 
-    // État interne
+    // Internal state
     let _updateInProgress = false;
     let _lastCheck = null;
+    let _fileListCache = null;
+    let _fileListCacheTime = 0;
     let _callbacks = {
         onProgress: null,
         onComplete: null,
@@ -43,7 +51,7 @@ const AtomeUpdater = (function () {
     };
 
     /**
-     * Détecte la plateforme actuelle
+     * Detect current platform
      */
     function getPlatform() {
         const isTauri = !!(
@@ -62,14 +70,14 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Log avec préfixe
+     * Log with prefix
      */
     function log(message, ...args) {
         console.log(`[AtomeUpdater] ${message}`, ...args);
     }
 
     /**
-     * Notifie la progression
+     * Notify progress
      */
     function notifyProgress(step, progress, message) {
         if (_callbacks.onProgress) {
@@ -79,11 +87,11 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Récupère la version actuelle
+     * Get current version from local file
      */
     async function getCurrentVersion() {
         try {
-            // Essayer plusieurs chemins possibles
+            // Try multiple possible paths
             const paths = [
                 `/version.json`,
                 `/src/version.json`,
@@ -102,11 +110,11 @@ const AtomeUpdater = (function () {
                         };
                     }
                 } catch (e) {
-                    // Essayer le chemin suivant
+                    // Try next path
                 }
             }
 
-            // Fallback: pas de fichier version trouvé
+            // Fallback: version file not found
             log('Version file not found, assuming first install');
             return { version: '0.0.0', commit: null, updatedAt: null };
         } catch (e) {
@@ -116,61 +124,89 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Récupère le dernier commit de la branche main
+     * Get latest commit from main branch
+     * Uses raw.githubusercontent.com to avoid rate limits
      */
     async function getLatestCommit() {
-        const { owner, repo, branch } = CONFIG.github;
-        const url = `https://api.github.com/repos/${owner}/${repo}/commits/${branch}`;
-
+        const { rawBaseUrl } = CONFIG.github;
+        
         try {
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/vnd.github.v3+json',
-                    'User-Agent': 'AtomeUpdater/1.0'
+            // Fetch version.json from raw GitHub (no rate limit)
+            const versionUrl = `${rawBaseUrl}/src/version.json?t=${Date.now()}`;
+            const response = await fetch(versionUrl);
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.commit) {
+                    return {
+                        sha: data.commit,
+                        shortSha: data.commit.substring(0, 7),
+                        message: data.message || 'Update available',
+                        date: data.updatedAt || new Date().toISOString(),
+                        author: data.author || 'atomecorp'
+                    };
                 }
-            });
-
-            if (!response.ok) {
-                if (response.status === 403) {
-                    // Rate limit atteint - vérifier le header
-                    const remaining = response.headers.get('X-RateLimit-Remaining');
-                    const resetTime = response.headers.get('X-RateLimit-Reset');
-                    const resetDate = resetTime ? new Date(parseInt(resetTime) * 1000) : null;
-                    const message = remaining === '0'
-                        ? `Rate limit GitHub atteint. Réessayez après ${resetDate?.toLocaleTimeString() || '1 heure'}`
-                        : 'Accès GitHub refusé (403)';
-                    throw new Error(message);
-                }
-                throw new Error(`GitHub API error: ${response.status}`);
             }
-
-            const commit = await response.json();
-
-            return {
-                sha: commit.sha,
-                shortSha: commit.sha.substring(0, 7),
-                message: commit.commit.message.split('\n')[0],
-                date: commit.commit.committer.date,
-                author: commit.commit.author.name
-            };
+            
+            // Fallback: try GitHub API with rate limit handling
+            return await getLatestCommitFromAPI();
+            
         } catch (error) {
             log('Failed to get latest commit:', error.message);
             throw error;
         }
     }
+    
+    /**
+     * Fallback: Get latest commit from GitHub API
+     */
+    async function getLatestCommitFromAPI() {
+        const { owner, repo, branch } = CONFIG.github;
+        const url = `https://api.github.com/repos/${owner}/${repo}/commits/${branch}`;
+
+        const response = await fetch(url, {
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'AtomeUpdater/1.0'
+            }
+        });
+
+        if (!response.ok) {
+            if (response.status === 403) {
+                const remaining = response.headers.get('X-RateLimit-Remaining');
+                const resetTime = response.headers.get('X-RateLimit-Reset');
+                const resetDate = resetTime ? new Date(parseInt(resetTime) * 1000) : null;
+                const message = remaining === '0'
+                    ? `GitHub rate limit reached. Try again after ${resetDate?.toLocaleTimeString() || '1 hour'}`
+                    : 'GitHub access denied (403)';
+                throw new Error(message);
+            }
+            throw new Error(`GitHub API error: ${response.status}`);
+        }
+
+        const commit = await response.json();
+
+        return {
+            sha: commit.sha,
+            shortSha: commit.sha.substring(0, 7),
+            message: commit.commit.message.split('\n')[0],
+            date: commit.commit.committer.date,
+            author: commit.commit.author.name
+        };
+    }
 
     /**
-     * Compare deux versions/commits
+     * Compare two versions/commits
      */
     function hasUpdate(current, latest) {
         if (current.commit && latest.sha) {
             return current.commit !== latest.sha;
         }
-        return true; // Si pas de commit local, considérer qu'il y a une MAJ
+        return true; // If no local commit, assume update is available
     }
 
     /**
-     * Vérifie si des mises à jour sont disponibles
+     * Check if updates are available
      */
     async function checkForUpdates() {
         log('Checking for updates...');
@@ -209,14 +245,21 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Récupère la liste des fichiers à mettre à jour depuis GitHub
-     * Ne récupère que les fichiers dans updatePaths
+     * Get file list to update from GitHub
+     * Only retrieves files in updatePaths
+     * Uses cache to avoid rate limits
      */
     async function getFileList(path = null) {
-        const { owner, repo, branch } = CONFIG.github;
+        // Check cache first (only for full list, not recursive calls)
+        if (!path && _fileListCache && (Date.now() - _fileListCacheTime < CONFIG.cacheDuration)) {
+            log('Using cached file list');
+            return _fileListCache;
+        }
+        
+        const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
         let files = [];
 
-        // Si pas de path spécifié, parcourir uniquement les updatePaths
+        // If no path specified, scan only updatePaths
         const pathsToScan = path ? [path] : CONFIG.updatePaths;
 
         for (const scanPath of pathsToScan) {
@@ -231,6 +274,11 @@ const AtomeUpdater = (function () {
                 });
 
                 if (!response.ok) {
+                    if (response.status === 403) {
+                        log(`Rate limit hit for ${scanPath}, using raw URLs`);
+                        // Fallback: cannot list files without API, skip this path
+                        continue;
+                    }
                     log(`Failed to list ${scanPath}: ${response.status}`);
                     continue;
                 }
@@ -238,7 +286,7 @@ const AtomeUpdater = (function () {
                 const items = await response.json();
 
                 for (const item of items) {
-                    // Vérifier si le chemin est protégé
+                    // Check if path is protected
                     const relativePath = item.path;
                     const isProtected = CONFIG.protectedPaths.some(p => relativePath.startsWith(p));
 
@@ -248,14 +296,15 @@ const AtomeUpdater = (function () {
                     }
 
                     if (item.type === 'file') {
+                        // Use raw.githubusercontent.com URL instead of API download_url
                         files.push({
                             path: item.path,
-                            downloadUrl: item.download_url,
+                            downloadUrl: `${rawBaseUrl}/${item.path}`,
                             sha: item.sha,
                             size: item.size
                         });
                     } else if (item.type === 'dir') {
-                        // Récursion pour les sous-dossiers
+                        // Recursion for subdirectories
                         const subFiles = await getFileList(item.path);
                         files = files.concat(subFiles);
                     }
@@ -265,11 +314,17 @@ const AtomeUpdater = (function () {
             }
         }
 
+        // Cache the result (only for full list)
+        if (!path) {
+            _fileListCache = files;
+            _fileListCacheTime = Date.now();
+        }
+
         return files;
     }
 
     /**
-     * Télécharge un fichier
+     * Download a file
      */
     async function downloadFile(url) {
         const response = await fetch(url);
@@ -280,7 +335,7 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Applique la mise à jour sur Tauri (via route HTTP Axum)
+     * Apply update on Tauri (via HTTP Axum route)
      */
     async function applyUpdateTauri(files, latestCommit) {
         const platform = getPlatform();
@@ -289,10 +344,10 @@ const AtomeUpdater = (function () {
             throw new Error('Tauri platform not detected');
         }
 
-        // Utiliser la route HTTP locale (port 3000) pour écrire les fichiers
+        // Use local HTTP route (port 3000) to write files
         const baseUrl = 'http://127.0.0.1:3000';
 
-        notifyProgress('download', 0, 'Préparation du téléchargement...');
+        notifyProgress('download', 0, 'Preparing download...');
 
         const totalFiles = files.length;
         let processedFiles = 0;
@@ -301,14 +356,14 @@ const AtomeUpdater = (function () {
         for (const file of files) {
             try {
                 notifyProgress('download', Math.round((processedFiles / totalFiles) * 50),
-                    `Téléchargement: ${file.path}`);
+                    `Downloading: ${file.path}`);
 
                 const content = await downloadFile(file.downloadUrl);
 
                 notifyProgress('install', 50 + Math.round((processedFiles / totalFiles) * 45),
-                    `Installation: ${file.path}`);
+                    `Installing: ${file.path}`);
 
-                // Écrire le fichier via la route HTTP Axum
+                // Write file via HTTP Axum route
                 const response = await fetch(`${baseUrl}/api/admin/apply-update`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -330,11 +385,11 @@ const AtomeUpdater = (function () {
             }
         }
 
-        // Mettre à jour le fichier version
-        notifyProgress('finalize', 95, 'Mise à jour du fichier version...');
+        // Update version file
+        notifyProgress('finalize', 95, 'Updating version file...');
 
         const versionContent = JSON.stringify({
-            version: '1.0.4', // Incrémenter manuellement ou utiliser un système
+            version: '1.0.4', // Increment manually or use a system
             commit: latestCommit.sha,
             updatedAt: new Date().toISOString()
         }, null, 2);
@@ -352,7 +407,7 @@ const AtomeUpdater = (function () {
             log('Failed to update version file');
         }
 
-        notifyProgress('complete', 100, 'Mise à jour terminée!');
+        notifyProgress('complete', 100, 'Update complete!');
 
         return {
             success: errors.length === 0,
@@ -362,12 +417,12 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Applique la mise à jour sur le serveur Fastify
+     * Apply update on Fastify server
      */
     async function applyUpdateServer(files, latestCommit) {
-        notifyProgress('request', 10, 'Envoi de la demande au serveur...');
+        notifyProgress('request', 10, 'Sending request to server...');
 
-        // Envoyer la liste des fichiers au serveur pour qu'il les télécharge
+        // Send file list to server for download
         const response = await fetch('/api/admin/apply-update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -387,13 +442,13 @@ const AtomeUpdater = (function () {
 
         const result = await response.json();
 
-        notifyProgress('complete', 100, 'Mise à jour serveur terminée!');
+        notifyProgress('complete', 100, 'Server update complete!');
 
         return result;
     }
 
     /**
-     * Applique la mise à jour
+     * Apply update
      */
     async function applyUpdate(options = {}) {
         if (_updateInProgress) {
@@ -406,12 +461,12 @@ const AtomeUpdater = (function () {
         log(`Starting update on ${platform.name}...`);
 
         try {
-            // Récupérer le dernier commit
-            notifyProgress('check', 5, 'Vérification de la dernière version...');
+            // Get latest commit
+            notifyProgress('check', 5, 'Checking latest version...');
             const latestCommit = await getLatestCommit();
 
-            // Récupérer la liste des fichiers
-            notifyProgress('list', 10, 'Récupération de la liste des fichiers...');
+            // Get file list
+            notifyProgress('list', 10, 'Getting file list...');
             const files = await getFileList();
             log(`Found ${files.length} files to update`);
 
@@ -443,7 +498,7 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Configure les callbacks
+     * Configure callbacks
      */
     function setCallbacks(callbacks) {
         if (callbacks.onProgress) _callbacks.onProgress = callbacks.onProgress;
@@ -452,7 +507,7 @@ const AtomeUpdater = (function () {
     }
 
     /**
-     * Retourne l'état actuel
+     * Return current status
      */
     function getStatus() {
         return {
@@ -467,7 +522,7 @@ const AtomeUpdater = (function () {
         };
     }
 
-    // API publique
+    // Public API
     return {
         checkForUpdates,
         applyUpdate,
@@ -481,12 +536,12 @@ const AtomeUpdater = (function () {
 
 })();
 
-// Export global
+// Global export
 if (typeof window !== 'undefined') {
     window.AtomeUpdater = AtomeUpdater;
 }
 
-// Export ES module si disponible
+// ES module export if available
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = AtomeUpdater;
 }
