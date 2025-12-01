@@ -52,7 +52,7 @@ function getDeviceKey() {
     let deviceId = localStorage.getItem('squirrel_device_id');
     if (!deviceId) {
         // Generate a random device ID on first run
-        deviceId = crypto.randomUUID ? crypto.randomUUID() : 
+        deviceId = crypto.randomUUID ? crypto.randomUUID() :
             'dev_' + Math.random().toString(36).substr(2, 16) + Date.now().toString(36);
         localStorage.setItem('squirrel_device_id', deviceId);
     }
@@ -135,9 +135,9 @@ function saveQueue(queue) {
  */
 export function addToQueue(action) {
     const queue = getQueue();
-    
+
     const actionId = `action_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
-    
+
     const queueItem = {
         id: actionId,
         type: action.type,
@@ -152,12 +152,12 @@ export function addToQueue(action) {
         maxRetries: 3,
         lastError: null
     };
-    
+
     // Check for duplicate actions (same type + userId)
-    const existingIndex = queue.findIndex(q => 
+    const existingIndex = queue.findIndex(q =>
         q.type === action.type && q.userId === action.userId && q.status === ActionStatus.PENDING
     );
-    
+
     if (existingIndex >= 0) {
         // Update existing action instead of adding duplicate
         queue[existingIndex] = { ...queue[existingIndex], ...queueItem, id: queue[existingIndex].id };
@@ -166,7 +166,7 @@ export function addToQueue(action) {
         queue.push(queueItem);
         console.log(`[syncQueue] Added action: ${actionId} (${action.type})`);
     }
-    
+
     saveQueue(queue);
     return existingIndex >= 0 ? queue[existingIndex].id : actionId;
 }
@@ -191,7 +191,7 @@ export function removeFromQueue(actionId) {
 export function updateActionStatus(actionId, status, error = null) {
     const queue = getQueue();
     const action = queue.find(q => q.id === actionId);
-    
+
     if (action) {
         action.status = status;
         action.updatedAt = new Date().toISOString();
@@ -207,8 +207,8 @@ export function updateActionStatus(actionId, status, error = null) {
  * @returns {Array} Pending actions for the user
  */
 export function getPendingActionsForUser(userId) {
-    return getQueue().filter(q => 
-        q.userId === userId && 
+    return getQueue().filter(q =>
+        q.userId === userId &&
         (q.status === ActionStatus.PENDING || q.status === ActionStatus.RETRY)
     );
 }
@@ -218,7 +218,7 @@ export function getPendingActionsForUser(userId) {
  * @returns {Array} All pending actions
  */
 export function getAllPendingActions() {
-    return getQueue().filter(q => 
+    return getQueue().filter(q =>
         q.status === ActionStatus.PENDING || q.status === ActionStatus.RETRY
     );
 }
@@ -230,11 +230,11 @@ export function getAllPendingActions() {
 export function cleanupOldActions(days = 7) {
     const queue = getQueue();
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    
-    const newQueue = queue.filter(q => 
+
+    const newQueue = queue.filter(q =>
         q.status !== ActionStatus.COMPLETED || q.updatedAt > cutoff
     );
-    
+
     if (newQueue.length !== queue.length) {
         saveQueue(newQueue);
         console.log(`[syncQueue] Cleaned up ${queue.length - newQueue.length} old actions`);
@@ -257,13 +257,13 @@ export function cleanupOldActions(days = 7) {
 export function storeCredentialsForSync(userId, password, enableAutoSync = true) {
     try {
         const allCredentials = getStoredCredentials();
-        
+
         allCredentials[userId] = {
             password: password, // Will be encrypted when saved
             autoSync: enableAutoSync,
             storedAt: new Date().toISOString()
         };
-        
+
         const encrypted = encryptForStorage(allCredentials);
         localStorage.setItem(CREDENTIALS_STORAGE_KEY, encrypted);
         console.log(`[syncQueue] Credentials stored for user: ${userId}`);
@@ -303,7 +303,7 @@ function getStoredCredentials() {
 export function removeCredentials(userId) {
     const allCredentials = getStoredCredentials();
     delete allCredentials[userId];
-    
+
     if (Object.keys(allCredentials).length === 0) {
         localStorage.removeItem(CREDENTIALS_STORAGE_KEY);
     } else {
@@ -379,7 +379,7 @@ export function saveSyncConfig(config) {
  */
 export async function isCloudServerAvailable(serverUrl) {
     if (!serverUrl) return false;
-    
+
     try {
         const response = await fetch(`${serverUrl}/api/health`, {
             method: 'GET',
@@ -399,37 +399,37 @@ export async function isCloudServerAvailable(serverUrl) {
  */
 export async function processAction(action, cloudServerUrl) {
     const credentials = getCredentialsForUser(action.userId);
-    
+
     if (!credentials && action.type !== SyncAction.DELETE_ACCOUNT) {
-        return { 
-            success: false, 
+        return {
+            success: false,
             error: 'No credentials stored for auto-sync',
             requiresManualSync: true
         };
     }
 
     updateActionStatus(action.id, ActionStatus.IN_PROGRESS);
-    
+
     try {
         let result;
-        
+
         switch (action.type) {
             case SyncAction.CREATE_ACCOUNT:
                 result = await syncCreateAccount(action, credentials, cloudServerUrl);
                 break;
-                
+
             case SyncAction.UPDATE_ACCOUNT:
                 result = await syncUpdateAccount(action, credentials, cloudServerUrl);
                 break;
-                
+
             case SyncAction.DELETE_ACCOUNT:
                 result = await syncDeleteAccount(action, credentials, cloudServerUrl);
                 break;
-                
+
             default:
                 result = { success: false, error: `Unknown action type: ${action.type}` };
         }
-        
+
         if (result.success) {
             updateActionStatus(action.id, ActionStatus.COMPLETED);
             console.log(`[syncQueue] Action completed: ${action.id}`);
@@ -440,9 +440,9 @@ export async function processAction(action, cloudServerUrl) {
             updateActionStatus(action.id, ActionStatus.FAILED, result.error);
             console.log(`[syncQueue] Action failed permanently: ${action.id}`);
         }
-        
+
         return result;
-        
+
     } catch (e) {
         const error = e.message || 'Unknown error';
         if (action.retryCount < action.maxRetries) {
@@ -468,18 +468,18 @@ async function syncCreateAccount(action, credentials, cloudServerUrl) {
         }),
         credentials: 'include'
     });
-    
+
     const data = await response.json().catch(() => ({}));
-    
+
     if (data.success || response.status === 409) {
         // 409 = already exists, which is fine for sync
-        return { 
-            success: true, 
+        return {
+            success: true,
             cloudId: data.user?.id,
             alreadyExists: response.status === 409
         };
     }
-    
+
     return { success: false, error: data.error || `HTTP ${response.status}` };
 }
 
@@ -497,12 +497,12 @@ async function syncUpdateAccount(action, credentials, cloudServerUrl) {
         }),
         credentials: 'include'
     });
-    
+
     if (!loginResponse.ok) {
         const loginData = await loginResponse.json().catch(() => ({}));
         return { success: false, error: loginData.error || 'Failed to authenticate' };
     }
-    
+
     // Then update
     const updateResponse = await fetch(`${cloudServerUrl}/api/auth/update`, {
         method: 'PUT',
@@ -510,7 +510,7 @@ async function syncUpdateAccount(action, credentials, cloudServerUrl) {
         body: JSON.stringify(action.data),
         credentials: 'include'
     });
-    
+
     const data = await updateResponse.json().catch(() => ({}));
     return { success: data.success, error: data.error };
 }
@@ -522,15 +522,15 @@ async function syncDeleteAccount(action, credentials, cloudServerUrl) {
     // For deletion, we need the password
     // If credentials are not available, check if password was stored in action.data
     const password = credentials?.password || action.data?.password;
-    
+
     if (!password) {
-        return { 
-            success: false, 
+        return {
+            success: false,
             error: 'Password required for account deletion',
             requiresManualSync: true
         };
     }
-    
+
     // First login
     const loginResponse = await fetch(`${cloudServerUrl}/api/auth/login`, {
         method: 'POST',
@@ -541,9 +541,9 @@ async function syncDeleteAccount(action, credentials, cloudServerUrl) {
         }),
         credentials: 'include'
     });
-    
+
     const loginData = await loginResponse.json().catch(() => ({}));
-    
+
     if (!loginData.success) {
         // Account might already be deleted on cloud, or never existed
         if (loginData.error?.includes('Invalid') || loginData.error?.includes('not found')) {
@@ -551,7 +551,7 @@ async function syncDeleteAccount(action, credentials, cloudServerUrl) {
         }
         return { success: false, error: loginData.error || 'Failed to authenticate' };
     }
-    
+
     // Then delete
     const deleteResponse = await fetch(`${cloudServerUrl}/api/auth/delete-account`, {
         method: 'DELETE',
@@ -559,7 +559,7 @@ async function syncDeleteAccount(action, credentials, cloudServerUrl) {
         body: JSON.stringify({ password }),
         credentials: 'include'
     });
-    
+
     const data = await deleteResponse.json().catch(() => ({}));
     return { success: data.success, error: data.error };
 }
@@ -572,25 +572,25 @@ async function syncDeleteAccount(action, credentials, cloudServerUrl) {
 export async function processAllPendingActions(cloudServerUrl = null) {
     const config = getSyncConfig();
     const serverUrl = cloudServerUrl || config.cloudServerUrl;
-    
+
     if (!serverUrl) {
         return { success: false, error: 'No cloud server configured', processed: 0 };
     }
-    
+
     // Check server availability
     const available = await isCloudServerAvailable(serverUrl);
     if (!available) {
         saveSyncConfig({ lastSyncAttempt: new Date().toISOString() });
         return { success: false, error: 'Cloud server not available', processed: 0 };
     }
-    
+
     const pending = getAllPendingActions();
     if (pending.length === 0) {
         return { success: true, message: 'No pending actions', processed: 0 };
     }
-    
+
     console.log(`[syncQueue] Processing ${pending.length} pending actions...`);
-    
+
     const results = {
         success: true,
         processed: 0,
@@ -599,11 +599,11 @@ export async function processAllPendingActions(cloudServerUrl = null) {
         requiresManual: 0,
         details: []
     };
-    
+
     for (const action of pending) {
         const result = await processAction(action, serverUrl);
         results.processed++;
-        
+
         if (result.success) {
             results.succeeded++;
         } else if (result.requiresManualSync) {
@@ -611,7 +611,7 @@ export async function processAllPendingActions(cloudServerUrl = null) {
         } else {
             results.failed++;
         }
-        
+
         results.details.push({
             actionId: action.id,
             type: action.type,
@@ -619,14 +619,14 @@ export async function processAllPendingActions(cloudServerUrl = null) {
             ...result
         });
     }
-    
-    saveSyncConfig({ 
+
+    saveSyncConfig({
         lastSyncAttempt: new Date().toISOString(),
         lastSuccessfulSync: results.failed === 0 ? new Date().toISOString() : config.lastSuccessfulSync
     });
-    
+
     console.log(`[syncQueue] Sync complete: ${results.succeeded} succeeded, ${results.failed} failed, ${results.requiresManual} need manual sync`);
-    
+
     return results;
 }
 
@@ -641,27 +641,27 @@ let syncIntervalId = null;
  */
 export function startAutoSync() {
     const config = getSyncConfig();
-    
+
     if (!config.autoSyncEnabled || !config.cloudServerUrl) {
         console.log('[syncQueue] Auto-sync not enabled or no server configured');
         return;
     }
-    
+
     // Stop existing interval if any
     stopAutoSync();
-    
+
     // Sync immediately on startup if configured
     if (config.syncOnStartup) {
         console.log('[syncQueue] Running startup sync...');
         processAllPendingActions().catch(e => console.warn('[syncQueue] Startup sync error:', e));
     }
-    
+
     // Set up interval
     const intervalMs = (config.syncIntervalMinutes || 5) * 60 * 1000;
     syncIntervalId = setInterval(() => {
         processAllPendingActions().catch(e => console.warn('[syncQueue] Scheduled sync error:', e));
     }, intervalMs);
-    
+
     console.log(`[syncQueue] Auto-sync started (every ${config.syncIntervalMinutes} minutes)`);
 }
 
@@ -683,13 +683,13 @@ export function stopAutoSync() {
 export function initSyncQueue() {
     // Cleanup old completed actions
     cleanupOldActions(7);
-    
+
     // Start auto-sync if enabled
     const config = getSyncConfig();
     if (config.autoSyncEnabled) {
         startAutoSync();
     }
-    
+
     // Listen for online events
     if (typeof window !== 'undefined') {
         window.addEventListener('online', () => {
@@ -697,7 +697,7 @@ export function initSyncQueue() {
             processAllPendingActions().catch(e => console.warn('[syncQueue] Online sync error:', e));
         });
     }
-    
+
     console.log('[syncQueue] Sync queue initialized');
 }
 
@@ -709,7 +709,7 @@ export default {
     // Constants
     SyncAction,
     ActionStatus,
-    
+
     // Queue management
     getQueue,
     addToQueue,
@@ -718,22 +718,22 @@ export default {
     getPendingActionsForUser,
     getAllPendingActions,
     cleanupOldActions,
-    
+
     // Credentials
     storeCredentialsForSync,
     getCredentialsForUser,
     removeCredentials,
     isAutoSyncEnabled,
-    
+
     // Config
     getSyncConfig,
     saveSyncConfig,
-    
+
     // Sync execution
     isCloudServerAvailable,
     processAction,
     processAllPendingActions,
-    
+
     // Auto-sync
     startAutoSync,
     stopAutoSync,

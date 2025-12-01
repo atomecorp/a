@@ -30,7 +30,7 @@ let SyncQueue = null;
     } catch (e) {
         console.warn('[auth] Security modules not available:', e.message);
     }
-    
+
     // Load sync queue module
     try {
         SyncQueue = await import('../security/syncQueue.js');
@@ -104,7 +104,7 @@ function resolveApiConfig() {
     if (typeof window !== 'undefined') {
         const hostname = window.location?.hostname;
         const port = window.location?.port;
-        
+
         // If on localhost:3000 (Squirrel dev server) → use Fastify on 3001
         if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
             console.log('[auth] Dev mode detected (localhost:3000), using Fastify on port 3001');
@@ -1403,7 +1403,7 @@ async function handleLogin() {
             accountStore.isLoggedIn = true;
             accountStore.currentUser = result.user;
             console.log('[auth] accountStore updated:', accountStore.isLoggedIn, accountStore.currentUser);
-            
+
             // Store credentials for auto-sync if enabled (local auth only)
             if (useLocalAuth && SyncQueue && result.user?.id) {
                 const config = SyncQueue.getSyncConfig();
@@ -1411,7 +1411,7 @@ async function handleLogin() {
                     // Update stored password (in case it changed)
                     SyncQueue.storeCredentialsForSync(result.user.id, password, true);
                 }
-                
+
                 // Check for pending sync actions and process them
                 if (config.cloudServerUrl) {
                     SyncQueue.processAllPendingActions(config.cloudServerUrl)
@@ -1423,7 +1423,7 @@ async function handleLogin() {
                         .catch(e => console.warn('[auth] Background sync error:', e));
                 }
             }
-            
+
             accountStore.formData.password = ''; // Clear password from memory
             puts(`[auth] Login successful: ${result.user.username}`);
             renderAccountPanel(AccountState.PROFILE);
@@ -1847,7 +1847,7 @@ function renderCloudSyncPanel() {
         const config = SyncQueue.getSyncConfig();
         const user = accountStore.currentUser;
         const hasStoredCreds = user && SyncQueue.isAutoSyncEnabled(user.id);
-        
+
         $('div', {
             parent: `#${rootId}`,
             text: '🔄 Automatic Synchronization',
@@ -1931,43 +1931,103 @@ function renderCloudSyncPanel() {
         buildDivider();
     }
 
-    // Password required for sync
-    $('div', {
-        parent: `#${rootId}`,
-        text: '🔑 Confirmation Required',
-        css: {
-            fontSize: '13px',
-            fontWeight: '600',
-            color: '#ff9800',
-            marginBottom: '8px'
-        }
-    });
+    // Check if credentials are already stored for this user
+    const user = accountStore.currentUser;
+    const storedCreds = (useLocalAuth && SyncQueue && user) ? SyncQueue.getCredentialsForUser(user.id) : null;
 
-    $('div', {
-        parent: `#${rootId}`,
-        text: 'Enter your password to confirm the sync. The same credentials will be used for your cloud account.',
-        css: {
-            fontSize: '12px',
-            color: '#888',
-            marginBottom: '12px'
-        }
-    });
+    if (storedCreds && storedCreds.password) {
+        // Credentials already stored - offer quick sync
+        $('div', {
+            parent: `#${rootId}`,
+            text: '🔓 Credentials Saved',
+            css: {
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#4caf50',
+                marginBottom: '8px'
+            }
+        });
 
-    buildInput({
-        id: 'sync_password',
-        label: 'Your Password',
-        type: 'password',
-        placeholder: 'Enter your password to confirm'
-    });
+        $('div', {
+            parent: `#${rootId}`,
+            text: 'Your credentials are securely stored. You can sync without re-entering your password.',
+            css: {
+                fontSize: '12px',
+                color: '#888',
+                marginBottom: '12px'
+            }
+        });
 
-    buildDivider();
+        // Hidden password field with stored value (for handleCloudSync)
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+        hiddenInput.id = 'sync_password';
+        hiddenInput.value = storedCreds.password;
+        document.getElementById(rootId).appendChild(hiddenInput);
 
-    // Sync button
-    buildButton({
-        text: '☁️ Start Sync to Cloud',
-        variant: 'primary',
-        onClick: handleCloudSync
-    });
+        buildDivider();
+
+        // Quick sync button
+        buildButton({
+            text: '☁️ Sync Now',
+            variant: 'primary',
+            onClick: handleCloudSync
+        });
+
+        // Option to re-enter password
+        $('div', {
+            parent: `#${rootId}`,
+            css: { marginTop: '12px' }
+        });
+
+        buildButton({
+            text: '🔑 Use Different Password',
+            variant: 'secondary',
+            onClick: () => {
+                // Remove stored credentials and re-render
+                SyncQueue.removeCredentials(user.id);
+                renderCloudSyncPanel();
+            }
+        });
+    } else {
+        // No stored credentials - require password input
+        $('div', {
+            parent: `#${rootId}`,
+            text: '🔑 Confirmation Required',
+            css: {
+                fontSize: '13px',
+                fontWeight: '600',
+                color: '#ff9800',
+                marginBottom: '8px'
+            }
+        });
+
+        $('div', {
+            parent: `#${rootId}`,
+            text: 'Enter your password to confirm the sync. The same credentials will be used for your cloud account.',
+            css: {
+                fontSize: '12px',
+                color: '#888',
+                marginBottom: '12px'
+            }
+        });
+
+        buildInput({
+            id: 'sync_password',
+            label: 'Your Password',
+            type: 'password',
+            placeholder: 'Enter your password to confirm'
+        });
+
+        buildDivider();
+
+        // Sync button
+        buildButton({
+            text: '☁️ Start Sync to Cloud',
+            variant: 'primary',
+            onClick: handleCloudSync
+        });
+    }
 
     // Cancel
     buildLink({
@@ -2101,14 +2161,24 @@ async function handleCloudSync() {
                 localStorage.setItem('cloud_auth_token', result.cloudToken);
             }
 
-            // Store credentials for auto-sync if checkbox is checked
-            const autoSyncCheckbox = document.getElementById('auto_sync_checkbox');
-            if (autoSyncCheckbox && autoSyncCheckbox.checked && SyncQueue && accountStore.currentUser) {
+            // Always store credentials after successful sync (for future syncs without password)
+            // The user has already provided their password, so we save it securely
+            if (SyncQueue && accountStore.currentUser) {
                 try {
-                    await SyncQueue.storeCredentialsForSync(accountStore.currentUser.id, password, true);
-                    console.log('[auth] Credentials stored for auto-sync');
+                    const autoSyncCheckbox = document.getElementById('auto_sync_checkbox');
+                    const enableAutoSync = autoSyncCheckbox ? autoSyncCheckbox.checked : false;
+                    await SyncQueue.storeCredentialsForSync(accountStore.currentUser.id, password, enableAutoSync);
+                    console.log('[auth] Credentials stored for future syncs');
+
+                    // Also save the cloud server URL in config
+                    const currentConfig = SyncQueue.getSyncConfig();
+                    SyncQueue.saveSyncConfig({
+                        ...currentConfig,
+                        cloudServerUrl,
+                        lastSuccessfulSync: new Date().toISOString()
+                    });
                 } catch (credErr) {
-                    console.warn('[auth] Failed to store credentials for auto-sync:', credErr);
+                    console.warn('[auth] Failed to store credentials:', credErr);
                 }
             }
 
@@ -2502,7 +2572,7 @@ async function handleDeleteAccount() {
             // If using local auth, queue the deletion for cloud sync
             if (useLocalAuth && SyncQueue) {
                 const config = SyncQueue.getSyncConfig();
-                
+
                 if (config.cloudServerUrl) {
                     // Add deletion to sync queue
                     SyncQueue.addToQueue({
@@ -2512,7 +2582,7 @@ async function handleDeleteAccount() {
                         phone: user.phone,
                         data: { password } // Store password for cloud deletion
                     });
-                    
+
                     // Try to sync immediately if server is available
                     const serverAvailable = await SyncQueue.isCloudServerAvailable(config.cloudServerUrl);
                     if (serverAvailable) {
@@ -2525,7 +2595,7 @@ async function handleDeleteAccount() {
                         puts('[auth] Cloud server not available, deletion queued for later sync');
                     }
                 }
-                
+
                 // Remove stored credentials for this user
                 SyncQueue.removeCredentials(user.id);
             }

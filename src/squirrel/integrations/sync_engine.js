@@ -35,7 +35,7 @@ function resolveWsCandidates() {
     // - Port 3000 (Squirrel static server or Axum) doesn't have WebSocket
     // - Port 1420/1430 (Tauri dev server / Vite) doesn't have WebSocket
     // Only Fastify on 3001 has the /ws/events endpoint
-    
+
     pushBase('ws://localhost:3001');
     pushBase('ws://127.0.0.1:3001');
 
