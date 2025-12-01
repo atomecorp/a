@@ -362,11 +362,24 @@ async fn batch_update_handler(
     State(state): State<AppState>,
     Json(payload): Json<BatchUpdateRequest>,
 ) -> impl IntoResponse {
-    // static_dir points to 'src', so parent is project root
-    let base_path = state.static_dir.parent().unwrap_or(&state.static_dir);
+    // static_dir points to 'src' bundle directory
+    // We need to write to the bundle, not the source
+    let static_dir = state.static_dir.as_ref();
+    
+    // Canonicalize to get absolute path
+    let base_path = match static_dir.parent() {
+        Some(parent) => {
+            match parent.canonicalize() {
+                Ok(abs) => abs,
+                Err(_) => parent.to_path_buf()
+            }
+        }
+        None => static_dir.to_path_buf()
+    };
 
     println!("📥 Batch update: {} files to download", payload.files.len());
-    println!("📂 Base path: {:?}", base_path);
+    println!("📂 Static dir: {:?}", static_dir);
+    println!("📂 Base path (absolute): {:?}", base_path);
 
     let allowed_prefixes = [
         "src/squirrel",
@@ -531,9 +544,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     let version = load_version(&base_dir);
     println!("📦 Version applicative: {}", version);
 
+    // Canonicalize static_dir to get absolute path for file updates
+    let static_dir_abs = base_dir.canonicalize().unwrap_or_else(|_| base_dir.clone());
+    println!("📂 Static dir (absolute): {:?}", static_dir_abs);
+
     let state = AppState {
         uploads_dir: Arc::new(uploads_dir.clone()),
-        static_dir: Arc::new(base_dir.clone()),
+        static_dir: Arc::new(static_dir_abs),
         version: Arc::new(version.clone()),
     };
 
