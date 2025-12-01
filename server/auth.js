@@ -1048,7 +1048,98 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         };
     });
 
+    // =========================================================================
+    // ADMIN ROUTES (UPDATE SYSTEM)
+    // =========================================================================
+
+    /**
+     * POST /api/admin/apply-update
+     * Write update files to the server (admin only)
+     * Security: Only allows writes to specific directories
+     */
+    server.post('/api/admin/apply-update', async (request, reply) => {
+        const { path: filePath, content } = request.body || {};
+
+        // Validate input
+        if (!filePath || typeof filePath !== 'string') {
+            return reply.code(400).send({
+                success: false,
+                error: 'Path is required'
+            });
+        }
+
+        if (typeof content !== 'string') {
+            return reply.code(400).send({
+                success: false,
+                error: 'Content is required'
+            });
+        }
+
+        // Security: Define allowed and protected paths
+        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'src/application/security'];
+        const protectedPrefixes = ['src/application/examples', 'src/application/config'];
+
+        // Check if path is protected
+        for (const protectedPath of protectedPrefixes) {
+            if (filePath.startsWith(protectedPath)) {
+                return reply.code(403).send({
+                    success: false,
+                    error: `Path ${protectedPath} is protected and cannot be updated`
+                });
+            }
+        }
+
+        // Check if path is allowed
+        const isAllowed = allowedPrefixes.some(prefix => filePath.startsWith(prefix));
+        if (!isAllowed) {
+            return reply.code(403).send({
+                success: false,
+                error: 'Path is not in allowed update directories'
+            });
+        }
+
+        // Prevent path traversal attacks
+        if (filePath.includes('..') || filePath.includes('//')) {
+            return reply.code(403).send({
+                success: false,
+                error: 'Invalid path'
+            });
+        }
+
+        try {
+            const { promises: fsPromises } = await import('fs');
+            const pathModule = await import('path');
+            const { fileURLToPath } = await import('url');
+
+            const __dirname = pathModule.dirname(fileURLToPath(import.meta.url));
+            const projectRoot = pathModule.join(__dirname, '..');
+            const targetPath = pathModule.join(projectRoot, filePath);
+
+            // Create parent directories if needed
+            const parentDir = pathModule.dirname(targetPath);
+            await fsPromises.mkdir(parentDir, { recursive: true });
+
+            // Write the file
+            await fsPromises.writeFile(targetPath, content, 'utf8');
+
+            console.log(`📝 [Admin] Updated file: ${filePath}`);
+
+            return {
+                success: true,
+                path: filePath,
+                message: 'File updated successfully'
+            };
+        } catch (error) {
+            request.log.error({ err: error }, 'Failed to write update file');
+            return reply.code(500).send({
+                success: false,
+                error: 'Failed to write file: ' + error.message
+            });
+        }
+    });
+
     console.log('🔐 Authentication routes registered');
+    console.log('🔧 Admin update route registered: /api/admin/apply-update');
     if (serverIdentityConfigured()) {
         console.log('🔑 Server identity verification enabled');
     } else {

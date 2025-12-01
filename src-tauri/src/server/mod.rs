@@ -3,7 +3,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path as AxumPath, State},
     http::{header, HeaderMap, HeaderValue, Method, StatusCode},
     response::IntoResponse,
-    routing::{get, get_service},
+    routing::{get, get_service, post},
     Json, Router,
 };
 use serde_json::json;
@@ -15,11 +15,7 @@ use std::{
     sync::Arc,
 };
 use tokio::fs;
-use tower_http::{
-    cors::{Any, CorsLayer},
-    limit::RequestBodyLimitLayer,
-    services::ServeDir,
-};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, services::ServeDir};
 
 // Local authentication module
 pub mod local_auth;
@@ -250,6 +246,92 @@ async fn download_upload_handler(
     }
 }
 
+/// Request for writing update files
+#[derive(serde::Deserialize)]
+pub struct WriteUpdateFileRequest {
+    pub path: String,
+    pub content: String,
+}
+
+/// Handler for writing update files (admin only)
+async fn update_file_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<WriteUpdateFileRequest>,
+) -> impl IntoResponse {
+    // Security: Only allow writes within src/ directory
+    let base_path = state.uploads_dir.parent().unwrap_or(&state.uploads_dir);
+    let target_path = base_path.join(&payload.path);
+
+    // Validate path is within allowed directories
+    let allowed_prefixes = [
+        "src/squirrel",
+        "src/application/core",
+        "src/application/security",
+    ];
+    let protected_prefixes = ["src/application/examples", "src/application/config"];
+
+    let path_str = payload.path.as_str();
+
+    // Check if path is protected
+    for protected in &protected_prefixes {
+        if path_str.starts_with(protected) {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Path {} is protected and cannot be updated", protected)
+                })),
+            );
+        }
+    }
+
+    // Check if path is allowed
+    let is_allowed = allowed_prefixes
+        .iter()
+        .any(|prefix| path_str.starts_with(prefix));
+    if !is_allowed {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "success": false,
+                "error": "Path is not in allowed update directories"
+            })),
+        );
+    }
+
+    // Create parent directories if needed
+    if let Some(parent) = target_path.parent() {
+        if let Err(err) = fs::create_dir_all(parent).await {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "error": format!("Failed to create directory: {}", err)
+                })),
+            );
+        }
+    }
+
+    // Write the file
+    match fs::write(&target_path, payload.content.as_bytes()).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "path": payload.path,
+                "message": "File updated successfully"
+            })),
+        ),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "error": format!("Failed to write file: {}", err)
+            })),
+        ),
+    }
+}
+
 pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
@@ -330,6 +412,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
             get(list_uploads_handler).post(upload_handler),
         )
         .route("/api/uploads/:file", get(download_upload_handler))
+        .route("/api/admin/apply-update", post(update_file_handler))
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)
