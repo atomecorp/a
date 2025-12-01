@@ -10,6 +10,8 @@ import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
 import { getABoxEventBus } from './aBoxServer.js';
+import path from 'path';
+import fs from 'fs/promises';
 
 // =============================================================================
 // CONSTANTS
