@@ -1446,10 +1446,10 @@ async function handleLogin() {
                                         'Content-Type': 'application/json',
                                         'Authorization': `Bearer ${result.token || localStorage.getItem('local_auth_token')}`
                                     },
-                                    body: JSON.stringify({ cloudId: cloudLoginData.user.id })
+                                    body: JSON.stringify({ cloud_id: cloudLoginData.user.id })
                                 });
                             } catch (e) {
-                                console.warn('[auth] Could not update cloud ID:', e.message);
+                                // Silently ignore - not critical
                             }
                         }
                     } else {
