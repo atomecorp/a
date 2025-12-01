@@ -800,14 +800,14 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         try {
             // Check for token in cookie OR Authorization header (for cross-origin requests)
             let token = request.cookies?.access_token;
-            
+
             if (!token) {
                 const authHeader = request.headers?.authorization;
                 if (authHeader && authHeader.startsWith('Bearer ')) {
                     token = authHeader.substring(7);
                 }
             }
-            
+
             if (!token) {
                 return reply.code(401).send({ success: false, error: 'Not authenticated' });
             }

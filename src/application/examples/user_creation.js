@@ -2687,10 +2687,10 @@ async function handleDeleteAccount() {
 
                 // Try to delete from cloud immediately
                 const serverAvailable = await SyncQueue.isCloudServerAvailable(cloudServerUrl);
-                
+
                 if (serverAvailable) {
                     puts('[auth] Cloud server available, deleting from cloud...');
-                    
+
                     try {
                         // Login first to get token (cookies don't work cross-origin)
                         const loginResponse = await fetch(`${cloudServerUrl}/api/auth/login`, {
@@ -2698,22 +2698,22 @@ async function handleDeleteAccount() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ phone: user.phone, password })
                         });
-                        
+
                         const loginData = await loginResponse.json().catch(() => ({}));
-                        
+
                         if (loginData.success && loginData.token) {
                             // Now delete using the token from login
                             const deleteResponse = await fetch(`${cloudServerUrl}/api/auth/delete-account`, {
                                 method: 'DELETE',
-                                headers: { 
+                                headers: {
                                     'Content-Type': 'application/json',
                                     'Authorization': `Bearer ${loginData.token}`
                                 },
                                 body: JSON.stringify({ password })
                             });
-                            
+
                             const deleteData = await deleteResponse.json().catch(() => ({}));
-                            
+
                             if (deleteData.success) {
                                 puts('[auth] ✅ Account deleted from cloud');
                             } else {
