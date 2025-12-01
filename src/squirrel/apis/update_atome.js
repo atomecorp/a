@@ -232,14 +232,14 @@ const AtomeUpdater = (function () {
     async function getFileList() {
         const { owner, repo, branch, rawBaseUrl } = CONFIG.github;
         const protectedPaths = CONFIG.protectedPaths || [];
-        
+
         log('getFileList: Fetching complete src/ tree from GitHub...');
 
         try {
             // Use GitHub Tree API with recursive=1 (single request for entire tree)
             const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
             log(`Fetching tree from: ${treeUrl}`);
-            
+
             const response = await fetch(treeUrl, {
                 headers: {
                     'Accept': 'application/vnd.github.v3+json',
