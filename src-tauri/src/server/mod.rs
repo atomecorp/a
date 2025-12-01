@@ -656,7 +656,10 @@ async fn sync_from_zip_handler(
         }
 
         // Check if path is protected
-        let is_protected = payload.protected_paths.iter().any(|p| relative_path.starts_with(p));
+        let is_protected = payload
+            .protected_paths
+            .iter()
+            .any(|p| relative_path.starts_with(p));
         if is_protected {
             continue;
         }
@@ -704,7 +707,11 @@ async fn sync_from_zip_handler(
 
     let success = errors.is_empty();
     (
-        if success { StatusCode::OK } else { StatusCode::PARTIAL_CONTENT },
+        if success {
+            StatusCode::OK
+        } else {
+            StatusCode::PARTIAL_CONTENT
+        },
         Json(json!({
             "success": success,
             "filesUpdated": updated_files.len(),
