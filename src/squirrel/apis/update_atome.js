@@ -342,7 +342,7 @@ const AtomeUpdater = (function () {
     /**
      * Apply update on Tauri (via HTTP Axum route)
      */
-    async function applyUpdateTauri(files, latestCommit) {
+    async function applyUpdateTauri(files, latestVersion) {
         const platform = getPlatform();
 
         if (!platform.isTauri) {
@@ -394,8 +394,7 @@ const AtomeUpdater = (function () {
         notifyProgress('finalize', 95, 'Updating version file...');
 
         const versionContent = JSON.stringify({
-            version: '1.0.4', // Increment manually or use a system
-            commit: latestCommit.sha,
+            version: latestVersion.version,
             updatedAt: new Date().toISOString()
         }, null, 2);
 
@@ -424,7 +423,7 @@ const AtomeUpdater = (function () {
     /**
      * Apply update on Fastify server
      */
-    async function applyUpdateServer(files, latestCommit) {
+    async function applyUpdateServer(files, latestVersion) {
         notifyProgress('request', 10, 'Sending request to server...');
 
         // Send file list to server for download
@@ -435,7 +434,7 @@ const AtomeUpdater = (function () {
             body: JSON.stringify({
                 source: `https://github.com/${CONFIG.github.owner}/${CONFIG.github.repo}`,
                 branch: CONFIG.github.branch,
-                commit: latestCommit.sha,
+                version: latestVersion.version,
                 paths: CONFIG.updatePaths
             })
         });
@@ -466,9 +465,9 @@ const AtomeUpdater = (function () {
         log(`Starting update on ${platform.name}...`);
 
         try {
-            // Get latest commit
+            // Get latest version
             notifyProgress('check', 5, 'Checking latest version...');
-            const latestCommit = await getLatestCommit();
+            const latestVersion = await getLatestVersion();
 
             // Get file list
             notifyProgress('list', 10, 'Getting file list...');
@@ -478,9 +477,9 @@ const AtomeUpdater = (function () {
             let result;
 
             if (platform.isTauri) {
-                result = await applyUpdateTauri(files, latestCommit);
+                result = await applyUpdateTauri(files, latestVersion);
             } else {
-                result = await applyUpdateServer(files, latestCommit);
+                result = await applyUpdateServer(files, latestVersion);
             }
 
             if (_callbacks.onComplete) {
