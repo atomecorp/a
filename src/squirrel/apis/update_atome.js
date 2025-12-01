@@ -140,7 +140,7 @@ const AtomeUpdater = (function () {
             }
 
             const data = await response.json();
-            
+
             // Use version as identifier (no API needed)
             return {
                 sha: data.commit || data.version, // Use commit if available, else version
@@ -179,7 +179,7 @@ const AtomeUpdater = (function () {
     function compareVersions(a, b) {
         const partsA = a.split('.').map(n => parseInt(n, 10) || 0);
         const partsB = b.split('.').map(n => parseInt(n, 10) || 0);
-        
+
         for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
             const numA = partsA[i] || 0;
             const numB = partsB[i] || 0;
@@ -250,7 +250,7 @@ const AtomeUpdater = (function () {
             try {
                 const manifestUrl = `${rawBaseUrl}/src/core_manifest.json?t=${Date.now()}`;
                 const manifestResponse = await fetch(manifestUrl);
-                
+
                 if (manifestResponse.ok) {
                     const manifest = await manifestResponse.json();
                     if (manifest.files && Array.isArray(manifest.files)) {
@@ -269,7 +269,7 @@ const AtomeUpdater = (function () {
                                 sha: f.sha || null,
                                 size: f.size || 0
                             }));
-                        
+
                         _fileListCache = files;
                         _fileListCacheTime = Date.now();
                         return files;
