@@ -375,18 +375,22 @@ const AtomeUpdater = (function () {
 
         notifyProgress('download', 0, 'Sending update request to server...');
 
-        const requestBody = {
-            files: files.map(f => ({
+        // Include version.json in the files to download from GitHub
+        // This way we get the complete version.json with file list
+        const allFiles = [
+            ...files.map(f => ({
                 path: f.path,
                 url: `${rawBaseUrl}/${f.path}`
             })),
-            version: {
+            {
                 path: CONFIG.versionFile,
-                content: JSON.stringify({
-                    version: latestVersion.version,
-                    updatedAt: new Date().toISOString()
-                }, null, 2)
+                url: `${rawBaseUrl}/${CONFIG.versionFile}`
             }
+        ];
+
+        const requestBody = {
+            files: allFiles,
+            version: null  // Don't generate, download from GitHub instead
         };
 
         log('Request body:', JSON.stringify(requestBody, null, 2));
@@ -425,16 +429,28 @@ const AtomeUpdater = (function () {
     async function applyUpdateServer(files, latestVersion) {
         notifyProgress('request', 10, 'Sending request to server...');
 
-        // Send file list to server for download
-        const response = await fetch('/api/admin/apply-update', {
+        const { rawBaseUrl } = CONFIG.github;
+
+        // Include version.json in the files to download from GitHub
+        const allFiles = [
+            ...files.map(f => ({
+                path: f.path,
+                url: `${rawBaseUrl}/${f.path}`
+            })),
+            {
+                path: CONFIG.versionFile,
+                url: `${rawBaseUrl}/${CONFIG.versionFile}`
+            }
+        ];
+
+        // Send file list to server for batch download
+        const response = await fetch('/api/admin/batch-update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({
-                source: `https://github.com/${CONFIG.github.owner}/${CONFIG.github.repo}`,
-                branch: CONFIG.github.branch,
-                version: latestVersion.version,
-                paths: CONFIG.updatePaths
+                files: allFiles,
+                version: null  // Download from GitHub instead of generating
             })
         });
 

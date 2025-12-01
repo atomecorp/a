@@ -1140,8 +1140,111 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
     });
 
+    /**
+     * POST /api/admin/batch-update
+     * Batch download and update files from GitHub (admin only)
+     */
+    server.post('/api/admin/batch-update', async (request, reply) => {
+        const { files, version } = request.body || {};
+
+        if (!files || !Array.isArray(files)) {
+            return reply.code(400).send({
+                success: false,
+                error: 'Files array is required'
+            });
+        }
+
+        const allowedPrefixes = ['src/squirrel', 'src/application/core', 'src/application/security'];
+        const allowedFiles = ['src/version.json'];
+        const protectedPrefixes = ['src/application/examples', 'src/application/config'];
+
+        const { promises: fsPromises } = await import('fs');
+        const pathModule = await import('path');
+        const { fileURLToPath } = await import('url');
+
+        const __dirname = pathModule.dirname(fileURLToPath(import.meta.url));
+        const projectRoot = pathModule.join(__dirname, '..');
+
+        const updatedFiles = [];
+        const errors = [];
+
+        for (const file of files) {
+            const { path: filePath, url } = file;
+
+            if (!filePath || !url) {
+                errors.push({ path: filePath || 'unknown', error: 'Missing path or url' });
+                continue;
+            }
+
+            // Check protected paths
+            const isProtected = protectedPrefixes.some(p => filePath.startsWith(p));
+            if (isProtected) {
+                errors.push({ path: filePath, error: 'Path is protected' });
+                continue;
+            }
+
+            // Check allowed paths
+            const isAllowed = allowedPrefixes.some(p => filePath.startsWith(p)) || allowedFiles.includes(filePath);
+            if (!isAllowed) {
+                errors.push({ path: filePath, error: 'Path not in allowed directories' });
+                continue;
+            }
+
+            // Prevent path traversal
+            if (filePath.includes('..') || filePath.includes('//')) {
+                errors.push({ path: filePath, error: 'Invalid path' });
+                continue;
+            }
+
+            try {
+                // Download from GitHub
+                const response = await fetch(url);
+                if (!response.ok) {
+                    errors.push({ path: filePath, error: `GitHub returned ${response.status}` });
+                    continue;
+                }
+
+                const content = await response.text();
+                const targetPath = pathModule.join(projectRoot, filePath);
+
+                // Create parent directories
+                const parentDir = pathModule.dirname(targetPath);
+                await fsPromises.mkdir(parentDir, { recursive: true });
+
+                // Write file
+                await fsPromises.writeFile(targetPath, content, 'utf8');
+                updatedFiles.push(filePath);
+
+            } catch (error) {
+                errors.push({ path: filePath, error: error.message });
+            }
+        }
+
+        // Update version file if provided
+        if (version && version.path && version.content) {
+            try {
+                const versionPath = pathModule.join(projectRoot, version.path);
+                const parentDir = pathModule.dirname(versionPath);
+                await fsPromises.mkdir(parentDir, { recursive: true });
+                await fsPromises.writeFile(versionPath, version.content, 'utf8');
+            } catch (error) {
+                errors.push({ path: version.path, error: error.message });
+            }
+        }
+
+        console.log(`📥 [Admin] Batch update: ${updatedFiles.length} files updated, ${errors.length} errors`);
+
+        return {
+            success: errors.length === 0,
+            filesUpdated: updatedFiles.length,
+            updated: updatedFiles,
+            errors: errors.length > 0 ? errors : null
+        };
+    });
+
     console.log('🔐 Authentication routes registered');
     console.log('🔧 Admin update route registered: /api/admin/apply-update');
+    console.log('🔧 Admin batch-update route registered: /api/admin/batch-update');
     if (serverIdentityConfigured()) {
         console.log('🔑 Server identity verification enabled');
     } else {

@@ -354,7 +354,8 @@ pub struct VersionUpdate {
 #[derive(serde::Deserialize)]
 pub struct BatchUpdateRequest {
     pub files: Vec<BatchUpdateFile>,
-    pub version: VersionUpdate,
+    #[serde(default)]
+    pub version: Option<VersionUpdate>,
 }
 
 /// Handler for batch downloading and updating files from GitHub
@@ -472,16 +473,18 @@ async fn batch_update_handler(
         }
     }
 
-    // Update version file
-    let version_path = base_path.join(&payload.version.path);
-    if let Some(parent) = version_path.parent() {
-        let _ = fs::create_dir_all(parent).await;
-    }
-    if let Err(e) = fs::write(&version_path, payload.version.content.as_bytes()).await {
-        errors.push(json!({
-            "path": payload.version.path,
-            "error": format!("Failed to update version file: {}", e)
-        }));
+    // Update version file only if provided (not null)
+    if let Some(ref version) = payload.version {
+        let version_path = base_path.join(&version.path);
+        if let Some(parent) = version_path.parent() {
+            let _ = fs::create_dir_all(parent).await;
+        }
+        if let Err(e) = fs::write(&version_path, version.content.as_bytes()).await {
+            errors.push(json!({
+                "path": version.path,
+                "error": format!("Failed to update version file: {}", e)
+            }));
+        }
     }
 
     let success = errors.is_empty();
