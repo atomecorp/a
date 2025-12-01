@@ -1301,8 +1301,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     ? name.substring(rootPrefix.length)
                     : name;
 
-                // Only process files in extractPath (src/)
-                if (!relativePath.startsWith(extractPath)) {
+                // Only process files EXACTLY in extractPath (src/)
+                // Must start with "src/" but NOT "src-tauri/" or "src-Auv3/"
+                const extractPrefix = extractPath.replace(/\/$/, '') + '/';
+                if (!relativePath.startsWith(extractPrefix)) {
                     continue;
                 }
 
@@ -1328,25 +1330,24 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     errors.push({ path: relativePath, error: e.message });
                 }
             }
-        }
 
             console.log('✅ Updated', updatedFiles.length, 'files');
-        if (errors.length > 0) {
-            console.log('⚠️', errors.length, 'errors');
+            if (errors.length > 0) {
+                console.log('⚠️', errors.length, 'errors');
+            }
+
+            return {
+                success: errors.length === 0,
+                filesUpdated: updatedFiles.length,
+                updated: updatedFiles,
+                errors: errors.length > 0 ? errors : null
+            };
+
+        } catch (error) {
+            console.error('❌ Sync from ZIP failed:', error.message);
+            return reply.code(500).send({ success: false, error: error.message });
         }
-
-        return {
-            success: errors.length === 0,
-            filesUpdated: updatedFiles.length,
-            updated: updatedFiles,
-            errors: errors.length > 0 ? errors : null
-        };
-
-    } catch (error) {
-        console.error('❌ Sync from ZIP failed:', error.message);
-        return reply.code(500).send({ success: false, error: error.message });
-    }
-});
+    });
 
 console.log('🔐 Authentication routes registered');
 console.log('🔧 Admin update route registered: /api/admin/apply-update');

@@ -668,8 +668,10 @@ async fn sync_from_zip_handler(
             &name
         };
 
-        // Only process files in the extract_path (src/)
-        if !relative_path.starts_with(&payload.extract_path) {
+        // Only process files that are EXACTLY in the extract_path folder (src/)
+        // Must start with "src/" but NOT "src-tauri/" or "src-Auv3/"
+        let extract_prefix = format!("{}/", payload.extract_path.trim_end_matches('/'));
+        if !relative_path.starts_with(&extract_prefix) {
             continue;
         }
 
