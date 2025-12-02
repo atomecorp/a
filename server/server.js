@@ -13,6 +13,19 @@ import {
   getABoxEventBus
 } from './aBoxServer.js';
 import { registerAuthRoutes } from './auth.js';
+import { registerAtomeRoutes } from './atomeRoutes.js';
+import { registerSharingRoutes } from './sharing.js';
+import {
+  initUserFiles,
+  registerFileUpload,
+  getUserFiles,
+  getAccessibleFiles,
+  canAccessFile,
+  shareFile,
+  unshareFile,
+  setFilePublic,
+  getFileStats
+} from './userFiles.js';
 import {
   startPolling as startGitHubPolling,
   stopPolling as stopGitHubPolling,
@@ -205,6 +218,9 @@ async function startServer() {
     await fs.mkdir(uploadsDir, { recursive: true });
     console.log('📁 Uploads directory:', uploadsDir);
 
+    // Initialize user files tracking
+    await initUserFiles(uploadsDir);
+
     if (process.env.SQUIRREL_DISABLE_WATCHER === '1') {
       console.log('🛑 File sync watcher disabled via SQUIRREL_DISABLE_WATCHER=1');
     } else {
@@ -278,6 +294,34 @@ async function startServer() {
     // 2. ROUTES API
     // ===========================
 
+    // Helper function to validate token (for sharing routes)
+    const validateToken = async (request) => {
+      // Try Bearer token first
+      const authHeader = request.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        try {
+          const [, payload] = token.split('.');
+          const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
+          return decoded;
+        } catch (e) {
+          // Fall through to cookie check
+        }
+      }
+
+      // Try cookie
+      const cookieToken = request.cookies?.access_token;
+      if (cookieToken && server.jwt) {
+        try {
+          return server.jwt.verify(cookieToken);
+        } catch (e) {
+          return null;
+        }
+      }
+
+      return null;
+    };
+
     // Register authentication routes (login, register, logout, OTP, etc.)
     if (DATABASE_ENABLED) {
       await registerAuthRoutes(server, AppDataSource, {
@@ -285,6 +329,12 @@ async function startServer() {
         cookieSecret: process.env.COOKIE_SECRET,
         isProduction: process.env.NODE_ENV === 'production'
       });
+
+      // Register Atome API routes
+      registerAtomeRoutes(server, AppDataSource);
+
+      // Register Sharing routes
+      registerSharingRoutes(server, validateToken);
     } else {
       // Provide stub routes that return 503 when DB is not configured
       server.post('/api/auth/register', async (req, reply) => reply.code(503).send({ success: false, error: DB_REQUIRED_MESSAGE }));
@@ -306,6 +356,10 @@ async function startServer() {
 
     server.post('/api/uploads', async (request, reply) => {
       try {
+        // Get user info if authenticated (optional for uploads)
+        const user = await validateToken(request);
+        const userId = user?.id || user?.userId || 'anonymous';
+
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
           : request.headers['x-filename'];
@@ -330,12 +384,130 @@ async function startServer() {
         const { fileName, filePath } = await resolveUploadPath(decodedName);
         await fs.writeFile(filePath, bodyBuffer);
 
-        return { success: true, file: fileName };
+        // Register file ownership
+        await registerFileUpload(fileName, userId, {
+          originalName: decodedName,
+          size: bodyBuffer.length
+        });
+
+        return { success: true, file: fileName, owner: userId };
       } catch (error) {
         request.log.error({ err: error }, 'File upload failed');
         reply.code(500);
         return { success: false, error: error.message };
       }
+    });
+
+    // =========================================================================
+    // USER FILES ROUTES - Get files with ownership filtering
+    // =========================================================================
+
+    // Get my files (files I own)
+    server.get('/api/files/my-files', async (request, reply) => {
+      const user = await validateToken(request);
+      if (!user) {
+        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+      }
+
+      const userId = user.id || user.userId;
+      const files = getUserFiles(userId);
+
+      return { success: true, data: files, count: files.length };
+    });
+
+    // Get all accessible files (owned + shared)
+    server.get('/api/files/accessible', async (request, reply) => {
+      const user = await validateToken(request);
+      if (!user) {
+        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+      }
+
+      const userId = user.id || user.userId;
+      const files = getAccessibleFiles(userId);
+
+      return { success: true, data: files, count: files.length };
+    });
+
+    // Share a file
+    server.post('/api/files/share', async (request, reply) => {
+      const user = await validateToken(request);
+      if (!user) {
+        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+      }
+
+      const { fileName, targetUserId, permission } = request.body || {};
+
+      if (!fileName || !targetUserId) {
+        return reply.status(400).send({ success: false, error: 'Missing fileName or targetUserId' });
+      }
+
+      const userId = user.id || user.userId;
+      const result = await shareFile(fileName, userId, targetUserId, permission || 'read');
+
+      if (!result.success) {
+        return reply.status(403).send(result);
+      }
+
+      return result;
+    });
+
+    // Unshare a file
+    server.post('/api/files/unshare', async (request, reply) => {
+      const user = await validateToken(request);
+      if (!user) {
+        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+      }
+
+      const { fileName, targetUserId } = request.body || {};
+
+      if (!fileName || !targetUserId) {
+        return reply.status(400).send({ success: false, error: 'Missing fileName or targetUserId' });
+      }
+
+      const userId = user.id || user.userId;
+      const result = await unshareFile(fileName, userId, targetUserId);
+
+      if (!result.success) {
+        return reply.status(403).send(result);
+      }
+
+      return result;
+    });
+
+    // Set file public/private
+    server.post('/api/files/visibility', async (request, reply) => {
+      const user = await validateToken(request);
+      if (!user) {
+        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+      }
+
+      const { fileName, isPublic } = request.body || {};
+
+      if (!fileName || typeof isPublic !== 'boolean') {
+        return reply.status(400).send({ success: false, error: 'Missing fileName or isPublic' });
+      }
+
+      const userId = user.id || user.userId;
+      const result = await setFilePublic(fileName, userId, isPublic);
+
+      if (!result.success) {
+        return reply.status(403).send(result);
+      }
+
+      return result;
+    });
+
+    // Get file stats (admin)
+    server.get('/api/files/stats', async (request, reply) => {
+      const user = await validateToken(request);
+      if (!user) {
+        return reply.status(401).send({ success: false, error: 'Unauthorized' });
+      }
+
+      // TODO: Check if user is admin
+      const stats = getFileStats();
+
+      return { success: true, data: stats };
     });
 
     server.post('/api/adole/users', async (request, reply) => {
