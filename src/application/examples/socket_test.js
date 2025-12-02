@@ -1622,6 +1622,20 @@ async function loadUserAtomes() {
     }
 
     try {
+        // Debug: Show which user we're loading for
+        const token = localStorage.getItem(TOKEN_KEY);
+        if (token) {
+            try {
+                const [, payload] = token.split('.');
+                const decoded = JSON.parse(atob(payload));
+                const userId = decoded.id || decoded.userId || decoded.sub;
+                console.log('[loadUserAtomes] Token userId:', userId, 'TOKEN_KEY:', TOKEN_KEY);
+                log(`Loading atomes for user: ${userId?.substring(0, 8)}...`, 'info');
+            } catch (e) {
+                console.log('[loadUserAtomes] Token decode error:', e);
+            }
+        }
+
         log('Loading your atomes...', 'info');
         const result = await Atome.list({ kind: 'shape' });
 

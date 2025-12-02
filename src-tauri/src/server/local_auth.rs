@@ -8,6 +8,7 @@
 //! - Login with JWT session tokens
 //! - Local SQLite database storage
 //! - Sync capability to remote server
+//! - Deterministic user IDs based on phone number (same ID across all platforms)
 
 use axum::{
     extract::State,
@@ -24,6 +25,41 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
+
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
+/// Namespace UUID for deterministic user ID generation
+/// This MUST be the same in Fastify and Axum to generate identical user IDs
+/// Using DNS namespace UUID: 6ba7b810-9dad-11d1-80b4-00c04fd430c8
+const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
+    0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+]);
+
+/// Generate a deterministic user ID from phone number
+/// Uses UUID v5 (SHA-1 based) with a fixed namespace
+/// This ensures the same phone number always produces the same user ID
+/// across all platforms (Fastify, Axum/Tauri, iOS)
+fn generate_deterministic_user_id(phone: &str) -> String {
+    // Normalize phone: remove spaces, dashes, parentheses
+    let normalized: String = phone
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-' && *c != '(' && *c != ')')
+        .collect::<String>()
+        .to_lowercase();
+
+    // Generate UUID v5 from phone + namespace
+    let user_id = Uuid::new_v5(&SQUIRREL_USER_NAMESPACE, normalized.as_bytes());
+
+    println!(
+        "[Auth] Generated deterministic userId for phone {}***: {}",
+        &phone[..std::cmp::min(4, phone.len())],
+        user_id
+    );
+
+    user_id.to_string()
+}
 
 // =============================================================================
 // TYPES
@@ -275,8 +311,9 @@ async fn register_handler(
         }
     };
 
-    // Create user
-    let user_id = Uuid::new_v4().to_string();
+    // Create user with deterministic ID based on phone number
+    // This ensures same user gets same ID across Fastify, Tauri, and iOS
+    let user_id = generate_deterministic_user_id(&clean_phone);
     let now = Utc::now().to_rfc3339();
 
     {

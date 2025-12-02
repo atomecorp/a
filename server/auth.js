@@ -7,12 +7,13 @@
  */
 
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, v5 as uuidv5 } from 'uuid';
 import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 // Get project root (parent of server/)
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +28,30 @@ const SALT_ROUNDS = 10;
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const JWT_EXPIRY = '7d'; // 7 days
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days in seconds
+
+// Namespace UUID for deterministic user ID generation
+// This MUST be the same in Fastify and Axum to generate identical user IDs
+const SQUIRREL_USER_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+
+/**
+ * Generate a deterministic user ID from phone number
+ * Uses UUID v5 (SHA-1 based) with a fixed namespace
+ * This ensures the same phone number always produces the same user ID
+ * across all platforms (Fastify, Axum/Tauri, iOS)
+ * 
+ * @param {string} phone - The normalized phone number
+ * @returns {string} - Deterministic UUID
+ */
+function generateDeterministicUserId(phone) {
+    // Normalize phone: remove spaces, ensure consistent format
+    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').toLowerCase();
+
+    // Generate UUID v5 from phone + namespace
+    const userId = uuidv5(normalizedPhone, SQUIRREL_USER_NAMESPACE);
+
+    console.log(`[Auth] Generated deterministic userId for phone ${phone.substring(0, 4)}***: ${userId}`);
+    return userId;
+}
 
 // In-memory OTP storage (use Redis in production for multi-instance deployments)
 const otpStore = new Map();
@@ -231,7 +256,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             // Create user in ADOLE schema
             const tenantId = uuidv4();
-            const principalId = uuidv4();
+            // Use deterministic user ID based on phone number
+            // This ensures same user gets same ID across Fastify, Tauri, and iOS
+            const principalId = generateDeterministicUserId(cleanPhone);
             const branchId = uuidv4();
             const commitId = uuidv4();
             const logicalClock = Date.now();

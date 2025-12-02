@@ -414,6 +414,8 @@ export function registerAtomeRoutes(server, dataSource) {
             const results = [];
 
             // Collect atomes that belong to this user
+            console.log(`[Atome] LIST - Looking for atomes for user: ${userId}`);
+
             for (const [propId, prop] of propertiesStore) {
                 if (prop.key === '__meta__') {
                     const meta = JSON.parse(prop.value_json);
@@ -421,8 +423,12 @@ export function registerAtomeRoutes(server, dataSource) {
                     // Skip deleted
                     if (meta.deleted_at) continue;
 
-                    // IMPORTANT: Filter by user - only return atomes created by this user
-                    if (meta.created_by !== userId) continue;
+                    // Filter by user - return atomes created by this user
+                    // Also include atomes without created_by (legacy data)
+                    if (meta.created_by && meta.created_by !== userId) {
+                        console.log(`[Atome] Skipping ${prop.object_id} - created_by: ${meta.created_by}, userId: ${userId}`);
+                        continue;
+                    }
 
                     // Apply additional filters
                     if (project_id && meta.project_id !== project_id) continue;

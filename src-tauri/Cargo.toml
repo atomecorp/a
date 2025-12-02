@@ -30,7 +30,7 @@ urlencoding = "2"
 # Local authentication dependencies
 rusqlite = { version = "0.31", features = ["bundled"] }
 bcrypt = "0.15"
-uuid = { version = "1.8", features = ["v4", "serde"] }
+uuid = { version = "1.8", features = ["v4", "v5", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 jsonwebtoken = "9"
 rand = "0.8"
