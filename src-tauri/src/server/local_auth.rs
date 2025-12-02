@@ -921,7 +921,8 @@ async fn sync_delete_handler(
     Json(req): Json<SyncDeleteRequest>,
 ) -> impl IntoResponse {
     // Verify sync secret
-    let expected_secret = std::env::var("SYNC_SECRET").unwrap_or_else(|_| "squirrel-sync-2024".to_string());
+    let expected_secret =
+        std::env::var("SYNC_SECRET").unwrap_or_else(|_| "squirrel-sync-2024".to_string());
     let provided_secret = headers
         .get("X-Sync-Secret")
         .and_then(|h| h.to_str().ok())
@@ -973,12 +974,17 @@ async fn sync_delete_handler(
     let user = match user {
         Some(u) => u,
         None => {
-            println!("ℹ️ sync-delete: User not found locally for phone {}", req.phone);
+            println!(
+                "ℹ️ sync-delete: User not found locally for phone {}",
+                req.phone
+            );
             return (
                 StatusCode::OK,
                 Json(AuthResponse {
                     success: true,
-                    message: Some("Account not found locally (already deleted or never synced)".into()),
+                    message: Some(
+                        "Account not found locally (already deleted or never synced)".into(),
+                    ),
                     error: None,
                     user: None,
                     token: None,
@@ -1013,7 +1019,10 @@ async fn sync_delete_handler(
         StatusCode::OK,
         Json(AuthResponse {
             success: true,
-            message: Some(format!("Account deleted successfully (synced from {})", source)),
+            message: Some(format!(
+                "Account deleted successfully (synced from {})",
+                source
+            )),
             error: None,
             user: None,
             token: None,
@@ -1188,10 +1197,7 @@ pub fn create_local_auth_router(data_dir: PathBuf) -> Router {
             "/api/auth/local/delete-synced",
             delete(delete_synced_handler),
         )
-        .route(
-            "/api/auth/local/sync-delete",
-            post(sync_delete_handler),
-        )
+        .route("/api/auth/local/sync-delete", post(sync_delete_handler))
         .route(
             "/api/auth/local/update-cloud-id",
             post(update_cloud_id_handler),

@@ -969,7 +969,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             try {
                 const tauriUrl = 'http://localhost:3000/api/auth/local/sync-delete';
                 console.log(`[auth] Syncing account deletion to Tauri: ${snapshot.phone}`);
-                
+
                 const syncResponse = await fetch(tauriUrl, {
                     method: 'POST',
                     headers: {
@@ -982,7 +982,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                         userId: decoded.id
                     })
                 });
-                
+
                 if (syncResponse.ok) {
                     const syncData = await syncResponse.json();
                     console.log(`[auth] ✅ Tauri account sync-delete successful:`, syncData);
