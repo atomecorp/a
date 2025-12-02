@@ -20,3 +20,5 @@ In certain circumstances, when the prompt explicitly specifies creating an HTML 
 All comments, warnings, errors,   messages, console logs and documentations, you must always be write in English, and only in english.
 
 never use any fallback unless specified
+
+never use : system confirm()  or alert or any other system dialog everything must be done within the webview with html elements and js

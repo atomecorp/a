@@ -965,6 +965,34 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             console.log(`🗑️ Account deleted: user ${decoded.id}`);
 
+            // === SYNC: Delete account on Tauri server ===
+            try {
+                const tauriUrl = 'http://localhost:3000/api/auth/local/sync-delete';
+                console.log(`[auth] Syncing account deletion to Tauri: ${snapshot.phone}`);
+                
+                const syncResponse = await fetch(tauriUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Sync-Source': 'fastify',
+                        'X-Sync-Secret': process.env.SYNC_SECRET || 'squirrel-sync-2024'
+                    },
+                    body: JSON.stringify({
+                        phone: snapshot.phone,
+                        userId: decoded.id
+                    })
+                });
+                
+                if (syncResponse.ok) {
+                    const syncData = await syncResponse.json();
+                    console.log(`[auth] ✅ Tauri account sync-delete successful:`, syncData);
+                } else {
+                    console.warn(`[auth] ⚠️ Tauri sync-delete failed: ${syncResponse.status}`);
+                }
+            } catch (syncError) {
+                console.warn(`[auth] ⚠️ Could not sync delete to Tauri:`, syncError.message);
+            }
+
             // Emit account deletion event for sync
             try {
                 const eventBus = getABoxEventBus();

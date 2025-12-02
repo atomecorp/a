@@ -209,6 +209,24 @@ class VersionSyncClient {
                 // Heartbeat response
                 break;
 
+            case 'atome:created':
+                console.log('[version_sync] 🆕 Atome created:', data.atome?.id);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-created', { detail: data.atome }));
+                this.broadcast({ type: 'atome:created', atome: data.atome });
+                break;
+
+            case 'atome:updated':
+                console.log('[version_sync] ✏️ Atome updated:', data.atome?.id);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-updated', { detail: data.atome }));
+                this.broadcast({ type: 'atome:updated', atome: data.atome });
+                break;
+
+            case 'atome:deleted':
+                console.log('[version_sync] 🗑️ Atome deleted:', data.atome?.id);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-deleted', { detail: data.atome }));
+                this.broadcast({ type: 'atome:deleted', atome: data.atome });
+                break;
+
             case 'error':
                 console.error('[version_sync] Server error:', data.message);
                 this.broadcast({ type: 'error', message: data.message });

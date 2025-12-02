@@ -3,12 +3,14 @@
  * 
  * Server-side routes for Atome CRUD operations.
  * Requires authentication for all operations.
+ * Broadcasts changes via WebSocket for real-time sync.
  */
 
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { broadcastMessage } from './githubSync.js';
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -180,6 +182,19 @@ export function registerAtomeRoutes(server, dataSource) {
             console.log(`✅ [Atome] Created: ${atomeId} (${kind})`);
             saveData(); // Persist to file
 
+            // Broadcast to all connected clients for real-time sync
+            broadcastMessage('atome:created', {
+                atome: {
+                    id: atomeId,
+                    kind,
+                    tag,
+                    parent,
+                    properties,
+                    created_at: extendedData.created_at,
+                    created_by: user.id || user.userId
+                }
+            });
+
             return {
                 success: true,
                 data: {
@@ -279,6 +294,16 @@ export function registerAtomeRoutes(server, dataSource) {
             console.log(`✅ [Atome] Updated: ${id} (${Object.keys(updatedProps).length} properties)`);
             saveData(); // Persist to file
 
+            // Broadcast to all connected clients for real-time sync
+            broadcastMessage('atome:updated', {
+                atome: {
+                    id,
+                    properties: updatedProps,
+                    updated_at: now,
+                    updated_by: user.id || user.userId
+                }
+            });
+
             return {
                 success: true,
                 data: {
@@ -329,6 +354,15 @@ export function registerAtomeRoutes(server, dataSource) {
 
             console.log(`✅ [Atome] Deleted: ${id}`);
             saveData(); // Persist to file
+
+            // Broadcast to all connected clients for real-time sync
+            broadcastMessage('atome:deleted', {
+                atome: {
+                    id,
+                    deleted_at: meta.deleted_at,
+                    deleted_by: userId
+                }
+            });
 
             return {
                 success: true,

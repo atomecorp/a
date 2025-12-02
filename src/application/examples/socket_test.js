@@ -257,40 +257,69 @@ Button({
             return;
         }
 
-        log(`Attempting login as: ${identifier}...`);
+        log(`Attempting login on BOTH servers: ${identifier}...`);
 
+        let tauriSuccess = false;
+        let fastifySuccess = false;
+        let userData = null;
+
+        // Login on Tauri (port 3000)
         try {
-            // Both Axum (local) and Fastify (cloud) use { phone, password }
-            const body = { phone: identifier, password };
+            const tauriResponse = await fetch('http://localhost:3000/api/auth/local/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone: identifier, password })
+            });
+            const tauriData = await tauriResponse.json();
+            if (tauriData.success && tauriData.token) {
+                log(`✅ Tauri login OK: ${tauriData.user?.username}`, 'success');
+                tauriSuccess = true;
+                localStorage.setItem('local_auth_token', tauriData.token);
+                userData = tauriData.user;
+            } else {
+                log(`Tauri login: ${tauriData.error || 'Failed'}`, 'warn');
+            }
+        } catch (error) {
+            log(`Tauri login error: ${error.message}`, 'warn');
+        }
 
-            const response = await fetch(`${apiBase}${authPrefix}/login`, {
+        // Login on Fastify (port 3001)
+        try {
+            const fastifyResponse = await fetch('http://localhost:3001/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
-                body: JSON.stringify(body)
+                body: JSON.stringify({ phone: identifier, password })
             });
-
-            const data = await response.json();
-
-            if (data.success && data.token) {
-                localStorage.setItem(TOKEN_KEY, data.token);
-                localStorage.setItem('user_data', JSON.stringify(data.user));
-
-                authStatus.$({
-                    css: { backgroundColor: '#6bcb77' },
-                    text: `🔓 ${data.user.username || identifier}`
-                });
-
-                log(`Logged in as: ${data.user.username}`, 'success');
-                updatePendingCount();
-
-                // Load user's atomes after login
-                await loadUserAtomes();
+            const fastifyData = await fastifyResponse.json();
+            if (fastifyData.success && fastifyData.token) {
+                log(`✅ Fastify login OK: ${fastifyData.user?.username}`, 'success');
+                fastifySuccess = true;
+                localStorage.setItem('cloud_auth_token', fastifyData.token);
+                if (!userData) userData = fastifyData.user;
             } else {
-                log(`Login failed: ${data.error || 'Unknown error'}`, 'error');
+                log(`Fastify login: ${fastifyData.error || 'Failed'}`, 'warn');
             }
         } catch (error) {
-            log(`Login error: ${error.message}`, 'error');
+            log(`Fastify login error: ${error.message}`, 'warn');
+        }
+
+        // Update UI
+        if (tauriSuccess || fastifySuccess) {
+            localStorage.setItem('user_data', JSON.stringify(userData));
+
+            authStatus.$({
+                css: { backgroundColor: '#6bcb77' },
+                text: `🔓 ${userData?.username || identifier}`
+            });
+
+            log(`Logged in: Tauri=${tauriSuccess}, Fastify=${fastifySuccess}`, 'success');
+            updatePendingCount();
+
+            // Load user's atomes after login
+            await loadUserAtomes();
+        } else {
+            log('Login failed on both servers', 'error');
         }
     }
 });
@@ -307,7 +336,35 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: () => {
+    onAction: async () => {
+        // Logout from both servers
+        const localToken = localStorage.getItem('local_auth_token');
+        const cloudToken = localStorage.getItem('cloud_auth_token');
+
+        // Logout from Tauri
+        if (localToken) {
+            try {
+                await fetch('http://localhost:3000/api/auth/local/logout', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${localToken}` }
+                });
+            } catch (e) { /* ignore */ }
+        }
+
+        // Logout from Fastify
+        if (cloudToken) {
+            try {
+                await fetch('http://localhost:3001/api/auth/logout', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${cloudToken}` },
+                    credentials: 'include'
+                });
+            } catch (e) { /* ignore */ }
+        }
+
+        // Clear all tokens
+        localStorage.removeItem('local_auth_token');
+        localStorage.removeItem('cloud_auth_token');
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem('user_data');
 
@@ -319,7 +376,390 @@ Button({
         // Clear visual area on logout - user's objects should not be visible
         clearVisualArea();
 
-        log('Logged out', 'info');
+        log('Logged out from both servers', 'info');
+    }
+});
+
+// Register button
+Button({
+    text: 'Register',
+    parent: authSection,
+    css: {
+        padding: '10px 20px',
+        backgroundColor: '#28a745',
+        color: 'white',
+        borderRadius: '5px',
+        cursor: 'pointer',
+        position: 'relative'
+    },
+    onAction: async () => {
+        const phone = loginInput.value;
+        const password = passwordInput.value;
+
+        if (!phone || !password) {
+            log('Please enter phone and password to register', 'warn');
+            return;
+        }
+
+        // Use phone as username for simplicity
+        const username = phone;
+
+        log(`Registering on BOTH servers: ${phone}...`);
+
+        let tauriSuccess = false;
+        let fastifySuccess = false;
+        let tauriData = null;
+        let fastifyData = null;
+
+        // Register on Tauri (port 3000)
+        try {
+            log('Registering on Tauri (local)...');
+            const tauriResponse = await fetch('http://localhost:3000/api/auth/local/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, phone, password })
+            });
+            tauriData = await tauriResponse.json();
+            if (tauriData.success) {
+                log(`✅ Tauri: Account created! User ID: ${tauriData.user?.id}`, 'success');
+                tauriSuccess = true;
+                localStorage.setItem('local_auth_token', tauriData.token);
+            } else {
+                log(`Tauri: ${tauriData.error || 'Registration failed'}`, 'warn');
+            }
+        } catch (error) {
+            log(`Tauri registration error: ${error.message}`, 'warn');
+        }
+
+        // Register on Fastify (port 3001)
+        try {
+            log('Registering on Fastify (cloud)...');
+            const fastifyResponse = await fetch('http://localhost:3001/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ username, phone, password })
+            });
+            fastifyData = await fastifyResponse.json();
+            if (fastifyData.success) {
+                log(`✅ Fastify: Account created! User ID: ${fastifyData.user?.id}`, 'success');
+                fastifySuccess = true;
+                localStorage.setItem('cloud_auth_token', fastifyData.token);
+            } else {
+                log(`Fastify: ${fastifyData.error || 'Registration failed'}`, 'warn');
+            }
+        } catch (error) {
+            log(`Fastify registration error: ${error.message}`, 'warn');
+        }
+
+        // Update UI based on results
+        if (tauriSuccess || fastifySuccess) {
+            const userData = tauriData?.user || fastifyData?.user;
+            localStorage.setItem('user_data', JSON.stringify(userData));
+
+            authStatus.$({
+                css: { backgroundColor: '#6bcb77' },
+                text: `🔓 ${userData?.username || phone}`
+            });
+
+            // Check if IDs match (deterministic UUID)
+            if (tauriSuccess && fastifySuccess) {
+                if (tauriData.user?.id === fastifyData.user?.id) {
+                    log(`✅ User IDs match! Both servers synced: ${tauriData.user?.id}`, 'success');
+                } else {
+                    log(`⚠️ User IDs don't match! Tauri: ${tauriData.user?.id}, Fastify: ${fastifyData.user?.id}`, 'warn');
+                }
+            }
+        } else {
+            log('❌ Registration failed on both servers', 'error');
+        }
+    }
+});
+
+// Delete Account button
+Button({
+    text: 'Delete Account',
+    parent: authSection,
+    css: {
+        padding: '10px 20px',
+        backgroundColor: '#6c757d',
+        color: 'white',
+        borderRadius: '5px',
+        cursor: 'pointer',
+        position: 'relative'
+    },
+    onAction: async () => {
+        const token = localStorage.getItem(TOKEN_KEY);
+
+        if (!token) {
+            log('You must be logged in to delete your account', 'warn');
+            return;
+        }
+
+        // Create modal overlay using Squirrel syntax
+        const modalOverlay = $('div', {
+            id: 'delete-account-modal',
+            css: {
+                position: 'fixed',
+                top: '0',
+                left: '0',
+                width: '100vw',
+                height: '100vh',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: '10000'
+            }
+        });
+
+        // Modal container
+        const modalContainer = $('div', {
+            parent: modalOverlay,
+            css: {
+                backgroundColor: '#ffffff',
+                borderRadius: '8px',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+                width: '350px',
+                maxWidth: '90vw',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column'
+            }
+        });
+
+        // Modal header
+        const modalHeader = $('div', {
+            parent: modalContainer,
+            css: {
+                padding: '15px 20px',
+                borderBottom: '1px solid #e0e0e0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#f8f9fa'
+            }
+        });
+
+        $('h3', {
+            parent: modalHeader,
+            text: '🗑️ Delete Account',
+            css: {
+                margin: '0',
+                fontSize: '1.1em',
+                color: '#333'
+            }
+        });
+
+        // Close button
+        const closeBtn = $('span', {
+            parent: modalHeader,
+            text: '✕',
+            css: {
+                cursor: 'pointer',
+                fontSize: '18px',
+                color: '#666',
+                padding: '5px'
+            }
+        });
+        closeBtn.onclick = () => modalOverlay.remove();
+
+        // Modal content
+        const modalContent = $('div', {
+            parent: modalContainer,
+            css: {
+                padding: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '15px'
+            }
+        });
+
+        $('p', {
+            parent: modalContent,
+            text: '⚠️ Are you sure you want to delete your account? This cannot be undone!',
+            css: {
+                color: '#dc3545',
+                fontWeight: 'bold',
+                margin: '0',
+                fontSize: '14px'
+            }
+        });
+
+        $('label', {
+            parent: modalContent,
+            text: 'Enter your password to confirm:',
+            css: {
+                color: '#333',
+                fontSize: '14px'
+            }
+        });
+
+        const passwordInput = $('input', {
+            parent: modalContent,
+            id: 'delete-account-password',
+            css: {
+                padding: '10px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                fontSize: '14px',
+                width: '100%',
+                boxSizing: 'border-box'
+            }
+        });
+        passwordInput.type = 'password';
+        passwordInput.placeholder = 'Your password';
+
+        // Modal footer with buttons
+        const modalFooter = $('div', {
+            parent: modalContainer,
+            css: {
+                padding: '15px 20px',
+                borderTop: '1px solid #e0e0e0',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                backgroundColor: '#f8f9fa'
+            }
+        });
+
+        // Cancel button
+        Button({
+            parent: modalFooter,
+            text: 'Cancel',
+            css: {
+                padding: '8px 16px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                borderRadius: '4px',
+                cursor: 'pointer'
+            },
+            onAction: () => {
+                log('Account deletion cancelled', 'info');
+                modalOverlay.remove();
+            }
+        });
+
+        // Delete button
+        Button({
+            parent: modalFooter,
+            text: 'Delete Account',
+            css: {
+                padding: '8px 16px',
+                backgroundColor: '#dc3545',
+                color: 'white',
+                borderRadius: '4px',
+                cursor: 'pointer'
+            },
+            onAction: async () => {
+                const password = document.getElementById('delete-account-password').value;
+
+                if (!password) {
+                    log('Password is required to delete account', 'error');
+                    return;
+                }
+
+                log('Deleting account on both servers...');
+
+                // Get both tokens
+                const localToken = localStorage.getItem('local_auth_token');
+                const cloudToken = localStorage.getItem('cloud_auth_token');
+
+                let localDeleted = false;
+                let cloudDeleted = false;
+
+                // Delete on Tauri (port 3000)
+                if (localToken) {
+                    try {
+                        log('Deleting on Tauri (local)...');
+                        const localResponse = await fetch('http://localhost:3000/api/auth/local/delete-account', {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${localToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ password })
+                        });
+                        const localData = await localResponse.json();
+                        if (localData.success) {
+                            log('✅ Account deleted on Tauri', 'success');
+                            localDeleted = true;
+                            localStorage.removeItem('local_auth_token');
+                        } else {
+                            log(`Tauri delete failed: ${localData.error || 'Unknown error'}`, 'warn');
+                        }
+                    } catch (error) {
+                        log(`Tauri delete error: ${error.message}`, 'warn');
+                    }
+                }
+
+                // Delete on Fastify (port 3001)
+                if (cloudToken) {
+                    try {
+                        log('Deleting on Fastify (cloud)...');
+                        const cloudResponse = await fetch('http://localhost:3001/api/auth/delete-account', {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${cloudToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            credentials: 'include',
+                            body: JSON.stringify({ password })
+                        });
+                        const cloudData = await cloudResponse.json();
+                        if (cloudData.success) {
+                            log('✅ Account deleted on Fastify', 'success');
+                            cloudDeleted = true;
+                            localStorage.removeItem('cloud_auth_token');
+                        } else {
+                            log(`Fastify delete failed: ${cloudData.error || 'Unknown error'}`, 'warn');
+                        }
+                    } catch (error) {
+                        log(`Fastify delete error: ${error.message}`, 'warn');
+                    }
+                }
+
+                // Clear user data
+                localStorage.removeItem('user_data');
+
+                if (localDeleted || cloudDeleted) {
+                    log('✅ Account deletion complete', 'success');
+
+                    authStatus.$({
+                        css: { backgroundColor: '#ff6b6b' },
+                        text: '🔒 Not Logged In'
+                    });
+
+                    clearVisualArea();
+                } else {
+                    log('❌ Failed to delete account on any server', 'error');
+                }
+
+                modalOverlay.remove();
+            }
+        });
+
+        // Add modal to document
+        document.body.appendChild(modalOverlay);
+
+        // Focus password input
+        setTimeout(() => passwordInput.focus(), 100);
+
+        // Close on overlay click
+        modalOverlay.onclick = (e) => {
+            if (e.target === modalOverlay) {
+                modalOverlay.remove();
+            }
+        };
+
+        // Close on Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                modalOverlay.remove();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
     }
 });
 
@@ -1728,17 +2168,94 @@ async function checkAuthStatus() {
     updatePendingCount();
 }
 
-// Listen for Atome events
+// Listen for Atome events (local, from Atome.create/update/delete)
 window.addEventListener('atome:created', (e) => {
-    log(`[Event] Atome created: ${e.detail.data?.id}`, 'info');
+    log(`[Local] Atome created: ${e.detail.data?.id}`, 'info');
 });
 
 window.addEventListener('atome:updated', (e) => {
-    log(`[Event] Atome updated: ${e.detail.data?.id}`, 'info');
+    log(`[Local] Atome updated: ${e.detail.data?.id}`, 'info');
 });
 
 window.addEventListener('atome:synced', (e) => {
-    log(`[Event] Sync complete: ${e.detail.results?.length || 0} ops, ${e.detail.pending} pending`, 'info');
+    log(`[Sync] Complete: ${e.detail.results?.length || 0} ops, ${e.detail.pending} pending`, 'info');
+});
+
+// Listen for REAL-TIME Atome sync events (from WebSocket, other clients)
+window.addEventListener('squirrel:atome-created', (e) => {
+    const atome = e.detail;
+    log(`[Sync] 🆕 Remote atome created: ${atome?.id}`, 'success');
+
+    // Add the new atome visually if it belongs to current user
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token && atome) {
+        try {
+            const [, payload] = token.split('.');
+            const decoded = JSON.parse(atob(payload));
+            const currentUserId = decoded.sub || decoded.id || decoded.userId;
+
+            // Only show if created by current user (or no created_by for legacy)
+            if (!atome.created_by || atome.created_by === currentUserId) {
+                const area = document.getElementById('visual-test-area');
+                if (area && !document.getElementById(atome.id)) {
+                    const css = atome.properties?.css || {
+                        width: '80px', height: '80px', backgroundColor: '#66bb6a',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontWeight: 'bold', cursor: 'pointer'
+                    };
+                    $('div', {
+                        parent: area,
+                        id: atome.id,
+                        css: css,
+                        text: atome.properties?.text || '⚛️',
+                        onclick: function () {
+                            window.selectVisualAtome(atome.id, this);
+                        }
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn('[Sync] Could not process created atome:', err);
+        }
+    }
+});
+
+window.addEventListener('squirrel:atome-updated', (e) => {
+    const atome = e.detail;
+    log(`[Sync] ✏️ Remote atome updated: ${atome?.id}`, 'info');
+
+    // Update the visual element if it exists
+    if (atome?.id) {
+        const el = document.getElementById(atome.id);
+        if (el && atome.properties) {
+            // Apply CSS updates
+            if (atome.properties.css) {
+                Object.assign(el.style, atome.properties.css);
+            }
+            // Apply text update
+            if (atome.properties.text !== undefined) {
+                el.textContent = atome.properties.text;
+            }
+        }
+    }
+});
+
+window.addEventListener('squirrel:atome-deleted', (e) => {
+    const atome = e.detail;
+    log(`[Sync] 🗑️ Remote atome deleted: ${atome?.id}`, 'warn');
+
+    // Remove the visual element
+    if (atome?.id) {
+        const el = document.getElementById(atome.id);
+        if (el) {
+            el.remove();
+            // Clear selection if this was the selected atome
+            if (window.selectedVisualAtomeId === atome.id) {
+                window.selectedVisualAtomeId = null;
+                window.updateVisualAtomeButtons();
+            }
+        }
+    }
 });
 
 // Initialize

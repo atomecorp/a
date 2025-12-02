@@ -145,6 +145,14 @@ pub struct DeleteSyncedRequest {
     pub synced_from_cloud: Option<bool>,
 }
 
+/// Request for sync-delete from Fastify server (uses sync secret, not JWT)
+#[derive(Debug, Deserialize)]
+pub struct SyncDeleteRequest {
+    pub phone: String,
+    #[serde(rename = "userId")]
+    pub user_id: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
     pub success: bool,
@@ -904,6 +912,115 @@ async fn delete_synced_handler(
     )
 }
 
+/// POST /api/auth/local/sync-delete
+/// Delete local account when Fastify deletes the cloud account
+/// Uses X-Sync-Secret header for authentication instead of JWT
+async fn sync_delete_handler(
+    State(state): State<LocalAuthState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<SyncDeleteRequest>,
+) -> impl IntoResponse {
+    // Verify sync secret
+    let expected_secret = std::env::var("SYNC_SECRET").unwrap_or_else(|_| "squirrel-sync-2024".to_string());
+    let provided_secret = headers
+        .get("X-Sync-Secret")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+
+    if provided_secret != expected_secret {
+        println!("⚠️ sync-delete: Invalid sync secret");
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(AuthResponse {
+                success: false,
+                error: Some("Invalid sync secret".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        );
+    }
+
+    let source = headers
+        .get("X-Sync-Source")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("unknown");
+
+    println!("🔄 sync-delete from {}: phone={}", source, req.phone);
+
+    // Find user by phone
+    let user = {
+        let db = state.db.lock().unwrap();
+        db.query_row(
+            "SELECT id, username, phone, password_hash, created_at, updated_at, cloud_id, last_sync FROM users WHERE phone = ?1",
+            [&req.phone],
+            |row| {
+                Ok(LocalUser {
+                    id: row.get(0)?,
+                    username: row.get(1)?,
+                    phone: row.get(2)?,
+                    password_hash: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    cloud_id: row.get(6)?,
+                    last_sync: row.get(7)?,
+                })
+            },
+        )
+        .ok()
+    };
+
+    let user = match user {
+        Some(u) => u,
+        None => {
+            println!("ℹ️ sync-delete: User not found locally for phone {}", req.phone);
+            return (
+                StatusCode::OK,
+                Json(AuthResponse {
+                    success: true,
+                    message: Some("Account not found locally (already deleted or never synced)".into()),
+                    error: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Delete user
+    {
+        let db = state.db.lock().unwrap();
+        if let Err(e) = db.execute("DELETE FROM users WHERE id = ?1", [&user.id]) {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some(format!("Failed to delete account: {}", e)),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    }
+
+    println!(
+        "✅ sync-delete: Local account deleted: {} ({}) - synced from {}",
+        user.username, user.phone, source
+    );
+
+    (
+        StatusCode::OK,
+        Json(AuthResponse {
+            success: true,
+            message: Some(format!("Account deleted successfully (synced from {})", source)),
+            error: None,
+            user: None,
+            token: None,
+        }),
+    )
+}
+
 // =============================================================================
 // JWT HELPERS
 // =============================================================================
@@ -1065,10 +1182,15 @@ pub fn create_local_auth_router(data_dir: PathBuf) -> Router {
         .route("/api/auth/local/login", post(login_handler))
         .route("/api/auth/local/logout", post(logout_handler))
         .route("/api/auth/local/me", get(me_handler))
-        .route("/api/auth/local/delete", delete(delete_handler))
+        .route("/api/auth/local/delete", delete(delete_handler.clone()))
+        .route("/api/auth/local/delete-account", delete(delete_handler)) // Alias for consistency
         .route(
             "/api/auth/local/delete-synced",
             delete(delete_synced_handler),
+        )
+        .route(
+            "/api/auth/local/sync-delete",
+            post(sync_delete_handler),
         )
         .route(
             "/api/auth/local/update-cloud-id",
