@@ -158,7 +158,7 @@ export function registerAtomeRoutes(server, dataSource) {
             if (!metaProp) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
-            
+
             // Check ownership
             const meta = JSON.parse(metaProp.value_json);
             if (meta.created_by !== userId) {
@@ -302,7 +302,7 @@ export function registerAtomeRoutes(server, dataSource) {
             if (meta.deleted_at) {
                 return reply.status(404).send({ success: false, error: 'Atome has been deleted' });
             }
-            
+
             // Check ownership - user can only access their own atomes
             if (meta.created_by !== userId) {
                 return reply.status(403).send({ success: false, error: 'Access denied' });
@@ -356,7 +356,7 @@ export function registerAtomeRoutes(server, dataSource) {
 
                     // Skip deleted
                     if (meta.deleted_at) continue;
-                    
+
                     // IMPORTANT: Filter by user - only return atomes created by this user
                     if (meta.created_by !== userId) continue;
 
@@ -384,7 +384,7 @@ export function registerAtomeRoutes(server, dataSource) {
                     });
                 }
             }
-            
+
             console.log(`📋 [Atome] List for user ${userId}: ${results.length} atomes`);
 
             return {
