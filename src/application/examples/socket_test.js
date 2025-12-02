@@ -283,7 +283,7 @@ Button({
 
                 log(`Logged in as: ${data.user.username}`, 'success');
                 updatePendingCount();
-                
+
                 // Load user's atomes after login
                 await loadUserAtomes();
             } else {
@@ -318,7 +318,7 @@ Button({
 
         // Clear visual area on logout - user's objects should not be visible
         clearVisualArea();
-        
+
         log('Logged out', 'info');
     }
 });
@@ -707,6 +707,49 @@ $('h2', {
     text: '🎨 Visual Test Area'
 });
 
+// Track selected visual atome - use window for global scope access in callbacks
+window.selectedVisualAtomeId = null;
+window.updateVisualAtomeBtn = null;
+window.deleteVisualAtomeBtn = null;
+
+// Function to select a visual atome
+window.selectVisualAtome = function (atomeId, element) {
+    // Deselect previous
+    if (window.selectedVisualAtomeId) {
+        const prevElem = document.getElementById(window.selectedVisualAtomeId);
+        if (prevElem) {
+            prevElem.style.outline = 'none';
+            prevElem.style.boxShadow = 'none';
+        }
+    }
+
+    // Toggle selection
+    if (window.selectedVisualAtomeId === atomeId) {
+        window.selectedVisualAtomeId = null;
+        log('Atome deselected', 'info');
+    } else {
+        window.selectedVisualAtomeId = atomeId;
+        element.style.outline = '3px solid #007bff';
+        element.style.boxShadow = '0 0 10px rgba(0,123,255,0.5)';
+        log(`Selected atome: ${atomeId}`, 'info');
+    }
+
+    // Update button states
+    window.updateVisualAtomeButtons();
+};
+
+// Function to update button states based on selection
+window.updateVisualAtomeButtons = function () {
+    if (window.updateVisualAtomeBtn) {
+        window.updateVisualAtomeBtn.style.opacity = window.selectedVisualAtomeId ? '1' : '0.5';
+        window.updateVisualAtomeBtn.style.pointerEvents = window.selectedVisualAtomeId ? 'auto' : 'none';
+    }
+    if (window.deleteVisualAtomeBtn) {
+        window.deleteVisualAtomeBtn.style.opacity = window.selectedVisualAtomeId ? '1' : '0.5';
+        window.deleteVisualAtomeBtn.style.pointerEvents = window.selectedVisualAtomeId ? 'auto' : 'none';
+    }
+};
+
 const visualArea = $('div', {
     parent: '#view',
     id: 'visual-test-area',
@@ -727,7 +770,7 @@ const visualArea = $('div', {
 $('p', {
     parent: visualArea,
     css: { color: '#999', margin: '0' },
-    text: 'Created Atomes will appear here when reconstructed'
+    text: 'Created Atomes will appear here when reconstructed (click to select)'
 });
 
 // Create Visual Atome button
@@ -779,22 +822,128 @@ Button({
             const result = await Atome.create(atomeData);
 
             if (result.success || result.queued) {
-                // Reconstruct visually
+                // Reconstruct visually with selection support
+                const atomeId = result.data.id;
                 const elem = $('div', {
                     parent: visualArea,
-                    id: result.data.id,
+                    id: atomeId,
                     css: atomeData.properties.css,
                     text: atomeData.properties.text,
                     onclick: function () {
-                        this.style.transform = this.style.transform === 'scale(1.2)' ? 'scale(1)' : 'scale(1.2)';
+                        window.selectVisualAtome(atomeId, this);
                     }
                 });
 
-                log(`Visual Atome created: ${result.data.id}`, 'success');
+                log(`Visual Atome created: ${atomeId}`, 'success');
                 updatePendingCount();
             }
         } catch (error) {
             log(`Error: ${error.message}`, 'error');
+        }
+    }
+});
+
+// Buttons container for visual atome actions
+const visualAtomeActionsContainer = $('div', {
+    parent: '#view',
+    css: {
+        display: 'flex',
+        gap: '10px',
+        marginTop: '10px',
+        marginBottom: '10px'
+    }
+});
+
+// Update Selected Atome button
+window.updateVisualAtomeBtn = Button({
+    text: 'Update Selected',
+    parent: visualAtomeActionsContainer,
+    id: 'update-visual-atome-btn',
+    css: {
+        padding: '10px 20px',
+        backgroundColor: '#ff9800',
+        color: 'white',
+        borderRadius: '5px',
+        cursor: 'pointer',
+        opacity: '0.5',
+        pointerEvents: 'none',
+        position: 'relative'
+    },
+    onAction: async () => {
+        if (!window.selectedVisualAtomeId) {
+            log('No atome selected', 'warn');
+            return;
+        }
+
+        // Update with new random color
+        const newColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+        const newBorderRadius = `${Math.random() * 50}%`;
+
+        try {
+            const result = await Atome.update({
+                id: window.selectedVisualAtomeId,
+                properties: {
+                    css: {
+                        backgroundColor: newColor,
+                        borderRadius: newBorderRadius
+                    }
+                }
+            });
+
+            if (result.success || result.queued) {
+                // Update visual element
+                const elem = document.getElementById(window.selectedVisualAtomeId);
+                if (elem) {
+                    elem.style.backgroundColor = newColor;
+                    elem.style.borderRadius = newBorderRadius;
+                }
+                log(`Updated atome: ${window.selectedVisualAtomeId}`, 'success');
+            } else {
+                log(`Update failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            log(`Update error: ${error.message}`, 'error');
+        }
+    }
+});
+
+// Delete Selected Atome button
+window.deleteVisualAtomeBtn = Button({
+    text: 'Delete Selected',
+    parent: visualAtomeActionsContainer,
+    id: 'delete-visual-atome-btn',
+    css: {
+        padding: '10px 20px',
+        backgroundColor: '#f44336',
+        color: 'white',
+        borderRadius: '5px',
+        cursor: 'pointer',
+        opacity: '0.5',
+        pointerEvents: 'none',
+        position: 'relative'
+    },
+    onAction: async () => {
+        if (!window.selectedVisualAtomeId) {
+            log('No atome selected', 'warn');
+            return;
+        }
+
+        try {
+            const result = await Atome.delete({ id: window.selectedVisualAtomeId });
+
+            if (result.success || result.queued) {
+                // Remove visual element
+                const elem = document.getElementById(window.selectedVisualAtomeId);
+                if (elem) elem.remove();
+
+                log(`Deleted atome: ${window.selectedVisualAtomeId}`, 'success');
+                window.selectedVisualAtomeId = null;
+                window.updateVisualAtomeButtons();
+            } else {
+                log(`Delete failed: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            log(`Delete error: ${error.message}`, 'error');
         }
     }
 });
@@ -1455,9 +1604,13 @@ function clearVisualArea() {
         $('p', {
             parent: area,
             css: { color: '#999', margin: '0' },
-            text: 'Created Atomes will appear here when reconstructed'
+            text: 'Created Atomes will appear here when reconstructed (click to select)'
         });
     }
+
+    // Reset selection state
+    window.selectedVisualAtomeId = null;
+    window.updateVisualAtomeButtons();
 }
 
 /**
@@ -1467,18 +1620,22 @@ async function loadUserAtomes() {
     if (!Atome.isAuthenticated()) {
         return;
     }
-    
+
     try {
         log('Loading your atomes...', 'info');
         const result = await Atome.list({ kind: 'shape' });
-        
+
         if (result.success && result.data && result.data.length > 0) {
             // Clear placeholder
             const area = document.getElementById('visual-test-area');
             if (area) {
                 area.innerHTML = '';
-                
-                // Recreate each atome visually
+
+                // Reset selection state
+                window.selectedVisualAtomeId = null;
+                window.updateVisualAtomeButtons();
+
+                // Recreate each atome visually with selection support
                 result.data.forEach(atome => {
                     const css = atome.properties?.css || {
                         width: '80px',
@@ -1491,18 +1648,19 @@ async function loadUserAtomes() {
                         fontWeight: 'bold',
                         cursor: 'pointer'
                     };
-                    
+
+                    const atomeId = atome.id;
                     $('div', {
                         parent: area,
-                        id: atome.id,
+                        id: atomeId,
                         css: css,
                         text: atome.properties?.text || '⚛️',
                         onclick: function () {
-                            this.style.transform = this.style.transform === 'scale(1.2)' ? 'scale(1)' : 'scale(1.2)';
+                            window.selectVisualAtome(atomeId, this);
                         }
                     });
                 });
-                
+
                 log(`Loaded ${result.data.length} atomes`, 'success');
             }
         } else {
@@ -1540,7 +1698,7 @@ async function checkAuthStatus() {
                 text: `🔓 ${data.user.username || data.user.phone || 'User'}`
             });
             log(`Already logged in as: ${data.user.username || data.user.phone}`, 'info');
-            
+
             // Load user's atomes after successful auth check
             await loadUserAtomes();
         } else {

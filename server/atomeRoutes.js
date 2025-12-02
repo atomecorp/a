@@ -6,10 +6,59 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// In-memory store for properties (in production, use a proper table)
-const propertiesStore = new Map();
-const propertyVersionsStore = new Map();
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Persistence file path
+const DATA_FILE = path.join(__dirname, 'data', 'atomes.json');
+
+// Ensure data directory exists
+function ensureDataDir() {
+    const dataDir = path.dirname(DATA_FILE);
+    if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+    }
+}
+
+// Load data from file
+function loadData() {
+    ensureDataDir();
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+            return {
+                properties: new Map(data.properties || []),
+                versions: new Map(data.versions || [])
+            };
+        }
+    } catch (e) {
+        console.warn('[Atome] Could not load data file, starting fresh:', e.message);
+    }
+    return { properties: new Map(), versions: new Map() };
+}
+
+// Save data to file
+function saveData() {
+    ensureDataDir();
+    try {
+        const data = {
+            properties: Array.from(propertiesStore.entries()),
+            versions: Array.from(propertyVersionsStore.entries())
+        };
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    } catch (e) {
+        console.error('[Atome] Could not save data file:', e.message);
+    }
+}
+
+// Initialize stores from file
+const { properties: propertiesStore, versions: propertyVersionsStore } = loadData();
+console.log(`[Atome] Loaded ${propertiesStore.size} properties from storage`);
 
 /**
  * Validate authentication token
@@ -27,8 +76,17 @@ async function validateToken(request) {
     try {
         const [, payload] = token.split('.');
         const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
-        return decoded;
+        console.log('[Atome] Token decoded:', JSON.stringify(decoded));
+        
+        // Normalize the user object - JWT uses 'sub' for user id
+        return {
+            id: decoded.sub || decoded.id || decoded.userId,
+            userId: decoded.sub || decoded.id || decoded.userId,
+            username: decoded.username,
+            phone: decoded.phone
+        };
     } catch (e) {
+        console.error('[Atome] Token decode error:', e.message);
         return null;
     }
 }
@@ -120,6 +178,7 @@ export function registerAtomeRoutes(server, dataSource) {
             });
 
             console.log(`✅ [Atome] Created: ${atomeId} (${kind})`);
+            saveData(); // Persist to file
 
             return {
                 success: true,
@@ -218,6 +277,7 @@ export function registerAtomeRoutes(server, dataSource) {
             }
 
             console.log(`✅ [Atome] Updated: ${id} (${Object.keys(updatedProps).length} properties)`);
+            saveData(); // Persist to file
 
             return {
                 success: true,
@@ -255,7 +315,10 @@ export function registerAtomeRoutes(server, dataSource) {
 
             // Check ownership
             const meta = JSON.parse(metaProp.value_json);
-            if (meta.created_by !== userId) {
+            console.log(`[Atome] DELETE check - userId: ${userId}, meta.created_by: ${meta.created_by}`);
+            
+            // Allow delete if user is owner OR if created_by is not set (legacy data)
+            if (meta.created_by && meta.created_by !== userId) {
                 return reply.status(403).send({ success: false, error: 'Access denied' });
             }
 
@@ -265,6 +328,7 @@ export function registerAtomeRoutes(server, dataSource) {
             metaProp.value_json = JSON.stringify(meta);
 
             console.log(`✅ [Atome] Deleted: ${id}`);
+            saveData(); // Persist to file
 
             return {
                 success: true,

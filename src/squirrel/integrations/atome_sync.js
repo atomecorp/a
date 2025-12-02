@@ -158,12 +158,13 @@ async function apiRequest(method, endpoint, data = null) {
     const options = {
         method,
         headers: {
-            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
         }
     };
 
+    // Only add Content-Type and body for methods that need it
     if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+        options.headers['Content-Type'] = 'application/json';
         options.body = JSON.stringify(data);
     }
 
