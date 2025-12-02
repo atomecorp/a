@@ -45,7 +45,7 @@ function resolveAtomeConfig() {
     // IMPORTANT: Atome API is ALWAYS on Fastify (3001), even in Tauri mode
     // Only auth goes to Axum (3000) in Tauri mode
     if (isTauri) {
-        return { 
+        return {
             base: 'http://localhost:3001',  // Atomes go to Fastify
             isLocal: true,  // But we still use local_auth_token
             isTauri: true
@@ -66,12 +66,12 @@ const atomeConfig = resolveAtomeConfig();
 const ATOME_API_BASE = atomeConfig.base + '/api/atome';
 const TOKEN_KEY = atomeConfig.isLocal ? 'local_auth_token' : 'cloud_auth_token';
 
-console.log('[Atome] Config:', { 
-    base: atomeConfig.base, 
-    isLocal: atomeConfig.isLocal, 
+console.log('[Atome] Config:', {
+    base: atomeConfig.base,
+    isLocal: atomeConfig.isLocal,
     isTauri: atomeConfig.isTauri,
     TOKEN_KEY,
-    ATOME_API_BASE 
+    ATOME_API_BASE
 });
 
 // Pending operations queue for offline support
@@ -122,7 +122,7 @@ function getCurrentUserId() {
             // Invalid JSON
         }
     }
-    
+
     // Try to decode from JWT token
     const token = getAuthToken();
     if (token) {
@@ -134,7 +134,7 @@ function getCurrentUserId() {
             // Invalid token format
         }
     }
-    
+
     return window.__SQUIRREL_USER_ID__ || null;
 }
 

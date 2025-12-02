@@ -77,7 +77,7 @@ async function validateToken(request) {
         const [, payload] = token.split('.');
         const decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
         console.log('[Atome] Token decoded:', JSON.stringify(decoded));
-        
+
         // Normalize the user object - JWT uses 'sub' for user id
         return {
             id: decoded.sub || decoded.id || decoded.userId,
@@ -316,7 +316,7 @@ export function registerAtomeRoutes(server, dataSource) {
             // Check ownership
             const meta = JSON.parse(metaProp.value_json);
             console.log(`[Atome] DELETE check - userId: ${userId}, meta.created_by: ${meta.created_by}`);
-            
+
             // Allow delete if user is owner OR if created_by is not set (legacy data)
             if (meta.created_by && meta.created_by !== userId) {
                 return reply.status(403).send({ success: false, error: 'Access denied' });
