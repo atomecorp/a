@@ -283,6 +283,9 @@ Button({
 
                 log(`Logged in as: ${data.user.username}`, 'success');
                 updatePendingCount();
+                
+                // Load user's atomes after login
+                await loadUserAtomes();
             } else {
                 log(`Login failed: ${data.error || 'Unknown error'}`, 'error');
             }
@@ -313,6 +316,9 @@ Button({
             text: '🔒 Not Logged In'
         });
 
+        // Clear visual area on logout - user's objects should not be visible
+        clearVisualArea();
+        
         log('Logged out', 'info');
     }
 });
@@ -743,8 +749,9 @@ Button({
             return;
         }
 
-        // Clear placeholder
-        visualArea.innerHTML = '';
+        // Remove placeholder text if present (only first time)
+        const placeholder = visualArea.querySelector('p');
+        if (placeholder) placeholder.remove();
 
         // Create and display atome
         const atomeData = {
@@ -1438,12 +1445,81 @@ function updatePendingCount() {
     }
 }
 
+/**
+ * Clear the visual area and show placeholder
+ */
+function clearVisualArea() {
+    const area = document.getElementById('visual-test-area');
+    if (area) {
+        area.innerHTML = '';
+        $('p', {
+            parent: area,
+            css: { color: '#999', margin: '0' },
+            text: 'Created Atomes will appear here when reconstructed'
+        });
+    }
+}
+
+/**
+ * Load user's atomes from server and display them
+ */
+async function loadUserAtomes() {
+    if (!Atome.isAuthenticated()) {
+        return;
+    }
+    
+    try {
+        log('Loading your atomes...', 'info');
+        const result = await Atome.list({ kind: 'shape' });
+        
+        if (result.success && result.data && result.data.length > 0) {
+            // Clear placeholder
+            const area = document.getElementById('visual-test-area');
+            if (area) {
+                area.innerHTML = '';
+                
+                // Recreate each atome visually
+                result.data.forEach(atome => {
+                    const css = atome.properties?.css || {
+                        width: '80px',
+                        height: '80px',
+                        backgroundColor: '#666',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                    };
+                    
+                    $('div', {
+                        parent: area,
+                        id: atome.id,
+                        css: css,
+                        text: atome.properties?.text || '⚛️',
+                        onclick: function () {
+                            this.style.transform = this.style.transform === 'scale(1.2)' ? 'scale(1)' : 'scale(1.2)';
+                        }
+                    });
+                });
+                
+                log(`Loaded ${result.data.length} atomes`, 'success');
+            }
+        } else {
+            log('No atomes found', 'info');
+        }
+    } catch (error) {
+        log(`Error loading atomes: ${error.message}`, 'error');
+    }
+}
+
 // Check initial auth status by calling the /me endpoint
 async function checkAuthStatus() {
     const token = localStorage.getItem(TOKEN_KEY);
 
     if (!token) {
         log('No auth token found', 'info');
+        clearVisualArea();
         return;
     }
 
@@ -1464,9 +1540,13 @@ async function checkAuthStatus() {
                 text: `🔓 ${data.user.username || data.user.phone || 'User'}`
             });
             log(`Already logged in as: ${data.user.username || data.user.phone}`, 'info');
+            
+            // Load user's atomes after successful auth check
+            await loadUserAtomes();
         } else {
             // Token invalid, clear it
             localStorage.removeItem(TOKEN_KEY);
+            clearVisualArea();
             log('Session expired, please login again', 'warn');
         }
     } catch (error) {

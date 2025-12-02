@@ -151,11 +151,18 @@ export function registerAtomeRoutes(server, dataSource) {
         try {
             const { id } = request.params;
             const { properties } = request.body;
+            const userId = user.id || user.userId;
 
             // Check if atome exists (via meta property)
             const metaProp = propertiesStore.get(`${id}:__meta__`);
             if (!metaProp) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
+            }
+            
+            // Check ownership
+            const meta = JSON.parse(metaProp.value_json);
+            if (meta.created_by !== userId) {
+                return reply.status(403).send({ success: false, error: 'Access denied' });
             }
 
             const updatedProps = {};
@@ -238,6 +245,7 @@ export function registerAtomeRoutes(server, dataSource) {
 
         try {
             const { id } = request.params;
+            const userId = user.id || user.userId;
 
             // Check if atome exists
             const metaProp = propertiesStore.get(`${id}:__meta__`);
@@ -245,10 +253,15 @@ export function registerAtomeRoutes(server, dataSource) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
 
-            // Soft delete - mark as deleted
+            // Check ownership
             const meta = JSON.parse(metaProp.value_json);
+            if (meta.created_by !== userId) {
+                return reply.status(403).send({ success: false, error: 'Access denied' });
+            }
+
+            // Soft delete - mark as deleted
             meta.deleted_at = new Date().toISOString();
-            meta.deleted_by = user.id || user.userId;
+            meta.deleted_by = userId;
             metaProp.value_json = JSON.stringify(meta);
 
             console.log(`✅ [Atome] Deleted: ${id}`);
@@ -275,6 +288,7 @@ export function registerAtomeRoutes(server, dataSource) {
 
         try {
             const { id } = request.params;
+            const userId = user.id || user.userId;
 
             // Get meta property
             const metaProp = propertiesStore.get(`${id}:__meta__`);
@@ -287,6 +301,11 @@ export function registerAtomeRoutes(server, dataSource) {
             // Check if deleted
             if (meta.deleted_at) {
                 return reply.status(404).send({ success: false, error: 'Atome has been deleted' });
+            }
+            
+            // Check ownership - user can only access their own atomes
+            if (meta.created_by !== userId) {
+                return reply.status(403).send({ success: false, error: 'Access denied' });
             }
 
             // Collect all properties
@@ -327,17 +346,21 @@ export function registerAtomeRoutes(server, dataSource) {
 
         try {
             const { project_id, kind, parent } = request.query;
+            const userId = user.id || user.userId;
             const results = [];
 
-            // Collect all atomes
+            // Collect atomes that belong to this user
             for (const [propId, prop] of propertiesStore) {
                 if (prop.key === '__meta__') {
                     const meta = JSON.parse(prop.value_json);
 
                     // Skip deleted
                     if (meta.deleted_at) continue;
+                    
+                    // IMPORTANT: Filter by user - only return atomes created by this user
+                    if (meta.created_by !== userId) continue;
 
-                    // Apply filters
+                    // Apply additional filters
                     if (project_id && meta.project_id !== project_id) continue;
                     if (kind && meta.kind !== kind) continue;
                     if (parent && meta.parent !== parent) continue;
@@ -356,10 +379,13 @@ export function registerAtomeRoutes(server, dataSource) {
                         tag: meta.tag,
                         parent: meta.parent,
                         properties,
-                        created_at: meta.created_at
+                        created_at: meta.created_at,
+                        created_by: meta.created_by
                     });
                 }
             }
+            
+            console.log(`📋 [Atome] List for user ${userId}: ${results.length} atomes`);
 
             return {
                 success: true,
