@@ -13,6 +13,15 @@ import {
   getABoxEventBus
 } from './aBoxServer.js';
 import { registerAuthRoutes } from './auth.js';
+import {
+  startPolling as startGitHubPolling,
+  stopPolling as stopGitHubPolling,
+  registerClient,
+  unregisterClient,
+  handleClientMessage,
+  getConnectedClients,
+  getLocalVersion
+} from './githubSync.js';
 
 // Database imports
 import { AppDataSource, ensureAdoleSchema, PG_URL } from '../database/db.js';
@@ -775,6 +784,18 @@ async function startServer() {
       }
     });
 
+    // Route pour voir les clients sync connectés
+    server.get('/api/admin/sync-clients', async (request, reply) => {
+      const clients = getConnectedClients();
+      const version = await getLocalVersion();
+      return {
+        success: true,
+        serverVersion: version.version,
+        clients: clients,
+        totalClients: clients.length
+      };
+    });
+
     // ===========================
     // 3. WEBSOCKET NATIF
     // ===========================
@@ -827,11 +848,55 @@ async function startServer() {
           });
         }
       });
+
+      // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser
+      fastify.get('/ws/sync', { websocket: true }, async (connection) => {
+        const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.log('🔗 Nouvelle connexion sync:', clientId);
+
+        // Register client
+        registerClient(clientId, connection, 'unknown');
+
+        // Send initial version info
+        const version = await getLocalVersion();
+        connection.send(JSON.stringify({
+          type: 'welcome',
+          clientId,
+          version: version.version,
+          protectedPaths: version.protectedPaths || [],
+          timestamp: new Date().toISOString()
+        }));
+
+        connection.on('message', async (message) => {
+          try {
+            const response = await handleClientMessage(clientId, message.toString());
+            if (response) {
+              connection.send(JSON.stringify(response));
+            }
+          } catch (error) {
+            connection.send(JSON.stringify({ type: 'error', message: error.message }));
+          }
+        });
+
+        connection.on('close', () => {
+          unregisterClient(clientId);
+        });
+
+        connection.on('error', (error) => {
+          console.error('❌ Erreur WebSocket sync:', error);
+          unregisterClient(clientId);
+        });
+      });
     });
 
     // ===========================
     // 4. DÉMARRAGE
     // ===========================
+
+    // Start GitHub polling for auto-sync
+    if (process.env.GITHUB_AUTO_SYNC !== 'false') {
+      startGitHubPolling();
+    }
 
     await server.listen({
       port: PORT,

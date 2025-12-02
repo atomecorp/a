@@ -1255,7 +1255,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      * Downloads ZIP from GitHub, extracts src/, syncs files
      */
     server.post('/api/admin/sync-from-zip', async (request, reply) => {
-        const { zipUrl, extractPath, protectedPaths = [] } = request.body;
+        const { zipUrl, extractPath = 'src', protectedPaths = [] } = request.body;
 
         if (!zipUrl) {
             return reply.code(400).send({ success: false, error: 'Missing zipUrl' });

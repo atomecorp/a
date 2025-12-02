@@ -245,6 +245,9 @@ cleanup() {
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
 PROD_BUILD=false
+TAURI_ONLY=false
+SERVER_ONLY=false
+FASTIFY_URL=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -256,16 +259,34 @@ while [[ $# -gt 0 ]]; do
             PROD_BUILD=true
             shift
             ;;
+        --tauri)
+            TAURI_ONLY=true
+            shift
+            ;;
+        --server)
+            SERVER_ONLY=true
+            shift
+            ;;
+        --fastify-url)
+            FASTIFY_URL="$2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
             echo "  -f, --force-deps      Force update all dependencies before starting"
             echo "      --prod            Build a production Tauri bundle and exit"
+            echo "      --tauri           Launch only Tauri (no local Fastify server)"
+            echo "      --server          Launch only Fastify server (no Tauri)"
+            echo "      --fastify-url URL Configure remote Fastify server URL for Tauri"
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Examples:"
-            echo "  $0                   # Start server (install deps if needed)"
+            echo "  $0                   # Start both Fastify + Tauri"
+            echo "  $0 --tauri           # Start only Tauri (connects to remote Fastify)"
+            echo "  $0 --server          # Start only Fastify server"
+            echo "  $0 --tauri --fastify-url https://myserver.com"
             echo "  $0 --force-deps      # Force update deps then start server"
             echo "  $0 --prod            # Build Tauri production bundle"
             echo ""
@@ -278,6 +299,12 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Export Fastify URL for Tauri to use
+if [[ -n "$FASTIFY_URL" ]]; then
+    export SQUIRREL_FASTIFY_URL="$FASTIFY_URL"
+    echo "🌐 Remote Fastify URL: $FASTIFY_URL"
+fi
 
 echo "🚀 Démarrage du serveur Fastify v5..."
 echo "📂 Répertoire: $(pwd)"
@@ -363,6 +390,38 @@ echo ""
 trap cleanup SIGINT SIGTERM EXIT
 
 echo "🚀 Démarrage des serveurs..."
+
+# Mode --server uniquement (pas de Tauri)
+if [ "$SERVER_ONLY" = true ]; then
+    echo "📡 Mode serveur uniquement (pas de Tauri)"
+    echo "📡 Démarrage du serveur Fastify..."
+    if [ "$FORCE_DEPS" = true ]; then
+        "$SCRIPTS_DIR/run_fastify.sh" --force-deps
+    else
+        "$SCRIPTS_DIR/run_fastify.sh"
+    fi
+    exit 0
+fi
+
+# Mode --tauri uniquement (pas de Fastify local)
+if [ "$TAURI_ONLY" = true ]; then
+    echo "🖥️  Mode Tauri uniquement (pas de Fastify local)"
+    if [ -n "$FASTIFY_URL" ]; then
+        echo "🌐 Connexion au serveur distant: $FASTIFY_URL"
+    else
+        echo "⚠️  Aucun serveur Fastify configuré. Utilisez --fastify-url URL"
+        echo "    ou exportez SQUIRREL_FASTIFY_URL avant de lancer."
+    fi
+    echo "🖥️  Démarrage de Tauri..."
+    if [ "$FORCE_DEPS" = true ]; then
+        "$SCRIPTS_DIR/run_tauri.sh" --force-deps
+    else
+        "$SCRIPTS_DIR/run_tauri.sh"
+    fi
+    exit 0
+fi
+
+# Mode normal: Fastify + Tauri
 
 # Lancer Fastify en arrière-plan via le script
 echo "📡 Démarrage du serveur Fastify..."
