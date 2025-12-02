@@ -23,7 +23,7 @@ At 1 request per minute, you'll hit the unauthenticated limit in just 1 hour. **
 4. Configure:
    - **Note**: `Squirrel Auto-Sync` (or any descriptive name)
    - **Expiration**: Choose based on your needs (90 days, 1 year, or no expiration)
-   - **Scopes**: 
+   - **Scopes**:
      - ✅ `repo` (for private repositories)
      - ✅ `public_repo` (for public repositories only)
 
@@ -64,12 +64,14 @@ export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 When the server starts, check the logs:
 
 ### ✅ Token Configured
+
 ```
 🔑 GitHub token configured for API access
 🔄 Starting GitHub polling (every 60s)
 ```
 
 ### ⚠️ No Token
+
 ```
 ⚠️  No GITHUB_TOKEN found - using unauthenticated API (60 req/hour limit)
 🔄 Starting GitHub polling (every 60s)
@@ -110,6 +112,7 @@ For the Squirrel auto-sync feature, you only need **read access** to the reposit
 ```
 
 **Solutions:**
+
 1. Add a `GITHUB_TOKEN` to your `.env`
 2. Wait for the rate limit to reset (1 hour)
 3. Check if another application is using your API quota
@@ -121,6 +124,7 @@ For the Squirrel auto-sync feature, you only need **read access** to the reposit
 ```
 
 **Solutions:**
+
 1. Verify the token is correct (no extra spaces)
 2. Check if the token has expired
 3. Regenerate a new token
@@ -132,6 +136,7 @@ For the Squirrel auto-sync feature, you only need **read access** to the reposit
 ```
 
 **Solutions:**
+
 1. Ensure the token has `repo` or `public_repo` scope
 2. Verify you have access to the repository
 
