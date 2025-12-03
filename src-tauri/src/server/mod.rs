@@ -21,6 +21,8 @@ use zip::ZipArchive;
 
 // Local authentication module
 pub mod local_auth;
+// Local atome storage module
+pub mod local_atome;
 
 #[derive(Clone)]
 struct AppState {
@@ -803,6 +805,8 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
             "http://localhost:1430".parse::<HeaderValue>().unwrap(),
             "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
             "http://localhost:3000".parse::<HeaderValue>().unwrap(),
+            "http://127.0.0.1:3001".parse::<HeaderValue>().unwrap(),
+            "http://localhost:3001".parse::<HeaderValue>().unwrap(),
             "tauri://localhost".parse::<HeaderValue>().unwrap(),
         ])
         .allow_methods([
@@ -817,6 +821,12 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
 
     // Create local auth router (independent state) with CORS layer
     let local_auth_router = local_auth::create_local_auth_router(
+        uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf(),
+    )
+    .layer(cors.clone());
+
+    // Create local atome router with CORS layer
+    let local_atome_router = local_atome::create_local_atome_router(
         uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf(),
     )
     .layer(cors.clone());
@@ -839,11 +849,14 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
         .with_state(state)
         // Merge local auth routes AFTER with_state (uses its own state with CORS)
-        .merge(local_auth_router);
+        .merge(local_auth_router)
+        // Merge local atome routes
+        .merge(local_atome_router);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     println!("Serveur Axum {} démarré: http://localhost:3000", version);
     println!("🔐 Local authentication enabled: /api/auth/local/*");
+    println!("📦 Local atome storage enabled: /api/atome/*");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
