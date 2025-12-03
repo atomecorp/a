@@ -13,7 +13,7 @@ import {
   getABoxEventBus
 } from './aBoxServer.js';
 import { registerAuthRoutes } from './auth.js';
-import { registerAtomeRoutes } from './atomeRoutes.js';
+import { registerAtomeRoutes } from './atomeRoutes.orm.js';
 import { registerSharingRoutes } from './sharing.js';
 import {
   initUserFiles,

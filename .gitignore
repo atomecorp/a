@@ -44,6 +44,10 @@ server/certificates/
 !server/certificates/.gitkeep
 !src/application/security/trusted_keys.js
 
+# Server data files (sensitive)
+server/data/
+server/data/*.json
+
 # Process files
 .watcher.pid
 src/assets/audios/Alive.mp3
