@@ -218,7 +218,44 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     Ok(conn)
 }
 
-/// Generate a random JWT secret if not provided
+/// Get or create a persistent JWT secret
+/// The secret is stored in a file so it survives app restarts
+fn get_or_create_jwt_secret(data_dir: &PathBuf) -> String {
+    // First check environment variable
+    if let Ok(secret) = std::env::var("LOCAL_JWT_SECRET") {
+        println!("🔐 Using JWT secret from environment");
+        return secret;
+    }
+
+    // Try to load from file
+    let secret_path = data_dir.join("jwt_secret.key");
+
+    if secret_path.exists() {
+        if let Ok(secret) = std::fs::read_to_string(&secret_path) {
+            let secret = secret.trim().to_string();
+            if !secret.is_empty() {
+                println!("🔐 Loaded JWT secret from file");
+                return secret;
+            }
+        }
+    }
+
+    // Generate new secret and save it
+    let mut rng = rand::thread_rng();
+    let bytes: Vec<u8> = (0..64).map(|_| rand::Rng::gen(&mut rng)).collect();
+    let secret = hex::encode(bytes);
+
+    // Save to file
+    if let Err(e) = std::fs::write(&secret_path, &secret) {
+        println!("⚠️ Could not save JWT secret to file: {}", e);
+    } else {
+        println!("🔐 Generated and saved new JWT secret");
+    }
+
+    secret
+}
+
+/// Generate a random JWT secret if not provided (legacy, kept for compatibility)
 fn generate_jwt_secret() -> String {
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..64).map(|_| rand::Rng::gen(&mut rng)).collect();
@@ -1180,10 +1217,10 @@ pub fn create_local_auth_router(data_dir: PathBuf) -> Router {
     // Initialize database
     let conn = init_database(&data_dir).expect("Failed to initialize local auth database");
 
-    // Create state
+    // Create state with PERSISTENT JWT secret
     let state = LocalAuthState {
         db: Arc::new(Mutex::new(conn)),
-        jwt_secret: std::env::var("LOCAL_JWT_SECRET").unwrap_or_else(|_| generate_jwt_secret()),
+        jwt_secret: get_or_create_jwt_secret(&data_dir),
     };
 
     Router::new()

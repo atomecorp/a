@@ -265,7 +265,7 @@ Button({
 
         // Login on Tauri (port 3000)
         try {
-            const tauriResponse = await fetch('http://localhost:3000/api/auth/local/login', {
+            const tauriResponse = await fetch('http://127.0.0.1:3000/api/auth/local/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone: identifier, password })
@@ -344,7 +344,7 @@ Button({
         // Logout from Tauri
         if (localToken) {
             try {
-                await fetch('http://localhost:3000/api/auth/local/logout', {
+                await fetch('http://127.0.0.1:3000/api/auth/local/logout', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${localToken}` }
                 });
@@ -414,7 +414,7 @@ Button({
         // Register on Tauri (port 3000)
         try {
             log('Registering on Tauri (local)...');
-            const tauriResponse = await fetch('http://localhost:3000/api/auth/local/register', {
+            const tauriResponse = await fetch('http://127.0.0.1:3000/api/auth/local/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, phone, password })
@@ -672,7 +672,7 @@ Button({
                 if (localToken) {
                     try {
                         log('Deleting on Tauri (local)...');
-                        const localResponse = await fetch('http://localhost:3000/api/auth/local/delete-account', {
+                        const localResponse = await fetch('http://127.0.0.1:3000/api/auth/local/delete-account', {
                             method: 'DELETE',
                             headers: {
                                 'Authorization': `Bearer ${localToken}`,
@@ -1227,7 +1227,10 @@ Button({
         position: 'relative'
     },
     onAction: async () => {
-        if (!Atome.isAuthenticated()) {
+        const localToken = localStorage.getItem('local_auth_token');
+        const cloudToken = localStorage.getItem('cloud_auth_token');
+
+        if (!localToken && !cloudToken) {
             log('Please login first', 'warn');
             return;
         }
@@ -1236,49 +1239,94 @@ Button({
         const placeholder = visualArea.querySelector('p');
         if (placeholder) placeholder.remove();
 
-        // Create and display atome
+        // Generate a unique ID for the atome
+        const atomeId = `atome_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
+        // Create atome data with explicit CSS properties
+        const cssProps = {
+            width: '80px',
+            height: '80px',
+            backgroundColor: `hsl(${Math.random() * 360}, 70%, 60%)`,
+            borderRadius: `${Math.random() * 50}%`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            transition: 'transform 0.2s'
+        };
+
         const atomeData = {
+            id: atomeId,
             kind: 'shape',
             tag: 'div',
             properties: {
-                css: {
-                    width: '80px',
-                    height: '80px',
-                    backgroundColor: `hsl(${Math.random() * 360}, 70%, 60%)`,
-                    borderRadius: `${Math.random() * 50}%`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    transition: 'transform 0.2s'
-                },
+                css: cssProps,
                 text: '⚛️'
             }
         };
 
-        try {
-            const result = await Atome.create(atomeData);
+        let createdOnTauri = false;
+        let createdOnFastify = false;
 
-            if (result.success || result.queued) {
-                // Reconstruct visually with selection support
-                const atomeId = result.data.id;
-                const elem = $('div', {
-                    parent: visualArea,
-                    id: atomeId,
-                    css: atomeData.properties.css,
-                    text: atomeData.properties.text,
-                    onclick: function () {
-                        window.selectVisualAtome(atomeId, this);
-                    }
+        // Create on Tauri (port 3000)
+        if (localToken) {
+            try {
+                const response = await fetch('http://127.0.0.1:3000/api/atome/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localToken}`
+                    },
+                    body: JSON.stringify(atomeData)
                 });
-
-                log(`Visual Atome created: ${atomeId}`, 'success');
-                updatePendingCount();
+                const result = await response.json();
+                if (result.success) {
+                    createdOnTauri = true;
+                    log(`Tauri: Atome created`, 'success');
+                }
+            } catch (e) {
+                log(`Tauri create error: ${e.message}`, 'warn');
             }
-        } catch (error) {
-            log(`Error: ${error.message}`, 'error');
+        }
+
+        // Create on Fastify (port 3001)
+        if (cloudToken) {
+            try {
+                const response = await fetch('http://localhost:3001/api/atome/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${cloudToken}`
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(atomeData)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    createdOnFastify = true;
+                    log(`Fastify: Atome created`, 'success');
+                }
+            } catch (e) {
+                log(`Fastify create error: ${e.message}`, 'warn');
+            }
+        }
+
+        // Display visually if created on at least one server
+        if (createdOnTauri || createdOnFastify) {
+            $('div', {
+                parent: visualArea,
+                id: atomeId,
+                css: cssProps,
+                text: '⚛️',
+                onclick: function () {
+                    window.selectVisualAtome(atomeId, this);
+                }
+            });
+            log(`Visual Atome created: ${atomeId} (Tauri: ${createdOnTauri}, Fastify: ${createdOnFastify})`, 'success');
+        } else {
+            log('Failed to create atome on any server', 'error');
         }
     }
 });
@@ -1315,34 +1363,76 @@ window.updateVisualAtomeBtn = Button({
             return;
         }
 
+        const localToken = localStorage.getItem('local_auth_token');
+        const cloudToken = localStorage.getItem('cloud_auth_token');
+
         // Update with new random color
         const newColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
         const newBorderRadius = `${Math.random() * 50}%`;
 
-        try {
-            const result = await Atome.update({
-                id: window.selectedVisualAtomeId,
-                properties: {
-                    css: {
-                        backgroundColor: newColor,
-                        borderRadius: newBorderRadius
-                    }
+        const updateData = {
+            id: window.selectedVisualAtomeId,
+            properties: {
+                css: {
+                    backgroundColor: newColor,
+                    borderRadius: newBorderRadius
                 }
-            });
-
-            if (result.success || result.queued) {
-                // Update visual element
-                const elem = document.getElementById(window.selectedVisualAtomeId);
-                if (elem) {
-                    elem.style.backgroundColor = newColor;
-                    elem.style.borderRadius = newBorderRadius;
-                }
-                log(`Updated atome: ${window.selectedVisualAtomeId}`, 'success');
-            } else {
-                log(`Update failed: ${result.error}`, 'error');
             }
-        } catch (error) {
-            log(`Update error: ${error.message}`, 'error');
+        };
+
+        let updated = false;
+
+        // Update on Tauri
+        if (localToken) {
+            try {
+                const response = await fetch(`http://127.0.0.1:3000/api/atome/${window.selectedVisualAtomeId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localToken}`
+                    },
+                    body: JSON.stringify(updateData)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updated = true;
+                    log('Tauri: Atome updated', 'success');
+                }
+            } catch (e) {
+                log(`Tauri update error: ${e.message}`, 'warn');
+            }
+        }
+
+        // Update on Fastify
+        if (cloudToken) {
+            try {
+                const response = await fetch(`http://localhost:3001/api/atome/${window.selectedVisualAtomeId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${cloudToken}`
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(updateData)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updated = true;
+                    log('Fastify: Atome updated', 'success');
+                }
+            } catch (e) {
+                log(`Fastify update error: ${e.message}`, 'warn');
+            }
+        }
+
+        if (updated) {
+            // Update visual element
+            const elem = document.getElementById(window.selectedVisualAtomeId);
+            if (elem) {
+                elem.style.backgroundColor = newColor;
+                elem.style.borderRadius = newBorderRadius;
+            }
+            log(`Updated atome: ${window.selectedVisualAtomeId}`, 'success');
         }
     }
 });
@@ -1368,22 +1458,58 @@ window.deleteVisualAtomeBtn = Button({
             return;
         }
 
-        try {
-            const result = await Atome.delete({ id: window.selectedVisualAtomeId });
+        const localToken = localStorage.getItem('local_auth_token');
+        const cloudToken = localStorage.getItem('cloud_auth_token');
 
-            if (result.success || result.queued) {
-                // Remove visual element
-                const elem = document.getElementById(window.selectedVisualAtomeId);
-                if (elem) elem.remove();
+        let deleted = false;
 
-                log(`Deleted atome: ${window.selectedVisualAtomeId}`, 'success');
-                window.selectedVisualAtomeId = null;
-                window.updateVisualAtomeButtons();
-            } else {
-                log(`Delete failed: ${result.error}`, 'error');
+        // Delete on Tauri
+        if (localToken) {
+            try {
+                const response = await fetch(`http://127.0.0.1:3000/api/atome/${window.selectedVisualAtomeId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${localToken}`
+                    }
+                });
+                const result = await response.json();
+                if (result.success) {
+                    deleted = true;
+                    log('Tauri: Atome deleted', 'success');
+                }
+            } catch (e) {
+                log(`Tauri delete error: ${e.message}`, 'warn');
             }
-        } catch (error) {
-            log(`Delete error: ${error.message}`, 'error');
+        }
+
+        // Delete on Fastify
+        if (cloudToken) {
+            try {
+                const response = await fetch(`http://localhost:3001/api/atome/${window.selectedVisualAtomeId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${cloudToken}`
+                    },
+                    credentials: 'include'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    deleted = true;
+                    log('Fastify: Atome deleted', 'success');
+                }
+            } catch (e) {
+                log(`Fastify delete error: ${e.message}`, 'warn');
+            }
+        }
+
+        if (deleted) {
+            // Remove visual element
+            const elem = document.getElementById(window.selectedVisualAtomeId);
+            if (elem) elem.remove();
+
+            log(`Deleted atome: ${window.selectedVisualAtomeId}`, 'success');
+            window.selectedVisualAtomeId = null;
+            window.updateVisualAtomeButtons();
         }
     }
 });
@@ -2054,115 +2180,175 @@ function clearVisualArea() {
 }
 
 /**
- * Load user's atomes from server and display them
+ * Load user's atomes from BOTH servers and display them
  */
 async function loadUserAtomes() {
-    if (!Atome.isAuthenticated()) {
+    const localToken = localStorage.getItem('local_auth_token');
+    const cloudToken = localStorage.getItem('cloud_auth_token');
+
+    if (!localToken && !cloudToken) {
         return;
     }
 
-    try {
-        // Debug: Show which user we're loading for
-        const token = localStorage.getItem(TOKEN_KEY);
-        if (token) {
-            try {
-                const [, payload] = token.split('.');
-                const decoded = JSON.parse(atob(payload));
-                const userId = decoded.id || decoded.userId || decoded.sub;
-                console.log('[loadUserAtomes] Token userId:', userId, 'TOKEN_KEY:', TOKEN_KEY);
-                log(`Loading atomes for user: ${userId?.substring(0, 8)}...`, 'info');
-            } catch (e) {
-                console.log('[loadUserAtomes] Token decode error:', e);
+    log('Loading your atomes from both servers...', 'info');
+
+    const allAtomes = new Map(); // Use Map to deduplicate by ID
+
+    // Load from Tauri
+    if (localToken) {
+        try {
+            const response = await fetch('http://127.0.0.1:3000/api/atome/list?kind=shape', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${localToken}` }
+            });
+            const result = await response.json();
+            if (result.success && result.data) {
+                result.data.forEach(atome => allAtomes.set(atome.id, atome));
+                log(`Tauri: ${result.data.length} atomes loaded`, 'info');
             }
+        } catch (e) {
+            console.warn('Tauri atome list failed:', e.message);
         }
+    }
 
-        log('Loading your atomes...', 'info');
-        const result = await Atome.list({ kind: 'shape' });
+    // Load from Fastify
+    if (cloudToken) {
+        try {
+            const response = await fetch('http://localhost:3001/api/atome/list?kind=shape', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${cloudToken}` },
+                credentials: 'include'
+            });
+            const result = await response.json();
+            if (result.success && result.data) {
+                result.data.forEach(atome => allAtomes.set(atome.id, atome));
+                log(`Fastify: ${result.data.length} atomes loaded`, 'info');
+            }
+        } catch (e) {
+            console.warn('Fastify atome list failed:', e.message);
+        }
+    }
 
-        if (result.success && result.data && result.data.length > 0) {
-            // Clear placeholder
-            const area = document.getElementById('visual-test-area');
-            if (area) {
-                area.innerHTML = '';
+    const atomesList = Array.from(allAtomes.values());
 
-                // Reset selection state
-                window.selectedVisualAtomeId = null;
-                window.updateVisualAtomeButtons();
+    if (atomesList.length > 0) {
+        // Clear placeholder
+        const area = document.getElementById('visual-test-area');
+        if (area) {
+            area.innerHTML = '';
 
-                // Recreate each atome visually with selection support
-                result.data.forEach(atome => {
-                    const css = atome.properties?.css || {
-                        width: '80px',
-                        height: '80px',
-                        backgroundColor: '#666',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                    };
+            // Reset selection state
+            window.selectedVisualAtomeId = null;
+            window.updateVisualAtomeButtons();
 
-                    const atomeId = atome.id;
-                    $('div', {
-                        parent: area,
-                        id: atomeId,
-                        css: css,
-                        text: atome.properties?.text || '⚛️',
-                        onclick: function () {
-                            window.selectVisualAtome(atomeId, this);
-                        }
-                    });
+            // Recreate each atome visually with selection support
+            atomesList.forEach(atome => {
+                const css = atome.properties?.css || {
+                    width: '80px',
+                    height: '80px',
+                    backgroundColor: '#666',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                };
+
+                const atomeId = atome.id;
+                $('div', {
+                    parent: area,
+                    id: atomeId,
+                    css: css,
+                    text: atome.properties?.text || '⚛️',
+                    onclick: function () {
+                        window.selectVisualAtome(atomeId, this);
+                    }
                 });
+            });
 
-                log(`Loaded ${result.data.length} atomes`, 'success');
-            }
-        } else {
-            log('No atomes found', 'info');
+            log(`Total: ${atomesList.length} unique atomes loaded`, 'success');
         }
-    } catch (error) {
-        log(`Error loading atomes: ${error.message}`, 'error');
+    } else {
+        log('No atomes found', 'info');
     }
 }
 
-// Check initial auth status by calling the /me endpoint
+// Check initial auth status by calling the /me endpoint on BOTH servers
 async function checkAuthStatus() {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const localToken = localStorage.getItem('local_auth_token');
+    const cloudToken = localStorage.getItem('cloud_auth_token');
 
-    if (!token) {
+    console.log('[checkAuthStatus] Tokens:', { localToken: !!localToken, cloudToken: !!cloudToken });
+
+    if (!localToken && !cloudToken) {
         log('No auth token found', 'info');
         clearVisualArea();
         return;
     }
 
-    try {
-        const response = await fetch(`${apiBase}${authPrefix}/me`, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            credentials: 'include'
-        });
+    let loggedIn = false;
+    let userData = null;
 
-        const data = await response.json();
-
-        if (data.success && data.user) {
-            authStatus.$({
-                css: { backgroundColor: '#6bcb77' },
-                text: `🔓 ${data.user.username || data.user.phone || 'User'}`
+    // Check Tauri (local) session - use 127.0.0.1 for Tauri compatibility
+    if (localToken) {
+        try {
+            console.log('[checkAuthStatus] Checking Tauri session...');
+            const response = await fetch('http://127.0.0.1:3000/api/auth/local/me', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${localToken}` }
             });
-            log(`Already logged in as: ${data.user.username || data.user.phone}`, 'info');
-
-            // Load user's atomes after successful auth check
-            await loadUserAtomes();
-        } else {
-            // Token invalid, clear it
-            localStorage.removeItem(TOKEN_KEY);
-            clearVisualArea();
-            log('Session expired, please login again', 'warn');
+            const data = await response.json();
+            console.log('[checkAuthStatus] Tauri response:', data);
+            if (data.success && data.user) {
+                loggedIn = true;
+                userData = data.user;
+                log(`Tauri session restored: ${data.user.username || data.user.phone}`, 'success');
+            } else {
+                console.log('[checkAuthStatus] Tauri token invalid, removing');
+                localStorage.removeItem('local_auth_token');
+            }
+        } catch (e) {
+            console.warn('Tauri /me check failed:', e.message);
         }
-    } catch (error) {
-        log(`Auth check error: ${error.message}`, 'error');
+    }
+
+    // Check Fastify (cloud) session
+    if (cloudToken) {
+        try {
+            console.log('[checkAuthStatus] Checking Fastify session...');
+            const response = await fetch('http://localhost:3001/api/auth/me', {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${cloudToken}` },
+                credentials: 'include'
+            });
+            const data = await response.json();
+            console.log('[checkAuthStatus] Fastify response:', data);
+            if (data.success && data.user) {
+                loggedIn = true;
+                if (!userData) userData = data.user;
+                log(`Fastify session restored: ${data.user.username || data.user.phone}`, 'success');
+            } else {
+                console.log('[checkAuthStatus] Fastify token invalid, removing');
+                localStorage.removeItem('cloud_auth_token');
+            }
+        } catch (e) {
+            console.warn('Fastify /me check failed:', e.message);
+        }
+    }
+
+    if (loggedIn && userData) {
+        authStatus.$({
+            css: { backgroundColor: '#6bcb77' },
+            text: `🔓 ${userData.username || userData.phone || 'User'}`
+        });
+        localStorage.setItem('user_data', JSON.stringify(userData));
+
+        // Load user's atomes after successful auth check
+        await loadUserAtomes();
+    } else {
+        clearVisualArea();
+        log('Session expired, please login again', 'warn');
     }
 
     updatePendingCount();
@@ -2258,8 +2444,91 @@ window.addEventListener('squirrel:atome-deleted', (e) => {
     }
 });
 
+// ============================================================================
+// AUTO-CONNECT WEBSOCKET FOR REAL-TIME SYNC
+// ============================================================================
+function connectSyncWebSocket() {
+    if (wsSync && wsSync.readyState === WebSocket.OPEN) {
+        return; // Already connected
+    }
+
+    console.log('[WebSocket] Connecting to /ws/sync for real-time updates...');
+    wsSync = new WebSocket('ws://localhost:3001/ws/sync');
+
+    wsSync.onopen = () => {
+        wsSyncStatus.$({ css: { backgroundColor: '#6bcb77' }, text: '🟢 /ws/sync' });
+        log('WebSocket connected for real-time sync', 'success');
+    };
+
+    wsSync.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            console.log('[WebSocket] Message received:', data.type);
+
+            // Handle atome sync events
+            if (data.type === 'atome:created' && data.atome) {
+                log(`[Sync] 🆕 Atome created: ${data.atome.id}`, 'success');
+
+                // Add visually if not already present
+                const area = document.getElementById('visual-test-area');
+                if (area && !document.getElementById(data.atome.id)) {
+                    const css = data.atome.properties?.css || {
+                        width: '80px', height: '80px', backgroundColor: '#66bb6a',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontWeight: 'bold', cursor: 'pointer'
+                    };
+                    $('div', {
+                        parent: area,
+                        id: data.atome.id,
+                        css: css,
+                        text: data.atome.properties?.text || '⚛️',
+                        onclick: function () { window.selectVisualAtome(data.atome.id, this); }
+                    });
+                    // Remove placeholder if present
+                    const placeholder = area.querySelector('p');
+                    if (placeholder) placeholder.remove();
+                }
+            }
+
+            if (data.type === 'atome:updated' && data.atome) {
+                log(`[Sync] ✏️ Atome updated: ${data.atome.id}`, 'info');
+                const el = document.getElementById(data.atome.id);
+                if (el && data.atome.properties?.css) {
+                    Object.assign(el.style, data.atome.properties.css);
+                }
+            }
+
+            if (data.type === 'atome:deleted' && data.atome) {
+                log(`[Sync] 🗑️ Atome deleted: ${data.atome.id}`, 'warn');
+                const el = document.getElementById(data.atome.id);
+                if (el) {
+                    el.remove();
+                    if (window.selectedVisualAtomeId === data.atome.id) {
+                        window.selectedVisualAtomeId = null;
+                        window.updateVisualAtomeButtons();
+                    }
+                }
+            }
+        } catch (e) {
+            console.log('[WebSocket] Raw message:', event.data);
+        }
+    };
+
+    wsSync.onclose = () => {
+        wsSyncStatus.$({ css: { backgroundColor: '#666' }, text: '⚪ /ws/sync' });
+        log('WebSocket disconnected, reconnecting in 3s...', 'warn');
+        // Auto-reconnect after 3 seconds
+        setTimeout(connectSyncWebSocket, 3000);
+    };
+
+    wsSync.onerror = (err) => {
+        console.warn('[WebSocket] Error:', err);
+    };
+}
+
 // Initialize
 checkAuthStatus();
+connectSyncWebSocket(); // Auto-connect WebSocket for real-time sync
 log('Socket & Atome Test initialized', 'success');
 
 export default {};

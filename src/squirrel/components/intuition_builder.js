@@ -41,7 +41,6 @@ let pendingParticleUpdateHost = null;
 const POINTER_TOUCH_ID_OFFSET = 1000;
 
 function save_intuition_menu(...args) {
-    console.log('Saving menu...');
     if (typeof window.saveMenuHook === 'function') {
         window.saveMenuHook(...args);
     }
@@ -2239,7 +2238,6 @@ function finishMenuItemDrag(e, ctx) {
                 clampFloatingToViewport(info);
                 repositionActiveSatellites(info);
                 updateCurrentMenuStatus({ reason: 'extraction' });
-                console.log('item extracted to floating palette');
                 save_intuition_menu();
             }
         }
@@ -2341,7 +2339,6 @@ function finishFloatingMove(e, ctx) {
         repositionActiveSatellites(ctx.floatingInfo);
     }
     if (ctx.dragActivated && ctx.pendingDragLog && !ctx.loggedDrag) {
-        console.log('item dragged');
         save_intuition_menu();
         ctx.loggedDrag = true;
         ctx.pendingDragLog = false;
@@ -2460,7 +2457,7 @@ const Intuition_theme = {
         tool_lock_pulse_duration: '1400ms', // durée animation clignotement doux
         tool_lock_toggle_mode: 'long', // 'long' (par défaut) ou 'click' pour permettre le clic simple de sortir
 
-        toolbox_icon: 'menu',            // false pour masquer, ou 'settings', 'play', etc.
+        toolbox_icon: 'data:image/svg+xml;base64,' + "PHN2ZyB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIHdpZHRoPSIxMjgiIGhlaWdodD0iMTI4IiAgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgaWQ9Im1lbnVDYW52YXMiPg0KICAgIDwhLS0gR2VuZXJhdGVkIGJ5IFBhaW50Q29kZSAtIGh0dHA6Ly93d3cucGFpbnRjb2RlYXBwLmNvbSAtLT4NCiAgICA8ZyBpZD0ibWVudUNhbnZhcy1ncm91cCI+DQogICAgICAgIDxnIGlkPSJtZW51Q2FudmFzLWdyb3VwMiI+DQogICAgICAgICAgICA8ZyBpZD0ibWVudUNhbnZhcy1ncm91cDMiPg0KICAgICAgICAgICAgICAgIDxwYXRoIGlkPSJtZW51Q2FudmFzLWJlemllciIgc3Ryb2tlPSJyZ2IoMjM4LCAyMzgsIDIzOCkiIHN0cm9rZS13aWR0aD0iMzMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Rva2UtbWl0ZXJsaW1pdD0iNCIgZmlsbD0icmdiKDAgLCAwLCAwKSIgZD0iTSAxNy42NywxOC4zMyBMIDExMS4zMywxOC4zMyIgLz4NCiAgICAgICAgICAgICAgICA8cGF0aCBpZD0ibWVudUNhbnZhcy1iZXppZXIyIiBzdHJva2U9InJnYigyMzgsIDIzOCwgMjM4KSIgc3Ryb2tlLXdpZHRoPSIzMyIgc3Rya2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS1taXRlcmxpbWl0PSI0IiBmaWxsPSJyZ2IoMCwgMCwgMCkiIGQ9Ik0gMTcuNjcsNjQuNSBMIDExMS4zMyw2NC41IiAvPg0KICAgICAgICAgICAgICAgIDxwYXRoIGlkPSJtZW51Q2FudmFzLWJlemllcjMiIHN0cm9rZT0icmdiKDIzOCwgMjM4LCAyMzgpIiBzdHJva2Utd2lkdGg9IjMzIiBzdHJpa2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS1taXRlcmxpbWl0PSI0IiBmaWxsPSJub25lIiBkPSJNIDE3LjY3LDExMC42NyBMIDExMS4zMywxMTAuNjciIC8+DQogICAgICAgICAgICA8L2c+DQogICAgICAgIDwvZz4NCiAgICA8L2c+DQo8L3N2Zz4=",            // false pour masquer, ou 'settings', 'play', etc.
         toolbox_icon_color: '#cacacaff',
         toolbox_icon_size: '39%',      // px, %, ou ratio (0..1)
         toolbox_icon_top: '50%',       // position verticale
@@ -2781,6 +2778,60 @@ function intuitionCommon(cfg) {
     return el;
 }
 
+function apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId) {
+    requestAnimationFrame(() => {
+        const svgEl = document.getElementById(svgId);
+        const parentEl = document.getElementById(parentId);
+        if (!svgEl || !parentEl) return;
+        // Responsif via CSS (pas d'attributs width/height)
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        svgEl.style.position = 'absolute';
+        svgEl.style.left = icon_Left;
+        svgEl.style.top = icon_Top;
+        svgEl.style.transform = 'translate(-50%, -50%)';
+        svgEl.style.display = 'block';
+        svgEl.style.pointerEvents = 'none';
+
+        // Taille: basée sur currentTheme.icon_size
+        const baseSize = Math.max(1,
+            Math.min(parentEl.clientWidth || 0, parentEl.clientHeight || 0) ||
+            (parseFloat(currentTheme.item_size) || 54)
+        );
+
+        // const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
+        const szDefRaw = (cfg.icon_size || currentTheme.icon_size || '16%').trim();
+
+        let iconSize = NaN;
+        if (szDefRaw.endsWith('%')) {
+            const pct = parseFloat(szDefRaw);
+            if (!isNaN(pct)) iconSize = Math.round((pct / 100) * baseSize);
+        } else if (szDefRaw.endsWith('px')) {
+            const px = parseFloat(szDefRaw);
+            if (!isNaN(px)) iconSize = Math.round(px);
+        } else {
+            const num = parseFloat(szDefRaw);
+            if (!isNaN(num)) {
+                // num < 1 => ratio, sinon px
+                iconSize = num <= 1 ? Math.round(num * baseSize) : Math.round(num);
+            }
+        }
+        if (!isFinite(iconSize) || isNaN(iconSize)) {
+            iconSize = Math.round(0.16 * baseSize); // fallback 16%
+        }
+        iconSize = Math.max(8, iconSize);
+        svgEl.style.width = iconSize + 'px';
+        svgEl.style.height = iconSize + 'px';
+
+        if (!svgEl.getAttribute('viewBox')) {
+            svgEl.setAttribute('viewBox', `0 0 ${iconSize} ${iconSize}`);
+        }
+        if (!svgEl.getAttribute('preserveAspectRatio')) {
+            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        }
+    });
+}
+
 
 function createIcon(cfg) {
     const parentId = cfg.id;
@@ -2794,65 +2845,26 @@ function createIcon(cfg) {
     let icon_color = (cfg.icon_color || currentTheme.icon_color || '#ffffffff').trim();
     let icon_Left = (cfg.icon_left || currentTheme.icon_left || '10%').trim();
     let icon_Top = (cfg.icon_top || currentTheme.icon_top || '50%').trim();
+    // check if icon is base64 encoded svg
+    if (typeof icon === 'string' && icon.startsWith('data:image/svg+xml;base64,')) {
 
-    dataFetcher(`assets/images/icons/${icon}.svg`)
-        .then(svgData => {
-            // Injecte le SVG dans le parent
-            render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
-            // Normalisation et centrage + taille basée sur currentTheme.icon_size
-            requestAnimationFrame(() => {
-                const svgEl = document.getElementById(svgId);
-                const parentEl = document.getElementById(parentId);
-                if (!svgEl || !parentEl) return;
-                // Responsif via CSS (pas d'attributs width/height)
-                svgEl.removeAttribute('width');
-                svgEl.removeAttribute('height');
-                svgEl.style.position = 'absolute';
-                svgEl.style.left = icon_Left;
-                svgEl.style.top = icon_Top;
-                svgEl.style.transform = 'translate(-50%, -50%)';
-                svgEl.style.display = 'block';
-                svgEl.style.pointerEvents = 'none';
+        const base64Data = icon.replace('data:image/svg+xml;base64,', '');
+        const svgData = atob(base64Data);
 
-                // Taille: basée sur currentTheme.icon_size
-                const baseSize = Math.max(1,
-                    Math.min(parentEl.clientWidth || 0, parentEl.clientHeight || 0) ||
-                    (parseFloat(currentTheme.item_size) || 54)
-                );
+        render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
+        apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId,);
+    }
+    else {
+        dataFetcher(`assets/images/icons/${icon}.svg`)
+            .then(svgData => {
+                // Injecte le SVG dans le parent
+                render_svg(svgData, svgId, parentId, '0px', '0px', '100%', '100%', icon_color, icon_color);
+                // Normalisation et centrage + taille basée sur currentTheme.icon_size
+                apply_svg_settings_and_anim(cfg, icon_Left, icon_Top, svgId, parentId);
+            })
+            .catch(err => { console.error(`Erreur (createIcon):${icon}, ${err}`); });
+    }
 
-                // const szDefRaw = currentTheme.icon_size != null ? String(currentTheme.icon_size).trim() : '16%';
-                const szDefRaw = (cfg.icon_size || currentTheme.icon_size || '16%').trim();
-
-                let iconSize = NaN;
-                if (szDefRaw.endsWith('%')) {
-                    const pct = parseFloat(szDefRaw);
-                    if (!isNaN(pct)) iconSize = Math.round((pct / 100) * baseSize);
-                } else if (szDefRaw.endsWith('px')) {
-                    const px = parseFloat(szDefRaw);
-                    if (!isNaN(px)) iconSize = Math.round(px);
-                } else {
-                    const num = parseFloat(szDefRaw);
-                    if (!isNaN(num)) {
-                        // num < 1 => ratio, sinon px
-                        iconSize = num <= 1 ? Math.round(num * baseSize) : Math.round(num);
-                    }
-                }
-                if (!isFinite(iconSize) || isNaN(iconSize)) {
-                    iconSize = Math.round(0.16 * baseSize); // fallback 16%
-                }
-                iconSize = Math.max(8, iconSize);
-                svgEl.style.width = iconSize + 'px';
-                svgEl.style.height = iconSize + 'px';
-
-                if (!svgEl.getAttribute('viewBox')) {
-                    svgEl.setAttribute('viewBox', `0 0 ${iconSize} ${iconSize}`);
-                }
-                if (!svgEl.getAttribute('preserveAspectRatio')) {
-                    svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-                }
-            });
-        })
-        .catch(err => { console.error('Erreur (createIcon):', err); });
 }
 function createLabel(cfg) {
     if (cfg.label) {
@@ -3171,34 +3183,6 @@ function runContentHandler(def, handlerName, payload = {}) {
     }
 }
 
-// Allow palette definitions to run a `touch` handler even though palettes normally act as containers.
-function triggerPaletteTouchHandler(el, def, nameKey) {
-    const resolvedKey = nameKey || (el && el.dataset && el.dataset.nameKey) || null;
-    const resolvedDef = def || (resolvedKey ? intuition_content[resolvedKey] : null);
-    if (!resolvedDef) {
-        return;
-    }
-    runContentHandler(resolvedDef, 'touch', {
-        el,
-        nameKey: resolvedKey,
-        kind: 'touch'
-    });
-}
-
-// Allow palette definitions to run a `close` handler whenever their satellite collapses.
-function triggerPaletteCloseHandler(el, def, nameKey) {
-    const resolvedKey = nameKey || (el && el.dataset && el.dataset.nameKey) || null;
-    const resolvedDef = def || (resolvedKey ? intuition_content[resolvedKey] : null);
-    if (!resolvedDef) {
-        return;
-    }
-    runContentHandler(resolvedDef, 'close', {
-        el,
-        nameKey: resolvedKey,
-        kind: 'close'
-    });
-}
-
 function handleToolSemanticEvent(kind, el, def, rawEvent) {
     if (!el) return;
     if (isEditModeActive()) return;
@@ -3222,7 +3206,7 @@ function handleToolSemanticEvent(kind, el, def, rawEvent) {
             if (typeof parsedThemeValue === 'number' && isFinite(parsedThemeValue)) {
                 return Math.max(0, parsedThemeValue);
             }
-            return 90;
+            return 0;
         })();
         const previousTransition = el.style.transition;
         if (!previousTransition || !/background/i.test(previousTransition)) {
@@ -5617,7 +5601,6 @@ function createFloatingPaletteSatellite(hostInfo, el, nameKey, paletteTitle, pla
     setLabelCentered(el, true);
     setPaletteVisualState(el, true);
     applyThemeToFloatingEntry(el, themeRef, inferDefinitionType(intuition_content[nameKey]));
-    const themeBg = (themeRef && themeRef.satellite_bg);
     if (themeBg) {
         el.style.background = themeBg;
     }
@@ -5669,11 +5652,6 @@ function handlePaletteClick(el, cfg) {
         return;
     }
 
-    const key = (el && el.dataset && el.dataset.nameKey)
-        || (cfg && cfg.nameKey)
-        || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
-    const desc = key ? intuition_content[key] : null;
-
     // Exclusif: ramener l'ancien palette si présent
     const wasActive = handlePaletteClick.active && handlePaletteClick.active.el === el;
     el.style.height = parseFloat(currentTheme.item_size) / 2 + 'px';
@@ -5681,7 +5659,6 @@ function handlePaletteClick(el, cfg) {
     // el.style.width = '300px';
 
     if (wasActive) {
-        triggerPaletteCloseHandler(el, desc, key);
         // BACK: go up one level in the stack and rebuild
         if (menuStack.length > 1) {
             const prevEntry = menuStack[menuStack.length - 2];
@@ -5708,12 +5685,9 @@ function handlePaletteClick(el, cfg) {
         }
         return;
     } else if (handlePaletteClick.active) {
-        triggerPaletteCloseHandler(handlePaletteClick.active.el);
         // Another palette was active; restore it before proceeding forward
         restorePalette(handlePaletteClick.active);
     }
-
-    triggerPaletteTouchHandler(el, desc, key);
 
     const supportEl = grab('toolbox_support');
     if (!supportEl || !el) return;
@@ -5752,6 +5726,7 @@ function handlePaletteClick(el, cfg) {
     setLabelCentered(el, true);
     // Apply palette icon/label visibility rules while outside
     setPaletteVisualState(el, true);
+    const key = (el && el.dataset && el.dataset.nameKey) || (cfg && cfg.nameKey) || ((cfg && cfg.id) ? String(cfg.id).replace(/^_intuition_/, '') : '');
     const themeBg = (currentTheme && currentTheme.satellite_bg);
     const paletteType = inferDefinitionType(key ? intuition_content[key] : undefined);
     applyThemeToFloatingEntry(el, currentTheme, paletteType);
@@ -5766,7 +5741,7 @@ function handlePaletteClick(el, cfg) {
     const targetPos = computeExtractedPaletteTarget(phRect, supportRect, elW, elH, currentTheme);
     const targetLeft = targetPos.left;
     const targetTop = targetPos.top;
-    // desc already resolved earlier
+    const desc = intuition_content[key];
 
     // Animer le glissement de la position placeholder vers la position externe
     const dx = targetLeft - phRect.left;
@@ -5830,7 +5805,6 @@ function handleFloatingPaletteClick(el, cfg) {
     const activeMap = hostInfo.activeSatellites;
     const existingState = activeMap.get(nameKey);
     if (existingState) {
-        triggerPaletteCloseHandler(el, def, nameKey);
         if (Array.isArray(hostInfo.menuStack) && hostInfo.menuStack.length) {
             const idx = hostInfo.menuStack.findIndex((entry) => entry && entry.parent === nameKey);
             if (idx >= 0) {
@@ -5845,8 +5819,6 @@ function handleFloatingPaletteClick(el, cfg) {
         renderFloatingBody(hostInfo, fallbackKeys);
         return;
     }
-
-    triggerPaletteTouchHandler(el, def, nameKey);
 
     const floatingMenuKey = def && def.floatingMenuKey;
     const floatingDef = floatingMenuKey ? intuition_content[floatingMenuKey] : null;

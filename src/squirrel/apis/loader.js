@@ -62,7 +62,6 @@ function dataFetcher(path, opts = {}) {
         serverCandidates.push(`http://127.0.0.1:${port}/audio/${encodeURI(cleanPath)}`);
       }
     }
-
     let assetPath = cleanPath;
     if (!/^(assets|src\/assets)\//.test(assetPath)) assetPath = 'assets/' + assetPath;
     const assetCandidates = [assetPath];
@@ -101,7 +100,6 @@ function dataFetcher(path, opts = {}) {
       if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(directFs.txt.slice(0, max)); }
       return done(directFs.txt);
     }
-
     // Immediate asset try if no port yet
     if (!port) {
       for (const u of assetCandidates) {
@@ -124,7 +122,6 @@ function dataFetcher(path, opts = {}) {
       const out = serverCandidates[0] || assetCandidates[0];
       return done(out);
     }
-
     for (const u of serverCandidates) {
       try {
         const r = await fetch(u);
@@ -143,20 +140,29 @@ function dataFetcher(path, opts = {}) {
         return done(u);
       } catch (_) { }
     }
-
     for (const u of assetCandidates) {
+
       try {
         if (looksText || mode === 'text' || mode === 'preview') {
+
           const r = await fetch(u); if (!r.ok) continue;
           const txt = await r.text();
           if (looksSvg && isHtmlFallback(txt)) { continue; }
           if (mode === 'preview' || opts.preview) { const max = opts.preview || 120; return done(txt.slice(0, max)); }
           return done(txt);
         }
-        if (mode === 'arraybuffer') { const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer()); }
-        if (mode === 'blob') { const r = await fetch(u); if (!r.ok) continue; return done(await r.blob()); }
+        if (mode === 'arraybuffer') {
+
+          const r = await fetch(u); if (!r.ok) continue; return done(await r.arrayBuffer());
+        }
+        if (mode === 'blob') {
+          const r = await fetch(u); if (!r.ok) continue; return done(await r.blob());
+        }
         return done(u);
-      } catch (_) { }
+      } catch (e) {
+        errro.log('err found:', e);
+
+      }
     }
 
     delete __inflightData[key];

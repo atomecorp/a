@@ -72,7 +72,7 @@ import('./examples/socket_test.js');
 // import('./examples/a_svg.js');
 
 // import('./examples/basic.js');
-//mport('./examples/tools.js'); //intuition menu
+import('./examples/tools.js'); //intuition menu
 // import('./examples/atome.js');
 // import('./jeezs/demo.js');
 // import('./examples/!test_taurie-path.js');
