@@ -1,5 +1,8 @@
 const DEFAULT_WS_PATH = '/ws/events';
-const MAX_RETRIES = 10;
+const MAX_RETRIES = 5;  // Reduced to avoid spamming
+const RECONNECT_BASE_DELAY = 2000;
+const RECONNECT_MAX_DELAY = 60000;  // 1 minute max
+const SILENT_MODE_AFTER_FAILURES = 3;  // Stop logging errors after N failures
 
 function resolveWsCandidates() {
     const customEndpoint = typeof window.__SQUIRREL_SYNC_WS__ === 'string'
@@ -28,8 +31,11 @@ function resolveWsCandidates() {
     const host = location.host || '';
     const port = location.port || '';
 
-    // Log for debugging
-    console.log('[sync_engine] resolveWsCandidates: isTauri =', isTauri, ', port =', port);
+    // Log for debugging only once, not on every reconnect
+    if (typeof window.__sync_engine_logged__ === 'undefined') {
+        console.log('[sync_engine] resolveWsCandidates: isTauri =', isTauri, ', port =', port);
+        window.__sync_engine_logged__ = true;
+    }
 
     // For both Tauri and browser dev mode, WebSocket is only available on Fastify (port 3001)
     // - Port 3000 (Squirrel static server or Axum) doesn't have WebSocket
@@ -39,7 +45,7 @@ function resolveWsCandidates() {
     pushBase('ws://localhost:3001');
     pushBase('ws://127.0.0.1:3001');
 
-    console.log('[sync_engine] WebSocket candidates:', bases);
+    // WebSocket candidates are localhost:3001 and 127.0.0.1:3001
     return bases.map((base) => ensureWsPath(base));
 }
 
@@ -105,8 +111,11 @@ class SyncEngineClient {
         this.state = {
             connected: false,
             attempts: 0,
+            totalFailures: 0,
             lastDelta: null,
-            endpoint: null
+            endpoint: null,
+            silentMode: false,
+            serverAvailable: null  // null = unknown, true/false = known state
         };
         this.listeners = new Set();
         this.socket = null;
@@ -132,13 +141,19 @@ class SyncEngineClient {
         try {
             this.socket = new WebSocket(url);
         } catch (error) {
-            this.scheduleReconnect();
+            this.handleConnectionError();
             return;
         }
 
         this.socket.addEventListener('open', () => {
+            if (!this.state.silentMode) {
+                console.log('[sync_engine] ✅ Connected to sync server');
+            }
             this.state.connected = true;
             this.state.attempts = 0;
+            this.state.totalFailures = 0;
+            this.state.silentMode = false;
+            this.state.serverAvailable = true;
             this.flushQueue();
         });
 
@@ -153,9 +168,23 @@ class SyncEngineClient {
         });
 
         this.socket.addEventListener('error', () => {
-            this.state.connected = false;
-            this.socket?.close();
+            this.handleConnectionError();
         });
+    }
+
+    handleConnectionError() {
+        this.state.totalFailures++;
+        this.state.connected = false;
+        this.state.serverAvailable = false;
+
+        // Enter silent mode after too many failures
+        if (this.state.totalFailures >= SILENT_MODE_AFTER_FAILURES && !this.state.silentMode) {
+            this.state.silentMode = true;
+            console.warn('[sync_engine] Entering silent mode - server appears unavailable. Will keep trying in background.');
+        }
+
+        this.socket?.close();
+        this.scheduleReconnect();
     }
 
     scheduleReconnect() {
@@ -163,10 +192,31 @@ class SyncEngineClient {
             return;
         }
         if (this.state.attempts >= MAX_RETRIES) {
+            if (!this.state.silentMode) {
+                console.warn('[sync_engine] Max retries reached. Server unavailable - sync disabled.');
+            }
+            this.state.serverAvailable = false;
+
+            // Schedule a long retry later (5 minutes)
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                this.state.attempts = 0;  // Reset attempts
+                this.connectNextCandidate();
+            }, 5 * 60 * 1000);
             return;
         }
+
         this.state.attempts += 1;
-        const delay = Math.min(1000 * this.state.attempts, 5000);
+        const delay = Math.min(
+            RECONNECT_BASE_DELAY * Math.pow(2, this.state.attempts - 1),
+            RECONNECT_MAX_DELAY
+        );
+
+        // Only log if not in silent mode
+        if (!this.state.silentMode && this.state.attempts <= 2) {
+            console.log(`[sync_engine] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${this.state.attempts}/${MAX_RETRIES})...`);
+        }
+
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
             this.connectNextCandidate();
@@ -245,6 +295,55 @@ class SyncEngineClient {
     getLastDelta() {
         return this.state.lastDelta;
     }
+
+    /**
+     * Get connection state
+     */
+    getState() {
+        return {
+            connected: this.state.connected,
+            endpoint: this.state.endpoint,
+            serverAvailable: this.state.serverAvailable,
+            silentMode: this.state.silentMode,
+            attempts: this.state.attempts
+        };
+    }
+
+    /**
+     * Check if server is available
+     */
+    isServerAvailable() {
+        return this.state.serverAvailable === true;
+    }
+
+    /**
+     * Reset connection state and retry
+     */
+    retry() {
+        this.state.attempts = 0;
+        this.state.totalFailures = 0;
+        this.state.silentMode = false;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.connectNextCandidate();
+    }
+
+    /**
+     * Disconnect from server
+     */
+    disconnect() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        if (this.socket) {
+            this.socket.close(1000, 'Client disconnect');
+            this.socket = null;
+        }
+        this.state.connected = false;
+    }
 }
 
 const syncEngineSingleton = new SyncEngineClient();
@@ -258,6 +357,20 @@ export default function initSyncEngine() {
 
     syncEngineSingleton.start();
 
+    // Listen for server availability events (from Tauri or other sources)
+    window.addEventListener('squirrel:server-available', () => {
+        console.log('[sync_engine] Server available event received - attempting connection');
+        syncEngineSingleton.retry();
+    });
+
+    // Also listen for online event (browser comes back online)
+    window.addEventListener('online', () => {
+        if (!syncEngineSingleton.state.connected) {
+            console.log('[sync_engine] Network online - attempting reconnection');
+            syncEngineSingleton.retry();
+        }
+    });
+
     const relayReady = () => {
         window.removeEventListener('squirrel:ready', relayReady);
         window.dispatchEvent(new CustomEvent('squirrel:sync-ready'));
@@ -267,7 +380,11 @@ export default function initSyncEngine() {
     window.Squirrel = window.Squirrel || {};
     window.Squirrel.SyncEngine = {
         subscribe: (listener) => syncEngineSingleton.subscribe(listener),
-        getLastDelta: () => syncEngineSingleton.getLastDelta()
+        getLastDelta: () => syncEngineSingleton.getLastDelta(),
+        getState: () => syncEngineSingleton.getState(),
+        isServerAvailable: () => syncEngineSingleton.isServerAvailable(),
+        retry: () => syncEngineSingleton.retry(),
+        disconnect: () => syncEngineSingleton.disconnect()
     };
 }
 

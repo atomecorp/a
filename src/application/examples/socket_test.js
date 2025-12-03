@@ -3,51 +3,52 @@
  * 
  * Interactive demo testing:
  * 1. WebSocket connections (/ws/events, /ws/sync)
- * 2. Atome API (create, update, delete, sync)
- * 3. Authentication integration
+ * 2. Unified Atome API (create, update, delete, sync) via UnifiedAtomeSync
+ * 3. Authentication integration with dual-server support
+ * 
+ * Uses the unified sync module for all atome operations
  */
 
+import UnifiedAtome, { getServerAvailability, isAuthenticated } from '../../squirrel/apis/unifiedAtomeSync.js';
+import { getLocalServerUrl, getCloudServerUrl, isTauri } from '../../squirrel/apis/serverUrls.js';
+
 // ============================================================================
-// API CONFIGURATION (same as user_creation.js)
+// API CONFIGURATION
 // ============================================================================
-function resolveApiConfig() {
-    if (typeof window !== 'undefined' && window.SQUIRREL_API_BASE) {
-        return { base: window.SQUIRREL_API_BASE, isLocal: false };
-    }
-    try {
-        const stored = localStorage.getItem('squirrel_api_base');
-        if (stored) return { base: stored, isLocal: false };
-    } catch (e) { }
 
-    let isTauri = false;
-    if (typeof window !== 'undefined' && window.__TAURI__) isTauri = true;
-    if (!isTauri) {
-        try {
-            const platform = typeof current_platform === 'function' ? current_platform() : '';
-            if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) isTauri = true;
-        } catch (_) { }
-    }
-    if (!isTauri && typeof window !== 'undefined' && window.location?.port === '1420') isTauri = true;
+// Server URLs constants for dual-server testing
+const TAURI_SERVER = getLocalServerUrl() || 'http://127.0.0.1:3000';
+const FASTIFY_SERVER = getCloudServerUrl();
 
-    if (isTauri) return { base: 'http://127.0.0.1:3000', isLocal: true };
+// Server availability tracking (updated from UnifiedAtome)
+let tauriServerAvailable = false;
+let fastifyServerAvailable = false;
 
-    if (typeof window !== 'undefined') {
-        const hostname = window.location?.hostname;
-        const port = window.location?.port;
-        if ((hostname === 'localhost' || hostname === '127.0.0.1') && port === '3000') {
-            return { base: 'http://localhost:3001', isLocal: false };
-        }
-    }
-    return { base: '', isLocal: false };
+/**
+ * Detect which servers are available at startup
+ * Uses the unified module for silent detection
+ */
+async function detectAvailableServers() {
+    console.log('[socket_test] Detecting available servers...');
+
+    const status = await getServerAvailability(true);
+    tauriServerAvailable = status.tauri;
+    fastifyServerAvailable = status.fastify;
+
+    console.log('[socket_test] Server availability:', {
+        tauri: tauriServerAvailable ? 'UP' : 'DOWN/SKIPPED',
+        fastify: fastifyServerAvailable ? 'UP' : 'DOWN'
+    });
+
+    return status;
 }
 
-const apiConfig = resolveApiConfig();
-const apiBase = apiConfig.base;
-const useLocalAuth = apiConfig.isLocal;
+// Determine auth config based on environment
+const useLocalAuth = isTauri();
 const authPrefix = useLocalAuth ? '/api/auth/local' : '/api/auth';
 const TOKEN_KEY = useLocalAuth ? 'local_auth_token' : 'cloud_auth_token';
 
-console.log('[socket_test] API config:', { apiBase, useLocalAuth, authPrefix, TOKEN_KEY });
+console.log('[socket_test] API config:', { useLocalAuth, authPrefix, TOKEN_KEY });
 
 // ============================================================================
 // TITLE
@@ -257,51 +258,55 @@ Button({
             return;
         }
 
-        log(`Attempting login on BOTH servers: ${identifier}...`);
+        log(`Attempting login on available servers: ${identifier}...`);
 
         let tauriSuccess = false;
         let fastifySuccess = false;
         let userData = null;
 
-        // Login on Tauri (port 3000)
-        try {
-            const tauriResponse = await fetch('http://127.0.0.1:3000/api/auth/local/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone: identifier, password })
-            });
-            const tauriData = await tauriResponse.json();
-            if (tauriData.success && tauriData.token) {
-                log(`✅ Tauri login OK: ${tauriData.user?.username}`, 'success');
-                tauriSuccess = true;
-                localStorage.setItem('local_auth_token', tauriData.token);
-                userData = tauriData.user;
-            } else {
-                log(`Tauri login: ${tauriData.error || 'Failed'}`, 'warn');
+        // Login on Tauri (port 3000) - ONLY if available
+        if (tauriServerAvailable) {
+            try {
+                const tauriResponse = await fetch(`${TAURI_SERVER}/api/auth/local/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: identifier, password })
+                });
+                const tauriData = await tauriResponse.json();
+                if (tauriData.success && tauriData.token) {
+                    log(`✅ Tauri login OK: ${tauriData.user?.username}`, 'success');
+                    tauriSuccess = true;
+                    localStorage.setItem('local_auth_token', tauriData.token);
+                    userData = tauriData.user;
+                } else {
+                    log(`Tauri login: ${tauriData.error || 'Failed'}`, 'warn');
+                }
+            } catch (error) {
+                log(`Tauri login error: ${error.message}`, 'warn');
             }
-        } catch (error) {
-            log(`Tauri login error: ${error.message}`, 'warn');
         }
 
-        // Login on Fastify (port 3001)
-        try {
-            const fastifyResponse = await fetch('http://localhost:3001/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ phone: identifier, password })
-            });
-            const fastifyData = await fastifyResponse.json();
-            if (fastifyData.success && fastifyData.token) {
-                log(`✅ Fastify login OK: ${fastifyData.user?.username}`, 'success');
-                fastifySuccess = true;
-                localStorage.setItem('cloud_auth_token', fastifyData.token);
-                if (!userData) userData = fastifyData.user;
-            } else {
-                log(`Fastify login: ${fastifyData.error || 'Failed'}`, 'warn');
+        // Login on Fastify (port 3001) - ONLY if available
+        if (fastifyServerAvailable) {
+            try {
+                const fastifyResponse = await fetch(`${FASTIFY_SERVER}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ phone: identifier, password })
+                });
+                const fastifyData = await fastifyResponse.json();
+                if (fastifyData.success && fastifyData.token) {
+                    log(`✅ Fastify login OK: ${fastifyData.user?.username}`, 'success');
+                    fastifySuccess = true;
+                    localStorage.setItem('cloud_auth_token', fastifyData.token);
+                    if (!userData) userData = fastifyData.user;
+                } else {
+                    log(`Fastify login: ${fastifyData.error || 'Failed'}`, 'warn');
+                }
+            } catch (error) {
+                log(`Fastify login error: ${error.message}`, 'warn');
             }
-        } catch (error) {
-            log(`Fastify login error: ${error.message}`, 'warn');
         }
 
         // Update UI
@@ -319,7 +324,11 @@ Button({
             // Load user's atomes after login
             await loadUserAtomes();
         } else {
-            log('Login failed on both servers', 'error');
+            if (!tauriServerAvailable && !fastifyServerAvailable) {
+                log('No server available', 'error');
+            } else {
+                log('Login failed on available servers', 'error');
+            }
         }
     }
 });
@@ -337,24 +346,24 @@ Button({
         position: 'relative'
     },
     onAction: async () => {
-        // Logout from both servers
+        // Logout from available servers only
         const localToken = localStorage.getItem('local_auth_token');
         const cloudToken = localStorage.getItem('cloud_auth_token');
 
-        // Logout from Tauri
-        if (localToken) {
+        // Logout from Tauri - ONLY if available
+        if (localToken && tauriServerAvailable) {
             try {
-                await fetch('http://127.0.0.1:3000/api/auth/local/logout', {
+                await fetch(`${TAURI_SERVER}/api/auth/local/logout`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${localToken}` }
                 });
             } catch (e) { /* ignore */ }
         }
 
-        // Logout from Fastify
-        if (cloudToken) {
+        // Logout from Fastify - ONLY if available
+        if (cloudToken && fastifyServerAvailable) {
             try {
-                await fetch('http://localhost:3001/api/auth/logout', {
+                await fetch(`${FASTIFY_SERVER}/api/auth/logout`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${cloudToken}` },
                     credentials: 'include'
@@ -376,7 +385,7 @@ Button({
         // Clear visual area on logout - user's objects should not be visible
         clearVisualArea();
 
-        log('Logged out from both servers', 'info');
+        log('Logged out', 'info');
     }
 });
 
@@ -404,52 +413,56 @@ Button({
         // Use phone as username for simplicity
         const username = phone;
 
-        log(`Registering on BOTH servers: ${phone}...`);
+        log(`Registering on available servers: ${phone}...`);
 
         let tauriSuccess = false;
         let fastifySuccess = false;
         let tauriData = null;
         let fastifyData = null;
 
-        // Register on Tauri (port 3000)
-        try {
-            log('Registering on Tauri (local)...');
-            const tauriResponse = await fetch('http://127.0.0.1:3000/api/auth/local/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, phone, password })
-            });
-            tauriData = await tauriResponse.json();
-            if (tauriData.success) {
-                log(`✅ Tauri: Account created! User ID: ${tauriData.user?.id}`, 'success');
-                tauriSuccess = true;
-                localStorage.setItem('local_auth_token', tauriData.token);
-            } else {
-                log(`Tauri: ${tauriData.error || 'Registration failed'}`, 'warn');
+        // Register on Tauri (port 3000) - ONLY if available
+        if (tauriServerAvailable) {
+            try {
+                log('Registering on Tauri (local)...');
+                const tauriResponse = await fetch(`${TAURI_SERVER}/api/auth/local/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, phone, password })
+                });
+                tauriData = await tauriResponse.json();
+                if (tauriData.success) {
+                    log(`✅ Tauri: Account created! User ID: ${tauriData.user?.id}`, 'success');
+                    tauriSuccess = true;
+                    localStorage.setItem('local_auth_token', tauriData.token);
+                } else {
+                    log(`Tauri: ${tauriData.error || 'Registration failed'}`, 'warn');
+                }
+            } catch (error) {
+                log(`Tauri registration error: ${error.message}`, 'warn');
             }
-        } catch (error) {
-            log(`Tauri registration error: ${error.message}`, 'warn');
         }
 
-        // Register on Fastify (port 3001)
-        try {
-            log('Registering on Fastify (cloud)...');
-            const fastifyResponse = await fetch('http://localhost:3001/api/auth/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ username, phone, password })
-            });
-            fastifyData = await fastifyResponse.json();
-            if (fastifyData.success) {
-                log(`✅ Fastify: Account created! User ID: ${fastifyData.user?.id}`, 'success');
-                fastifySuccess = true;
-                localStorage.setItem('cloud_auth_token', fastifyData.token);
-            } else {
-                log(`Fastify: ${fastifyData.error || 'Registration failed'}`, 'warn');
+        // Register on Fastify (port 3001) - ONLY if available
+        if (fastifyServerAvailable) {
+            try {
+                log('Registering on Fastify (cloud)...');
+                const fastifyResponse = await fetch(`${FASTIFY_SERVER}/api/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ username, phone, password })
+                });
+                fastifyData = await fastifyResponse.json();
+                if (fastifyData.success) {
+                    log(`✅ Fastify: Account created! User ID: ${fastifyData.user?.id}`, 'success');
+                    fastifySuccess = true;
+                    localStorage.setItem('cloud_auth_token', fastifyData.token);
+                } else {
+                    log(`Fastify: ${fastifyData.error || 'Registration failed'}`, 'warn');
+                }
+            } catch (error) {
+                log(`Fastify registration error: ${error.message}`, 'warn');
             }
-        } catch (error) {
-            log(`Fastify registration error: ${error.message}`, 'warn');
         }
 
         // Update UI based on results
@@ -471,7 +484,11 @@ Button({
                 }
             }
         } else {
-            log('❌ Registration failed on both servers', 'error');
+            if (!tauriServerAvailable && !fastifyServerAvailable) {
+                log('❌ No server available', 'error');
+            } else {
+                log('❌ Registration failed on available servers', 'error');
+            }
         }
     }
 });
@@ -489,9 +506,11 @@ Button({
         position: 'relative'
     },
     onAction: async () => {
-        const token = localStorage.getItem(TOKEN_KEY);
+        // Check for ANY token (local or cloud)
+        const localToken = localStorage.getItem('local_auth_token');
+        const cloudToken = localStorage.getItem('cloud_auth_token');
 
-        if (!token) {
+        if (!localToken && !cloudToken) {
             log('You must be logged in to delete your account', 'warn');
             return;
         }
@@ -659,7 +678,7 @@ Button({
                     return;
                 }
 
-                log('Deleting account on both servers...');
+                log('Deleting account on available servers...');
 
                 // Get both tokens
                 const localToken = localStorage.getItem('local_auth_token');
@@ -668,11 +687,11 @@ Button({
                 let localDeleted = false;
                 let cloudDeleted = false;
 
-                // Delete on Tauri (port 3000)
-                if (localToken) {
+                // Delete on Tauri (port 3000) - ONLY if available
+                if (localToken && tauriServerAvailable) {
                     try {
                         log('Deleting on Tauri (local)...');
-                        const localResponse = await fetch('http://127.0.0.1:3000/api/auth/local/delete-account', {
+                        const localResponse = await fetch(`${TAURI_SERVER}/api/auth/local/delete-account`, {
                             method: 'DELETE',
                             headers: {
                                 'Authorization': `Bearer ${localToken}`,
@@ -693,11 +712,11 @@ Button({
                     }
                 }
 
-                // Delete on Fastify (port 3001)
-                if (cloudToken) {
+                // Delete on Fastify (port 3001) - ONLY if available
+                if (cloudToken && fastifyServerAvailable) {
                     try {
                         log('Deleting on Fastify (cloud)...');
-                        const cloudResponse = await fetch('http://localhost:3001/api/auth/delete-account', {
+                        const cloudResponse = await fetch(`${FASTIFY_SERVER}/api/auth/delete-account`, {
                             method: 'DELETE',
                             headers: {
                                 'Authorization': `Bearer ${cloudToken}`,
@@ -809,7 +828,7 @@ Button({
         }
 
         log('Connecting to /ws/events...');
-        wsEvents = new WebSocket('ws://localhost:3001/ws/events');
+        wsEvents = new WebSocket(FASTIFY_SERVER.replace('http', 'ws') + '/ws/events');
 
         wsEvents.onopen = () => {
             wsEventsStatus.$({
@@ -861,7 +880,7 @@ Button({
         }
 
         log('Connecting to /ws/sync...');
-        wsSync = new WebSocket('ws://localhost:3001/ws/sync');
+        wsSync = new WebSocket(FASTIFY_SERVER.replace('http', 'ws') + '/ws/sync');
 
         wsSync.onopen = () => {
             wsSyncStatus.$({
@@ -984,12 +1003,7 @@ Button({
         position: 'relative'
     },
     onAction: async () => {
-        if (!window.Atome) {
-            log('Atome API not loaded', 'error');
-            return;
-        }
-
-        if (!Atome.isAuthenticated()) {
+        if (!isAuthenticated()) {
             log('Please login first', 'warn');
             return;
         }
@@ -997,7 +1011,7 @@ Button({
         log('Creating test Atome...');
 
         try {
-            const result = await Atome.create({
+            const result = await UnifiedAtome.create({
                 kind: 'shape',
                 tag: 'div',
                 properties: {
@@ -1045,8 +1059,7 @@ Button({
         log(`Updating Atome: ${testAtomeId}...`);
 
         try {
-            const result = await Atome.update({
-                id: testAtomeId,
+            const result = await UnifiedAtome.update(testAtomeId, {
                 properties: {
                     css: {
                         backgroundColor: '#4ecdc4',
@@ -1088,7 +1101,7 @@ Button({
         log(`Deleting Atome: ${testAtomeId}...`);
 
         try {
-            const result = await Atome.delete({ id: testAtomeId });
+            const result = await UnifiedAtome.delete(testAtomeId);
 
             if (result.success || result.queued) {
                 log(`Atome deleted${result.queued ? ' (queued)' : ''}`, 'success');
@@ -1116,17 +1129,15 @@ Button({
         position: 'relative'
     },
     onAction: async () => {
-        log('Syncing pending operations...');
+        log('Syncing servers and processing pending operations...');
 
         try {
-            const result = await Atome.sync();
-
-            if (result.success) {
-                log(`Sync complete: ${result.synced || 0} operations`, 'success');
-            } else {
-                log(`Sync failed: ${result.reason}`, 'warn');
-            }
+            await UnifiedAtome.sync();
+            log('Sync complete!', 'success');
             updatePendingCount();
+
+            // Reload atomes to show synced data
+            await loadUserAtomes();
         } catch (error) {
             log(`Sync error: ${error.message}`, 'error');
         }
@@ -1267,66 +1278,40 @@ Button({
             }
         };
 
-        let createdOnTauri = false;
-        let createdOnFastify = false;
+        // Use UnifiedAtome for creation (handles both servers automatically)
+        try {
+            const result = await UnifiedAtome.create(atomeData);
 
-        // Create on Tauri (port 3000)
-        if (localToken) {
-            try {
-                const response = await fetch('http://127.0.0.1:3000/api/atome/create', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localToken}`
-                    },
-                    body: JSON.stringify(atomeData)
+            if (result.success) {
+                $('div', {
+                    parent: visualArea,
+                    id: atomeId,
+                    css: cssProps,
+                    text: '⚛️',
+                    onclick: function () {
+                        window.selectVisualAtome(atomeId, this);
+                    }
                 });
-                const result = await response.json();
-                if (result.success) {
-                    createdOnTauri = true;
-                    log(`Tauri: Atome created`, 'success');
-                }
-            } catch (e) {
-                log(`Tauri create error: ${e.message}`, 'warn');
-            }
-        }
-
-        // Create on Fastify (port 3001)
-        if (cloudToken) {
-            try {
-                const response = await fetch('http://localhost:3001/api/atome/create', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${cloudToken}`
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify(atomeData)
+                log(`Visual Atome created: ${atomeId}`, 'success');
+            } else if (result.queued) {
+                // Still show visually but indicate it's queued
+                $('div', {
+                    parent: visualArea,
+                    id: atomeId,
+                    css: { ...cssProps, opacity: '0.7' },
+                    text: '⏳',
+                    onclick: function () {
+                        window.selectVisualAtome(atomeId, this);
+                    }
                 });
-                const result = await response.json();
-                if (result.success) {
-                    createdOnFastify = true;
-                    log(`Fastify: Atome created`, 'success');
-                }
-            } catch (e) {
-                log(`Fastify create error: ${e.message}`, 'warn');
+                log(`Visual Atome queued: ${atomeId} (offline)`, 'warn');
+            } else {
+                log(`Failed to create atome: ${result.error}`, 'error');
             }
-        }
 
-        // Display visually if created on at least one server
-        if (createdOnTauri || createdOnFastify) {
-            $('div', {
-                parent: visualArea,
-                id: atomeId,
-                css: cssProps,
-                text: '⚛️',
-                onclick: function () {
-                    window.selectVisualAtome(atomeId, this);
-                }
-            });
-            log(`Visual Atome created: ${atomeId} (Tauri: ${createdOnTauri}, Fastify: ${createdOnFastify})`, 'success');
-        } else {
-            log('Failed to create atome on any server', 'error');
+            updatePendingCount();
+        } catch (error) {
+            log(`Create error: ${error.message}`, 'error');
         }
     }
 });
@@ -1363,76 +1348,35 @@ window.updateVisualAtomeBtn = Button({
             return;
         }
 
-        const localToken = localStorage.getItem('local_auth_token');
-        const cloudToken = localStorage.getItem('cloud_auth_token');
-
-        // Update with new random color
+        // Update with new random color using UnifiedAtome
         const newColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
         const newBorderRadius = `${Math.random() * 50}%`;
 
-        const updateData = {
-            id: window.selectedVisualAtomeId,
-            properties: {
-                css: {
-                    backgroundColor: newColor,
-                    borderRadius: newBorderRadius
+        try {
+            const result = await UnifiedAtome.update(window.selectedVisualAtomeId, {
+                properties: {
+                    css: {
+                        backgroundColor: newColor,
+                        borderRadius: newBorderRadius
+                    }
                 }
-            }
-        };
+            });
 
-        let updated = false;
-
-        // Update on Tauri
-        if (localToken) {
-            try {
-                const response = await fetch(`http://127.0.0.1:3000/api/atome/${window.selectedVisualAtomeId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localToken}`
-                    },
-                    body: JSON.stringify(updateData)
-                });
-                const result = await response.json();
-                if (result.success) {
-                    updated = true;
-                    log('Tauri: Atome updated', 'success');
+            if (result.success || result.queued) {
+                // Update visual element
+                const elem = document.getElementById(window.selectedVisualAtomeId);
+                if (elem) {
+                    elem.style.backgroundColor = newColor;
+                    elem.style.borderRadius = newBorderRadius;
                 }
-            } catch (e) {
-                log(`Tauri update error: ${e.message}`, 'warn');
+                log(`Updated atome: ${window.selectedVisualAtomeId}${result.queued ? ' (queued)' : ''}`, 'success');
+            } else {
+                log(`Update failed: ${result.error}`, 'error');
             }
-        }
 
-        // Update on Fastify
-        if (cloudToken) {
-            try {
-                const response = await fetch(`http://localhost:3001/api/atome/${window.selectedVisualAtomeId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${cloudToken}`
-                    },
-                    credentials: 'include',
-                    body: JSON.stringify(updateData)
-                });
-                const result = await response.json();
-                if (result.success) {
-                    updated = true;
-                    log('Fastify: Atome updated', 'success');
-                }
-            } catch (e) {
-                log(`Fastify update error: ${e.message}`, 'warn');
-            }
-        }
-
-        if (updated) {
-            // Update visual element
-            const elem = document.getElementById(window.selectedVisualAtomeId);
-            if (elem) {
-                elem.style.backgroundColor = newColor;
-                elem.style.borderRadius = newBorderRadius;
-            }
-            log(`Updated atome: ${window.selectedVisualAtomeId}`, 'success');
+            updatePendingCount();
+        } catch (error) {
+            log(`Update error: ${error.message}`, 'error');
         }
     }
 });
@@ -1458,58 +1402,24 @@ window.deleteVisualAtomeBtn = Button({
             return;
         }
 
-        const localToken = localStorage.getItem('local_auth_token');
-        const cloudToken = localStorage.getItem('cloud_auth_token');
+        try {
+            const result = await UnifiedAtome.delete(window.selectedVisualAtomeId);
 
-        let deleted = false;
+            if (result.success || result.queued) {
+                // Remove visual element
+                const elem = document.getElementById(window.selectedVisualAtomeId);
+                if (elem) elem.remove();
 
-        // Delete on Tauri
-        if (localToken) {
-            try {
-                const response = await fetch(`http://127.0.0.1:3000/api/atome/${window.selectedVisualAtomeId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${localToken}`
-                    }
-                });
-                const result = await response.json();
-                if (result.success) {
-                    deleted = true;
-                    log('Tauri: Atome deleted', 'success');
-                }
-            } catch (e) {
-                log(`Tauri delete error: ${e.message}`, 'warn');
+                log(`Deleted atome: ${window.selectedVisualAtomeId}${result.queued ? ' (queued)' : ''}`, 'success');
+                window.selectedVisualAtomeId = null;
+                window.updateVisualAtomeButtons();
+            } else {
+                log(`Delete failed: ${result.error}`, 'error');
             }
-        }
 
-        // Delete on Fastify
-        if (cloudToken) {
-            try {
-                const response = await fetch(`http://localhost:3001/api/atome/${window.selectedVisualAtomeId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${cloudToken}`
-                    },
-                    credentials: 'include'
-                });
-                const result = await response.json();
-                if (result.success) {
-                    deleted = true;
-                    log('Fastify: Atome deleted', 'success');
-                }
-            } catch (e) {
-                log(`Fastify delete error: ${e.message}`, 'warn');
-            }
-        }
-
-        if (deleted) {
-            // Remove visual element
-            const elem = document.getElementById(window.selectedVisualAtomeId);
-            if (elem) elem.remove();
-
-            log(`Deleted atome: ${window.selectedVisualAtomeId}`, 'success');
-            window.selectedVisualAtomeId = null;
-            window.updateVisualAtomeButtons();
+            updatePendingCount();
+        } catch (error) {
+            log(`Delete error: ${error.message}`, 'error');
         }
     }
 });
@@ -2151,13 +2061,12 @@ Button({
 // HELPER FUNCTIONS
 // ============================================================================
 function updatePendingCount() {
-    if (window.Atome) {
-        const count = Atome.getPendingCount();
-        pendingOpsStatus.$({
-            css: { backgroundColor: count > 0 ? '#ffc107' : '#666' },
-            text: `📤 Pending: ${count}`
-        });
-    }
+    // Use UnifiedAtome for pending count
+    const count = UnifiedAtome.getPendingCount();
+    pendingOpsStatus.$({
+        css: { backgroundColor: count > 0 ? '#ffc107' : '#666' },
+        text: `📤 Pending: ${count}`
+    });
 }
 
 /**
@@ -2180,106 +2089,75 @@ function clearVisualArea() {
 }
 
 /**
- * Load user's atomes from BOTH servers and display them
+ * Load user's atomes from available servers and display them
+ * Uses UnifiedAtome.list() for unified fetching
  */
 async function loadUserAtomes() {
-    const localToken = localStorage.getItem('local_auth_token');
-    const cloudToken = localStorage.getItem('cloud_auth_token');
-
-    if (!localToken && !cloudToken) {
+    if (!isAuthenticated()) {
         return;
     }
 
-    log('Loading your atomes from both servers...', 'info');
+    log('Loading your atomes from available servers...', 'info');
 
-    const allAtomes = new Map(); // Use Map to deduplicate by ID
+    try {
+        const result = await UnifiedAtome.list({ kind: 'shape' });
 
-    // Load from Tauri
-    if (localToken) {
-        try {
-            const response = await fetch('http://127.0.0.1:3000/api/atome/list?kind=shape', {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${localToken}` }
-            });
-            const result = await response.json();
-            if (result.success && result.data) {
-                result.data.forEach(atome => allAtomes.set(atome.id, atome));
-                log(`Tauri: ${result.data.length} atomes loaded`, 'info');
-            }
-        } catch (e) {
-            console.warn('Tauri atome list failed:', e.message);
-        }
-    }
+        if (result.success && result.data && result.data.length > 0) {
+            const atomesList = result.data;
 
-    // Load from Fastify
-    if (cloudToken) {
-        try {
-            const response = await fetch('http://localhost:3001/api/atome/list?kind=shape', {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${cloudToken}` },
-                credentials: 'include'
-            });
-            const result = await response.json();
-            if (result.success && result.data) {
-                result.data.forEach(atome => allAtomes.set(atome.id, atome));
-                log(`Fastify: ${result.data.length} atomes loaded`, 'info');
-            }
-        } catch (e) {
-            console.warn('Fastify atome list failed:', e.message);
-        }
-    }
+            // Clear placeholder
+            const area = document.getElementById('visual-test-area');
+            if (area) {
+                area.innerHTML = '';
 
-    const atomesList = Array.from(allAtomes.values());
+                // Reset selection state
+                window.selectedVisualAtomeId = null;
+                window.updateVisualAtomeButtons();
 
-    if (atomesList.length > 0) {
-        // Clear placeholder
-        const area = document.getElementById('visual-test-area');
-        if (area) {
-            area.innerHTML = '';
+                // Recreate each atome visually with selection support
+                atomesList.forEach(atome => {
+                    const css = atome.properties?.css || atome.data?.css || {
+                        width: '80px',
+                        height: '80px',
+                        backgroundColor: '#666',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                    };
 
-            // Reset selection state
-            window.selectedVisualAtomeId = null;
-            window.updateVisualAtomeButtons();
-
-            // Recreate each atome visually with selection support
-            atomesList.forEach(atome => {
-                const css = atome.properties?.css || {
-                    width: '80px',
-                    height: '80px',
-                    backgroundColor: '#666',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                };
-
-                const atomeId = atome.id;
-                $('div', {
-                    parent: area,
-                    id: atomeId,
-                    css: css,
-                    text: atome.properties?.text || '⚛️',
-                    onclick: function () {
-                        window.selectVisualAtome(atomeId, this);
-                    }
+                    const atomeId = atome.id;
+                    $('div', {
+                        parent: area,
+                        id: atomeId,
+                        css: css,
+                        text: atome.properties?.text || atome.data?.text || '⚛️',
+                        onclick: function () {
+                            window.selectVisualAtome(atomeId, this);
+                        }
+                    });
                 });
-            });
 
-            log(`Total: ${atomesList.length} unique atomes loaded`, 'success');
+                log(`Total: ${atomesList.length} unique atomes loaded`, 'success');
+            }
+        } else {
+            log('No atomes found', 'info');
         }
-    } else {
+    } catch (error) {
+        console.debug('[loadUserAtomes] Error:', error.message);
         log('No atomes found', 'info');
     }
 }
 
-// Check initial auth status by calling the /me endpoint on BOTH servers
+// Check initial auth status by calling the /me endpoint on available servers only
 async function checkAuthStatus() {
     const localToken = localStorage.getItem('local_auth_token');
     const cloudToken = localStorage.getItem('cloud_auth_token');
 
     console.log('[checkAuthStatus] Tokens:', { localToken: !!localToken, cloudToken: !!cloudToken });
+    console.log('[checkAuthStatus] Servers:', { tauri: tauriServerAvailable, fastify: fastifyServerAvailable });
 
     if (!localToken && !cloudToken) {
         log('No auth token found', 'info');
@@ -2290,11 +2168,11 @@ async function checkAuthStatus() {
     let loggedIn = false;
     let userData = null;
 
-    // Check Tauri (local) session - use 127.0.0.1 for Tauri compatibility
-    if (localToken) {
+    // Check Tauri (local) session - ONLY if server is available
+    if (localToken && tauriServerAvailable) {
         try {
             console.log('[checkAuthStatus] Checking Tauri session...');
-            const response = await fetch('http://127.0.0.1:3000/api/auth/local/me', {
+            const response = await fetch(`${TAURI_SERVER}/api/auth/local/me`, {
                 method: 'GET',
                 headers: { 'Authorization': `Bearer ${localToken}` }
             });
@@ -2311,13 +2189,15 @@ async function checkAuthStatus() {
         } catch (e) {
             console.warn('Tauri /me check failed:', e.message);
         }
+    } else if (localToken && !tauriServerAvailable) {
+        console.log('[checkAuthStatus] Tauri server not available, skipping local token check');
     }
 
-    // Check Fastify (cloud) session
-    if (cloudToken) {
+    // Check Fastify (cloud) session - ONLY if server is available
+    if (cloudToken && fastifyServerAvailable) {
         try {
             console.log('[checkAuthStatus] Checking Fastify session...');
-            const response = await fetch('http://localhost:3001/api/auth/me', {
+            const response = await fetch(`${FASTIFY_SERVER}/api/auth/me`, {
                 method: 'GET',
                 headers: { 'Authorization': `Bearer ${cloudToken}` },
                 credentials: 'include'
@@ -2335,6 +2215,8 @@ async function checkAuthStatus() {
         } catch (e) {
             console.warn('Fastify /me check failed:', e.message);
         }
+    } else if (cloudToken && !fastifyServerAvailable) {
+        console.log('[checkAuthStatus] Fastify server not available, skipping cloud token check');
     }
 
     if (loggedIn && userData) {
@@ -2348,7 +2230,11 @@ async function checkAuthStatus() {
         await loadUserAtomes();
     } else {
         clearVisualArea();
-        log('Session expired, please login again', 'warn');
+        if (!tauriServerAvailable && !fastifyServerAvailable) {
+            log('No server available', 'error');
+        } else {
+            log('Session expired, please login again', 'warn');
+        }
     }
 
     updatePendingCount();
@@ -2453,7 +2339,7 @@ function connectSyncWebSocket() {
     }
 
     console.log('[WebSocket] Connecting to /ws/sync for real-time updates...');
-    wsSync = new WebSocket('ws://localhost:3001/ws/sync');
+    wsSync = new WebSocket(FASTIFY_SERVER.replace('http', 'ws') + '/ws/sync');
 
     wsSync.onopen = () => {
         wsSyncStatus.$({ css: { backgroundColor: '#6bcb77' }, text: '🟢 /ws/sync' });
@@ -2526,9 +2412,28 @@ function connectSyncWebSocket() {
     };
 }
 
-// Initialize
-checkAuthStatus();
-connectSyncWebSocket(); // Auto-connect WebSocket for real-time sync
-log('Socket & Atome Test initialized', 'success');
+// Initialize - detect servers first, then check auth
+(async () => {
+    await detectAvailableServers();
+
+    // Update UI to show server status
+    if (!tauriServerAvailable && !fastifyServerAvailable) {
+        log('⚠️ No server available - running in offline mode', 'warn');
+    } else {
+        const servers = [];
+        if (tauriServerAvailable) servers.push('Tauri (local)');
+        if (fastifyServerAvailable) servers.push('Fastify (cloud)');
+        log(`Servers available: ${servers.join(', ')}`, 'success');
+    }
+
+    await checkAuthStatus();
+
+    // Only connect WebSocket if Fastify is available
+    if (fastifyServerAvailable) {
+        connectSyncWebSocket();
+    }
+
+    log('Socket & Atome Test initialized', 'success');
+})();
 
 export default {};

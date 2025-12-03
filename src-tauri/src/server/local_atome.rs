@@ -17,7 +17,6 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -57,7 +56,12 @@ struct Claims {
 pub struct CreateAtomeRequest {
     pub id: Option<String>,
     pub kind: String,
-    pub data: serde_json::Value,
+    #[serde(default)]
+    pub data: Option<serde_json::Value>,
+    #[serde(default)]
+    pub properties: Option<serde_json::Value>,
+    #[serde(default)]
+    pub tag: Option<String>,
     #[serde(rename = "parentId")]
     pub parent_id: Option<String>,
 }
@@ -255,7 +259,36 @@ async fn create_atome_handler(
     };
 
     let now = Utc::now().to_rfc3339();
-    let data_json = serde_json::to_string(&req.data).unwrap_or_else(|_| "{}".to_string());
+    
+    // Merge data and properties - properties takes precedence, then data
+    // Also include tag in the final data if provided
+    let mut final_data = serde_json::Map::new();
+    
+    // First, merge data if provided
+    if let Some(data) = &req.data {
+        if let Some(obj) = data.as_object() {
+            for (k, v) in obj {
+                final_data.insert(k.clone(), v.clone());
+            }
+        }
+    }
+    
+    // Then, merge properties if provided (takes precedence)
+    if let Some(properties) = &req.properties {
+        if let Some(obj) = properties.as_object() {
+            for (k, v) in obj {
+                final_data.insert(k.clone(), v.clone());
+            }
+        }
+    }
+    
+    // Include tag at top level of data if provided
+    if let Some(tag) = &req.tag {
+        final_data.insert("tag".to_string(), serde_json::Value::String(tag.clone()));
+    }
+    
+    let final_data_value = serde_json::Value::Object(final_data);
+    let data_json = serde_json::to_string(&final_data_value).unwrap_or_else(|_| "{}".to_string());
 
     // Insert into database
     {
@@ -299,7 +332,7 @@ async fn create_atome_handler(
             atome: Some(AtomeData {
                 id: atome_id,
                 kind: req.kind,
-                data: req.data,
+                data: final_data_value,
                 parent_id: req.parent_id,
                 owner_id: claims.sub,
                 created_at: now.clone(),
@@ -514,7 +547,7 @@ async fn update_atome_handler(
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     );
 
-    let (current_kind, current_data_str, current_parent_id, owner_id) = match existing {
+    let (current_kind, current_data_str, current_parent_id, _owner_id) = match existing {
         Ok(data) => data,
         Err(_) => {
             return (

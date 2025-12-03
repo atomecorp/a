@@ -1,0 +1,170 @@
+/**
+ * Server URL Resolution Module
+ * 
+ * Centralized URL resolution for Squirrel servers.
+ * Handles both Tauri (local Axum) and browser (Fastify) modes.
+ * 
+ * Ports:
+ * - 3000: Tauri/Axum local server (auth, atomes, static files)
+ * - 3001: Fastify cloud server (auth, atomes, sync, WebSocket)
+ * 
+ * @module src/squirrel/apis/serverUrls
+ */
+
+/**
+ * Check if running in Tauri environment
+ */
+export function isTauri() {
+    if (typeof window === 'undefined') return false;
+    return !!(
+        window.__TAURI__ ||
+        window.__TAURI_INTERNALS__ ||
+        (typeof navigator !== 'undefined' && /tauri/i.test(navigator.userAgent || ''))
+    );
+}
+
+/**
+ * Check if local server (Axum on 3000) is likely available
+ * This is a heuristic based on environment, not a real connection test
+ */
+export function isLocalServerLikely() {
+    if (typeof window === 'undefined') return false;
+
+    // Tauri always has local server
+    if (isTauri()) return true;
+
+    // Check if port was explicitly set
+    if (window.__ATOME_LOCAL_HTTP_PORT__) return true;
+
+    return false;
+}
+
+/**
+ * Get the local server URL (Tauri Axum on port 3000)
+ * Returns null if local server is not available
+ */
+export function getLocalServerUrl() {
+    if (typeof window === 'undefined') return null;
+
+    // Custom port set by Tauri
+    const customPort = window.__ATOME_LOCAL_HTTP_PORT__;
+    if (customPort) {
+        return `http://127.0.0.1:${customPort}`;
+    }
+
+    // Check if Tauri is available
+    if (isTauri()) {
+        return 'http://127.0.0.1:3000';
+    }
+
+    // Local server not available (pure browser/Fastify mode)
+    return null;
+}
+
+/**
+ * Get the cloud server URL (Fastify on port 3001)
+ */
+export function getCloudServerUrl() {
+    if (typeof window !== 'undefined') {
+        // Check for custom Fastify URL
+        const customUrl = window.__SQUIRREL_FASTIFY_URL__;
+        if (customUrl && typeof customUrl === 'string') {
+            return customUrl.trim().replace(/\/$/, '');
+        }
+    }
+
+    // Default Fastify URL
+    return 'http://localhost:3001';
+}
+
+/**
+ * Get the best available server URL for API calls
+ * Prefers local server if available, falls back to cloud
+ * 
+ * @param {object} options - Options
+ * @param {boolean} options.preferCloud - Prefer cloud server even if local is available
+ * @param {boolean} options.requireLocal - Require local server (returns null if not available)
+ * @returns {string|null} Server URL or null if not available
+ */
+export function getServerUrl(options = {}) {
+    const { preferCloud = false, requireLocal = false } = options;
+
+    const localUrl = getLocalServerUrl();
+    const cloudUrl = getCloudServerUrl();
+
+    if (requireLocal) {
+        return localUrl;
+    }
+
+    if (preferCloud) {
+        return cloudUrl || localUrl;
+    }
+
+    // Default: prefer local if available
+    return localUrl || cloudUrl;
+}
+
+/**
+ * Get URLs for both local and cloud servers
+ * Used when operations need to sync to both
+ * 
+ * @returns {object} { local: string|null, cloud: string }
+ */
+export function getBothServerUrls() {
+    return {
+        local: getLocalServerUrl(),
+        cloud: getCloudServerUrl()
+    };
+}
+
+/**
+ * Build an API URL for the appropriate server
+ * 
+ * @param {string} path - API path (e.g., '/api/auth/login')
+ * @param {object} options - Options for getServerUrl
+ * @returns {string|null} Full URL or null
+ */
+export function buildApiUrl(path, options = {}) {
+    const baseUrl = getServerUrl(options);
+    if (!baseUrl) return null;
+
+    // Ensure path starts with /
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${baseUrl}${normalizedPath}`;
+}
+
+/**
+ * Build a local API URL (Tauri/Axum)
+ * Returns null if local server is not available
+ * 
+ * @param {string} path - API path
+ * @returns {string|null} Full URL or null
+ */
+export function buildLocalApiUrl(path) {
+    return buildApiUrl(path, { requireLocal: true });
+}
+
+/**
+ * Build a cloud API URL (Fastify)
+ * 
+ * @param {string} path - API path
+ * @returns {string} Full URL
+ */
+export function buildCloudApiUrl(path) {
+    const baseUrl = getCloudServerUrl();
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${baseUrl}${normalizedPath}`;
+}
+
+// Export as default object for convenience
+export default {
+    isTauri,
+    isLocalServerLikely,
+    getLocalServerUrl,
+    getCloudServerUrl,
+    getServerUrl,
+    getBothServerUrls,
+    buildApiUrl,
+    buildLocalApiUrl,
+    buildCloudApiUrl
+};

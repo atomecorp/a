@@ -128,7 +128,10 @@ export function registerAtomeRoutes(server, dataSource) {
             // Ensure user exists in ORM
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
-            const { id, kind, tag, parent, properties, project_id } = request.body;
+            const { id, kind, tag, parent, properties, data, project_id } = request.body;
+
+            // Support both 'properties' and 'data' field names (merge them)
+            const mergedProperties = { ...(data || {}), ...(properties || {}) };
 
             // Generate UUID if not provided (must be valid UUID for PostgreSQL)
             // If client provides an ID, check if it's a valid UUID, otherwise generate one
@@ -141,7 +144,7 @@ export function registerAtomeRoutes(server, dataSource) {
 
             // Build properties to store (include original id if provided for reference)
             const allProperties = {
-                ...(properties || {}),
+                ...mergedProperties,
                 kind: kind || 'generic',
                 tag: tag || 'div',
                 parent: parent || null,
@@ -168,7 +171,7 @@ export function registerAtomeRoutes(server, dataSource) {
                     kind,
                     tag,
                     parent,
-                    properties,
+                    properties: mergedProperties,
                     created_at: new Date().toISOString(),
                     created_by: principal_id
                 }

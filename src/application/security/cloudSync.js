@@ -15,6 +15,7 @@
  */
 
 import { verifyServer } from './serverVerification.js';
+import { getLocalServerUrl, getCloudServerUrl } from '../../squirrel/apis/serverUrls.js';
 
 // Sync states
 export const SyncState = {
@@ -187,9 +188,17 @@ export async function syncToCloud(options) {
  * @param {string} cloudId - Cloud account ID
  */
 async function updateLocalAccountCloudId(localToken, cloudId) {
+    const localServerUrl = getLocalServerUrl();
+
+    // Skip if no local server (pure browser mode)
+    if (!localServerUrl) {
+        console.log('[cloudSync] Skipping local update - no local server available');
+        return;
+    }
+
     try {
         // Call local Axum server to update account
-        const response = await fetch('http://localhost:3000/api/auth/local/update-cloud-id', {
+        const response = await fetch(`${localServerUrl}/api/auth/local/update-cloud-id`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -213,8 +222,21 @@ async function updateLocalAccountCloudId(localToken, cloudId) {
  * @returns {Promise<object>} Sync status
  */
 export async function getSyncStatus(localToken) {
+    const localServerUrl = getLocalServerUrl();
+
+    // If no local server (pure browser mode), always return not synced
+    if (!localServerUrl) {
+        return {
+            isSynced: false,
+            cloudId: null,
+            lastSync: null,
+            state: SyncState.NOT_SYNCED,
+            error: 'Local server not available (browser mode)'
+        };
+    }
+
     try {
-        const response = await fetch('http://localhost:3000/api/auth/local/me', {
+        const response = await fetch(`${localServerUrl}/api/auth/local/me`, {
             headers: {
                 'Authorization': `Bearer ${localToken}`
             }

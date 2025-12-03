@@ -12,9 +12,10 @@
  */
 
 const DEFAULT_WS_PATH = '/ws/sync';
-const MAX_RETRIES = 10;
-const RECONNECT_BASE_DELAY = 1000;
-const RECONNECT_MAX_DELAY = 30000;
+const MAX_RETRIES = 5;  // Reduced to avoid spamming
+const RECONNECT_BASE_DELAY = 2000;
+const RECONNECT_MAX_DELAY = 60000;  // 1 minute max
+const SILENT_MODE_AFTER_FAILURES = 3;  // Stop logging errors after N failures
 
 /**
  * Resolve WebSocket URL for version sync
@@ -93,11 +94,14 @@ class VersionSyncClient {
         this.state = {
             connected: false,
             attempts: 0,
+            totalFailures: 0,
             lastVersion: null,
             serverVersion: null,
             endpoint: null,
             clientId: getClientId(),
-            runtime: detectRuntime()
+            runtime: detectRuntime(),
+            silentMode: false,
+            serverAvailable: null  // null = unknown, true/false = known state
         };
         this.listeners = new Set();
         this.socket = null;
@@ -129,12 +133,17 @@ class VersionSyncClient {
         const url = resolveVersionSyncUrl();
         this.state.endpoint = url;
 
-        console.log('[version_sync] Connecting to:', url);
+        // Only log if not in silent mode
+        if (!this.state.silentMode) {
+            console.log('[version_sync] Connecting to:', url);
+        }
 
         try {
             this.socket = new WebSocket(url);
         } catch (error) {
-            console.error('[version_sync] WebSocket creation failed:', error);
+            if (!this.state.silentMode) {
+                console.warn('[version_sync] WebSocket creation failed:', error.message);
+            }
             this.scheduleReconnect();
             return;
         }
@@ -152,6 +161,9 @@ class VersionSyncClient {
         console.log('[version_sync] ✅ Connected to version sync server');
         this.state.connected = true;
         this.state.attempts = 0;
+        this.state.totalFailures = 0;
+        this.state.silentMode = false;
+        this.state.serverAvailable = true;
 
         // Send registration message
         this.send({
@@ -346,7 +358,10 @@ class VersionSyncClient {
      * Handle WebSocket close
      */
     onClose(event) {
-        console.log('[version_sync] Connection closed:', event.code, event.reason);
+        // Only log if not in silent mode
+        if (!this.state.silentMode) {
+            console.log('[version_sync] Connection closed:', event.code, event.reason || 'no reason');
+        }
         this.state.connected = false;
         this.socket = null;
         this.stopHeartbeat();
@@ -359,8 +374,21 @@ class VersionSyncClient {
      * Handle WebSocket error
      */
     onError(event) {
-        console.error('[version_sync] WebSocket error:', event);
+        this.state.totalFailures++;
+
+        // Enter silent mode after too many failures to avoid log spam
+        if (this.state.totalFailures >= SILENT_MODE_AFTER_FAILURES && !this.state.silentMode) {
+            this.state.silentMode = true;
+            console.warn('[version_sync] Entering silent mode - server appears unavailable. Will keep trying in background.');
+        }
+
+        // Only log errors if not in silent mode
+        if (!this.state.silentMode) {
+            console.warn('[version_sync] WebSocket connection failed (attempt', this.state.attempts + 1, '/', MAX_RETRIES, ')');
+        }
+
         this.state.connected = false;
+        this.state.serverAvailable = false;
         this.socket?.close();
     }
 
@@ -372,8 +400,18 @@ class VersionSyncClient {
             return;
         }
         if (this.state.attempts >= MAX_RETRIES) {
-            console.error('[version_sync] Max retries reached, giving up');
-            this.broadcast({ type: 'max-retries-reached' });
+            if (!this.state.silentMode) {
+                console.warn('[version_sync] Max retries reached. Server unavailable - sync disabled.');
+            }
+            this.state.serverAvailable = false;
+            this.broadcast({ type: 'server-unavailable' });
+
+            // Schedule a long retry later (5 minutes)
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                this.state.attempts = 0;  // Reset attempts
+                this.connect();
+            }, 5 * 60 * 1000);
             return;
         }
 
@@ -383,7 +421,10 @@ class VersionSyncClient {
             RECONNECT_MAX_DELAY
         );
 
-        console.log(`[version_sync] Reconnecting in ${delay}ms (attempt ${this.state.attempts}/${MAX_RETRIES})...`);
+        // Only log if not in silent mode
+        if (!this.state.silentMode) {
+            console.log(`[version_sync] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${this.state.attempts}/${MAX_RETRIES})...`);
+        }
 
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
@@ -464,8 +505,32 @@ class VersionSyncClient {
             localVersion: this.state.lastVersion,
             endpoint: this.state.endpoint,
             clientId: this.state.clientId,
-            pendingConflicts: this.pendingConflicts.length
+            pendingConflicts: this.pendingConflicts.length,
+            serverAvailable: this.state.serverAvailable,
+            silentMode: this.state.silentMode,
+            attempts: this.state.attempts
         };
+    }
+
+    /**
+     * Check if server is available
+     */
+    isServerAvailable() {
+        return this.state.serverAvailable === true;
+    }
+
+    /**
+     * Reset connection state and retry
+     */
+    retry() {
+        this.state.attempts = 0;
+        this.state.totalFailures = 0;
+        this.state.silentMode = false;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.connect();
     }
 
     /**
@@ -501,6 +566,20 @@ export default function initVersionSync() {
     // Start connection
     versionSyncSingleton.start();
 
+    // Listen for server availability events (from Tauri or other sources)
+    window.addEventListener('squirrel:server-available', () => {
+        console.log('[version_sync] Server available event received - attempting connection');
+        versionSyncSingleton.retry();
+    });
+
+    // Also listen for online event (browser comes back online)
+    window.addEventListener('online', () => {
+        if (!versionSyncSingleton.state.connected) {
+            console.log('[version_sync] Network online - attempting reconnection');
+            versionSyncSingleton.retry();
+        }
+    });
+
     // Expose global API
     window.Squirrel = window.Squirrel || {};
     window.Squirrel.VersionSync = {
@@ -508,7 +587,9 @@ export default function initVersionSync() {
         getState: () => versionSyncSingleton.getState(),
         requestSync: () => versionSyncSingleton.requestSync(),
         resolveConflict: (id, resolution) => versionSyncSingleton.resolveConflict(id, resolution),
-        disconnect: () => versionSyncSingleton.disconnect()
+        disconnect: () => versionSyncSingleton.disconnect(),
+        isServerAvailable: () => versionSyncSingleton.isServerAvailable(),
+        retry: () => versionSyncSingleton.retry()
     };
 
     // Dispatch ready event

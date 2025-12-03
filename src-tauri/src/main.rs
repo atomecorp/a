@@ -9,7 +9,51 @@ use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
-use tauri::Manager; // pour get_webview_window
+use tauri::{AppHandle, Manager}; // pour get_webview_window
+
+/// Notify the frontend that the Fastify server is available
+fn notify_frontend_server_available(app_handle: &AppHandle) {
+    // Dispatch a custom event to all windows
+    let script = r#"
+        if (typeof window !== 'undefined') {
+            console.log('[tauri] Fastify server is now available');
+            window.dispatchEvent(new CustomEvent('squirrel:server-available'));
+        }
+    "#;
+
+    if let Some(win) = app_handle.get_webview_window("main") {
+        let _ = win.eval(script);
+    } else {
+        // Fallback: try all windows
+        for (_, w) in app_handle.webview_windows() {
+            let _ = w.eval(script);
+            break;
+        }
+    }
+}
+
+/// Wait for a server to be ready on the given port, then notify frontend
+fn wait_for_server_and_notify(app_handle: &AppHandle, port: u16, max_attempts: u32) {
+    let addr = format!("127.0.0.1:{}", port);
+
+    for attempt in 1..=max_attempts {
+        std::thread::sleep(Duration::from_millis(500));
+
+        if TcpStream::connect(&addr).is_ok() {
+            println!(
+                "✅ Serveur Fastify prêt sur le port {} (après {} tentatives)",
+                port, attempt
+            );
+            notify_frontend_server_available(app_handle);
+            return;
+        }
+    }
+
+    println!(
+        "⚠️ Serveur Fastify n'a pas répondu après {} tentatives",
+        max_attempts
+    );
+}
 
 fn resolve_shared_uploads_dir(static_dir: &Path) -> PathBuf {
     let raw = std::env::var("SQUIRREL_UPLOADS_DIR")
@@ -105,11 +149,14 @@ fn main() {
             }
 
             // Serveur Fastify en arrière-plan
+            let app_handle = app.handle().clone();
             std::thread::spawn(move || {
                 std::thread::sleep(Duration::from_secs(2));
 
                 if TcpStream::connect("127.0.0.1:3001").is_ok() {
                     println!("Serveur Fastify déjà actif sur le port 3001; lancement ignoré");
+                    // Notify frontend that server is available
+                    notify_frontend_server_available(&app_handle);
                     return;
                 }
 
@@ -120,6 +167,8 @@ fn main() {
                 {
                     Ok(child) => {
                         println!("Serveur Fastify lancé depuis Tauri (PID {})", child.id());
+                        // Wait for Fastify to be ready (poll until port is open)
+                        wait_for_server_and_notify(&app_handle, 3001, 30);
                     }
                     Err(e) => println!("Erreur lancement Fastify: {}", e),
                 }

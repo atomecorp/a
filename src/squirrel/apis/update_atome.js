@@ -7,6 +7,9 @@
  * @module update_atome
  */
 
+// Import server URL resolver
+import { getLocalServerUrl } from './serverUrls.js';
+
 const AtomeUpdater = (function () {
     'use strict';
 
@@ -245,7 +248,7 @@ const AtomeUpdater = (function () {
             throw new Error('Tauri platform not detected');
         }
 
-        const baseUrl = 'http://127.0.0.1:3000';
+        const baseUrl = getLocalServerUrl() || 'http://127.0.0.1:3000';
         const { owner, repo, branch } = CONFIG.github;
         const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/${branch}.zip`;
 
