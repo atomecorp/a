@@ -916,44 +916,27 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 return reply.code(401).send({ success: false, error: 'Incorrect password' });
             }
 
-            // Delete all user data using a transaction
-            await dataSource.manager.transaction(async (tx) => {
-                // 1. Delete object_state entries
-                await tx.query(
-                    `DELETE FROM object_state WHERE object_id = $1`,
-                    [decoded.id]
-                );
+            // Delete all user data - handle missing tables gracefully for legacy accounts
+            const deleteQueries = [
+                { table: 'object_state', query: `DELETE FROM object_state WHERE object_id = $1`, params: [decoded.id] },
+                { table: 'commits', query: `DELETE FROM commits WHERE object_id = $1`, params: [decoded.id] },
+                { table: 'branches', query: `DELETE FROM branches WHERE object_id = $1`, params: [decoded.id] },
+                { table: 'property_versions', query: `DELETE FROM property_versions WHERE object_id = $1`, params: [decoded.id] },
+                { table: 'properties', query: `DELETE FROM properties WHERE object_id = $1`, params: [decoded.id] },
+                { table: 'acls', query: `DELETE FROM acls WHERE object_id = $1`, params: [decoded.id] },
+                { table: 'objects', query: `DELETE FROM objects WHERE object_id = $1`, params: [decoded.id] },
+                { table: 'principals', query: `DELETE FROM principals WHERE principal_id = $1`, params: [decoded.id] },
+                { table: 'tenants', query: `DELETE FROM tenants WHERE tenant_id = $1`, params: [user.tenant_id] }
+            ];
 
-                // 2. Delete commits
-                await tx.query(
-                    `DELETE FROM commits WHERE object_id = $1`,
-                    [decoded.id]
-                );
-
-                // 3. Delete branches
-                await tx.query(
-                    `DELETE FROM branches WHERE object_id = $1`,
-                    [decoded.id]
-                );
-
-                // 4. Delete the object
-                await tx.query(
-                    `DELETE FROM objects WHERE object_id = $1`,
-                    [decoded.id]
-                );
-
-                // 5. Delete the principal (user)
-                await tx.query(
-                    `DELETE FROM principals WHERE principal_id = $1`,
-                    [decoded.id]
-                );
-
-                // 6. Delete the tenant (if this user was the owner)
-                await tx.query(
-                    `DELETE FROM tenants WHERE tenant_id = $1`,
-                    [user.tenant_id]
-                );
-            });
+            for (const { table, query, params } of deleteQueries) {
+                try {
+                    await dataSource.query(query, params);
+                } catch (tableErr) {
+                    // Ignore errors for missing tables or constraints - legacy accounts may not have all tables
+                    console.log(`[delete] Skipping ${table}: ${tableErr.message?.substring(0, 50) || 'error'}`);
+                }
+            }
 
             // Clear the authentication cookie
             reply.clearCookie('access_token', {

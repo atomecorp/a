@@ -760,7 +760,17 @@ async fn delete_handler(
         );
     }
 
-    // Delete user
+    // Try to delete from cloud server first (Fastify)
+    // This ensures both servers are in sync
+    let cloud_delete_result = notify_cloud_deletion(&user.phone, &req.password).await;
+    if let Err(e) = &cloud_delete_result {
+        println!("⚠️ Cloud deletion notification: {}", e);
+        // Continue with local deletion even if cloud fails
+    } else {
+        println!("☁️ Cloud account deletion notified");
+    }
+
+    // Delete user locally
     {
         let db = state.db.lock().unwrap();
         if let Err(e) = db.execute("DELETE FROM users WHERE id = ?1", [&claims.sub]) {
@@ -788,13 +798,77 @@ async fn delete_handler(
             success: true,
             message: Some("Account deleted successfully".into()),
             error: None,
-            user: None,
+            user: Some(UserInfo {
+                id: user.id,
+                username: user.username,
+                phone: user.phone,
+                cloud_id: user.cloud_id,
+                synced: None,
+            }),
             token: None,
         }),
     )
 }
 
-/// DELETE /api/auth/local/delete-synced
+/// Notify Fastify server to delete the cloud account
+async fn notify_cloud_deletion(phone: &str, password: &str) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let fastify_url = "http://localhost:3001";
+
+    // First login to get a token
+    let login_response = client
+        .post(format!("{}/api/auth/login", fastify_url))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "phone": phone,
+            "password": password
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Login request failed: {}", e))?;
+
+    let login_data: serde_json::Value = login_response
+        .json()
+        .await
+        .map_err(|e| format!("Login parse failed: {}", e))?;
+
+    if !login_data["success"].as_bool().unwrap_or(false) {
+        let error = login_data["error"].as_str().unwrap_or("Unknown error");
+        // If account doesn't exist on cloud, that's fine
+        if error.contains("Invalid") || error.contains("not found") {
+            return Ok(());
+        }
+        return Err(format!("Cloud login failed: {}", error));
+    }
+
+    let token = login_data["token"]
+        .as_str()
+        .ok_or("No token in login response")?;
+
+    // Now delete the account
+    let delete_response = client
+        .delete(format!("{}/api/auth/delete-account", fastify_url))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .json(&serde_json::json!({
+            "password": password
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Delete request failed: {}", e))?;
+
+    let delete_data: serde_json::Value = delete_response
+        .json()
+        .await
+        .map_err(|e| format!("Delete parse failed: {}", e))?;
+
+    if !delete_data["success"].as_bool().unwrap_or(false) {
+        let error = delete_data["error"].as_str().unwrap_or("Unknown error");
+        return Err(format!("Cloud deletion failed: {}", error));
+    }
+
+    Ok(())
+}
 /// Delete local account synced from cloud (no password verification needed)
 /// This is called when an account is deleted from the cloud server
 async fn delete_synced_handler(
