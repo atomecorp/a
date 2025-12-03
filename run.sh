@@ -399,7 +399,66 @@ if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE
     exit 1
 fi
 
-echo "✅ PostgreSQL DSN configuré"
+# Get the active DSN (in order of priority)
+ACTIVE_PG_DSN="${ADOLE_PG_DSN:-${PG_CONNECTION_STRING:-${DATABASE_URL:-}}}"
+
+# Validate the DSN format and check for common issues
+validate_pg_dsn() {
+    local dsn="$1"
+    
+    # Check for placeholder values
+    if [[ "$dsn" == *"COLLER"* || "$dsn" == *"PASTE"* || "$dsn" == *"YOUR_"* || "$dsn" == *"your_"* || "$dsn" == *"VALEUR"* || "$dsn" == *"VALUE"* ]]; then
+        echo "❌ The PostgreSQL DSN contains a placeholder value:"
+        echo "   $dsn"
+        echo ""
+        echo "   This looks like a template that was never configured."
+        echo "   Please set a real connection string."
+        return 1
+    fi
+    
+    # Check basic format
+    if [[ ! "$dsn" =~ ^postgres(ql)?:// ]]; then
+        echo "❌ Invalid PostgreSQL DSN format. Must start with postgres:// or postgresql://"
+        echo "   Current value: $dsn"
+        return 1
+    fi
+    
+    # Extract hostname from DSN (postgres://user:pass@HOST:port/db)
+    local host_part
+    host_part=$(echo "$dsn" | sed -E 's|^postgres(ql)?://[^@]*@([^:/]+).*|\2|')
+    
+    if [[ -z "$host_part" ]]; then
+        echo "❌ Could not extract hostname from DSN"
+        return 1
+    fi
+    
+    # Check for suspicious hostnames
+    if [[ "$host_part" == "base" || "$host_part" == "host" || "$host_part" == "server" || "$host_part" == "hostname" ]]; then
+        echo "❌ Invalid hostname in DSN: '$host_part'"
+        echo "   This looks like a placeholder value. Please configure a real hostname."
+        echo ""
+        echo "   Current DSN: $dsn"
+        echo ""
+        echo "   To fix, edit .env or export ADOLE_PG_DSN with a valid connection string:"
+        echo "   export ADOLE_PG_DSN='postgres://user:password@localhost:5432/database'"
+        return 1
+    fi
+    
+    return 0
+}
+
+if ! validate_pg_dsn "$ACTIVE_PG_DSN"; then
+    echo ""
+    echo "💡 Tip: If you have an old ADOLE_PG_DSN in your shell profile (~/.zshrc, ~/.bashrc),"
+    echo "   you may need to unset it or update it:"
+    echo "   unset ADOLE_PG_DSN"
+    echo ""
+    exit 1
+fi
+
+# Show configured DSN (masked password for security)
+MASKED_DSN=$(echo "$ACTIVE_PG_DSN" | sed -E 's|(postgres(ql)?://[^:]+:)[^@]+(@)|\1***\3|')
+echo "✅ PostgreSQL DSN configuré: $MASKED_DSN"
 echo ""
 
 prepare_uploads_dir
