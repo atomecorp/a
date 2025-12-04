@@ -14,269 +14,19 @@
  * - Output panel shows console.log and results
  * - Auto-save to localStorage
  * - Database sync via UnifiedAtome API
+ * 
+ * Shortcuts:
+ * - Alt+E: Open a new editor from anywhere
+ * - Ctrl+Enter: Run code
+ * - Ctrl+S: Save to localStorage
+ * - Ctrl+Shift+S: Validate & save to database
+ * - Ctrl+Z/Y: Undo/Redo
  */
 
 import { $, define } from '../../squirrel/squirrel.js';
 import { EditorBuilder } from '../../squirrel/components/editor_builder.js';
 
-// === MAIN DEMO ===
-
-// Create a toolbar for editor management
-const toolbar = $('div', {
-    id: 'editor-toolbar',
-    css: {
-        position: 'fixed',
-        top: '10px',
-        left: '10px',
-        display: 'flex',
-        gap: '8px',
-        zIndex: '9999',
-        padding: '8px 12px',
-        backgroundColor: 'rgba(30, 30, 30, 0.95)',
-        borderRadius: '8px',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.3)'
-    }
-});
-
-// === TOOLBAR BUTTONS ===
-
-// New JavaScript Editor
-$('button', {
-    text: '+ JavaScript',
-    css: {
-        padding: '8px 16px',
-        backgroundColor: '#f7df1e',
-        color: '#000',
-        border: 'none',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontWeight: 'bold',
-        fontSize: '13px'
-    },
-    events: {
-        click: () => {
-            const offset = EditorBuilder.getAll().length * 30;
-            EditorBuilder({
-                language: 'javascript',
-                fileName: `script_${Date.now()}.js`,
-                position: { x: 150 + offset, y: 80 + offset },
-                content: `// JavaScript Example - Click ▶ or press Ctrl+Enter to run!
-
-function greet(name) {
-    console.log(\`👋 Hello, \${name}!\`);
-    return { greeting: 'Hello', name, timestamp: Date.now() };
-}
-
-// Let's test it
-const result = greet('World');
-console.log('Result:', result);
-
-// Some math
-const sum = [1, 2, 3, 4, 5].reduce((a, b) => a + b, 0);
-console.log('Sum of 1-5:', sum);
-`,
-                onChange: (content) => {
-                    console.log('[JS Editor] Content changed, length:', content.length);
-                },
-                onValidate: (info) => {
-                    console.log('[JS Editor] ✓ Validated and saved:', info.fileName);
-                },
-                onClose: (id) => {
-                    console.log('[JS Editor] Closed:', id);
-                    updateEditorCount();
-                }
-            });
-            updateEditorCount();
-        },
-        mouseenter: (e) => { e.target.style.transform = 'scale(1.05)'; },
-        mouseleave: (e) => { e.target.style.transform = 'scale(1)'; }
-    },
-    attach: toolbar
-});
-
-// New Ruby Editor
-$('button', {
-    text: '+ Ruby',
-    css: {
-        padding: '8px 16px',
-        backgroundColor: '#cc342d',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontWeight: 'bold',
-        fontSize: '13px'
-    },
-    events: {
-        click: () => {
-            const offset = EditorBuilder.getAll().length * 30;
-            EditorBuilder({
-                language: 'ruby',
-                fileName: `script_${Date.now()}.rb`,
-                position: { x: 200 + offset, y: 120 + offset },
-                content: `# Ruby Example - Click ▶ or press Ctrl+Enter to run!
-# Note: Ruby runs via Opal (first run may take a moment to load)
-
-class Greeter
-  def initialize(name)
-    @name = name
-  end
-
-  def greet
-    puts "👋 Hello, #{@name}!"
-    { greeting: 'Hello', name: @name }
-  end
-end
-
-# Let's test it
-greeter = Greeter.new("Ruby World")
-result = greeter.greet
-puts "Result: #{result}"
-
-# Ruby goodies
-numbers = [1, 2, 3, 4, 5]
-puts "Sum: #{numbers.sum}"
-puts "Squared: #{numbers.map { |n| n ** 2 }}"
-`,
-                onChange: (content) => {
-                    console.log('[Ruby Editor] Content changed, length:', content.length);
-                },
-                onValidate: (info) => {
-                    console.log('[Ruby Editor] ✓ Validated and saved:', info.fileName);
-                },
-                onClose: (id) => {
-                    console.log('[Ruby Editor] Closed:', id);
-                    updateEditorCount();
-                }
-            });
-            updateEditorCount();
-        },
-        mouseenter: (e) => { e.target.style.transform = 'scale(1.05)'; },
-        mouseleave: (e) => { e.target.style.transform = 'scale(1)'; }
-    },
-    attach: toolbar
-});
-
-// Load from Database
-$('button', {
-    text: '📂 Load',
-    css: {
-        padding: '8px 16px',
-        backgroundColor: '#3b82f6',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontWeight: 'bold',
-        fontSize: '13px'
-    },
-    events: {
-        click: async () => {
-            const files = await EditorBuilder.listFiles();
-            if (files.length === 0) {
-                alert('No saved files found. Create and validate a file first!');
-                return;
-            }
-
-            // Simple file picker
-            const fileNames = files.map(f => (f.properties?.fileName || f.data?.fileName || f.id));
-            const selected = prompt(`Available files:\n${fileNames.join('\n')}\n\nEnter filename to load:`);
-
-            if (selected) {
-                const editor = await EditorBuilder.loadFile({ fileName: selected });
-                if (editor) {
-                    console.log('[Load] Loaded file:', selected);
-                    updateEditorCount();
-                } else {
-                    alert('File not found: ' + selected);
-                }
-            }
-        },
-        mouseenter: (e) => { e.target.style.backgroundColor = '#2563eb'; },
-        mouseleave: (e) => { e.target.style.backgroundColor = '#3b82f6'; }
-    },
-    attach: toolbar
-});
-
-// Close All
-$('button', {
-    text: '✕ Close All',
-    css: {
-        padding: '8px 16px',
-        backgroundColor: '#ef4444',
-        color: '#fff',
-        border: 'none',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontWeight: 'bold',
-        fontSize: '13px'
-    },
-    events: {
-        click: () => {
-            if (confirm('Close all editors?')) {
-                EditorBuilder.closeAll();
-                updateEditorCount();
-            }
-        },
-        mouseenter: (e) => { e.target.style.backgroundColor = '#dc2626'; },
-        mouseleave: (e) => { e.target.style.backgroundColor = '#ef4444'; }
-    },
-    attach: toolbar
-});
-
-// Editor count display
-const countDisplay = $('span', {
-    id: 'editor-count',
-    text: 'Editors: 0',
-    css: {
-        padding: '8px 12px',
-        color: '#9ca3af',
-        fontSize: '13px'
-    },
-    attach: toolbar
-});
-
-function updateEditorCount() {
-    const count = EditorBuilder.getAll().length;
-    countDisplay.textContent = `Editors: ${count}`;
-}
-
-// === INFO PANEL ===
-
-$('div', {
-    id: 'info-panel',
-    css: {
-        position: 'fixed',
-        bottom: '20px',
-        left: '20px',
-        padding: '16px 20px',
-        backgroundColor: 'rgba(30, 30, 30, 0.95)',
-        color: '#d4d4d4',
-        borderRadius: '8px',
-        fontSize: '13px',
-        lineHeight: '1.6',
-        maxWidth: '350px',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-        zIndex: '9997'
-    },
-    html: `
-    <div style="font-weight: bold; margin-bottom: 8px; color: #fff;">📝 Code Editor Demo</div>
-    <div style="color: #9ca3af;">
-      <div>🖱️ <strong>Drag</strong> header to move</div>
-      <div>↘️ <strong>Resize</strong> from bottom-right corner</div>
-      <div>📄 <strong>Drop</strong> text files to load</div>
-      <div>💾 <strong>Auto-save</strong> on every keystroke</div>
-      <div>✓ <strong>Ctrl+Shift+S</strong> to save to database</div>
-      <div>↶↷ <strong>Ctrl+Z/Y</strong> for undo/redo</div>
-      <div>🎨 Switch language with dropdown</div>
-    </div>
-    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #3c3c3c; color: #6b7280;">
-      Tip: Use <strong>Alt+E</strong> shortcut to open a new editor from anywhere!
-    </div>
-  `
-});
-
-// === CREATE INITIAL EDITORS ===
+// === CREATE DEMO EDITORS ===
 
 // JavaScript example
 const jsEditor = EditorBuilder({
@@ -375,9 +125,6 @@ puts account
     }
 });
 
-// Update initial count
-updateEditorCount();
-
 // === EXPORTS FOR CONSOLE ACCESS ===
 
 window.EditorBuilder = EditorBuilder;
@@ -388,13 +135,15 @@ console.log(`
 ╔═══════════════════════════════════════════════════════════╗
 ║  📝 Code Editor Demo Loaded!                               ║
 ╠═══════════════════════════════════════════════════════════╣
-║  Available in console:                                     ║
-║  • EditorBuilder - Create new editors                      ║
-║  • jsEditor - JavaScript editor instance                   ║
-║  • rubyEditor - Ruby editor instance                       ║
+║  Shortcuts:                                                ║
+║  • Alt+E: Open new editor                                  ║
+║  • Ctrl+Enter: Run code                                    ║
+║  • Ctrl+S: Save locally                                    ║
+║  • Ctrl+Shift+S: Save to database                          ║
+║  • Ctrl+Z/Y: Undo/Redo                                     ║
 ║                                                           ║
-║  Try: EditorBuilder({ language: 'javascript' })            ║
-║       jsEditor.getContent()                                ║
-║       EditorBuilder.getAll()                               ║
+║  Available in console:                                     ║
+║  • jsEditor.getContent() / rubyEditor.getContent()         ║
+║  • jsEditor.run() / rubyEditor.run()                       ║
 ╚═══════════════════════════════════════════════════════════╝
 `);
