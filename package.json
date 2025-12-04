@@ -47,6 +47,7 @@
     "build:npm": "rollup -c scripts_utils/rollup.config.npm.js",
     "build:cdn": "rollup -c scripts_utils/rollup.config.cdn.js",
     "build:all": "npm run build:cdn && npm run build:npm",
+    "build:codemirror": "node scripts_utils/bundle-codemirror.js",
     "prepublishOnly": "npm run build:npm",
     "scan:components": "echo '✅ Scan skipped - Using static imports'",
     "prebuild": "echo '✅ Prebuild complete - No scan needed'",
@@ -78,6 +79,7 @@
     "@rollup/plugin-terser": "^0.4.4",
     "@tauri-apps/cli": "^2.9.4",
     "@testing-library/dom": "^9.3.1",
+    "esbuild": "^0.27.1",
     "jsdom": "^24.0.0",
     "rollup": "^4.53.3",
     "rollup-plugin-filesize": "^10.0.0",
@@ -86,7 +88,12 @@
     "ws": "^8.18.2"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/commands": "^6.10.0",
     "@codemirror/lang-javascript": "^6.2.4",
+    "@codemirror/language": "^6.11.3",
+    "@codemirror/legacy-modes": "^6.5.2",
+    "@codemirror/search": "^6.5.11",
     "@codemirror/state": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.37.2",

@@ -572,6 +572,14 @@ run_latest_updates() {
   else
     log_ok "🎉 Latest libraries downloaded"
   fi
+
+  # Build CodeMirror bundle for offline use
+  log_info "📦 Building CodeMirror bundle for offline use..."
+  if (cd "$PROJECT_ROOT" && npm run build:codemirror 2>/dev/null); then
+    log_ok "✅ CodeMirror bundle created"
+  else
+    log_warn "⚠️  CodeMirror bundle build failed (run 'npm run build:codemirror' manually)"
+  fi
 }
 
 # --- Main -----------------------------------------------------------------
