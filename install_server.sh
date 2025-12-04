@@ -186,14 +186,12 @@ fi
 
 log_info "📦 Installing Project Dependencies..."
 
-# Clean old ORMs
-npm uninstall sequelize knex objection --save || true
-
-# Install deps
+# Install deps (production only, excludes devDependencies)
 npm install --omit=dev --verbose
 
-# Ensure TypeORM and pino-pretty (required for server)
-npm install typeorm reflect-metadata pg fastify chokidar pino-pretty --save
+# Ensure critical production dependencies are installed
+# (some may be in devDependencies but are needed for server)
+npm install typeorm reflect-metadata pg fastify chokidar pino-pretty knex objection --save
 
 # Create marker to skip reinstallation on run.sh
 touch node_modules/.install_complete
