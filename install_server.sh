@@ -268,6 +268,41 @@ fi
 
 log_ok "✅ Nginx configured."
 
+# --- 5b. SSL Certificate with Let's Encrypt --------------------------------
+
+log_info "🔐 Configuring SSL Certificate..."
+
+# Check if certificate already exists
+if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+    log_info "✅ SSL certificate already exists for $DOMAIN"
+else
+    # Try to obtain certificate (non-interactive)
+    log_info "🔄 Requesting SSL certificate from Let's Encrypt..."
+    
+    # First, verify the domain points to this server
+    SERVER_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null || echo "")
+    DOMAIN_IP=$(dig +short "$DOMAIN" 2>/dev/null | head -1 || echo "")
+    
+    if [ -z "$SERVER_IP" ]; then
+        log_warn "⚠️  Could not determine server IP. Skipping SSL setup."
+        log_warn "   Run manually: sudo certbot --nginx -d $DOMAIN -d $WWW_DOMAIN"
+    elif [ -z "$DOMAIN_IP" ]; then
+        log_warn "⚠️  Could not resolve $DOMAIN. Skipping SSL setup."
+        log_warn "   Ensure DNS is configured, then run: sudo certbot --nginx -d $DOMAIN -d $WWW_DOMAIN"
+    elif [ "$SERVER_IP" != "$DOMAIN_IP" ]; then
+        log_warn "⚠️  Domain $DOMAIN ($DOMAIN_IP) does not point to this server ($SERVER_IP)"
+        log_warn "   Update DNS records, then run: sudo certbot --nginx -d $DOMAIN -d $WWW_DOMAIN"
+    else
+        # DNS looks correct, try certbot
+        if certbot --nginx -d "$DOMAIN" -d "$WWW_DOMAIN" --non-interactive --agree-tos --email "admin@$DOMAIN" --redirect 2>/dev/null; then
+            log_ok "✅ SSL certificate installed successfully!"
+        else
+            log_warn "⚠️  Certbot failed. You may need to run it manually:"
+            log_warn "   sudo certbot --nginx -d $DOMAIN -d $WWW_DOMAIN"
+        fi
+    fi
+fi
+
 # --- 6. Service Setup (Systemd vs RC.D) ------------------------------------
 
 log_info "⚙️  Configuring Service ($SERVICE_NAME)..."
