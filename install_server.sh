@@ -277,11 +277,20 @@ log_ok "✅ Nginx configured."
 
 log_info "🔐 Configuring SSL Certificate..."
 
-# Check if certificate already exists
-if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
-    log_info "✅ SSL certificate already exists for $DOMAIN"
+# Check if SSL is already configured in nginx
+if [ -f "$CONF_PATH" ] && grep -q "ssl_certificate" "$CONF_PATH"; then
+    log_info "✅ SSL already configured in nginx for $DOMAIN"
+elif [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+    # Certificate exists but nginx not configured - reinstall to nginx
+    log_info "🔄 SSL certificate exists, configuring nginx..."
+    if certbot install --nginx -d "$DOMAIN" -d "$WWW_DOMAIN" --non-interactive --redirect 2>/dev/null; then
+        log_ok "✅ SSL certificate configured in nginx!"
+    else
+        log_warn "⚠️  Could not configure SSL in nginx. Run manually:"
+        log_warn "   sudo certbot --nginx -d $DOMAIN -d $WWW_DOMAIN"
+    fi
 else
-    # Try to obtain certificate (non-interactive)
+    # No certificate - try to obtain one
     log_info "🔄 Requesting SSL certificate from Let's Encrypt..."
     
     # First, verify the domain points to this server
