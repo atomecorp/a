@@ -192,8 +192,11 @@ npm uninstall sequelize knex objection --save || true
 # Install deps
 npm install --omit=dev --verbose
 
-# Ensure TypeORM
-npm install typeorm reflect-metadata pg fastify chokidar --save
+# Ensure TypeORM and pino-pretty (required for server)
+npm install typeorm reflect-metadata pg fastify chokidar pino-pretty --save
+
+# Create marker to skip reinstallation on run.sh
+touch node_modules/.install_complete
 
 log_ok "✅ npm dependencies installed."
 
@@ -271,12 +274,21 @@ log_ok "✅ Nginx configured."
 
 log_info "⚙️  Configuring Service ($SERVICE_NAME)..."
 
-chown -R $USER:$USER "$APP_DIR"
+# Fix permissions - ensure www-data can read the app but root owns node_modules
+chown -R root:root "$APP_DIR"
+chmod -R 755 "$APP_DIR"
+
+# Ensure uploads directory is writable by www-data
+mkdir -p "$UPLOADS_DIR"
+chown -R $USER:$USER "$UPLOADS_DIR"
+chmod -R 775 "$UPLOADS_DIR"
 
 NODE_EXEC=$(command -v node)
 
 if [ "$OS_TYPE" == "linux" ]; then
     # --- Systemd (Linux) ---
+    # Note: We run as root to avoid permission issues with node_modules
+    # The server binds to 127.0.0.1 so it's only accessible via Nginx
     cat > /etc/systemd/system/$SERVICE_NAME.service <<EOF
 [Unit]
 Description=Squirrel Node.js Server
@@ -284,10 +296,10 @@ After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=$USER
-Group=$USER
+User=root
+Group=root
 WorkingDirectory=$APP_DIR
-ExecStart=/bin/bash $APP_DIR/run.sh --server
+ExecStart=$NODE_EXEC $APP_DIR/server/server.js
 Restart=always
 RestartSec=5
 EnvironmentFile=$APP_DIR/.env

@@ -145,19 +145,28 @@ else
     print_status "📥 Running in non-interactive mode, proceeding with installation..."
 fi
 
-# Clean npm cache (optional)
-print_status "Cleaning npm cache..."
-npm cache clean --force 2>/dev/null || true
+# In non-interactive mode (production), skip clean install if dependencies exist
+if [ "$INTERACTIVE" = false ] && [ -d "node_modules" ] && [ -f "node_modules/.package-lock.json" ]; then
+    print_status "✅ Dependencies already installed, skipping clean install in production mode"
+    print_status "Use --force to reinstall dependencies"
+else
+    # Clean npm cache (optional)
+    print_status "Cleaning npm cache..."
+    npm cache clean --force 2>/dev/null || true
 
-# Remove node_modules and package-lock.json for clean installation
-if [ -d "node_modules" ]; then
-    print_status "Removing existing node_modules..."
-    rm -rf node_modules
-fi
+    # Remove node_modules and package-lock.json for clean installation
+    if [ -d "node_modules" ]; then
+        print_status "Removing existing node_modules..."
+        rm -rf node_modules || {
+            print_warning "Could not remove node_modules (permission issue?)"
+            print_status "Continuing with existing node_modules..."
+        }
+    fi
 
-if [ -f "package-lock.json" ]; then
-    print_status "Removing existing package-lock.json..."
-    rm -f package-lock.json
+    if [ -f "package-lock.json" ]; then
+        print_status "Removing existing package-lock.json..."
+        rm -f package-lock.json || true
+    fi
 fi
 
 # Install dependencies
