@@ -5,8 +5,18 @@ The installation process is fully automated and supports both **Linux (Debian/Ub
 
 ## 🌍 Supported Platforms
 
+| OS | Supported | Script | Notes |
+|-----|-----------|--------|-------|
+| **Linux (Debian/Ubuntu)** | ✅ Yes | `install_server.sh` | Production servers - uses `apt`, `systemd`, `/etc/nginx` |
+| **FreeBSD** | ✅ Yes | `install_server.sh` | Production servers - uses `pkg`, `rc.d`, `/usr/local/etc/nginx` |
+| **macOS** | ❌ No | Use `run.sh` | Development only - not designed for production servers |
+
+### Recommended Versions
+
 * **Linux**: Debian 11/12, Ubuntu 20.04/22.04/24.04 (Recommended)
 * **FreeBSD**: 13.x, 14.x
+
+> ⚠️ **Note for macOS users**: The `install_server.sh` script is designed for **production servers** only. On macOS, use `./run.sh` for local development.
 
 ## 🚀 Installation
 
