@@ -354,6 +354,17 @@ async function startServer() {
       };
     });
 
+    // Health check endpoint for load balancers and monitoring
+    server.get('/health', async () => {
+      return {
+        status: 'ok',
+        version: SERVER_VERSION,
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        database: DATABASE_ENABLED ? (AppDataSource.isInitialized ? 'connected' : 'disconnected') : 'disabled'
+      };
+    });
+
     server.post('/api/uploads', async (request, reply) => {
       try {
         // Get user info if authenticated (optional for uploads)
