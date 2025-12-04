@@ -287,9 +287,14 @@ Type=simple
 User=$USER
 Group=$USER
 WorkingDirectory=$APP_DIR
-ExecStart=$NODE_EXEC server/server.js
+ExecStart=/bin/bash $APP_DIR/run.sh --server
 Restart=always
+RestartSec=5
 EnvironmentFile=$APP_DIR/.env
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=$SERVICE_NAME
 
 [Install]
 WantedBy=multi-user.target

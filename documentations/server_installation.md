@@ -73,18 +73,26 @@ SQUIRREL_UPLOADS_DIR=/opt/a/uploads
 ## 🎮 Managing the Server
 
 Once installed, the server runs in the background as a system service.
-Use the helper script `run_server.sh` to manage it easily on any platform.
+Use `./run.sh` with service commands to manage it easily on any platform.
 
 ### Common Commands
 
 | Action | Command | Description |
 | :--- | :--- | :--- |
-| **Status** | `./run_server.sh status` | Check if server is running & view recent logs |
-| **Start** | `./run_server.sh start` | Start the service |
-| **Stop** | `./run_server.sh stop` | Stop the service |
-| **Restart** | `./run_server.sh restart` | Restart the service (e.g. after updates) |
-| **Logs** | `./run_server.sh logs` | View live logs (Ctrl+C to exit) |
-| **Check** | `./run_server.sh check` | Run system diagnostics (Nginx, SSL, Ports) |
+| **Start (HTTPS)** | `./run.sh --https` | Start production server via systemd/nginx |
+| **Start (HTTP dev)** | `./run.sh --server` | Start dev server (HTTP only, no Tauri) |
+| **Status** | `./run.sh status` | Check if server is running & view recent logs |
+| **Stop** | `./run.sh stop` | Stop the service |
+| **Restart** | `./run.sh restart` | Restart the service (e.g. after updates) |
+| **Logs** | `./run.sh logs` | View live logs (Ctrl+C to exit) |
+| **Check** | `./run.sh check` | Run system diagnostics (Nginx, SSL, Ports) |
+
+### Development vs Production
+
+| Mode | Command | Protocol | Use Case |
+| :--- | :--- | :--- | :--- |
+| **Development** | `./run.sh --server` | HTTP | Local testing, debugging |
+| **Production** | `./run.sh --https` | HTTPS (via Nginx) | Production servers |
 
 ### Manual Service Management (Advanced)
 
