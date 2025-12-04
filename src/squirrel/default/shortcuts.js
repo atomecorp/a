@@ -53,7 +53,7 @@ const openEditor = function openCodeEditor(key) {
   createNewCodeEditor();
 };
 
-shortcut('alt-c', openConsole);
+shortcut('alt-t', openConsole);
 shortcut('alt-e', openEditor);
 
 window.openConsole = openConsole;
