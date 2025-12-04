@@ -243,8 +243,12 @@ elif [ "$OS_TYPE" == "freebsd" ]; then
     fi
 fi
 
-# Generate Config (Simplified for brevity, logic is same)
-cat > "$CONF_PATH" <<EOF
+# Check if SSL is already configured (don't overwrite certbot's config)
+if [ -f "$CONF_PATH" ] && grep -q "ssl_certificate" "$CONF_PATH"; then
+    log_info "✅ Nginx SSL configuration already exists, preserving it"
+else
+    # Generate HTTP Config (certbot will add SSL later)
+    cat > "$CONF_PATH" <<EOF
 server {
     listen 80;
     server_name $DOMAIN $WWW_DOMAIN;
@@ -257,6 +261,7 @@ server {
     }
 }
 EOF
+fi
 
 if [ "$OS_TYPE" == "linux" ]; then
     ln -sf "$CONF_PATH" "$SITES_ENABLED/"
