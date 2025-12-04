@@ -18,6 +18,26 @@
 // ============================================================================
 // ENVIRONMENT DETECTION
 // ============================================================================
+
+/**
+ * Check if we're in a production environment
+ */
+function isProductionEnvironment() {
+    if (typeof window === 'undefined') return false;
+    const hostname = window.location?.hostname || '';
+    return hostname === 'atome.one' || 
+           hostname === 'www.atome.one' ||
+           hostname.endsWith('.squirrel.cloud') || 
+           hostname === 'squirrel.cloud';
+}
+
+/**
+ * Get production API base URL
+ */
+function getProductionApiBase() {
+    return `${window.location.protocol}//${window.location.host}`;
+}
+
 function resolveAtomeConfig() {
     // Check for custom API base
     if (typeof window !== 'undefined' && window.SQUIRREL_API_BASE) {
@@ -27,6 +47,11 @@ function resolveAtomeConfig() {
         const stored = localStorage.getItem('squirrel_api_base');
         if (stored) return { base: stored, isLocal: false };
     } catch (e) { }
+
+    // Production environment: use same origin
+    if (isProductionEnvironment()) {
+        return { base: getProductionApiBase(), isLocal: false, isTauri: false };
+    }
 
     // Detect Tauri environment
     let isTauri = false;

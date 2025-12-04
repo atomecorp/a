@@ -71,9 +71,21 @@ export function getCloudServerUrl() {
         if (customUrl && typeof customUrl === 'string') {
             return customUrl.trim().replace(/\/$/, '');
         }
+
+        // Auto-detect from current page URL (production mode)
+        // If we're on https://atome.one, use that as the server
+        const loc = window.location;
+        if (loc && loc.hostname && loc.hostname !== 'localhost' && loc.hostname !== '127.0.0.1') {
+            // We're on a real domain - use same origin
+            const protocol = loc.protocol; // 'https:' or 'http:'
+            const host = loc.hostname;
+            // If port is default (80/443), don't include it
+            const port = (loc.port && loc.port !== '80' && loc.port !== '443') ? `:${loc.port}` : '';
+            return `${protocol}//${host}${port}`;
+        }
     }
 
-    // Default Fastify URL
+    // Default Fastify URL (local development)
     return 'http://localhost:3001';
 }
 

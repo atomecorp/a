@@ -4,12 +4,31 @@ const RECONNECT_BASE_DELAY = 2000;
 const RECONNECT_MAX_DELAY = 60000;  // 1 minute max
 const SILENT_MODE_AFTER_FAILURES = 3;  // Stop logging errors after N failures
 
+/**
+ * Check if we're in a production environment
+ */
+function isProductionEnvironment() {
+    if (typeof window === 'undefined') return false;
+    const hostname = window.location?.hostname || '';
+    return hostname === 'atome.one' || 
+           hostname === 'www.atome.one' ||
+           hostname.endsWith('.squirrel.cloud') || 
+           hostname === 'squirrel.cloud';
+}
+
 function resolveWsCandidates() {
     const customEndpoint = typeof window.__SQUIRREL_SYNC_WS__ === 'string'
         ? window.__SQUIRREL_SYNC_WS__.trim()
         : '';
     if (customEndpoint) {
         return [ensureWsPath(customEndpoint)];
+    }
+
+    // Production environment: use same origin with wss
+    if (isProductionEnvironment()) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        return [`${protocol}//${host}${DEFAULT_WS_PATH}`];
     }
 
     const bases = [];

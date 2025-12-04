@@ -18,6 +18,18 @@ const RECONNECT_MAX_DELAY = 60000;  // 1 minute max
 const SILENT_MODE_AFTER_FAILURES = 3;  // Stop logging errors after N failures
 
 /**
+ * Check if we're in a production environment
+ */
+function isProductionEnvironment() {
+    if (typeof window === 'undefined') return false;
+    const hostname = window.location?.hostname || '';
+    return hostname === 'atome.one' || 
+           hostname === 'www.atome.one' ||
+           hostname.endsWith('.squirrel.cloud') || 
+           hostname === 'squirrel.cloud';
+}
+
+/**
  * Resolve WebSocket URL for version sync
  * Supports remote Fastify URL via window.__SQUIRREL_FASTIFY_URL__
  */
@@ -35,6 +47,13 @@ function resolveVersionSyncUrl() {
             .replace(/\/$/, '');
         console.log('[version_sync] Using custom Fastify URL:', wsUrl);
         return `${wsUrl}${DEFAULT_WS_PATH}`;
+    }
+
+    // Production environment: use same origin with wss
+    if (isProductionEnvironment()) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        return `${protocol}//${host}${DEFAULT_WS_PATH}`;
     }
 
     // Default to localhost:3001 (Fastify server)
