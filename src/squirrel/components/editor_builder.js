@@ -276,8 +276,13 @@ const createEditor = (config = {}) => {
             if (state.editorView) redo(state.editorView);
         });
 
+        // Run button
+        const runBtn = createButton('▶', 'Run Code (Ctrl+Enter)', () => {
+            if (state.runCode) state.runCode();
+        }, '#22c55e');
+
         // Save/Validate button
-        const validateBtn = createButton('✓', 'Validate & Save to DB (Ctrl+Shift+S)', validateContent, '#22c55e');
+        const validateBtn = createButton('✓', 'Validate & Save to DB (Ctrl+Shift+S)', validateContent, '#3b82f6');
 
         // Load button
         const loadBtn = createButton('📂', 'Load from DB', showLoadDialog);
@@ -287,6 +292,7 @@ const createEditor = (config = {}) => {
 
         buttons.appendChild(undoBtn);
         buttons.appendChild(redoBtn);
+        buttons.appendChild(runBtn);
         buttons.appendChild(langSelect);
         buttons.appendChild(validateBtn);
         buttons.appendChild(loadBtn);
@@ -350,6 +356,74 @@ const createEditor = (config = {}) => {
         editorArea.appendChild(dropOverlay);
 
         return editorArea;
+    }
+
+    function createOutputPanel() {
+        const outputPanel = document.createElement('div');
+        outputPanel.className = 'sq-editor-output';
+        Object.assign(outputPanel.style, {
+            display: 'none',
+            flexDirection: 'column',
+            maxHeight: '150px',
+            borderTop: '1px solid #3c3c3c',
+            backgroundColor: '#1a1a1a'
+        });
+
+        // Output header
+        const outputHeader = document.createElement('div');
+        Object.assign(outputHeader.style, {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '4px 8px',
+            backgroundColor: '#252526',
+            fontSize: '11px',
+            color: '#9ca3af'
+        });
+
+        const outputTitle = document.createElement('span');
+        outputTitle.textContent = '📤 Output';
+
+        const clearOutputBtn = document.createElement('button');
+        clearOutputBtn.textContent = '✕';
+        clearOutputBtn.title = 'Clear & Hide Output';
+        Object.assign(clearOutputBtn.style, {
+            background: 'transparent',
+            border: 'none',
+            color: '#9ca3af',
+            cursor: 'pointer',
+            fontSize: '12px',
+            padding: '2px 6px',
+            borderRadius: '3px'
+        });
+        clearOutputBtn.addEventListener('mouseenter', () => clearOutputBtn.style.backgroundColor = 'rgba(255,255,255,0.1)');
+        clearOutputBtn.addEventListener('mouseleave', () => clearOutputBtn.style.backgroundColor = 'transparent');
+        clearOutputBtn.addEventListener('click', () => {
+            outputPanel.style.display = 'none';
+            outputContent.innerHTML = '';
+        });
+
+        outputHeader.appendChild(outputTitle);
+        outputHeader.appendChild(clearOutputBtn);
+
+        // Output content
+        const outputContent = document.createElement('div');
+        outputContent.className = 'sq-editor-output-content';
+        Object.assign(outputContent.style, {
+            flex: '1',
+            padding: '8px',
+            overflowY: 'auto',
+            fontFamily: 'Consolas, "Courier New", monospace',
+            fontSize: '12px',
+            color: '#d4d4d4',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word'
+        });
+
+        outputPanel.appendChild(outputHeader);
+        outputPanel.appendChild(outputContent);
+
+        return outputPanel;
     }
 
     function createStatusBar() {
@@ -418,7 +492,8 @@ const createEditor = (config = {}) => {
                 ...searchKeymap,
                 { key: 'Mod-s', run: () => { saveContent(); return true; } },
                 { key: 'Mod-Shift-s', run: () => { validateContent(); return true; } },
-                { key: 'Mod-w', run: () => { closeEditor(); return true; } }
+                { key: 'Mod-w', run: () => { closeEditor(); return true; } },
+                { key: 'Mod-Enter', run: () => { if (state.runCode) state.runCode(); return true; } }
             ]),
             EditorView.updateListener.of(update => {
                 if (update.docChanged) {
@@ -918,16 +993,208 @@ const createEditor = (config = {}) => {
         });
     }
 
+    // === CODE EXECUTION ===
+
+    function runCode() {
+        const code = state.editorView?.state.doc.toString() || '';
+        if (!code.trim()) return;
+
+        const outputPanel = container.querySelector('.sq-editor-output');
+        const outputContent = container.querySelector('.sq-editor-output-content');
+
+        if (!outputPanel || !outputContent) return;
+
+        // Show output panel
+        outputPanel.style.display = 'flex';
+
+        // Clear previous output
+        outputContent.innerHTML = '';
+
+        // Captured output
+        const logs = [];
+
+        // Capture console methods
+        const originalConsole = {
+            log: console.log.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console),
+            info: console.info.bind(console)
+        };
+
+        const captureLog = (type, ...args) => {
+            const formatted = args.map(arg => {
+                if (typeof arg === 'object') {
+                    try {
+                        return JSON.stringify(arg, null, 2);
+                    } catch {
+                        return String(arg);
+                    }
+                }
+                return String(arg);
+            }).join(' ');
+
+            logs.push({ type, message: formatted });
+            originalConsole[type](...args); // Also log to real console
+        };
+
+        // Temporarily override console
+        console.log = (...args) => captureLog('log', ...args);
+        console.warn = (...args) => captureLog('warn', ...args);
+        console.error = (...args) => captureLog('error', ...args);
+        console.info = (...args) => captureLog('info', ...args);
+
+        const displayOutput = () => {
+            logs.forEach(({ type, message }) => {
+                const line = document.createElement('div');
+                line.style.padding = '2px 0';
+
+                if (type === 'error') {
+                    line.style.color = '#f87171';
+                } else if (type === 'warn') {
+                    line.style.color = '#fbbf24';
+                } else if (type === 'info') {
+                    line.style.color = '#60a5fa';
+                } else {
+                    line.style.color = '#d4d4d4';
+                }
+
+                line.textContent = message;
+                outputContent.appendChild(line);
+            });
+
+            // Restore console
+            console.log = originalConsole.log;
+            console.warn = originalConsole.warn;
+            console.error = originalConsole.error;
+            console.info = originalConsole.info;
+        };
+
+        const displayError = (error) => {
+            logs.push({ type: 'error', message: `❌ ${error.name}: ${error.message}` });
+            displayOutput();
+        };
+
+        const displayResult = (result) => {
+            if (result !== undefined) {
+                const resultLine = document.createElement('div');
+                resultLine.style.padding = '4px 0';
+                resultLine.style.borderTop = '1px solid #3c3c3c';
+                resultLine.style.marginTop = '4px';
+                resultLine.style.color = '#4ade80';
+
+                let displayValue;
+                if (typeof result === 'object') {
+                    try {
+                        displayValue = JSON.stringify(result, null, 2);
+                    } catch {
+                        displayValue = String(result);
+                    }
+                } else {
+                    displayValue = String(result);
+                }
+
+                resultLine.textContent = `→ ${displayValue}`;
+                outputContent.appendChild(resultLine);
+            }
+        };
+
+        // Load Opal dynamically
+        const loadOpal = () => {
+            return new Promise((resolve, reject) => {
+                if (typeof Opal !== 'undefined') {
+                    resolve();
+                    return;
+                }
+
+                // Check if already loading
+                if (window._opalLoading) {
+                    window._opalLoading.then(resolve).catch(reject);
+                    return;
+                }
+
+                logs.push({ type: 'info', message: '⏳ Loading Ruby interpreter (Opal)...' });
+                displayOutput();
+                logs.length = 0; // Clear for actual output
+
+                window._opalLoading = new Promise((res, rej) => {
+                    const script1 = document.createElement('script');
+                    script1.src = 'js/opal.min.js';
+                    script1.onload = () => {
+                        const script2 = document.createElement('script');
+                        script2.src = 'js/opal-parser.min.js';
+                        script2.onload = () => {
+                            window._opalLoading = null;
+                            res();
+                        };
+                        script2.onerror = () => {
+                            window._opalLoading = null;
+                            rej(new Error('Failed to load opal-parser.min.js'));
+                        };
+                        document.head.appendChild(script2);
+                    };
+                    script1.onerror = () => {
+                        window._opalLoading = null;
+                        rej(new Error('Failed to load opal.min.js'));
+                    };
+                    document.head.appendChild(script1);
+                });
+
+                window._opalLoading.then(resolve).catch(reject);
+            });
+        };
+
+        // Execute based on language
+        const lang = state.language.toLowerCase();
+
+        if (lang === 'javascript' || lang === 'js') {
+            // JavaScript execution
+            try {
+                const result = new Function(code)();
+                displayOutput();
+                displayResult(result);
+            } catch (error) {
+                displayError(error);
+            }
+        } else if (lang === 'ruby' || lang === 'rb') {
+            // Ruby execution via Opal (async loading)
+            loadOpal().then(() => {
+                try {
+                    // Compile Ruby to JavaScript
+                    const compiled = Opal.compile(code);
+
+                    // Execute compiled code
+                    const result = eval(compiled);
+                    displayOutput();
+                    displayResult(result);
+                } catch (error) {
+                    displayError(error);
+                }
+            }).catch(error => {
+                displayError(error);
+            });
+        } else {
+            // Unsupported language
+            logs.push({ type: 'warn', message: `⚠️ Code execution not supported for language: ${lang}` });
+            logs.push({ type: 'info', message: 'Supported languages: JavaScript, Ruby' });
+            displayOutput();
+        }
+    }
+
+    // Make runCode available to the keymap
+    state.runCode = runCode;
+
     // === BUILD UI ===
 
     const container = createContainer();
     const header = createHeader();
     const editorArea = createEditorArea();
+    const outputPanel = createOutputPanel();
     const statusBar = createStatusBar();
     const resizeHandle = createResizeHandle();
 
     container.appendChild(header);
     container.appendChild(editorArea);
+    container.appendChild(outputPanel);
     container.appendChild(statusBar);
     if (resizeHandle) container.appendChild(resizeHandle);
 
@@ -983,6 +1250,7 @@ const createEditor = (config = {}) => {
         save: saveContent,
         validate: validateContent,
         close: closeEditor,
+        run: () => state.runCode && state.runCode(),
         focus: () => state.editorView?.focus(),
         undo: () => state.editorView && undo(state.editorView),
         redo: () => state.editorView && redo(state.editorView),

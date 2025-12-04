@@ -2,7 +2,18 @@
  * 📝 IDE Code Editor Example
  * 
  * Demonstrates usage of the EditorBuilder component
- * with multiple editors, drag & drop, and database sync.
+ * with multiple editors, drag & drop, database sync, and code execution.
+ * 
+ * Features:
+ * - Multi-window editors with unique IDs
+ * - Drag & drop to reposition windows
+ * - Resize from corner handle
+ * - CodeMirror 6 with syntax highlighting
+ * - JavaScript and Ruby language support
+ * - Run code with ▶ button or Ctrl/Cmd+Enter
+ * - Output panel shows console.log and results
+ * - Auto-save to localStorage
+ * - Database sync via UnifiedAtome API
  */
 
 import { $, define } from '../../squirrel/squirrel.js';
@@ -49,14 +60,20 @@ $('button', {
                 language: 'javascript',
                 fileName: `script_${Date.now()}.js`,
                 position: { x: 150 + offset, y: 80 + offset },
-                content: `// New JavaScript file
-function hello(name) {
-    console.log(\`Hello, \${name}!\`);
-    return { greeting: 'Hello', name };
+                content: `// JavaScript Example - Click ▶ or press Ctrl+Enter to run!
+
+function greet(name) {
+    console.log(\`👋 Hello, \${name}!\`);
+    return { greeting: 'Hello', name, timestamp: Date.now() };
 }
 
-// Try it out
-hello('World');
+// Let's test it
+const result = greet('World');
+console.log('Result:', result);
+
+// Some math
+const sum = [1, 2, 3, 4, 5].reduce((a, b) => a + b, 0);
+console.log('Sum of 1-5:', sum);
 `,
                 onChange: (content) => {
                     console.log('[JS Editor] Content changed, length:', content.length);
@@ -97,20 +114,29 @@ $('button', {
                 language: 'ruby',
                 fileName: `script_${Date.now()}.rb`,
                 position: { x: 200 + offset, y: 120 + offset },
-                content: `# New Ruby file
+                content: `# Ruby Example - Click ▶ or press Ctrl+Enter to run!
+# Note: Ruby runs via Opal (first run may take a moment to load)
+
 class Greeter
   def initialize(name)
     @name = name
   end
 
   def greet
-    puts "Hello, #{@name}!"
+    puts "👋 Hello, #{@name}!"
+    { greeting: 'Hello', name: @name }
   end
 end
 
-# Usage
-greeter = Greeter.new("World")
-greeter.greet
+# Let's test it
+greeter = Greeter.new("Ruby World")
+result = greeter.greet
+puts "Result: #{result}"
+
+# Ruby goodies
+numbers = [1, 2, 3, 4, 5]
+puts "Sum: #{numbers.sum}"
+puts "Squared: #{numbers.map { |n| n ** 2 }}"
 `,
                 onChange: (content) => {
                     console.log('[Ruby Editor] Content changed, length:', content.length);
