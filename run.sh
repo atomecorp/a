@@ -716,7 +716,6 @@ FORCE_DEPS=false
 PROD_BUILD=false
 TAURI_ONLY=false
 SERVER_ONLY=false
-HTTPS_MODE=false
 FASTIFY_URL=""
 
 while [[ $# -gt 0 ]]; do
@@ -738,8 +737,10 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --https)
-            HTTPS_MODE=true
-            shift
+            # Production mode: start service directly without dev setup
+            echo "🔐 Mode production HTTPS (systemd/nginx)"
+            service_start
+            exit 0
             ;;
         --fastify-url)
             FASTIFY_URL="$2"
@@ -902,13 +903,6 @@ echo ""
 trap cleanup SIGINT SIGTERM EXIT
 
 echo "🚀 Démarrage des serveurs..."
-
-# Mode --https (production avec systemd/nginx)
-if [ "$HTTPS_MODE" = true ]; then
-    echo "🔐 Mode production HTTPS (systemd/nginx)"
-    service_start
-    exit 0
-fi
 
 # Mode --server uniquement (pas de Tauri)
 if [ "$SERVER_ONLY" = true ]; then
