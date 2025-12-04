@@ -130,5 +130,7 @@ git pull
 ./install_full.sh
 
 # 3. Restart the server
-./run_server.sh restart
+./run.sh restart
 ```
+
+> 💡 **Tip**: If you started the server manually in foreground (not as a service), use `Ctrl+C` to stop it.
