@@ -25,10 +25,10 @@
 function isProductionEnvironment() {
     if (typeof window === 'undefined') return false;
     const hostname = window.location?.hostname || '';
-    return hostname === 'atome.one' || 
-           hostname === 'www.atome.one' ||
-           hostname.endsWith('.squirrel.cloud') || 
-           hostname === 'squirrel.cloud';
+    return hostname === 'atome.one' ||
+        hostname === 'www.atome.one' ||
+        hostname.endsWith('.squirrel.cloud') ||
+        hostname === 'squirrel.cloud';
 }
 
 /**

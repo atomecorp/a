@@ -19,10 +19,11 @@ import { getLocalServerUrl, getCloudServerUrl, isTauri } from './serverUrls.js';
 // CONFIGURATION
 // =============================================================================
 
+// Use getters to ensure URLs are resolved at call time, not import time
 const CONFIG = {
-    // Server URLs
-    TAURI_SERVER: getLocalServerUrl() || 'http://127.0.0.1:3000',
-    FASTIFY_SERVER: getCloudServerUrl() || 'http://localhost:3001',
+    // Server URLs - use getters for dynamic resolution
+    get TAURI_SERVER() { return getLocalServerUrl() || 'http://127.0.0.1:3000'; },
+    get FASTIFY_SERVER() { return getCloudServerUrl() || 'http://localhost:3001'; },
 
     // Timing
     SERVER_CHECK_TIMEOUT: 800,      // Fast check timeout
