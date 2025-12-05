@@ -139,17 +139,70 @@
             return this;
         });
 
-        // Event listener
-        Opal.defn(Element, '$on', function (event, block) {
+        // Event listener - handles Ruby blocks properly
+        Opal.defn(Element, '$on', function $$on(event) {
+            var block = $$on.$$p || null;
+            $$on.$$p = null;
+
             var self = this;
-            if (block === undefined && typeof arguments[1] === 'object') {
-                block = arguments[1];
-            }
-            this.native.addEventListener(toStr(event), function (e) {
-                if (block && typeof block.$call === 'function') {
-                    block.$call();
+            var eventName = toStr(event);
+
+            this.native.addEventListener(eventName, function (e) {
+                if (block) {
+                    try {
+                        // Pass event info to block if it accepts arguments
+                        block.$call();
+                    } catch (err) {
+                        console.error('[opal-squirrel] Event handler error:', err);
+                    }
                 }
             });
+            return this;
+        });
+
+        // Drag support
+        Opal.defn(Element, '$make_draggable', function $$makeDraggable() {
+            var block = $$makeDraggable.$$p || null;
+            $$makeDraggable.$$p = null;
+
+            var self = this;
+            var el = this.native;
+            var isDragging = false;
+            var offsetX = 0, offsetY = 0;
+
+            el.style.cursor = 'grab';
+
+            el.addEventListener('mousedown', function (e) {
+                isDragging = true;
+                offsetX = e.clientX - el.offsetLeft;
+                offsetY = e.clientY - el.offsetTop;
+                el.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function (e) {
+                if (!isDragging) return;
+                var newX = e.clientX - offsetX;
+                var newY = e.clientY - offsetY;
+                el.style.left = newX + 'px';
+                el.style.top = newY + 'px';
+
+                if (block) {
+                    try {
+                        block.$call(newX, newY);
+                    } catch (err) {
+                        console.error('[opal-squirrel] Drag callback error:', err);
+                    }
+                }
+            });
+
+            document.addEventListener('mouseup', function () {
+                if (isDragging) {
+                    isDragging = false;
+                    el.style.cursor = 'grab';
+                }
+            });
+
             return this;
         });
 

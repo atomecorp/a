@@ -120,14 +120,14 @@ account = Account.new("Savings", 100)
 account.deposit(50).withdraw(25)
 puts account
 
-# Créer une box (attachée automatiquement à #view)
+# Créer une box cliquable
 box = Squirrel.create('div', 
   id: 'color-box',
-  parent: 'view',  # ou '#view' ou attach: 'view'
+  parent: 'view',
   css: {
     width: '200px',
     height: '200px',
-    background_color: 'yellow',  # Typo corrigée: yelliow -> yellow
+    background_color: 'yellow',
     cursor: 'pointer',
     border_radius: '8px',
     transition: 'background-color 0.3s ease',
@@ -142,14 +142,38 @@ box = Squirrel.create('div',
 colors = %w[red blue green purple orange yellow]
 $index = 0
 
-# Événement clic
+# Événement clic sur la box
 box.on(:click) do
   $index = ($index + 1) % colors.length
   box.css[:background_color] = colors[$index]
   puts "Couleur: #{colors[$index]}"
 end
 
-puts "Box créée! Cliquez dessus."
+# Créer un cercle draggable
+circle = Squirrel.create('div',
+  id: 'drag-circle',
+  parent: 'view',
+  css: {
+    width: '80px',
+    height: '80px',
+    background_color: '#3b82f6',
+    border_radius: '50%',
+    position: 'absolute',
+    top: '200px',
+    left: '350px',
+    z_index: '1001',
+    box_shadow: '0 4px 12px rgba(0,0,0,0.3)'
+  }
+)
+
+# Rendre le cercle draggable avec log de position
+circle.make_draggable do |x, y|
+  puts "Position: x=#{x}, y=#{y}"
+end
+
+puts "Box et cercle créés!"
+puts "- Cliquez sur la box jaune pour changer sa couleur"
+puts "- Glissez le cercle bleu pour voir sa position"
 `,
     onValidate: (info) => {
         console.log('✓ Ruby file validated:', info);
