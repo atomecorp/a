@@ -119,6 +119,37 @@ end
 account = Account.new("Savings", 100)
 account.deposit(50).withdraw(25)
 puts account
+
+# Créer une box (attachée automatiquement à #view)
+box = Squirrel.create('div', 
+  id: 'color-box',
+  parent: 'view',  # ou '#view' ou attach: 'view'
+  css: {
+    width: '200px',
+    height: '200px',
+    background_color: 'yellow',  # Typo corrigée: yelliow -> yellow
+    cursor: 'pointer',
+    border_radius: '8px',
+    transition: 'background-color 0.3s ease',
+    position: 'absolute',
+    top: '100px',
+    left: '100px',
+    z_index: '1000'
+  }
+)
+
+# Liste de couleurs
+colors = %w[red blue green purple orange yellow]
+$index = 0
+
+# Événement clic
+box.on(:click) do
+  $index = ($index + 1) % colors.length
+  box.css[:background_color] = colors[$index]
+  puts "Couleur: #{colors[$index]}"
+end
+
+puts "Box créée! Cliquez dessus."
 `,
     onValidate: (info) => {
         console.log('✓ Ruby file validated:', info);

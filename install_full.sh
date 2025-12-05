@@ -459,6 +459,9 @@ run_stable_updates() {
     "wavesurfer-v7/core/wavesurfer.esm.min.js|https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.10.1/wavesurfer.esm.min.js"
     "three.min.js|https://cdnjs.cloudflare.com/ajax/libs/three.js/0.179.1/three.module.min.js"
     "three.core.min.js|https://cdnjs.cloudflare.com/ajax/libs/three.js/0.179.1/three.core.min.js"
+    # Opal Ruby runtime
+    "opal.min.js|https://cdn.opalrb.com/opal/1.8.2/opal.min.js"
+    "opal-parser.min.js|https://cdn.opalrb.com/opal/1.8.2/opal-parser.min.js"
   )
 
   for entry in "${STABLE_LIBS[@]}"; do
@@ -563,6 +566,18 @@ run_latest_updates() {
 
   total=$((total + 1))
   if download_latest_asset "three.core.min.js" "https://cdnjs.cloudflare.com/ajax/libs/three.js/$THREE_VERSION/three.core.min.js" "three" "$THREE_VERSION"; then
+    success=$((success + 1))
+  fi
+
+  # Opal Ruby runtime (version stable, pas de CDN avec latest)
+  log_info "💎 Downloading Opal Ruby runtime..."
+  total=$((total + 1))
+  if download_file "https://cdn.opalrb.com/opal/1.8.2/opal.min.js" "$JS_DIR/opal.min.js" "opal.min.js"; then
+    success=$((success + 1))
+  fi
+
+  total=$((total + 1))
+  if download_file "https://cdn.opalrb.com/opal/1.8.2/opal-parser.min.js" "$JS_DIR/opal-parser.min.js" "opal-parser.min.js"; then
     success=$((success + 1))
   fi
 

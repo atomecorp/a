@@ -1123,8 +1123,20 @@ const createEditor = (config = {}) => {
                         const script2 = document.createElement('script');
                         script2.src = 'js/opal-parser.min.js';
                         script2.onload = () => {
-                            window._opalLoading = null;
-                            res();
+                            // Load opal-squirrel bridge
+                            const script3 = document.createElement('script');
+                            script3.src = 'js/opal-squirrel.js';
+                            script3.onload = () => {
+                                window._opalLoading = null;
+                                res();
+                            };
+                            script3.onerror = () => {
+                                // Bridge is optional, continue anyway
+                                console.warn('[EditorBuilder] opal-squirrel.js not found, continuing without bridge');
+                                window._opalLoading = null;
+                                res();
+                            };
+                            document.head.appendChild(script3);
                         };
                         script2.onerror = () => {
                             window._opalLoading = null;
