@@ -12,6 +12,16 @@
  * - API programmatique complète
  */
 
+// DEBUG: Track page reloads
+if (!window._editorDebugInstalled) {
+    window._editorDebugInstalled = true;
+    window.addEventListener('beforeunload', (e) => {
+        console.log('[Editor DEBUG] Page is about to unload!');
+        console.trace('[Editor DEBUG] Stack trace:');
+    });
+    console.log('[Editor DEBUG] Unload listener installed');
+}
+
 import { $, define } from '../squirrel.js';
 
 // === CODEMIRROR IMPORTS (from local bundle) ===
@@ -306,6 +316,7 @@ const createEditor = (config = {}) => {
 
     function createButton(icon, title, onClick, hoverColor = 'rgba(255,255,255,0.2)') {
         const btn = document.createElement('button');
+        btn.type = 'button'; // Prevent form submission behavior
         btn.textContent = icon;
         btn.title = title;
         Object.assign(btn.style, {
@@ -320,7 +331,16 @@ const createEditor = (config = {}) => {
         });
         btn.addEventListener('mouseenter', () => btn.style.background = hoverColor);
         btn.addEventListener('mouseleave', () => btn.style.background = 'transparent');
-        btn.addEventListener('click', onClick);
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+                await onClick();
+            } catch (err) {
+                console.error('[Editor Button] Error:', err);
+            }
+            return false;
+        });
         btn.addEventListener('mousedown', (e) => e.stopPropagation());
         return btn;
     }
@@ -610,16 +630,63 @@ const createEditor = (config = {}) => {
     }
 
     async function validateContent() {
-        if (!state.editorView || state.isSaving) return;
+        console.log('[Editor] validateContent() called at:', new Date().toISOString());
+        console.log('[Editor] window._editorSaveMarker before:', window._editorSaveMarker);
+        window._editorSaveMarker = (window._editorSaveMarker || 0) + 1;
+        console.log('[Editor] window._editorSaveMarker after:', window._editorSaveMarker);
+
+        if (!state.editorView || state.isSaving) {
+            console.log('[Editor] Early return - editorView:', !!state.editorView, 'isSaving:', state.isSaving);
+            return;
+        }
 
         state.isSaving = true;
-        updateStatus('Saving to database...');
+        updateStatus('Saving...');
 
         const content = state.editorView.state.doc.toString();
 
         try {
             // Import UnifiedAtome dynamically
-            const { UnifiedAtome } = await import('../apis/unifiedAtomeSync.js');
+            console.log('[Editor] Importing UnifiedAtome...');
+            const { UnifiedAtome, isAuthenticated } = await import('../apis/unifiedAtomeSync.js');
+            console.log('[Editor] Import successful, isAuthenticated:', isAuthenticated());
+
+            // Check authentication first
+            if (!isAuthenticated()) {
+                console.log('[Editor] Not authenticated, saving locally');
+                // Save to localStorage only if not authenticated
+                const localKey = `editor_file_${state.fileName}_${Date.now()}`;
+                const localData = {
+                    id: localKey,
+                    fileName: state.fileName,
+                    language: state.language,
+                    content: content,
+                    lastModified: new Date().toISOString()
+                };
+
+                // Get existing local files
+                let localFiles = [];
+                try {
+                    localFiles = JSON.parse(localStorage.getItem('editor_local_files') || '[]');
+                } catch { }
+
+                // Add or update file
+                const existingIndex = localFiles.findIndex(f => f.fileName === state.fileName);
+                if (existingIndex >= 0) {
+                    localFiles[existingIndex] = localData;
+                } else {
+                    localFiles.push(localData);
+                }
+
+                localStorage.setItem('editor_local_files', JSON.stringify(localFiles));
+                state.fileId = localKey;
+                state.lastValidatedContent = content;
+                state.isDirty = false;
+                updateDirtyIndicator(false);
+                updateStatus('✓ Saved locally (not logged in)');
+                onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content, local: true });
+                return;
+            }
 
             const atomeData = {
                 id: state.fileId || `code_file_${Date.now()}`,
@@ -634,7 +701,7 @@ const createEditor = (config = {}) => {
             };
 
             let result;
-            if (state.fileId) {
+            if (state.fileId && !state.fileId.startsWith('editor_file_')) {
                 result = await UnifiedAtome.update(state.fileId, atomeData);
             } else {
                 result = await UnifiedAtome.create(atomeData);
@@ -649,27 +716,87 @@ const createEditor = (config = {}) => {
                 updateDirtyIndicator(false);
                 updateStatus('✓ Saved to database');
                 onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content });
+            } else if (result.queued) {
+                updateStatus('⏳ Queued (server unavailable)');
             } else {
                 throw new Error(result.error || 'Save failed');
             }
         } catch (error) {
-            console.error('[Editor] Save to database failed:', error);
-            updateStatus('✗ Save failed');
+            console.error('[Editor] Save failed:', error);
+            updateStatus('✗ Save failed: ' + error.message);
             onError?.(error);
         } finally {
             state.isSaving = false;
+            console.log('[Editor] validateContent() completed successfully');
         }
     }
 
     async function showLoadDialog() {
         try {
-            const { UnifiedAtome } = await import('../apis/unifiedAtomeSync.js');
+            const { UnifiedAtome, isAuthenticated } = await import('../apis/unifiedAtomeSync.js');
 
             updateStatus('Loading files...');
-            const result = await UnifiedAtome.list({ kind: 'code_file' });
 
-            if (!result.success || !result.data?.length) {
-                updateStatus('No files found');
+            // Collect files from all sources
+            let allFiles = [];
+
+            // Get local files first (always available)
+            try {
+                const localFiles = JSON.parse(localStorage.getItem('editor_local_files') || '[]');
+                localFiles.forEach(f => {
+                    allFiles.push({
+                        id: f.id,
+                        source: 'local',
+                        properties: {
+                            fileName: f.fileName,
+                            language: f.language,
+                            content: f.content,
+                            lastModified: f.lastModified
+                        }
+                    });
+                });
+            } catch { }
+
+            // Get database files if authenticated
+            if (isAuthenticated()) {
+                const result = await UnifiedAtome.list({ kind: 'code_file' });
+                if (result.success && result.data?.length) {
+                    result.data.forEach(f => {
+                        allFiles.push({
+                            ...f,
+                            source: 'database'
+                        });
+                    });
+                }
+            }
+
+            if (!allFiles.length) {
+                updateStatus('No saved files found');
+                // Show info message
+                const info = document.createElement('div');
+                Object.assign(info.style, {
+                    position: 'fixed',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    backgroundColor: '#2d2d30',
+                    border: '1px solid #3c3c3c',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    zIndex: '10001',
+                    color: '#fff',
+                    textAlign: 'center',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+                });
+                info.innerHTML = `
+                    <div style="font-size: 24px; margin-bottom: 10px;">📂</div>
+                    <div style="margin-bottom: 15px;">No saved files found.<br>Save a file first with ✓ button.</div>
+                    <button id="close-info-btn" style="background: #3b82f6; border: none; color: #fff; padding: 8px 20px; border-radius: 4px; cursor: pointer;">OK</button>
+                `;
+                document.body.appendChild(info);
+                info.querySelector('#close-info-btn').addEventListener('click', () => {
+                    document.body.removeChild(info);
+                });
                 return;
             }
 
@@ -685,7 +812,7 @@ const createEditor = (config = {}) => {
                 borderRadius: '8px',
                 padding: '16px',
                 zIndex: '10001',
-                minWidth: '300px',
+                minWidth: '350px',
                 maxHeight: '400px',
                 overflow: 'auto',
                 boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
@@ -702,10 +829,11 @@ const createEditor = (config = {}) => {
             fileList.style.flexDirection = 'column';
             fileList.style.gap = '4px';
 
-            result.data.forEach(file => {
+            allFiles.forEach(file => {
                 const props = file.properties || file.data || {};
+                const sourceIcon = file.source === 'local' ? '💾' : '☁️';
                 const fileItem = document.createElement('button');
-                fileItem.textContent = `${props.fileName || file.id} (${languageLabels[props.language] || 'Unknown'})`;
+                fileItem.innerHTML = `${sourceIcon} <strong>${props.fileName || file.id}</strong> <span style="color:#888">(${languageLabels[props.language] || 'Unknown'})</span>`;
                 Object.assign(fileItem.style, {
                     background: 'rgba(255,255,255,0.1)',
                     border: 'none',
@@ -713,7 +841,10 @@ const createEditor = (config = {}) => {
                     padding: '8px 12px',
                     borderRadius: '4px',
                     cursor: 'pointer',
-                    textAlign: 'left'
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                 });
                 fileItem.addEventListener('mouseenter', () => fileItem.style.background = 'rgba(255,255,255,0.2)');
                 fileItem.addEventListener('mouseleave', () => fileItem.style.background = 'rgba(255,255,255,0.1)');
