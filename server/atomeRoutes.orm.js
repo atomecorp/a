@@ -12,6 +12,22 @@ import { broadcastMessage } from './githubSync.js';
 import orm from '../database/orm.js';
 
 /**
+ * Safely parse a JSON value, returning raw value if parsing fails
+ * This handles cases where values are stored as raw strings vs JSON
+ */
+function safeParseJSON(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    try {
+        return JSON.parse(value);
+    } catch {
+        // If it's not valid JSON, return as-is (it's a raw string value)
+        return value;
+    }
+}
+
+/**
  * Validate authentication token
  */
 async function validateToken(request) {
@@ -462,8 +478,8 @@ export function registerAtomeRoutes(server, dataSource) {
                 const history = await orm.getPropertyHistory(id, key);
                 versions = history.map(h => ({
                     key: h.key,
-                    value: JSON.parse(h.value || 'null'),
-                    previous_value: h.previous_value ? JSON.parse(h.previous_value) : null,
+                    value: safeParseJSON(h.value),
+                    previous_value: h.previous_value ? safeParseJSON(h.previous_value) : null,
                     changed_at: h.changed_at,
                     changed_by: h.changed_by,
                     change_type: h.change_type
@@ -476,8 +492,8 @@ export function registerAtomeRoutes(server, dataSource) {
                     for (const h of history) {
                         versions.push({
                             key: h.key,
-                            value: JSON.parse(h.value || 'null'),
-                            previous_value: h.previous_value ? JSON.parse(h.previous_value) : null,
+                            value: safeParseJSON(h.value),
+                            previous_value: h.previous_value ? safeParseJSON(h.previous_value) : null,
                             changed_at: h.changed_at,
                             changed_by: h.changed_by,
                             change_type: h.change_type
@@ -501,7 +517,391 @@ export function registerAtomeRoutes(server, dataSource) {
         }
     });
 
-    console.log('🔧 Atome API routes registered (ORM version)');
+    // =========================================================================
+    // ALTER - POST /api/atome/:id/alter (ADOLE: append-only alterations)
+    // =========================================================================
+    server.post('/api/atome/:id/alter', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            await orm.initDatabase();
+            const { tenant_id, principal_id } = await ensureUserInORM(user);
+
+            const { id } = request.params;
+            const { alterations } = request.body;
+
+            if (!alterations || !Array.isArray(alterations) || alterations.length === 0) {
+                return reply.status(400).send({ 
+                    success: false, 
+                    error: 'Alterations array is required' 
+                });
+            }
+
+            // Check atome exists and user has write access
+            const atome = await orm.getAtome(id);
+            if (!atome) {
+                return reply.status(404).send({ success: false, error: 'Atome not found' });
+            }
+
+            if (atome.created_by !== principal_id) {
+                const hasAccess = await orm.hasPermission(principal_id, id, 'write');
+                if (!hasAccess) {
+                    return reply.status(403).send({ success: false, error: 'Access denied' });
+                }
+            }
+
+            // Apply alterations (each creates a new version in history)
+            const appliedAlterations = [];
+            for (const alteration of alterations) {
+                const { key, value, operation = 'set' } = alteration;
+                
+                if (!key) {
+                    continue;
+                }
+
+                // Get current value for history
+                const currentValue = await orm.getProperty(id, key);
+                
+                // Apply the alteration
+                await orm.setProperty(id, key, value, principal_id);
+                
+                appliedAlterations.push({
+                    key,
+                    previous_value: currentValue,
+                    new_value: value,
+                    operation,
+                    applied_at: new Date().toISOString()
+                });
+            }
+
+            // Broadcast change
+            broadcastMessage({
+                type: 'atome_altered',
+                atomeId: id,
+                userId: principal_id,
+                alterations: appliedAlterations
+            });
+
+            console.log(`✅ [Atome] Altered ${id}: ${appliedAlterations.length} changes`);
+
+            return {
+                success: true,
+                data: {
+                    atome_id: id,
+                    alterations_applied: appliedAlterations.length,
+                    alterations: appliedAlterations
+                }
+            };
+
+        } catch (error) {
+            console.error('❌ [Atome] Alter error:', error.message);
+            return reply.status(500).send({ success: false, error: error.message });
+        }
+    });
+
+    // =========================================================================
+    // RENAME - POST /api/atome/:id/rename
+    // =========================================================================
+    server.post('/api/atome/:id/rename', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            await orm.initDatabase();
+            const { tenant_id, principal_id } = await ensureUserInORM(user);
+
+            const { id } = request.params;
+            const { new_name } = request.body;
+
+            if (!new_name || typeof new_name !== 'string' || new_name.trim().length === 0) {
+                return reply.status(400).send({ 
+                    success: false, 
+                    error: 'new_name is required and must be a non-empty string' 
+                });
+            }
+
+            // Check atome exists and user has write access
+            const atome = await orm.getAtome(id);
+            if (!atome) {
+                return reply.status(404).send({ success: false, error: 'Atome not found' });
+            }
+
+            if (atome.created_by !== principal_id) {
+                const hasAccess = await orm.hasPermission(principal_id, id, 'write');
+                if (!hasAccess) {
+                    return reply.status(403).send({ success: false, error: 'Access denied' });
+                }
+            }
+
+            // Get current name for history
+            const oldName = await orm.getProperty(id, 'name');
+            
+            // Update the name
+            await orm.setProperty(id, 'name', new_name.trim(), principal_id);
+
+            // Broadcast change
+            broadcastMessage({
+                type: 'atome_renamed',
+                atomeId: id,
+                userId: principal_id,
+                oldName,
+                newName: new_name.trim()
+            });
+
+            console.log(`✅ [Atome] Renamed ${id}: "${oldName}" -> "${new_name.trim()}"`);
+
+            return {
+                success: true,
+                data: {
+                    atome_id: id,
+                    old_name: oldName,
+                    new_name: new_name.trim()
+                }
+            };
+
+        } catch (error) {
+            console.error('❌ [Atome] Rename error:', error.message);
+            return reply.status(500).send({ success: false, error: error.message });
+        }
+    });
+
+    // =========================================================================
+    // RESTORE - POST /api/atome/:id/restore (restore to a specific version)
+    // =========================================================================
+    server.post('/api/atome/:id/restore', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            await orm.initDatabase();
+            const { tenant_id, principal_id } = await ensureUserInORM(user);
+
+            const { id } = request.params;
+            const { key, version_index } = request.body;
+
+            if (!key || typeof key !== 'string') {
+                return reply.status(400).send({ 
+                    success: false, 
+                    error: 'key is required to restore a specific property' 
+                });
+            }
+
+            if (typeof version_index !== 'number' || version_index < 0) {
+                return reply.status(400).send({ 
+                    success: false, 
+                    error: 'version_index must be a non-negative integer (0 = most recent)' 
+                });
+            }
+
+            // Check atome exists and user has write access
+            const atome = await orm.getAtome(id);
+            if (!atome) {
+                return reply.status(404).send({ success: false, error: 'Atome not found' });
+            }
+
+            if (atome.created_by !== principal_id) {
+                const hasAccess = await orm.hasPermission(principal_id, id, 'write');
+                if (!hasAccess) {
+                    return reply.status(403).send({ success: false, error: 'Access denied' });
+                }
+            }
+
+            // Get property history
+            const history = await orm.getPropertyHistory(id, key);
+            
+            if (!history || history.length === 0) {
+                return reply.status(404).send({ 
+                    success: false, 
+                    error: `No history found for property "${key}"` 
+                });
+            }
+
+            if (version_index >= history.length) {
+                return reply.status(400).send({ 
+                    success: false, 
+                    error: `Version index ${version_index} out of range. Available: 0-${history.length - 1}` 
+                });
+            }
+
+            // Get the version to restore
+            const versionToRestore = history[version_index];
+            const valueToRestore = JSON.parse(versionToRestore.value || 'null');
+            const currentValue = await orm.getProperty(id, key);
+
+            // Apply the restoration (this creates a new history entry)
+            await orm.setProperty(id, key, valueToRestore, principal_id);
+
+            // Broadcast change
+            broadcastMessage({
+                type: 'atome_restored',
+                atomeId: id,
+                userId: principal_id,
+                key,
+                restoredFromVersion: version_index
+            });
+
+            console.log(`✅ [Atome] Restored ${id}.${key} to version ${version_index}`);
+
+            return {
+                success: true,
+                data: {
+                    atome_id: id,
+                    key,
+                    previous_value: currentValue,
+                    restored_value: valueToRestore,
+                    restored_from_version: version_index,
+                    restored_from_date: versionToRestore.changed_at
+                }
+            };
+
+        } catch (error) {
+            console.error('❌ [Atome] Restore error:', error.message);
+            return reply.status(500).send({ success: false, error: error.message });
+        }
+    });
+
+    // =========================================================================
+    // USER DATA - DELETE /api/user-data/delete-all
+    // =========================================================================
+    server.delete('/api/user-data/delete-all', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            await orm.initDatabase();
+            const { tenant_id, principal_id } = await ensureUserInORM(user);
+
+            const { confirm } = request.body || {};
+            
+            if (confirm !== true && confirm !== 'DELETE_ALL_MY_DATA') {
+                return reply.status(400).send({ 
+                    success: false, 
+                    error: 'Confirmation required. Set confirm to true or "DELETE_ALL_MY_DATA"' 
+                });
+            }
+
+            const db = orm.getDatabase();
+
+            // Count atomes before deletion
+            const atomes = await db('atomes')
+                .where('created_by', principal_id)
+                .select('atome_id');
+            
+            const atomeIds = atomes.map(a => a.atome_id);
+            let deletedCount = 0;
+
+            if (atomeIds.length > 0) {
+                // Delete properties and history for user's atomes
+                await db('properties')
+                    .whereIn('atome_id', atomeIds)
+                    .del();
+                
+                await db('property_history')
+                    .whereIn('atome_id', atomeIds)
+                    .del();
+
+                // Delete permissions
+                await db('permissions')
+                    .whereIn('atome_id', atomeIds)
+                    .del();
+
+                // Delete atomes
+                deletedCount = await db('atomes')
+                    .where('created_by', principal_id)
+                    .del();
+            }
+
+            console.log(`🗑️ [UserData] Deleted ${deletedCount} atomes for user ${principal_id}`);
+
+            return {
+                success: true,
+                data: {
+                    deleted_atomes: deletedCount,
+                    user_id: principal_id
+                }
+            };
+
+        } catch (error) {
+            console.error('❌ [UserData] Delete error:', error.message);
+            return reply.status(500).send({ success: false, error: error.message });
+        }
+    });
+
+    // =========================================================================
+    // USER DATA - GET /api/user-data/export
+    // =========================================================================
+    server.get('/api/user-data/export', async (request, reply) => {
+        const user = await validateToken(request);
+        if (!user) {
+            return reply.status(401).send({ success: false, error: 'Unauthorized' });
+        }
+
+        try {
+            await orm.initDatabase();
+            const { tenant_id, principal_id } = await ensureUserInORM(user);
+
+            const db = orm.getDatabase();
+
+            // Get all user's atomes
+            const atomes = await db('atomes')
+                .where('created_by', principal_id)
+                .select('*');
+
+            const exportData = {
+                exported_at: new Date().toISOString(),
+                user_id: principal_id,
+                atomes: []
+            };
+
+            for (const atome of atomes) {
+                // Get all properties for this atome
+                const properties = await orm.getAllProperties(atome.atome_id);
+                
+                // Get history for each property
+                const history = {};
+                for (const key of Object.keys(properties)) {
+                    const propHistory = await orm.getPropertyHistory(atome.atome_id, key);
+                    history[key] = propHistory.map(h => ({
+                        value: safeParseJSON(h.value),
+                        previous_value: h.previous_value ? safeParseJSON(h.previous_value) : null,
+                        changed_at: h.changed_at,
+                        change_type: h.change_type
+                    }));
+                }
+
+                exportData.atomes.push({
+                    atome_id: atome.atome_id,
+                    atome_type: atome.atome_type,
+                    created_at: atome.created_at,
+                    updated_at: atome.updated_at,
+                    properties,
+                    history
+                });
+            }
+
+            console.log(`📦 [UserData] Exported ${exportData.atomes.length} atomes for user ${principal_id}`);
+
+            return {
+                success: true,
+                data: exportData
+            };
+
+        } catch (error) {
+            console.error('❌ [UserData] Export error:', error.message);
+            return reply.status(500).send({ success: false, error: error.message });
+        }
+    });
+
+    console.log('🔧 Atome API routes registered (ORM version with ADOLE support)');
 }
 
 export default registerAtomeRoutes;

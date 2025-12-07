@@ -654,6 +654,238 @@ async fn logout_handler() -> impl IntoResponse {
     )
 }
 
+/// POST /api/auth/local/change-password
+async fn change_password_handler(
+    State(state): State<LocalAuthState>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<ChangePasswordRequest>,
+) -> impl IntoResponse {
+    // Validate JWT token
+    let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
+    let token = match auth_header {
+        Some(h) if h.starts_with("Bearer ") => &h[7..],
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some("Missing or invalid authorization header".into()),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Decode token
+    let claims = match decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+        &Validation::default(),
+    ) {
+        Ok(token_data) => token_data.claims,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some("Invalid or expired token".into()),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Validate new password
+    if req.new_password.len() < 6 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse {
+                success: false,
+                error: Some("New password must be at least 6 characters".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        );
+    }
+
+    let db = state.db.lock().unwrap();
+
+    // Get current password hash
+    let user: Result<(String, String), _> = db.query_row(
+        "SELECT id, password_hash FROM users WHERE id = ?1",
+        params![claims.sub],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    );
+
+    match user {
+        Ok((user_id, password_hash)) => {
+            // Verify current password
+            if !verify(&req.current_password, &password_hash).unwrap_or(false) {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(AuthResponse {
+                        success: false,
+                        error: Some("Current password is incorrect".into()),
+                        message: None,
+                        user: None,
+                        token: None,
+                    }),
+                );
+            }
+
+            // Hash new password
+            let new_hash = match hash(&req.new_password, DEFAULT_COST) {
+                Ok(h) => h,
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(AuthResponse {
+                            success: false,
+                            error: Some("Failed to hash password".into()),
+                            message: None,
+                            user: None,
+                            token: None,
+                        }),
+                    );
+                }
+            };
+
+            // Update password
+            let now = Utc::now().to_rfc3339();
+            match db.execute(
+                "UPDATE users SET password_hash = ?1, updated_at = ?2 WHERE id = ?3",
+                params![new_hash, now, user_id],
+            ) {
+                Ok(_) => {
+                    println!("🔐 Password changed for user {}", user_id);
+                    (
+                        StatusCode::OK,
+                        Json(AuthResponse {
+                            success: true,
+                            message: Some("Password updated successfully".into()),
+                            error: None,
+                            user: None,
+                            token: None,
+                        }),
+                    )
+                }
+                Err(e) => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(AuthResponse {
+                        success: false,
+                        error: Some(format!("Database error: {}", e)),
+                        message: None,
+                        user: None,
+                        token: None,
+                    }),
+                ),
+            }
+        }
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            Json(AuthResponse {
+                success: false,
+                error: Some("User not found".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        ),
+    }
+}
+
+/// POST /api/auth/local/refresh
+async fn refresh_token_handler(
+    State(state): State<LocalAuthState>,
+    headers: axum::http::HeaderMap,
+) -> impl IntoResponse {
+    // Validate current JWT token
+    let auth_header = headers.get("authorization").and_then(|h| h.to_str().ok());
+    let token = match auth_header {
+        Some(h) if h.starts_with("Bearer ") => &h[7..],
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some("Missing or invalid authorization header".into()),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Decode token (allow expired tokens for refresh)
+    let mut validation = Validation::default();
+    validation.validate_exp = false; // Allow expired tokens
+
+    let claims = match decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(state.jwt_secret.as_bytes()),
+        &validation,
+    ) {
+        Ok(token_data) => token_data.claims,
+        Err(_) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(AuthResponse {
+                    success: false,
+                    error: Some("Invalid token".into()),
+                    message: None,
+                    user: None,
+                    token: None,
+                }),
+            );
+        }
+    };
+
+    // Generate new token with extended expiration
+    let new_claims = Claims {
+        sub: claims.sub.clone(),
+        username: claims.username.clone(),
+        phone: claims.phone.clone(),
+        exp: (Utc::now() + Duration::hours(24)).timestamp(),
+        iat: Utc::now().timestamp(),
+    };
+
+    match encode(
+        &Header::default(),
+        &new_claims,
+        &EncodingKey::from_secret(state.jwt_secret.as_bytes()),
+    ) {
+        Ok(new_token) => {
+            println!("🔄 Token refreshed for user {}", claims.sub);
+            (
+                StatusCode::OK,
+                Json(AuthResponse {
+                    success: true,
+                    message: Some("Token refreshed".into()),
+                    error: None,
+                    user: None,
+                    token: Some(new_token),
+                }),
+            )
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(AuthResponse {
+                success: false,
+                error: Some("Failed to generate new token".into()),
+                message: None,
+                user: None,
+                token: None,
+            }),
+        ),
+    }
+}
+
 /// DELETE /api/auth/local/delete
 async fn delete_handler(
     State(state): State<LocalAuthState>,
@@ -1304,6 +1536,11 @@ pub fn create_local_auth_router(data_dir: PathBuf) -> Router {
         .route("/api/auth/local/login", post(login_handler))
         .route("/api/auth/local/logout", post(logout_handler))
         .route("/api/auth/local/me", get(me_handler))
+        .route(
+            "/api/auth/local/change-password",
+            post(change_password_handler),
+        )
+        .route("/api/auth/local/refresh", post(refresh_token_handler))
         .route("/api/auth/local/delete", delete(delete_handler.clone()))
         .route("/api/auth/local/delete-account", delete(delete_handler)) // Alias for consistency
         .route(

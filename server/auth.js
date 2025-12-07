@@ -1394,6 +1394,91 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         }
     });
 
+    // =========================================================================
+    // REFRESH TOKEN - POST /api/auth/refresh
+    // =========================================================================
+    server.post('/api/auth/refresh', async (request, reply) => {
+        try {
+            // Try to get token from cookie first, then from Authorization header
+            let token = request.cookies.access_token;
+
+            if (!token) {
+                const authHeader = request.headers.authorization;
+                if (authHeader && authHeader.startsWith('Bearer ')) {
+                    token = authHeader.substring(7);
+                }
+            }
+
+            if (!token) {
+                return reply.code(401).send({ success: false, error: 'No token provided' });
+            }
+
+            // Verify the current token (allow expired tokens for refresh)
+            let decoded;
+            try {
+                decoded = server.jwt.verify(token);
+            } catch (err) {
+                // If token is expired, try to decode without verification
+                if (err.message.includes('expired')) {
+                    try {
+                        const [, payload] = token.split('.');
+                        decoded = JSON.parse(Buffer.from(payload, 'base64').toString());
+                    } catch {
+                        return reply.code(401).send({ success: false, error: 'Invalid token format' });
+                    }
+                } else {
+                    return reply.code(401).send({ success: false, error: 'Invalid token' });
+                }
+            }
+
+            // Verify user still exists
+            const rows = await dataSource.query(
+                `SELECT os.object_id, os.snapshot FROM object_state os WHERE os.object_id = $1 LIMIT 1`,
+                [decoded.id || decoded.sub]
+            );
+
+            if (rows.length === 0) {
+                return reply.code(404).send({ success: false, error: 'User not found' });
+            }
+
+            const user = rows[0];
+            const snapshot = user.snapshot;
+
+            // Generate new token with fresh expiry
+            const newToken = server.jwt.sign({
+                sub: user.object_id,
+                id: user.object_id,
+                username: snapshot.username,
+                phone: snapshot.phone
+            });
+
+            // Set new cookie
+            reply.setCookie('access_token', newToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
+                maxAge: COOKIE_MAX_AGE
+            });
+
+            console.log(`🔄 Token refreshed for user ${user.object_id}`);
+
+            return {
+                success: true,
+                token: newToken,
+                user: {
+                    id: user.object_id,
+                    username: snapshot.username,
+                    phone: snapshot.phone
+                }
+            };
+
+        } catch (error) {
+            request.log.error({ err: error }, 'Token refresh failed');
+            return reply.code(500).send({ success: false, error: 'Token refresh failed' });
+        }
+    });
+
     console.log('🔐 Authentication routes registered');
     console.log('🔧 Admin update route registered: /api/admin/apply-update');
     console.log('🔧 Admin batch-update route registered: /api/admin/batch-update');

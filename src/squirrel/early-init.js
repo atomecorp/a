@@ -17,10 +17,10 @@
     // ═══════════════════════════════════════════════════════════════════════════
     // REMOTE LOGGING - Send logs to Axum server (3000) to survive page reloads
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
     var loadTime = Date.now();
     var logBuffer = [];
-    
+
     function remoteLog(level, message, data) {
         var entry = {
             timestamp: new Date().toISOString(),
@@ -31,10 +31,10 @@
             url: window.location.href,
             userAgent: navigator.userAgent
         };
-        
+
         // Also log locally
         console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log']('[Squirrel]', message, data || '');
-        
+
         // Send to Axum server (port 3000) - fire and forget, no await
         try {
             var xhr = new XMLHttpRequest();
@@ -45,24 +45,24 @@
             // Ignore send errors
         }
     }
-    
+
     remoteLog('info', 'Page loaded', { loadTime: loadTime });
 
     // ═══════════════════════════════════════════════════════════════════════════
     // DEBUG: Track page lifecycle to understand reloads
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
     // Track beforeunload to catch reloads
-    window.addEventListener('beforeunload', function(e) {
+    window.addEventListener('beforeunload', function (e) {
         var elapsed = Date.now() - loadTime;
-        remoteLog('warn', '⚠️ PAGE UNLOADING', { 
+        remoteLog('warn', '⚠️ PAGE UNLOADING', {
             elapsed: elapsed,
-            stack: new Error().stack 
+            stack: new Error().stack
         });
     });
-    
+
     // Track navigation
-    window.addEventListener('popstate', function(e) {
+    window.addEventListener('popstate', function (e) {
         remoteLog('warn', 'popstate event', { state: e.state });
     });
 
@@ -72,9 +72,32 @@
 
     // Capture phase - catches rejections first
     window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason;
+        var reasonStr = 'Unknown';
+        var reasonData = null;
+
+        try {
+            if (reason === null || reason === undefined) {
+                reasonStr = String(reason);
+            } else if (typeof reason === 'string') {
+                reasonStr = reason;
+            } else if (reason instanceof Error) {
+                reasonStr = reason.message || reason.toString();
+                reasonData = { name: reason.name, stack: reason.stack };
+            } else if (typeof reason === 'object') {
+                reasonStr = reason.message || reason.error || JSON.stringify(reason).substring(0, 500);
+                reasonData = reason;
+            } else {
+                reasonStr = String(reason);
+            }
+        } catch (ex) {
+            reasonStr = 'Could not stringify reason: ' + ex.message;
+        }
+
         remoteLog('error', '⛔ Unhandled Promise Rejection (PREVENTED)', {
-            reason: String(e.reason),
-            stack: e.reason && e.reason.stack ? e.reason.stack : null
+            reason: reasonStr,
+            reasonData: reasonData,
+            stack: reason && reason.stack ? reason.stack : null
         });
         e.preventDefault();
         e.stopPropagation();
@@ -99,9 +122,9 @@
         });
         return true; // Prevents default handling
     };
-    
+
     // Error event handler (catches more errors)
-    window.addEventListener('error', function(e) {
+    window.addEventListener('error', function (e) {
         remoteLog('error', '⛔ Error event (PREVENTED)', {
             message: e.message,
             filename: e.filename,
@@ -114,37 +137,37 @@
     // ═══════════════════════════════════════════════════════════════════════════
     // DEBUG: Intercept all fetch calls to track what triggers reload
     // ═══════════════════════════════════════════════════════════════════════════
-    
+
     var originalFetch = window.fetch;
-    window.fetch = function(url, options) {
+    window.fetch = function (url, options) {
         var urlStr = typeof url === 'string' ? url : (url && url.url) || String(url);
         var method = (options && options.method) || 'GET';
-        
+
         // Log requests to port 3000 (Tauri/Axum server)
         if (urlStr.includes('3000')) {
             remoteLog('info', '📡 FETCH to Tauri', { method: method, url: urlStr });
         }
-        
+
         return originalFetch.apply(this, arguments)
-            .then(function(response) {
+            .then(function (response) {
                 if (urlStr.includes('3000')) {
-                    remoteLog('info', '✅ FETCH response from Tauri', { 
-                        status: response.status, 
-                        url: urlStr 
+                    remoteLog('info', '✅ FETCH response from Tauri', {
+                        status: response.status,
+                        url: urlStr
                     });
                 }
                 return response;
             })
-            .catch(function(error) {
+            .catch(function (error) {
                 if (urlStr.includes('3000')) {
-                    remoteLog('error', '❌ FETCH error from Tauri', { 
-                        error: error.message, 
-                        url: urlStr 
+                    remoteLog('error', '❌ FETCH error from Tauri', {
+                        error: error.message,
+                        url: urlStr
                     });
                 }
                 throw error;
             });
     };
-    
+
     remoteLog('info', '✅ Early init complete - all handlers installed');
 })();

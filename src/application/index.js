@@ -48,13 +48,14 @@
 
 //  import('./examples/audio_basic.js');
 ////////////////////
-puts('synced!');
+// puts('synced!');
 // import('./aBox/index.js');
 // import('./examples/user_creation.js');
 // import('./examples/update.js');
 // import('./examples/socket_test.js');
-import('./examples/socket_test.js');
-import('./examples/ide_code_editor.js');
+// import('./examples/socket_test.js');
+// import('./examples/ide_code_editor.js');
+import('./examples/apis.js');
 
 // import('./lyrix/index.js');
 // import('./examples/input_file.js');
