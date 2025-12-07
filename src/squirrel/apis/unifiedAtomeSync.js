@@ -232,7 +232,9 @@ async function apiRequest(serverUrl, token, method, endpoint, data = null) {
             options.body = JSON.stringify(data);
         }
 
+        console.log(`[apiRequest] 📤 ${method} ${serverUrl}${endpoint}`);
         const response = await fetch(`${serverUrl}${endpoint}`, options);
+        console.log(`[apiRequest] 📥 Response status: ${response.status} ${response.statusText}`);
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
@@ -240,9 +242,12 @@ async function apiRequest(serverUrl, token, method, endpoint, data = null) {
             return null;
         }
 
-        return await response.json();
+        console.log(`[apiRequest] 📦 Parsing JSON...`);
+        const result = await response.json();
+        console.log(`[apiRequest] ✅ JSON parsed successfully`);
+        return result;
     } catch (error) {
-        console.debug(`[UnifiedAtome] Request to ${serverUrl} failed:`, error.message);
+        console.error(`[apiRequest] ❌ Request to ${serverUrl} failed:`, error.message, error);
         return null;
     }
 }
@@ -255,6 +260,10 @@ async function tauriRequest(method, endpoint, data = null) {
     if (!tauri) return null;
 
     const token = getTokens().tauri;
+    if (!token) {
+        console.debug('[UnifiedAtome] No Tauri token available, skipping request');
+        return null;
+    }
     return apiRequest(CONFIG.TAURI_SERVER, token, method, endpoint, data);
 }
 
@@ -266,6 +275,10 @@ async function fastifyRequest(method, endpoint, data = null) {
     if (!fastify) return null;
 
     const token = getTokens().fastify;
+    if (!token) {
+        console.debug('[UnifiedAtome] No Fastify token available, skipping request');
+        return null;
+    }
     return apiRequest(CONFIG.FASTIFY_SERVER, token, method, endpoint, data);
 }
 
@@ -497,18 +510,48 @@ function formatAtomeForServer(atome) {
  * Emit event to listeners
  */
 function emitEvent(type, data) {
+    // Remote log to survive potential crash
+    try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'http://127.0.0.1:3000/api/debug-log', false); // SYNC to ensure it's sent
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({ level: 'info', message: '📢 emitEvent START: ' + type, data: null }));
+    } catch(e) {}
+    
+    console.log('[UnifiedAtome] 📢 emitEvent START:', type);
+    
     // Dispatch DOM event
     if (typeof window !== 'undefined') {
+        console.log('[UnifiedAtome] 📢 Dispatching CustomEvent atome:' + type);
+        
+        try {
+            const xhr2 = new XMLHttpRequest();
+            xhr2.open('POST', 'http://127.0.0.1:3000/api/debug-log', false);
+            xhr2.setRequestHeader('Content-Type', 'application/json');
+            xhr2.send(JSON.stringify({ level: 'info', message: '📢 BEFORE dispatchEvent atome:' + type, data: null }));
+        } catch(e) {}
+        
         window.dispatchEvent(new CustomEvent(`atome:${type}`, { detail: data }));
+        
+        try {
+            const xhr3 = new XMLHttpRequest();
+            xhr3.open('POST', 'http://127.0.0.1:3000/api/debug-log', false);
+            xhr3.setRequestHeader('Content-Type', 'application/json');
+            xhr3.send(JSON.stringify({ level: 'info', message: '📢 AFTER dispatchEvent atome:' + type, data: null }));
+        } catch(e) {}
+        
+        console.log('[UnifiedAtome] 📢 CustomEvent dispatched');
     }
 
     // Call registered listeners
     const listeners = state.listeners.get(type) || [];
+    console.log('[UnifiedAtome] 📢 Calling', listeners.length, 'registered listeners');
     for (const listener of listeners) {
         try {
             listener(data);
         } catch { }
     }
+    console.log('[UnifiedAtome] 📢 emitEvent DONE:', type);
 }
 
 // =============================================================================
@@ -581,23 +624,79 @@ const UnifiedAtome = {
 
         // Create on Tauri if available
         if (tauri) {
-            const tauriResult = await tauriRequest('POST', '/api/atome/create', atomeData);
-            if (tauriResult?.success) {
-                created = true;
-                result = tauriResult;
-                console.debug('[UnifiedAtome] Created on Tauri:', atomeData.id);
+            console.log('[UnifiedAtome] 🚀 BEFORE tauriRequest - page should NOT reload after this');
+            try {
+                const tauriResult = await tauriRequest('POST', '/api/atome/create', atomeData);
+                
+                // CRITICAL: Remote log IMMEDIATELY after tauriRequest returns
+                try {
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', 'http://127.0.0.1:3000/api/debug-log', false);
+                    xhr.setRequestHeader('Content-Type', 'application/json');
+                    xhr.send(JSON.stringify({ 
+                        level: 'info', 
+                        message: '🟢 IMMEDIATELY AFTER tauriRequest', 
+                        data: { success: tauriResult?.success, id: atomeData.id }
+                    }));
+                } catch(e) {}
+                
+                console.log('[UnifiedAtome] ✅ AFTER tauriRequest - result:', tauriResult);
+                if (tauriResult?.success) {
+                    created = true;
+                    result = tauriResult;
+                    console.debug('[UnifiedAtome] Created on Tauri:', atomeData.id);
+                    
+                    // Remote log after setting created=true
+                    try {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', 'http://127.0.0.1:3000/api/debug-log', false);
+                        xhr.setRequestHeader('Content-Type', 'application/json');
+                        xhr.send(JSON.stringify({ 
+                            level: 'info', 
+                            message: '🟢 AFTER setting created=true', 
+                            data: { created: true }
+                        }));
+                    } catch(e) {}
+                }
+            } catch (e) {
+                console.error('[UnifiedAtome] ❌ tauriRequest THREW:', e);
             }
         }
 
         // Create on Fastify if available
         if (fastify) {
+            // Remote log before fastifyRequest
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://127.0.0.1:3000/api/debug-log', false);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.send(JSON.stringify({ level: 'info', message: '🔷 BEFORE fastifyRequest', data: { fastify: true } }));
+            } catch(e) {}
+            
             const fastifyResult = await fastifyRequest('POST', '/api/atome/create', atomeData);
+            
+            // Remote log after fastifyRequest
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://127.0.0.1:3000/api/debug-log', false);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.send(JSON.stringify({ level: 'info', message: '🔷 AFTER fastifyRequest', data: { success: fastifyResult?.success } }));
+            } catch(e) {}
+            
             if (fastifyResult?.success) {
                 created = true;
                 if (!result) result = fastifyResult;
                 console.debug('[UnifiedAtome] Created on Fastify:', atomeData.id);
             }
         }
+
+        // Remote log before emitEvent
+        try {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', 'http://127.0.0.1:3000/api/debug-log', false);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify({ level: 'info', message: '🎯 BEFORE emitEvent check', data: { created: created } }));
+        } catch(e) {}
 
         if (created) {
             emitEvent('created', { data: atomeData, result });

@@ -35,6 +35,25 @@ const booleanAttributes = new Set([
 // Stocker la fonction d'animation native pour éviter la récursion
 const nativeAnimate = HTMLElement.prototype.animate;
 
+// Wrapper pour capturer les erreurs des handlers async et éviter les rejections non gérées
+// (évite le reload de Tauri WebView sur unhandledrejection)
+const wrapAsyncHandler = (fn) => {
+  return function (event) {
+    try {
+      const result = fn.call(this, event);
+      // Si le handler retourne une promesse, capturer les erreurs
+      if (result && typeof result.then === 'function') {
+        result.catch(err => {
+          console.error('[Squirrel] Async event handler error:', err);
+        });
+      }
+      return result;
+    } catch (err) {
+      console.error('[Squirrel] Event handler error:', err);
+    }
+  };
+};
+
 // Fonction utilitaire pour ajouter des classes (évite la duplication de code)
 const addClasses = (element, classes) => {
   if (!classes) return;
@@ -138,8 +157,9 @@ const $ = (id, props = {}) => {
     if (isEventHandler(key) && typeof merged[key] === 'function') {
       const eventName = key.slice(2).toLowerCase();
       const handler = merged[key];
-      element.addEventListener(eventName, handler);
-      eventRegistry.get(element)[eventName] = handler;
+      const wrappedHandler = wrapAsyncHandler(handler);
+      element.addEventListener(eventName, wrappedHandler);
+      eventRegistry.get(element)[eventName] = wrappedHandler;
     }
   }
 
@@ -209,13 +229,14 @@ const $ = (id, props = {}) => {
       if (isEventHandler(key) && typeof updateProps[key] === 'function') {
         const eventName = key.slice(2).toLowerCase();
         const newHandler = updateProps[key];
+        const wrappedHandler = wrapAsyncHandler(newHandler);
 
         if (currentListeners[eventName]) {
           element.removeEventListener(eventName, currentListeners[eventName]);
         }
 
-        element.addEventListener(eventName, newHandler);
-        currentListeners[eventName] = newHandler;
+        element.addEventListener(eventName, wrappedHandler);
+        currentListeners[eventName] = wrappedHandler;
       }
     }
 

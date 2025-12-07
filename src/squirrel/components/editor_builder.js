@@ -12,16 +12,6 @@
  * - API programmatique complète
  */
 
-// DEBUG: Track page reloads
-if (!window._editorDebugInstalled) {
-    window._editorDebugInstalled = true;
-    window.addEventListener('beforeunload', (e) => {
-        console.log('[Editor DEBUG] Page is about to unload!');
-        console.trace('[Editor DEBUG] Stack trace:');
-    });
-    console.log('[Editor DEBUG] Unload listener installed');
-}
-
 import { $, define } from '../squirrel.js';
 
 // === CODEMIRROR IMPORTS (from local bundle) ===
@@ -631,9 +621,6 @@ const createEditor = (config = {}) => {
 
     async function validateContent() {
         console.log('[Editor] validateContent() called at:', new Date().toISOString());
-        console.log('[Editor] window._editorSaveMarker before:', window._editorSaveMarker);
-        window._editorSaveMarker = (window._editorSaveMarker || 0) + 1;
-        console.log('[Editor] window._editorSaveMarker after:', window._editorSaveMarker);
 
         if (!state.editorView || state.isSaving) {
             console.log('[Editor] Early return - editorView:', !!state.editorView, 'isSaving:', state.isSaving);
@@ -646,15 +633,14 @@ const createEditor = (config = {}) => {
         const content = state.editorView.state.doc.toString();
 
         try {
-            // Import UnifiedAtome dynamically
-            console.log('[Editor] Importing UnifiedAtome...');
+            console.log('[Editor] Importing UnifiedAtome module...');
             const { UnifiedAtome, isAuthenticated } = await import('../apis/unifiedAtomeSync.js');
-            console.log('[Editor] Import successful, isAuthenticated:', isAuthenticated());
+            const authenticated = isAuthenticated();
+            console.log('[Editor] isAuthenticated:', authenticated);
 
-            // Check authentication first
-            if (!isAuthenticated()) {
-                console.log('[Editor] Not authenticated, saving locally');
-                // Save to localStorage only if not authenticated
+            if (!authenticated) {
+                // Save to localStorage only - NO network calls
+                console.log('[Editor] Not authenticated, saving to localStorage only');
                 const localKey = `editor_file_${state.fileName}_${Date.now()}`;
                 const localData = {
                     id: localKey,
@@ -664,13 +650,11 @@ const createEditor = (config = {}) => {
                     lastModified: new Date().toISOString()
                 };
 
-                // Get existing local files
                 let localFiles = [];
                 try {
                     localFiles = JSON.parse(localStorage.getItem('editor_local_files') || '[]');
                 } catch { }
 
-                // Add or update file
                 const existingIndex = localFiles.findIndex(f => f.fileName === state.fileName);
                 if (existingIndex >= 0) {
                     localFiles[existingIndex] = localData;
@@ -683,11 +667,13 @@ const createEditor = (config = {}) => {
                 state.lastValidatedContent = content;
                 state.isDirty = false;
                 updateDirtyIndicator(false);
-                updateStatus('✓ Saved locally (not logged in)');
+                updateStatus('✓ Saved locally (login for cloud sync)');
                 onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content, local: true });
                 return;
             }
 
+            // Authenticated - save to server
+            console.log('[Editor] Authenticated, calling UnifiedAtome.create...');
             const atomeData = {
                 id: state.fileId || `code_file_${Date.now()}`,
                 kind: 'code_file',
@@ -700,34 +686,26 @@ const createEditor = (config = {}) => {
                 }
             };
 
-            let result;
-            if (state.fileId && !state.fileId.startsWith('editor_file_')) {
-                result = await UnifiedAtome.update(state.fileId, atomeData);
-            } else {
-                result = await UnifiedAtome.create(atomeData);
-                if (result.success) {
-                    state.fileId = atomeData.id;
-                }
-            }
+            const result = await UnifiedAtome.create(atomeData);
+            console.log('[Editor] create result:', result);
 
             if (result.success) {
+                state.fileId = atomeData.id;
                 state.lastValidatedContent = content;
                 state.isDirty = false;
                 updateDirtyIndicator(false);
                 updateStatus('✓ Saved to database');
                 onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content });
-            } else if (result.queued) {
-                updateStatus('⏳ Queued (server unavailable)');
             } else {
-                throw new Error(result.error || 'Save failed');
+                updateStatus('⏳ Queued (server unavailable)');
             }
+
         } catch (error) {
             console.error('[Editor] Save failed:', error);
-            updateStatus('✗ Save failed: ' + error.message);
+            updateStatus('✗ Failed: ' + error.message);
             onError?.(error);
         } finally {
             state.isSaving = false;
-            console.log('[Editor] validateContent() completed successfully');
         }
     }
 

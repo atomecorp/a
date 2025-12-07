@@ -116,6 +116,25 @@ async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse
     }))
 }
 
+/// Debug log handler - receives logs from frontend to survive page reloads
+async fn debug_log_handler(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
+    // Print to terminal with timestamp
+    let level = payload.get("level").and_then(|v| v.as_str()).unwrap_or("info");
+    let message = payload.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    let elapsed = payload.get("elapsed").and_then(|v| v.as_i64()).unwrap_or(0);
+    let data = payload.get("data");
+    
+    let icon = match level {
+        "error" => "❌",
+        "warn" => "⚠️",
+        _ => "📝"
+    };
+    
+    println!("{} [FRONTEND +{}ms] {} {:?}", icon, elapsed, message, data);
+    
+    Json(json!({ "success": true }))
+}
+
 async fn upload_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -819,20 +838,35 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT])
         .allow_credentials(true);
 
+    // Use a separate data directory for SQLite databases to avoid triggering Tauri hot-reload
+    // The data_dir should be outside the watched src/ folder
+    let data_dir = {
+        // Try to use a 'data' folder at project root (outside src/)
+        let project_root = static_dir.parent().unwrap_or(&static_dir);
+        let data_path = project_root.join("data");
+        
+        // Create the data directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&data_path) {
+            eprintln!("⚠️ Could not create data directory {:?}: {}", data_path, e);
+            // Fallback to uploads parent if data dir creation fails
+            uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf()
+        } else {
+            println!("📂 Database directory (outside src/): {:?}", data_path);
+            data_path
+        }
+    };
+
     // Create local auth router (independent state) with CORS layer
-    let local_auth_router = local_auth::create_local_auth_router(
-        uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf(),
-    )
-    .layer(cors.clone());
+    let local_auth_router = local_auth::create_local_auth_router(data_dir.clone())
+        .layer(cors.clone());
 
     // Create local atome router with CORS layer
-    let local_atome_router = local_atome::create_local_atome_router(
-        uploads_dir.parent().unwrap_or(&uploads_dir).to_path_buf(),
-    )
-    .layer(cors.clone());
+    let local_atome_router = local_atome::create_local_atome_router(data_dir.clone())
+        .layer(cors.clone());
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
+        .route("/api/debug-log", post(debug_log_handler))
         .route(
             "/api/uploads",
             get(list_uploads_handler).post(upload_handler),

@@ -9,7 +9,7 @@ import { $, define } from '../squirrel.js';
 
 // Registre des templates globaux
 const buttonTemplates = {
-   'squirrel_design': {
+  'squirrel_design': {
     name: 'Material Design Green',
     description: 'Style Material Design avec couleurs vertes',
     css: {
@@ -21,7 +21,7 @@ const buttonTemplates = {
       borderRadius: '3px',
       border: 'none',
       padding: '8px 9px',
-     
+
 
       cursor: 'pointer',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -29,14 +29,14 @@ const buttonTemplates = {
       height: '19px'
     },
     onStyle: {
-        backgroundColor: 'rgba(99,99,99,1)',
+      backgroundColor: 'rgba(99,99,99,1)',
       boxShadow: '0 4px 8px rgba(0,0,0,0.6)',
-         color: 'yellow',
+      color: 'yellow',
     },
     offStyle: {
       backgroundColor: 'rgba(69,69,69,1)',
       boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-            color: 'orange',
+      color: 'orange',
     }
   },
   // === MATERIAL DESIGN ===
@@ -77,7 +77,7 @@ const buttonTemplates = {
       boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
     }
   },
-  
+
 
   'material_design_green': {
     name: 'Material Design Green',
@@ -137,7 +137,7 @@ const buttonTemplates = {
     offStyle: {
       backgroundColor: '#6c757d',
       borderColor: '#5a6268'
-      
+
     },
     hover: {
       backgroundColor: '#0056b3',
@@ -316,16 +316,16 @@ const applyTemplateEffects = (button, template) => {
         const css = {};
         if (button && /_toggle$/.test(button.id)) {
           let masterScale = 1;
-          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
-            const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
-            if (baseSize) {
-              const scaled = Math.round(baseSize * masterScale) + 'px';
-              css.width = scaled;
-              css.height = scaled;
-            } else {
-              if (button.style.width) css.width = button.style.width;
-              if (button.style.height) css.height = button.style.height;
-            }
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch (e) { }
+          const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
+          if (baseSize) {
+            const scaled = Math.round(baseSize * masterScale) + 'px';
+            css.width = scaled;
+            css.height = scaled;
+          } else {
+            if (button.style.width) css.width = button.style.width;
+            if (button.style.height) css.height = button.style.height;
+          }
           if (button.style.borderRadius) css.borderRadius = button.style.borderRadius;
         }
         return css;
@@ -352,7 +352,7 @@ const applyTemplateEffects = (button, template) => {
         const css = {};
         if (button && /_toggle$/.test(button.id)) {
           let masterScale = 1;
-          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+          try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch (e) { }
           const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
           if (baseSize) {
             const scaled = Math.round(baseSize * masterScale) + 'px';
@@ -391,8 +391,8 @@ define('button-container', {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '8px 16px',
-  // remove default contour
-  border: 'none',
+    // remove default contour
+    border: 'none',
     borderRadius: '4px',
     // backgroundColor: '#f8f9fa', // ❌ Retiré pour éviter les conflits
     // color: '#333', // ❌ Retiré pour éviter les conflits
@@ -400,12 +400,12 @@ define('button-container', {
     fontFamily: 'system-ui, sans-serif',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-  outline: 'none',
-  userSelect: 'none',
-  WebkitUserSelect: 'none',
-  WebkitTapHighlightColor: 'transparent',
-  WebkitTouchCallout: 'none',
-  WebkitUserDrag: 'none'
+    outline: 'none',
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    WebkitTapHighlightColor: 'transparent',
+    WebkitTouchCallout: 'none',
+    WebkitUserDrag: 'none'
   },
   attrs: {
     type: 'button'
@@ -424,8 +424,8 @@ define('button-icon', {
     fontSize: '16px',
     userSelect: 'none',
     WebkitUserSelect: 'none',
-  pointerEvents: 'none',
-  WebkitUserDrag: 'none'
+    pointerEvents: 'none',
+    WebkitUserDrag: 'none'
   },
   attrs: {
     draggable: 'false'
@@ -442,8 +442,8 @@ define('button-text', {
     lineHeight: '1',
     userSelect: 'none',
     WebkitUserSelect: 'none',
-  pointerEvents: 'none',
-  WebkitUserDrag: 'none'
+    pointerEvents: 'none',
+    WebkitUserDrag: 'none'
   },
   attrs: {
     draggable: 'false'
@@ -464,16 +464,16 @@ define('button-badge', {
     borderRadius: '9px',
     backgroundColor: '#dc3545',
     color: 'white',
-  userSelect: 'none',
-  WebkitUserSelect: 'none',
-  pointerEvents: 'none',
-  WebkitUserDrag: 'none',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: '11px',
-  fontWeight: '600',
-  lineHeight: '1'
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    pointerEvents: 'none',
+    WebkitUserDrag: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    fontWeight: '600',
+    lineHeight: '1'
   }
 });
 
@@ -569,11 +569,11 @@ const createButton = (config = {}) => {
     skin = {},
     id,
     disabled = false,
-    
+
     // === SYSTÈME DE TEMPLATES ===
     template, // ou templates pour compatibilité
     templates, // alias pour template
-    
+
     // === NOUVELLES PROPRIÉTÉS TOGGLE ===
     onText,
     offText,
@@ -583,11 +583,11 @@ const createButton = (config = {}) => {
     offStyle = {},
     initialState = false, // false = OFF, true = ON
     onStateChange,
-    
+
     // === PROPRIÉTÉS POUR ÉTATS MULTIPLES ===
     states, // Array d'états personnalisés
     cycleMode = 'forward',
-    
+
     ...otherProps
   } = config;
 
@@ -596,7 +596,7 @@ const createButton = (config = {}) => {
 
   // Résoudre le nom du template
   const templateName = template || templates;
-  
+
   // Appliquer le template si spécifié
   let processedConfig = config;
   if (templateName) {
@@ -615,7 +615,7 @@ const createButton = (config = {}) => {
     processedConfig.toggle === true
   );
   const isMultiStateMode = states && states.length > 0;
-  
+
   // État interne pour le toggle
   let currentToggleState = initialState;
   let currentStateIndex = 0;
@@ -651,24 +651,24 @@ const createButton = (config = {}) => {
     // Pas de template, juste les styles utilisateur
     containerStyles = { ...containerStyles, ...processedConfig.css };
   }
-  
+
   // 3. Ajouter les styles skin
   if (skin.container) {
     containerStyles = { ...containerStyles, ...skin.container };
   }
-  
+
   // 4. ✅ FUSION FINALE : Ajouter les styles d'état initial AVANT création
   if (isToggleMode && templateName && buttonTemplates[templateName]) {
     // Récupérer les styles d'état du template
-    const templateStateStyles = currentToggleState ? 
-      (buttonTemplates[templateName].onStyle || {}) : 
+    const templateStateStyles = currentToggleState ?
+      (buttonTemplates[templateName].onStyle || {}) :
       (buttonTemplates[templateName].offStyle || {});
-    
+
     // Récupérer les styles d'état de l'utilisateur
-    const userStateStyles = currentToggleState ? 
-      (processedConfig.onStyle || {}) : 
+    const userStateStyles = currentToggleState ?
+      (processedConfig.onStyle || {}) :
       (processedConfig.offStyle || {});
-    
+
     // Appliquer les styles d'état par-dessus tout
     if (templateStateStyles && Object.keys(templateStateStyles).length > 0) {
       containerStyles = { ...containerStyles, ...templateStateStyles };
@@ -739,24 +739,24 @@ const createButton = (config = {}) => {
     if (isToggleMode) {
       // Mode toggle: basculer entre ON/OFF
       currentToggleState = !currentToggleState;
-      
+
       // Mettre à jour le texte
       const newText = currentToggleState ? onText : offText;
       if (newText) {
         button.updateText(newText);
       }
-      
+
       // Mettre à jour les styles
       // ✅ Récupérer les styles du template pour le nouvel état
-      const templateStateStyles = currentToggleState ? 
-        (templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].onStyle || {} : {}) : 
+      const templateStateStyles = currentToggleState ?
+        (templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].onStyle || {} : {}) :
         (templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].offStyle || {} : {});
-      
+
       // ✅ Récupérer les styles utilisateur pour le nouvel état
-      const userStateStyles = currentToggleState ? 
-        (processedConfig.onStyle || {}) : 
+      const userStateStyles = currentToggleState ?
+        (processedConfig.onStyle || {}) :
         (processedConfig.offStyle || {});
-      
+
       // ✅ Fusionner les styles: template base + template state + user state + user css
       const templateBase = templateName && buttonTemplates[templateName] ? buttonTemplates[templateName].css : {};
       // Compose so state styles override base CSS. Base = template + user css; State = template state + user state.
@@ -773,7 +773,7 @@ const createButton = (config = {}) => {
         // Recompute width/height from stored base size * external master scale if available
         const baseSize = button.dataset.baseToggleSize ? parseFloat(button.dataset.baseToggleSize) : null;
         let masterScale = 1;
-        try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch(e) {}
+        try { if (window.getIntuitionMasterScale) masterScale = window.getIntuitionMasterScale(); } catch (e) { }
         if (baseSize) {
           const scaled = Math.round(baseSize * masterScale) + 'px';
           finalStyles.width = scaled;
@@ -788,25 +788,31 @@ const createButton = (config = {}) => {
         const existingBR = button.style.borderRadius;
         if (existingBR && finalStyles.borderRadius === undefined) finalStyles.borderRadius = existingBR;
       }
-      
+
       button.$({ css: finalStyles });
-      
-      // Exécuter l'action appropriée
+
+      // Exécuter l'action appropriée (with async error handling)
       if (currentToggleState && button._handlers.onAction) {
-        button._handlers.onAction(currentToggleState, button);
+        Promise.resolve(button._handlers.onAction(currentToggleState, button)).catch(err => {
+          console.error('[Button] onAction error:', err);
+        });
       } else if (!currentToggleState && button._handlers.offAction) {
-        button._handlers.offAction(currentToggleState, button);
+        Promise.resolve(button._handlers.offAction(currentToggleState, button)).catch(err => {
+          console.error('[Button] offAction error:', err);
+        });
       }
-      
+
       // Callback de changement d'état
       if (onStateChange) {
-        onStateChange(currentToggleState, button);
+        Promise.resolve(onStateChange(currentToggleState, button)).catch(err => {
+          console.error('[Button] onStateChange error:', err);
+        });
       }
-      
+
     } else if (isMultiStateMode) {
       // Mode multi-états: passer à l'état suivant
       currentStateIndex = getNextStateIndex(currentStateIndex, states.length, cycleMode, pingPongDirection);
-      
+
       // Pour ping-pong, ajuster la direction si nécessaire
       if (cycleMode === 'ping-pong') {
         if (currentStateIndex === states.length - 1) {
@@ -815,9 +821,9 @@ const createButton = (config = {}) => {
           pingPongDirection = 1;
         }
       }
-      
+
       const newState = states[currentStateIndex];
-      
+
       // Mettre à jour l'apparence
       if (newState.text) button.updateText(newState.text);
       if (newState.css) {
@@ -828,28 +834,34 @@ const createButton = (config = {}) => {
         const iconEl = button.querySelector('.hs-button-icon');
         if (iconEl) iconEl.textContent = newState.icon;
       }
-      
-      // Exécuter l'action de l'état
+
+      // Exécuter l'action de l'état (with async error handling)
       if (newState.action) {
-        newState.action(newState, currentStateIndex, button);
+        Promise.resolve(newState.action(newState, currentStateIndex, button)).catch(err => {
+          console.error('[Button] state action error:', err);
+        });
       }
-      
+
       // Callback de changement d'état
       if (onStateChange) {
-        onStateChange(newState, currentStateIndex, button);
+        Promise.resolve(onStateChange(newState, currentStateIndex, button)).catch(err => {
+          console.error('[Button] onStateChange error:', err);
+        });
       }
-      
+
     } else {
-      // Mode bouton classique
+      // Mode bouton classique (with async error handling)
       if (button._handlers.onClick) {
-        button._handlers.onClick(event, button);
+        Promise.resolve(button._handlers.onClick(event, button)).catch(err => {
+          console.error('[Button] onClick error:', err);
+        });
       }
     }
   };
 
   // Création du conteneur principal
   // console.log('🔍 CSS final avant création DOM:', { backgroundColor: containerStyles.backgroundColor, color: containerStyles.color });
-  
+
   // ✅ Nettoyer les styles CSS pour éviter les propriétés parasites
   const cleanStyles = {};
   // Utiliser Object.keys() au lieu de for...in pour éviter les propriétés héritées
@@ -858,9 +870,9 @@ const createButton = (config = {}) => {
       cleanStyles[key] = containerStyles[key];
     }
   });
-  
+
   // console.log('🔍 cleanStyles:', { backgroundColor: cleanStyles.backgroundColor, color: cleanStyles.color });
-  
+
   const button = $('button-container', {
     id: buttonId,
     css: cleanStyles,
@@ -916,12 +928,12 @@ const createButton = (config = {}) => {
       text: icon,
       css: skin.icon || {}
     });
-    
+
     // Ajustement de la marge si pas de texte
     if (!finalText) {
       iconElement.$({ css: { marginRight: '0' } });
     }
-    
+
     button.appendChild(iconElement);
   }
 
@@ -983,8 +995,8 @@ const createButton = (config = {}) => {
 
   button.setDisabled = (isDisabled) => {
     button.disabled = isDisabled;
-    button.$({ 
-      css: { 
+    button.$({
+      css: {
         opacity: isDisabled ? '0.6' : '1',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         pointerEvents: isDisabled ? 'none' : 'auto'
@@ -1004,12 +1016,12 @@ const createButton = (config = {}) => {
       text: icon,
       css: skin.icon || {}
     });
-    
+
     // Ajustement de la marge si pas de texte
     if (!finalText) {
       iconElement.$({ css: { marginRight: '0' } });
     }
-    
+
     button.appendChild(iconElement);
   }
 
@@ -1071,8 +1083,8 @@ const createButton = (config = {}) => {
 
   button.setDisabled = (isDisabled) => {
     button.disabled = isDisabled;
-    button.$({ 
-      css: { 
+    button.$({
+      css: {
         opacity: isDisabled ? '0.6' : '1',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
         pointerEvents: isDisabled ? 'none' : 'auto'
@@ -1087,23 +1099,23 @@ const createButton = (config = {}) => {
       handleClick();
       return button;
     };
-    
+
     button.setState = (state) => {
       if (currentToggleState !== state) {
         handleClick();
       }
       return button;
     };
-    
+
     button.getState = () => currentToggleState;
-    
+
     button.setOnState = () => {
       if (!currentToggleState) {
         handleClick();
       }
       return button;
     };
-    
+
     button.setOffState = () => {
       if (currentToggleState) {
         handleClick();
@@ -1111,37 +1123,37 @@ const createButton = (config = {}) => {
       return button;
     };
   }
-  
+
   // === MÉTHODES SPÉCIFIQUES MULTI-ÉTATS ===
   if (isMultiStateMode) {
     button.nextState = () => {
       handleClick();
       return button;
     };
-    
+
     button.setStateIndex = (index) => {
       if (index >= 0 && index < states.length && index !== currentStateIndex) {
         currentStateIndex = index;
         const newState = states[currentStateIndex];
-        
+
         if (newState.text) button.updateText(newState.text);
         if (newState.css) button.$({ css: newState.css });
         if (newState.icon) {
           const iconEl = button.querySelector('.hs-button-icon');
           if (iconEl) iconEl.textContent = newState.icon;
         }
-        
+
         if (newState.action) {
           newState.action(newState, currentStateIndex, button);
         }
-        
+
         if (onStateChange) {
           onStateChange(newState, currentStateIndex, button);
         }
       }
       return button;
     };
-    
+
     button.getCurrentState = () => states[currentStateIndex];
     button.getCurrentStateIndex = () => currentStateIndex;
     button.getStates = () => states;
@@ -1214,12 +1226,12 @@ const createSuccessButton = (config) => createButton({ ...config, variant: 'succ
 const createDangerButton = (config) => createButton({ ...config, variant: 'danger' });
 const createWarningButton = (config) => createButton({ ...config, variant: 'warning' });
 
-const createIconButton = (config) => createButton({ 
-  ...config, 
-  text: '', 
-  skin: { 
+const createIconButton = (config) => createButton({
+  ...config,
+  text: '',
+  skin: {
     container: { padding: '8px', borderRadius: '50%' },
-    ...config.skin 
+    ...config.skin
   }
 });
 
@@ -1227,7 +1239,7 @@ const createOutlineButton = (config) => createButton({
   ...config,
   variant: 'outline',
   skin: {
-    container: { 
+    container: {
       color: buttonStyles[config.color || 'primary']?.backgroundColor || '#007bff',
       borderColor: buttonStyles[config.color || 'primary']?.backgroundColor || '#007bff'
     },
