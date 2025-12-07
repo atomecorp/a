@@ -260,6 +260,7 @@ async function tauriRequest(method, endpoint, data = null) {
     if (!tauri) return null;
 
     const token = getTokens().tauri;
+    console.log('[tauriRequest] Token available:', !!token, 'for', method, endpoint);
     if (!token) {
         console.debug('[UnifiedAtome] No Tauri token available, skipping request');
         return null;

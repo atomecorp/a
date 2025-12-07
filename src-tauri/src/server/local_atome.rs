@@ -82,6 +82,7 @@ fn default_type() -> String { "atome".to_string() }
 fn default_version() -> i64 { 1 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct UpdateAtomeRequest {
     pub data: Option<serde_json::Value>,
     pub snapshot: Option<serde_json::Value>,
@@ -547,6 +548,10 @@ async fn list_atomes_handler(
         Err(e) => return e,
     };
 
+    // Debug: log the user ID from token
+    println!("📋 [LIST] Querying atomes for user: {} (kind: {:?})", claims.sub, query.kind);
+    println!("📋 [LIST] Token sub (user_id) = '{}'", claims.sub);
+
     let limit = query.limit.unwrap_or(100).min(1000);
     let offset = query.offset.unwrap_or(0);
 
@@ -580,10 +585,13 @@ async fn list_atomes_handler(
 
     // Count total
     let count_sql = format!("SELECT COUNT(*) FROM atomes WHERE {}", where_clause);
+    println!("📋 [LIST] COUNT SQL: {}", count_sql);
     let total: i64 = {
         let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
-        db.query_row(&count_sql, params_refs.as_slice(), |row| row.get(0))
-            .unwrap_or(0)
+        let count_result = db.query_row(&count_sql, params_refs.as_slice(), |row| row.get(0))
+            .unwrap_or(0);
+        println!("📋 [LIST] COUNT result: {}", count_result);
+        count_result
     };
 
     // Fetch atomes with ADOLE fields
@@ -642,8 +650,13 @@ async fn list_atomes_handler(
             meta,
         })
     }) {
-        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+        Ok(rows) => {
+            let collected: Vec<AtomeData> = rows.filter_map(|r| r.ok()).collect();
+            println!("📋 [LIST] Found {} atomes after mapping", collected.len());
+            collected
+        },
         Err(e) => {
+            println!("📋 [LIST] Query error: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(AtomeResponse {
@@ -659,6 +672,7 @@ async fn list_atomes_handler(
         }
     };
 
+    println!("📋 [LIST] Returning {} atomes for user {}", atomes.len(), claims.sub);
     (
         StatusCode::OK,
         Json(AtomeResponse {

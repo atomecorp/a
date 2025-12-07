@@ -737,15 +737,22 @@ const createEditor = (config = {}) => {
 
             // Get database files if authenticated
             if (isAuthenticated()) {
+                console.log('[LoadDialog] User is authenticated, fetching code_file atomes...');
                 const result = await UnifiedAtome.list({ kind: 'code_file' });
+                console.log('[LoadDialog] UnifiedAtome.list result:', result);
                 if (result.success && result.data?.length) {
+                    console.log('[LoadDialog] Found', result.data.length, 'files in database');
                     result.data.forEach(f => {
                         allFiles.push({
                             ...f,
                             source: 'database'
                         });
                     });
+                } else {
+                    console.log('[LoadDialog] No files found or error:', result);
                 }
+            } else {
+                console.log('[LoadDialog] User is NOT authenticated, skipping database fetch');
             }
 
             if (!allFiles.length) {

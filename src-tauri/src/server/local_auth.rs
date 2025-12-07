@@ -147,6 +147,7 @@ pub struct DeleteSyncedRequest {
 
 /// Request for sync-delete from Fastify server (uses sync secret, not JWT)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct SyncDeleteRequest {
     pub phone: String,
     #[serde(rename = "userId")]
@@ -256,6 +257,7 @@ fn get_or_create_jwt_secret(data_dir: &PathBuf) -> String {
 }
 
 /// Generate a random JWT secret if not provided (legacy, kept for compatibility)
+#[allow(dead_code)]
 fn generate_jwt_secret() -> String {
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..64).map(|_| rand::Rng::gen(&mut rng)).collect();

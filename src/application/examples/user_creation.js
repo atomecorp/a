@@ -3039,16 +3039,55 @@ function renderAccountPanel(state) {
 /**
  * Check for existing session on page load
  * This ensures the session persists after page reload
+ * Checks BOTH local (Tauri) and cloud (Fastify) tokens
  */
 async function checkSessionOnLoad() {
     puts('[auth] Checking session on load...');
-    const result = await apiGetMe();
-
-    if (result.success && result.user) {
-        accountStore.isLoggedIn = true;
-        accountStore.currentUser = result.user;
-        puts(`[auth] Session restored: ${result.user.username}`);
-        return true;
+    
+    const localToken = localStorage.getItem('local_auth_token');
+    const cloudToken = localStorage.getItem('cloud_auth_token');
+    
+    console.log('[auth] Tokens available:', { local: !!localToken, cloud: !!cloudToken });
+    
+    // Try local (Tauri) session first if we have a local token
+    if (localToken && useLocalAuth) {
+        const result = await apiGetMe();
+        if (result.success && result.user) {
+            accountStore.isLoggedIn = true;
+            accountStore.currentUser = result.user;
+            puts(`[auth] Local session restored: ${result.user.username}`);
+            return true;
+        }
+    }
+    
+    // Try cloud (Fastify) session if we have a cloud token
+    // This works even in Tauri if user logged in via Fastify
+    if (cloudToken) {
+        try {
+            const fastifyUrl = 'http://localhost:3001/api/auth/me';
+            console.log('[auth] Checking Fastify session:', fastifyUrl);
+            
+            const response = await fetch(fastifyUrl, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${cloudToken}` },
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.user) {
+                    accountStore.isLoggedIn = true;
+                    accountStore.currentUser = result.user;
+                    puts(`[auth] Cloud session restored: ${result.user.username}`);
+                    return true;
+                }
+            } else {
+                console.log('[auth] Cloud token invalid, removing');
+                localStorage.removeItem('cloud_auth_token');
+            }
+        } catch (e) {
+            console.warn('[auth] Fastify session check failed:', e.message);
+        }
     }
 
     accountStore.isLoggedIn = false;
