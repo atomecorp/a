@@ -1,7 +1,5 @@
 let debugConsole = null;
 let debugConsoleVisible = false;
-let codeEditor = null;
-let codeEditorCounter = 0;
 
 function createBasicConsole() {
   if (!debugConsole) {
@@ -13,27 +11,6 @@ function createBasicConsole() {
     });
   }
   return debugConsole;
-}
-
-function createNewCodeEditor() {
-  // Dynamic import to avoid circular dependencies
-  import('../components/editor_builder.js').then(({ EditorBuilder }) => {
-    codeEditorCounter++;
-    const offset = codeEditorCounter * 30;
-
-    EditorBuilder({
-      language: 'javascript',
-      fileName: `untitled_${codeEditorCounter}.js`,
-      position: { x: 100 + offset, y: 60 + offset },
-      size: { width: 650, height: 450 },
-      content: `// New file\n\n`,
-      onClose: () => {
-        console.log('[Shortcut] Editor closed');
-      }
-    });
-  }).catch(err => {
-    console.error('[Shortcut] Failed to load EditorBuilder:', err);
-  });
 }
 
 const openConsole = function atest(key) {
@@ -49,12 +26,6 @@ const openConsole = function atest(key) {
   debugConsoleVisible = false;
 };
 
-const openEditor = function openCodeEditor(key) {
-  createNewCodeEditor();
-};
-
 shortcut('alt-c', openConsole);
-shortcut('alt-e', openEditor);
 
 window.openConsole = openConsole;
-window.openEditor = openEditor;
