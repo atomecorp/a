@@ -634,7 +634,7 @@ const createEditor = (config = {}) => {
 
         try {
             console.log('[Editor] Importing UnifiedAtome module...');
-            const { UnifiedAtome, isAuthenticated } = await import('../apis/unifiedAtomeSync.js');
+            const { UnifiedAtome, isAuthenticated } = await import('../apis/unified/index.js');
             const authenticated = isAuthenticated();
             console.log('[Editor] isAuthenticated:', authenticated);
 
@@ -672,17 +672,20 @@ const createEditor = (config = {}) => {
                 return;
             }
 
-            // Authenticated - save to server
+            // Authenticated - save to server with ADOLE-compliant format
             console.log('[Editor] Authenticated, calling UnifiedAtome.create...');
             const atomeData = {
-                id: state.fileId || `code_file_${Date.now()}`,
                 kind: 'code_file',
-                properties: {
+                type: state.language || 'javascript',
+                data: {
                     fileName: state.fileName,
                     language: state.language,
                     content: content,
                     lastModified: new Date().toISOString(),
                     size: content.length
+                },
+                meta: {
+                    fileId: state.fileId || null
                 }
             };
 
@@ -690,14 +693,15 @@ const createEditor = (config = {}) => {
             console.log('[Editor] create result:', result);
 
             if (result.success) {
-                state.fileId = atomeData.id;
+                state.fileId = result.id;
                 state.lastValidatedContent = content;
                 state.isDirty = false;
                 updateDirtyIndicator(false);
-                updateStatus('✓ Saved to database');
-                onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content });
+                updateStatus(`✓ Saved (v${result.version || 1})`);
+                onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content, version: result.version });
             } else {
-                updateStatus('⏳ Queued (server unavailable)');
+                console.warn('[Editor] Save failed:', result.error);
+                updateStatus('✗ Save failed: ' + (result.error || 'Unknown error'));
             }
 
         } catch (error) {
@@ -711,7 +715,7 @@ const createEditor = (config = {}) => {
 
     async function showLoadDialog() {
         try {
-            const { UnifiedAtome, isAuthenticated } = await import('../apis/unifiedAtomeSync.js');
+            const { UnifiedAtome, isAuthenticated } = await import('../apis/unified/index.js');
 
             updateStatus('Loading files...');
 
@@ -1430,12 +1434,12 @@ createEditor.loadFile = async (options = {}) => {
     const { fileId, fileName, userId = 'current' } = options;
 
     try {
-        const { UnifiedAtome } = await import('../apis/unifiedAtomeSync.js');
+        const { UnifiedAtome } = await import('../apis/unified/index.js');
 
         let file;
         if (fileId) {
             const result = await UnifiedAtome.get(fileId);
-            if (result.success) file = result.data;
+            if (result.success) file = result.atome;
         } else if (fileName) {
             const result = await UnifiedAtome.list({ kind: 'code_file' });
             if (result.success) {
@@ -1461,9 +1465,9 @@ createEditor.loadFile = async (options = {}) => {
 
 createEditor.listFiles = async (options = {}) => {
     try {
-        const { UnifiedAtome } = await import('../apis/unifiedAtomeSync.js');
+        const { UnifiedAtome } = await import('../apis/unified/index.js');
         const result = await UnifiedAtome.list({ kind: 'code_file', ...options });
-        return result.success ? result.data : [];
+        return result.success ? result.atomes : [];
     } catch (error) {
         console.error('[EditorBuilder] listFiles failed:', error);
         return [];

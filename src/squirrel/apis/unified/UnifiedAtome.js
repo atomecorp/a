@@ -221,7 +221,15 @@ const UnifiedAtome = {
             try {
                 const result = await TauriAdapter.atome.list(params);
                 if (result.success) {
-                    return { ...result, source: 'tauri' };
+                    // Normalize response: use 'data' as standard property name
+                    const items = result.atomes || result.data || [];
+                    return {
+                        success: true,
+                        data: items,
+                        atomes: items, // alias for backward compatibility
+                        total: result.total,
+                        source: 'tauri'
+                    };
                 }
             } catch (error) {
                 // Fall through
@@ -233,14 +241,22 @@ const UnifiedAtome = {
             try {
                 const result = await FastifyAdapter.atome.list(params);
                 if (result.success) {
-                    return { ...result, source: 'fastify' };
+                    // Normalize response: use 'data' as standard property name
+                    const items = result.atomes || result.data || [];
+                    return {
+                        success: true,
+                        data: items,
+                        atomes: items, // alias for backward compatibility
+                        total: result.total,
+                        source: 'fastify'
+                    };
                 }
             } catch (error) {
                 // Fall through
             }
         }
 
-        return { success: false, error: 'Failed to list atomes', data: [] };
+        return { success: false, error: 'Failed to list atomes', data: [], atomes: [] };
     },
 
     /**
@@ -600,6 +616,27 @@ const UnifiedAtome = {
             return deviceId;
         }
         return 'unknown_device';
+    },
+
+    /**
+     * Get pending operations count (for offline sync queue)
+     * @returns {number} Number of pending operations
+     */
+    getPendingCount() {
+        // For now, return 0 as the unified API handles sync differently
+        // This can be enhanced to track pending operations if needed
+        if (typeof localStorage !== 'undefined') {
+            try {
+                const pending = localStorage.getItem('unified_pending_ops');
+                if (pending) {
+                    const ops = JSON.parse(pending);
+                    return Array.isArray(ops) ? ops.length : 0;
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+        return 0;
     }
 };
 

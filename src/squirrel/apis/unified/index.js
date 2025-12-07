@@ -35,6 +35,15 @@ import UnifiedSync from './UnifiedSync.js';
 import TauriAdapter from './adapters/TauriAdapter.js';
 import FastifyAdapter from './adapters/FastifyAdapter.js';
 
+/**
+ * Check if user is authenticated on any backend
+ * Convenience function for quick auth checks
+ * @returns {boolean} True if authenticated on at least one backend
+ */
+function isAuthenticated() {
+    return TauriAdapter.getToken() || FastifyAdapter.getToken();
+}
+
 // Export all APIs
 export {
     UnifiedAuth,
@@ -42,7 +51,8 @@ export {
     UnifiedUserData,
     UnifiedSync,
     TauriAdapter,
-    FastifyAdapter
+    FastifyAdapter,
+    isAuthenticated
 };
 
 // Default export with all APIs

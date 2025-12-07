@@ -3,13 +3,13 @@
  * 
  * Interactive demo testing:
  * 1. WebSocket connections (/ws/events, /ws/sync)
- * 2. Unified Atome API (create, update, delete, sync) via UnifiedAtomeSync
- * 3. Authentication integration with dual-server support
+ * 2. Unified Atome API (create, update, delete, sync) via Unified APIs
+ * 3. Authentication integration with dual-server support (UnifiedAuth)
  * 
- * Uses the unified sync module for all atome operations
+ * Uses the unified API modules for all operations
  */
 
-import UnifiedAtome, { getServerAvailability, isAuthenticated } from '../../squirrel/apis/unifiedAtomeSync.js';
+import { UnifiedAtome, UnifiedAuth, UnifiedSync, isAuthenticated, TauriAdapter, FastifyAdapter } from '../../squirrel/apis/unified/index.js';
 import { getLocalServerUrl, getCloudServerUrl, isTauri } from '../../squirrel/apis/serverUrls.js';
 
 // ============================================================================
@@ -31,7 +31,7 @@ let fastifyServerAvailable = false;
 async function detectAvailableServers() {
     console.log('[socket_test] Detecting available servers...');
 
-    const status = await getServerAvailability(true);
+    const status = await UnifiedAuth.checkAvailability();
     tauriServerAvailable = status.tauri;
     fastifyServerAvailable = status.fastify;
 
@@ -258,59 +258,17 @@ Button({
             return;
         }
 
-        log(`Attempting login on available servers: ${identifier}...`);
+        log(`Attempting login via UnifiedAuth: ${identifier}...`);
 
-        let tauriSuccess = false;
-        let fastifySuccess = false;
-        let userData = null;
+        // Use UnifiedAuth - handles both backends automatically
+        const result = await UnifiedAuth.login({
+            username: identifier,
+            phone: identifier,
+            password
+        });
 
-        // Login on Tauri (port 3000) - ONLY if available
-        if (tauriServerAvailable) {
-            try {
-                const tauriResponse = await fetch(`${TAURI_SERVER}/api/auth/local/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: identifier, password })
-                });
-                const tauriData = await tauriResponse.json();
-                if (tauriData.success && tauriData.token) {
-                    log(`✅ Tauri login OK: ${tauriData.user?.username}`, 'success');
-                    tauriSuccess = true;
-                    localStorage.setItem('local_auth_token', tauriData.token);
-                    userData = tauriData.user;
-                } else {
-                    log(`Tauri login: ${tauriData.error || 'Failed'}`, 'warn');
-                }
-            } catch (error) {
-                log(`Tauri login error: ${error.message}`, 'warn');
-            }
-        }
-
-        // Login on Fastify (port 3001) - ONLY if available
-        if (fastifyServerAvailable) {
-            try {
-                const fastifyResponse = await fetch(`${FASTIFY_SERVER}/api/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ phone: identifier, password })
-                });
-                const fastifyData = await fastifyResponse.json();
-                if (fastifyData.success && fastifyData.token) {
-                    log(`✅ Fastify login OK: ${fastifyData.user?.username}`, 'success');
-                    fastifySuccess = true;
-                    localStorage.setItem('cloud_auth_token', fastifyData.token);
-                    if (!userData) userData = fastifyData.user;
-                } else {
-                    log(`Fastify login: ${fastifyData.error || 'Failed'}`, 'warn');
-                }
-            } catch (error) {
-                log(`Fastify login error: ${error.message}`, 'warn');
-            }
-        }
-
-        // Update UI
-        if (tauriSuccess || fastifySuccess) {
+        if (result.success) {
+            const userData = result.user;
             localStorage.setItem('user_data', JSON.stringify(userData));
 
             authStatus.$({
@@ -318,16 +276,15 @@ Button({
                 text: `🔓 ${userData?.username || identifier}`
             });
 
-            log(`Logged in: Tauri=${tauriSuccess}, Fastify=${fastifySuccess}`, 'success');
+            log(`✅ Logged in: Tauri=${result.backends?.tauri}, Fastify=${result.backends?.fastify}`, 'success');
             updatePendingCount();
 
             // Load user's atomes after login
             await loadUserAtomes();
         } else {
-            if (!tauriServerAvailable && !fastifyServerAvailable) {
-                log('No server available', 'error');
-            } else {
-                log('Login failed on available servers', 'error');
+            log(`❌ Login failed: ${result.error}`, 'error');
+            if (result.backends) {
+                log(`Backend details: Tauri=${result.backends.tauri?.error || 'N/A'}, Fastify=${result.backends.fastify?.error || 'N/A'}`, 'warn');
             }
         }
     }
@@ -346,35 +303,16 @@ Button({
         position: 'relative'
     },
     onAction: async () => {
-        // Logout from available servers only
-        const localToken = localStorage.getItem('local_auth_token');
-        const cloudToken = localStorage.getItem('cloud_auth_token');
+        // Use UnifiedAuth for logout - handles both backends
+        const result = await UnifiedAuth.logout();
 
-        // Logout from Tauri - ONLY if available
-        if (localToken && tauriServerAvailable) {
-            try {
-                await fetch(`${TAURI_SERVER}/api/auth/local/logout`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${localToken}` }
-                });
-            } catch (e) { /* ignore */ }
+        if (result.success) {
+            log(`✅ Logged out: Tauri=${result.backends?.tauri}, Fastify=${result.backends?.fastify}`, 'info');
+        } else {
+            log(`Logout: ${result.error || 'Completed with warnings'}`, 'warn');
         }
 
-        // Logout from Fastify - ONLY if available
-        if (cloudToken && fastifyServerAvailable) {
-            try {
-                await fetch(`${FASTIFY_SERVER}/api/auth/logout`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${cloudToken}` },
-                    credentials: 'include'
-                });
-            } catch (e) { /* ignore */ }
-        }
-
-        // Clear all tokens
-        localStorage.removeItem('local_auth_token');
-        localStorage.removeItem('cloud_auth_token');
-        localStorage.removeItem(TOKEN_KEY);
+        // Clear user data from localStorage
         localStorage.removeItem('user_data');
 
         authStatus.$({
@@ -384,8 +322,6 @@ Button({
 
         // Clear visual area on logout - user's objects should not be visible
         clearVisualArea();
-
-        log('Logged out', 'info');
     }
 });
 
@@ -413,61 +349,17 @@ Button({
         // Use phone as username for simplicity
         const username = phone;
 
-        log(`Registering on available servers: ${phone}...`);
+        log(`Registering via UnifiedAuth: ${phone}...`);
 
-        let tauriSuccess = false;
-        let fastifySuccess = false;
-        let tauriData = null;
-        let fastifyData = null;
+        // Use UnifiedAuth - handles both backends automatically
+        const result = await UnifiedAuth.register({
+            username,
+            phone,
+            password
+        });
 
-        // Register on Tauri (port 3000) - ONLY if available
-        if (tauriServerAvailable) {
-            try {
-                log('Registering on Tauri (local)...');
-                const tauriResponse = await fetch(`${TAURI_SERVER}/api/auth/local/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, phone, password })
-                });
-                tauriData = await tauriResponse.json();
-                if (tauriData.success) {
-                    log(`✅ Tauri: Account created! User ID: ${tauriData.user?.id}`, 'success');
-                    tauriSuccess = true;
-                    localStorage.setItem('local_auth_token', tauriData.token);
-                } else {
-                    log(`Tauri: ${tauriData.error || 'Registration failed'}`, 'warn');
-                }
-            } catch (error) {
-                log(`Tauri registration error: ${error.message}`, 'warn');
-            }
-        }
-
-        // Register on Fastify (port 3001) - ONLY if available
-        if (fastifyServerAvailable) {
-            try {
-                log('Registering on Fastify (cloud)...');
-                const fastifyResponse = await fetch(`${FASTIFY_SERVER}/api/auth/register`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ username, phone, password })
-                });
-                fastifyData = await fastifyResponse.json();
-                if (fastifyData.success) {
-                    log(`✅ Fastify: Account created! User ID: ${fastifyData.user?.id}`, 'success');
-                    fastifySuccess = true;
-                    localStorage.setItem('cloud_auth_token', fastifyData.token);
-                } else {
-                    log(`Fastify: ${fastifyData.error || 'Registration failed'}`, 'warn');
-                }
-            } catch (error) {
-                log(`Fastify registration error: ${error.message}`, 'warn');
-            }
-        }
-
-        // Update UI based on results
-        if (tauriSuccess || fastifySuccess) {
-            const userData = tauriData?.user || fastifyData?.user;
+        if (result.success) {
+            const userData = result.user;
             localStorage.setItem('user_data', JSON.stringify(userData));
 
             authStatus.$({
@@ -475,19 +367,13 @@ Button({
                 text: `🔓 ${userData?.username || phone}`
             });
 
-            // Check if IDs match (deterministic UUID)
-            if (tauriSuccess && fastifySuccess) {
-                if (tauriData.user?.id === fastifyData.user?.id) {
-                    log(`✅ User IDs match! Both servers synced: ${tauriData.user?.id}`, 'success');
-                } else {
-                    log(`⚠️ User IDs don't match! Tauri: ${tauriData.user?.id}, Fastify: ${fastifyData.user?.id}`, 'warn');
-                }
-            }
+            log(`✅ Account created! User ID: ${userData?.id}`, 'success');
+            log(`Backends: Tauri=${result.backends?.tauri}, Fastify=${result.backends?.fastify}`, 'info');
         } else {
-            if (!tauriServerAvailable && !fastifyServerAvailable) {
-                log('❌ No server available', 'error');
-            } else {
-                log('❌ Registration failed on available servers', 'error');
+            log(`❌ Registration failed: ${result.error}`, 'error');
+            if (result.backends) {
+                if (result.backends.tauri?.error) log(`Tauri: ${result.backends.tauri.error}`, 'warn');
+                if (result.backends.fastify?.error) log(`Fastify: ${result.backends.fastify.error}`, 'warn');
             }
         }
     }
@@ -678,71 +564,16 @@ Button({
                     return;
                 }
 
-                log('Deleting account on available servers...');
+                log('Deleting account via UnifiedAuth...');
 
-                // Get both tokens
-                const localToken = localStorage.getItem('local_auth_token');
-                const cloudToken = localStorage.getItem('cloud_auth_token');
-
-                let localDeleted = false;
-                let cloudDeleted = false;
-
-                // Delete on Tauri (port 3000) - ONLY if available
-                if (localToken && tauriServerAvailable) {
-                    try {
-                        log('Deleting on Tauri (local)...');
-                        const localResponse = await fetch(`${TAURI_SERVER}/api/auth/local/delete-account`, {
-                            method: 'DELETE',
-                            headers: {
-                                'Authorization': `Bearer ${localToken}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ password })
-                        });
-                        const localData = await localResponse.json();
-                        if (localData.success) {
-                            log('✅ Account deleted on Tauri', 'success');
-                            localDeleted = true;
-                            localStorage.removeItem('local_auth_token');
-                        } else {
-                            log(`Tauri delete failed: ${localData.error || 'Unknown error'}`, 'warn');
-                        }
-                    } catch (error) {
-                        log(`Tauri delete error: ${error.message}`, 'warn');
-                    }
-                }
-
-                // Delete on Fastify (port 3001) - ONLY if available
-                if (cloudToken && fastifyServerAvailable) {
-                    try {
-                        log('Deleting on Fastify (cloud)...');
-                        const cloudResponse = await fetch(`${FASTIFY_SERVER}/api/auth/delete-account`, {
-                            method: 'DELETE',
-                            headers: {
-                                'Authorization': `Bearer ${cloudToken}`,
-                                'Content-Type': 'application/json'
-                            },
-                            credentials: 'include',
-                            body: JSON.stringify({ password })
-                        });
-                        const cloudData = await cloudResponse.json();
-                        if (cloudData.success) {
-                            log('✅ Account deleted on Fastify', 'success');
-                            cloudDeleted = true;
-                            localStorage.removeItem('cloud_auth_token');
-                        } else {
-                            log(`Fastify delete failed: ${cloudData.error || 'Unknown error'}`, 'warn');
-                        }
-                    } catch (error) {
-                        log(`Fastify delete error: ${error.message}`, 'warn');
-                    }
-                }
+                // Use UnifiedAuth - handles both backends automatically
+                const result = await UnifiedAuth.deleteAccount({ password });
 
                 // Clear user data
                 localStorage.removeItem('user_data');
 
-                if (localDeleted || cloudDeleted) {
-                    log('✅ Account deletion complete', 'success');
+                if (result.success) {
+                    log(`✅ Account deleted: Tauri=${result.backends?.tauri}, Fastify=${result.backends?.fastify}`, 'success');
 
                     authStatus.$({
                         css: { backgroundColor: '#ff6b6b' },
@@ -751,7 +582,11 @@ Button({
 
                     clearVisualArea();
                 } else {
-                    log('❌ Failed to delete account on any server', 'error');
+                    log(`❌ Delete failed: ${result.error}`, 'error');
+                    if (result.backends) {
+                        if (result.backends.tauri?.error) log(`Tauri: ${result.backends.tauri.error}`, 'warn');
+                        if (result.backends.fastify?.error) log(`Fastify: ${result.backends.fastify.error}`, 'warn');
+                    }
                 }
 
                 modalOverlay.remove();
@@ -2151,87 +1986,32 @@ async function loadUserAtomes() {
     }
 }
 
-// Check initial auth status by calling the /me endpoint on available servers only
+// Check initial auth status using UnifiedAuth.me()
 async function checkAuthStatus() {
-    const localToken = localStorage.getItem('local_auth_token');
-    const cloudToken = localStorage.getItem('cloud_auth_token');
+    console.log('[checkAuthStatus] Checking authentication status via UnifiedAuth...');
 
-    console.log('[checkAuthStatus] Tokens:', { localToken: !!localToken, cloudToken: !!cloudToken });
-    console.log('[checkAuthStatus] Servers:', { tauri: tauriServerAvailable, fastify: fastifyServerAvailable });
+    // Use UnifiedAuth.me() - handles both backends automatically
+    const result = await UnifiedAuth.me();
 
-    if (!localToken && !cloudToken) {
-        log('No auth token found', 'info');
-        clearVisualArea();
-        return;
-    }
+    console.log('[checkAuthStatus] UnifiedAuth.me result:', result);
 
-    let loggedIn = false;
-    let userData = null;
+    if (result.success && result.user) {
+        const userData = result.user;
 
-    // Check Tauri (local) session - ONLY if server is available
-    if (localToken && tauriServerAvailable) {
-        try {
-            console.log('[checkAuthStatus] Checking Tauri session...');
-            const response = await fetch(`${TAURI_SERVER}/api/auth/local/me`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${localToken}` }
-            });
-            const data = await response.json();
-            console.log('[checkAuthStatus] Tauri response:', data);
-            if (data.success && data.user) {
-                loggedIn = true;
-                userData = data.user;
-                log(`Tauri session restored: ${data.user.username || data.user.phone}`, 'success');
-            } else {
-                console.log('[checkAuthStatus] Tauri token invalid, removing');
-                localStorage.removeItem('local_auth_token');
-            }
-        } catch (e) {
-            console.warn('Tauri /me check failed:', e.message);
-        }
-    } else if (localToken && !tauriServerAvailable) {
-        console.log('[checkAuthStatus] Tauri server not available, skipping local token check');
-    }
-
-    // Check Fastify (cloud) session - ONLY if server is available
-    if (cloudToken && fastifyServerAvailable) {
-        try {
-            console.log('[checkAuthStatus] Checking Fastify session...');
-            const response = await fetch(`${FASTIFY_SERVER}/api/auth/me`, {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${cloudToken}` },
-                credentials: 'include'
-            });
-            const data = await response.json();
-            console.log('[checkAuthStatus] Fastify response:', data);
-            if (data.success && data.user) {
-                loggedIn = true;
-                if (!userData) userData = data.user;
-                log(`Fastify session restored: ${data.user.username || data.user.phone}`, 'success');
-            } else {
-                console.log('[checkAuthStatus] Fastify token invalid, removing');
-                localStorage.removeItem('cloud_auth_token');
-            }
-        } catch (e) {
-            console.warn('Fastify /me check failed:', e.message);
-        }
-    } else if (cloudToken && !fastifyServerAvailable) {
-        console.log('[checkAuthStatus] Fastify server not available, skipping cloud token check');
-    }
-
-    if (loggedIn && userData) {
         authStatus.$({
             css: { backgroundColor: '#6bcb77' },
             text: `🔓 ${userData.username || userData.phone || 'User'}`
         });
         localStorage.setItem('user_data', JSON.stringify(userData));
 
+        log(`Session restored: ${userData.username || userData.phone} (source: ${result.source})`, 'success');
+
         // Load user's atomes after successful auth check
         await loadUserAtomes();
     } else {
         clearVisualArea();
-        if (!tauriServerAvailable && !fastifyServerAvailable) {
-            log('No server available', 'error');
+        if (result.error === 'No authentication token found') {
+            log('No auth token found', 'info');
         } else {
             log('Session expired, please login again', 'warn');
         }
