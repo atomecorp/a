@@ -967,7 +967,7 @@ Button({
         log('Syncing servers and processing pending operations...');
 
         try {
-            await UnifiedAtome.sync();
+            await UnifiedSync.syncNow();
             log('Sync complete!', 'success');
             updatePendingCount();
 
