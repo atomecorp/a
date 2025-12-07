@@ -127,12 +127,17 @@ const auth = {
 
     /**
      * Login user
-     * @param {Object} data - { username, password }
+     * @param {Object} data - { username, password } or { phone, password }
      */
     async login(data) {
+        // Server expects 'phone' field, use username as fallback
+        const loginData = {
+            phone: data.phone || data.username,
+            password: data.password
+        };
         return request('/api/auth/local/login', {
             method: 'POST',
-            body: data,
+            body: loginData,
             skipAuth: true
         });
     },
