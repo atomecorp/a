@@ -848,8 +848,9 @@ Button({
         try {
             const result = await UnifiedAtome.create({
                 kind: 'shape',
-                tag: 'div',
-                properties: {
+                type: 'div',
+                data: {
+                    tag: 'div',
                     css: {
                         color: 'red',
                         width: '100px',
@@ -860,9 +861,9 @@ Button({
                 }
             });
 
-            if (result.success || result.queued) {
-                testAtomeId = result.data.id;
-                log(`Atome created: ${testAtomeId}${result.queued ? ' (queued)' : ''}`, 'success');
+            if (result.success) {
+                testAtomeId = result.id;
+                log(`Atome created: ${testAtomeId}`, 'success');
                 updatePendingCount();
             } else {
                 log(`Create failed: ${result.error}`, 'error');
@@ -895,16 +896,14 @@ Button({
 
         try {
             const result = await UnifiedAtome.update(testAtomeId, {
-                properties: {
-                    css: {
-                        backgroundColor: '#4ecdc4',
-                        borderRadius: '50%'
-                    }
+                css: {
+                    backgroundColor: '#4ecdc4',
+                    borderRadius: '50%'
                 }
             });
 
-            if (result.success || result.queued) {
-                log(`Atome updated${result.queued ? ' (queued)' : ''}`, 'success');
+            if (result.success) {
+                log(`Atome updated (v${result.version || 'N/A'})`, 'success');
                 updatePendingCount();
             } else {
                 log(`Update failed: ${result.error}`, 'error');
@@ -1104,10 +1103,11 @@ Button({
         };
 
         const atomeData = {
-            id: atomeId,
             kind: 'shape',
-            tag: 'div',
-            properties: {
+            type: 'div',
+            data: {
+                id: atomeId,
+                tag: 'div',
                 css: cssProps,
                 text: '⚛️'
             }
@@ -1120,7 +1120,7 @@ Button({
             if (result.success) {
                 $('div', {
                     parent: visualArea,
-                    id: atomeId,
+                    id: result.id || atomeId,
                     css: cssProps,
                     text: '⚛️',
                     onclick: function () {
@@ -1189,22 +1189,20 @@ window.updateVisualAtomeBtn = Button({
 
         try {
             const result = await UnifiedAtome.update(window.selectedVisualAtomeId, {
-                properties: {
-                    css: {
-                        backgroundColor: newColor,
-                        borderRadius: newBorderRadius
-                    }
+                css: {
+                    backgroundColor: newColor,
+                    borderRadius: newBorderRadius
                 }
             });
 
-            if (result.success || result.queued) {
+            if (result.success) {
                 // Update visual element
                 const elem = document.getElementById(window.selectedVisualAtomeId);
                 if (elem) {
                     elem.style.backgroundColor = newColor;
                     elem.style.borderRadius = newBorderRadius;
                 }
-                log(`Updated atome: ${window.selectedVisualAtomeId}${result.queued ? ' (queued)' : ''}`, 'success');
+                log(`Updated atome: ${window.selectedVisualAtomeId} (v${result.version || 'N/A'})`, 'success');
             } else {
                 log(`Update failed: ${result.error}`, 'error');
             }
