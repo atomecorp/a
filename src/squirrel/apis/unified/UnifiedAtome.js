@@ -16,59 +16,8 @@
  * @module unified/UnifiedAtome
  */
 
-import TauriAdapter from './adapters/TauriAdapter.js';
-import FastifyAdapter from './adapters/FastifyAdapter.js';
-import SyncWebSocket from './SyncWebSocket.js';
+import { checkBackends, generateUUID, TauriAdapter, FastifyAdapter, CONFIG } from './_shared.js';
 import UnifiedSync from './UnifiedSync.js';
-
-// ============================================
-// BACKEND DETECTION
-// ============================================
-
-let _tauriAvailable = null;
-let _fastifyAvailable = null;
-let _lastCheck = 0;
-const CHECK_INTERVAL = 30000; // 30 seconds
-
-/**
- * Check which backends are available
- */
-async function checkBackends(force = false) {
-    const now = Date.now();
-    if (!force && _lastCheck && (now - _lastCheck < CHECK_INTERVAL)) {
-        return { tauri: _tauriAvailable, fastify: _fastifyAvailable };
-    }
-
-    const [tauri, fastify] = await Promise.all([
-        TauriAdapter.isAvailable(),
-        FastifyAdapter.isAvailable()
-    ]);
-
-    _tauriAvailable = tauri;
-    _fastifyAvailable = fastify;
-    _lastCheck = now;
-
-    return { tauri, fastify };
-}
-
-/**
- * Generate a valid UUID for atomes
- * IMPORTANT: Must be a valid UUID to ensure consistency across all servers
- * The same ID will be used by Tauri (SQLite) and Fastify (PostgreSQL)
- */
-function generateId(prefix = 'atome') {
-    // Ignore prefix parameter - always generate a valid UUID
-    // This ensures the ID is accepted by both SQLite and PostgreSQL without modification
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-        return crypto.randomUUID();
-    }
-    // Fallback: generate UUID v4 manually
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
 
 // ============================================
 // TAURI RECONNECTION SYNC
@@ -76,7 +25,6 @@ function generateId(prefix = 'atome') {
 
 let _syncInProgress = false;
 let _lastTauriSync = 0;
-const SYNC_COOLDOWN = 5000; // 5 seconds cooldown between syncs
 
 /**
  * Sync all Fastify atomes to Tauri when Tauri reconnects
@@ -91,7 +39,7 @@ async function syncFastifyToTauri() {
 
     // Cooldown to prevent rapid re-syncs
     const now = Date.now();
-    if (now - _lastTauriSync < SYNC_COOLDOWN) {
+    if (now - _lastTauriSync < CONFIG.SYNC_COOLDOWN) {
         console.log('[UnifiedAtome] Sync cooldown active, skipping');
         return;
     }
@@ -415,9 +363,9 @@ const UnifiedAtome = {
         if (primaryResult && primaryResult.success) {
             const resultAtome = primaryResult.atome || { ...atomeData, id: primaryResult.id };
 
-            // NOTE: Do NOT broadcast via SyncWebSocket here!
-            // The HTTP API (Fastify/Tauri) already broadcasts to all clients via githubSync.broadcastMessage
-            // Calling SyncWebSocket.broadcastCreate would cause duplicate atome creation on the server
+            // NOTE: Do NOT broadcast manually here!
+            // The HTTP API (Fastify/Tauri) already broadcasts to all clients via the sync server
+            // The SyncEngine will receive the event automatically
 
             const createResult = {
                 success: true,
@@ -690,8 +638,8 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
-            // NOTE: Do NOT broadcast via SyncWebSocket here!
-            // The HTTP API already broadcasts to all clients via githubSync.broadcastMessage
+            // NOTE: Do NOT broadcast manually here!
+            // The HTTP API broadcasts to all clients via the sync server
 
             return {
                 success: true,
@@ -774,8 +722,8 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
-            // NOTE: Do NOT broadcast via SyncWebSocket here!
-            // The HTTP API already broadcasts to all clients via githubSync.broadcastMessage
+            // NOTE: Do NOT broadcast manually here!
+            // The HTTP API broadcasts to all clients via the sync server
 
             return {
                 success: true,
@@ -845,8 +793,8 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
-            // NOTE: Do NOT broadcast via SyncWebSocket here!
-            // The HTTP API already broadcasts to all clients via githubSync.broadcastMessage
+            // NOTE: Do NOT broadcast manually here!
+            // The HTTP API broadcasts to all clients via the sync server
 
             return {
                 success: true,

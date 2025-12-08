@@ -2,7 +2,7 @@
  * Socket & Atome Sync Test
  * 
  * Interactive demo testing:
- * 1. WebSocket connections (/ws/events, /ws/sync, /ws/atome-sync)
+ * 1. WebSocket connection via Sync (unified)
  * 2. Unified Atome API (create, update, delete, sync) via Unified APIs
  * 3. Authentication integration with dual-server support (UnifiedAuth)
  * 4. Real-time sync via WebSocket
@@ -10,7 +10,7 @@
  * Uses the unified API modules for all operations
  */
 
-import { UnifiedAtome, UnifiedAuth, UnifiedSync, SyncWebSocket, isAuthenticated, TauriAdapter, FastifyAdapter } from '../../squirrel/apis/unified/index.js';
+import { UnifiedAtome, UnifiedAuth, UnifiedSync, isAuthenticated, TauriAdapter, FastifyAdapter } from '../../squirrel/apis/unified/index.js';
 import { getLocalServerUrl, getCloudServerUrl, isTauri } from '../../squirrel/apis/serverUrls.js';
 
 // ============================================================================
@@ -101,10 +101,10 @@ const authStatus = $('div', {
     text: '🔒 Not Logged In'
 });
 
-// WebSocket Events status
-const wsEventsStatus = $('div', {
+// Sync connection status
+const syncStatus = $('div', {
     parent: statusBar,
-    id: 'ws-events-status',
+    id: 'sync-status',
     css: {
         padding: '8px 16px',
         borderRadius: '20px',
@@ -112,35 +112,7 @@ const wsEventsStatus = $('div', {
         color: 'white',
         fontSize: '14px'
     },
-    text: '⚪ /ws/events'
-});
-
-// WebSocket Sync status
-const wsSyncStatus = $('div', {
-    parent: statusBar,
-    id: 'ws-sync-status',
-    css: {
-        padding: '8px 16px',
-        borderRadius: '20px',
-        backgroundColor: '#666',
-        color: 'white',
-        fontSize: '14px'
-    },
-    text: '⚪ /ws/sync'
-});
-
-// WebSocket Atome Sync status (real-time)
-const wsAtomeSyncStatus = $('div', {
-    parent: statusBar,
-    id: 'ws-atome-sync-status',
-    css: {
-        padding: '8px 16px',
-        borderRadius: '20px',
-        backgroundColor: '#666',
-        color: 'white',
-        fontSize: '14px'
-    },
-    text: '⚪ /ws/atome-sync'
+    text: '⚪ Sync'
 });
 
 // Pending ops indicator
@@ -656,12 +628,9 @@ const wsSection = $('div', {
     }
 });
 
-let wsEvents = null;
-let wsSync = null;
-
-// Connect /ws/events
+// Connect Sync via UnifiedSync API
 Button({
-    text: 'Connect /ws/events',
+    text: 'Connect Sync',
     parent: wsSection,
     css: {
         padding: '10px 20px',
@@ -671,110 +640,18 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: () => {
-        if (wsEvents && wsEvents.readyState === WebSocket.OPEN) {
-            log('/ws/events already connected', 'warn');
+    onAction: async () => {
+        if (UnifiedSync.isRealtimeConnected()) {
+            log('Sync already connected', 'warn');
             return;
         }
-
-        log('Connecting to /ws/events...');
-        wsEvents = new WebSocket(FASTIFY_SERVER.replace('http', 'ws') + '/ws/events');
-
-        wsEvents.onopen = () => {
-            wsEventsStatus.$({
-                css: { backgroundColor: '#6bcb77' },
-                text: '🟢 /ws/events'
-            });
-            log('/ws/events connected!', 'success');
-        };
-
-        wsEvents.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                log(`[/ws/events] ${data.type}: ${JSON.stringify(data).substring(0, 100)}...`);
-            } catch (e) {
-                log(`[/ws/events] ${event.data}`);
-            }
-        };
-
-        wsEvents.onclose = () => {
-            wsEventsStatus.$({
-                css: { backgroundColor: '#666' },
-                text: '⚪ /ws/events'
-            });
-            log('/ws/events disconnected', 'warn');
-        };
-
-        wsEvents.onerror = (err) => {
-            log(`/ws/events error: ${err.message || 'Connection failed'}`, 'error');
-        };
+        await connectRealtimeSync();
     }
 });
 
-// Connect /ws/sync
+// Disconnect sync
 Button({
-    text: 'Connect /ws/sync',
-    parent: wsSection,
-    css: {
-        padding: '10px 20px',
-        backgroundColor: '#28a745',
-        color: 'white',
-        borderRadius: '5px',
-        cursor: 'pointer',
-        position: 'relative'
-    },
-    onAction: () => {
-        if (wsSync && wsSync.readyState === WebSocket.OPEN) {
-            log('/ws/sync already connected', 'warn');
-            return;
-        }
-
-        log('Connecting to /ws/sync...');
-        wsSync = new WebSocket(FASTIFY_SERVER.replace('http', 'ws') + '/ws/sync');
-
-        wsSync.onopen = () => {
-            wsSyncStatus.$({
-                css: { backgroundColor: '#6bcb77' },
-                text: '🟢 /ws/sync'
-            });
-            log('/ws/sync connected!', 'success');
-        };
-
-        wsSync.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                log(`[/ws/sync] ${data.type}: ${JSON.stringify(data).substring(0, 100)}...`);
-
-                if (data.type === 'welcome') {
-                    log(`Server version: ${data.version}`, 'success');
-                    // Store the client ID for use in HTTP headers (to exclude self from broadcasts)
-                    if (data.clientId) {
-                        localStorage.setItem('squirrel_client_id', data.clientId);
-                        log(`Client ID stored: ${data.clientId}`, 'info');
-                    }
-                }
-            } catch (e) {
-                log(`[/ws/sync] ${event.data}`);
-            }
-        };
-
-        wsSync.onclose = () => {
-            wsSyncStatus.$({
-                css: { backgroundColor: '#666' },
-                text: '⚪ /ws/sync'
-            });
-            log('/ws/sync disconnected', 'warn');
-        };
-
-        wsSync.onerror = (err) => {
-            log(`/ws/sync error: ${err.message || 'Connection failed'}`, 'error');
-        };
-    }
-});
-
-// Disconnect all
-Button({
-    text: 'Disconnect All',
+    text: 'Disconnect Sync',
     parent: wsSection,
     css: {
         padding: '10px 20px',
@@ -785,19 +662,16 @@ Button({
         position: 'relative'
     },
     onAction: () => {
-        if (wsEvents) {
-            wsEvents.close();
-            wsEvents = null;
-        }
-        if (wsSync) {
-            wsSync.close();
-            wsSync = null;
-        }
-        log('All WebSockets disconnected', 'info');
+        UnifiedSync.disconnectRealtime();
+        syncStatus.$({
+            css: { backgroundColor: '#666' },
+            text: '⚪ Sync'
+        });
+        log('Sync disconnected', 'info');
     }
 });
 
-// Send ping
+// Send ping (uses global SyncEngine)
 Button({
     text: 'Send Ping',
     parent: wsSection,
@@ -810,11 +684,13 @@ Button({
         position: 'relative'
     },
     onAction: () => {
-        if (wsSync && wsSync.readyState === WebSocket.OPEN) {
-            wsSync.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
-            log('Ping sent to /ws/sync', 'info');
+        const syncEngine = window.Squirrel?.SyncEngine;
+        if (syncEngine?.getState?.()?.connected) {
+            // Ping is automatically sent by heartbeat, but we can request a sync
+            syncEngine.requestSync?.();
+            log('Sync request sent', 'info');
         } else {
-            log('Not connected to /ws/sync', 'warn');
+            log('Not connected to Sync', 'warn');
         }
     }
 });
@@ -2151,108 +2027,16 @@ window.addEventListener('squirrel:atome-deleted', (e) => {
 });
 
 // ============================================================================
-// AUTO-CONNECT WEBSOCKET FOR REAL-TIME SYNC
+// CONNECT TO REAL-TIME SYNC VIA UNIFIED API
 // ============================================================================
-function connectSyncWebSocket() {
-    if (wsSync && wsSync.readyState === WebSocket.OPEN) {
-        return; // Already connected
-    }
-
-    console.log('[WebSocket] Connecting to /ws/sync for real-time updates...');
-    wsSync = new WebSocket(FASTIFY_SERVER.replace('http', 'ws') + '/ws/sync');
-
-    wsSync.onopen = () => {
-        wsSyncStatus.$({ css: { backgroundColor: '#6bcb77' }, text: '🟢 /ws/sync' });
-        log('WebSocket connected for real-time sync', 'success');
-    };
-
-    wsSync.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            console.log('[WebSocket] Message received:', data.type);
-
-            // Handle atome sync events
-            if (data.type === 'atome:created' && data.atome) {
-                // Skip if we created this atome ourselves (avoid duplicate)
-                // Check both the final ID and the original_id
-                const isOwnAtome = locallyCreatedAtomeIds.has(data.atome.id) || locallyCreatedAtomeIds.has(data.atome.original_id);
-                console.log('[WebSocket] atome:created received:', data.atome.id,
-                    'original_id:', data.atome.original_id,
-                    'isOwn:', isOwnAtome,
-                    'localIds:', [...locallyCreatedAtomeIds]);
-
-                if (isOwnAtome) {
-                    console.log('[WebSocket] Skipping own atome creation:', data.atome.id, 'original:', data.atome.original_id);
-                    return;
-                }
-
-                log(`[Sync] 🆕 Atome created: ${data.atome.id}`, 'success');
-
-                // Add visually if not already present
-                const area = document.getElementById('visual-test-area');
-                if (area && !document.getElementById(data.atome.id)) {
-                    const css = data.atome.properties?.css || {
-                        width: '80px', height: '80px', backgroundColor: '#66bb6a',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: 'white', fontWeight: 'bold', cursor: 'pointer'
-                    };
-                    $('div', {
-                        parent: area,
-                        id: data.atome.id,
-                        css: css,
-                        text: data.atome.properties?.text || '⚛️',
-                        onclick: function () { window.selectVisualAtome(data.atome.id, this); }
-                    });
-                    // Remove placeholder if present
-                    const placeholder = area.querySelector('p');
-                    if (placeholder) placeholder.remove();
-                }
-            }
-
-            if (data.type === 'atome:updated' && data.atome) {
-                log(`[Sync] ✏️ Atome updated: ${data.atome.id}`, 'info');
-                const el = document.getElementById(data.atome.id);
-                if (el && data.atome.properties?.css) {
-                    Object.assign(el.style, data.atome.properties.css);
-                }
-            }
-
-            if (data.type === 'atome:deleted' && data.atome) {
-                log(`[Sync] 🗑️ Atome deleted: ${data.atome.id}`, 'warn');
-                const el = document.getElementById(data.atome.id);
-                if (el) {
-                    el.remove();
-                    if (window.selectedVisualAtomeId === data.atome.id) {
-                        window.selectedVisualAtomeId = null;
-                        window.updateVisualAtomeButtons();
-                    }
-                }
-            }
-        } catch (e) {
-            console.log('[WebSocket] Raw message:', event.data);
-        }
-    };
-
-    wsSync.onclose = () => {
-        wsSyncStatus.$({ css: { backgroundColor: '#666' }, text: '⚪ /ws/sync' });
-        log('WebSocket disconnected, reconnecting in 3s...', 'warn');
-        // Auto-reconnect after 3 seconds
-        setTimeout(connectSyncWebSocket, 3000);
-    };
-
-    wsSync.onerror = (err) => {
-        console.warn('[WebSocket] Error:', err);
-    };
-}
-
-// Connect to real-time atome sync WebSocket
-async function connectAtomeSyncWebSocket() {
-    log('Connecting to real-time atome sync...', 'info');
+async function connectRealtimeSync() {
+    log('Connecting to real-time sync...', 'info');
 
     try {
         const connected = await UnifiedSync.connectRealtime({
             onAtomeCreated: (data) => {
                 log(`🔔 [REALTIME] Atome created: ${data.atome?.id || 'unknown'}`, 'success');
+                syncStatus.$({ css: { backgroundColor: '#6bcb77' }, text: '🟢 Sync' });
                 // Refresh atome list to show new atome
                 loadUserAtomes();
             },
@@ -2273,25 +2057,25 @@ async function connectAtomeSyncWebSocket() {
             },
             onConnected: (data) => {
                 log(`🟢 Real-time sync connected as ${data.clientId}`, 'success');
-                wsAtomeSyncStatus.style.backgroundColor = '#6bcb77';
-                wsAtomeSyncStatus.textContent = '🟢 /ws/atome-sync';
+                syncStatus.style.backgroundColor = '#6bcb77';
+                syncStatus.textContent = '🟢 Sync';
             },
             onDisconnected: (data) => {
                 log(`🔴 Real-time sync disconnected: ${data.reason || 'unknown'}`, 'warn');
-                wsAtomeSyncStatus.style.backgroundColor = '#ff6b6b';
-                wsAtomeSyncStatus.textContent = '🔴 /ws/atome-sync';
+                syncStatus.style.backgroundColor = '#ff6b6b';
+                syncStatus.textContent = '🔴 Sync';
             }
         });
 
         if (connected) {
             log('Real-time atome sync connected successfully', 'success');
         } else {
-            log('Failed to connect real-time atome sync', 'error');
+            log('Failed to connect real-time sync', 'error');
         }
     } catch (error) {
         log(`Real-time sync error: ${error.message}`, 'error');
-        wsAtomeSyncStatus.style.backgroundColor = '#ff6b6b';
-        wsAtomeSyncStatus.textContent = '❌ /ws/atome-sync';
+        syncStatus.style.backgroundColor = '#ff6b6b';
+        syncStatus.textContent = '❌ Sync';
     }
 }
 
@@ -2311,11 +2095,9 @@ async function connectAtomeSyncWebSocket() {
 
     await checkAuthStatus();
 
-    // Only connect WebSocket if Fastify is available
+    // Connect to real-time sync if Fastify is available
     if (fastifyServerAvailable) {
-        connectSyncWebSocket();
-        // Connect real-time atome sync WebSocket
-        connectAtomeSyncWebSocket();
+        connectRealtimeSync();
     }
 
     log('Socket & Atome Test initialized', 'success');

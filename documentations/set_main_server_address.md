@@ -122,18 +122,17 @@ Or set via environment variable:
 PORT=8080 ./run.sh --server
 ```
 
-### WebSocket Endpoints
+### WebSocket Endpoint
 
-The server exposes two WebSocket endpoints:
+The server exposes a unified WebSocket endpoint:
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/ws/events` | File synchronization events (chokidar watcher) |
-| `/ws/sync` | Version synchronization and client management |
+| `/ws/sync` | All sync events (files, atomes, versions, accounts) |
 
 ## Client Connection Logic
 
-The `version_sync.js` client resolves the server URL in this order:
+The `sync_engine.js` client resolves the server URL in this order:
 
 1. **`window.__SQUIRREL_FASTIFY_URL__`** - JavaScript global (highest priority)
 2. **Default fallback** - `ws://localhost:3001/ws/sync`

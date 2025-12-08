@@ -53,7 +53,7 @@ You can override the watch list without touching the code:
 
 `./run.sh` now exposes `DEFAULT_MONITORED_PATH` next to `DEFAULT_UPLOADS_PATH`. Update those two lines (or export `SQUIRREL_UPLOADS_DIR` / `SQUIRREL_MONITORED_DIR` yourself) and the script will export the matching `SQUIRREL_SYNC_WATCH` globs for both folders automatically before launching Fastify/Tauri. Even if you customize `SQUIRREL_SYNC_WATCH`, the Fastify watcher forcibly adds both directories so uploads stay mirrored. The default monitored inbox is `/Users/Shared/monitored` and Fastify logs `📂 Watcher detected ...` when a change occurs there.
 
-Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastify-host>:3001/ws/events`. The browser-side SyncEngine (see `src/squirrel/integrations/sync_engine.js`) converts them into `squirrel:adole-delta` events so you can listen for deltas anywhere in the UI.
+Whenever the watcher fires, Fastify broadcasts JSON envelopes over `ws://<fastify-host>:3001/ws/sync`. The browser-side SyncEngine (see `src/squirrel/integrations/sync_engine.js`) converts them into `squirrel:adole-delta` events so you can listen for deltas anywhere in the UI.
 
 ## 4. Using the drag-and-drop UI
 
@@ -94,7 +94,7 @@ If all four checks work, the "dropbox" flow is fully operational.
 
 | Symptom | Fix |
 | --- | --- |
-| WebSocket fails on `ws://127.0.0.1:3000/ws/events` | Keep Fastify running on port 3001; SyncEngine will automatically fall back. To force the endpoint, set `window.__SQUIRREL_SYNC_WS__ = 'ws://127.0.0.1:3001/ws/events'` before loading `spark.js`. |
+| WebSocket fails to connect | Keep Fastify running on port 3001; SyncEngine will automatically connect to `ws://127.0.0.1:3001/ws/sync`. To force the endpoint, set `window.__SQUIRREL_SYNC_WS__ = 'ws://127.0.0.1:3001/ws/sync'` before loading `spark.js`. |
 | No files listed in the UI | Ensure `/api/uploads` is reachable. Check browser console for `Unable to load uploads`. |
 | Files not written to disk | Verify write permissions on `src/assets/uploads` (Fastify) or the Tauri app-data directory. |
 | Watcher ignores a folder | Update `SQUIRREL_SYNC_WATCH` or the `watch` array so the folder pattern is included, then restart the server. |

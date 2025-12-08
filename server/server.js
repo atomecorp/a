@@ -1039,138 +1039,14 @@ async function startServer() {
     // 3. WEBSOCKET NATIF
     // ===========================
 
-    // -----------------------------------------------
-    // 3.1 ATOME SYNC WEBSOCKET - Real-time sync
-    // -----------------------------------------------
-
-    // Store connected atome sync clients
-    const atomeSyncClients = new Map();
-
-    // Broadcast to all atome sync clients except sender
-    function broadcastToAtomeSyncClients(message, excludeClientId = null) {
-      const payload = JSON.stringify(message);
-      for (const [clientId, connection] of atomeSyncClients) {
-        if (clientId !== excludeClientId) {
-          try {
-            connection.send(payload);
-          } catch (error) {
-            console.error(`❌ Failed to broadcast to ${clientId}:`, error);
-          }
-        }
-      }
-    }
-
-    // WebSocket route for atome real-time sync
+    // Route WebSocket unifiée pour sync (inclut file events, atome events, version sync)
     server.register(async function (fastify) {
-      fastify.get('/ws/atome-sync', { websocket: true }, (connection) => {
-        const clientId = `atome_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        console.log(`📡 Atome Sync WebSocket connected: ${clientId}`);
+      // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser
+      fastify.get('/ws/sync', { websocket: true }, async (connection) => {
+        const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        console.log('🔗 Nouvelle connexion sync:', clientId);
 
-        // Register client
-        atomeSyncClients.set(clientId, connection);
-
-        // Send welcome message
-        connection.send(JSON.stringify({
-          type: 'welcome',
-          clientId,
-          timestamp: new Date().toISOString(),
-          connectedClients: atomeSyncClients.size
-        }));
-
-        // Handle incoming messages
-        connection.on('message', async (message) => {
-          try {
-            const data = JSON.parse(message.toString());
-
-            switch (data.type) {
-              case 'ping':
-                connection.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
-                break;
-
-              case 'auth':
-                // Validate token if provided
-                console.log(`🔐 Client ${clientId} authenticated`);
-                connection.send(JSON.stringify({ type: 'auth:success', clientId }));
-                break;
-
-              case 'atome:created':
-                // NOTE: Do NOT save to database here!
-                // The HTTP API (/api/atome/create) already saves and broadcasts via /ws/sync
-                // This WebSocket is for client-to-client sync only, not for DB operations
-                console.log(`📦 [ws/atome-sync] Received atome:created from ${clientId}:`, data.atome?.id);
-                // Only broadcast to other atome-sync clients (for P2P sync scenarios)
-                broadcastToAtomeSyncClients({
-                  type: 'atome:created',
-                  atome: data.atome,
-                  sourceClient: clientId,
-                  timestamp: new Date().toISOString()
-                }, clientId);
-                break;
-
-              case 'atome:updated':
-                // NOTE: Do NOT update database here - HTTP API handles it
-                console.log(`✏️ [ws/atome-sync] Received atome:updated from ${clientId}:`, data.atome?.id);
-                // Broadcast to other clients
-                broadcastToAtomeSyncClients({
-                  type: 'atome:updated',
-                  atome: data.atome,
-                  sourceClient: clientId,
-                  timestamp: new Date().toISOString()
-                }, clientId);
-                break;
-
-              case 'atome:altered':
-                console.log(`🔄 Atome altered by ${clientId}:`, data.atomeId);
-                // Broadcast alteration to other clients
-                broadcastToAtomeSyncClients({
-                  type: 'atome:altered',
-                  atomeId: data.atomeId,
-                  alteration: data.alteration,
-                  atome: data.atome,
-                  sourceClient: clientId,
-                  timestamp: new Date().toISOString()
-                }, clientId);
-                break;
-
-              case 'atome:deleted':
-                // NOTE: Do NOT delete from database here - HTTP API handles it
-                console.log(`🗑️ [ws/atome-sync] Received atome:deleted from ${clientId}:`, data.atomeId);
-                // Broadcast to other clients
-                broadcastToAtomeSyncClients({
-                  type: 'atome:deleted',
-                  atomeId: data.atomeId,
-                  sourceClient: clientId,
-                  timestamp: new Date().toISOString()
-                }, clientId);
-                break;
-
-              default:
-                console.log(`❓ Unknown message type from ${clientId}:`, data.type);
-            }
-          } catch (error) {
-            console.error(`❌ Message parse error from ${clientId}:`, error);
-            connection.send(JSON.stringify({ type: 'error', message: error.message }));
-          }
-        });
-
-        // Handle disconnect
-        connection.on('close', () => {
-          atomeSyncClients.delete(clientId);
-          console.log(`🛑 Atome Sync client disconnected: ${clientId} (${atomeSyncClients.size} remaining)`);
-        });
-
-        connection.on('error', (error) => {
-          atomeSyncClients.delete(clientId);
-          console.error(`❌ Atome Sync WebSocket error for ${clientId}:`, error);
-        });
-      });
-    });
-
-    // Route WebSocket pour les événements temps réel
-    server.register(async function (fastify) {
-      fastify.get('/ws/events', { websocket: true }, (connection) => {
-        console.log('📡 Connexion WebSocket Events');
-
+        // Helper for safe sending
         const safeSend = (payload) => {
           try {
             connection.send(JSON.stringify(payload));
@@ -1179,77 +1055,51 @@ async function startServer() {
           }
         };
 
-        safeSend({
-          type: 'sync:handshake',
-          version: 1,
-          runtime: SERVER_TYPE,
-          timestamp: new Date().toISOString(),
-          payload: {
-            watcherEnabled: Boolean(fileSyncWatcherHandle),
-            watcherConfig: fileSyncWatcherHandle?.config ?? null
-          }
-        });
-
-        if (fileSyncWatcherHandle) {
-          const forward = (payload) => safeSend(payload);
-          syncEventBus.on('event', forward);
-
-          connection.on('close', () => {
-            syncEventBus.off('event', forward);
-            console.log('🛑 Client events déconnecté');
-          });
-
-          connection.on('error', (error) => {
-            syncEventBus.off('event', forward);
-            console.error('❌ Erreur WebSocket events:', error);
-          });
-        } else {
-          safeSend({
-            type: 'sync:warning',
-            timestamp: new Date().toISOString(),
-            payload: { message: 'File watcher disabled server-side' }
-          });
-          connection.on('close', () => {
-            console.log('🛑 Client events déconnecté (watcher inactif)');
-          });
-        }
-      });
-
-      // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser
-      fastify.get('/ws/sync', { websocket: true }, async (connection) => {
-        const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        console.log('🔗 Nouvelle connexion sync:', clientId);
-
         // Register client
         registerClient(clientId, connection, 'unknown');
 
-        // Send initial version info
+        // Send initial version info + watcher status
         const version = await getLocalVersion();
-        connection.send(JSON.stringify({
+        safeSend({
           type: 'welcome',
           clientId,
           version: version.version,
           protectedPaths: version.protectedPaths || [],
-          timestamp: new Date().toISOString()
-        }));
+          timestamp: new Date().toISOString(),
+          watcherEnabled: Boolean(fileSyncWatcherHandle),
+          watcherConfig: fileSyncWatcherHandle?.config ?? null
+        });
+
+        // Forward file watcher events to this client
+        let fileEventForwarder = null;
+        if (fileSyncWatcherHandle) {
+          fileEventForwarder = (payload) => safeSend(payload);
+          syncEventBus.on('event', fileEventForwarder);
+        }
 
         connection.on('message', async (message) => {
           try {
             const response = await handleClientMessage(clientId, message.toString());
             if (response) {
-              connection.send(JSON.stringify(response));
+              safeSend(response);
             }
           } catch (error) {
-            connection.send(JSON.stringify({ type: 'error', message: error.message }));
+            safeSend({ type: 'error', message: error.message });
           }
         });
 
         connection.on('close', () => {
+          if (fileEventForwarder) {
+            syncEventBus.off('event', fileEventForwarder);
+          }
           unregisterClient(clientId);
         });
 
         connection.on('error', (error) => {
           console.error('❌ Erreur WebSocket sync:', error);
+          if (fileEventForwarder) {
+            syncEventBus.off('event', fileEventForwarder);
+          }
           unregisterClient(clientId);
         });
       });
@@ -1270,8 +1120,7 @@ async function startServer() {
     });
 
     console.log(`✅ Serveur Fastify v${server.version} (app ${SERVER_VERSION}) démarré sur http://localhost:${PORT}`);
-    console.log(`📡 Events WebSocket sur ws://localhost:${PORT}/ws/events`);
-    console.log(`🔄 Atome Sync WebSocket sur ws://localhost:${PORT}/ws/atome-sync`);
+    console.log(`🔄 Sync WebSocket sur ws://localhost:${PORT}/ws/sync`);
     console.log(`🌐 Frontend servi depuis: http://localhost:${PORT}/`);
 
   } catch (error) {

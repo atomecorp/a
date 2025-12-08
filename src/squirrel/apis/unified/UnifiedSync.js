@@ -5,7 +5,7 @@
  * Handles real-time sync between Tauri (local) and Fastify (cloud)
  * 
  * Features:
- * - WebSocket-based real-time sync
+ * - WebSocket-based real-time sync (via global SyncEngine)
  * - Automatic sync when both backends available
  * - Offline queue for pending changes
  * - Conflict detection and resolution
@@ -14,9 +14,7 @@
  * @module unified/UnifiedSync
  */
 
-import TauriAdapter from './adapters/TauriAdapter.js';
-import FastifyAdapter from './adapters/FastifyAdapter.js';
-import SyncWebSocket from './SyncWebSocket.js';
+import { checkBackends, TauriAdapter, FastifyAdapter } from './_shared.js';
 
 // ============================================
 // SYNC STATE
@@ -26,19 +24,13 @@ const syncState = {
     lastSyncTime: null,
     pendingChanges: [],
     conflicts: [],
-    isSyncing: false
+    isSyncing: false,
+    eventListeners: new Map()
 };
 
-// ============================================
-// BACKEND DETECTION
-// ============================================
-
-async function checkBackends() {
-    const [tauri, fastify] = await Promise.all([
-        TauriAdapter.isAvailable(),
-        FastifyAdapter.isAvailable()
-    ]);
-    return { tauri, fastify };
+// Helper to get SyncEngine from global
+function getSyncEngine() {
+    return typeof window !== 'undefined' ? window.Squirrel?.SyncEngine : null;
 }
 
 // ============================================
@@ -58,6 +50,8 @@ const UnifiedSync = {
      */
     async status() {
         const { tauri, fastify } = await checkBackends();
+        const syncEngine = getSyncEngine();
+        const engineState = syncEngine?.getState?.() || {};
 
         return {
             tauri: {
@@ -73,7 +67,11 @@ const UnifiedSync = {
             pendingChanges: syncState.pendingChanges.length,
             conflicts: syncState.conflicts,
             isSyncing: syncState.isSyncing,
-            lastSync: syncState.lastSyncTime
+            lastSync: syncState.lastSyncTime,
+            realtime: {
+                connected: engineState.connected || false,
+                serverAvailable: engineState.serverAvailable || false
+            }
         };
     },
 
@@ -333,12 +331,12 @@ const UnifiedSync = {
     },
 
     // ============================================
-    // WEBSOCKET REAL-TIME SYNC
+    // WEBSOCKET REAL-TIME SYNC (via global SyncEngine)
     // ============================================
 
     /**
      * Connect to real-time sync via WebSocket
-     * Automatically handles incoming sync events
+     * Uses the global SyncEngine from sync_engine.js
      * 
      * @param {Object} [options] - Connection options
      * @param {Function} [options.onAtomeCreated] - Callback when atome is created
@@ -356,32 +354,44 @@ const UnifiedSync = {
      * });
      */
     async connectRealtime(options = {}) {
+        const syncEngine = getSyncEngine();
+        if (!syncEngine) {
+            console.warn('[UnifiedSync] SyncEngine not available - make sure spark.js is loaded');
+            return false;
+        }
+
         try {
-            // Set up event handlers before connecting
-            if (options.onAtomeCreated) {
-                SyncWebSocket.on('atome:created', options.onAtomeCreated);
-            }
-            if (options.onAtomeUpdated) {
-                SyncWebSocket.on('atome:updated', options.onAtomeUpdated);
-            }
-            if (options.onAtomeAltered) {
-                SyncWebSocket.on('atome:altered', options.onAtomeAltered);
-            }
-            if (options.onAtomeDeleted) {
-                SyncWebSocket.on('atome:deleted', options.onAtomeDeleted);
-            }
-            if (options.onConnected) {
-                SyncWebSocket.on('sync:connected', options.onConnected);
-            }
-            if (options.onDisconnected) {
-                SyncWebSocket.on('sync:disconnected', options.onDisconnected);
-            }
+            // Create a listener that routes events to callbacks
+            const listener = (data) => {
+                if (!data || !data.type) return;
 
-            // Connect with auth token if available
-            const token = FastifyAdapter.getToken();
-            await SyncWebSocket.connect({ token });
+                switch (data.type) {
+                    case 'atome:created':
+                        if (options.onAtomeCreated) options.onAtomeCreated(data);
+                        break;
+                    case 'atome:updated':
+                        if (options.onAtomeUpdated) options.onAtomeUpdated(data);
+                        break;
+                    case 'atome:altered':
+                        if (options.onAtomeAltered) options.onAtomeAltered(data);
+                        break;
+                    case 'atome:deleted':
+                        if (options.onAtomeDeleted) options.onAtomeDeleted(data);
+                        break;
+                    case 'connected':
+                        if (options.onConnected) options.onConnected(data);
+                        break;
+                    case 'disconnected':
+                        if (options.onDisconnected) options.onDisconnected(data);
+                        break;
+                }
+            };
 
-            console.log('[UnifiedSync] Real-time sync connected');
+            // Store unsubscribe function
+            const unsubscribe = syncEngine.subscribe(listener);
+            syncState.eventListeners.set('main', { listener, unsubscribe });
+
+            console.log('[UnifiedSync] Real-time sync connected via SyncEngine');
             return true;
         } catch (error) {
             console.error('[UnifiedSync] Failed to connect real-time sync:', error);
@@ -393,8 +403,12 @@ const UnifiedSync = {
      * Disconnect from real-time sync
      */
     disconnectRealtime() {
-        SyncWebSocket.disconnect();
-        console.log('[UnifiedSync] Real-time sync disconnected');
+        const mainListener = syncState.eventListeners.get('main');
+        if (mainListener?.unsubscribe) {
+            mainListener.unsubscribe();
+        }
+        syncState.eventListeners.delete('main');
+        console.log('[UnifiedSync] Real-time sync listener removed');
     },
 
     /**
@@ -403,16 +417,19 @@ const UnifiedSync = {
      * @returns {boolean} True if connected
      */
     isRealtimeConnected() {
-        return SyncWebSocket.isConnected();
+        const syncEngine = getSyncEngine();
+        const state = syncEngine?.getState?.();
+        return state?.connected || false;
     },
 
     /**
      * Get real-time sync connection state
      * 
-     * @returns {Object} { connected, clientId, reconnectAttempts }
+     * @returns {Object} { connected, clientId, serverAvailable }
      */
     getRealtimeState() {
-        return SyncWebSocket.getState();
+        const syncEngine = getSyncEngine();
+        return syncEngine?.getState?.() || { connected: false };
     },
 
     /**
@@ -423,17 +440,36 @@ const UnifiedSync = {
      * @returns {Function} Unsubscribe function
      */
     on(eventType, callback) {
-        return SyncWebSocket.on(eventType, callback);
+        const syncEngine = getSyncEngine();
+        if (!syncEngine) {
+            console.warn('[UnifiedSync] SyncEngine not available');
+            return () => { };
+        }
+
+        // Create a filtered listener
+        const filteredListener = (data) => {
+            if (data?.type === eventType) {
+                callback(data);
+            }
+        };
+
+        const unsubscribe = syncEngine.subscribe(filteredListener);
+
+        // Store for cleanup
+        const key = `${eventType}_${Date.now()}`;
+        syncState.eventListeners.set(key, { listener: filteredListener, unsubscribe });
+
+        return unsubscribe;
     },
 
     /**
-     * Unsubscribe from a sync event
-     * 
-     * @param {string} eventType - Event type
-     * @param {Function} callback - Callback to remove
+     * Unsubscribe from all sync events
      */
-    off(eventType, callback) {
-        SyncWebSocket.off(eventType, callback);
+    offAll() {
+        for (const [key, { unsubscribe }] of syncState.eventListeners) {
+            if (unsubscribe) unsubscribe();
+        }
+        syncState.eventListeners.clear();
     }
 };
 

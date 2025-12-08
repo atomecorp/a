@@ -2,14 +2,14 @@
 
 ## Overview
 
-The unified API now supports real-time synchronization between Tauri (local) and Fastify (cloud) backends via WebSocket.
+The unified API supports real-time synchronization via a single WebSocket endpoint `/ws/sync`.
 
 ```
 ┌─────────────────┐         WebSocket          ┌─────────────────┐
 │   Client 1      │◄─────────────────────────►│   Fastify       │
 │   (Tauri)       │                            │   Server        │
 └─────────────────┘                            │                 │
-                                               │  /ws/atome-sync │
+                                               │    /ws/sync     │
 ┌─────────────────┐                            │                 │
 │   Client 2      │◄─────────────────────────►│                 │
 │   (Browser)     │                            └─────────────────┘
@@ -18,39 +18,33 @@ The unified API now supports real-time synchronization between Tauri (local) and
 
 ## Components
 
-### 1. SyncWebSocket (`src/squirrel/apis/unified/SyncWebSocket.js`)
+### 1. SyncEngine (`src/squirrel/integrations/sync_engine.js`)
 
-Client-side WebSocket manager with:
+Unified client-side WebSocket manager with:
 
+- Single connection to `/ws/sync`
+- Handles all event types: file, atome, account, version
 - Auto-reconnection with exponential backoff
-- Event-based architecture
-- Heartbeat keepalive
-- Connection state management
+- Event-based architecture via `syncEventBus`
+- Global API via `window.Squirrel.SyncEngine`
 
-### 2. Fastify WebSocket Route (`/ws/atome-sync`)
+### 2. Fastify WebSocket Route (`/ws/sync`)
 
 Server-side WebSocket handler that:
 
 - Registers connected clients
 - Broadcasts CRUD events to all other clients
+- Forwards file watcher events
+- Handles version sync and account events
 - Persists changes to PostgreSQL database
 
 ### 3. UnifiedSync Integration
 
-`UnifiedSync.js` now provides:
+`UnifiedSync.js` provides high-level methods:
 
 - `connectRealtime(options)` - Connect with event callbacks
 - `disconnectRealtime()` - Disconnect from WebSocket
 - `isRealtimeConnected()` - Check connection status
-- `on(event, callback)` - Subscribe to sync events
-
-### 4. UnifiedAtome Integration
-
-`UnifiedAtome.js` automatically broadcasts:
-
-- `atome:created` on create
-- `atome:altered` on alter/update/rename
-- `atome:deleted` on delete
 
 ## Usage
 
@@ -63,7 +57,6 @@ import { UnifiedSync } from '../../squirrel/apis/unified/index.js';
 await UnifiedSync.connectRealtime({
     onAtomeCreated: (data) => {
         console.log('New atome from another client:', data.atome);
-        // Refresh UI or local cache
     },
     onAtomeUpdated: (data) => {
         console.log('Atome updated:', data.atome);
@@ -80,25 +73,24 @@ await UnifiedSync.connectRealtime({
 });
 ```
 
-### Manual Event Subscription
+### Direct SyncEngine Access
 
 ```javascript
-import { SyncWebSocket } from '../../squirrel/apis/unified/index.js';
-
-// Connect directly
-await SyncWebSocket.connect();
+// Via global API
+const { subscribe, send, getState } = window.Squirrel.SyncEngine;
 
 // Subscribe to events
-const unsubscribe = SyncWebSocket.on('atome:created', (data) => {
-    console.log('New atome:', data.atome);
+const unsubscribe = subscribe((event) => {
+    console.log('Sync event:', event.type, event);
 });
 
-// Later: unsubscribe();
+// Send a message
+send({ type: 'ping', timestamp: Date.now() });
 
-// Check connection
-if (SyncWebSocket.isConnected()) {
-    console.log('WebSocket is active');
-}
+// Check state
+const state = getState();
+console.log('Connected:', state.connected);
+console.log('Client ID:', state.clientId);
 ```
 
 ### Automatic Broadcasting
@@ -124,31 +116,27 @@ const result = await UnifiedAtome.create({
 |-------|---------|-------------|
 | `sync:connected` | `{ clientId, serverTime }` | WebSocket connected |
 | `sync:disconnected` | `{ code, reason }` | WebSocket disconnected |
-| `sync:error` | `{ error }` | Connection error |
 | `atome:created` | `{ atome, sourceClient, timestamp }` | New atome created |
 | `atome:updated` | `{ atome, sourceClient, timestamp }` | Atome updated |
-| `atome:altered` | `{ atomeId, alteration, atome, sourceClient, timestamp }` | ADOLE alteration |
+| `atome:altered` | `{ atomeId, alteration, atome }` | ADOLE alteration |
 | `atome:deleted` | `{ atomeId, sourceClient, timestamp }` | Atome deleted |
+| `atome:renamed` | `{ atomeId, oldName, newName }` | Atome renamed |
+| `atome:restored` | `{ atomeId, atome }` | Atome restored |
+| `file:change` | `{ path, event }` | File changed |
+| `version:update` | `{ id, version }` | Version updated |
 
 ## Configuration
 
-Default WebSocket URL: `ws://127.0.0.1:3001/ws/atome-sync`
+The SyncEngine automatically detects the environment and constructs the appropriate WebSocket URL:
 
-Can be customized:
-
-```javascript
-await SyncWebSocket.connect({ 
-    url: 'ws://custom-server:3001/ws/atome-sync',
-    token: 'your-auth-token'
-});
-```
+- Development: `ws://127.0.0.1:3001/ws/sync`
+- Production: Uses the production server URL
 
 ## Reconnection Strategy
 
 - Initial delay: 1 second
 - Max delay: 30 seconds
 - Multiplier: 2x (exponential backoff)
-- Max attempts: 10
 
 ## Flow Diagram
 

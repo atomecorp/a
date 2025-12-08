@@ -46,7 +46,7 @@ PORT=4000 node server.js
 #### 🔌 Native WebSocket
 
 - `ws://localhost:3000/ws` - WebSocket echo
-- `ws://localhost:3000/ws/events` - WebSocket broadcast
+- `ws://localhost:3001/ws/sync` - Unified sync events
 
 #### 📁 Static Files
 

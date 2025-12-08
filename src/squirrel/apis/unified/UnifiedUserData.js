@@ -12,35 +12,7 @@
  * @module unified/UnifiedUserData
  */
 
-import TauriAdapter from './adapters/TauriAdapter.js';
-import FastifyAdapter from './adapters/FastifyAdapter.js';
-
-// ============================================
-// BACKEND DETECTION
-// ============================================
-
-let _tauriAvailable = null;
-let _fastifyAvailable = null;
-let _lastCheck = 0;
-const CHECK_INTERVAL = 30000;
-
-async function checkBackends(force = false) {
-    const now = Date.now();
-    if (!force && _lastCheck && (now - _lastCheck < CHECK_INTERVAL)) {
-        return { tauri: _tauriAvailable, fastify: _fastifyAvailable };
-    }
-
-    const [tauri, fastify] = await Promise.all([
-        TauriAdapter.isAvailable(),
-        FastifyAdapter.isAvailable()
-    ]);
-
-    _tauriAvailable = tauri;
-    _fastifyAvailable = fastify;
-    _lastCheck = now;
-
-    return { tauri, fastify };
-}
+import { checkBackends, TauriAdapter, FastifyAdapter } from './_shared.js';
 
 // ============================================
 // UNIFIED USER DATA API

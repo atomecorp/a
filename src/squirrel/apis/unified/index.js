@@ -32,9 +32,7 @@ import UnifiedAuth from './UnifiedAuth.js';
 import UnifiedAtome from './UnifiedAtome.js';
 import UnifiedUserData from './UnifiedUserData.js';
 import UnifiedSync from './UnifiedSync.js';
-import SyncWebSocket from './SyncWebSocket.js';
-import TauriAdapter from './adapters/TauriAdapter.js';
-import FastifyAdapter from './adapters/FastifyAdapter.js';
+import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from './_shared.js';
 
 /**
  * Check if user is authenticated on any backend
@@ -51,9 +49,10 @@ export {
     UnifiedAtome,
     UnifiedUserData,
     UnifiedSync,
-    SyncWebSocket,
     TauriAdapter,
     FastifyAdapter,
+    checkBackends,
+    generateUUID,
     isAuthenticated
 };
 
@@ -63,7 +62,6 @@ export default {
     Atome: UnifiedAtome,
     UserData: UnifiedUserData,
     Sync: UnifiedSync,
-    WebSocket: SyncWebSocket,
     adapters: {
         Tauri: TauriAdapter,
         Fastify: FastifyAdapter

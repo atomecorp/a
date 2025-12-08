@@ -14,53 +14,7 @@
  * @module unified/UnifiedAuth
  */
 
-import TauriAdapter from './adapters/TauriAdapter.js';
-import FastifyAdapter from './adapters/FastifyAdapter.js';
-
-// ============================================
-// BACKEND DETECTION
-// ============================================
-
-let _tauriAvailable = null;
-let _fastifyAvailable = null;
-let _lastCheck = 0;
-const CHECK_INTERVAL = 30000; // 30 seconds
-
-/**
- * Check which backends are available
- * @param {boolean} force - Force recheck even if recently checked
- * @returns {Promise<{tauri: boolean, fastify: boolean}>}
- */
-async function checkBackends(force = false) {
-    const now = Date.now();
-    if (!force && _lastCheck && (now - _lastCheck < CHECK_INTERVAL)) {
-        return { tauri: _tauriAvailable, fastify: _fastifyAvailable };
-    }
-
-    const [tauri, fastify] = await Promise.all([
-        TauriAdapter.isAvailable(),
-        FastifyAdapter.isAvailable()
-    ]);
-
-    _tauriAvailable = tauri;
-    _fastifyAvailable = fastify;
-    _lastCheck = now;
-
-    return { tauri, fastify };
-}
-
-/**
- * Get the primary adapter based on availability
- * Priority: Tauri (local-first) > Fastify (cloud)
- */
-async function getPrimaryAdapter() {
-    const { tauri, fastify } = await checkBackends();
-
-    if (tauri) return { adapter: TauriAdapter, name: 'tauri' };
-    if (fastify) return { adapter: FastifyAdapter, name: 'fastify' };
-
-    throw new Error('No backend available. Please check your connection.');
-}
+import { checkBackends, TauriAdapter, FastifyAdapter } from './_shared.js';
 
 // ============================================
 // UNIFIED AUTH API

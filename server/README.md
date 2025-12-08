@@ -50,25 +50,24 @@ ws.send(JSON.stringify({
 }));
 ```
 
-### 2. WebSocket Events (`/ws/events`)
-- **URL:** `ws://localhost:3000/ws/events`
-- **Fonction:** Diffusion (broadcast) à tous les clients connectés
-- **Usage:** Chat, notifications temps réel
+### 2. Unified Sync WebSocket (`/ws/sync`)
+- **URL:** `ws://localhost:3001/ws/sync`
+- **Fonction:** Synchronization unifiée (atomes, fichiers, versions)
+- **Usage:** Real-time sync across all clients
 
 ```javascript
-const eventsWs = new WebSocket('ws://localhost:3000/ws/events');
+const syncWs = new WebSocket('ws://localhost:3001/ws/sync');
 
-eventsWs.onmessage = (event) => {
+syncWs.onmessage = (event) => {
     const data = JSON.parse(event.data);
-    // Messages diffusés à tous les clients
-    console.log('📡 Broadcast:', data);
+    // Handle sync events
+    console.log('📡 Sync event:', data.type, data);
 };
 
-// Envoyer un message qui sera diffusé
-eventsWs.send(JSON.stringify({
-    type: 'chat',
-    username: 'Alice',
-    message: 'Hello everyone!'
+// Send a ping
+syncWs.send(JSON.stringify({
+    type: 'ping',
+    timestamp: Date.now()
 }));
 ```
 
@@ -161,7 +160,7 @@ client.connect();
 class ChatClient {
     constructor(username) {
         this.username = username;
-        this.ws = new WebSocket('ws://localhost:3000/ws/events');
+        this.ws = new WebSocket('ws://localhost:3001/ws/sync');
         
         this.ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
@@ -204,7 +203,7 @@ fetch('http://localhost:3000/api/broadcast', {
 });
 
 // Côté client - Écouter les notifications
-const notificationWs = new WebSocket('ws://localhost:3000/ws/events');
+const notificationWs = new WebSocket('ws://localhost:3001/ws/sync');
 notificationWs.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'server_broadcast' && data.data.type === 'system') {
