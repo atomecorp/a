@@ -264,7 +264,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const identifier = loginInput.value;
         const password = passwordInput.value;
 
@@ -317,7 +317,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         // Use UnifiedAuth for logout - handles both backends
         const result = await UnifiedAuth.logout();
 
@@ -352,7 +352,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const phone = loginInput.value;
         const password = passwordInput.value;
 
@@ -406,7 +406,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         // Check for ANY token (local or cloud)
         const localToken = localStorage.getItem('local_auth_token');
         const cloudToken = localStorage.getItem('cloud_auth_token');
@@ -571,7 +571,7 @@ Button({
                 borderRadius: '4px',
                 cursor: 'pointer'
             },
-            onAction: async () => {
+            onclick: async () => {
                 const password = document.getElementById('delete-account-password').value;
 
                 if (!password) {
@@ -747,6 +747,11 @@ Button({
 
                 if (data.type === 'welcome') {
                     log(`Server version: ${data.version}`, 'success');
+                    // Store the client ID for use in HTTP headers (to exclude self from broadcasts)
+                    if (data.clientId) {
+                        localStorage.setItem('squirrel_client_id', data.clientId);
+                        log(`Client ID stored: ${data.clientId}`, 'info');
+                    }
                 }
             } catch (e) {
                 log(`[/ws/sync] ${event.data}`);
@@ -852,7 +857,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         if (!isAuthenticated()) {
             log('Please login first', 'warn');
             return;
@@ -901,7 +906,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         if (!testAtomeId) {
             log('Create an Atome first', 'warn');
             return;
@@ -941,7 +946,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         if (!testAtomeId) {
             log('No Atome to delete', 'warn');
             return;
@@ -977,7 +982,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         log('Syncing servers and processing pending operations...');
 
         try {
@@ -1067,6 +1072,9 @@ const visualArea = $('div', {
     }
 });
 
+// Track atomes we've created locally to avoid duplicates from WebSocket
+const locallyCreatedAtomeIds = new Set();
+
 $('p', {
     parent: visualArea,
     css: { color: '#999', margin: '0' },
@@ -1086,7 +1094,7 @@ Button({
         marginTop: '10px',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const localToken = localStorage.getItem('local_auth_token');
         const cloudToken = localStorage.getItem('cloud_auth_token');
 
@@ -1099,8 +1107,9 @@ Button({
         const placeholder = visualArea.querySelector('p');
         if (placeholder) placeholder.remove();
 
-        // Generate a unique ID for the atome
-        const atomeId = `atome_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+        // Generate a VALID UUID for the atome - this ID will be used everywhere
+        // Using crypto.randomUUID() ensures the server accepts it without modification
+        const atomeId = crypto.randomUUID();
 
         // Create atome data with explicit CSS properties
         const cssProps = {
@@ -1128,22 +1137,32 @@ Button({
             }
         };
 
+        // Pre-register this ID to avoid duplicate from WebSocket event
+        // We use a "pending" marker since we don't know the final UUID yet
+        locallyCreatedAtomeIds.add(atomeId);
+        
         // Use UnifiedAtome for creation (handles both servers automatically)
         try {
             const result = await UnifiedAtome.create(atomeData);
 
             if (result.success) {
+                const createdId = result.id || atomeId;
+                // Track the final ID too (server may have generated a different UUID)
+                locallyCreatedAtomeIds.add(createdId);
+                
                 $('div', {
                     parent: visualArea,
-                    id: result.id || atomeId,
+                    id: createdId,
                     css: cssProps,
                     text: '⚛️',
                     onclick: function () {
-                        window.selectVisualAtome(atomeId, this);
+                        window.selectVisualAtome(createdId, this);
                     }
                 });
-                log(`Visual Atome created: ${atomeId}`, 'success');
+                log(`Visual Atome created: ${createdId}`, 'success');
             } else if (result.queued) {
+                // Track queued atomes too
+                locallyCreatedAtomeIds.add(atomeId);
                 // Still show visually but indicate it's queued
                 $('div', {
                     parent: visualArea,
@@ -1192,7 +1211,7 @@ window.updateVisualAtomeBtn = Button({
         pointerEvents: 'none',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         if (!window.selectedVisualAtomeId) {
             log('No atome selected', 'warn');
             return;
@@ -1244,7 +1263,7 @@ window.deleteVisualAtomeBtn = Button({
         pointerEvents: 'none',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         if (!window.selectedVisualAtomeId) {
             log('No atome selected', 'warn');
             return;
@@ -1328,7 +1347,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const token = localStorage.getItem(TOKEN_KEY);
         if (!token) {
             log('Please login first', 'warn');
@@ -1406,7 +1425,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const token = localStorage.getItem(TOKEN_KEY);
         if (!token) {
             log('Please login first', 'warn');
@@ -1490,7 +1509,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const token = localStorage.getItem(TOKEN_KEY);
         if (!token) {
             log('Please login first', 'warn');
@@ -1529,7 +1548,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const token = localStorage.getItem(TOKEN_KEY);
 
         // Create test file content
@@ -1665,7 +1684,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const token = localStorage.getItem(TOKEN_KEY);
         if (!token) {
             log('Please login first', 'warn');
@@ -1753,7 +1772,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const token = localStorage.getItem(TOKEN_KEY);
         if (!token) {
             log('Please login first', 'warn');
@@ -1835,7 +1854,7 @@ Button({
         cursor: 'pointer',
         position: 'relative'
     },
-    onAction: async () => {
+    onclick: async () => {
         const token = localStorage.getItem(TOKEN_KEY);
         if (!token) {
             log('Please login first', 'warn');
@@ -2049,6 +2068,14 @@ window.addEventListener('atome:synced', (e) => {
 // Listen for REAL-TIME Atome sync events (from WebSocket, other clients)
 window.addEventListener('squirrel:atome-created', (e) => {
     const atome = e.detail;
+    
+    // Skip if we created this atome ourselves (avoid duplicate)
+    // Check both the final ID and the original_id (client-generated ID)
+    if (locallyCreatedAtomeIds.has(atome?.id) || locallyCreatedAtomeIds.has(atome?.original_id)) {
+        console.log('[squirrel:atome-created] Skipping own atome:', atome?.id, 'original:', atome?.original_id);
+        return;
+    }
+    
     log(`[Sync] 🆕 Remote atome created: ${atome?.id}`, 'success');
 
     // Add the new atome visually if it belongs to current user
@@ -2146,6 +2173,13 @@ function connectSyncWebSocket() {
 
             // Handle atome sync events
             if (data.type === 'atome:created' && data.atome) {
+                // Skip if we created this atome ourselves (avoid duplicate)
+                // Check both the final ID and the original_id
+                if (locallyCreatedAtomeIds.has(data.atome.id) || locallyCreatedAtomeIds.has(data.atome.original_id)) {
+                    console.log('[WebSocket] Skipping own atome creation:', data.atome.id, 'original:', data.atome.original_id);
+                    return;
+                }
+                
                 log(`[Sync] 🆕 Atome created: ${data.atome.id}`, 'success');
 
                 // Add visually if not already present

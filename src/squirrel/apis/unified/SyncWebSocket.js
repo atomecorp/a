@@ -27,11 +27,13 @@
 
 const CONFIG = {
     FASTIFY_WS_URL: 'ws://127.0.0.1:3001/ws/atome-sync',
-    RECONNECT_INITIAL_DELAY: 1000,
-    RECONNECT_MAX_DELAY: 30000,
+    RECONNECT_INITIAL_DELAY: 30000,  // Start at 30 seconds
+    RECONNECT_MAX_DELAY: 3600000,    // 1 hour max
     RECONNECT_MULTIPLIER: 2,
     HEARTBEAT_INTERVAL: 30000,
-    MAX_RECONNECT_ATTEMPTS: 10
+    MAX_RECONNECT_ATTEMPTS: 3,       // Very few attempts
+    LONG_POLL_INTERVAL: 300000,      // 5 minutes between background retries
+    SILENT_MODE_AFTER_FAILURES: 1    // Silent after first failure
 };
 
 // ============================================
@@ -44,6 +46,9 @@ let reconnectTimeout = null;
 let heartbeatInterval = null;
 let isIntentionallyClosed = false;
 let clientId = null;
+let silentMode = false;
+let fastifyChecked = false;
+let serverAvailable = null;
 
 // Event listeners
 const eventListeners = new Map();
@@ -99,6 +104,44 @@ function stopHeartbeat() {
         clearInterval(heartbeatInterval);
         heartbeatInterval = null;
     }
+}
+
+/**
+ * Check if Fastify server is available before attempting WebSocket
+ */
+async function checkFastifyAvailable() {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        const response = await fetch('http://127.0.0.1:3001/api/server-info', {
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+        return response.ok;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Schedule background retry with long interval (for when Fastify is unavailable)
+ */
+function scheduleBackgroundRetry() {
+    if (reconnectTimeout) return;
+    
+    reconnectTimeout = setTimeout(async () => {
+        reconnectTimeout = null;
+        const available = await checkFastifyAvailable();
+        if (available) {
+            console.log('[SyncWebSocket] Fastify server now available, connecting...');
+            silentMode = false;
+            reconnectAttempts = 0;
+            SyncWebSocket.connect();
+        } else {
+            // Still not available, schedule another background check
+            scheduleBackgroundRetry();
+        }
+    }, CONFIG.LONG_POLL_INTERVAL);
 }
 
 function handleMessage(event) {
@@ -167,17 +210,27 @@ function handleMessage(event) {
 
 function scheduleReconnect() {
     if (isIntentionallyClosed) return;
+    if (reconnectTimeout) return;
+    
+    // Enter silent mode after first failure
+    if (reconnectAttempts >= CONFIG.SILENT_MODE_AFTER_FAILURES && !silentMode) {
+        silentMode = true;
+        console.log('[SyncWebSocket] Fastify server unavailable - sync will auto-resume when server is back');
+    }
+    
     if (reconnectAttempts >= CONFIG.MAX_RECONNECT_ATTEMPTS) {
-        console.error('[SyncWebSocket] Max reconnection attempts reached');
-        emit('sync:error', { error: 'Max reconnection attempts reached' });
+        serverAvailable = false;
+        emit('sync:error', { error: 'Server unavailable' });
+        // Switch to long background polling
+        scheduleBackgroundRetry();
         return;
     }
 
+    reconnectAttempts++;
     const delay = getReconnectDelay();
-    console.log(`[SyncWebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${CONFIG.MAX_RECONNECT_ATTEMPTS})`);
 
     reconnectTimeout = setTimeout(() => {
-        reconnectAttempts++;
+        reconnectTimeout = null;
         SyncWebSocket.connect();
     }, delay);
 }
@@ -193,6 +246,7 @@ const SyncWebSocket = {
      * @param {Object} options - Connection options
      * @param {string} [options.url] - Custom WebSocket URL
      * @param {string} [options.token] - Auth token to send
+     * @param {boolean} [options.skipCheck] - Skip Fastify availability check
      * @returns {Promise<boolean>} Connection success
      * 
      * @example
@@ -200,14 +254,25 @@ const SyncWebSocket = {
      * // or with custom URL:
      * await SyncWebSocket.connect({ url: 'ws://custom:3001/ws/atome-sync' });
      */
-    connect(options = {}) {
-        return new Promise((resolve, reject) => {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-                console.log('[SyncWebSocket] Already connected');
-                resolve(true);
-                return;
-            }
+    async connect(options = {}) {
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            return true;
+        }
 
+        // First time: check if Fastify is even available
+        if (!fastifyChecked && !options.skipCheck) {
+            fastifyChecked = true;
+            const available = await checkFastifyAvailable();
+            if (!available) {
+                // Fastify not available - enter silent mode immediately, no error spam
+                silentMode = true;
+                serverAvailable = false;
+                scheduleBackgroundRetry();
+                return false;
+            }
+        }
+
+        return new Promise((resolve, reject) => {
             isIntentionallyClosed = false;
             const url = options.url || CONFIG.FASTIFY_WS_URL;
 
@@ -217,6 +282,8 @@ const SyncWebSocket = {
                 websocket.onopen = () => {
                     console.log('[SyncWebSocket] Connection established');
                     reconnectAttempts = 0;
+                    silentMode = false;
+                    serverAvailable = true;
                     startHeartbeat();
 
                     // Send auth token if available
@@ -233,7 +300,10 @@ const SyncWebSocket = {
                 websocket.onmessage = handleMessage;
 
                 websocket.onclose = (event) => {
-                    console.log(`[SyncWebSocket] Connection closed: ${event.code} ${event.reason}`);
+                    // Only log if not in silent mode
+                    if (!silentMode) {
+                        console.log(`[SyncWebSocket] Connection closed: ${event.code} ${event.reason}`);
+                    }
                     stopHeartbeat();
                     emit('sync:disconnected', { code: event.code, reason: event.reason });
 
@@ -243,13 +313,18 @@ const SyncWebSocket = {
                 };
 
                 websocket.onerror = (error) => {
-                    console.error('[SyncWebSocket] Connection error:', error);
+                    // Only log if not in silent mode
+                    if (!silentMode) {
+                        console.warn('[SyncWebSocket] Connection error');
+                    }
                     emit('sync:error', { error: 'WebSocket connection error' });
                     reject(error);
                 };
 
             } catch (error) {
-                console.error('[SyncWebSocket] Failed to create WebSocket:', error);
+                if (!silentMode) {
+                    console.warn('[SyncWebSocket] Failed to create WebSocket');
+                }
                 reject(error);
             }
         });
@@ -465,7 +540,43 @@ const SyncWebSocket = {
 
         websocket.send(JSON.stringify(message));
         return true;
+    },
+
+    /**
+     * Get connection state
+     */
+    getState() {
+        return {
+            connected: websocket && websocket.readyState === WebSocket.OPEN,
+            serverAvailable,
+            silentMode,
+            reconnectAttempts
+        };
+    },
+
+    /**
+     * Reset connection state and retry
+     */
+    retry() {
+        reconnectAttempts = 0;
+        silentMode = false;
+        fastifyChecked = false;
+        if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+        }
+        this.connect();
     }
 };
+
+// Setup network listeners for smart reconnection
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+        if (serverAvailable === false || (websocket && websocket.readyState !== WebSocket.OPEN)) {
+            console.log('[SyncWebSocket] Network back online, attempting reconnection...');
+            SyncWebSocket.retry();
+        }
+    });
+}
 
 export default SyncWebSocket;

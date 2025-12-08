@@ -274,7 +274,7 @@ async function startServer() {
       origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
+      allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Client-Id']
     });
 
     // Servir les fichiers statiques depuis staticRoot (../src en dev)
@@ -1008,17 +1008,11 @@ async function startServer() {
                 break;
 
               case 'atome:created':
-                console.log(`📦 Atome created by ${clientId}:`, data.atome?.id);
-                // Save to database
-                if (DATABASE_ENABLED && data.atome) {
-                  try {
-                    await AppDataSource.getRepository(AtomeEntity).save(data.atome);
-                    console.log(`✅ Atome saved to DB: ${data.atome.id}`);
-                  } catch (dbError) {
-                    console.error('❌ DB save error:', dbError.message);
-                  }
-                }
-                // Broadcast to other clients
+                // NOTE: Do NOT save to database here!
+                // The HTTP API (/api/atome/create) already saves and broadcasts via /ws/sync
+                // This WebSocket is for client-to-client sync only, not for DB operations
+                console.log(`📦 [ws/atome-sync] Received atome:created from ${clientId}:`, data.atome?.id);
+                // Only broadcast to other atome-sync clients (for P2P sync scenarios)
                 broadcastToAtomeSyncClients({
                   type: 'atome:created',
                   atome: data.atome,
@@ -1028,19 +1022,8 @@ async function startServer() {
                 break;
 
               case 'atome:updated':
-                console.log(`✏️ Atome updated by ${clientId}:`, data.atome?.id);
-                // Update in database
-                if (DATABASE_ENABLED && data.atome?.id) {
-                  try {
-                    await AppDataSource.getRepository(AtomeEntity).update(
-                      { id: data.atome.id },
-                      data.atome
-                    );
-                    console.log(`✅ Atome updated in DB: ${data.atome.id}`);
-                  } catch (dbError) {
-                    console.error('❌ DB update error:', dbError.message);
-                  }
-                }
+                // NOTE: Do NOT update database here - HTTP API handles it
+                console.log(`✏️ [ws/atome-sync] Received atome:updated from ${clientId}:`, data.atome?.id);
                 // Broadcast to other clients
                 broadcastToAtomeSyncClients({
                   type: 'atome:updated',
@@ -1064,16 +1047,8 @@ async function startServer() {
                 break;
 
               case 'atome:deleted':
-                console.log(`🗑️ Atome deleted by ${clientId}:`, data.atomeId);
-                // Delete from database
-                if (DATABASE_ENABLED && data.atomeId) {
-                  try {
-                    await AppDataSource.getRepository(AtomeEntity).delete({ id: data.atomeId });
-                    console.log(`✅ Atome deleted from DB: ${data.atomeId}`);
-                  } catch (dbError) {
-                    console.error('❌ DB delete error:', dbError.message);
-                  }
-                }
+                // NOTE: Do NOT delete from database here - HTTP API handles it
+                console.log(`🗑️ [ws/atome-sync] Received atome:deleted from ${clientId}:`, data.atomeId);
                 // Broadcast to other clients
                 broadcastToAtomeSyncClients({
                   type: 'atome:deleted',

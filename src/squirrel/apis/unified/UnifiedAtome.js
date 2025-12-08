@@ -52,10 +52,22 @@ async function checkBackends(force = false) {
 }
 
 /**
- * Generate a unique ID for atomes
+ * Generate a valid UUID for atomes
+ * IMPORTANT: Must be a valid UUID to ensure consistency across all servers
+ * The same ID will be used by Tauri (SQLite) and Fastify (PostgreSQL)
  */
 function generateId(prefix = 'atome') {
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Ignore prefix parameter - always generate a valid UUID
+    // This ensures the ID is accepted by both SQLite and PostgreSQL without modification
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    // Fallback: generate UUID v4 manually
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
 }
 
 // ============================================
@@ -401,10 +413,9 @@ const UnifiedAtome = {
         if (primaryResult && primaryResult.success) {
             const resultAtome = primaryResult.atome || { ...atomeData, id: primaryResult.id };
 
-            // Broadcast via WebSocket for real-time sync
-            if (SyncWebSocket.isConnected()) {
-                SyncWebSocket.broadcastCreate(resultAtome);
-            }
+            // NOTE: Do NOT broadcast via SyncWebSocket here!
+            // The HTTP API (Fastify/Tauri) already broadcasts to all clients via githubSync.broadcastMessage
+            // Calling SyncWebSocket.broadcastCreate would cause duplicate atome creation on the server
 
             const createResult = {
                 success: true,
@@ -677,10 +688,8 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
-            // Broadcast via WebSocket for real-time sync
-            if (SyncWebSocket.isConnected()) {
-                SyncWebSocket.broadcastAlter(id, alterData, primaryResult.atome);
-            }
+            // NOTE: Do NOT broadcast via SyncWebSocket here!
+            // The HTTP API already broadcasts to all clients via githubSync.broadcastMessage
 
             return {
                 success: true,
@@ -763,10 +772,8 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
-            // Broadcast via WebSocket for real-time sync
-            if (SyncWebSocket.isConnected()) {
-                SyncWebSocket.broadcastAlter(id, { operation: 'rename', newName: data.newName }, primaryResult.atome);
-            }
+            // NOTE: Do NOT broadcast via SyncWebSocket here!
+            // The HTTP API already broadcasts to all clients via githubSync.broadcastMessage
 
             return {
                 success: true,
@@ -836,10 +843,8 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
-            // Broadcast via WebSocket for real-time sync
-            if (SyncWebSocket.isConnected()) {
-                SyncWebSocket.broadcastDelete(id);
-            }
+            // NOTE: Do NOT broadcast via SyncWebSocket here!
+            // The HTTP API already broadcasts to all clients via githubSync.broadcastMessage
 
             return {
                 success: true,

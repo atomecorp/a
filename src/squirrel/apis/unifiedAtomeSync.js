@@ -611,7 +611,7 @@ const UnifiedAtome = {
         }
 
         const atomeData = {
-            id: data.id || `atome_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            id: data.id || crypto.randomUUID(),
             kind: data.kind || 'generic',
             tag: data.tag || 'div',
             data: data.data || data.properties || {},

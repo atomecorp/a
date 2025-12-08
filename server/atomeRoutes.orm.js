@@ -184,10 +184,14 @@ export function registerAtomeRoutes(server, dataSource) {
 
             console.log(`✅ [Atome] Created: ${object_id} (${kind})`);
 
-            // Broadcast to all connected clients for real-time sync
+            // Get client ID from header to exclude from broadcast (avoid echo back to sender)
+            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
+
+            // Broadcast to all connected clients EXCEPT the sender for real-time sync
             broadcastMessage('atome:created', {
                 atome: {
                     id: object_id,
+                    original_id: id || null,  // Client's original ID for dedup
                     kind,
                     tag,
                     parent,
@@ -195,7 +199,7 @@ export function registerAtomeRoutes(server, dataSource) {
                     created_at: new Date().toISOString(),
                     created_by: principal_id
                 }
-            });
+            }, senderClientId);  // Exclude sender from broadcast
 
             return {
                 success: true,
@@ -254,7 +258,10 @@ export function registerAtomeRoutes(server, dataSource) {
             const now = new Date().toISOString();
             console.log(`✅ [Atome] Updated: ${id} (${Object.keys(properties || {}).length} properties)`);
 
-            // Broadcast to all connected clients for real-time sync
+            // Get client ID from header to exclude from broadcast
+            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
+
+            // Broadcast to all connected clients EXCEPT sender for real-time sync
             broadcastMessage('atome:updated', {
                 atome: {
                     id,
@@ -262,7 +269,7 @@ export function registerAtomeRoutes(server, dataSource) {
                     updated_at: now,
                     updated_by: principal_id
                 }
-            });
+            }, senderClientId);
 
             return {
                 success: true,
@@ -317,14 +324,17 @@ export function registerAtomeRoutes(server, dataSource) {
 
             console.log(`✅ [Atome] Deleted: ${id}`);
 
-            // Broadcast to all connected clients for real-time sync
+            // Get client ID from header to exclude from broadcast
+            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
+
+            // Broadcast to all connected clients EXCEPT sender for real-time sync
             broadcastMessage('atome:deleted', {
                 atome: {
                     id,
                     deleted_at: deletedAt,
                     deleted_by: principal_id
                 }
-            });
+            }, senderClientId);
 
             return {
                 success: true,
@@ -595,12 +605,15 @@ export function registerAtomeRoutes(server, dataSource) {
                 });
             }
 
-            // Broadcast change
+            // Get client ID from header to exclude from broadcast
+            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
+
+            // Broadcast change EXCEPT to sender
             broadcastMessage('atome:altered', {
                 atomeId: id,
                 userId: principal_id,
                 alterations: appliedAlterations
-            });
+            }, senderClientId);
 
             console.log(`✅ [Atome] Altered ${id}: ${appliedAlterations.length} changes`);
 
@@ -662,13 +675,16 @@ export function registerAtomeRoutes(server, dataSource) {
             // Update the name
             await orm.setProperty(id, 'name', new_name.trim(), principal_id);
 
-            // Broadcast change
+            // Get client ID from header to exclude from broadcast
+            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
+
+            // Broadcast change EXCEPT to sender
             broadcastMessage('atome:renamed', {
                 atomeId: id,
                 userId: principal_id,
                 oldName,
                 newName: new_name.trim()
-            });
+            }, senderClientId);
 
             console.log(`✅ [Atome] Renamed ${id}: "${oldName}" -> "${new_name.trim()}"`);
 
@@ -755,13 +771,16 @@ export function registerAtomeRoutes(server, dataSource) {
             // Apply the restoration (this creates a new history entry)
             await orm.setProperty(id, key, valueToRestore, principal_id);
 
-            // Broadcast change
+            // Get client ID from header to exclude from broadcast
+            const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
+
+            // Broadcast change EXCEPT to sender
             broadcastMessage('atome:restored', {
                 atomeId: id,
                 userId: principal_id,
                 key,
                 restoredFromVersion: version_index
-            });
+            }, senderClientId);
 
             console.log(`✅ [Atome] Restored ${id}.${key} to version ${version_index}`);
 

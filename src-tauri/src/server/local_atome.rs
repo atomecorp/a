@@ -1451,10 +1451,6 @@ async fn alter_atome_handler(
 
             // Merge changes into data based on operation
             let new_data = match req.operation.as_str() {
-                "update" | "patch" | _ => {
-                    // Deep merge of changed fields (ADOLE: patch, don't replace)
-                    deep_merge_json(&current_data, &req.changes)
-                }
                 "rename" => {
                     // Update name field
                     let mut merged = current_data.clone();
@@ -1464,6 +1460,11 @@ async fn alter_atome_handler(
                         }
                     }
                     merged
+                }
+                // "update", "patch", or any other operation: deep merge
+                _ => {
+                    // Deep merge of changed fields (ADOLE: patch, don't replace)
+                    deep_merge_json(&current_data, &req.changes)
                 }
             };
 

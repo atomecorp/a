@@ -57,6 +57,17 @@ async function isAvailable() {
 }
 
 /**
+ * Get the WebSocket client ID (for deduplication)
+ * @returns {string|null}
+ */
+function getClientId() {
+    if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem('squirrel_client_id');
+    }
+    return null;
+}
+
+/**
  * Make an authenticated request to Fastify backend
  * @param {string} endpoint - API endpoint (e.g., '/api/auth/me')
  * @param {Object} options - Fetch options
@@ -65,6 +76,7 @@ async function isAvailable() {
 async function request(endpoint, options = {}) {
     const url = `${FASTIFY_BASE_URL}${endpoint}`;
     const token = getToken();
+    const wsClientId = getClientId();
 
     const headers = {
         'Content-Type': 'application/json',
@@ -73,6 +85,12 @@ async function request(endpoint, options = {}) {
 
     if (token && !options.skipAuth) {
         headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Include WebSocket client ID so server can exclude us from broadcast
+    // This prevents duplicate atomes when we create via HTTP and receive via WebSocket
+    if (wsClientId) {
+        headers['X-Client-Id'] = wsClientId;
     }
 
     const config = {

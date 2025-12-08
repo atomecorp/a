@@ -304,11 +304,19 @@ function broadcastVersionUpdate(versionData) {
 
 /**
  * Broadcast arbitrary message to all clients
+ * @param {string} type - Message type
+ * @param {object} data - Message data
+ * @param {string} [excludeClientId] - Client ID to exclude from broadcast (to avoid echo)
  */
-function broadcastMessage(type, data) {
+function broadcastMessage(type, data, excludeClientId = null) {
     const message = JSON.stringify({ type, ...data, timestamp: new Date().toISOString() });
 
     for (const [clientId, client] of connectedClients) {
+        // Skip the client that originated this message (avoid duplicate)
+        if (excludeClientId && clientId === excludeClientId) {
+            console.log(`[Broadcast] Skipping client ${clientId} (sender)`);
+            continue;
+        }
         try {
             if (client.ws.readyState === 1) {
                 client.ws.send(message);

@@ -12,10 +12,11 @@
  */
 
 const DEFAULT_WS_PATH = '/ws/sync';
-const MAX_RETRIES = 5;  // Reduced to avoid spamming
-const RECONNECT_BASE_DELAY = 2000;
-const RECONNECT_MAX_DELAY = 60000;  // 1 minute max
-const SILENT_MODE_AFTER_FAILURES = 3;  // Stop logging errors after N failures
+const MAX_RETRIES = 3;  // Very few retries to avoid spam
+const RECONNECT_BASE_DELAY = 30000;  // Start at 30 seconds
+const RECONNECT_MAX_DELAY = 3600000;  // 1 hour max
+const SILENT_MODE_AFTER_FAILURES = 1;  // Silent after first failure (Fastify may be intentionally off)
+const LONG_POLL_INTERVAL = 300000;  // 5 minutes between background retries
 
 /**
  * Check if we're in a production environment
@@ -120,13 +121,70 @@ class VersionSyncClient {
             clientId: getClientId(),
             runtime: detectRuntime(),
             silentMode: false,
-            serverAvailable: null  // null = unknown, true/false = known state
+            serverAvailable: null,  // null = unknown, true/false = known state
+            fastifyChecked: false   // Whether we've checked Fastify availability
         };
         this.listeners = new Set();
         this.socket = null;
         this.reconnectTimer = null;
         this.heartbeatTimer = null;
         this.pendingConflicts = [];
+        this.setupNetworkListeners();
+    }
+
+    /**
+     * Setup network online/offline listeners for smart reconnection
+     */
+    setupNetworkListeners() {
+        if (typeof window === 'undefined') return;
+        
+        window.addEventListener('online', () => {
+            if (!this.state.connected && this.state.silentMode) {
+                console.log('[version_sync] Network back online, attempting reconnection...');
+                this.state.silentMode = false;
+                this.state.attempts = 0;
+                this.state.fastifyChecked = false;
+                this.start();
+            }
+        });
+    }
+
+    /**
+     * Check if Fastify server is available before attempting WebSocket
+     */
+    async checkFastifyAvailable() {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 2000);
+            const response = await fetch('http://127.0.0.1:3001/api/server-info', {
+                signal: controller.signal
+            });
+            clearTimeout(timeout);
+            return response.ok;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * Schedule background retry with long interval (for when Fastify is unavailable)
+     */
+    scheduleBackgroundRetry() {
+        if (this.reconnectTimer) return;
+        
+        this.reconnectTimer = setTimeout(async () => {
+            this.reconnectTimer = null;
+            const available = await this.checkFastifyAvailable();
+            if (available) {
+                console.log('[version_sync] Fastify server now available, connecting...');
+                this.state.silentMode = false;
+                this.state.attempts = 0;
+                this.connect();
+            } else {
+                // Still not available, schedule another background check
+                this.scheduleBackgroundRetry();
+            }
+        }, LONG_POLL_INTERVAL);
     }
 
     /**
@@ -134,13 +192,24 @@ class VersionSyncClient {
      */
     async start() {
         if (this.socket || this.state.connected) {
-            console.log('[version_sync] Already connected or connecting');
             return;
+        }
+
+        // First time: check if Fastify is even available
+        if (!this.state.fastifyChecked) {
+            this.state.fastifyChecked = true;
+            const available = await this.checkFastifyAvailable();
+            if (!available) {
+                // Fastify not available - enter silent mode immediately, no error spam
+                this.state.silentMode = true;
+                this.state.serverAvailable = false;
+                this.scheduleBackgroundRetry();
+                return;
+            }
         }
 
         // Get local version before connecting
         this.state.lastVersion = await getLocalVersion();
-        console.log('[version_sync] Local version:', this.state.lastVersion);
 
         this.connect();
     }
@@ -274,6 +343,20 @@ class VersionSyncClient {
                 console.log('[version_sync] ♻️ Atome restored:', data.atome?.id || data.atomeId);
                 window.dispatchEvent(new CustomEvent('squirrel:atome-restored', { detail: data.atome || { id: data.atomeId } }));
                 this.broadcast({ type: 'atome:restored', atome: data.atome, atomeId: data.atomeId });
+                break;
+
+            case 'welcome':
+                // Server assigned us a client ID - store it for HTTP header deduplication
+                if (data.clientId) {
+                    console.log('[version_sync] 🔑 Server assigned clientId:', data.clientId);
+                    try {
+                        localStorage.setItem('squirrel_client_id', data.clientId);
+                    } catch (e) {
+                        console.warn('[version_sync] Could not store clientId:', e);
+                    }
+                }
+                this.state.serverVersion = data.version;
+                this.broadcast({ type: 'welcome', data });
                 break;
 
             case 'error':
@@ -413,15 +496,10 @@ class VersionSyncClient {
     onError(event) {
         this.state.totalFailures++;
 
-        // Enter silent mode after too many failures to avoid log spam
+        // Enter silent mode after first failure (Fastify may be intentionally off)
         if (this.state.totalFailures >= SILENT_MODE_AFTER_FAILURES && !this.state.silentMode) {
             this.state.silentMode = true;
-            console.warn('[version_sync] Entering silent mode - server appears unavailable. Will keep trying in background.');
-        }
-
-        // Only log errors if not in silent mode
-        if (!this.state.silentMode) {
-            console.warn('[version_sync] WebSocket connection failed (attempt', this.state.attempts + 1, '/', MAX_RETRIES, ')');
+            console.log('[version_sync] Fastify server unavailable - sync will auto-resume when server is back');
         }
 
         this.state.connected = false;
@@ -436,19 +514,12 @@ class VersionSyncClient {
         if (this.reconnectTimer) {
             return;
         }
+        
         if (this.state.attempts >= MAX_RETRIES) {
-            if (!this.state.silentMode) {
-                console.warn('[version_sync] Max retries reached. Server unavailable - sync disabled.');
-            }
             this.state.serverAvailable = false;
             this.broadcast({ type: 'server-unavailable' });
-
-            // Schedule a long retry later (5 minutes)
-            this.reconnectTimer = setTimeout(() => {
-                this.reconnectTimer = null;
-                this.state.attempts = 0;  // Reset attempts
-                this.connect();
-            }, 5 * 60 * 1000);
+            // Switch to long background polling
+            this.scheduleBackgroundRetry();
             return;
         }
 
@@ -457,11 +528,6 @@ class VersionSyncClient {
             RECONNECT_BASE_DELAY * Math.pow(2, this.state.attempts - 1),
             RECONNECT_MAX_DELAY
         );
-
-        // Only log if not in silent mode
-        if (!this.state.silentMode) {
-            console.log(`[version_sync] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${this.state.attempts}/${MAX_RETRIES})...`);
-        }
 
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
