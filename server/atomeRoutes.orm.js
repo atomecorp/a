@@ -146,7 +146,10 @@ export function registerAtomeRoutes(server, dataSource) {
 
             const { id, kind, tag, parent, properties, data, project_id } = request.body;
 
-            console.log(`[Atome] CREATE request - id: ${id}, kind: ${kind}, user: ${principal_id}`);
+            // Also check for ID in data object (sent by UnifiedAtome)
+            const providedId = id || data?.id;
+
+            console.log(`[Atome] CREATE request - id: ${providedId}, kind: ${kind}, user: ${principal_id}`);
 
             // Support both 'properties' and 'data' field names (merge them)
             const mergedProperties = { ...(data || {}), ...(properties || {}) };
@@ -154,8 +157,8 @@ export function registerAtomeRoutes(server, dataSource) {
             // Generate UUID if not provided (must be valid UUID for PostgreSQL)
             // If client provides an ID, check if it's a valid UUID, otherwise generate one
             let atomeId;
-            if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-                atomeId = id;
+            if (providedId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(providedId)) {
+                atomeId = providedId;
                 console.log(`[Atome] Using provided UUID: ${atomeId}`);
             } else {
                 atomeId = uuidv4();
@@ -169,7 +172,9 @@ export function registerAtomeRoutes(server, dataSource) {
                 tag: tag || 'div',
                 parent: parent || null,
                 project_id: project_id || null,
-                original_id: id || null  // Keep original ID if provided
+                original_id: id || null,  // Keep original ID if provided
+                created_source: 'fastify',  // Track where the atome was created
+                created_server: process.env.SQUIRREL_SERVER_ID || 'fastify-dev'
             };
 
             // Create atome via ORM

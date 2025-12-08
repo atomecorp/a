@@ -63,7 +63,7 @@ function generateId(prefix = 'atome') {
         return crypto.randomUUID();
     }
     // Fallback: generate UUID v4 manually
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0;
         const v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);
@@ -377,9 +377,11 @@ const UnifiedAtome = {
         if (fastify && FastifyAdapter.getToken()) {
             try {
                 // Use same ID if created on Tauri
-                if (primaryResult && primaryResult.id) {
-                    atomeData.id = primaryResult.id;
-                    console.log(`[UnifiedAtome.create] Using Tauri ID for Fastify: ${primaryResult.id}`);
+                // ID can be in primaryResult.id, primaryResult.atome?.id, or primaryResult.data?.id
+                const tauriId = primaryResult?.id || primaryResult?.atome?.id || primaryResult?.data?.id;
+                if (tauriId) {
+                    atomeData.id = tauriId;
+                    console.log(`[UnifiedAtome.create] Using Tauri ID for Fastify: ${tauriId}`);
                 }
                 console.log(`[UnifiedAtome.create] Sending to Fastify:`, JSON.stringify(atomeData).substring(0, 300));
                 results.fastify = await FastifyAdapter.atome.create(atomeData);

@@ -203,10 +203,18 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             cloud_id TEXT,
-            last_sync TEXT
+            last_sync TEXT,
+            created_source TEXT DEFAULT 'tauri'
         )",
         [],
     )?;
+
+    // Add created_source column if it doesn't exist (migration for existing databases)
+    conn.execute(
+        "ALTER TABLE users ADD COLUMN created_source TEXT DEFAULT 'tauri'",
+        [],
+    )
+    .ok(); // Ignore error if column already exists
 
     // Create index on phone for faster lookups
     conn.execute(
@@ -366,15 +374,16 @@ async fn register_handler(
     {
         let db = state.db.lock().unwrap();
         if let Err(e) = db.execute(
-            "INSERT INTO users (id, username, phone, password_hash, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO users (id, username, phone, password_hash, created_at, updated_at, created_source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 user_id,
                 clean_username,
                 clean_phone,
                 password_hash,
                 now,
-                now
+                now,
+                "tauri"
             ],
         ) {
             return (

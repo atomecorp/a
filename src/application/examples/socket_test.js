@@ -1140,7 +1140,7 @@ Button({
         // Pre-register this ID to avoid duplicate from WebSocket event
         // We use a "pending" marker since we don't know the final UUID yet
         locallyCreatedAtomeIds.add(atomeId);
-        
+
         // Use UnifiedAtome for creation (handles both servers automatically)
         try {
             const result = await UnifiedAtome.create(atomeData);
@@ -1149,7 +1149,7 @@ Button({
                 const createdId = result.id || atomeId;
                 // Track the final ID too (server may have generated a different UUID)
                 locallyCreatedAtomeIds.add(createdId);
-                
+
                 $('div', {
                     parent: visualArea,
                     id: createdId,
@@ -2068,14 +2068,14 @@ window.addEventListener('atome:synced', (e) => {
 // Listen for REAL-TIME Atome sync events (from WebSocket, other clients)
 window.addEventListener('squirrel:atome-created', (e) => {
     const atome = e.detail;
-    
+
     // Skip if we created this atome ourselves (avoid duplicate)
     // Check both the final ID and the original_id (client-generated ID)
     if (locallyCreatedAtomeIds.has(atome?.id) || locallyCreatedAtomeIds.has(atome?.original_id)) {
         console.log('[squirrel:atome-created] Skipping own atome:', atome?.id, 'original:', atome?.original_id);
         return;
     }
-    
+
     log(`[Sync] 🆕 Remote atome created: ${atome?.id}`, 'success');
 
     // Add the new atome visually if it belongs to current user
@@ -2175,11 +2175,17 @@ function connectSyncWebSocket() {
             if (data.type === 'atome:created' && data.atome) {
                 // Skip if we created this atome ourselves (avoid duplicate)
                 // Check both the final ID and the original_id
-                if (locallyCreatedAtomeIds.has(data.atome.id) || locallyCreatedAtomeIds.has(data.atome.original_id)) {
+                const isOwnAtome = locallyCreatedAtomeIds.has(data.atome.id) || locallyCreatedAtomeIds.has(data.atome.original_id);
+                console.log('[WebSocket] atome:created received:', data.atome.id,
+                    'original_id:', data.atome.original_id,
+                    'isOwn:', isOwnAtome,
+                    'localIds:', [...locallyCreatedAtomeIds]);
+
+                if (isOwnAtome) {
                     console.log('[WebSocket] Skipping own atome creation:', data.atome.id, 'original:', data.atome.original_id);
                     return;
                 }
-                
+
                 log(`[Sync] 🆕 Atome created: ${data.atome.id}`, 'success');
 
                 // Add visually if not already present
@@ -2242,7 +2248,7 @@ function connectSyncWebSocket() {
 // Connect to real-time atome sync WebSocket
 async function connectAtomeSyncWebSocket() {
     log('Connecting to real-time atome sync...', 'info');
-    
+
     try {
         const connected = await UnifiedSync.connectRealtime({
             onAtomeCreated: (data) => {

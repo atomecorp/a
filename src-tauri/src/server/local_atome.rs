@@ -210,7 +210,8 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
             updated_at TEXT NOT NULL,
             deleted_at TEXT,
             last_sync TEXT,
-            meta TEXT DEFAULT '{}'
+            meta TEXT DEFAULT '{}',
+            created_source TEXT DEFAULT 'tauri'
         )",
         [],
     )?;
@@ -294,6 +295,7 @@ fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         ("tenant_id", "ALTER TABLE atomes ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'local-tenant'"),
         ("deleted", "ALTER TABLE atomes ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0"),
         ("deleted_at", "ALTER TABLE atomes ADD COLUMN deleted_at TEXT"),
+        ("created_source", "ALTER TABLE atomes ADD COLUMN created_source TEXT DEFAULT 'tauri'"),
     ];
 
     for (column_name, sql) in migrations {
@@ -493,8 +495,8 @@ async fn create_atome_handler(
         let db = state.db.lock().unwrap();
         if let Err(e) = db.execute(
             "INSERT INTO atomes (id, tenant_id, kind, type, owner_id, parent_id, data, snapshot, 
-             logical_clock, device_id, sync_status, meta, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+             logical_clock, device_id, sync_status, meta, created_at, updated_at, created_source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             rusqlite::params![
                 &atome_id,
                 DEFAULT_TENANT_ID,
@@ -509,7 +511,8 @@ async fn create_atome_handler(
                 "synced",
                 &meta_json,
                 &now,
-                &now
+                &now,
+                "tauri"
             ],
         ) {
             return (
@@ -1157,10 +1160,12 @@ async fn sync_push_handler(
                 let snapshot_json = serde_json::to_string(&atome.snapshot).unwrap_or_else(|_| data_json.clone());
                 let meta_json = atome.meta.as_ref().map(|m| serde_json::to_string(m).unwrap_or_else(|_| "null".to_string()));
                 let deleted_at: Option<String> = if atome.deleted { Some(now.clone()) } else { None };
+                // Determine created_source from incoming atome or default to 'synced'
+                let created_source = "synced";
 
                 let _ = db.execute(
-                    "INSERT INTO atomes (id, tenant_id, kind, type, owner_id, parent_id, data, snapshot, logical_clock, schema_version, device_id, sync_status, meta, created_at, updated_at, deleted, deleted_at)
-                     VALUES (?1, 'local-tenant', ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, 'synced', ?10, ?11, ?12, ?13, ?14)",
+                    "INSERT INTO atomes (id, tenant_id, kind, type, owner_id, parent_id, data, snapshot, logical_clock, schema_version, device_id, sync_status, meta, created_at, updated_at, deleted, deleted_at, created_source)
+                     VALUES (?1, 'local-tenant', ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, ?9, 'synced', ?10, ?11, ?12, ?13, ?14, ?15)",
                     rusqlite::params![
                         &atome.id,
                         &atome.kind,
@@ -1175,7 +1180,8 @@ async fn sync_push_handler(
                         &atome.created_at,
                         &now,
                         &atome.deleted,
-                        &deleted_at
+                        &deleted_at,
+                        created_source
                     ],
                 );
                 synced += 1;

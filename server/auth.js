@@ -269,7 +269,9 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                 phone: cleanPhone,
                 password_hash: passwordHash,
                 optional,
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                created_source: 'fastify',  // Track where the user was created
+                created_server: process.env.SQUIRREL_SERVER_ID || 'fastify-dev'
             };
 
             await dataSource.manager.transaction(async (tx) => {

@@ -1128,5 +1128,70 @@ export default {
     getAtome,
     getAtomesByUser,
     updateAtome,
-    deleteAtome
+    deleteAtome,
+
+    // TypeORM compatibility adapter (for auth.js migration)
+    getDataSourceAdapter
 };
+
+/**
+ * Create a TypeORM-like DataSource adapter for backwards compatibility
+ * This allows auth.js to work with Knex using the same interface
+ * @returns {Object} DataSource-like object
+ */
+export function getDataSourceAdapter() {
+    if (!db) {
+        throw new Error('[ORM] Database not initialized. Call initDatabase() first.');
+    }
+
+    return {
+        isInitialized: true,
+
+        /**
+         * Execute raw SQL query with parameters
+         * Supports $1, $2, ... PostgreSQL-style parameters
+         * @param {string} sql - SQL query
+         * @param {Array} params - Query parameters
+         * @returns {Promise<Array>} Query results
+         */
+        async query(sql, params = []) {
+            // Knex uses ? for parameters, but we receive $1, $2, etc.
+            // Convert $1, $2, ... to ? for Knex
+            let convertedSql = sql;
+            if (params && params.length > 0) {
+                for (let i = params.length; i >= 1; i--) {
+                    convertedSql = convertedSql.replace(new RegExp(`\\$${i}`, 'g'), '?');
+                }
+            }
+
+            const result = await db.raw(convertedSql, params);
+
+            // PostgreSQL returns { rows: [...] }, SQLite returns array directly
+            return result.rows || result;
+        },
+
+        /**
+         * Transaction manager adapter
+         */
+        manager: {
+            async transaction(callback) {
+                return db.transaction(async (trx) => {
+                    // Create a transaction-aware adapter
+                    const txAdapter = {
+                        async query(sql, params = []) {
+                            let convertedSql = sql;
+                            if (params && params.length > 0) {
+                                for (let i = params.length; i >= 1; i--) {
+                                    convertedSql = convertedSql.replace(new RegExp(`\\$${i}`, 'g'), '?');
+                                }
+                            }
+                            const result = await trx.raw(convertedSql, params);
+                            return result.rows || result;
+                        }
+                    };
+                    return callback(txAdapter);
+                });
+            }
+        }
+    };
+}

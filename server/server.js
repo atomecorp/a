@@ -6,6 +6,45 @@ import fastifyCors from '@fastify/cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { promises as fs, createReadStream, readFileSync, existsSync } from 'fs';
+
+// Load environment variables from .env files
+const __filename_env = fileURLToPath(import.meta.url);
+const __dirname_env = path.dirname(__filename_env);
+const projectRoot_env = path.resolve(__dirname_env, '..');
+
+function loadEnvFile(filePath, options = {}) {
+  const { override = false } = options;
+  if (!existsSync(filePath)) return false;
+
+  const content = readFileSync(filePath, 'utf8');
+  const lines = content.split(/\r?\n/);
+
+  for (const line of lines) {
+    if (!line || line.trim().startsWith('#')) continue;
+    const delimiterIndex = line.indexOf('=');
+    if (delimiterIndex === -1) continue;
+
+    const key = line.slice(0, delimiterIndex).trim();
+    if (!key) continue;
+
+    let value = line.slice(delimiterIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    value = value.replace(/\\n/g, '\n');
+
+    if (override || !(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+  return true;
+}
+
+// Load .env and .env.local (local overrides main)
+loadEnvFile(path.join(projectRoot_env, '.env'));
+loadEnvFile(path.join(projectRoot_env, '.env.local'), { override: true });
+
 import {
   startABoxMonitoring,
   stopABoxMonitoring,
@@ -36,12 +75,12 @@ import {
   getLocalVersion
 } from './githubSync.js';
 
-// Database imports
-import { AppDataSource, ensureAdoleSchema, PG_URL } from '../database/db.js';
+// Database imports - Using Knex ORM (unified for SQLite/PostgreSQL)
+import orm from '../database/orm.js';
 import { v4 as uuidv4 } from 'uuid';
-import { UserEntity } from '../database/User.js';
-import { ProjectEntity } from '../database/Project.js';
-import { AtomeEntity } from '../database/Atome.js';
+
+// Get PostgreSQL connection URL from environment (for DATABASE_ENABLED check)
+const PG_URL = process.env.ADOLE_PG_DSN || process.env.PG_CONNECTION_STRING || process.env.DATABASE_URL;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
@@ -242,10 +281,9 @@ async function startServer() {
       console.log('📊 Initialisation de la base de données...');
 
       try {
-        if (!AppDataSource.isInitialized) {
-          await AppDataSource.initialize();
-        }
-        console.log('✅ Connexion à la base de données établie (TypeORM)');
+        // Initialize Knex ORM (unified SQLite/PostgreSQL layer)
+        await orm.initDatabase();
+        console.log('✅ Connexion à la base de données établie (Knex ORM)');
       } catch (error) {
         if (error && error.code === 'ECONNREFUSED') {
           console.error('❌ PostgreSQL connection refused. Start the database and retry.');
@@ -258,9 +296,7 @@ async function startServer() {
         throw error;
       }
 
-      console.log('🗄️  Initialisation du schéma ADOLE (PostgreSQL)...');
-      await ensureAdoleSchema();
-      console.log('✅ Schéma ADOLE prêt');
+      console.log('✅ Schéma ADOLE prêt (Knex)');
     } else {
       console.warn('⚠️  Aucune base PostgreSQL configurée. Les routes dépendant de la base renverront 503.');
     }
@@ -324,14 +360,17 @@ async function startServer() {
 
     // Register authentication routes (login, register, logout, OTP, etc.)
     if (DATABASE_ENABLED) {
-      await registerAuthRoutes(server, AppDataSource, {
+      // Get TypeORM-compatible adapter from Knex ORM
+      const dataSourceAdapter = orm.getDataSourceAdapter();
+
+      await registerAuthRoutes(server, dataSourceAdapter, {
         jwtSecret: process.env.JWT_SECRET,
         cookieSecret: process.env.COOKIE_SECRET,
         isProduction: process.env.NODE_ENV === 'production'
       });
 
-      // Register Atome API routes
-      registerAtomeRoutes(server, AppDataSource);
+      // Register Atome API routes (uses Knex directly, dataSource param is legacy)
+      registerAtomeRoutes(server, dataSourceAdapter);
 
       // Register Sharing routes
       registerSharingRoutes(server, validateToken);
@@ -361,7 +400,7 @@ async function startServer() {
         version: SERVER_VERSION,
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
-        database: DATABASE_ENABLED ? (AppDataSource.isInitialized ? 'connected' : 'disconnected') : 'disabled'
+        database: DATABASE_ENABLED ? 'connected' : 'disabled'
       };
     });
 
@@ -551,33 +590,34 @@ async function startServer() {
       };
 
       try {
-        await AppDataSource.manager.transaction(async (transactionalEntityManager) => {
-          await transactionalEntityManager.query(
+        const dataSourceAdapter = orm.getDataSourceAdapter();
+        await dataSourceAdapter.manager.transaction(async (tx) => {
+          await tx.query(
             `INSERT INTO tenants (tenant_id, name) VALUES ($1, $2) ON CONFLICT (tenant_id) DO UPDATE SET name = EXCLUDED.name`,
             [tenant_id, tenantName || username || 'tenant']
           );
 
-          await transactionalEntityManager.query(
+          await tx.query(
             `INSERT INTO principals (tenant_id, principal_id, kind, email) VALUES ($1, $2, $3, $4) ON CONFLICT (principal_id) DO UPDATE SET email = EXCLUDED.email, kind = EXCLUDED.kind`,
             [tenant_id, principal_id, kind, email]
           );
 
-          await transactionalEntityManager.query(
+          await tx.query(
             `INSERT INTO objects (object_id, tenant_id, type, created_by) VALUES ($1, $2, $3, $4) ON CONFLICT (object_id) DO UPDATE SET type = EXCLUDED.type, created_by = EXCLUDED.created_by`,
             [principal_id, tenant_id, 'user_profile', principal_id]
           );
 
-          await transactionalEntityManager.query(
+          await tx.query(
             `INSERT INTO branches (branch_id, tenant_id, object_id, name, is_default) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (branch_id) DO NOTHING`,
             [branch_id, tenant_id, principal_id, 'main', true]
           );
 
-          await transactionalEntityManager.query(
+          await tx.query(
             `INSERT INTO commits (commit_id, tenant_id, object_id, branch_id, author_id, logical_clock, message) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (commit_id) DO NOTHING`,
             [commit_id, tenant_id, principal_id, branch_id, principal_id, logical_clock, 'profile upsert']
           );
 
-          await transactionalEntityManager.query(
+          await tx.query(
             `INSERT INTO object_state (tenant_id, object_id, branch_id, version_seq, snapshot) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (tenant_id, object_id, branch_id) DO UPDATE SET version_seq = EXCLUDED.version_seq, snapshot = EXCLUDED.snapshot, updated_at = now()`,
             [tenant_id, principal_id, branch_id, logical_clock, JSON.stringify(snapshot)]
           );
@@ -605,7 +645,8 @@ async function startServer() {
 
       try {
         const principalId = request.params.principalId;
-        const rows = await AppDataSource.query(
+        const dataSourceAdapter = orm.getDataSourceAdapter();
+        const rows = await dataSourceAdapter.query(
           `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
            FROM principals p 
            LEFT JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id 
@@ -643,7 +684,8 @@ async function startServer() {
       }
 
       try {
-        const rows = await AppDataSource.query(
+        const dataSourceAdapter = orm.getDataSourceAdapter();
+        const rows = await dataSourceAdapter.query(
           `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
            FROM principals p 
            LEFT JOIN object_state os ON os.object_id = p.principal_id AND os.tenant_id = p.tenant_id 
@@ -713,9 +755,10 @@ async function startServer() {
       }
 
       try {
-        await AppDataSource.query('SELECT 1');
+        const dataSourceAdapter = orm.getDataSourceAdapter();
+        await dataSourceAdapter.query('SELECT 1');
 
-        const tableRows = await AppDataSource.query(`
+        const tableRows = await dataSourceAdapter.query(`
           SELECT tablename FROM pg_catalog.pg_tables 
           WHERE schemaname = 'public' 
           ORDER BY tablename
@@ -768,6 +811,7 @@ async function startServer() {
     // ...existing database routes...
 
     // Users API
+    // Users API (now using Knex principals table - ADOLE compliant)
     server.get('/api/users', async (request, reply) => {
       if (!DATABASE_ENABLED) {
         reply.code(503);
@@ -775,7 +819,8 @@ async function startServer() {
       }
 
       try {
-        const users = await AppDataSource.getRepository(UserEntity).find();
+        const db = orm.getDatabase();
+        const users = await db('principals').select('*');
         return { success: true, data: users };
       } catch (error) {
         reply.code(500);
@@ -790,7 +835,28 @@ async function startServer() {
       }
 
       try {
-        const user = await AppDataSource.getRepository(UserEntity).save(request.body);
+        const db = orm.getDatabase();
+        const { name, email, phone, password } = request.body;
+        const principal_id = uuidv4();
+
+        // Get or create default tenant
+        let tenant = await db('tenants').first();
+        if (!tenant) {
+          const tenant_id = uuidv4();
+          await db('tenants').insert({ tenant_id, name: 'default' });
+          tenant = { tenant_id };
+        }
+
+        await db('principals').insert({
+          principal_id,
+          tenant_id: tenant.tenant_id,
+          kind: 'user',
+          email: email || null,
+          phone: phone || null,
+          username: name || null
+        });
+
+        const user = await db('principals').where('principal_id', principal_id).first();
         return { success: true, data: user };
       } catch (error) {
         reply.code(500);
@@ -805,10 +871,8 @@ async function startServer() {
       }
 
       try {
-        const user = await AppDataSource.getRepository(UserEntity).findOne({
-          where: { id: parseInt(request.params.id) },
-          relations: ['project']
-        });
+        const db = orm.getDatabase();
+        const user = await db('principals').where('principal_id', request.params.id).first();
 
         if (!user) {
           reply.code(404);
@@ -829,9 +893,10 @@ async function startServer() {
       }
 
       try {
-        const result = await AppDataSource.getRepository(UserEntity).delete(request.params.id);
+        const db = orm.getDatabase();
+        const deleted = await db('principals').where('principal_id', request.params.id).del();
 
-        if (result.affected === 0) {
+        if (deleted === 0) {
           reply.code(404);
           return { success: false, error: 'User not found' };
         }
@@ -847,7 +912,7 @@ async function startServer() {
       }
     });
 
-    // Projects API
+    // Projects API (now using Knex objects table with type='project' - ADOLE compliant)
     server.get('/api/projects', async (request, reply) => {
       if (!DATABASE_ENABLED) {
         reply.code(503);
@@ -855,9 +920,8 @@ async function startServer() {
       }
 
       try {
-        const projects = await AppDataSource.getRepository(ProjectEntity).find({
-          relations: ['users', 'owner', 'atomes']
-        });
+        const db = orm.getDatabase();
+        const projects = await db('objects').where('type', 'project').andWhere('deleted', false);
         return { success: true, data: projects };
       } catch (error) {
         reply.code(500);
@@ -872,7 +936,27 @@ async function startServer() {
       }
 
       try {
-        const project = await AppDataSource.getRepository(ProjectEntity).save(request.body);
+        const db = orm.getDatabase();
+        const { name, description } = request.body;
+        const object_id = uuidv4();
+
+        // Get or create default tenant
+        let tenant = await db('tenants').first();
+        if (!tenant) {
+          const tenant_id = uuidv4();
+          await db('tenants').insert({ tenant_id, name: 'default' });
+          tenant = { tenant_id };
+        }
+
+        await db('objects').insert({
+          object_id,
+          tenant_id: tenant.tenant_id,
+          type: 'project',
+          kind: 'project',
+          meta: JSON.stringify({ name, description })
+        });
+
+        const project = await db('objects').where('object_id', object_id).first();
         return { success: true, data: project };
       } catch (error) {
         reply.code(500);
@@ -887,10 +971,11 @@ async function startServer() {
       }
 
       try {
-        const project = await AppDataSource.getRepository(ProjectEntity).findOne({
-          where: { id: parseInt(request.params.id) },
-          relations: ['users', 'owner', 'atomes']
-        });
+        const db = orm.getDatabase();
+        const project = await db('objects')
+          .where('object_id', request.params.id)
+          .andWhere('type', 'project')
+          .first();
 
         if (!project) {
           reply.code(404);
@@ -907,7 +992,7 @@ async function startServer() {
     // NOTE: Atome routes are registered via registerAtomeRoutes() from atomeRoutes.orm.js
     // They use /api/atome/* (singular) endpoints
 
-    // Database stats endpoint
+    // Database stats endpoint (now using Knex)
     server.get('/api/db/stats', async (request, reply) => {
       if (!DATABASE_ENABLED) {
         reply.code(503);
@@ -915,19 +1000,20 @@ async function startServer() {
       }
 
       try {
-        const [userCount, projectCount, atomeCount] = await Promise.all([
-          AppDataSource.getRepository(UserEntity).count(),
-          AppDataSource.getRepository(ProjectEntity).count(),
-          AppDataSource.getRepository(AtomeEntity).count()
+        const db = orm.getDatabase();
+        const [userResult, projectResult, atomeResult] = await Promise.all([
+          db('principals').count('* as count').first(),
+          db('objects').where('type', 'project').count('* as count').first(),
+          db('objects').where('type', 'atome').count('* as count').first()
         ]);
 
         return {
           success: true,
           data: {
-            users: userCount,
-            projects: projectCount,
-            atomes: atomeCount,
-            database: 'PostgreSQL + TypeORM',
+            users: parseInt(userResult?.count || 0),
+            projects: parseInt(projectResult?.count || 0),
+            atomes: parseInt(atomeResult?.count || 0),
+            database: 'PostgreSQL + Knex (ADOLE)',
             timestamp: new Date().toISOString()
           }
         };
