@@ -21,6 +21,7 @@ The unified API now supports real-time synchronization between Tauri (local) and
 ### 1. SyncWebSocket (`src/squirrel/apis/unified/SyncWebSocket.js`)
 
 Client-side WebSocket manager with:
+
 - Auto-reconnection with exponential backoff
 - Event-based architecture
 - Heartbeat keepalive
@@ -29,6 +30,7 @@ Client-side WebSocket manager with:
 ### 2. Fastify WebSocket Route (`/ws/atome-sync`)
 
 Server-side WebSocket handler that:
+
 - Registers connected clients
 - Broadcasts CRUD events to all other clients
 - Persists changes to PostgreSQL database
@@ -36,6 +38,7 @@ Server-side WebSocket handler that:
 ### 3. UnifiedSync Integration
 
 `UnifiedSync.js` now provides:
+
 - `connectRealtime(options)` - Connect with event callbacks
 - `disconnectRealtime()` - Disconnect from WebSocket
 - `isRealtimeConnected()` - Check connection status
@@ -44,6 +47,7 @@ Server-side WebSocket handler that:
 ### 4. UnifiedAtome Integration
 
 `UnifiedAtome.js` automatically broadcasts:
+
 - `atome:created` on create
 - `atome:altered` on alter/update/rename
 - `atome:deleted` on delete
@@ -131,6 +135,7 @@ const result = await UnifiedAtome.create({
 Default WebSocket URL: `ws://127.0.0.1:3001/ws/atome-sync`
 
 Can be customized:
+
 ```javascript
 await SyncWebSocket.connect({ 
     url: 'ws://custom-server:3001/ws/atome-sync',

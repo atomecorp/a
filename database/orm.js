@@ -26,6 +26,35 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
+/**
+ * Deep merge two objects recursively (ADOLE principle: patch, don't replace)
+ * @param {Object} target - The base object
+ * @param {Object} source - The patch object with changes
+ * @returns {Object} Merged object
+ */
+function deepMerge(target, source) {
+    const result = { ...target };
+
+    for (const key of Object.keys(source)) {
+        if (
+            source[key] !== null &&
+            typeof source[key] === 'object' &&
+            !Array.isArray(source[key]) &&
+            target[key] !== null &&
+            typeof target[key] === 'object' &&
+            !Array.isArray(target[key])
+        ) {
+            // Recursively merge nested objects
+            result[key] = deepMerge(target[key], source[key]);
+        } else {
+            // Overwrite with new value
+            result[key] = source[key];
+        }
+    }
+
+    return result;
+}
+
 // Determine database type from environment
 function getDatabaseType() {
     // Check for explicit setting
@@ -551,13 +580,31 @@ export async function updateObject(objectId, updates) {
  * @returns {Promise<{property_id: string}>}
  */
 export async function setProperty(objectId, key, value, changedBy = null) {
-    const valueJson = JSON.stringify(value);
-    const valueType = typeof value;
-
     // Check if property exists
     const existing = await db('properties')
         .where({ object_id: objectId, key })
         .first();
+
+    let finalValue = value;
+
+    // If property exists and both old and new values are objects, do a deep merge
+    // This is the ADOLE principle: alterations patch, they don't replace
+    if (existing && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        try {
+            const existingValue = JSON.parse(existing.value);
+            if (typeof existingValue === 'object' && existingValue !== null && !Array.isArray(existingValue)) {
+                // Deep merge: new values override existing, but existing keys not in new are preserved
+                finalValue = deepMerge(existingValue, value);
+                console.log(`[ORM] Deep merging property '${key}':`, { existing: existingValue, patch: value, result: finalValue });
+            }
+        } catch (e) {
+            // If parsing fails, use the new value as-is
+            console.warn(`[ORM] Could not parse existing value for merge, replacing:`, e.message);
+        }
+    }
+
+    const valueJson = JSON.stringify(finalValue);
+    const valueType = typeof finalValue;
 
     if (existing) {
         // Update existing property

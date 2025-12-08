@@ -253,9 +253,27 @@ class VersionSyncClient {
                 break;
 
             case 'atome:deleted':
-                console.log('[version_sync] 🗑️ Atome deleted:', data.atome?.id);
-                window.dispatchEvent(new CustomEvent('squirrel:atome-deleted', { detail: data.atome }));
-                this.broadcast({ type: 'atome:deleted', atome: data.atome });
+                console.log('[version_sync] 🗑️ Atome deleted:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-deleted', { detail: data.atome || { id: data.atomeId } }));
+                this.broadcast({ type: 'atome:deleted', atome: data.atome, atomeId: data.atomeId });
+                break;
+
+            case 'atome:altered':
+                console.log('[version_sync] 🔧 Atome altered:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-altered', { detail: data.atome || { id: data.atomeId, alterations: data.alterations } }));
+                this.broadcast({ type: 'atome:altered', atome: data.atome, atomeId: data.atomeId, alterations: data.alterations });
+                break;
+
+            case 'atome:renamed':
+                console.log('[version_sync] 📝 Atome renamed:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-renamed', { detail: data.atome || { id: data.atomeId, newName: data.newName } }));
+                this.broadcast({ type: 'atome:renamed', atome: data.atome, atomeId: data.atomeId, newName: data.newName });
+                break;
+
+            case 'atome:restored':
+                console.log('[version_sync] ♻️ Atome restored:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-restored', { detail: data.atome || { id: data.atomeId } }));
+                this.broadcast({ type: 'atome:restored', atome: data.atome, atomeId: data.atomeId });
                 break;
 
             case 'error':

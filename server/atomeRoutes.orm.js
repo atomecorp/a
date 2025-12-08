@@ -521,8 +521,11 @@ export function registerAtomeRoutes(server, dataSource) {
     // ALTER - POST /api/atome/:id/alter (ADOLE: append-only alterations)
     // =========================================================================
     server.post('/api/atome/:id/alter', async (request, reply) => {
+        console.log(`📝 [Atome] ALTER request for ${request.params.id}`);
+
         const user = await validateToken(request);
         if (!user) {
+            console.log(`❌ [Atome] ALTER unauthorized`);
             return reply.status(401).send({ success: false, error: 'Unauthorized' });
         }
 
@@ -531,12 +534,23 @@ export function registerAtomeRoutes(server, dataSource) {
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
-            const { alterations } = request.body;
+            let { alterations, operation, changes, reason } = request.body;
+            console.log(`📝 [Atome] ALTER body:`, { operation, changes: changes ? Object.keys(changes) : null, alterations: alterations?.length });
+
+            // Support unified API format: { operation, changes, reason }
+            // Convert to alterations array format
+            if (!alterations && changes && typeof changes === 'object') {
+                alterations = Object.entries(changes).map(([key, value]) => ({
+                    key,
+                    value,
+                    operation: operation || 'set'
+                }));
+            }
 
             if (!alterations || !Array.isArray(alterations) || alterations.length === 0) {
-                return reply.status(400).send({ 
-                    success: false, 
-                    error: 'Alterations array is required' 
+                return reply.status(400).send({
+                    success: false,
+                    error: 'Alterations array or changes object is required'
                 });
             }
 
@@ -557,17 +571,17 @@ export function registerAtomeRoutes(server, dataSource) {
             const appliedAlterations = [];
             for (const alteration of alterations) {
                 const { key, value, operation = 'set' } = alteration;
-                
+
                 if (!key) {
                     continue;
                 }
 
                 // Get current value for history
                 const currentValue = await orm.getProperty(id, key);
-                
+
                 // Apply the alteration
                 await orm.setProperty(id, key, value, principal_id);
-                
+
                 appliedAlterations.push({
                     key,
                     previous_value: currentValue,
@@ -578,8 +592,7 @@ export function registerAtomeRoutes(server, dataSource) {
             }
 
             // Broadcast change
-            broadcastMessage({
-                type: 'atome_altered',
+            broadcastMessage('atome:altered', {
                 atomeId: id,
                 userId: principal_id,
                 alterations: appliedAlterations
@@ -616,12 +629,13 @@ export function registerAtomeRoutes(server, dataSource) {
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
-            const { new_name } = request.body;
+            // Support both camelCase (unified API) and snake_case formats
+            const new_name = request.body.new_name || request.body.newName;
 
             if (!new_name || typeof new_name !== 'string' || new_name.trim().length === 0) {
-                return reply.status(400).send({ 
-                    success: false, 
-                    error: 'new_name is required and must be a non-empty string' 
+                return reply.status(400).send({
+                    success: false,
+                    error: 'new_name or newName is required and must be a non-empty string'
                 });
             }
 
@@ -640,13 +654,12 @@ export function registerAtomeRoutes(server, dataSource) {
 
             // Get current name for history
             const oldName = await orm.getProperty(id, 'name');
-            
+
             // Update the name
             await orm.setProperty(id, 'name', new_name.trim(), principal_id);
 
             // Broadcast change
-            broadcastMessage({
-                type: 'atome_renamed',
+            broadcastMessage('atome:renamed', {
                 atomeId: id,
                 userId: principal_id,
                 oldName,
@@ -687,16 +700,16 @@ export function registerAtomeRoutes(server, dataSource) {
             const { key, version_index } = request.body;
 
             if (!key || typeof key !== 'string') {
-                return reply.status(400).send({ 
-                    success: false, 
-                    error: 'key is required to restore a specific property' 
+                return reply.status(400).send({
+                    success: false,
+                    error: 'key is required to restore a specific property'
                 });
             }
 
             if (typeof version_index !== 'number' || version_index < 0) {
-                return reply.status(400).send({ 
-                    success: false, 
-                    error: 'version_index must be a non-negative integer (0 = most recent)' 
+                return reply.status(400).send({
+                    success: false,
+                    error: 'version_index must be a non-negative integer (0 = most recent)'
                 });
             }
 
@@ -715,18 +728,18 @@ export function registerAtomeRoutes(server, dataSource) {
 
             // Get property history
             const history = await orm.getPropertyHistory(id, key);
-            
+
             if (!history || history.length === 0) {
-                return reply.status(404).send({ 
-                    success: false, 
-                    error: `No history found for property "${key}"` 
+                return reply.status(404).send({
+                    success: false,
+                    error: `No history found for property "${key}"`
                 });
             }
 
             if (version_index >= history.length) {
-                return reply.status(400).send({ 
-                    success: false, 
-                    error: `Version index ${version_index} out of range. Available: 0-${history.length - 1}` 
+                return reply.status(400).send({
+                    success: false,
+                    error: `Version index ${version_index} out of range. Available: 0-${history.length - 1}`
                 });
             }
 
@@ -739,8 +752,7 @@ export function registerAtomeRoutes(server, dataSource) {
             await orm.setProperty(id, key, valueToRestore, principal_id);
 
             // Broadcast change
-            broadcastMessage({
-                type: 'atome_restored',
+            broadcastMessage('atome:restored', {
                 atomeId: id,
                 userId: principal_id,
                 key,
@@ -781,11 +793,11 @@ export function registerAtomeRoutes(server, dataSource) {
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { confirm } = request.body || {};
-            
+
             if (confirm !== true && confirm !== 'DELETE_ALL_MY_DATA') {
-                return reply.status(400).send({ 
-                    success: false, 
-                    error: 'Confirmation required. Set confirm to true or "DELETE_ALL_MY_DATA"' 
+                return reply.status(400).send({
+                    success: false,
+                    error: 'Confirmation required. Set confirm to true or "DELETE_ALL_MY_DATA"'
                 });
             }
 
@@ -795,7 +807,7 @@ export function registerAtomeRoutes(server, dataSource) {
             const atomes = await db('atomes')
                 .where('created_by', principal_id)
                 .select('atome_id');
-            
+
             const atomeIds = atomes.map(a => a.atome_id);
             let deletedCount = 0;
 
@@ -804,7 +816,7 @@ export function registerAtomeRoutes(server, dataSource) {
                 await db('properties')
                     .whereIn('atome_id', atomeIds)
                     .del();
-                
+
                 await db('property_history')
                     .whereIn('atome_id', atomeIds)
                     .del();
@@ -865,7 +877,7 @@ export function registerAtomeRoutes(server, dataSource) {
             for (const atome of atomes) {
                 // Get all properties for this atome
                 const properties = await orm.getAllProperties(atome.atome_id);
-                
+
                 // Get history for each property
                 const history = {};
                 for (const key of Object.keys(properties)) {

@@ -196,7 +196,7 @@ const atome = {
      * @param {Object} data - { kind, type?, data, meta? }
      */
     async create(data) {
-        return request('/api/atomes', {
+        return request('/api/atome/create', {
             method: 'POST',
             body: data
         });
@@ -207,7 +207,7 @@ const atome = {
      * @param {string} id - Atome UUID
      */
     async get(id) {
-        return request(`/api/atomes/${id}`, {
+        return request(`/api/atome/${id}`, {
             method: 'GET'
         });
     },
@@ -227,7 +227,7 @@ const atome = {
         if (params.parentId) query.append('parentId', params.parentId);
 
         const queryString = query.toString();
-        return request(`/api/atomes${queryString ? '?' + queryString : ''}`, {
+        return request(`/api/atome/list${queryString ? '?' + queryString : ''}`, {
             method: 'GET'
         });
     },
@@ -238,7 +238,7 @@ const atome = {
      * @param {Object} data - { operation, changes, reason? }
      */
     async alter(id, data) {
-        return request(`/api/atomes/${id}/alter`, {
+        return request(`/api/atome/${id}/alter`, {
             method: 'POST',
             body: data
         });
@@ -250,7 +250,7 @@ const atome = {
      * @param {Object} data - Fields to update
      */
     async update(id, data) {
-        return request(`/api/atomes/${id}`, {
+        return request(`/api/atome/${id}`, {
             method: 'PUT',
             body: data
         });
@@ -262,7 +262,7 @@ const atome = {
      * @param {Object} data - { newName }
      */
     async rename(id, data) {
-        return request(`/api/atomes/${id}/rename`, {
+        return request(`/api/atome/${id}/rename`, {
             method: 'POST',
             body: data
         });
@@ -274,7 +274,7 @@ const atome = {
      * @param {Object} data - { reason? }
      */
     async delete(id, data = {}) {
-        return request(`/api/atomes/${id}`, {
+        return request(`/api/atome/${id}`, {
             method: 'DELETE',
             body: data
         });
@@ -291,7 +291,7 @@ const atome = {
         if (params.limit) query.append('limit', params.limit);
 
         const queryString = query.toString();
-        return request(`/api/atomes/${id}/history${queryString ? '?' + queryString : ''}`, {
+        return request(`/api/atome/${id}/history${queryString ? '?' + queryString : ''}`, {
             method: 'GET'
         });
     },
@@ -302,7 +302,7 @@ const atome = {
      * @param {Object} data - { version, reason? }
      */
     async restore(id, data) {
-        return request(`/api/atomes/${id}/restore`, {
+        return request(`/api/atome/${id}/restore`, {
             method: 'POST',
             body: data
         });

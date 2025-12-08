@@ -81,6 +81,30 @@ fn default_kind() -> String { "generic".to_string() }
 fn default_type() -> String { "atome".to_string() }
 fn default_version() -> i64 { 1 }
 
+/// Deep merge two JSON values (ADOLE principle: patch, don't replace)
+/// Recursively merges objects, replacing non-object values
+fn deep_merge_json(base: &serde_json::Value, patch: &serde_json::Value) -> serde_json::Value {
+    match (base, patch) {
+        // Both are objects: merge recursively
+        (serde_json::Value::Object(base_obj), serde_json::Value::Object(patch_obj)) => {
+            let mut result = base_obj.clone();
+            for (key, patch_value) in patch_obj {
+                let merged_value = if let Some(base_value) = base_obj.get(key) {
+                    // Key exists in base, merge recursively
+                    deep_merge_json(base_value, patch_value)
+                } else {
+                    // Key doesn't exist in base, use patch value
+                    patch_value.clone()
+                };
+                result.insert(key.clone(), merged_value);
+            }
+            serde_json::Value::Object(result)
+        }
+        // Patch is not an object or base is not an object: use patch value
+        _ => patch.clone(),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 pub struct UpdateAtomeRequest {
@@ -1427,25 +1451,9 @@ async fn alter_atome_handler(
 
             // Merge changes into data based on operation
             let new_data = match req.operation.as_str() {
-                "update" => {
-                    // Full replace of changed fields
-                    let mut merged = current_data.clone();
-                    if let (Some(obj), Some(changes_obj)) = (merged.as_object_mut(), req.changes.as_object()) {
-                        for (key, value) in changes_obj {
-                            obj.insert(key.clone(), value.clone());
-                        }
-                    }
-                    merged
-                }
-                "patch" => {
-                    // Deep merge
-                    let mut merged = current_data.clone();
-                    if let (Some(obj), Some(changes_obj)) = (merged.as_object_mut(), req.changes.as_object()) {
-                        for (key, value) in changes_obj {
-                            obj.insert(key.clone(), value.clone());
-                        }
-                    }
-                    merged
+                "update" | "patch" | _ => {
+                    // Deep merge of changed fields (ADOLE: patch, don't replace)
+                    deep_merge_json(&current_data, &req.changes)
                 }
                 "rename" => {
                     // Update name field
@@ -1453,16 +1461,6 @@ async fn alter_atome_handler(
                     if let Some(obj) = merged.as_object_mut() {
                         if let Some(new_name) = req.changes.get("name").or(req.changes.get("newName")) {
                             obj.insert("name".to_string(), new_name.clone());
-                        }
-                    }
-                    merged
-                }
-                _ => {
-                    // Default: merge changes
-                    let mut merged = current_data.clone();
-                    if let (Some(obj), Some(changes_obj)) = (merged.as_object_mut(), req.changes.as_object()) {
-                        for (key, value) in changes_obj {
-                            obj.insert(key.clone(), value.clone());
                         }
                     }
                     merged

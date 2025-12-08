@@ -137,7 +137,7 @@ const UnifiedAtome = {
 
         if (primaryResult && primaryResult.success) {
             const resultAtome = primaryResult.atome || { ...atomeData, id: primaryResult.id };
-            
+
             // Broadcast via WebSocket for real-time sync
             if (SyncWebSocket.isConnected()) {
                 SyncWebSocket.broadcastCreate(resultAtome);
@@ -326,6 +326,46 @@ const UnifiedAtome = {
         if (fastify && FastifyAdapter.getToken()) {
             try {
                 results.fastify = await FastifyAdapter.atome.alter(id, alterData);
+
+                // If atome not found on Fastify (404), try to sync it first from Tauri
+                if (!results.fastify.success && results.fastify.status === 404 && results.tauri?.success) {
+                    console.log('[UnifiedAtome] Atome not on Fastify, syncing from Tauri...');
+                    // Get the full atome from Tauri (which already contains the alteration)
+                    const tauriAtome = await TauriAdapter.atome.get(id);
+                    console.log('[UnifiedAtome] Tauri atome structure:', JSON.stringify(tauriAtome.atome, null, 2));
+
+                    if (tauriAtome.success && tauriAtome.atome) {
+                        // Transform Tauri atome to Fastify format
+                        // Tauri uses 'data' field for properties, Fastify expects 'properties'
+                        const atomeForFastify = {
+                            id: tauriAtome.atome.id,
+                            kind: tauriAtome.atome.kind || 'generic',
+                            tag: tauriAtome.atome.data?.tag || 'div',
+                            parent: tauriAtome.atome.parent_id || tauriAtome.atome.data?.parent || null,
+                            // Merge all data fields into properties for Fastify
+                            properties: {
+                                ...(tauriAtome.atome.data || {}),
+                                ...(tauriAtome.atome.snapshot || {})
+                            }
+                        };
+
+                        console.log('[UnifiedAtome] Transformed for Fastify:', JSON.stringify(atomeForFastify, null, 2));
+
+                        const createResult = await FastifyAdapter.atome.create(atomeForFastify);
+                        if (createResult.success) {
+                            // The atome is now on Fastify with the complete state from Tauri
+                            // No need to alter again - the alteration is already included
+                            results.fastify = {
+                                success: true,
+                                synced: true,
+                                message: 'Atome synced from Tauri (alteration already applied)'
+                            };
+                        } else {
+                            console.log('[UnifiedAtome] Failed to create on Fastify:', createResult.error);
+                        }
+                    }
+                }
+
                 if (results.fastify.success && !primaryResult) {
                     primaryResult = results.fastify;
                 }
@@ -484,7 +524,12 @@ const UnifiedAtome = {
                     primaryResult = results.fastify;
                 }
             } catch (error) {
-                results.fastify = { success: false, error: error.message };
+                // 404 is expected if atome was never synced to Fastify - not an error
+                if (error.message?.includes('404') || error.message?.includes('not found')) {
+                    results.fastify = { success: true, skipped: true, reason: 'Atome not on Fastify' };
+                } else {
+                    results.fastify = { success: false, error: error.message };
+                }
             }
         }
 

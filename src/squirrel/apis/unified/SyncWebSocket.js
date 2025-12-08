@@ -104,7 +104,7 @@ function stopHeartbeat() {
 function handleMessage(event) {
     try {
         const message = JSON.parse(event.data);
-        
+
         switch (message.type) {
             case 'welcome':
                 clientId = message.clientId;
@@ -117,23 +117,33 @@ function handleMessage(event) {
                 break;
 
             case 'atome:created':
-                console.log('[SyncWebSocket] Received atome:created', message.atome?.id);
+                console.log('[SyncWebSocket] Received atome:created', message.atome?.id || message.atomeId);
                 emit('atome:created', message);
                 break;
 
             case 'atome:updated':
-                console.log('[SyncWebSocket] Received atome:updated', message.atome?.id);
+                console.log('[SyncWebSocket] Received atome:updated', message.atome?.id || message.atomeId);
                 emit('atome:updated', message);
                 break;
 
             case 'atome:altered':
-                console.log('[SyncWebSocket] Received atome:altered', message.atome?.id);
+                console.log('[SyncWebSocket] Received atome:altered', message.atome?.id || message.atomeId);
                 emit('atome:altered', message);
                 break;
 
             case 'atome:deleted':
                 console.log('[SyncWebSocket] Received atome:deleted', message.atomeId);
                 emit('atome:deleted', message);
+                break;
+
+            case 'atome:renamed':
+                console.log('[SyncWebSocket] Received atome:renamed', message.atomeId);
+                emit('atome:renamed', message);
+                break;
+
+            case 'atome:restored':
+                console.log('[SyncWebSocket] Received atome:restored', message.atomeId);
+                emit('atome:restored', message);
                 break;
 
             case 'sync:broadcast':
@@ -147,7 +157,7 @@ function handleMessage(event) {
                 break;
 
             default:
-                console.log('[SyncWebSocket] Unknown message type:', message.type);
+                console.log('[SyncWebSocket] Unknown message type:', message.type);;
                 emit('sync:message', message);
         }
     } catch (error) {
@@ -165,7 +175,7 @@ function scheduleReconnect() {
 
     const delay = getReconnectDelay();
     console.log(`[SyncWebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${CONFIG.MAX_RECONNECT_ATTEMPTS})`);
-    
+
     reconnectTimeout = setTimeout(() => {
         reconnectAttempts++;
         SyncWebSocket.connect();
@@ -226,7 +236,7 @@ const SyncWebSocket = {
                     console.log(`[SyncWebSocket] Connection closed: ${event.code} ${event.reason}`);
                     stopHeartbeat();
                     emit('sync:disconnected', { code: event.code, reason: event.reason });
-                    
+
                     if (!isIntentionallyClosed) {
                         scheduleReconnect();
                     }
@@ -250,12 +260,12 @@ const SyncWebSocket = {
      */
     disconnect() {
         isIntentionallyClosed = true;
-        
+
         if (reconnectTimeout) {
             clearTimeout(reconnectTimeout);
             reconnectTimeout = null;
         }
-        
+
         stopHeartbeat();
 
         if (websocket) {

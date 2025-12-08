@@ -904,209 +904,8 @@ async function startServer() {
       }
     });
 
-    // Atomes API
-    server.get('/api/atomes', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const atomes = await AppDataSource.getRepository(AtomeEntity).find({
-          relations: ['user', 'project']
-        });
-        return { success: true, data: atomes };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    server.post('/api/atomes', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const body = request.body;
-        
-        // Prepare atome data for PostgreSQL (ADOLE format)
-        const atomeData = {
-          id: body.id || `atome_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          kind: body.kind || 'generic',
-          type: body.type || 'generic',
-          data: body.data || body.properties || {},
-          meta: body.meta || {},
-          parentId: body.parentId || null,
-          logicalClock: body.logicalClock || 1,
-          deviceId: body.deviceId || null,
-          // Legacy fields
-          user_id: body.user_id || null,
-          project_id: body.project_id || null,
-          name_project: body.name_project || null
-        };
-
-        const atome = await AppDataSource.getRepository(AtomeEntity).save(atomeData);
-        console.log(`✅ Atome saved to PostgreSQL: ${atome.id}`);
-        return { success: true, data: atome, id: atome.id };
-      } catch (error) {
-        console.error('❌ Failed to save atome:', error.message);
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    // Get single atome by ID
-    server.get('/api/atomes/:id', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const atome = await AppDataSource.getRepository(AtomeEntity).findOne({
-          where: { id: request.params.id }
-        });
-        if (!atome) {
-          reply.code(404);
-          return { success: false, error: 'Atome not found' };
-        }
-        return { success: true, atome, data: atome };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    // Update atome by ID
-    server.put('/api/atomes/:id', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const repo = AppDataSource.getRepository(AtomeEntity);
-        const atome = await repo.findOne({ where: { id: request.params.id } });
-        if (!atome) {
-          reply.code(404);
-          return { success: false, error: 'Atome not found' };
-        }
-
-        // Merge updates
-        const updated = await repo.save({
-          ...atome,
-          ...request.body,
-          logicalClock: (atome.logicalClock || 0) + 1
-        });
-        console.log(`✅ Atome updated in PostgreSQL: ${updated.id}`);
-        return { success: true, atome: updated, data: updated };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    // Delete atome by ID (soft delete)
-    server.delete('/api/atomes/:id', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const repo = AppDataSource.getRepository(AtomeEntity);
-        const atome = await repo.findOne({ where: { id: request.params.id } });
-        if (!atome) {
-          reply.code(404);
-          return { success: false, error: 'Atome not found' };
-        }
-
-        // Soft delete: mark as deleted
-        await repo.save({
-          ...atome,
-          deletedAt: new Date()
-        });
-        console.log(`✅ Atome soft-deleted in PostgreSQL: ${request.params.id}`);
-        return { success: true, id: request.params.id, deletedAt: new Date().toISOString() };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    // Alter atome (ADOLE: append alteration)
-    server.post('/api/atomes/:id/alter', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const repo = AppDataSource.getRepository(AtomeEntity);
-        const atome = await repo.findOne({ where: { id: request.params.id } });
-        if (!atome) {
-          reply.code(404);
-          return { success: false, error: 'Atome not found' };
-        }
-
-        const { operation, changes } = request.body;
-        
-        // Apply changes to data
-        const newData = { ...atome.data, ...changes };
-        const newClock = (atome.logicalClock || 0) + 1;
-
-        const updated = await repo.save({
-          ...atome,
-          data: newData,
-          logicalClock: newClock
-        });
-
-        console.log(`✅ Atome altered in PostgreSQL: ${updated.id} (v${newClock})`);
-        return { 
-          success: true, 
-          atome: updated, 
-          version: newClock,
-          alteration: { operation, changes, timestamp: new Date().toISOString() }
-        };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
-
-    // Rename atome
-    server.post('/api/atomes/:id/rename', async (request, reply) => {
-      if (!DATABASE_ENABLED) {
-        reply.code(503);
-        return { success: false, error: DB_REQUIRED_MESSAGE };
-      }
-
-      try {
-        const repo = AppDataSource.getRepository(AtomeEntity);
-        const atome = await repo.findOne({ where: { id: request.params.id } });
-        if (!atome) {
-          reply.code(404);
-          return { success: false, error: 'Atome not found' };
-        }
-
-        const { newName } = request.body;
-        const oldName = atome.data?.name || atome.name_project;
-        
-        const updated = await repo.save({
-          ...atome,
-          data: { ...atome.data, name: newName },
-          logicalClock: (atome.logicalClock || 0) + 1
-        });
-
-        console.log(`✅ Atome renamed in PostgreSQL: ${updated.id} (${oldName} → ${newName})`);
-        return { success: true, atome: updated, oldName, newName, version: updated.logicalClock };
-      } catch (error) {
-        reply.code(500);
-        return { success: false, error: error.message };
-      }
-    });
+    // NOTE: Atome routes are registered via registerAtomeRoutes() from atomeRoutes.orm.js
+    // They use /api/atome/* (singular) endpoints
 
     // Database stats endpoint
     server.get('/api/db/stats', async (request, reply) => {
@@ -1157,7 +956,7 @@ async function startServer() {
     // -----------------------------------------------
     // 3.1 ATOME SYNC WEBSOCKET - Real-time sync
     // -----------------------------------------------
-    
+
     // Store connected atome sync clients
     const atomeSyncClients = new Map();
 
@@ -1180,7 +979,7 @@ async function startServer() {
       fastify.get('/ws/atome-sync', { websocket: true }, (connection) => {
         const clientId = `atome_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         console.log(`📡 Atome Sync WebSocket connected: ${clientId}`);
-        
+
         // Register client
         atomeSyncClients.set(clientId, connection);
 
@@ -1196,7 +995,7 @@ async function startServer() {
         connection.on('message', async (message) => {
           try {
             const data = JSON.parse(message.toString());
-            
+
             switch (data.type) {
               case 'ping':
                 connection.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
