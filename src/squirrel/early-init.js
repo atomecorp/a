@@ -15,56 +15,58 @@
     window._squirrelEarlyInitDone = true;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // REMOTE LOGGING - Send logs to Axum server (3000) to survive page reloads
+    // TAURI AVAILABILITY TRACKING
     // ═══════════════════════════════════════════════════════════════════════════
 
     var loadTime = Date.now();
-    var logBuffer = [];
+    var tauriAvailable = false; // Start assuming unavailable - will be updated
+    window._tauriAvailable = false; // Expose globally for other modules
 
-    function remoteLog(level, message, data) {
-        var entry = {
-            timestamp: new Date().toISOString(),
-            elapsed: Date.now() - loadTime,
-            level: level,
-            message: message,
-            data: data || null,
-            url: window.location.href,
-            userAgent: navigator.userAgent
-        };
+    // Silent check using fetch (no XHR errors in console)
+    function checkTauriSilently() {
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function () { controller.abort(); }, 1500);
 
-        // Also log locally
-        console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log']('[Squirrel]', message, data || '');
-
-        // Send to Axum server (port 3000) - fire and forget, no await
-        try {
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', 'http://127.0.0.1:3000/api/debug-log', true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.send(JSON.stringify(entry));
-        } catch (e) {
-            // Ignore send errors
-        }
+        return fetch('http://127.0.0.1:3000/api/server-info', {
+            method: 'GET',
+            signal: controller.signal
+        })
+            .then(function (response) {
+                clearTimeout(timeoutId);
+                tauriAvailable = response.ok;
+                window._tauriAvailable = tauriAvailable;
+                if (tauriAvailable) {
+                    console.log('[Squirrel] ✅ Tauri server detected');
+                }
+                return tauriAvailable;
+            })
+            .catch(function () {
+                clearTimeout(timeoutId);
+                tauriAvailable = false;
+                window._tauriAvailable = false;
+                return false;
+            });
     }
 
-    remoteLog('info', 'Page loaded', { loadTime: loadTime });
+    // Check immediately
+    checkTauriSilently();
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DEBUG: Track page lifecycle to understand reloads
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Track beforeunload to catch reloads
-    window.addEventListener('beforeunload', function (e) {
-        var elapsed = Date.now() - loadTime;
-        remoteLog('warn', '⚠️ PAGE UNLOADING', {
-            elapsed: elapsed,
-            stack: new Error().stack
+    // Re-check periodically (every 30 seconds) in case Tauri starts later
+    setInterval(function () {
+        var wasAvailable = tauriAvailable;
+        checkTauriSilently().then(function (isNowAvailable) {
+            if (!wasAvailable && isNowAvailable) {
+                console.log('[Squirrel] 🔄 Tauri server reconnected - triggering sync');
+                // Dispatch event for sync modules to pick up
+                window.dispatchEvent(new CustomEvent('squirrel:tauri-reconnected'));
+            }
         });
-    });
+    }, 30000);
 
-    // Track navigation
-    window.addEventListener('popstate', function (e) {
-        remoteLog('warn', 'popstate event', { state: e.state });
-    });
+    function remoteLog(level, message, data) {
+        // Only log locally - no remote logging to avoid XHR errors
+        console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log']('[Squirrel]', message, data || '');
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CRITICAL: Prevent Tauri WebView reload on unhandled promise rejections
@@ -143,14 +145,18 @@
         var urlStr = typeof url === 'string' ? url : (url && url.url) || String(url);
         var method = (options && options.method) || 'GET';
 
-        // Log requests to port 3000 (Tauri/Axum server)
-        if (urlStr.includes('3000')) {
+        // Skip logging for Tauri if we know it's not available
+        var isTauriRequest = urlStr.includes('3000');
+
+        // Only log if Tauri is available or status is unknown
+        if (isTauriRequest && tauriAvailable !== false) {
             remoteLog('info', '📡 FETCH to Tauri', { method: method, url: urlStr });
         }
 
         return originalFetch.apply(this, arguments)
             .then(function (response) {
-                if (urlStr.includes('3000')) {
+                if (isTauriRequest && tauriAvailable !== false) {
+                    tauriAvailable = true; // Now we know it's available
                     remoteLog('info', '✅ FETCH response from Tauri', {
                         status: response.status,
                         url: urlStr
@@ -159,15 +165,21 @@
                 return response;
             })
             .catch(function (error) {
-                if (urlStr.includes('3000')) {
-                    remoteLog('error', '❌ FETCH error from Tauri', {
-                        error: error.message,
-                        url: urlStr
-                    });
+                if (isTauriRequest) {
+                    // Mark Tauri as unavailable to stop future spam
+                    tauriAvailable = false;
+                    // Only log once, not for every failed request
+                    if (!window._tauriErrorLogged) {
+                        window._tauriErrorLogged = true;
+                        console.warn('[Squirrel] Tauri server not available - using Fastify only');
+                    }
                 }
                 throw error;
             });
     };
 
-    remoteLog('info', '✅ Early init complete - all handlers installed');
+    // Only log init complete if not spamming
+    if (tauriAvailable !== false) {
+        remoteLog('info', '✅ Early init complete - all handlers installed');
+    }
 })();

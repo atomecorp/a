@@ -19,6 +19,7 @@
 import TauriAdapter from './adapters/TauriAdapter.js';
 import FastifyAdapter from './adapters/FastifyAdapter.js';
 import SyncWebSocket from './SyncWebSocket.js';
+import UnifiedSync from './UnifiedSync.js';
 
 // ============================================
 // BACKEND DETECTION
@@ -55,6 +56,242 @@ async function checkBackends(force = false) {
  */
 function generateId(prefix = 'atome') {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// ============================================
+// TAURI RECONNECTION SYNC
+// ============================================
+
+let _syncInProgress = false;
+let _lastTauriSync = 0;
+const SYNC_COOLDOWN = 5000; // 5 seconds cooldown between syncs
+
+/**
+ * Sync all Fastify atomes to Tauri when Tauri reconnects
+ * This ensures atomes created while Tauri was offline get synced
+ */
+async function syncFastifyToTauri() {
+    // Prevent concurrent syncs
+    if (_syncInProgress) {
+        console.log('[UnifiedAtome] Sync already in progress, skipping');
+        return;
+    }
+
+    // Cooldown to prevent rapid re-syncs
+    const now = Date.now();
+    if (now - _lastTauriSync < SYNC_COOLDOWN) {
+        console.log('[UnifiedAtome] Sync cooldown active, skipping');
+        return;
+    }
+
+    _syncInProgress = true;
+    _lastTauriSync = now;
+
+    try {
+        console.log('[UnifiedAtome] Starting bidirectional sync...');
+
+        // Check both backends are available
+        const [tauriOk, fastifyOk] = await Promise.all([
+            TauriAdapter.isAvailable(),
+            FastifyAdapter.isAvailable()
+        ]);
+
+        // Check tokens
+        const tauriToken = TauriAdapter.getToken();
+        const fastifyToken = FastifyAdapter.getToken();
+
+        console.log(`[UnifiedAtome] Backend status - Tauri: ${tauriOk} (token: ${!!tauriToken}), Fastify: ${fastifyOk} (token: ${!!fastifyToken})`);
+
+        if (!tauriOk && !fastifyOk) {
+            console.log('[UnifiedAtome] No backends available, cannot sync');
+            return;
+        }
+
+        // Get all atomes from available backends
+        let fastifyAtomes = [];
+        let tauriAtomes = [];
+
+        if (fastifyOk && fastifyToken) {
+            try {
+                const result = await FastifyAdapter.atome.list();
+                console.log('[UnifiedAtome] Fastify list raw result:', JSON.stringify(result).substring(0, 500));
+                if (result.success) {
+                    fastifyAtomes = result.atomes || result.data || [];
+                    // Log kinds for debugging
+                    const kinds = {};
+                    fastifyAtomes.forEach(a => {
+                        const kind = a.kind || a.properties?.kind || 'unknown';
+                        kinds[kind] = (kinds[kind] || 0) + 1;
+                    });
+                    console.log('[UnifiedAtome] Fastify atomes by kind:', JSON.stringify(kinds));
+                }
+            } catch (err) {
+                console.warn('[UnifiedAtome] Failed to get Fastify atomes:', err.message);
+            }
+        }
+
+        if (tauriOk && tauriToken) {
+            try {
+                const result = await TauriAdapter.atome.list();
+                console.log('[UnifiedAtome] Tauri list raw result:', JSON.stringify(result).substring(0, 500));
+                if (result.success) {
+                    tauriAtomes = result.atomes || result.data || [];
+                }
+            } catch (err) {
+                console.warn('[UnifiedAtome] Failed to get Tauri atomes:', err.message);
+            }
+        }
+
+        console.log(`[UnifiedAtome] Fastify has ${fastifyAtomes.length} atomes (total for user), Tauri has ${tauriAtomes.length} atomes`);
+
+        // If Tauri is down, we can only access Fastify atomes
+        if (!tauriOk || !tauriToken) {
+            console.log('[UnifiedAtome] Note: Tauri is unavailable. Atomes stored only on Tauri will sync when Tauri reconnects.');
+        }
+
+        // Build maps for quick lookup
+        const tauriMap = new Map();
+        for (const atome of tauriAtomes) {
+            if (atome.id) tauriMap.set(atome.id, atome);
+        }
+
+        const fastifyMap = new Map();
+        for (const atome of fastifyAtomes) {
+            if (atome.id) fastifyMap.set(atome.id, atome);
+        }
+
+        let tauriCreated = 0;
+        let tauriUpdated = 0;
+        let fastifyCreated = 0;
+        let fastifyUpdated = 0;
+
+        // Sync Fastify → Tauri (if Tauri is available)
+        if (tauriOk && tauriToken) {
+            for (const fastifyAtome of fastifyAtomes) {
+                if (!fastifyAtome.id) continue;
+                const tauriAtome = tauriMap.get(fastifyAtome.id);
+
+                if (!tauriAtome) {
+                    // Atome doesn't exist on Tauri - create it
+                    try {
+                        await TauriAdapter.atome.create(fastifyAtome);
+                        tauriCreated++;
+                        console.log(`[UnifiedAtome] Created on Tauri: ${fastifyAtome.id}`);
+                    } catch (err) {
+                        console.error(`[UnifiedAtome] Failed to create ${fastifyAtome.id} on Tauri:`, err.message);
+                    }
+                } else {
+                    // Atome exists - check logical clock
+                    const fastifyClock = fastifyAtome.logicalClock || fastifyAtome.logical_clock || 0;
+                    const tauriClock = tauriAtome.logicalClock || tauriAtome.logical_clock || 0;
+
+                    if (fastifyClock > tauriClock) {
+                        try {
+                            await TauriAdapter.atome.update(fastifyAtome.id, fastifyAtome);
+                            tauriUpdated++;
+                            console.log(`[UnifiedAtome] Updated on Tauri: ${fastifyAtome.id}`);
+                        } catch (err) {
+                            console.error(`[UnifiedAtome] Failed to update ${fastifyAtome.id} on Tauri:`, err.message);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sync Tauri → Fastify (if Fastify is available)
+        if (fastifyOk && fastifyToken) {
+            for (const tauriAtome of tauriAtomes) {
+                if (!tauriAtome.id) continue;
+                const fastifyAtome = fastifyMap.get(tauriAtome.id);
+
+                if (!fastifyAtome) {
+                    // Atome doesn't exist on Fastify - create it
+                    try {
+                        await FastifyAdapter.atome.create(tauriAtome);
+                        fastifyCreated++;
+                        console.log(`[UnifiedAtome] Created on Fastify: ${tauriAtome.id}`);
+                    } catch (err) {
+                        console.error(`[UnifiedAtome] Failed to create ${tauriAtome.id} on Fastify:`, err.message);
+                    }
+                } else {
+                    // Atome exists - check logical clock
+                    const tauriClock = tauriAtome.logicalClock || tauriAtome.logical_clock || 0;
+                    const fastifyClock = fastifyAtome.logicalClock || fastifyAtome.logical_clock || 0;
+
+                    if (tauriClock > fastifyClock) {
+                        try {
+                            await FastifyAdapter.atome.update(tauriAtome.id, tauriAtome);
+                            fastifyUpdated++;
+                            console.log(`[UnifiedAtome] Updated on Fastify: ${tauriAtome.id}`);
+                        } catch (err) {
+                            console.error(`[UnifiedAtome] Failed to update ${tauriAtome.id} on Fastify:`, err.message);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Process queued changes
+        const pendingChanges = UnifiedSync.getPendingChanges();
+        if (pendingChanges.length > 0) {
+            console.log(`[UnifiedAtome] Processing ${pendingChanges.length} queued changes...`);
+            let processed = 0;
+
+            for (const change of pendingChanges) {
+                try {
+                    if (change.type === 'create') {
+                        if (change.targetBackend === 'fastify' && fastifyOk && fastifyToken) {
+                            await FastifyAdapter.atome.create(change.atome);
+                            processed++;
+                            console.log(`[UnifiedAtome] Queued create synced to Fastify: ${change.atome.id}`);
+                        } else if (change.targetBackend === 'tauri' && tauriOk && tauriToken) {
+                            await TauriAdapter.atome.create(change.atome);
+                            processed++;
+                            console.log(`[UnifiedAtome] Queued create synced to Tauri: ${change.atome.id}`);
+                        }
+                    }
+                    // Add more change types as needed (update, alter, delete)
+                } catch (err) {
+                    console.error(`[UnifiedAtome] Failed to process queued change:`, err.message);
+                }
+            }
+
+            if (processed > 0) {
+                UnifiedSync.clearPendingChanges();
+                console.log(`[UnifiedAtome] Processed ${processed} queued changes`);
+            }
+        }
+
+        console.log(`[UnifiedAtome] Sync complete - Tauri: +${tauriCreated}/~${tauriUpdated}, Fastify: +${fastifyCreated}/~${fastifyUpdated}`);
+
+    } catch (err) {
+        console.error('[UnifiedAtome] Sync failed:', err);
+    } finally {
+        _syncInProgress = false;
+    }
+}
+
+// Listen for events to trigger sync
+if (typeof window !== 'undefined') {
+    // Sync when Tauri reconnects
+    window.addEventListener('squirrel:tauri-reconnected', () => {
+        console.log('[UnifiedAtome] Tauri reconnected, initiating sync...');
+        syncFastifyToTauri();
+    });
+
+    // Sync after user logs in (with a small delay to ensure tokens are set)
+    window.addEventListener('squirrel:user-logged-in', () => {
+        console.log('[UnifiedAtome] User logged in, initiating sync...');
+        // Reset the cooldown to allow immediate sync after login
+        _lastTauriSync = 0;
+        setTimeout(() => {
+            syncFastifyToTauri();
+        }, 500);
+    });
+
+    // NOTE: Removed automatic sync on page load
+    // Sync is now triggered only after successful authentication
+    // to avoid using stale tokens from previous sessions
 }
 
 // ============================================
@@ -96,6 +333,11 @@ const UnifiedAtome = {
         const results = { tauri: null, fastify: null };
         let primaryResult = null;
 
+        // Log backend availability
+        const tauriToken = TauriAdapter.getToken();
+        const fastifyToken = FastifyAdapter.getToken();
+        console.log(`[UnifiedAtome.create] Backends - Tauri: ${tauri} (token: ${!!tauriToken}), Fastify: ${fastify} (token: ${!!fastifyToken})`);
+
         // Prepare atome data
         const atomeData = {
             kind: data.kind,
@@ -125,14 +367,35 @@ const UnifiedAtome = {
                 // Use same ID if created on Tauri
                 if (primaryResult && primaryResult.id) {
                     atomeData.id = primaryResult.id;
+                    console.log(`[UnifiedAtome.create] Using Tauri ID for Fastify: ${primaryResult.id}`);
                 }
+                console.log(`[UnifiedAtome.create] Sending to Fastify:`, JSON.stringify(atomeData).substring(0, 300));
                 results.fastify = await FastifyAdapter.atome.create(atomeData);
+                console.log(`[UnifiedAtome.create] Fastify response:`, JSON.stringify(results.fastify).substring(0, 300));
                 if (results.fastify.success && !primaryResult) {
                     primaryResult = results.fastify;
                 }
             } catch (error) {
                 results.fastify = { success: false, error: error.message };
             }
+        } else if (primaryResult && primaryResult.success) {
+            // Fastify unavailable but Tauri succeeded - queue for later sync
+            console.log('[UnifiedAtome.create] Fastify unavailable, queuing for sync...');
+            UnifiedSync.queueChange({
+                type: 'create',
+                atome: { ...atomeData, id: primaryResult.id },
+                targetBackend: 'fastify'
+            });
+        }
+
+        // Also queue for Tauri if Tauri was unavailable but Fastify succeeded
+        if (!tauri && results.fastify?.success) {
+            console.log('[UnifiedAtome.create] Tauri unavailable, queuing for sync...');
+            UnifiedSync.queueChange({
+                type: 'create',
+                atome: { ...atomeData, id: results.fastify.id },
+                targetBackend: 'tauri'
+            });
         }
 
         if (primaryResult && primaryResult.success) {
@@ -143,7 +406,7 @@ const UnifiedAtome = {
                 SyncWebSocket.broadcastCreate(resultAtome);
             }
 
-            return {
+            const createResult = {
                 success: true,
                 id: primaryResult.id || primaryResult.atome?.id,
                 version: 1,
@@ -151,11 +414,15 @@ const UnifiedAtome = {
                 backends: {
                     tauri: results.tauri?.success || false,
                     fastify: results.fastify?.success || false
-                }
+                },
+                queued: (!results.tauri?.success || !results.fastify?.success) ? true : false
             };
+            console.log(`[UnifiedAtome.create] Success - ID: ${createResult.id}, Tauri: ${createResult.backends.tauri}, Fastify: ${createResult.backends.fastify}, Queued: ${createResult.queued}`);
+            return createResult;
         }
 
         const error = results.tauri?.error || results.fastify?.error || 'Create failed';
+        console.log(`[UnifiedAtome.create] Failed - Tauri: ${results.tauri?.error || 'N/A'}, Fastify: ${results.fastify?.error || 'N/A'}`);
         return { success: false, error, backends: results };
     },
 
@@ -205,6 +472,7 @@ const UnifiedAtome = {
 
     /**
      * List atomes with optional filters
+     * Merges results from both backends, preferring the most recent version
      * 
      * @param {Object} [params] - Filter parameters
      * @param {string} [params.kind] - Filter by kind
@@ -225,48 +493,82 @@ const UnifiedAtome = {
      */
     async list(params = {}) {
         const { tauri, fastify } = await checkBackends();
+        const allAtomes = new Map(); // Use Map to deduplicate by ID
 
-        // Try Tauri first
-        if (tauri && TauriAdapter.getToken()) {
+        // Log backend availability
+        const tauriToken = TauriAdapter.getToken();
+        const fastifyToken = FastifyAdapter.getToken();
+        console.log(`[UnifiedAtome.list] Backends - Tauri: ${tauri} (token: ${!!tauriToken}), Fastify: ${fastify} (token: ${!!fastifyToken})`);
+
+        // Fetch from Tauri
+        if (tauri && tauriToken) {
             try {
                 const result = await TauriAdapter.atome.list(params);
+                console.log(`[UnifiedAtome.list] Tauri returned: ${result.success}, count: ${(result.atomes || result.data || []).length}`);
                 if (result.success) {
-                    // Normalize response: use 'data' as standard property name
                     const items = result.atomes || result.data || [];
-                    return {
-                        success: true,
-                        data: items,
-                        atomes: items, // alias for backward compatibility
-                        total: result.total,
-                        source: 'tauri'
-                    };
+                    for (const atome of items) {
+                        const id = atome.id || atome.object_id;
+                        if (id) {
+                            allAtomes.set(id, { ...atome, _source: 'tauri' });
+                        }
+                    }
                 }
             } catch (error) {
-                // Fall through
+                console.warn('[UnifiedAtome] Tauri list failed:', error.message);
             }
         }
 
-        // Try Fastify
-        if (fastify && FastifyAdapter.getToken()) {
+        // Fetch from Fastify and merge
+        if (fastify && fastifyToken) {
             try {
                 const result = await FastifyAdapter.atome.list(params);
+                console.log(`[UnifiedAtome.list] Fastify returned: ${result.success}, count: ${(result.atomes || result.data || []).length}`);
                 if (result.success) {
-                    // Normalize response: use 'data' as standard property name
                     const items = result.atomes || result.data || [];
-                    return {
-                        success: true,
-                        data: items,
-                        atomes: items, // alias for backward compatibility
-                        total: result.total,
-                        source: 'fastify'
-                    };
+                    for (const atome of items) {
+                        const id = atome.id || atome.object_id;
+                        if (id) {
+                            const existing = allAtomes.get(id);
+                            if (existing) {
+                                // Compare versions - keep the most recent
+                                const existingClock = existing.logicalClock || existing.logical_clock || 0;
+                                const newClock = atome.logicalClock || atome.logical_clock || 0;
+                                if (newClock > existingClock) {
+                                    allAtomes.set(id, { ...atome, _source: 'fastify' });
+                                }
+                            } else {
+                                // Atome only exists on Fastify
+                                allAtomes.set(id, { ...atome, _source: 'fastify' });
+                            }
+                        }
+                    }
                 }
             } catch (error) {
-                // Fall through
+                console.warn('[UnifiedAtome] Fastify list failed:', error.message);
             }
         }
 
-        return { success: false, error: 'Failed to list atomes', data: [], atomes: [] };
+        // Convert Map to array
+        const items = Array.from(allAtomes.values());
+        console.log(`[UnifiedAtome.list] Total merged atomes: ${items.length}`);
+
+        // Sort by updated time (most recent first)
+        items.sort((a, b) => {
+            const aTime = new Date(a.updatedAt || a.updated_at || a.createdAt || a.created_at || 0).getTime();
+            const bTime = new Date(b.updatedAt || b.updated_at || b.createdAt || b.created_at || 0).getTime();
+            return bTime - aTime;
+        });
+
+        // Always return success: true with the items array (even if empty)
+        // This allows the UI to know the query succeeded but there are no atomes
+        return {
+            success: true,
+            data: items,
+            atomes: items,
+            total: items.length,
+            source: items.length > 0 ? 'merged' : 'empty'
+        };
     },
 
     /**
@@ -707,6 +1009,15 @@ const UnifiedAtome = {
             }
         }
         return 0;
+    },
+
+    /**
+     * Manually trigger bidirectional sync between Fastify and Tauri
+     * Useful after extended offline periods or to force sync
+     * @returns {Promise<void>}
+     */
+    async sync() {
+        return syncFastifyToTauri();
     }
 };
 

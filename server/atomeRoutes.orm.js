@@ -146,6 +146,8 @@ export function registerAtomeRoutes(server, dataSource) {
 
             const { id, kind, tag, parent, properties, data, project_id } = request.body;
 
+            console.log(`[Atome] CREATE request - id: ${id}, kind: ${kind}, user: ${principal_id}`);
+
             // Support both 'properties' and 'data' field names (merge them)
             const mergedProperties = { ...(data || {}), ...(properties || {}) };
 
@@ -154,8 +156,10 @@ export function registerAtomeRoutes(server, dataSource) {
             let atomeId;
             if (id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
                 atomeId = id;
+                console.log(`[Atome] Using provided UUID: ${atomeId}`);
             } else {
                 atomeId = uuidv4();
+                console.log(`[Atome] Generated new UUID: ${atomeId} (original id was: ${id || 'none'})`);
             }
 
             // Build properties to store (include original id if provided for reference)

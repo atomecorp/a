@@ -819,7 +819,77 @@ if [[ -n "$FASTIFY_URL" ]]; then
     echo "🌐 Remote Fastify URL: $FASTIFY_URL"
 fi
 
-echo "🚀 Démarrage du serveur Fastify v5..."
+# =============================================================================
+# MODE DETECTION - Handle modes BEFORE doing any setup
+# =============================================================================
+
+# Mode --server uniquement (pas de Tauri)
+if [ "$SERVER_ONLY" = true ]; then
+    echo "📡 Mode serveur uniquement (Fastify sur port 3001)"
+    echo "📂 Répertoire: $(pwd)"
+    echo "🔧 Node.js: $(node --version)"
+    echo "📦 NPM: $(npm --version)"
+    echo ""
+    
+    # Install deps if needed
+    if [ "$FORCE_DEPS" = true ]; then
+        rm -f node_modules/.install_complete
+    fi
+    if [ ! -d "node_modules" ] || [ ! -f "node_modules/.install_complete" ]; then
+        echo "📥 Installation des dépendances..."
+        chmod +x "$SCRIPTS_DIR/install_dependencies.sh"
+        "$SCRIPTS_DIR/install_dependencies.sh" --non-interactive
+        touch node_modules/.install_complete
+    fi
+    
+    echo "📡 Démarrage du serveur Fastify..."
+    if [ "$FORCE_DEPS" = true ]; then
+        "$SCRIPTS_DIR/run_fastify.sh" --force-deps
+    else
+        "$SCRIPTS_DIR/run_fastify.sh"
+    fi
+    exit 0
+fi
+
+# Mode --tauri uniquement (pas de Fastify local)
+if [ "$TAURI_ONLY" = true ]; then
+    echo "🖥️  Mode Tauri uniquement (Axum sur port 3000)"
+    echo "📂 Répertoire: $(pwd)"
+    echo "🔧 Node.js: $(node --version)"
+    echo "📦 NPM: $(npm --version)"
+    echo ""
+    
+    if [ -n "$FASTIFY_URL" ]; then
+        echo "🌐 Connexion au serveur Fastify distant: $FASTIFY_URL"
+    else
+        echo "ℹ️  Pas de serveur Fastify configuré (Tauri fonctionne en mode local)"
+    fi
+    
+    # Install deps if needed
+    if [ "$FORCE_DEPS" = true ]; then
+        rm -f node_modules/.install_complete
+    fi
+    if [ ! -d "node_modules" ] || [ ! -f "node_modules/.install_complete" ]; then
+        echo "📥 Installation des dépendances..."
+        chmod +x "$SCRIPTS_DIR/install_dependencies.sh"
+        "$SCRIPTS_DIR/install_dependencies.sh" --non-interactive
+        touch node_modules/.install_complete
+    fi
+    
+    echo "🖥️  Démarrage de Tauri (Axum sur port 3000)..."
+    if [ "$FORCE_DEPS" = true ]; then
+        "$SCRIPTS_DIR/run_tauri.sh" --force-deps
+    else
+        "$SCRIPTS_DIR/run_tauri.sh"
+    fi
+    exit 0
+fi
+
+# =============================================================================
+# MODE NORMAL: Fastify + Tauri
+# =============================================================================
+
+echo "🚀 Mode complet: Tauri (port 3000) + Fastify (port 3001)"
 echo "📂 Répertoire: $(pwd)"
 echo "🔧 Node.js: $(node --version)"
 echo "📦 NPM: $(npm --version)"
@@ -894,7 +964,7 @@ if [ "$PROD_BUILD" = true ]; then
     exit 0
 fi
 
-# Scanner les composants Squirrel (sera relancé par run_fastify mais on garde l'appel initial)
+# Scanner les composants Squirrel
 echo "🔍 Scan des composants Squirrel..."
 npm run scan:components
 echo ""
@@ -902,39 +972,7 @@ echo ""
 # Capturer les signaux d'interruption
 trap cleanup SIGINT SIGTERM EXIT
 
-echo "🚀 Démarrage des serveurs..."
-
-# Mode --server uniquement (pas de Tauri)
-if [ "$SERVER_ONLY" = true ]; then
-    echo "📡 Mode serveur uniquement (pas de Tauri)"
-    echo "📡 Démarrage du serveur Fastify..."
-    if [ "$FORCE_DEPS" = true ]; then
-        "$SCRIPTS_DIR/run_fastify.sh" --force-deps
-    else
-        "$SCRIPTS_DIR/run_fastify.sh"
-    fi
-    exit 0
-fi
-
-# Mode --tauri uniquement (pas de Fastify local)
-if [ "$TAURI_ONLY" = true ]; then
-    echo "🖥️  Mode Tauri uniquement (pas de Fastify local)"
-    if [ -n "$FASTIFY_URL" ]; then
-        echo "🌐 Connexion au serveur distant: $FASTIFY_URL"
-    else
-        echo "⚠️  Aucun serveur Fastify configuré. Utilisez --fastify-url URL"
-        echo "    ou exportez SQUIRREL_FASTIFY_URL avant de lancer."
-    fi
-    echo "🖥️  Démarrage de Tauri..."
-    if [ "$FORCE_DEPS" = true ]; then
-        "$SCRIPTS_DIR/run_tauri.sh" --force-deps
-    else
-        "$SCRIPTS_DIR/run_tauri.sh"
-    fi
-    exit 0
-fi
-
-# Mode normal: Fastify + Tauri
+# Mode normal: Fastify + Tauri (les modes --server et --tauri ont déjà exit plus haut)
 
 # Lancer Fastify en arrière-plan via le script
 echo "📡 Démarrage du serveur Fastify..."

@@ -247,6 +247,19 @@ const UnifiedAuth = {
                 console.log(`[UnifiedAuth] Processed ${syncResult.processed} pending syncs after login`);
             }
 
+            // Dispatch event to trigger atome sync after login
+            if (typeof window !== 'undefined') {
+                console.log('[UnifiedAuth] Dispatching squirrel:user-logged-in event');
+                window.dispatchEvent(new CustomEvent('squirrel:user-logged-in', {
+                    detail: {
+                        backends: {
+                            tauri: results.tauri?.success || false,
+                            fastify: results.fastify?.success || false
+                        }
+                    }
+                }));
+            }
+
             return {
                 success: true,
                 user: primaryResult.user,
@@ -504,7 +517,7 @@ const UnifiedAuth = {
      */
     _queuePendingSync(operation, data) {
         if (typeof localStorage === 'undefined') return;
-        
+
         try {
             const queue = JSON.parse(localStorage.getItem('auth_pending_sync') || '[]');
             queue.push({
@@ -538,7 +551,7 @@ const UnifiedAuth = {
         for (const item of queue) {
             if (item.operation === 'register') {
                 const data = item.data;
-                
+
                 // Sync to Tauri if it was created on Fastify
                 if (data.createdOn === 'fastify' && tauri) {
                     try {
