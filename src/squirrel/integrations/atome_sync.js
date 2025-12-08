@@ -15,27 +15,25 @@
  *   Atome.sync()
  */
 
+// Import shared utilities from sync_engine
+import { isProductionEnvironment, detectRuntime } from './sync_engine.js';
+
 // ============================================================================
 // ENVIRONMENT DETECTION
 // ============================================================================
-
-/**
- * Check if we're in a production environment
- */
-function isProductionEnvironment() {
-    if (typeof window === 'undefined') return false;
-    const hostname = window.location?.hostname || '';
-    return hostname === 'atome.one' ||
-        hostname === 'www.atome.one' ||
-        hostname.endsWith('.squirrel.cloud') ||
-        hostname === 'squirrel.cloud';
-}
 
 /**
  * Get production API base URL
  */
 function getProductionApiBase() {
     return `${window.location.protocol}//${window.location.host}`;
+}
+
+/**
+ * Check if running in Tauri environment
+ */
+function isTauriEnvironment() {
+    return detectRuntime() === 'tauri';
 }
 
 function resolveAtomeConfig() {
@@ -53,19 +51,8 @@ function resolveAtomeConfig() {
         return { base: getProductionApiBase(), isLocal: false, isTauri: false };
     }
 
-    // Detect Tauri environment
-    let isTauri = false;
-    if (typeof window !== 'undefined' && window.__TAURI__) isTauri = true;
-    if (!isTauri) {
-        try {
-            const platform = typeof current_platform === 'function' ? current_platform() : '';
-            if (typeof platform === 'string' && platform.toLowerCase().includes('taur')) isTauri = true;
-        } catch (_) { }
-    }
-    if (!isTauri && typeof window !== 'undefined') {
-        const port = window.location?.port;
-        if (port === '1420' || port === '1430') isTauri = true;
-    }
+    // Use shared Tauri detection
+    const isTauri = isTauriEnvironment();
 
     // IMPORTANT: Atome API is ALWAYS on Fastify (3001), even in Tauri mode
     // Only auth goes to Axum (3000) in Tauri mode
@@ -259,7 +246,7 @@ function generateId() {
         return crypto.randomUUID();
     }
     // Fallback: generate UUID v4 manually
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
         const r = Math.random() * 16 | 0;
         const v = c === 'x' ? r : (r & 0x3 | 0x8);
         return v.toString(16);

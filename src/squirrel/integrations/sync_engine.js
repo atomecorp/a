@@ -1,9 +1,26 @@
-const DEFAULT_WS_PATH = '/ws/events';
-const MAX_RETRIES = 3;  // Very few retries to avoid spam
-const RECONNECT_BASE_DELAY = 30000;  // Start at 30 seconds
-const RECONNECT_MAX_DELAY = 3600000;  // 1 hour max
-const SILENT_MODE_AFTER_FAILURES = 1;  // Silent after first failure (Fastify may be intentionally off)
-const LONG_POLL_INTERVAL = 300000;  // 5 minutes between background retries
+/**
+ * sync_engine.js
+ * 
+ * Unified WebSocket sync module for Squirrel framework.
+ * Handles both file system events (/ws/events) and version/atome sync (/ws/sync).
+ * 
+ * Features:
+ * - File system event synchronization (ADOLE delta format)
+ * - Version synchronization with conflict resolution
+ * - Atome CRUD event broadcasting
+ * - Auto-reconnect with exponential backoff
+ * - Silent mode when Fastify server is unavailable
+ */
+
+// === SHARED CONSTANTS ===
+const MAX_RETRIES = 3;
+const RECONNECT_BASE_DELAY = 30000;
+const RECONNECT_MAX_DELAY = 3600000;
+const SILENT_MODE_AFTER_FAILURES = 1;
+const LONG_POLL_INTERVAL = 300000;
+const HEARTBEAT_INTERVAL = 30000;
+
+// === SHARED UTILITIES ===
 
 /**
  * Check if we're in a production environment
@@ -17,70 +34,92 @@ function isProductionEnvironment() {
         hostname === 'squirrel.cloud';
 }
 
-function resolveWsCandidates() {
-    const customEndpoint = typeof window.__SQUIRREL_SYNC_WS__ === 'string'
-        ? window.__SQUIRREL_SYNC_WS__.trim()
+/**
+ * Check if Fastify server is available
+ */
+async function checkFastifyAvailable() {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 2000);
+        const response = await fetch('http://127.0.0.1:3001/api/server-info', {
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+        return response.ok;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Get client identifier (persistent)
+ */
+function getClientId() {
+    let clientId = null;
+    try {
+        clientId = localStorage.getItem('squirrel_client_id');
+        if (!clientId) {
+            clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            localStorage.setItem('squirrel_client_id', clientId);
+        }
+    } catch (e) {
+        clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+    return clientId;
+}
+
+/**
+ * Detect runtime environment
+ */
+function detectRuntime() {
+    if (typeof window === 'undefined') return 'unknown';
+    if (window.__TAURI__ || window.__TAURI_INTERNALS__) return 'tauri';
+    if (typeof navigator !== 'undefined' && /electron/i.test(navigator.userAgent || '')) return 'electron';
+    return 'browser';
+}
+
+/**
+ * Get current local version from version.json
+ */
+async function getLocalVersion() {
+    try {
+        const response = await fetch('/version.json');
+        if (response.ok) {
+            const data = await response.json();
+            return data.version || 'unknown';
+        }
+    } catch (e) {
+        // Silent fail
+    }
+    return 'unknown';
+}
+
+/**
+ * Resolve WebSocket URL for a given path
+ */
+function resolveWsUrl(wsPath, customVar) {
+    const customEndpoint = typeof window[customVar] === 'string'
+        ? window[customVar].trim()
         : '';
+
     if (customEndpoint) {
-        return [ensureWsPath(customEndpoint)];
+        const wsUrl = customEndpoint
+            .replace(/^https:/, 'wss:')
+            .replace(/^http:/, 'ws:')
+            .replace(/\/$/, '');
+        return `${wsUrl}${wsPath}`;
     }
 
-    // Production environment: use same origin with wss
     if (isProductionEnvironment()) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.host;
-        return [`${protocol}//${host}${DEFAULT_WS_PATH}`];
+        return `${protocol}//${host}${wsPath}`;
     }
 
-    const bases = [];
-    const pushBase = (value) => {
-        if (!value || bases.includes(value)) {
-            return;
-        }
-        bases.push(value);
-    };
-
-    const isTauri = Boolean(
-        window.__TAURI__ ||
-        window.__TAURI_INTERNALS__ ||
-        (typeof navigator !== 'undefined' && /tauri/i.test(navigator.userAgent || ''))
-    );
-
-    const location = window.location || {};
-    const protocol = location.protocol || 'http:';
-    const host = location.host || '';
-    const port = location.port || '';
-
-    // Log for debugging only once, not on every reconnect
-    if (typeof window.__sync_engine_logged__ === 'undefined') {
-        console.log('[sync_engine] resolveWsCandidates: isTauri =', isTauri, ', port =', port);
-        window.__sync_engine_logged__ = true;
-    }
-
-    // For both Tauri and browser dev mode, WebSocket is only available on Fastify (port 3001)
-    // - Port 3000 (Squirrel static server or Axum) doesn't have WebSocket
-    // - Port 1420/1430 (Tauri dev server / Vite) doesn't have WebSocket
-    // Only Fastify on 3001 has the /ws/events endpoint
-
-    pushBase('ws://localhost:3001');
-    pushBase('ws://127.0.0.1:3001');
-
-    // WebSocket candidates are localhost:3001 and 127.0.0.1:3001
-    return bases.map((base) => ensureWsPath(base));
+    return `ws://localhost:3001${wsPath}`;
 }
 
-function ensureWsPath(base) {
-    if (!base) {
-        return `ws://127.0.0.1:3001${DEFAULT_WS_PATH}`;
-    }
-
-    const trimmed = base.replace(/\s+/g, '');
-    if (trimmed.endsWith(DEFAULT_WS_PATH)) {
-        return trimmed;
-    }
-
-    return `${trimmed.replace(/\/$/, '')}${DEFAULT_WS_PATH}`;
-}
+// === FILE SYNC UTILITIES ===
 
 function mapKindToOperation(kind) {
     switch (kind) {
@@ -126,34 +165,37 @@ function toAdoleDelta(envelope) {
     };
 }
 
-class SyncEngineClient {
-    constructor() {
+// =============================================================================
+// BASE WEBSOCKET CLIENT CLASS (shared logic)
+// =============================================================================
+
+class BaseWebSocketClient {
+    constructor(name, wsPath, customVar) {
+        this.name = name;
+        this.wsPath = wsPath;
+        this.customVar = customVar;
         this.state = {
             connected: false,
             attempts: 0,
             totalFailures: 0,
-            lastDelta: null,
             endpoint: null,
             silentMode: false,
-            serverAvailable: null,  // null = unknown, true/false = known state
-            fastifyChecked: false   // Whether we've checked Fastify availability
+            serverAvailable: null,
+            fastifyChecked: false
         };
         this.listeners = new Set();
         this.socket = null;
         this.reconnectTimer = null;
-        this.queue = [];
-        this.setupNetworkListeners();
+        this._networkListenerSetup = false;
     }
 
-    /**
-     * Setup network online/offline listeners for smart reconnection
-     */
     setupNetworkListeners() {
-        if (typeof window === 'undefined') return;
-        
+        if (typeof window === 'undefined' || this._networkListenerSetup) return;
+        this._networkListenerSetup = true;
+
         window.addEventListener('online', () => {
             if (!this.state.connected && this.state.silentMode) {
-                console.log('[sync_engine] Network back online, attempting reconnection...');
+                console.log(`[${this.name}] Network back online, attempting reconnection...`);
                 this.state.silentMode = false;
                 this.state.attempts = 0;
                 this.start();
@@ -161,52 +203,27 @@ class SyncEngineClient {
         });
     }
 
-    /**
-     * Check if Fastify server is available before attempting WebSocket
-     */
-    async checkFastifyAvailable() {
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 2000);
-            const response = await fetch('http://127.0.0.1:3001/api/server-info', {
-                signal: controller.signal
-            });
-            clearTimeout(timeout);
-            return response.ok;
-        } catch (e) {
-            return false;
-        }
-    }
-
     async start() {
-        if (this.socket || this.state.connected) {
-            return;
-        }
-        
-        // First time: check if Fastify is even available
+        if (this.socket || this.state.connected) return;
+
         if (!this.state.fastifyChecked) {
             this.state.fastifyChecked = true;
-            const available = await this.checkFastifyAvailable();
+            const available = await checkFastifyAvailable();
             if (!available) {
-                // Fastify not available - enter silent mode immediately, no error spam
                 this.state.silentMode = true;
                 this.state.serverAvailable = false;
                 this.scheduleBackgroundRetry();
                 return;
             }
         }
-        
-        this.connectNextCandidate();
+
+        this.connect();
     }
 
-    connectNextCandidate() {
-        const endpoints = resolveWsCandidates();
-        const endpoint = endpoints[this.state.attempts % endpoints.length];
-        this.state.endpoint = endpoint;
-        this.openSocket(endpoint);
-    }
+    connect() {
+        const url = resolveWsUrl(this.wsPath, this.customVar);
+        this.state.endpoint = url;
 
-    openSocket(url) {
         try {
             this.socket = new WebSocket(url);
         } catch (error) {
@@ -214,31 +231,31 @@ class SyncEngineClient {
             return;
         }
 
-        this.socket.addEventListener('open', () => {
-            if (!this.state.silentMode) {
-                console.log('[sync_engine] ✅ Connected to sync server');
-            }
-            this.state.connected = true;
-            this.state.attempts = 0;
-            this.state.totalFailures = 0;
-            this.state.silentMode = false;
-            this.state.serverAvailable = true;
-            this.flushQueue();
-        });
+        this.socket.addEventListener('open', () => this.onOpen());
+        this.socket.addEventListener('message', (event) => this.onMessage(event));
+        this.socket.addEventListener('close', (event) => this.onClose(event));
+        this.socket.addEventListener('error', () => this.handleConnectionError());
+    }
 
-        this.socket.addEventListener('message', (event) => {
-            this.handleMessage(event);
-        });
+    onOpen() {
+        if (!this.state.silentMode) {
+            console.log(`[${this.name}] ✅ Connected`);
+        }
+        this.state.connected = true;
+        this.state.attempts = 0;
+        this.state.totalFailures = 0;
+        this.state.silentMode = false;
+        this.state.serverAvailable = true;
+    }
 
-        this.socket.addEventListener('close', () => {
-            this.state.connected = false;
-            this.socket = null;
-            this.scheduleReconnect();
-        });
+    onMessage(event) {
+        // Override in subclass
+    }
 
-        this.socket.addEventListener('error', () => {
-            this.handleConnectionError();
-        });
+    onClose(event) {
+        this.state.connected = false;
+        this.socket = null;
+        this.scheduleReconnect();
     }
 
     handleConnectionError() {
@@ -246,57 +263,42 @@ class SyncEngineClient {
         this.state.connected = false;
         this.state.serverAvailable = false;
 
-        // Enter silent mode after too many failures
         if (this.state.totalFailures >= SILENT_MODE_AFTER_FAILURES && !this.state.silentMode) {
             this.state.silentMode = true;
-            console.warn('[sync_engine] Entering silent mode - server appears unavailable. Will keep trying in background.');
+            console.log(`[${this.name}] Fastify server unavailable - sync will auto-resume when server is back`);
         }
 
         this.socket?.close();
         this.scheduleReconnect();
     }
 
-    /**
-     * Schedule background retry with long interval (for when Fastify is unavailable)
-     */
     scheduleBackgroundRetry() {
         if (this.reconnectTimer) return;
-        
+
         this.reconnectTimer = setTimeout(async () => {
             this.reconnectTimer = null;
-            const available = await this.checkFastifyAvailable();
+            const available = await checkFastifyAvailable();
             if (available) {
-                console.log('[sync_engine] Fastify server now available, connecting...');
+                console.log(`[${this.name}] Fastify server now available, connecting...`);
                 this.state.silentMode = false;
                 this.state.attempts = 0;
-                this.connectNextCandidate();
+                this.connect();
             } else {
-                // Still not available, schedule another background check
                 this.scheduleBackgroundRetry();
             }
         }, LONG_POLL_INTERVAL);
     }
 
     scheduleReconnect() {
-        if (this.reconnectTimer) {
-            return;
-        }
-        
-        // Enter silent mode after first failure
-        if (this.state.totalFailures >= SILENT_MODE_AFTER_FAILURES && !this.state.silentMode) {
-            this.state.silentMode = true;
-            // Single log message, then go silent
-            console.log('[sync_engine] Fastify server unavailable - sync will auto-resume when server is back');
-        }
-        
+        if (this.reconnectTimer) return;
+
         if (this.state.attempts >= MAX_RETRIES) {
             this.state.serverAvailable = false;
-            // Switch to long background polling
             this.scheduleBackgroundRetry();
             return;
         }
 
-        this.state.attempts += 1;
+        this.state.attempts++;
         const delay = Math.min(
             RECONNECT_BASE_DELAY * Math.pow(2, this.state.attempts - 1),
             RECONNECT_MAX_DELAY
@@ -304,11 +306,95 @@ class SyncEngineClient {
 
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
-            this.connectNextCandidate();
+            this.connect();
         }, delay);
     }
 
-    handleMessage(event) {
+    broadcast(data) {
+        this.listeners.forEach((listener) => {
+            try {
+                listener(data);
+            } catch (_) {
+                // Ignore listener errors
+            }
+        });
+    }
+
+    subscribe(listener) {
+        if (typeof listener === 'function') {
+            this.listeners.add(listener);
+        }
+        return () => this.listeners.delete(listener);
+    }
+
+    send(data) {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            return false;
+        }
+        try {
+            this.socket.send(JSON.stringify(data));
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    getState() {
+        return {
+            connected: this.state.connected,
+            endpoint: this.state.endpoint,
+            serverAvailable: this.state.serverAvailable,
+            silentMode: this.state.silentMode,
+            attempts: this.state.attempts
+        };
+    }
+
+    isServerAvailable() {
+        return this.state.serverAvailable === true;
+    }
+
+    retry() {
+        this.state.attempts = 0;
+        this.state.totalFailures = 0;
+        this.state.silentMode = false;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.connect();
+    }
+
+    disconnect() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        if (this.socket) {
+            this.socket.close(1000, 'Client disconnect');
+            this.socket = null;
+        }
+        this.state.connected = false;
+    }
+}
+
+// =============================================================================
+// FILE SYNC CLIENT (/ws/events)
+// =============================================================================
+
+class FileSyncClient extends BaseWebSocketClient {
+    constructor() {
+        super('sync_engine', '/ws/events', '__SQUIRREL_SYNC_WS__');
+        this.lastDelta = null;
+        this.queue = [];
+        this.setupNetworkListeners();
+    }
+
+    onOpen() {
+        super.onOpen();
+        this.flushQueue();
+    }
+
+    onMessage(event) {
         let payload = null;
         try {
             payload = JSON.parse(event.data);
@@ -319,11 +405,11 @@ class SyncEngineClient {
         if (payload.type === 'sync:file-event') {
             const delta = toAdoleDelta(payload);
             if (delta) {
-                this.state.lastDelta = delta;
+                this.lastDelta = delta;
                 this.broadcast(delta);
+                window.dispatchEvent(new CustomEvent('squirrel:adole-delta', { detail: delta }));
             }
         } else if (payload.type === 'sync:account-created') {
-            // Account created on cloud server - sync to local
             console.log('[sync_engine] Account created on cloud:', payload.payload);
             this.broadcast({
                 type: 'account-created',
@@ -334,7 +420,6 @@ class SyncEngineClient {
                 rawEvent: payload
             });
         } else if (payload.type === 'sync:account-deleted') {
-            // Account deleted on cloud server - sync to local
             console.log('[sync_engine] Account deleted on cloud:', payload.payload);
             this.broadcast({
                 type: 'account-deleted',
@@ -352,17 +437,6 @@ class SyncEngineClient {
         }
     }
 
-    broadcast(delta) {
-        this.listeners.forEach((listener) => {
-            try {
-                listener(delta);
-            } catch (_) {
-                // Ignore listener errors
-            }
-        });
-        window.dispatchEvent(new CustomEvent('squirrel:adole-delta', { detail: delta }));
-    }
-
     flushQueue() {
         while (this.queue.length) {
             const msg = this.queue.shift();
@@ -370,107 +444,297 @@ class SyncEngineClient {
         }
     }
 
-    subscribe(listener) {
-        if (typeof listener === 'function') {
-            this.listeners.add(listener);
-        }
-        return () => this.listeners.delete(listener);
-    }
-
     getLastDelta() {
-        return this.state.lastDelta;
-    }
-
-    /**
-     * Get connection state
-     */
-    getState() {
-        return {
-            connected: this.state.connected,
-            endpoint: this.state.endpoint,
-            serverAvailable: this.state.serverAvailable,
-            silentMode: this.state.silentMode,
-            attempts: this.state.attempts
-        };
-    }
-
-    /**
-     * Check if server is available
-     */
-    isServerAvailable() {
-        return this.state.serverAvailable === true;
-    }
-
-    /**
-     * Reset connection state and retry
-     */
-    retry() {
-        this.state.attempts = 0;
-        this.state.totalFailures = 0;
-        this.state.silentMode = false;
-        if (this.reconnectTimer) {
-            clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = null;
-        }
-        this.connectNextCandidate();
-    }
-
-    /**
-     * Disconnect from server
-     */
-    disconnect() {
-        if (this.reconnectTimer) {
-            clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = null;
-        }
-        if (this.socket) {
-            this.socket.close(1000, 'Client disconnect');
-            this.socket = null;
-        }
-        this.state.connected = false;
+        return this.lastDelta;
     }
 }
 
-const syncEngineSingleton = new SyncEngineClient();
+// =============================================================================
+// VERSION SYNC CLIENT (/ws/sync)
+// =============================================================================
+
+class VersionSyncClient extends BaseWebSocketClient {
+    constructor() {
+        super('version_sync', '/ws/sync', '__SQUIRREL_FASTIFY_URL__');
+        this.clientId = getClientId();
+        this.runtime = detectRuntime();
+        this.localVersion = null;
+        this.serverVersion = null;
+        this.pendingConflicts = [];
+        this.heartbeatTimer = null;
+        this.setupNetworkListeners();
+    }
+
+    async start() {
+        if (this.socket || this.state.connected) return;
+
+        if (!this.state.fastifyChecked) {
+            this.state.fastifyChecked = true;
+            const available = await checkFastifyAvailable();
+            if (!available) {
+                this.state.silentMode = true;
+                this.state.serverAvailable = false;
+                this.scheduleBackgroundRetry();
+                return;
+            }
+        }
+
+        this.localVersion = await getLocalVersion();
+        this.connect();
+    }
+
+    onOpen() {
+        super.onOpen();
+
+        // Send registration
+        this.send({
+            type: 'register',
+            clientId: this.clientId,
+            runtime: this.runtime,
+            localVersion: this.localVersion,
+            capabilities: ['auto-update', 'conflict-resolution']
+        });
+
+        this.startHeartbeat();
+        this.broadcast({ type: 'connected', endpoint: this.state.endpoint });
+    }
+
+    onClose(event) {
+        super.onClose(event);
+        this.stopHeartbeat();
+        this.broadcast({ type: 'disconnected', code: event.code, reason: event.reason });
+    }
+
+    onMessage(event) {
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch (e) {
+            return;
+        }
+
+        switch (data.type) {
+            case 'version-update':
+                this.handleVersionUpdate(data);
+                break;
+
+            case 'sync-request':
+                this.broadcast({ type: 'sync-request', files: data.files, action: data.action });
+                break;
+
+            case 'conflict':
+                this.handleConflict(data);
+                break;
+
+            case 'registered':
+                this.serverVersion = data.serverVersion;
+                this.broadcast({ type: 'registered', data });
+                break;
+
+            case 'pong':
+                break;
+
+            case 'atome:created':
+                console.log('[version_sync] 🆕 Atome created:', data.atome?.id);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-created', { detail: data.atome }));
+                this.broadcast({ type: 'atome:created', atome: data.atome });
+                break;
+
+            case 'atome:updated':
+                console.log('[version_sync] ✏️ Atome updated:', data.atome?.id);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-updated', { detail: data.atome }));
+                this.broadcast({ type: 'atome:updated', atome: data.atome });
+                break;
+
+            case 'atome:deleted':
+                console.log('[version_sync] 🗑️ Atome deleted:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-deleted', { detail: data.atome || { id: data.atomeId } }));
+                this.broadcast({ type: 'atome:deleted', atome: data.atome, atomeId: data.atomeId });
+                break;
+
+            case 'atome:altered':
+                console.log('[version_sync] 🔧 Atome altered:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-altered', { detail: data.atome || { id: data.atomeId, alterations: data.alterations } }));
+                this.broadcast({ type: 'atome:altered', atome: data.atome, atomeId: data.atomeId, alterations: data.alterations });
+                break;
+
+            case 'atome:renamed':
+                console.log('[version_sync] 📝 Atome renamed:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-renamed', { detail: data.atome || { id: data.atomeId, newName: data.newName } }));
+                this.broadcast({ type: 'atome:renamed', atome: data.atome, atomeId: data.atomeId, newName: data.newName });
+                break;
+
+            case 'atome:restored':
+                console.log('[version_sync] ♻️ Atome restored:', data.atome?.id || data.atomeId);
+                window.dispatchEvent(new CustomEvent('squirrel:atome-restored', { detail: data.atome || { id: data.atomeId } }));
+                this.broadcast({ type: 'atome:restored', atome: data.atome, atomeId: data.atomeId });
+                break;
+
+            case 'welcome':
+                if (data.clientId) {
+                    try {
+                        localStorage.setItem('squirrel_client_id', data.clientId);
+                    } catch (e) { }
+                }
+                this.serverVersion = data.version;
+                this.broadcast({ type: 'welcome', data });
+                break;
+
+            case 'error':
+                console.error('[version_sync] Server error:', data.message);
+                this.broadcast({ type: 'error', message: data.message });
+                break;
+
+            default:
+                this.broadcast({ type: 'unknown', data });
+        }
+    }
+
+    handleVersionUpdate(data) {
+        const { newVersion, oldVersion, changes, requiresReload } = data;
+        console.log('[version_sync] 🔄 Version update:', oldVersion, '->', newVersion);
+
+        this.serverVersion = newVersion;
+        this.broadcast({ type: 'version-update', newVersion, oldVersion, changes, requiresReload });
+        window.dispatchEvent(new CustomEvent('squirrel:version-update', {
+            detail: { newVersion, oldVersion, changes, requiresReload }
+        }));
+
+        if (requiresReload && window.Squirrel?.config?.autoReload !== false) {
+            console.log('[version_sync] Auto-reload in 3 seconds...');
+            setTimeout(() => window.location.reload(), 3000);
+        }
+    }
+
+    handleConflict(data) {
+        console.log('[version_sync] ⚠️ Conflict detected:', data);
+        this.pendingConflicts.push({
+            id: data.conflictId,
+            file: data.file,
+            localVersion: data.localVersion,
+            serverVersion: data.serverVersion,
+            timestamp: Date.now()
+        });
+        this.broadcast({ type: 'conflict', conflict: data });
+        window.dispatchEvent(new CustomEvent('squirrel:sync-conflict', { detail: data }));
+    }
+
+    resolveConflict(conflictId, resolution) {
+        const conflict = this.pendingConflicts.find(c => c.id === conflictId);
+        if (!conflict) return;
+
+        this.send({
+            type: 'resolve-conflict',
+            conflictId,
+            resolution,
+            clientId: this.clientId
+        });
+        this.pendingConflicts = this.pendingConflicts.filter(c => c.id !== conflictId);
+    }
+
+    requestSync() {
+        this.send({
+            type: 'request-sync',
+            clientId: this.clientId,
+            localVersion: this.localVersion
+        });
+    }
+
+    startHeartbeat() {
+        this.stopHeartbeat();
+        this.heartbeatTimer = setInterval(() => {
+            if (this.state.connected && this.socket?.readyState === WebSocket.OPEN) {
+                this.send({ type: 'ping', timestamp: Date.now() });
+            }
+        }, HEARTBEAT_INTERVAL);
+    }
+
+    stopHeartbeat() {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+    }
+
+    disconnect() {
+        this.stopHeartbeat();
+        super.disconnect();
+    }
+
+    getState() {
+        return {
+            ...super.getState(),
+            serverVersion: this.serverVersion,
+            localVersion: this.localVersion,
+            clientId: this.clientId,
+            pendingConflicts: this.pendingConflicts.length
+        };
+    }
+}
+
+// =============================================================================
+// SINGLETON INSTANCES
+// =============================================================================
+
+const fileSyncSingleton = new FileSyncClient();
+const versionSyncSingleton = new VersionSyncClient();
 let syncEngineInitialized = false;
 
 export default function initSyncEngine() {
-    if (syncEngineInitialized) {
-        return;
-    }
+    if (syncEngineInitialized) return;
     syncEngineInitialized = true;
 
-    syncEngineSingleton.start();
+    // Start both sync clients
+    fileSyncSingleton.start();
+    versionSyncSingleton.start();
 
-    // Listen for server availability events (from Tauri or other sources)
+    // Listen for server availability events
     window.addEventListener('squirrel:server-available', () => {
         console.log('[sync_engine] Server available event received - attempting connection');
-        syncEngineSingleton.retry();
+        fileSyncSingleton.retry();
+        versionSyncSingleton.retry();
     });
 
-    // Also listen for online event (browser comes back online)
-    window.addEventListener('online', () => {
-        if (!syncEngineSingleton.state.connected) {
-            console.log('[sync_engine] Network online - attempting reconnection');
-            syncEngineSingleton.retry();
-        }
-    });
-
+    // Relay ready event
     const relayReady = () => {
         window.removeEventListener('squirrel:ready', relayReady);
         window.dispatchEvent(new CustomEvent('squirrel:sync-ready'));
+        window.dispatchEvent(new CustomEvent('squirrel:version-sync-ready'));
     };
     window.addEventListener('squirrel:ready', relayReady, { once: true });
 
+    // Expose global APIs
     window.Squirrel = window.Squirrel || {};
+
+    // File sync API (backward compatible)
     window.Squirrel.SyncEngine = {
-        subscribe: (listener) => syncEngineSingleton.subscribe(listener),
-        getLastDelta: () => syncEngineSingleton.getLastDelta(),
-        getState: () => syncEngineSingleton.getState(),
-        isServerAvailable: () => syncEngineSingleton.isServerAvailable(),
-        retry: () => syncEngineSingleton.retry(),
-        disconnect: () => syncEngineSingleton.disconnect()
+        subscribe: (listener) => fileSyncSingleton.subscribe(listener),
+        getLastDelta: () => fileSyncSingleton.getLastDelta(),
+        getState: () => fileSyncSingleton.getState(),
+        isServerAvailable: () => fileSyncSingleton.isServerAvailable(),
+        retry: () => fileSyncSingleton.retry(),
+        disconnect: () => fileSyncSingleton.disconnect()
     };
+
+    // Version sync API (backward compatible)
+    window.Squirrel.VersionSync = {
+        subscribe: (listener) => versionSyncSingleton.subscribe(listener),
+        getState: () => versionSyncSingleton.getState(),
+        requestSync: () => versionSyncSingleton.requestSync(),
+        resolveConflict: (id, resolution) => versionSyncSingleton.resolveConflict(id, resolution),
+        disconnect: () => versionSyncSingleton.disconnect(),
+        isServerAvailable: () => versionSyncSingleton.isServerAvailable(),
+        retry: () => versionSyncSingleton.retry()
+    };
+
+    console.log('[sync_engine] Initialized: SyncEngine + VersionSync');
 }
 
-export { syncEngineSingleton as SyncEngine };
+// Export shared utilities for atome_sync.js
+export {
+    fileSyncSingleton as SyncEngine,
+    versionSyncSingleton as VersionSync,
+    isProductionEnvironment,
+    detectRuntime,
+    getClientId
+};

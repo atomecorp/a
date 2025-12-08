@@ -81,7 +81,6 @@ import './default/shortcuts.js';
 // === OPTIONAL INTEGRATIONS ===
 import initIPlugWeb from './integrations/iplug_web.js';
 import initSyncEngine from './integrations/sync_engine.js';
-import initVersionSync from './integrations/version_sync.js';
 import './integrations/atome_sync.js'; // Exposes window.Atome
 
 
@@ -154,8 +153,7 @@ import('./kickstart.js').then(() => {
   // Toggle optional integrations once core runtime is ready
   try { initIPlugWeb(); } catch (e) { console.warn('iPlug init failed', e); }
   try { initSyncEngine(); } catch (e) { console.warn('SyncEngine init failed', e); }
-  try { initVersionSync(); } catch (e) { console.warn('VersionSync init failed', e); }
-  
+
   // === LOAD APPLICATION ===
   // Setup drag/drop prevention
   window.addEventListener("dragover", function (e) {
@@ -166,7 +164,7 @@ import('./kickstart.js').then(() => {
     e.preventDefault();
     e.stopPropagation();
   });
-  
+
   // Import application once framework is ready
   let __appImported = false;
   function __importAppOnce() {
@@ -176,10 +174,10 @@ import('./kickstart.js').then(() => {
       console.error('[Squirrel] Application import error:', err);
     });
   }
-  
+
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
   if (!isIOS) {
     // Non-iOS: import immediately since squirrel:ready was just dispatched by kickstart
     __importAppOnce();
