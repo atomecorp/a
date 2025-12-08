@@ -32,6 +32,7 @@ import UnifiedAuth from './UnifiedAuth.js';
 import UnifiedAtome from './UnifiedAtome.js';
 import UnifiedUserData from './UnifiedUserData.js';
 import UnifiedSync from './UnifiedSync.js';
+import SyncWebSocket from './SyncWebSocket.js';
 import TauriAdapter from './adapters/TauriAdapter.js';
 import FastifyAdapter from './adapters/FastifyAdapter.js';
 
@@ -50,6 +51,7 @@ export {
     UnifiedAtome,
     UnifiedUserData,
     UnifiedSync,
+    SyncWebSocket,
     TauriAdapter,
     FastifyAdapter,
     isAuthenticated
@@ -61,6 +63,7 @@ export default {
     Atome: UnifiedAtome,
     UserData: UnifiedUserData,
     Sync: UnifiedSync,
+    WebSocket: SyncWebSocket,
     adapters: {
         Tauri: TauriAdapter,
         Fastify: FastifyAdapter

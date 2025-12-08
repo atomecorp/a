@@ -11,11 +11,14 @@
  * - Tauri/Axum backend (localhost:3000, SQLite)
  * - Fastify backend (localhost:3001, PostgreSQL)
  * 
+ * Real-time sync via WebSocket when both backends are connected
+ * 
  * @module unified/UnifiedAtome
  */
 
 import TauriAdapter from './adapters/TauriAdapter.js';
 import FastifyAdapter from './adapters/FastifyAdapter.js';
+import SyncWebSocket from './SyncWebSocket.js';
 
 // ============================================
 // BACKEND DETECTION
@@ -133,11 +136,18 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
+            const resultAtome = primaryResult.atome || { ...atomeData, id: primaryResult.id };
+            
+            // Broadcast via WebSocket for real-time sync
+            if (SyncWebSocket.isConnected()) {
+                SyncWebSocket.broadcastCreate(resultAtome);
+            }
+
             return {
                 success: true,
                 id: primaryResult.id || primaryResult.atome?.id,
                 version: 1,
-                atome: primaryResult.atome,
+                atome: resultAtome,
                 backends: {
                     tauri: results.tauri?.success || false,
                     fastify: results.fastify?.success || false
@@ -325,6 +335,11 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
+            // Broadcast via WebSocket for real-time sync
+            if (SyncWebSocket.isConnected()) {
+                SyncWebSocket.broadcastAlter(id, alterData, primaryResult.atome);
+            }
+
             return {
                 success: true,
                 id: id,
@@ -406,6 +421,11 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
+            // Broadcast via WebSocket for real-time sync
+            if (SyncWebSocket.isConnected()) {
+                SyncWebSocket.broadcastAlter(id, { operation: 'rename', newName: data.newName }, primaryResult.atome);
+            }
+
             return {
                 success: true,
                 id: id,
@@ -469,6 +489,11 @@ const UnifiedAtome = {
         }
 
         if (primaryResult && primaryResult.success) {
+            // Broadcast via WebSocket for real-time sync
+            if (SyncWebSocket.isConnected()) {
+                SyncWebSocket.broadcastDelete(id);
+            }
+
             return {
                 success: true,
                 id: id,

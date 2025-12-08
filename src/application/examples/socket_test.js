@@ -2,14 +2,15 @@
  * Socket & Atome Sync Test
  * 
  * Interactive demo testing:
- * 1. WebSocket connections (/ws/events, /ws/sync)
+ * 1. WebSocket connections (/ws/events, /ws/sync, /ws/atome-sync)
  * 2. Unified Atome API (create, update, delete, sync) via Unified APIs
  * 3. Authentication integration with dual-server support (UnifiedAuth)
+ * 4. Real-time sync via WebSocket
  * 
  * Uses the unified API modules for all operations
  */
 
-import { UnifiedAtome, UnifiedAuth, UnifiedSync, isAuthenticated, TauriAdapter, FastifyAdapter } from '../../squirrel/apis/unified/index.js';
+import { UnifiedAtome, UnifiedAuth, UnifiedSync, SyncWebSocket, isAuthenticated, TauriAdapter, FastifyAdapter } from '../../squirrel/apis/unified/index.js';
 import { getLocalServerUrl, getCloudServerUrl, isTauri } from '../../squirrel/apis/serverUrls.js';
 
 // ============================================================================
@@ -126,6 +127,20 @@ const wsSyncStatus = $('div', {
         fontSize: '14px'
     },
     text: '⚪ /ws/sync'
+});
+
+// WebSocket Atome Sync status (real-time)
+const wsAtomeSyncStatus = $('div', {
+    parent: statusBar,
+    id: 'ws-atome-sync-status',
+    css: {
+        padding: '8px 16px',
+        borderRadius: '20px',
+        backgroundColor: '#666',
+        color: 'white',
+        fontSize: '14px'
+    },
+    text: '⚪ /ws/atome-sync'
 });
 
 // Pending ops indicator
@@ -2190,6 +2205,56 @@ function connectSyncWebSocket() {
     };
 }
 
+// Connect to real-time atome sync WebSocket
+async function connectAtomeSyncWebSocket() {
+    log('Connecting to real-time atome sync...', 'info');
+    
+    try {
+        const connected = await UnifiedSync.connectRealtime({
+            onAtomeCreated: (data) => {
+                log(`🔔 [REALTIME] Atome created: ${data.atome?.id || 'unknown'}`, 'success');
+                // Refresh atome list to show new atome
+                loadUserAtomes();
+            },
+            onAtomeUpdated: (data) => {
+                log(`🔔 [REALTIME] Atome updated: ${data.atome?.id || 'unknown'}`, 'info');
+                // Refresh to show updated atome
+                loadUserAtomes();
+            },
+            onAtomeAltered: (data) => {
+                log(`🔔 [REALTIME] Atome altered: ${data.atomeId || 'unknown'}`, 'info');
+                // Refresh to show altered atome
+                loadUserAtomes();
+            },
+            onAtomeDeleted: (data) => {
+                log(`🔔 [REALTIME] Atome deleted: ${data.atomeId || 'unknown'}`, 'warn');
+                // Refresh to remove deleted atome
+                loadUserAtomes();
+            },
+            onConnected: (data) => {
+                log(`🟢 Real-time sync connected as ${data.clientId}`, 'success');
+                wsAtomeSyncStatus.style.backgroundColor = '#6bcb77';
+                wsAtomeSyncStatus.textContent = '🟢 /ws/atome-sync';
+            },
+            onDisconnected: (data) => {
+                log(`🔴 Real-time sync disconnected: ${data.reason || 'unknown'}`, 'warn');
+                wsAtomeSyncStatus.style.backgroundColor = '#ff6b6b';
+                wsAtomeSyncStatus.textContent = '🔴 /ws/atome-sync';
+            }
+        });
+
+        if (connected) {
+            log('Real-time atome sync connected successfully', 'success');
+        } else {
+            log('Failed to connect real-time atome sync', 'error');
+        }
+    } catch (error) {
+        log(`Real-time sync error: ${error.message}`, 'error');
+        wsAtomeSyncStatus.style.backgroundColor = '#ff6b6b';
+        wsAtomeSyncStatus.textContent = '❌ /ws/atome-sync';
+    }
+}
+
 // Initialize - detect servers first, then check auth
 (async () => {
     await detectAvailableServers();
@@ -2209,6 +2274,8 @@ function connectSyncWebSocket() {
     // Only connect WebSocket if Fastify is available
     if (fastifyServerAvailable) {
         connectSyncWebSocket();
+        // Connect real-time atome sync WebSocket
+        connectAtomeSyncWebSocket();
     }
 
     log('Socket & Atome Test initialized', 'success');

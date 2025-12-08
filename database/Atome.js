@@ -1,19 +1,18 @@
 import { EntitySchema } from "typeorm";
 
+/**
+ * Atome - ADOLE compliant document entity
+ * 
+ * Supports both legacy fields (user_id, project_id) and
+ * new ADOLE fields (kind, type, data, meta, logicalClock, etc.)
+ */
 export class Atome {
-  constructor(id, user_id, project_id, name_project) {
+  constructor(id, kind, type, data, meta) {
     this.id = id;
-    this.user_id = user_id;
-    this.project_id = project_id;
-    this.name_project = name_project;
-  }
-
-  canBeUsedBy(user) {
-    return this.user_id === user.id || user.hasPermission('admin');
-  }
-
-  belongsToProject(projectId) {
-    return this.project_id === projectId;
+    this.kind = kind || 'generic';
+    this.type = type || 'generic';
+    this.data = data || {};
+    this.meta = meta || {};
   }
 }
 
@@ -24,19 +23,74 @@ export const AtomeEntity = new EntitySchema({
   columns: {
     id: {
       primary: true,
-      type: "int",
-      generated: true,
+      type: "varchar",
+      length: 255,
     },
+    // ADOLE fields
+    kind: {
+      type: "varchar",
+      length: 100,
+      nullable: true,
+      default: "generic"
+    },
+    type: {
+      type: "varchar",
+      length: 100,
+      nullable: true,
+      default: "generic"
+    },
+    data: {
+      type: "jsonb",
+      nullable: true
+    },
+    meta: {
+      type: "jsonb",
+      nullable: true
+    },
+    parentId: {
+      type: "varchar",
+      length: 255,
+      nullable: true
+    },
+    logicalClock: {
+      type: "int",
+      nullable: true,
+      default: 1
+    },
+    deviceId: {
+      type: "varchar",
+      length: 255,
+      nullable: true
+    },
+    // Legacy fields (for backward compatibility)
     user_id: {
       type: "int",
+      nullable: true
     },
     project_id: {
       type: "int",
+      nullable: true
     },
     name_project: {
       type: "varchar",
       length: 255,
+      nullable: true
     },
+    // Timestamps
+    createdAt: {
+      type: "timestamp",
+      createDate: true,
+      nullable: true
+    },
+    updatedAt: {
+      type: "timestamp",
+      updateDate: true,
+      nullable: true
+    },
+    deletedAt: {
+      type: "timestamp",
+      nullable: true
+    }
   },
   relations: {
     user: {
@@ -44,12 +98,14 @@ export const AtomeEntity = new EntitySchema({
       target: "User",
       joinColumn: { name: "user_id" },
       inverseSide: "atomes",
+      nullable: true
     },
     project: {
       type: "many-to-one",
       target: "Project",
       joinColumn: { name: "project_id" },
       inverseSide: "atomes",
+      nullable: true
     },
   },
 });

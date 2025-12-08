@@ -5,6 +5,7 @@
  * Handles real-time sync between Tauri (local) and Fastify (cloud)
  * 
  * Features:
+ * - WebSocket-based real-time sync
  * - Automatic sync when both backends available
  * - Offline queue for pending changes
  * - Conflict detection and resolution
@@ -15,6 +16,7 @@
 
 import TauriAdapter from './adapters/TauriAdapter.js';
 import FastifyAdapter from './adapters/FastifyAdapter.js';
+import SyncWebSocket from './SyncWebSocket.js';
 
 // ============================================
 // SYNC STATE
@@ -328,6 +330,110 @@ const UnifiedSync = {
      */
     getConflicts() {
         return [...syncState.conflicts];
+    },
+
+    // ============================================
+    // WEBSOCKET REAL-TIME SYNC
+    // ============================================
+
+    /**
+     * Connect to real-time sync via WebSocket
+     * Automatically handles incoming sync events
+     * 
+     * @param {Object} [options] - Connection options
+     * @param {Function} [options.onAtomeCreated] - Callback when atome is created
+     * @param {Function} [options.onAtomeUpdated] - Callback when atome is updated
+     * @param {Function} [options.onAtomeAltered] - Callback when atome is altered
+     * @param {Function} [options.onAtomeDeleted] - Callback when atome is deleted
+     * @param {Function} [options.onConnected] - Callback when connected
+     * @param {Function} [options.onDisconnected] - Callback when disconnected
+     * @returns {Promise<boolean>} Connection success
+     * 
+     * @example
+     * await UnifiedSync.connectRealtime({
+     *     onAtomeCreated: (data) => console.log('New atome:', data.atome),
+     *     onConnected: () => console.log('Real-time sync connected!')
+     * });
+     */
+    async connectRealtime(options = {}) {
+        try {
+            // Set up event handlers before connecting
+            if (options.onAtomeCreated) {
+                SyncWebSocket.on('atome:created', options.onAtomeCreated);
+            }
+            if (options.onAtomeUpdated) {
+                SyncWebSocket.on('atome:updated', options.onAtomeUpdated);
+            }
+            if (options.onAtomeAltered) {
+                SyncWebSocket.on('atome:altered', options.onAtomeAltered);
+            }
+            if (options.onAtomeDeleted) {
+                SyncWebSocket.on('atome:deleted', options.onAtomeDeleted);
+            }
+            if (options.onConnected) {
+                SyncWebSocket.on('sync:connected', options.onConnected);
+            }
+            if (options.onDisconnected) {
+                SyncWebSocket.on('sync:disconnected', options.onDisconnected);
+            }
+
+            // Connect with auth token if available
+            const token = FastifyAdapter.getToken();
+            await SyncWebSocket.connect({ token });
+
+            console.log('[UnifiedSync] Real-time sync connected');
+            return true;
+        } catch (error) {
+            console.error('[UnifiedSync] Failed to connect real-time sync:', error);
+            return false;
+        }
+    },
+
+    /**
+     * Disconnect from real-time sync
+     */
+    disconnectRealtime() {
+        SyncWebSocket.disconnect();
+        console.log('[UnifiedSync] Real-time sync disconnected');
+    },
+
+    /**
+     * Check if real-time sync is connected
+     * 
+     * @returns {boolean} True if connected
+     */
+    isRealtimeConnected() {
+        return SyncWebSocket.isConnected();
+    },
+
+    /**
+     * Get real-time sync connection state
+     * 
+     * @returns {Object} { connected, clientId, reconnectAttempts }
+     */
+    getRealtimeState() {
+        return SyncWebSocket.getState();
+    },
+
+    /**
+     * Subscribe to a specific sync event
+     * 
+     * @param {string} eventType - Event type (atome:created, atome:updated, etc.)
+     * @param {Function} callback - Callback function
+     * @returns {Function} Unsubscribe function
+     */
+    on(eventType, callback) {
+        return SyncWebSocket.on(eventType, callback);
+    },
+
+    /**
+     * Unsubscribe from a sync event
+     * 
+     * @param {string} eventType - Event type
+     * @param {Function} callback - Callback to remove
+     */
+    off(eventType, callback) {
+        SyncWebSocket.off(eventType, callback);
     }
 };
 
