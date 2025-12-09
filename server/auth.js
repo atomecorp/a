@@ -494,7 +494,17 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      */
     server.get('/api/auth/me', async (request, reply) => {
         try {
-            const token = request.cookies.access_token;
+            // Accept token from cookie OR Authorization header
+            let token = request.cookies.access_token;
+            
+            // Fallback to Authorization header if no cookie
+            if (!token) {
+                const authHeader = request.headers.authorization;
+                if (authHeader && authHeader.startsWith('Bearer ')) {
+                    token = authHeader.substring(7);
+                }
+            }
+            
             if (!token) {
                 // Return 200 with success:false to avoid browser console error
                 return { success: false, authenticated: false };
