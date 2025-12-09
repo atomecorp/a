@@ -150,7 +150,10 @@ export function registerAtomeRoutes(server, dataSource) {
             // Ensure user exists in ORM
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
-            const { id, kind, tag, parent, properties, data, project_id } = request.body;
+            // Accept both camelCase and snake_case for compatibility
+            const parentId = request.body.parentId || request.body.parent_id;
+            const projectId = request.body.projectId || request.body.project_id;
+            const { id, kind, tag, properties, data } = request.body;
 
             // Also check for ID in data object (sent by UnifiedAtome)
             const providedId = id || data?.id;
@@ -176,20 +179,20 @@ export function registerAtomeRoutes(server, dataSource) {
                 ...mergedProperties,
                 kind: kind || 'generic',
                 tag: tag || 'div',
-                parent: parent || null,
-                project_id: project_id || null,
-                original_id: id || null,  // Keep original ID if provided
-                created_source: 'fastify',  // Track where the atome was created
-                created_server: process.env.SQUIRREL_SERVER_ID || 'fastify-dev'
+                parentId: parentId || null,
+                projectId: projectId || null,
+                originalId: id || null,  // Keep original ID if provided
+                createdSource: 'fastify',  // Track where the atome was created
+                createdServer: process.env.SQUIRREL_SERVER_ID || 'fastify-dev'
             };
 
-            // Create atome via ORM
+            // Create atome via ORM (internal uses snake_case for DB)
             const { object_id } = await db.createAtome({
                 object_id: atomeId,
                 tenant_id: tenant_id,
                 created_by: principal_id,
                 kind: kind || 'generic',
-                parent_id: parent || null,
+                parent_id: parentId || null,
                 properties: allProperties
             });
 
@@ -202,13 +205,13 @@ export function registerAtomeRoutes(server, dataSource) {
             broadcastMessage('atome:created', {
                 atome: {
                     id: object_id,
-                    original_id: id || null,  // Client's original ID for dedup
+                    originalId: id || null,  // Client's original ID for dedup
                     kind,
                     tag,
-                    parent,
+                    parentId,
                     properties: mergedProperties,
-                    created_at: new Date().toISOString(),
-                    created_by: principal_id
+                    createdAt: new Date().toISOString(),
+                    createdBy: principal_id
                 }
             }, senderClientId);  // Exclude sender from broadcast
 
@@ -218,9 +221,9 @@ export function registerAtomeRoutes(server, dataSource) {
                     id: object_id,
                     kind,
                     tag,
-                    parent,
+                    parentId,
                     properties,
-                    created_at: new Date().toISOString()
+                    createdAt: new Date().toISOString()
                 }
             };
 
@@ -393,10 +396,10 @@ export function registerAtomeRoutes(server, dataSource) {
                     id: atome.object_id,
                     kind: atome.properties.kind,
                     tag: atome.properties.tag,
-                    parent: atome.properties.parent,
+                    parentId: atome.properties.parentId || atome.parent_id,
                     properties: atome.properties,
-                    created_at: atome.created_at,
-                    created_by: atome.created_by
+                    createdAt: atome.created_at,
+                    createdBy: atome.created_by
                 }
             };
 
@@ -419,27 +422,33 @@ export function registerAtomeRoutes(server, dataSource) {
             await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
-            const { project_id, kind, parent } = request.query;
+            // Accept both camelCase and snake_case for compatibility
+            const parentId = request.query.parentId || request.query.parent_id;
+            const projectId = request.query.projectId || request.query.project_id;
+            const { kind } = request.query;
 
             console.log(`[Atome] LIST - Looking for atomes for user: ${principal_id}`);
 
             // Get all atomes for this user
             const atomes = await db.getAtomesByUser(principal_id);
 
-            // Apply filters
+            // Apply filters and map to camelCase response
             let results = atomes.map(atome => ({
                 id: atome.object_id,
                 kind: atome.properties.kind || atome.kind,
                 tag: atome.properties.tag,
-                parent: atome.properties.parent,
+                parentId: atome.properties.parentId || atome.properties.parent_id || atome.parent_id,
                 properties: atome.properties,
-                created_at: atome.created_at,
-                created_by: atome.created_by
+                createdAt: atome.created_at,
+                createdBy: atome.created_by
             }));
 
-            // Filter by project_id
-            if (project_id) {
-                results = results.filter(a => a.properties.project_id === project_id);
+            // Filter by projectId
+            if (projectId) {
+                results = results.filter(a =>
+                    a.properties.projectId === projectId ||
+                    a.properties.project_id === projectId
+                );
             }
 
             // Filter by kind
@@ -447,9 +456,13 @@ export function registerAtomeRoutes(server, dataSource) {
                 results = results.filter(a => a.kind === kind);
             }
 
-            // Filter by parent
-            if (parent) {
-                results = results.filter(a => a.parent === parent);
+            // Filter by parentId
+            if (parentId) {
+                results = results.filter(a =>
+                    a.parentId === parentId ||
+                    a.properties?.parentId === parentId ||
+                    a.properties?.parent_id === parentId
+                );
             }
 
             console.log(`📋 [Atome] List for user ${principal_id}: ${results.length} atomes`);

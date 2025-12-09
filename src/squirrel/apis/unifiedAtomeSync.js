@@ -488,7 +488,7 @@ async function synchronizeServers() {
 }
 
 /**
- * Format atome data for server API
+ * Format atome data for server API (uses camelCase)
  */
 function formatAtomeForServer(atome) {
     return {
@@ -497,9 +497,9 @@ function formatAtomeForServer(atome) {
         tag: atome.tag || 'div',
         data: atome.data || atome.properties || {},
         properties: atome.properties || atome.data || {},
-        parent_id: atome.parent_id || atome.parentId,
-        created_at: atome.created_at || atome.createdAt,
-        updated_at: atome.updated_at || atome.updatedAt
+        parentId: atome.parentId || atome.parent_id,
+        createdAt: atome.createdAt || atome.created_at,
+        updatedAt: atome.updatedAt || atome.updated_at
     };
 }
 
@@ -586,8 +586,8 @@ const UnifiedAtome = {
             tag: data.tag || 'div',
             data: data.data || data.properties || {},
             properties: data.properties || data.data || {},
-            parent_id: data.parent_id || data.parentId,
-            project_id: data.project_id
+            parentId: data.parentId || data.parent_id,
+            projectId: data.projectId || data.project_id
         };
 
         let created = false;
@@ -649,7 +649,7 @@ const UnifiedAtome = {
             data: data.data || data.properties || data,
             properties: data.properties || data.data || data,
             kind: data.kind,
-            parent_id: data.parent_id || data.parentId
+            parentId: data.parentId || data.parent_id
         };
 
         let updated = false;
@@ -774,7 +774,7 @@ const UnifiedAtome = {
 
         const queryParams = new URLSearchParams();
         if (options.kind) queryParams.set('kind', options.kind);
-        if (options.parent_id) queryParams.set('parentId', options.parent_id);
+        if (options.parentId) queryParams.set('parentId', options.parentId);
         if (options.limit) queryParams.set('limit', options.limit);
         if (options.offset) queryParams.set('offset', options.offset);
 

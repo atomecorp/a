@@ -8,7 +8,7 @@
  * 4. User logged in Fastify stays logged in until logout
  */
 
-import { UnifiedAuth } from '../../squirrel/apis/unified/index.js';
+import { UnifiedAuth, UnifiedAtome } from '../../squirrel/apis/unified/index.js';
 import { TauriAdapter, FastifyAdapter, checkBackends } from '../../squirrel/apis/unified/_shared.js';
 
 // ============================================================================
@@ -384,6 +384,8 @@ async function loginOnTauri() {
 
     if (result.success) {
       log(`✅ Logged in on Tauri! Token: ${result.token?.substring(0, 30)}...`, 'success');
+      // Auto-load atomes after login
+      await loadAndSyncAtomes();
     } else {
       log(`❌ Login failed: ${result.error || 'Unknown error'}`, 'error');
     }
@@ -410,6 +412,8 @@ async function loginOnFastify() {
 
     if (result.success) {
       log(`✅ Logged in on Fastify! Token: ${result.token?.substring(0, 30)}...`, 'success');
+      // Auto-load atomes after login
+      await loadAndSyncAtomes();
     } else {
       log(`❌ Login failed: ${result.error}`, 'error');
     }
@@ -856,11 +860,961 @@ createButton('🔄 Refresh Status', updateStatus, '#9c27b0');
 createButton('🧪 Run All Tests', runAllTests, '#00bcd4');
 
 // ============================================================================
+// ATOME TESTS SECTION
+// ============================================================================
+
+$('h3', {
+  parent: container,
+  text: '⚛️ Atome CRUD Tests',
+  css: { marginTop: '30px', borderTop: '2px solid #666', paddingTop: '20px' }
+});
+
+// Atome test area
+const atomePanel = $('div', {
+  parent: container,
+  css: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '15px' }
+});
+
+// Visual area for atomes
+const atomeArea = $('div', {
+  parent: container,
+  id: 'atome-area',
+  css: {
+    minHeight: '100px',
+    padding: '10px',
+    backgroundColor: '#1a1a2e',
+    borderRadius: '8px',
+    display: 'flex',
+    gap: '10px',
+    flexWrap: 'wrap',
+    marginBottom: '15px'
+  }
+});
+
+// Selected atome tracking
+let selectedAtomeId = null;
+let selectedAtomeEl = null;
+
+/**
+ * Load and sync atomes from both servers
+ * - Fetches atomes from Tauri and Fastify
+ * - Syncs missing atomes to the other server
+ * - Displays all atomes in the visual area
+ */
+async function loadAndSyncAtomes() {
+  log('🔄 Loading and syncing atomes...', 'info');
+
+  const tauriToken = TauriAdapter.getToken();
+  const fastifyToken = FastifyAdapter.getToken();
+
+  let tauriAtomes = [];
+  let fastifyAtomes = [];
+
+  // Fetch from Tauri
+  if (tauriToken) {
+    try {
+      const result = await TauriAdapter.atome.list({ kind: 'shape' });
+      if (result.success) {
+        tauriAtomes = result.data || result.atomes || [];
+        log(`📦 Tauri: ${tauriAtomes.length} atome(s)`, 'info');
+      }
+    } catch (e) {
+      log(`⚠️ Tauri list error: ${e.message}`, 'warn');
+    }
+  }
+
+  // Fetch from Fastify
+  if (fastifyToken) {
+    try {
+      const result = await FastifyAdapter.atome.list({ kind: 'shape' });
+      if (result.success) {
+        fastifyAtomes = result.data || result.atomes || [];
+        log(`📦 Fastify: ${fastifyAtomes.length} atome(s)`, 'info');
+      }
+    } catch (e) {
+      log(`⚠️ Fastify list error: ${e.message}`, 'warn');
+    }
+  }
+
+  // Build ID sets for comparison
+  const tauriIds = new Set(tauriAtomes.map(a => a.id));
+  const fastifyIds = new Set(fastifyAtomes.map(a => a.id));
+
+  // Sync Tauri → Fastify (atomes missing on Fastify)
+  if (fastifyToken) {
+    for (const atome of tauriAtomes) {
+      if (!fastifyIds.has(atome.id)) {
+        log(`🔄 Syncing to Fastify: ${atome.id.substring(0, 8)}`, 'info');
+        try {
+          await FastifyAdapter.atome.create({
+            id: atome.id,
+            kind: atome.kind || 'shape',
+            type: atome.type || 'div',
+            data: atome.properties || atome.data || {}
+          });
+        } catch (e) {
+          log(`⚠️ Sync to Fastify failed: ${e.message}`, 'warn');
+        }
+      }
+    }
+  }
+
+  // Sync Fastify → Tauri (atomes missing on Tauri)
+  if (tauriToken) {
+    for (const atome of fastifyAtomes) {
+      if (!tauriIds.has(atome.id)) {
+        log(`🔄 Syncing to Tauri: ${atome.id.substring(0, 8)}`, 'info');
+        try {
+          await TauriAdapter.atome.create({
+            id: atome.id,
+            kind: atome.kind || 'shape',
+            type: atome.type || 'div',
+            data: atome.properties || atome.data || {}
+          });
+        } catch (e) {
+          log(`⚠️ Sync to Tauri failed: ${e.message}`, 'warn');
+        }
+      }
+    }
+  }
+
+  // Merge and dedupe all atomes
+  const allAtomesMap = new Map();
+  [...tauriAtomes, ...fastifyAtomes].forEach(a => {
+    if (!allAtomesMap.has(a.id)) {
+      allAtomesMap.set(a.id, a);
+    }
+  });
+  const allAtomes = Array.from(allAtomesMap.values());
+
+  log(`✅ Total unique atomes: ${allAtomes.length}`, 'success');
+
+  // Display in visual area
+  const area = document.getElementById('atome-area');
+  if (area) {
+    area.innerHTML = '';
+    selectedAtomeId = null;
+    selectedAtomeEl = null;
+
+    allAtomes.forEach(atome => {
+      const css = atome.properties?.css || atome.data?.css || {};
+      $('div', {
+        parent: area,
+        id: atome.id,
+        css: {
+          width: css.width || '60px',
+          height: css.height || '60px',
+          backgroundColor: css.backgroundColor || '#666',
+          borderRadius: css.borderRadius || '8px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', color: 'white', fontWeight: 'bold'
+        },
+        text: atome.properties?.text || atome.data?.text || '⚛️',
+        onclick: function () {
+          if (selectedAtomeEl) selectedAtomeEl.style.outline = 'none';
+          selectedAtomeId = atome.id;
+          selectedAtomeEl = this;
+          this.style.outline = '3px solid #2196f3';
+          log(`Selected: ${atome.id.substring(0, 8)}`, 'info');
+        }
+      });
+    });
+  }
+}
+
+// Helper function for atome buttons
+function createAtomeButton(text, onClick, color = '#1976d2') {
+  return $('button', {
+    parent: atomePanel,
+    text: text,
+    css: {
+      padding: '8px 12px',
+      backgroundColor: color,
+      color: 'white',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontWeight: 'bold',
+      fontSize: '12px'
+    },
+    onclick: onClick
+  });
+}
+
+// Create Atome - creates on BOTH servers with same ID, linked to current project
+createAtomeButton('➕ Create Atome', async () => {
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+  log(`🔍 Tokens - Tauri: ${localToken ? 'yes' : 'no'}, Fastify: ${cloudToken ? 'yes' : 'no'}`, 'info');
+
+  if (!localToken && !cloudToken) {
+    log('❌ Please login first', 'error');
+    return;
+  }
+
+  if (!currentProjectId) {
+    log('❌ Create or open a project first', 'warn');
+    return;
+  }
+
+  const atomeId = crypto.randomUUID();
+  const color = `hsl(${Math.random() * 360}, 70%, 60%)`;
+
+  const atomeData = {
+    id: atomeId,
+    kind: 'shape',
+    type: 'div',
+    parentId: currentProjectId, // Link to current project
+    data: {
+      id: atomeId,
+      css: { width: '60px', height: '60px', backgroundColor: color, borderRadius: '8px' },
+      text: '⚛️'
+    }
+  };
+
+  log(`⚛️ Creating atome ${atomeId.substring(0, 8)} on both servers...`, 'info');
+
+  let tauriOk = false;
+  let fastifyOk = false;
+
+  // Create on Tauri
+  if (localToken) {
+    try {
+      const result = await TauriAdapter.atome.create(atomeData);
+      tauriOk = result.success;
+      log(`📦 Tauri: ${result.success ? '✅' : '❌'} ${result.error || ''}`, result.success ? 'success' : 'error');
+    } catch (e) {
+      log(`📦 Tauri: ❌ ${e.message}`, 'error');
+    }
+  }
+
+  // Create on Fastify with SAME ID
+  if (cloudToken) {
+    try {
+      const result = await FastifyAdapter.atome.create(atomeData);
+      fastifyOk = result.success;
+      log(`📦 Fastify: ${result.success ? '✅' : '❌'} ${result.error || ''}`, result.success ? 'success' : 'error');
+    } catch (e) {
+      log(`📦 Fastify: ❌ ${e.message}`, 'error');
+    }
+  }
+
+  if (tauriOk || fastifyOk) {
+    log(`✅ Atome created: ${atomeId.substring(0, 8)} (Tauri: ${tauriOk}, Fastify: ${fastifyOk})`, 'success');
+    // Add visual
+    $('div', {
+      parent: atomeArea,
+      id: atomeId,
+      css: {
+        width: '60px', height: '60px', backgroundColor: color, borderRadius: '8px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', color: 'white', fontWeight: 'bold'
+      },
+      text: '⚛️',
+      onclick: function () {
+        if (selectedAtomeEl) selectedAtomeEl.style.outline = 'none';
+        selectedAtomeId = atomeId;
+        selectedAtomeEl = this;
+        this.style.outline = '3px solid #2196f3';
+        log(`Selected: ${atomeId.substring(0, 8)}`, 'info');
+      }
+    });
+  } else {
+    log(`❌ Create failed on both servers`, 'error');
+  }
+}, '#4caf50');
+
+// Update Atome
+createAtomeButton('✏️ Update Selected', async () => {
+  if (!selectedAtomeId) {
+    log('❌ Select an atome first', 'warn');
+    return;
+  }
+
+  const newColor = `hsl(${Math.random() * 360}, 70%, 60%)`;
+  log(`✏️ Updating atome ${selectedAtomeId.substring(0, 8)}...`, 'info');
+
+  const result = await UnifiedAtome.update(selectedAtomeId, {
+    kind: 'shape',
+    type: 'div',
+    data: {
+      id: selectedAtomeId,
+      css: { width: '60px', height: '60px', backgroundColor: newColor, borderRadius: '50%' },
+      text: '🔄'
+    }
+  });
+
+  if (result.success || result.tauri?.success || result.fastify?.success) {
+    log(`✅ Atome updated: ${selectedAtomeId.substring(0, 8)}`, 'success');
+    if (selectedAtomeEl) {
+      selectedAtomeEl.style.backgroundColor = newColor;
+      selectedAtomeEl.style.borderRadius = '50%';
+      selectedAtomeEl.textContent = '🔄';
+    }
+  } else {
+    log(`❌ Update failed: ${result.error || JSON.stringify(result)}`, 'error');
+  }
+}, '#ff9800');
+
+// Delete Atome
+createAtomeButton('🗑️ Delete Selected', async () => {
+  if (!selectedAtomeId) {
+    log('❌ Select an atome first', 'warn');
+    return;
+  }
+
+  log(`🗑️ Deleting atome ${selectedAtomeId.substring(0, 8)}...`, 'info');
+
+  const result = await UnifiedAtome.delete(selectedAtomeId);
+
+  if (result.success || result.tauri?.success || result.fastify?.success) {
+    log(`✅ Atome deleted: ${selectedAtomeId.substring(0, 8)}`, 'success');
+    if (selectedAtomeEl) selectedAtomeEl.remove();
+    selectedAtomeId = null;
+    selectedAtomeEl = null;
+  } else {
+    log(`❌ Delete failed: ${result.error || JSON.stringify(result)}`, 'error');
+  }
+}, '#f44336');
+
+// List Atomes
+createAtomeButton('📋 List My Atomes', async () => {
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+  log(`🔍 Tokens - Tauri: ${localToken ? 'yes' : 'no'}, Fastify: ${cloudToken ? 'yes' : 'no'}`, 'info');
+  log('📋 Loading atomes...', 'info');
+
+  const result = await UnifiedAtome.list({ kind: 'shape' });
+
+  // Log full result for debugging
+  log(`📦 Raw result: ${JSON.stringify(result).substring(0, 300)}`, 'info');
+
+  // Handle different result formats
+  const atomes = result.data || result.atomes || [];
+
+  if (result.success && atomes.length > 0) {
+    log(`✅ Found ${atomes.length} atome(s) (backends: Tauri=${result.backends?.tauri}, Fastify=${result.backends?.fastify})`, 'success');
+
+    // Clear and rebuild visual area
+    atomeArea.innerHTML = '';
+    selectedAtomeId = null;
+    selectedAtomeEl = null;
+
+    atomes.forEach(atome => {
+      const css = atome.properties?.css || atome.data?.css || {};
+      const el = $('div', {
+        parent: atomeArea,
+        id: atome.id,
+        css: {
+          width: css.width || '60px',
+          height: css.height || '60px',
+          backgroundColor: css.backgroundColor || '#666',
+          borderRadius: css.borderRadius || '8px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', color: 'white', fontWeight: 'bold'
+        },
+        text: atome.properties?.text || atome.data?.text || '⚛️',
+        onclick: function () {
+          if (selectedAtomeEl) selectedAtomeEl.style.outline = 'none';
+          selectedAtomeId = atome.id;
+          selectedAtomeEl = this;
+          this.style.outline = '3px solid #2196f3';
+          log(`Selected: ${atome.id.substring(0, 8)}`, 'info');
+        }
+      });
+    });
+  } else if (result.success) {
+    log(`ℹ️ No atomes found`, 'info');
+    atomeArea.innerHTML = '';
+  } else {
+    log(`❌ List failed: ${result.error || 'Unknown error'}`, 'error');
+  }
+}, '#2196f3');
+
+// Share input and button
+const shareInput = $('input', {
+  parent: atomePanel,
+  placeholder: 'Target user phone',
+  css: { padding: '8px', borderRadius: '4px', border: '1px solid #ccc', width: '150px' }
+});
+
+createAtomeButton('🔗 Share Selected', async () => {
+  if (!selectedAtomeId) {
+    log('❌ Select an atome first', 'warn');
+    return;
+  }
+  const targetPhone = shareInput.value.trim();
+  if (!targetPhone) {
+    log('❌ Enter target user phone', 'warn');
+    return;
+  }
+
+  log(`🔗 Sharing atome with ${targetPhone}...`, 'info');
+
+  // Get target user ID from phone
+  const token = localStorage.getItem('cloud_auth_token') || localStorage.getItem('local_auth_token');
+  const baseUrl = localStorage.getItem('cloud_auth_token') ? 'http://localhost:3001' : 'http://localhost:3000';
+
+  try {
+    const resp = await fetch(`${baseUrl}/api/share/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        resource_type: 'atome',
+        resource_id: selectedAtomeId,
+        target_phone: targetPhone,
+        permission: 'read'
+      })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      log(`✅ Shared with ${targetPhone}!`, 'success');
+    } else {
+      log(`❌ Share failed: ${data.error}`, 'error');
+    }
+  } catch (e) {
+    log(`❌ Share error: ${e.message}`, 'error');
+  }
+}, '#9c27b0');
+
+// ============================================================================
 // INIT
+// ============================================================================
+
+// Current project tracking
+let currentProjectId = localStorage.getItem('current_project_id') || null;
+let currentProjectName = localStorage.getItem('current_project_name') || 'No Project';
+
+// ============================================================================
+// PROJECT MANAGEMENT
+// ============================================================================
+
+$('h3', {
+  parent: container,
+  text: '📁 Project Management',
+  css: { marginTop: '30px', borderTop: '2px solid #666', paddingTop: '20px' }
+});
+
+const projectPanel = $('div', {
+  parent: container,
+  css: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '15px', alignItems: 'center' }
+});
+
+// Project status display
+const projectStatus = $('div', {
+  parent: projectPanel,
+  id: 'project-status',
+  css: {
+    padding: '8px 16px',
+    backgroundColor: '#2a2a4a',
+    borderRadius: '4px',
+    color: '#fff',
+    fontWeight: 'bold'
+  },
+  text: `📁 ${currentProjectName}`
+});
+
+// Project name input
+const projectNameInput = $('input', {
+  parent: projectPanel,
+  placeholder: 'Project name',
+  css: { padding: '8px', borderRadius: '4px', border: '1px solid #ccc', width: '150px' }
+});
+
+// Helper for project buttons
+function createProjectButton(text, onClick, color = '#1976d2') {
+  return $('button', {
+    parent: projectPanel,
+    text: text,
+    css: {
+      padding: '8px 12px',
+      backgroundColor: color,
+      color: 'white',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      fontWeight: 'bold',
+      fontSize: '12px'
+    },
+    onclick: onClick
+  });
+}
+
+/**
+ * Create a new project (kind: "project")
+ */
+createProjectButton('➕ Create Project', async () => {
+  const name = projectNameInput.value.trim();
+  if (!name) {
+    log('❌ Enter project name', 'warn');
+    return;
+  }
+
+  const projectId = crypto.randomUUID();
+  const projectData = {
+    id: projectId,
+    kind: 'project',
+    type: 'container',
+    data: {
+      id: projectId,
+      name: name,
+      created_at: new Date().toISOString()
+    }
+  };
+
+  log(`📁 Creating project "${name}"...`, 'info');
+
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+
+  let tauriOk = false;
+  let fastifyOk = false;
+
+  // Create on both servers
+  if (localToken) {
+    try {
+      const result = await TauriAdapter.atome.create(projectData);
+      tauriOk = result.success;
+    } catch (e) { }
+  }
+  if (cloudToken) {
+    try {
+      const result = await FastifyAdapter.atome.create(projectData);
+      fastifyOk = result.success;
+    } catch (e) { }
+  }
+
+  if (tauriOk || fastifyOk) {
+    log(`✅ Project created: ${name} (${projectId.substring(0, 8)})`, 'success');
+    // Set as current project
+    currentProjectId = projectId;
+    currentProjectName = name;
+    localStorage.setItem('current_project_id', projectId);
+    localStorage.setItem('current_project_name', name);
+    projectStatus.textContent = `📁 ${name}`;
+    projectNameInput.value = '';
+    // Clear atome area for new project
+    atomeArea.innerHTML = '';
+    selectedAtomeId = null;
+    selectedAtomeEl = null;
+  } else {
+    log(`❌ Failed to create project`, 'error');
+  }
+}, '#4caf50');
+
+/**
+ * Open an existing project - shows a list to choose from
+ */
+createProjectButton('📂 Open Project', async () => {
+  log('📂 Loading projects...', 'info');
+
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+
+  let projects = [];
+
+  // Fetch projects from both servers
+  if (localToken) {
+    try {
+      const result = await TauriAdapter.atome.list({ kind: 'project' });
+      if (result.success) {
+        (result.data || result.atomes || []).forEach(p => {
+          if (!projects.find(x => x.id === p.id)) projects.push(p);
+        });
+      }
+    } catch (e) { }
+  }
+  if (cloudToken) {
+    try {
+      const result = await FastifyAdapter.atome.list({ kind: 'project' });
+      if (result.success) {
+        (result.data || result.atomes || []).forEach(p => {
+          if (!projects.find(x => x.id === p.id)) projects.push(p);
+        });
+      }
+    } catch (e) { }
+  }
+
+  if (projects.length === 0) {
+    log('ℹ️ No projects found. Create one first.', 'info');
+    return;
+  }
+
+  // Create project selection UI (no system dialogs!)
+  // Remove any existing selector
+  const existingSelector = document.getElementById('project-selector-modal');
+  if (existingSelector) existingSelector.remove();
+
+  const modal = $('div', {
+    id: 'project-selector-modal',
+    css: {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: '9999'
+    }
+  });
+
+  const panel = $('div', {
+    parent: modal,
+    css: {
+      backgroundColor: '#2a2a2a',
+      borderRadius: '12px',
+      padding: '20px',
+      minWidth: '300px',
+      maxWidth: '400px',
+      maxHeight: '80vh',
+      overflowY: 'auto'
+    }
+  });
+
+  $('div', {
+    parent: panel,
+    text: '📂 Select Project',
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '15px', color: 'white' }
+  });
+
+  // Create a button for each project
+  projects.forEach((project) => {
+    const name = project.data?.name || project.properties?.name || project.id.substring(0, 8);
+    $('div', {
+      parent: panel,
+      text: `📁 ${name}`,
+      css: {
+        padding: '12px 16px',
+        margin: '5px 0',
+        backgroundColor: '#3a3a3a',
+        borderRadius: '8px',
+        cursor: 'pointer',
+        color: 'white',
+        transition: 'background-color 0.2s'
+      },
+      onmouseover: function() { this.style.backgroundColor = '#4a4a4a'; },
+      onmouseout: function() { this.style.backgroundColor = '#3a3a3a'; },
+      onclick: async function() {
+        currentProjectId = project.id;
+        currentProjectName = name;
+        localStorage.setItem('current_project_id', currentProjectId);
+        localStorage.setItem('current_project_name', currentProjectName);
+        projectStatus.textContent = `📁 ${currentProjectName}`;
+        log(`✅ Opened project: ${currentProjectName}`, 'success');
+        modal.remove();
+        await loadProjectAtomes(currentProjectId);
+      }
+    });
+  });
+
+  // Cancel button
+  $('div', {
+    parent: panel,
+    text: '❌ Cancel',
+    css: {
+      padding: '12px 16px',
+      marginTop: '15px',
+      backgroundColor: '#666',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      color: 'white',
+      textAlign: 'center'
+    },
+    onclick: function() { modal.remove(); }
+  });
+}, '#2196f3');
+
+/**
+ * Delete the current project (without deleting its atomes)
+ */
+createProjectButton('🗑️ Delete Project', async () => {
+  if (!currentProjectId) {
+    log('❌ No project selected', 'warn');
+    return;
+  }
+
+  // Create confirmation modal (no system dialogs!)
+  const existingModal = document.getElementById('delete-confirm-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = $('div', {
+    id: 'delete-confirm-modal',
+    css: {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: '9999'
+    }
+  });
+
+  const panel = $('div', {
+    parent: modal,
+    css: {
+      backgroundColor: '#2a2a2a',
+      borderRadius: '12px',
+      padding: '20px',
+      minWidth: '300px',
+      maxWidth: '400px'
+    }
+  });
+
+  $('div', {
+    parent: panel,
+    text: '🗑️ Delete Project?',
+    css: { fontSize: '18px', fontWeight: 'bold', marginBottom: '10px', color: 'white' }
+  });
+
+  $('div', {
+    parent: panel,
+    text: `Are you sure you want to delete "${currentProjectName}"?`,
+    css: { marginBottom: '20px', color: '#ccc' }
+  });
+
+  const buttonContainer = $('div', {
+    parent: panel,
+    css: { display: 'flex', gap: '10px', justifyContent: 'flex-end' }
+  });
+
+  // Cancel button
+  $('div', {
+    parent: buttonContainer,
+    text: '❌ Cancel',
+    css: {
+      padding: '10px 20px',
+      backgroundColor: '#666',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      color: 'white'
+    },
+    onclick: function() { modal.remove(); }
+  });
+
+  // Confirm delete button
+  $('div', {
+    parent: buttonContainer,
+    text: '🗑️ Delete',
+    css: {
+      padding: '10px 20px',
+      backgroundColor: '#f44336',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      color: 'white'
+    },
+    onclick: async function() {
+      modal.remove();
+      log(`🗑️ Deleting project "${currentProjectName}"...`, 'info');
+
+      const localToken = localStorage.getItem('local_auth_token');
+      const cloudToken = localStorage.getItem('cloud_auth_token');
+
+      // Delete from both servers
+      if (localToken) {
+        try {
+          await TauriAdapter.atome.delete(currentProjectId);
+        } catch (e) { }
+      }
+      if (cloudToken) {
+        try {
+          await FastifyAdapter.atome.delete(currentProjectId);
+        } catch (e) { }
+      }
+
+      log(`✅ Project deleted: ${currentProjectName}`, 'success');
+
+      // Clear current project
+      currentProjectId = null;
+      currentProjectName = 'No Project';
+      localStorage.removeItem('current_project_id');
+      localStorage.removeItem('current_project_name');
+      projectStatus.textContent = `📁 No Project`;
+    }
+  });
+}, '#f44336');
+
+/**
+ * Load atomes for a specific project
+ */
+async function loadProjectAtomes(projectId) {
+  log(`📦 Loading atomes for project ${projectId?.substring(0, 8) || 'all'}...`, 'info');
+
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+
+  let allAtomes = new Map();
+
+  // Fetch from Tauri
+  if (localToken) {
+    try {
+      const result = await TauriAdapter.atome.list({ kind: 'shape', parentId: projectId });
+      if (result.success) {
+        (result.data || result.atomes || []).forEach(a => allAtomes.set(a.id, a));
+      }
+    } catch (e) { }
+  }
+
+  // Fetch from Fastify
+  if (cloudToken) {
+    try {
+      const result = await FastifyAdapter.atome.list({ kind: 'shape', parentId: projectId });
+      if (result.success) {
+        (result.data || result.atomes || []).forEach(a => allAtomes.set(a.id, a));
+      }
+    } catch (e) { }
+  }
+
+  const atomes = Array.from(allAtomes.values());
+  log(`✅ Loaded ${atomes.length} atome(s)`, 'success');
+
+  // Display
+  atomeArea.innerHTML = '';
+  selectedAtomeId = null;
+  selectedAtomeEl = null;
+
+  atomes.forEach(atome => {
+    const css = atome.properties?.css || atome.data?.css || {};
+    $('div', {
+      parent: atomeArea,
+      id: atome.id,
+      css: {
+        width: css.width || '60px',
+        height: css.height || '60px',
+        backgroundColor: css.backgroundColor || '#666',
+        borderRadius: css.borderRadius || '8px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'pointer', color: 'white', fontWeight: 'bold'
+      },
+      text: atome.properties?.text || atome.data?.text || '⚛️',
+      onclick: function () {
+        if (selectedAtomeEl) selectedAtomeEl.style.outline = 'none';
+        selectedAtomeId = atome.id;
+        selectedAtomeEl = this;
+        this.style.outline = '3px solid #2196f3';
+        log(`Selected: ${atome.id.substring(0, 8)}`, 'info');
+      }
+    });
+  });
+}
+
+// ============================================================================
+// REAL-TIME SYNC LISTENERS
+// ============================================================================
+
+/**
+ * Listen for real-time atome events from WebSocket
+ */
+window.addEventListener('squirrel:atome-created', (e) => {
+  const atome = e.detail;
+  if (!atome?.id) return;
+
+  // Check if already displayed
+  if (document.getElementById(atome.id)) return;
+
+  log(`🔔 [RT] Atome created: ${atome.id.substring(0, 8)}`, 'success');
+
+  // Add to visual area
+  const css = atome.properties?.css || atome.data?.css || {};
+  $('div', {
+    parent: atomeArea,
+    id: atome.id,
+    css: {
+      width: css.width || '60px',
+      height: css.height || '60px',
+      backgroundColor: css.backgroundColor || '#666',
+      borderRadius: css.borderRadius || '8px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      cursor: 'pointer', color: 'white', fontWeight: 'bold'
+    },
+    text: atome.properties?.text || atome.data?.text || '⚛️',
+    onclick: function () {
+      if (selectedAtomeEl) selectedAtomeEl.style.outline = 'none';
+      selectedAtomeId = atome.id;
+      selectedAtomeEl = this;
+      this.style.outline = '3px solid #2196f3';
+    }
+  });
+});
+
+window.addEventListener('squirrel:atome-updated', (e) => {
+  const atome = e.detail;
+  if (!atome?.id) return;
+
+  log(`🔔 [RT] Atome updated: ${atome.id.substring(0, 8)}`, 'info');
+
+  const el = document.getElementById(atome.id);
+  if (el) {
+    const css = atome.properties?.css || atome.data?.css || {};
+    if (css.backgroundColor) el.style.backgroundColor = css.backgroundColor;
+    if (css.borderRadius) el.style.borderRadius = css.borderRadius;
+    el.textContent = atome.properties?.text || atome.data?.text || el.textContent;
+  }
+});
+
+window.addEventListener('squirrel:atome-deleted', (e) => {
+  const atome = e.detail;
+  const id = atome?.id || atome?.atomeId;
+  if (!id) return;
+
+  log(`🔔 [RT] Atome deleted: ${id.substring(0, 8)}`, 'warn');
+
+  const el = document.getElementById(id);
+  if (el) {
+    el.remove();
+    if (selectedAtomeId === id) {
+      selectedAtomeId = null;
+      selectedAtomeEl = null;
+    }
+  }
+});
+
+// ============================================================================
+// AUTO-RESTORE ON LOGIN
+// ============================================================================
+
+/**
+ * Restore user session: load current project and its atomes
+ */
+async function restoreSession() {
+  log('🔄 Restoring session...', 'info');
+
+  const localToken = localStorage.getItem('local_auth_token');
+  const cloudToken = localStorage.getItem('cloud_auth_token');
+
+  if (!localToken && !cloudToken) {
+    log('ℹ️ Not logged in - nothing to restore', 'info');
+    return;
+  }
+
+  // First, sync atomes between servers
+  await loadAndSyncAtomes();
+
+  // If we have a current project, load its atomes
+  if (currentProjectId) {
+    log(`📁 Restoring project: ${currentProjectName}`, 'info');
+    await loadProjectAtomes(currentProjectId);
+  }
+}
+
+// ============================================================================
+// FINAL INIT
 // ============================================================================
 
 log('🚀 Cross-Backend Auth Test Suite loaded', 'info');
 log('Click "Run All Tests" to execute automated tests', 'info');
 log('Or use individual buttons for manual testing', 'info');
+
+// Restore session if tokens exist
+restoreSession();
 
 updateStatus();

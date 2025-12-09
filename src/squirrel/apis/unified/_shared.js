@@ -48,11 +48,11 @@ async function silentPing(baseUrl) {
         // Use AbortController for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), CONFIG.PING_TIMEOUT);
-        
+
         // Choose endpoint based on server (Tauri uses /local/, Fastify doesn't)
         const isTauriServer = baseUrl.includes(':3000');
         const pingEndpoint = isTauriServer ? '/api/auth/local/me' : '/api/auth/me';
-        
+
         const response = await fetch(`${baseUrl}${pingEndpoint}`, {
             method: 'GET',
             signal: controller.signal,
@@ -62,7 +62,7 @@ async function silentPing(baseUrl) {
                 'Accept': 'application/json'
             }
         });
-        
+
         clearTimeout(timeoutId);
         // Any response (even 401/403) means server is online
         return true;
@@ -85,11 +85,11 @@ function isInTauri() {
  */
 function isLocalDev() {
     const hostname = window.location?.hostname || '';
-    return hostname === 'localhost' || 
-           hostname === '127.0.0.1' || 
-           hostname === '' ||
-           hostname.startsWith('192.168.') ||
-           hostname.startsWith('10.');
+    return hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '' ||
+        hostname.startsWith('192.168.') ||
+        hostname.startsWith('10.');
 }
 
 /**

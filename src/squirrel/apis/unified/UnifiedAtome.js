@@ -604,7 +604,7 @@ const UnifiedAtome = {
                             id: tauriAtome.atome.id,
                             kind: tauriAtome.atome.kind || 'generic',
                             tag: tauriAtome.atome.data?.tag || 'div',
-                            parent: tauriAtome.atome.parent_id || tauriAtome.atome.data?.parent || null,
+                            parentId: tauriAtome.atome.parentId || tauriAtome.atome.data?.parentId || null,
                             // Merge all data fields into properties for Fastify
                             properties: {
                                 ...(tauriAtome.atome.data || {}),
