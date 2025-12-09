@@ -109,12 +109,25 @@ async function logServerInfo() {
   };
 
   const bases = resolveApiBases();
+
+  // Check if we're in Tauri environment
+  const isInTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+
   for (const base of bases) {
+    // Skip Tauri server if we're not in Tauri environment (prevents console errors)
+    if (base.includes('127.0.0.1:3000') && !isInTauri) {
+      continue;
+    }
+    // Skip Fastify if explicitly marked offline
+    if (base.includes('127.0.0.1:3001') && window._checkFastifyAvailable && window._checkFastifyAvailable() === false) {
+      continue;
+    }
+
     const endpoint = base ? `${base}/api/server-info` : '/api/server-info';
     try {
       const res = await fetch(endpoint, { cache: 'no-store' });
       if (!res.ok) {
-        console.warn('⚠️ Unable to reach /api/server-info:', res.status);
+        // Don't log warning - silent failure
         continue;
       }
       const data = await res.json();
@@ -128,7 +141,7 @@ async function logServerInfo() {
         return;
       }
     } catch (error) {
-      console.warn('⚠️ Failed to fetch /api/server-info', error);
+      // Silent failure - don't log to avoid console noise
     }
   }
 

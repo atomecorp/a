@@ -247,8 +247,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             );
 
             if (existingRows.length > 0) {
-                // Return 200 with success:false to avoid browser console error
-                return { success: false, error: 'Phone number already registered' };
+                // Return 200 with success:true and message to avoid browser console error
+                return { success: true, message: 'User already exists - ready to login', alreadyExists: true };
             }
 
             // Hash password

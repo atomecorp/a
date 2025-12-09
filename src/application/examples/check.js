@@ -228,6 +228,13 @@ async function createUserOnTauri() {
 
     log(`📦 Raw result: ${JSON.stringify(result)}`, 'info');
 
+    // Check if user already exists (server now returns 200 with message)
+    const msgOrError = result.message || result.error || '';
+    if (msgOrError.includes('already') || msgOrError.includes('exists') || msgOrError.includes('ready to login')) {
+      log(`ℹ️ User "${username}" already exists on Tauri - ready to login`, 'info');
+      return { success: true, alreadyExists: true };
+    }
+
     if (result.success) {
       log(`✅ User created on Tauri: ${JSON.stringify(result.user)}`, 'success');
     } else {
@@ -237,6 +244,12 @@ async function createUserOnTauri() {
     await updateStatus();
     return result;
   } catch (e) {
+    // Check if user already exists from exception
+    const errorMsg = e.message || '';
+    if (errorMsg.includes('already') || errorMsg.includes('exists') || errorMsg.includes('registered')) {
+      log(`ℹ️ User "${username}" already exists on Tauri - ready to login`, 'info');
+      return { success: true, alreadyExists: true };
+    }
     log(`❌ Error: ${e.message}`, 'error');
     return { success: false, error: e.message };
   }
@@ -255,6 +268,13 @@ async function createUserOnFastify() {
       username: username
     });
 
+    // Check if user already exists (server returns 200 with message or error)
+    const msgOrError = result.message || result.error || '';
+    if (msgOrError.includes('already') || msgOrError.includes('exists') || msgOrError.includes('registered') || msgOrError.includes('ready to login')) {
+      log(`ℹ️ User "${username}" already exists on Fastify - ready to login`, 'info');
+      return { success: true, alreadyExists: true };
+    }
+
     if (result.success) {
       log(`✅ User created on Fastify: ${JSON.stringify(result.user)}`, 'success');
     } else {
@@ -264,6 +284,12 @@ async function createUserOnFastify() {
     await updateStatus();
     return result;
   } catch (e) {
+    // Check if user already exists from exception
+    const errorMsg = e.message || '';
+    if (errorMsg.includes('already') || errorMsg.includes('exists') || errorMsg.includes('registered')) {
+      log(`ℹ️ User "${username}" already exists on Fastify - ready to login`, 'info');
+      return { success: true, alreadyExists: true };
+    }
     log(`❌ Error: ${e.message}`, 'error');
     return { success: false, error: e.message };
   }

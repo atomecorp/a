@@ -39,31 +39,60 @@ const _connectionState = {
 
 /**
  * Silent ping - checks server availability WITHOUT console errors
- * Uses a combination of techniques to minimize console noise
- * @param {string} baseUrl - Server base URL
+ * Uses WebSocket which doesn't show errors in browser console
+ * @param {string} baseUrl - Server base URL (http://...)
  * @returns {Promise<boolean>} - true if online, false otherwise
  */
 async function silentPing(baseUrl) {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CONFIG.PING_TIMEOUT);
+    return new Promise((resolve) => {
+        try {
+            // Convert HTTP URL to WebSocket URL
+            const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws/sync';
 
-        // Use HEAD request for minimal payload
-        const response = await fetch(`${baseUrl}/api/server-info`, {
-            method: 'HEAD',
-            signal: controller.signal,
-            // Prevent caching
-            cache: 'no-store',
-            // Don't send credentials to avoid CORS preflight on simple requests
-            credentials: 'omit'
-        });
+            const ws = new WebSocket(wsUrl);
+            const timeout = setTimeout(() => {
+                try { ws.close(); } catch (e) { }
+                resolve(false);
+            }, CONFIG.PING_TIMEOUT);
 
-        clearTimeout(timeoutId);
-        return response.ok || response.status < 500;
-    } catch {
-        // Silently return false - no logging
-        return false;
-    }
+            ws.onopen = () => {
+                clearTimeout(timeout);
+                try { ws.close(); } catch (e) { }
+                resolve(true);
+            };
+
+            ws.onerror = () => {
+                // WebSocket errors don't appear in console - silent!
+                clearTimeout(timeout);
+                resolve(false);
+            };
+
+            ws.onclose = () => {
+                // If we get here without onopen, server is offline
+            };
+        } catch {
+            resolve(false);
+        }
+    });
+}
+
+/**
+ * Check if we're in Tauri environment
+ */
+function isInTauri() {
+    return !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
+}
+
+/**
+ * Check if we're on localhost (dev environment)
+ */
+function isLocalDev() {
+    const hostname = window.location?.hostname || '';
+    return hostname === 'localhost' || 
+           hostname === '127.0.0.1' || 
+           hostname === '' ||
+           hostname.startsWith('192.168.') ||
+           hostname.startsWith('10.');
 }
 
 /**
@@ -73,8 +102,30 @@ async function silentPing(baseUrl) {
  */
 export async function checkConnection(backend) {
     const state = _connectionState[backend];
-    const baseUrl = backend === 'tauri' ? CONFIG.TAURI_BASE_URL : CONFIG.FASTIFY_BASE_URL;
     const now = Date.now();
+
+    // TAURI: Only check if we're actually in Tauri environment
+    // Don't try to connect from browser - it will always fail with console error
+    if (backend === 'tauri') {
+        if (isInTauri()) {
+            // In Tauri app, assume Tauri server is available
+            state.online = true;
+            state.lastCheck = now;
+            return true;
+        } else {
+            // Not in Tauri - don't even try to ping, just return false
+            state.online = false;
+            state.lastCheck = now;
+            return false;
+        }
+    }
+
+    // FASTIFY: Only check if on localhost
+    if (backend === 'fastify' && !isLocalDev()) {
+        state.online = false;
+        state.lastCheck = now;
+        return false;
+    }
 
     // Use cached state if recently checked
     if (state.lastCheck && (now - state.lastCheck < CONFIG.OFFLINE_CACHE_DURATION)) {
@@ -89,7 +140,8 @@ export async function checkConnection(backend) {
         return state.online;
     }
 
-    // Perform silent ping
+    // Perform silent ping (only for Fastify at this point)
+    const baseUrl = CONFIG.FASTIFY_BASE_URL;
     const isOnline = await silentPing(baseUrl);
 
     // Update state

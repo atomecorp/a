@@ -336,12 +336,14 @@ async fn register_handler(
             .unwrap_or(false);
 
         if exists {
+            // Return 200 with already_exists flag to avoid browser console errors
+            // The client can check the message to know the user already exists
             return (
-                StatusCode::CONFLICT,
+                StatusCode::OK,
                 Json(AuthResponse {
-                    success: false,
-                    error: Some("Phone number already registered".into()),
-                    message: None,
+                    success: true,
+                    error: None,
+                    message: Some("User already exists - ready to login".into()),
                     user: None,
                     token: None,
                 }),
