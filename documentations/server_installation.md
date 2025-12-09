@@ -61,8 +61,12 @@ The installer generates a default one for you.
 NODE_ENV=production
 PORT=3001
 HOST=127.0.0.1
-ADOLE_PG_DSN=postgres://postgres:postgres@localhost:5432/squirrel
+SQLITE_PATH=/opt/a/src/assets/adole.db
 SQUIRREL_UPLOADS_DIR=/opt/a/uploads
+
+# Optional: For cloud deployment with Turso/libSQL
+# LIBSQL_URL=libsql://your-database.turso.io
+# LIBSQL_AUTH_TOKEN=your_auth_token
 ```
 
 * **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).

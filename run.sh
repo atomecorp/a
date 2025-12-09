@@ -20,209 +20,51 @@ DEFAULT_UPLOADS_PATH="src/assets/uploads"
 # Absolute paths are supported; relative values are resolved from the project root.
 DEFAULT_MONITORED_PATH="/Users/Shared/monitored"
 
-# --- PostgreSQL defaults -----------------------------------------------------
-DEFAULT_PG_USER="squirrel"
-DEFAULT_PG_PASSWORD="squirrel_secret"
-DEFAULT_PG_DATABASE="squirrel_db"
-DEFAULT_PG_HOST="localhost"
-DEFAULT_PG_PORT="5432"
+# --- Database defaults (SQLite/libSQL) ---------------------------------------
+DEFAULT_SQLITE_PATH="src/assets/adole.db"
 
 # =============================================================================
-# POSTGRESQL AUTO-SETUP FUNCTION
+# DATABASE SETUP FUNCTION (SQLite)
 # =============================================================================
-# This function ensures PostgreSQL is properly configured for a fresh clone.
-# It handles: service check, user creation, database creation, DSN generation.
-# It NEVER drops existing databases or users.
+# This function ensures SQLite database directory exists and path is configured.
+# For cloud deployments, set LIBSQL_URL and LIBSQL_AUTH_TOKEN in .env
 # =============================================================================
 
-setup_postgres() {
+setup_database() {
     echo ""
-    echo "🐘 Vérification de la configuration PostgreSQL..."
-    echo ""
-
-    # 1. Check if PostgreSQL is installed
-    if ! command -v psql &>/dev/null; then
-        echo "❌ PostgreSQL n'est pas installé sur ce système."
-        echo ""
-        echo "📦 Instructions d'installation:"
-        echo ""
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            echo "   macOS (Homebrew):"
-            echo "   brew install postgresql@15"
-            echo "   brew services start postgresql@15"
-        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            echo "   Ubuntu/Debian:"
-            echo "   sudo apt update && sudo apt install postgresql postgresql-contrib"
-            echo "   sudo systemctl start postgresql"
-            echo ""
-            echo "   Fedora/RHEL:"
-            echo "   sudo dnf install postgresql-server postgresql-contrib"
-            echo "   sudo postgresql-setup --initdb"
-            echo "   sudo systemctl start postgresql"
-        fi
-        echo ""
-        return 1
-    fi
-
-    echo "✅ PostgreSQL est installé ($(psql --version | head -1))"
-
-    # 2. Check if PostgreSQL service is running
-    local pg_running=false
-
-    # Try to connect to PostgreSQL
-    if pg_isready -h "$DEFAULT_PG_HOST" -p "$DEFAULT_PG_PORT" &>/dev/null; then
-        pg_running=true
-    fi
-
-    if [[ "$pg_running" == "false" ]]; then
-        echo "⚠️  Le service PostgreSQL ne semble pas être en cours d'exécution."
-        echo ""
-
-        # Try to start it
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            echo "🔄 Tentative de démarrage du service PostgreSQL (macOS)..."
-            if brew services start postgresql@15 2>/dev/null || brew services start postgresql 2>/dev/null; then
-                sleep 2
-                if pg_isready -h "$DEFAULT_PG_HOST" -p "$DEFAULT_PG_PORT" &>/dev/null; then
-                    echo "✅ Service PostgreSQL démarré avec succès"
-                    pg_running=true
-                fi
-            fi
-        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-            echo "🔄 Tentative de démarrage du service PostgreSQL (Linux)..."
-            if sudo systemctl start postgresql 2>/dev/null; then
-                sleep 2
-                if pg_isready -h "$DEFAULT_PG_HOST" -p "$DEFAULT_PG_PORT" &>/dev/null; then
-                    echo "✅ Service PostgreSQL démarré avec succès"
-                    pg_running=true
-                fi
-            fi
-        fi
-
-        if [[ "$pg_running" == "false" ]]; then
-            echo "❌ Impossible de démarrer PostgreSQL automatiquement."
-            echo ""
-            echo "📋 Démarrez-le manuellement:"
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                echo "   brew services start postgresql@15"
-            else
-                echo "   sudo systemctl start postgresql"
-            fi
-            echo ""
-            return 1
-        fi
-    else
-        echo "✅ Service PostgreSQL en cours d'exécution"
-    fi
-
-    # 3. Determine which superuser to use for admin operations
-    local pg_admin_user=""
-    local pg_admin_cmd=""
-
-    # On macOS, the current user is often the PostgreSQL superuser
-    # On Linux, 'postgres' is typically the superuser
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # Try current user first (common on Homebrew installs)
-        if psql -h "$DEFAULT_PG_HOST" -p "$DEFAULT_PG_PORT" -U "$USER" -d postgres -c "SELECT 1;" &>/dev/null; then
-            pg_admin_user="$USER"
-            pg_admin_cmd="psql -h $DEFAULT_PG_HOST -p $DEFAULT_PG_PORT -U $USER"
-        elif psql -h "$DEFAULT_PG_HOST" -p "$DEFAULT_PG_PORT" -U postgres -d postgres -c "SELECT 1;" &>/dev/null; then
-            pg_admin_user="postgres"
-            pg_admin_cmd="psql -h $DEFAULT_PG_HOST -p $DEFAULT_PG_PORT -U postgres"
-        fi
-    else
-        # On Linux, try sudo -u postgres
-        if sudo -u postgres psql -c "SELECT 1;" &>/dev/null; then
-            pg_admin_user="postgres"
-            pg_admin_cmd="sudo -u postgres psql"
-        fi
-    fi
-
-    if [[ -z "$pg_admin_cmd" ]]; then
-        echo "❌ Impossible de trouver un utilisateur PostgreSQL admin."
-        echo "   Vérifiez que vous avez les droits d'accès à PostgreSQL."
-        return 1
-    fi
-
-    echo "✅ Connexion admin PostgreSQL: $pg_admin_user"
-
-    # 4. Check if project user exists, create if not
-    local user_exists
-    user_exists=$($pg_admin_cmd -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DEFAULT_PG_USER';" 2>/dev/null || echo "")
-
-    if [[ "$user_exists" == "1" ]]; then
-        echo "✅ Utilisateur '$DEFAULT_PG_USER' existe déjà"
-    else
-        echo "🔧 Création de l'utilisateur '$DEFAULT_PG_USER'..."
-        if $pg_admin_cmd -d postgres -c "CREATE USER $DEFAULT_PG_USER WITH PASSWORD '$DEFAULT_PG_PASSWORD' CREATEDB;" &>/dev/null; then
-            echo "✅ Utilisateur '$DEFAULT_PG_USER' créé avec succès"
-        else
-            echo "❌ Échec de la création de l'utilisateur '$DEFAULT_PG_USER'"
-            return 1
-        fi
-    fi
-
-    # 5. Check if project database exists, create if not
-    local db_exists
-    db_exists=$($pg_admin_cmd -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DEFAULT_PG_DATABASE';" 2>/dev/null || echo "")
-
-    if [[ "$db_exists" == "1" ]]; then
-        echo "✅ Base de données '$DEFAULT_PG_DATABASE' existe déjà"
-    else
-        echo "🔧 Création de la base de données '$DEFAULT_PG_DATABASE'..."
-        if $pg_admin_cmd -d postgres -c "CREATE DATABASE $DEFAULT_PG_DATABASE OWNER $DEFAULT_PG_USER;" &>/dev/null; then
-            echo "✅ Base de données '$DEFAULT_PG_DATABASE' créée avec succès"
-        else
-            echo "❌ Échec de la création de la base de données '$DEFAULT_PG_DATABASE'"
-            return 1
-        fi
-    fi
-
-    # 6. Grant privileges (idempotent)
-    $pg_admin_cmd -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE $DEFAULT_PG_DATABASE TO $DEFAULT_PG_USER;" &>/dev/null || true
-
-    # 7. Build and export DSN
-    local dsn="postgres://$DEFAULT_PG_USER:$DEFAULT_PG_PASSWORD@$DEFAULT_PG_HOST:$DEFAULT_PG_PORT/$DEFAULT_PG_DATABASE"
-
-    # 8. Verify connection with the project user
-    echo "🔄 Vérification de la connexion avec l'utilisateur projet..."
-    if PGPASSWORD="$DEFAULT_PG_PASSWORD" psql -h "$DEFAULT_PG_HOST" -p "$DEFAULT_PG_PORT" -U "$DEFAULT_PG_USER" -d "$DEFAULT_PG_DATABASE" -c "SELECT 1;" &>/dev/null; then
-        echo "✅ Connexion à la base de données réussie"
-    else
-        echo "❌ Impossible de se connecter avec l'utilisateur '$DEFAULT_PG_USER'"
-        echo "   DSN testé: $dsn"
-        return 1
-    fi
-
-    # 9. Write DSN to .env file
-    echo "💾 Sauvegarde de la configuration dans .env..."
-    write_pg_dsn_to_env "$dsn"
-
-    # 10. Export for current session
-    export ADOLE_PG_DSN="$dsn"
-
-    echo ""
-    echo "🎉 Configuration PostgreSQL terminée avec succès!"
-    echo "   Utilisateur: $DEFAULT_PG_USER"
-    echo "   Base:        $DEFAULT_PG_DATABASE"
-    echo "   Host:        $DEFAULT_PG_HOST:$DEFAULT_PG_PORT"
+    echo "🗄️  Configuration de la base de données SQLite..."
     echo ""
 
+    # Determine SQLite path
+    local sqlite_path="${SQLITE_PATH:-$PROJECT_ROOT/$DEFAULT_SQLITE_PATH}"
+    local sqlite_dir
+    sqlite_dir="$(dirname "$sqlite_path")"
+
+    # Ensure directory exists
+    if [[ ! -d "$sqlite_dir" ]]; then
+        echo "📂 Création du répertoire: $sqlite_dir"
+        mkdir -p "$sqlite_dir"
+    fi
+
+    # Write path to .env if not already set
+    if [[ -z "${SQLITE_PATH:-}" ]]; then
+        echo "💾 Configuration de SQLITE_PATH dans .env..."
+        write_sqlite_path_to_env "$sqlite_path"
+    fi
+
+    echo "✅ Base de données SQLite configurée: $sqlite_path"
+    
+    # Check for libSQL/Turso configuration
+    if [[ -n "${LIBSQL_URL:-}" ]]; then
+        echo "☁️  libSQL/Turso configuré: ${LIBSQL_URL}"
+    fi
+    
+    echo ""
     return 0
 }
 
-compute_default_dsn() {
-    local host="${ADOLE_PG_HOST:-${PGHOST:-localhost}}"
-    local port="${ADOLE_PG_PORT:-${PGPORT:-5432}}"
-    local user="${ADOLE_PG_USER:-${PGUSER:-postgres}}"
-    local password="${ADOLE_PG_PASSWORD:-${PGPASSWORD:-postgres}}"
-    local database="${ADOLE_PG_DATABASE:-${PGDATABASE:-squirrel}}"
-
-    printf 'postgres://%s:%s@%s:%s/%s' "$user" "$password" "$host" "$port" "$database"
-}
-
-write_pg_dsn_to_env() {
-    local dsn="$1"
+write_sqlite_path_to_env() {
+    local db_path="$1"
     local env_file="$PROJECT_ROOT/.env"
     local tmp
 
@@ -230,17 +72,21 @@ write_pg_dsn_to_env() {
     trap 'rm -f "$tmp"' RETURN
 
     if [[ -f "$env_file" ]]; then
-        grep -v '^ADOLE_PG_DSN=' "$env_file" >"$tmp" || true
+        # Remove old database entries
+        grep -v '^SQLITE_PATH=' "$env_file" | \
+        grep -v '^ADOLE_PG_DSN=' | \
+        grep -v '^PG_CONNECTION_STRING=' | \
+        grep -v '^DATABASE_URL=' >"$tmp" || true
     else
         : >"$tmp"
     fi
 
-    printf 'ADOLE_PG_DSN=%s\n' "$dsn" >>"$tmp"
+    printf 'SQLITE_PATH=%s\n' "$db_path" >>"$tmp"
     mv "$tmp" "$env_file"
     trap - RETURN
 
     chmod 600 "$env_file" 2>/dev/null || true
-    echo "INFO: Wrote PostgreSQL DSN to $(basename "$env_file")."
+    echo "✅ Chemin SQLite sauvegardé dans .env"
 }
 
 load_env_file() {
@@ -367,98 +213,26 @@ prepare_monitored_dir() {
     echo "👀 SQUIRREL_SYNC_WATCH=$SQUIRREL_SYNC_WATCH"
 }
 
-if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    echo "INFO: No PostgreSQL connection string detected (ADOLE_PG_DSN/PG_CONNECTION_STRING/DATABASE_URL)."
-    echo ""
+# Setup SQLite database
+if [[ -z "${SQLITE_PATH:-}" ]]; then
+    echo "INFO: No SQLITE_PATH detected in environment."
+    setup_database
     
-    # Try automatic PostgreSQL setup
-    if ! setup_postgres; then
-        echo ""
-        echo "❌ La configuration automatique de PostgreSQL a échoué."
-        echo ""
-        echo "📋 Options disponibles:"
-        echo ""
-        echo "   1. Configurez manuellement PostgreSQL et créez un fichier .env:"
-        echo "      echo 'ADOLE_PG_DSN=postgres://user:password@localhost:5432/database' > .env"
-        echo ""
-        echo "   2. Ou exportez la variable avant de lancer le script:"
-        echo "      export ADOLE_PG_DSN='postgres://user:password@localhost:5432/database'"
-        echo "      ./run.sh"
-        echo ""
-        exit 1
-    fi
-    
-    # Reload environment files to pick up the newly configured DSN
+    # Reload environment files to pick up the newly configured path
     load_env_file "$PROJECT_ROOT/.env"
     load_env_file "$PROJECT_ROOT/.env.local"
 fi
 
-if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    echo "ERROR: No PostgreSQL connection string detected even after automatic configuration."
-    echo "       Please configure it manually in .env or export it before running ./run.sh."
-    exit 1
+# Ensure SQLITE_PATH is set
+SQLITE_PATH="${SQLITE_PATH:-$PROJECT_ROOT/$DEFAULT_SQLITE_PATH}"
+export SQLITE_PATH
+
+echo "✅ SQLite database path: $SQLITE_PATH"
+
+# Show libSQL/Turso config if present
+if [[ -n "${LIBSQL_URL:-}" ]]; then
+    echo "☁️  libSQL/Turso URL: ${LIBSQL_URL}"
 fi
-
-# Get the active DSN (in order of priority)
-ACTIVE_PG_DSN="${ADOLE_PG_DSN:-${PG_CONNECTION_STRING:-${DATABASE_URL:-}}}"
-
-# Validate the DSN format and check for common issues
-validate_pg_dsn() {
-    local dsn="$1"
-    
-    # Check for placeholder values
-    if [[ "$dsn" == *"COLLER"* || "$dsn" == *"PASTE"* || "$dsn" == *"YOUR_"* || "$dsn" == *"your_"* || "$dsn" == *"VALEUR"* || "$dsn" == *"VALUE"* ]]; then
-        echo "❌ The PostgreSQL DSN contains a placeholder value:"
-        echo "   $dsn"
-        echo ""
-        echo "   This looks like a template that was never configured."
-        echo "   Please set a real connection string."
-        return 1
-    fi
-    
-    # Check basic format
-    if [[ ! "$dsn" =~ ^postgres(ql)?:// ]]; then
-        echo "❌ Invalid PostgreSQL DSN format. Must start with postgres:// or postgresql://"
-        echo "   Current value: $dsn"
-        return 1
-    fi
-    
-    # Extract hostname from DSN (postgres://user:pass@HOST:port/db)
-    local host_part
-    host_part=$(echo "$dsn" | sed -E 's|^postgres(ql)?://[^@]*@([^:/]+).*|\2|')
-    
-    if [[ -z "$host_part" ]]; then
-        echo "❌ Could not extract hostname from DSN"
-        return 1
-    fi
-    
-    # Check for suspicious hostnames
-    if [[ "$host_part" == "base" || "$host_part" == "host" || "$host_part" == "server" || "$host_part" == "hostname" ]]; then
-        echo "❌ Invalid hostname in DSN: '$host_part'"
-        echo "   This looks like a placeholder value. Please configure a real hostname."
-        echo ""
-        echo "   Current DSN: $dsn"
-        echo ""
-        echo "   To fix, edit .env or export ADOLE_PG_DSN with a valid connection string:"
-        echo "   export ADOLE_PG_DSN='postgres://user:password@localhost:5432/database'"
-        return 1
-    fi
-    
-    return 0
-}
-
-if ! validate_pg_dsn "$ACTIVE_PG_DSN"; then
-    echo ""
-    echo "💡 Tip: If you have an old ADOLE_PG_DSN in your shell profile (~/.zshrc, ~/.bashrc),"
-    echo "   you may need to unset it or update it:"
-    echo "   unset ADOLE_PG_DSN"
-    echo ""
-    exit 1
-fi
-
-# Show configured DSN (masked password for security)
-MASKED_DSN=$(echo "$ACTIVE_PG_DSN" | sed -E 's|(postgres(ql)?://[^:]+:)[^@]+(@)|\1***\3|')
-echo "✅ PostgreSQL DSN configuré: $MASKED_DSN"
 echo ""
 
 prepare_uploads_dir
@@ -700,12 +474,12 @@ service_check() {
         echo -e "⚠️  Non configuré"
     fi
     
-    # 5. PostgreSQL
-    echo -n "5. PostgreSQL: "
-    if pg_isready -h localhost -p 5432 &>/dev/null; then
-        echo -e "✅ En cours d'exécution"
+    # 5. SQLite Database
+    echo -n "5. SQLite: "
+    if [[ -f "${SQLITE_PATH:-$PROJECT_ROOT/$DEFAULT_SQLITE_PATH}" ]]; then
+        echo -e "✅ Base de données présente"
     else
-        echo -e "❌ Non disponible"
+        echo -e "⚠️  Base de données non créée (sera créée au démarrage)"
     fi
     
     echo ""

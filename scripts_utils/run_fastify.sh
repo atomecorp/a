@@ -28,10 +28,11 @@ load_env_file() {
 load_env_file "$PROJECT_ROOT/.env"
 load_env_file "$PROJECT_ROOT/.env.local"
 
-if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    echo "ERROR: No PostgreSQL connection string detected (ADOLE_PG_DSN/PG_CONNECTION_STRING/DATABASE_URL)."
-    echo "       Define it in .env or export it before starting the server."
-    exit 1
+# SQLite is always available (local file), libSQL is optional for cloud
+# Just ensure SQLITE_PATH has a sensible default
+if [[ -z "${SQLITE_PATH:-}" ]]; then
+    export SQLITE_PATH="$PROJECT_ROOT/src/assets/adole.db"
+    echo "INFO: SQLITE_PATH not set, using default: $SQLITE_PATH"
 fi
 
 # Vérifier les arguments de ligne de commande

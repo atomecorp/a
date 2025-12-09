@@ -1,12 +1,10 @@
 #!/bin/bash
 #
 # 🔄 DATABASE RESET SCRIPT
-# Resets SQLite and PostgreSQL databases - keeps structure, deletes all data
+# Resets SQLite/libSQL databases - keeps structure, deletes all data
 #
 # Usage: ./scripts_utils/reset_databases.sh [options]
 # Options:
-#   --sqlite-only    Reset only SQLite
-#   --postgres-only  Reset only PostgreSQL
 #   --force          Skip confirmation
 #   --help           Show this help
 #
@@ -25,21 +23,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Defaults
-RESET_SQLITE=true
-RESET_POSTGRES=true
 FORCE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --sqlite-only)
-            RESET_POSTGRES=false
-            shift
-            ;;
-        --postgres-only)
-            RESET_SQLITE=false
-            shift
-            ;;
         --force)
             FORCE=true
             shift
@@ -48,8 +36,6 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
-            echo "  --sqlite-only    Reset only SQLite databases"
-            echo "  --postgres-only  Reset only PostgreSQL database"
             echo "  --force          Skip confirmation prompt"
             echo "  --help           Show this help"
             exit 0
@@ -66,11 +52,13 @@ echo -e "${BLUE}║           🔄 DATABASE RESET UTILITY                       
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
+# Get SQLite path from env or use default
+SQLITE_PATH="${SQLITE_PATH:-$PROJECT_ROOT/src/assets/adole.db}"
+
 # Confirmation
 if [ "$FORCE" = false ]; then
     echo -e "${YELLOW}⚠️  WARNING: This will delete ALL data from:${NC}"
-    [ "$RESET_SQLITE" = true ] && echo -e "   - SQLite: ${PROJECT_ROOT}/server/eDen.db"
-    [ "$RESET_POSTGRES" = true ] && echo -e "   - PostgreSQL: squirrel database (if configured)"
+    echo -e "   - SQLite: ${SQLITE_PATH}"
     echo ""
     echo -e "${YELLOW}Tables will be TRUNCATED (structure preserved, data deleted).${NC}"
     echo ""
@@ -81,172 +69,73 @@ if [ "$FORCE" = false ]; then
     fi
 fi
 
-# ==================== SQLite Reset ====================
-if [ "$RESET_SQLITE" = true ]; then
-    echo ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}  📦 Resetting SQLite Database${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+# ==================== SQLite/ADOLE Reset ====================
+echo ""
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BLUE}  📦 Resetting SQLite/ADOLE Database${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+if [ -f "$SQLITE_PATH" ]; then
+    echo -e "  Database: ${SQLITE_PATH}"
     
-    SQLITE_DB="$PROJECT_ROOT/server/eDen.db"
+    # Get current counts (ADOLE tables)
+    echo -e "\n  ${YELLOW}Before reset:${NC}"
+    sqlite3 "$SQLITE_PATH" "SELECT '    Tenants: ' || COUNT(*) FROM tenants;" 2>/dev/null || echo "    Tenants: (table not found)"
+    sqlite3 "$SQLITE_PATH" "SELECT '    Principals: ' || COUNT(*) FROM principals;" 2>/dev/null || echo "    Principals: (table not found)"
+    sqlite3 "$SQLITE_PATH" "SELECT '    Objects: ' || COUNT(*) FROM objects;" 2>/dev/null || echo "    Objects: (table not found)"
+    sqlite3 "$SQLITE_PATH" "SELECT '    Properties: ' || COUNT(*) FROM properties;" 2>/dev/null || echo "    Properties: (table not found)"
+    sqlite3 "$SQLITE_PATH" "SELECT '    Property Versions: ' || COUNT(*) FROM property_versions;" 2>/dev/null || echo "    Property_versions: (table not found)"
     
-    if [ -f "$SQLITE_DB" ]; then
-        echo -e "  Database: ${SQLITE_DB}"
-        
-        # Get current counts
-        echo -e "\n  ${YELLOW}Before reset:${NC}"
-        sqlite3 "$SQLITE_DB" "SELECT '    Users: ' || COUNT(*) FROM user;" 2>/dev/null || echo "    Users: 0"
-        sqlite3 "$SQLITE_DB" "SELECT '    Projects: ' || COUNT(*) FROM project;" 2>/dev/null || echo "    Projects: 0"
-        sqlite3 "$SQLITE_DB" "SELECT '    Atomes: ' || COUNT(*) FROM atome;" 2>/dev/null || echo "    Atomes: 0"
-        
-        # Truncate tables (order matters due to foreign keys)
-        echo -e "\n  ${BLUE}Truncating tables...${NC}"
-        
-        sqlite3 "$SQLITE_DB" "DELETE FROM atome;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} atome table cleared"
-        sqlite3 "$SQLITE_DB" "DELETE FROM project;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} project table cleared"
-        sqlite3 "$SQLITE_DB" "DELETE FROM user;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} user table cleared"
-        
-        # Reset auto-increment counters
-        sqlite3 "$SQLITE_DB" "DELETE FROM sqlite_sequence WHERE name='atome';" 2>/dev/null
-        sqlite3 "$SQLITE_DB" "DELETE FROM sqlite_sequence WHERE name='project';" 2>/dev/null
-        sqlite3 "$SQLITE_DB" "DELETE FROM sqlite_sequence WHERE name='user';" 2>/dev/null
-        echo -e "    ${GREEN}✓${NC} Auto-increment counters reset"
-        
-        # Verify
-        echo -e "\n  ${GREEN}After reset:${NC}"
-        sqlite3 "$SQLITE_DB" "SELECT '    Users: ' || COUNT(*) FROM user;"
-        sqlite3 "$SQLITE_DB" "SELECT '    Projects: ' || COUNT(*) FROM project;"
-        sqlite3 "$SQLITE_DB" "SELECT '    Atomes: ' || COUNT(*) FROM atome;"
-        
-        echo -e "\n  ${GREEN}✅ SQLite reset complete!${NC}"
-    else
-        echo -e "  ${YELLOW}⚠️  SQLite database not found at: ${SQLITE_DB}${NC}"
-    fi
+    # Truncate ADOLE tables (order matters due to foreign keys)
+    echo -e "\n  ${BLUE}Truncating tables...${NC}"
     
-    # Also reset Tauri local databases if they exist
-    TAURI_DBS=(
-        "$PROJECT_ROOT/src-tauri/target/release/_up_/src/assets/local_users.db"
-        "$PROJECT_ROOT/src-tauri/target/debug/_up_/src/assets/local_users.db"
-        "$PROJECT_ROOT/src-tauri/target/debug/_up_/src/assets/local_atomes.db"
-    )
+    # Disable foreign keys, truncate, re-enable
+    sqlite3 "$SQLITE_PATH" "PRAGMA foreign_keys=OFF;" 2>/dev/null
     
-    for db in "${TAURI_DBS[@]}"; do
-        if [ -f "$db" ]; then
-            echo -e "\n  ${BLUE}Resetting Tauri DB: $(basename "$db")${NC}"
-            # Get tables and truncate each
-            tables=$(sqlite3 "$db" ".tables" 2>/dev/null | tr ' ' '\n' | grep -v '^$')
-            for table in $tables; do
-                if [[ "$table" != "sqlite_sequence" && "$table" != "knex_migrations"* ]]; then
-                    sqlite3 "$db" "DELETE FROM $table;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} $table cleared"
-                fi
-            done
-        fi
-    done
+    sqlite3 "$SQLITE_PATH" "DELETE FROM sync_queue;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} sync_queue cleared" || echo -e "    ${YELLOW}⚠${NC} sync_queue not found"
+    sqlite3 "$SQLITE_PATH" "DELETE FROM acls;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} acls cleared" || echo -e "    ${YELLOW}⚠${NC} acls not found"
+    sqlite3 "$SQLITE_PATH" "DELETE FROM property_versions;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} property_versions cleared" || echo -e "    ${YELLOW}⚠${NC} property_versions not found"
+    sqlite3 "$SQLITE_PATH" "DELETE FROM properties;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} properties cleared" || echo -e "    ${YELLOW}⚠${NC} properties not found"
+    sqlite3 "$SQLITE_PATH" "DELETE FROM objects;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} objects cleared" || echo -e "    ${YELLOW}⚠${NC} objects not found"
+    sqlite3 "$SQLITE_PATH" "DELETE FROM principals;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} principals cleared" || echo -e "    ${YELLOW}⚠${NC} principals not found"
+    sqlite3 "$SQLITE_PATH" "DELETE FROM tenants;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} tenants cleared" || echo -e "    ${YELLOW}⚠${NC} tenants not found"
+    
+    # Keep migration tracking
+    echo -e "    ${BLUE}ℹ${NC} Keeping _migrations table (schema version tracking)"
+    
+    sqlite3 "$SQLITE_PATH" "PRAGMA foreign_keys=ON;" 2>/dev/null
+    
+    # Verify
+    echo -e "\n  ${GREEN}After reset:${NC}"
+    sqlite3 "$SQLITE_PATH" "SELECT '    Tenants: ' || COUNT(*) FROM tenants;" 2>/dev/null || true
+    sqlite3 "$SQLITE_PATH" "SELECT '    Principals: ' || COUNT(*) FROM principals;" 2>/dev/null || true
+    sqlite3 "$SQLITE_PATH" "SELECT '    Objects: ' || COUNT(*) FROM objects;" 2>/dev/null || true
+    sqlite3 "$SQLITE_PATH" "SELECT '    Properties: ' || COUNT(*) FROM properties;" 2>/dev/null || true
+    
+    echo -e "\n  ${GREEN}✅ SQLite/ADOLE reset complete!${NC}"
+else
+    echo -e "  ${YELLOW}⚠️  SQLite database not found at: ${SQLITE_PATH}${NC}"
+    echo -e "  ${YELLOW}    Database will be created on first server start.${NC}"
 fi
 
-# ==================== PostgreSQL Reset ====================
-if [ "$RESET_POSTGRES" = true ]; then
-    echo ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BLUE}  🐘 Resetting PostgreSQL Database${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    
-    # Try to get connection string from environment or use default
-    PG_DSN="${ADOLE_PG_DSN:-${PG_CONNECTION_STRING:-${DATABASE_URL:-}}}"
-    
-    if [ -z "$PG_DSN" ]; then
-        # Try default local connection
-        PG_DSN="postgresql://postgres:postgres@localhost:5432/squirrel"
-        echo -e "  ${YELLOW}No PG_DSN found, trying default: ${PG_DSN}${NC}"
-    fi
-    
-    # Check if psql is available
-    if ! command -v psql &> /dev/null; then
-        echo -e "  ${RED}❌ psql command not found. Install PostgreSQL client.${NC}"
-        echo -e "     macOS: brew install postgresql@16"
-        echo -e "     Linux: apt install postgresql-client"
-    else
-        # Test connection
-        if psql "$PG_DSN" -c "SELECT 1;" &> /dev/null; then
-            echo -e "  ${GREEN}✓${NC} Connected to PostgreSQL"
-            
-            # Get ADOLE tables
-            echo -e "\n  ${YELLOW}Finding ADOLE tables...${NC}"
-            
-            # ADOLE uses TypeORM with these potential tables
-            ADOLE_TABLES=$(psql "$PG_DSN" -t -c "
-                SELECT tablename FROM pg_tables 
-                WHERE schemaname = 'public' 
-                AND tablename NOT LIKE 'pg_%'
-                AND tablename NOT LIKE 'typeorm_%'
-                ORDER BY tablename;
-            " 2>/dev/null | tr -d ' ' | grep -v '^$')
-            
-            if [ -n "$ADOLE_TABLES" ]; then
-                echo -e "  Found tables:"
-                for table in $ADOLE_TABLES; do
-                    count=$(psql "$PG_DSN" -t -c "SELECT COUNT(*) FROM \"$table\";" 2>/dev/null | tr -d ' ')
-                    echo -e "    - $table (${count:-0} rows)"
-                done
-                
-                echo -e "\n  ${BLUE}Truncating tables...${NC}"
-                
-                # Disable foreign key checks, truncate, re-enable
-                psql "$PG_DSN" -c "
-                    DO \$\$
-                    DECLARE
-                        r RECORD;
-                    BEGIN
-                        -- Disable triggers
-                        FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT LIKE 'typeorm_%'
-                        LOOP
-                            EXECUTE 'ALTER TABLE \"' || r.tablename || '\" DISABLE TRIGGER ALL';
-                        END LOOP;
-                        
-                        -- Truncate all tables
-                        FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT LIKE 'typeorm_%'
-                        LOOP
-                            EXECUTE 'TRUNCATE TABLE \"' || r.tablename || '\" CASCADE';
-                        END LOOP;
-                        
-                        -- Re-enable triggers
-                        FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT LIKE 'typeorm_%'
-                        LOOP
-                            EXECUTE 'ALTER TABLE \"' || r.tablename || '\" ENABLE TRIGGER ALL';
-                        END LOOP;
-                    END \$\$;
-                " 2>/dev/null && echo -e "    ${GREEN}✓${NC} All tables truncated"
-                
-                # Reset sequences
-                psql "$PG_DSN" -c "
-                    DO \$\$
-                    DECLARE
-                        r RECORD;
-                    BEGIN
-                        FOR r IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema = 'public'
-                        LOOP
-                            EXECUTE 'ALTER SEQUENCE \"' || r.sequence_name || '\" RESTART WITH 1';
-                        END LOOP;
-                    END \$\$;
-                " 2>/dev/null && echo -e "    ${GREEN}✓${NC} Sequences reset"
-                
-                echo -e "\n  ${GREEN}After reset:${NC}"
-                for table in $ADOLE_TABLES; do
-                    count=$(psql "$PG_DSN" -t -c "SELECT COUNT(*) FROM \"$table\";" 2>/dev/null | tr -d ' ')
-                    echo -e "    - $table: ${count:-0} rows"
-                done
-                
-                echo -e "\n  ${GREEN}✅ PostgreSQL reset complete!${NC}"
-            else
-                echo -e "  ${YELLOW}⚠️  No user tables found in PostgreSQL${NC}"
+# Also reset Tauri local databases if they exist
+TAURI_DBS=(
+    "$PROJECT_ROOT/src-tauri/target/release/_up_/src/assets/adole.db"
+    "$PROJECT_ROOT/src-tauri/target/debug/_up_/src/assets/adole.db"
+)
+
+for db in "${TAURI_DBS[@]}"; do
+    if [ -f "$db" ]; then
+        echo -e "\n  ${BLUE}Resetting Tauri DB: $(basename "$db")${NC}"
+        # Get tables and truncate each
+        tables=$(sqlite3 "$db" ".tables" 2>/dev/null | tr ' ' '\n' | grep -v '^$')
+        for table in $tables; do
+            if [[ "$table" != "_migrations" ]]; then
+                sqlite3 "$db" "DELETE FROM $table;" 2>/dev/null && echo -e "    ${GREEN}✓${NC} $table cleared"
             fi
-        else
-            echo -e "  ${YELLOW}⚠️  Could not connect to PostgreSQL${NC}"
-            echo -e "     Make sure the database is running and connection string is correct."
-            echo -e "     Set ADOLE_PG_DSN, PG_CONNECTION_STRING, or DATABASE_URL"
-        fi
+        done
     fi
-fi
+done
 
 # ==================== Summary ====================
 echo ""

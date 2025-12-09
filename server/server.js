@@ -75,12 +75,12 @@ import {
   getLocalVersion
 } from './githubSync.js';
 
-// Database imports - Using Knex ORM (unified for SQLite/PostgreSQL)
-import orm from '../database/orm.js';
+// Database imports - Using SQLite/libSQL (ADOLE data layer)
+import db from '../database/adole.js';
 import { v4 as uuidv4 } from 'uuid';
 
-// Get PostgreSQL connection URL from environment (for DATABASE_ENABLED check)
-const PG_URL = process.env.ADOLE_PG_DSN || process.env.PG_CONNECTION_STRING || process.env.DATABASE_URL;
+// Check if database is configured (SQLite path or libSQL URL)
+const DB_CONFIGURED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
@@ -244,8 +244,8 @@ const server = fastify({
 });
 
 const PORT = process.env.PORT || 3001;
-const DATABASE_ENABLED = Boolean(PG_URL);
-const DB_REQUIRED_MESSAGE = 'Database not configured. Set ADOLE_PG_DSN or PG_CONNECTION_STRING/DATABASE_URL.';
+const DATABASE_ENABLED = DB_CONFIGURED;
+const DB_REQUIRED_MESSAGE = 'Database not configured. Set SQLITE_PATH or LIBSQL_URL/LIBSQL_AUTH_TOKEN.';
 
 async function startServer() {
   try {
@@ -282,7 +282,7 @@ async function startServer() {
 
       try {
         // Initialize Knex ORM (unified SQLite/PostgreSQL layer)
-        await orm.initDatabase();
+        await db.initDatabase();
         console.log('✅ Connexion à la base de données établie (Knex ORM)');
       } catch (error) {
         if (error && error.code === 'ECONNREFUSED') {
@@ -361,7 +361,7 @@ async function startServer() {
     // Register authentication routes (login, register, logout, OTP, etc.)
     if (DATABASE_ENABLED) {
       // Get TypeORM-compatible adapter from Knex ORM
-      const dataSourceAdapter = orm.getDataSourceAdapter();
+      const dataSourceAdapter = db.getDataSourceAdapter();
 
       await registerAuthRoutes(server, dataSourceAdapter, {
         jwtSecret: process.env.JWT_SECRET,
@@ -590,7 +590,7 @@ async function startServer() {
       };
 
       try {
-        const dataSourceAdapter = orm.getDataSourceAdapter();
+        const dataSourceAdapter = db.getDataSourceAdapter();
         await dataSourceAdapter.manager.transaction(async (tx) => {
           await tx.query(
             `INSERT INTO tenants (tenant_id, name) VALUES ($1, $2) ON CONFLICT (tenant_id) DO UPDATE SET name = EXCLUDED.name`,
@@ -645,7 +645,7 @@ async function startServer() {
 
       try {
         const principalId = request.params.principalId;
-        const dataSourceAdapter = orm.getDataSourceAdapter();
+        const dataSourceAdapter = db.getDataSourceAdapter();
         const rows = await dataSourceAdapter.query(
           `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
            FROM principals p 
@@ -684,7 +684,7 @@ async function startServer() {
       }
 
       try {
-        const dataSourceAdapter = orm.getDataSourceAdapter();
+        const dataSourceAdapter = db.getDataSourceAdapter();
         const rows = await dataSourceAdapter.query(
           `SELECT p.principal_id, p.tenant_id, p.email, p.kind, os.snapshot 
            FROM principals p 
@@ -755,7 +755,7 @@ async function startServer() {
       }
 
       try {
-        const dataSourceAdapter = orm.getDataSourceAdapter();
+        const dataSourceAdapter = db.getDataSourceAdapter();
         await dataSourceAdapter.query('SELECT 1');
 
         const tableRows = await dataSourceAdapter.query(`
@@ -819,7 +819,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const users = await db('principals').select('*');
         return { success: true, data: users };
       } catch (error) {
@@ -835,7 +835,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const { name, email, phone, password } = request.body;
         const principal_id = uuidv4();
 
@@ -871,7 +871,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const user = await db('principals').where('principal_id', request.params.id).first();
 
         if (!user) {
@@ -893,7 +893,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const deleted = await db('principals').where('principal_id', request.params.id).del();
 
         if (deleted === 0) {
@@ -920,7 +920,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const projects = await db('objects').where('type', 'project').andWhere('deleted', false);
         return { success: true, data: projects };
       } catch (error) {
@@ -936,7 +936,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const { name, description } = request.body;
         const object_id = uuidv4();
 
@@ -971,7 +971,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const project = await db('objects')
           .where('object_id', request.params.id)
           .andWhere('type', 'project')
@@ -1000,7 +1000,7 @@ async function startServer() {
       }
 
       try {
-        const db = orm.getDatabase();
+        const db = db.getDatabase();
         const [userResult, projectResult, atomeResult] = await Promise.all([
           db('principals').count('* as count').first(),
           db('objects').where('type', 'project').count('* as count').first(),

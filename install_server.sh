@@ -113,9 +113,8 @@ if [ "$OS_TYPE" == "linux" ]; then
         apt-get install -y nodejs
     fi
 
-    # Postgres
-    ensure_package "postgresql" "postgresql16-server"
-    ensure_package "postgresql-contrib" "postgresql16-contrib"
+    # SQLite dependencies (for better-sqlite3 compilation)
+    ensure_package "libsqlite3-dev" "sqlite3"
 
     # Nginx & Certbot
     ensure_package "nginx" "nginx"
@@ -134,17 +133,8 @@ elif [ "$OS_TYPE" == "freebsd" ]; then
     ensure_package "node" "node20"
     ensure_package "npm" "npm-node20"
 
-    # Postgres
-    ensure_package "postgresql" "postgresql16-server"
-    ensure_package "postgresql-contrib" "postgresql16-contrib"
-    
-    # Enable and Init Postgres on FreeBSD
-    sysrc postgresql_enable="YES"
-    if [ ! -d "/var/db/postgres/data16" ]; then
-        log_info "🗄️  Initializing PostgreSQL database..."
-        service postgresql initdb
-    fi
-    service postgresql start
+    # SQLite (for better-sqlite3)
+    ensure_package "sqlite3" "sqlite3"
 
     # Nginx & Certbot
     ensure_package "nginx" "nginx"
@@ -174,12 +164,26 @@ fi
 
 if [ ! -f .env ]; then
     log_info "Creating .env from defaults..."
-    echo "ADOLE_PG_DSN=postgres://postgres:postgres@localhost:5432/squirrel" > .env
+    echo "# SQLite/libSQL Database Configuration" > .env
+    echo "SQLITE_PATH=$APP_DIR/data/adole.db" >> .env
+    echo "# For Turso cloud (optional):" >> .env
+    echo "# LIBSQL_URL=libsql://your-database.turso.io" >> .env
+    echo "# LIBSQL_AUTH_TOKEN=your-auth-token" >> .env
+    echo "" >> .env
     echo "NODE_ENV=production" >> .env
     echo "PORT=$NODE_PORT" >> .env
     echo "SQUIRREL_UPLOADS_DIR=$UPLOADS_DIR" >> .env
     echo "HOST=127.0.0.1" >> .env
     chmod 600 .env
+fi
+
+# Create data directory for SQLite database
+DATA_DIR="$APP_DIR/data"
+if [ ! -d "$DATA_DIR" ]; then
+    mkdir -p "$DATA_DIR"
+    chown $USER:$USER "$DATA_DIR"
+    chmod 755 "$DATA_DIR"
+    log_ok "✅ Created data directory: $DATA_DIR"
 fi
 
 # --- 3. Project Dependencies -----------------------------------------------
@@ -190,38 +194,30 @@ log_info "📦 Installing Project Dependencies..."
 npm install --omit=dev --verbose
 
 # Ensure critical production dependencies are installed
-# (some may be in devDependencies but are needed for server)
-npm install typeorm reflect-metadata pg fastify chokidar pino-pretty knex objection --save
+npm install fastify chokidar pino-pretty better-sqlite3 @libsql/client --save
 
 # Create marker to skip reinstallation on run.sh
 touch node_modules/.install_complete
 
 log_ok "✅ npm dependencies installed."
 
-# --- 4. Database Setup -----------------------------------------------------
+# --- 4. Database Setup (SQLite) --------------------------------------------
 
-log_info "🗄️  Configuring PostgreSQL Database..."
+log_info "🗄️  Initializing SQLite Database..."
 
-# FreeBSD uses 'postgres' user but requires sudo/su differently
-if [ "$OS_TYPE" == "linux" ]; then
-    CMD_PREFIX="sudo -u postgres"
-elif [ "$OS_TYPE" == "freebsd" ]; then
-    CMD_PREFIX="su -m postgres -c"
-fi
+# Initialize the database by running migrations
+cd "$APP_DIR"
+node -e "
+import { connect } from './database/driver.js';
+import { runMigrations } from './database/migrate.js';
 
-$CMD_PREFIX psql -c "DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'postgres') THEN
-    CREATE ROLE postgres WITH LOGIN SUPERUSER PASSWORD 'postgres';
-  ELSE
-    ALTER ROLE postgres WITH PASSWORD 'postgres';
-  END IF;
-END
-\$\$;" || true
+const db = await connect();
+await runMigrations(db);
+console.log('Database initialized successfully');
+db.close();
+" 2>&1 || log_warn "Database initialization will be done on first run"
 
-$CMD_PREFIX psql -c "CREATE DATABASE squirrel OWNER postgres;" 2>/dev/null || true
-
-log_ok "✅ Database configured."
+log_ok "✅ Database ready."
 
 # --- 5. Nginx Configuration ------------------------------------------------
 

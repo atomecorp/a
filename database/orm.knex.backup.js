@@ -179,6 +179,59 @@ export function isSQLite() {
     return dbType === 'sqlite';
 }
 
+// ============================================================================
+// JSON VALUE HELPERS - Consistent handling for SQLite and PostgreSQL
+// ============================================================================
+
+/**
+ * Serialize a value for storage in a JSON column
+ * - Both SQLite and PostgreSQL need JSON.stringify for json/jsonb columns
+ * - Knex does NOT auto-serialize objects for PostgreSQL json columns
+ * @param {*} value - Value to serialize
+ * @returns {string|null} JSON string or null
+ */
+function serializeJsonValue(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    // Always stringify - PostgreSQL json columns need a valid JSON string
+    // If it's already a JSON string, return as-is
+    if (typeof value === 'string') {
+        // Check if it's already a valid JSON string
+        try {
+            JSON.parse(value);
+            return value; // It's already JSON, return as-is
+        } catch {
+            // It's a plain string, stringify it
+            return JSON.stringify(value);
+        }
+    }
+    return JSON.stringify(value);
+}
+
+/**
+ * Deserialize a value from a JSON column
+ * - PostgreSQL may return parsed objects (if column is json type)
+ * - SQLite returns strings
+ * @param {*} value - Value from database
+ * @returns {*} Parsed value or original if already an object
+ */
+function deserializeJsonValue(value) {
+    if (value === null || value === undefined) {
+        return value;
+    }
+    // If PostgreSQL already parsed it, return as-is
+    if (typeof value === 'object') {
+        return value;
+    }
+    // Otherwise parse the string (SQLite case)
+    try {
+        return JSON.parse(value);
+    } catch {
+        return value;
+    }
+}
+
 /**
  * Create database schema
  * Creates all ADOLE tables if they don't exist
@@ -488,7 +541,7 @@ export async function createObject(data) {
         kind: data.kind,
         created_by: data.created_by,
         parent_id: data.parent_id,
-        meta: JSON.stringify(data.meta || {}),
+        meta: serializeJsonValue(data.meta || {}),
         created_at: db.fn.now(),
         updated_at: db.fn.now()
     });
@@ -590,23 +643,22 @@ export async function setProperty(objectId, key, value, changedBy = null) {
     // If property exists and both old and new values are objects, do a deep merge
     // This is the ADOLE principle: alterations patch, they don't replace
     if (existing && typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        try {
-            const existingValue = JSON.parse(existing.value);
-            if (typeof existingValue === 'object' && existingValue !== null && !Array.isArray(existingValue)) {
-                // Deep merge: new values override existing, but existing keys not in new are preserved
-                finalValue = deepMerge(existingValue, value);
-                console.log(`[ORM] Deep merging property '${key}':`, { existing: existingValue, patch: value, result: finalValue });
-            }
-        } catch (e) {
-            // If parsing fails, use the new value as-is
-            console.warn(`[ORM] Could not parse existing value for merge, replacing:`, e.message);
+        const existingValue = deserializeJsonValue(existing.value);
+        if (typeof existingValue === 'object' && existingValue !== null && !Array.isArray(existingValue)) {
+            // Deep merge: new values override existing, but existing keys not in new are preserved
+            finalValue = deepMerge(existingValue, value);
+            console.log(`[ORM] Deep merging property '${key}':`, { existing: existingValue, patch: value, result: finalValue });
         }
     }
 
-    const valueJson = JSON.stringify(finalValue);
+    // Serialize value consistently for both SQLite and PostgreSQL
+    const valueJson = serializeJsonValue(finalValue);
     const valueType = typeof finalValue;
 
     if (existing) {
+        // Use serializeJsonValue for consistent previous_value storage
+        const previousValueJson = serializeJsonValue(deserializeJsonValue(existing.value));
+
         // Update existing property
         await db('properties')
             .where('property_id', existing.property_id)
@@ -623,7 +675,7 @@ export async function setProperty(objectId, key, value, changedBy = null) {
             object_id: objectId,
             key: key,
             value: valueJson,
-            previous_value: existing.value,
+            previous_value: previousValueJson,
             changed_by: changedBy,
             change_type: 'update'
         });
@@ -670,11 +722,7 @@ export async function getProperty(objectId, key) {
 
     if (!prop) return undefined;
 
-    try {
-        return JSON.parse(prop.value);
-    } catch {
-        return prop.value;
-    }
+    return deserializeJsonValue(prop.value);
 }
 
 /**
@@ -687,11 +735,7 @@ export async function getAllProperties(objectId) {
 
     const result = {};
     for (const prop of props) {
-        try {
-            result[prop.key] = JSON.parse(prop.value);
-        } catch {
-            result[prop.key] = prop.value;
-        }
+        result[prop.key] = deserializeJsonValue(prop.value);
     }
     return result;
 }
@@ -709,14 +753,14 @@ export async function deleteProperty(objectId, key, changedBy = null) {
         .first();
 
     if (existing) {
-        // Create version record before delete
+        // Create version record before delete - use serializeJsonValue for consistency
         await db('property_versions').insert({
             version_id: uuidv4(),
             property_id: existing.property_id,
             object_id: objectId,
             key: key,
             value: null,
-            previous_value: existing.value,
+            previous_value: serializeJsonValue(deserializeJsonValue(existing.value)),
             changed_by: changedBy,
             change_type: 'delete'
         });
@@ -772,11 +816,7 @@ export async function getPropertyAtTime(objectId, key, timestamp) {
 
     if (!version) return undefined;
 
-    try {
-        return JSON.parse(version.value);
-    } catch {
-        return version.value;
-    }
+    return deserializeJsonValue(version.value);
 }
 
 // ============================================================================
@@ -901,7 +941,7 @@ export async function addToSyncQueue(data) {
         object_id: data.object_id,
         action: data.action,
         device_id: data.device_id,
-        payload: JSON.stringify(data.payload || {}),
+        payload: serializeJsonValue(data.payload || {}),
         status: 'pending'
     }).returning('id');
 
@@ -946,7 +986,7 @@ export async function failSyncItem(id, error) {
         .where('id', id)
         .update({
             status: 'failed',
-            payload: db.raw(`payload || ?`, [JSON.stringify({ error })]),
+            payload: db.raw(`payload || ?`, [serializeJsonValue({ error })]),
             updated_at: db.fn.now()
         });
 }

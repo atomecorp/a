@@ -406,7 +406,8 @@ async function testAtomeAPIs(baseUrl, platform, token) {
     try {
         const res = await request(`${baseUrl}/api/atome/${atomeId}`, {
             method: 'DELETE',
-            headers
+            headers,
+            body: {} // Empty body required for Fastify JSON parser
         });
 
         logTest(`[${platform}] Delete atome`, res.ok && res.data.success);

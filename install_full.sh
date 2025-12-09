@@ -14,20 +14,11 @@ SKIP_TAURI=false
 SKIP_FASTIFY=false
 SKIP_IPLUG=false
 
-DEFAULT_PG_DSN="postgres://postgres:postgres@localhost:5432/squirrel"
+# SQLite database path (no longer using PostgreSQL)
+DEFAULT_SQLITE_PATH="src/assets/adole.db"
 
-compute_default_dsn() {
-  local host="${ADOLE_PG_HOST:-${PGHOST:-localhost}}"
-  local port="${ADOLE_PG_PORT:-${PGPORT:-5432}}"
-  local user="${ADOLE_PG_USER:-${PGUSER:-postgres}}"
-  local password="${ADOLE_PG_PASSWORD:-${PGPASSWORD:-postgres}}"
-  local database="${ADOLE_PG_DATABASE:-${PGDATABASE:-squirrel}}"
-
-  printf 'postgres://%s:%s@%s:%s/%s' "$user" "$password" "$host" "$port" "$database"
-}
-
-write_pg_dsn_to_env() {
-  local dsn="$1"
+write_sqlite_path_to_env() {
+  local db_path="$1"
   local env_file="$PROJECT_ROOT/.env"
   local tmp
 
@@ -35,17 +26,18 @@ write_pg_dsn_to_env() {
   trap 'rm -f "$tmp"' RETURN
 
   if [[ -f "$env_file" ]]; then
-    grep -v '^ADOLE_PG_DSN=' "$env_file" >"$tmp" || true
+    # Remove old PostgreSQL and SQLite entries
+    grep -v '^ADOLE_PG_DSN=' "$env_file" | grep -v '^SQLITE_PATH=' | grep -v '^PG_CONNECTION_STRING=' | grep -v '^DATABASE_URL=' >"$tmp" || true
   else
     : >"$tmp"
   fi
 
-  printf 'ADOLE_PG_DSN=%s\n' "$dsn" >>"$tmp"
+  printf 'SQLITE_PATH=%s\n' "$db_path" >>"$tmp"
   mv "$tmp" "$env_file"
   trap - RETURN
 
   chmod 600 "$env_file" 2>/dev/null || true
-  log_ok "✅ PostgreSQL DSN stored in $(basename "$env_file")"
+  log_ok "✅ SQLite path stored in $(basename "$env_file")"
 }
 
 load_env_file() {
@@ -63,16 +55,12 @@ ensure_env_configured() {
   load_env_file "$PROJECT_ROOT/.env"
   load_env_file "$PROJECT_ROOT/.env.local"
 
-  if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    local generated_dsn
-    generated_dsn="$(compute_default_dsn)"
-    if [[ -z "$generated_dsn" ]]; then
-      generated_dsn="$DEFAULT_PG_DSN"
-    fi
-
-    log_info "ℹ️  No PostgreSQL DSN found. Writing default DSN to .env."
-    if ! write_pg_dsn_to_env "$generated_dsn"; then
-      log_error "❌ Failed to persist PostgreSQL DSN in .env."
+  # Check for SQLite path configuration
+  if [[ -z "${SQLITE_PATH:-}" ]]; then
+    local db_path="$PROJECT_ROOT/$DEFAULT_SQLITE_PATH"
+    log_info "ℹ️  No SQLITE_PATH found. Writing default path to .env."
+    if ! write_sqlite_path_to_env "$db_path"; then
+      log_error "❌ Failed to persist SQLite path in .env."
       exit 1
     fi
 
@@ -80,9 +68,12 @@ ensure_env_configured() {
     load_env_file "$PROJECT_ROOT/.env.local"
   fi
 
-  if [[ -z "${ADOLE_PG_DSN:-}" && -z "${PG_CONNECTION_STRING:-}" && -z "${DATABASE_URL:-}" ]]; then
-    log_error "❌ PostgreSQL DSN still missing after attempting automatic configuration."
-    exit 1
+  # Ensure SQLite directory exists
+  local sqlite_dir
+  sqlite_dir="$(dirname "${SQLITE_PATH:-$PROJECT_ROOT/$DEFAULT_SQLITE_PATH}")"
+  if [[ ! -d "$sqlite_dir" ]]; then
+    mkdir -p "$sqlite_dir"
+    log_ok "✅ Created database directory: $sqlite_dir"
   fi
 }
 
@@ -601,147 +592,23 @@ run_latest_updates() {
 # Execution logic moved to main() at the end of script
 
 
-install_pg_module() {
-  log_info "🧩 Ensuring pg driver is installed"
-  (cd "$PROJECT_ROOT" && npm install pg@latest)
-  log_ok "✅ pg driver installed"
+install_sqlite_modules() {
+  log_info "🧩 Ensuring SQLite/libSQL drivers are installed"
+  (cd "$PROJECT_ROOT" && npm install better-sqlite3@latest @libsql/client@latest)
+  log_ok "✅ SQLite/libSQL drivers installed"
 }
 
-escape_sql_literal() {
-  local value="$1"
-  value="${value//\'/''}"
-  printf "%s" "$value"
-}
-
-escape_sql_identifier() {
-  local value="$1"
-  value="${value//\"/""}"
-  printf "%s" "$value"
-}
-
-parse_dsn_components() {
-  local dsn="$1"
-  local remainder="${dsn#*://}"
-
-  if [[ "$remainder" == "$dsn" ]]; then
-    return 1
+setup_sqlite_database() {
+  local sqlite_path="${SQLITE_PATH:-$PROJECT_ROOT/src/assets/adole.db}"
+  local sqlite_dir
+  sqlite_dir="$(dirname "$sqlite_path")"
+  
+  if [[ ! -d "$sqlite_dir" ]]; then
+    log_info "📂 Creating SQLite directory: $sqlite_dir"
+    mkdir -p "$sqlite_dir"
   fi
-
-  local credentials host_and_path user password host_with_port path host port database
-
-  if [[ "$remainder" == *@* ]]; then
-    credentials="${remainder%@*}"
-    host_and_path="${remainder#*@}"
-  else
-    credentials=""
-    host_and_path="$remainder"
-  fi
-
-  user="${credentials%%:*}"
-  if [[ "$credentials" == *:* ]]; then
-    password="${credentials#*:}"
-  else
-    password=""
-  fi
-
-  host_with_port="${host_and_path%%/*}"
-  path="${host_and_path#*/}"
-
-  if [[ "$host_with_port" == *:* ]]; then
-    host="${host_with_port%%:*}"
-    port="${host_with_port#*:}"
-  else
-    host="$host_with_port"
-    port=""
-  fi
-
-  database="${path%%\?*}"
-  database="${database%%#*}"
-
-  DB_USER="${user:-postgres}"
-  DB_PASSWORD="$password"
-  DB_HOST="${host:-localhost}"
-  DB_PORT="${port:-5432}"
-  DB_NAME="${database:-squirrel}"
-  return 0
-}
-
-setup_postgres_role_and_database() {
-  local dsn
-  dsn="${ADOLE_PG_DSN:-${PG_CONNECTION_STRING:-${DATABASE_URL:-}}}"
-
-  if [[ -z "$dsn" ]]; then
-    log_warn "⚠️  No PostgreSQL DSN available. Skipping database setup."
-    return
-  fi
-
-  if ! command -v psql >/dev/null 2>&1; then
-    log_warn "⚠️  psql not available. Skipping automatic database setup."
-    return
-  fi
-
-  if ! parse_dsn_components "$dsn"; then
-    log_warn "⚠️  Unable to parse PostgreSQL DSN. Skipping automatic database setup."
-    return
-  fi
-
-  local super_user super_password super_db
-  super_user="${ADOLE_PG_SUPERUSER:-$USER}"
-  super_password="${ADOLE_PG_SUPERUSER_PASSWORD:-}"
-  super_db="${ADOLE_PG_SUPERUSER_DB:-postgres}"
-
-  local original_pgpassword="${PGPASSWORD-}"
-  if [[ -n "$super_password" ]]; then
-    export PGPASSWORD="$super_password"
-  else
-    unset PGPASSWORD
-  fi
-
-  local psql_cmd=(psql -h "$DB_HOST" -p "$DB_PORT" -U "$super_user" "$super_db")
-
-  if ! "${psql_cmd[@]}" -Atc "SELECT 1" >/dev/null 2>&1; then
-    log_warn "⚠️  Unable to connect to PostgreSQL as '$super_user'. Skipping automatic database setup."
-    if [[ -n "$original_pgpassword" ]]; then
-      export PGPASSWORD="$original_pgpassword"
-    else
-      unset PGPASSWORD
-    fi
-    return
-  fi
-
-  local role_exists
-  role_exists="$("${psql_cmd[@]}" -Atc "SELECT 1 FROM pg_roles WHERE rolname = '$(escape_sql_literal "$DB_USER")'")" || true
-  if [[ "$role_exists" != "1" ]]; then
-    log_info "� Creating PostgreSQL role '$DB_USER'"
-    if ! "${psql_cmd[@]}" -c "CREATE ROLE \"$(escape_sql_identifier "$DB_USER")\" WITH LOGIN PASSWORD '$(escape_sql_literal "$DB_PASSWORD")';"; then
-      log_warn "⚠️  Unable to create role '$DB_USER'."
-    else
-      log_ok "✅ Role '$DB_USER' created"
-    fi
-  else
-    log_info "👤 Role '$DB_USER' already exists"
-  fi
-
-  "${psql_cmd[@]}" -c "ALTER ROLE \"$(escape_sql_identifier "$DB_USER")\" CREATEDB;" >/dev/null 2>&1 || true
-
-  local db_exists
-  db_exists="$("${psql_cmd[@]}" -Atc "SELECT 1 FROM pg_database WHERE datname = '$(escape_sql_literal "$DB_NAME")'")" || true
-  if [[ "$db_exists" != "1" ]]; then
-    log_info "�️  Creating database '$DB_NAME'"
-    if ! "${psql_cmd[@]}" -c "CREATE DATABASE \"$(escape_sql_identifier "$DB_NAME")\" OWNER \"$(escape_sql_identifier "$DB_USER")\";"; then
-      log_warn "⚠️  Unable to create database '$DB_NAME'."
-    else
-      log_ok "✅ Database '$DB_NAME' created"
-    fi
-  else
-    log_info "🗄️  Database '$DB_NAME' already exists"
-  fi
-
-  if [[ -n "$original_pgpassword" ]]; then
-    export PGPASSWORD="$original_pgpassword"
-  else
-    unset PGPASSWORD
-  fi
+  
+  log_ok "✅ SQLite database path configured: $sqlite_path"
 }
 
 ensure_runtime_directories() {
@@ -833,8 +700,8 @@ main() {
 
   ensure_chokidar_dependency
   reinstall_project_dependencies
-  install_pg_module
-  setup_postgres_role_and_database
+  install_sqlite_modules
+  setup_sqlite_database
   ensure_runtime_directories
 
   log_ok "🎉 All updates complete!"

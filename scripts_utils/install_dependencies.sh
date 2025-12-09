@@ -331,7 +331,7 @@ install_packages() {
 }
 
 print_status "🗄️ Checking database dependencies..."
-PRODUCTION_DB_DEPS=("knex" "objection")
+PRODUCTION_DB_DEPS=("better-sqlite3" "@libsql/client")
 install_packages "" "${PRODUCTION_DB_DEPS[@]}"
 
 print_status "🏗️ Checking build tools..."
@@ -421,9 +421,8 @@ show_version "@fastify/websocket"
 
 echo ""
 echo "🗄️ DATABASE:"
-show_version "knex"
-show_version "objection"
-show_version "sequelize"
+show_version "better-sqlite3"
+show_version "@libsql/client"
 show_version "sqlite3"
 
 echo ""

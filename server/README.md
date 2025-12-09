@@ -26,6 +26,7 @@ PORT=4000 node server.js
 ## 🔌 Endpoints WebSocket
 
 ### 1. WebSocket Echo (`/ws`)
+
 - **URL:** `ws://localhost:3000/ws`
 - **Fonction:** Echo des messages avec enrichissement
 - **Usage:** Test et communication simple
@@ -51,6 +52,7 @@ ws.send(JSON.stringify({
 ```
 
 ### 2. Unified Sync WebSocket (`/ws/sync`)
+
 - **URL:** `ws://localhost:3001/ws/sync`
 - **Fonction:** Synchronization unifiée (atomes, fichiers, versions)
 - **Usage:** Real-time sync across all clients
@@ -74,10 +76,13 @@ syncWs.send(JSON.stringify({
 ## 🌐 Endpoints API REST
 
 ### Health Check
+
 ```bash
 curl http://localhost:3000/health
 ```
+
 **Réponse:**
+
 ```json
 {
   "status": "ok",
@@ -88,11 +93,13 @@ curl http://localhost:3000/health
 ```
 
 ### Test API
+
 ```bash
 curl http://localhost:3000/api/test
 ```
 
 ### Broadcast depuis l'API
+
 ```bash
 curl -X POST http://localhost:3000/api/broadcast \
   -H "Content-Type: application/json" \
@@ -102,6 +109,7 @@ curl -X POST http://localhost:3000/api/broadcast \
 ## 📁 Fichiers statiques
 
 Le serveur sert automatiquement les fichiers depuis `/src` :
+
 - **Frontend:** `http://localhost:3000/`
 - **Index:** `http://localhost:3000/index.html`
 - **Assets:** `http://localhost:3000/css/styles.css`, etc.
@@ -221,6 +229,7 @@ notificationWs.onmessage = (event) => {
 ## 🔧 Configuration avancée
 
 ### Middleware personnalisé
+
 ```javascript
 // Dans server.js
 fastify.addHook('onRequest', async (request, reply) => {
@@ -229,6 +238,7 @@ fastify.addHook('onRequest', async (request, reply) => {
 ```
 
 ### Authentification WebSocket
+
 ```javascript
 fastify.register(async function (fastify) {
     fastify.get('/ws/secure', { 
@@ -257,6 +267,7 @@ fastify.register(async function (fastify) {
 ## 🐛 Debug et logs
 
 Les logs sont formatés avec `pino-pretty` :
+
 ```bash
 # Logs détaillés
 DEBUG=* node server.js

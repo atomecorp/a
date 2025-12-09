@@ -3,7 +3,7 @@
 # setup_debian_server.sh
 # ----------------------
 # Script d'installation automatique pour serveur Debian/Ubuntu.
-# Installe PostgreSQL, configure la base de données 'squirrel' pour Atome,
+# Installe SQLite3, configure la base de données ADOLE pour Atome,
 # installe Node.js et les dépendances du projet.
 #
 # Usage: sudo ./setup_debian_server.sh
@@ -29,45 +29,17 @@ fi
 # --- 1. Mise à jour du système ---
 log_info "Mise à jour des paquets système..."
 apt-get update && apt-get upgrade -y
-apt-get install -y curl build-essential git
+apt-get install -y curl build-essential git sqlite3
 
-# --- 2. Installation de PostgreSQL ---
-if ! command -v psql >/dev/null 2>&1; then
-  log_info "Installation de PostgreSQL..."
-  apt-get install -y postgresql postgresql-contrib
-  systemctl enable postgresql
-  systemctl start postgresql
-  log_ok "PostgreSQL installé."
+# --- 2. Vérification de SQLite ---
+if command -v sqlite3 >/dev/null 2>&1; then
+  log_ok "SQLite3 installé: $(sqlite3 --version | head -1)"
 else
-  log_ok "PostgreSQL est déjà installé."
+  log_error "Échec de l'installation de SQLite3"
+  exit 1
 fi
 
-# --- 3. Configuration de la Base de Données Atome ---
-DB_NAME="squirrel"
-DB_USER="postgres"
-DB_PASS="postgres" # Mot de passe par défaut défini dans server_install.sh
-
-log_info "Configuration de PostgreSQL pour Atome..."
-
-# On s'assure que le service tourne
-systemctl start postgresql
-
-# Configuration du mot de passe de l'utilisateur postgres
-# Note: Sur une install par défaut Debian, l'utilisateur système 'postgres' peut se connecter sans mot de passe via socket peer.
-# Nous forçons le mot de passe pour permettre la connexion via TCP/IP (localhost) si nécessaire par l'app.
-log_info "Configuration du mot de passe utilisateur '$DB_USER'..."
-sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '$DB_PASS';"
-
-# Création de la base de données si elle n'existe pas
-if sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
-    log_info "La base de données '$DB_NAME' existe déjà."
-else
-    log_info "Création de la base de données '$DB_NAME'..."
-    sudo -u postgres createdb "$DB_NAME"
-    log_ok "Base de données '$DB_NAME' créée."
-fi
-
-# --- 4. Installation de Node.js (LTS) ---
+# --- 3. Installation de Node.js (LTS) ---
 if ! command -v node >/dev/null 2>&1; then
   log_info "Installation de Node.js LTS..."
   # Utilisation du script officiel NodeSource
@@ -78,7 +50,7 @@ else
   log_ok "Node.js est déjà installé: $(node -v)"
 fi
 
-# --- 5. Installation des dépendances du projet ---
+# --- 4. Installation des dépendances du projet ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Si le script est dans scripts_utils/, on remonte d'un cran. Sinon on assume être à la racine.
 if [[ "$(basename "$SCRIPT_DIR")" == "scripts_utils" ]]; then
@@ -106,10 +78,10 @@ if [ -f "$PROJECT_ROOT/package.json" ]; then
   
   log_ok "Dépendances NPM installées."
   
-  # Création du fichier .env si nécessaire avec les infos de la DB locale
+  # Création du fichier .env si nécessaire avec le chemin SQLite
   if [ ! -f ".env" ]; then
       log_info "Création du fichier .env..."
-      echo "ADOLE_PG_DSN=postgres://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME" > .env
+      echo "SQLITE_PATH=$PROJECT_ROOT/src/assets/adole.db" > .env
       chmod 600 .env
       log_ok "Fichier .env créé."
   fi
@@ -120,10 +92,13 @@ fi
 log_ok "✅ Installation terminée avec succès !"
 echo "-----------------------------------------------------"
 echo "Serveur prêt."
-echo "Base de données : $DB_NAME"
-echo "Utilisateur     : $DB_USER"
-echo "Mot de passe    : $DB_PASS"
+echo "Base de données : SQLite ($PROJECT_ROOT/src/assets/adole.db)"
 echo "-----------------------------------------------------"
+echo ""
+echo "Pour utiliser libSQL/Turso en production, ajoutez à .env:"
+echo "  LIBSQL_URL=libsql://your-database.turso.io"
+echo "  LIBSQL_AUTH_TOKEN=your_auth_token"
+echo ""
 echo "Pour lancer le serveur :"
 echo "cd $PROJECT_ROOT"
 echo "npm start (ou la commande de démarrage appropriée)"

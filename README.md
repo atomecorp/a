@@ -13,7 +13,7 @@ Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that driv
 | Layer | Purpose | Default ports / paths |
 | --- | --- | --- |
 | **Squirrel Frontend** (`src/application`) | Builds views via `$()` helpers and DSL-generated components. | Runs inside the browser, the Tauri webview, or WKWebView for AUv3. |
-| **Fastify server** (`server/server.js`) | Serves static files during development, exposes `/api/uploads` backed by `src/assets/uploads`, proxies DB access (PostgreSQL via Objection/Knex). | `http://127.0.0.1:3001` |
+| **Fastify server** (`server/server.js`) | Serves static files during development, exposes `/api/uploads` backed by `src/assets/uploads`, handles DB access (SQLite/libSQL via ADOLE). | `http://127.0.0.1:3001` |
 | **Axum server in Tauri** (`src-tauri/src/server`) | Mirrors the same API when the app runs inside Tauri, persisting uploads under the sandbox (`~/Library/Containers/.../uploads`). | `http://127.0.0.1:3000` |
 | **Tauri host** (`src-tauri`) | Launches the Axum server, makes sure Fastify is running (spawning it if needed), and exposes the port to the frontend. | Native desktop bundle. |
 | **DSP / AUv3 / WAM** (`src/core`, `src/au`, `src/web`, `src-Auv3`) | Shared C++ DSP core compiled via the root CMake superbuild, surfaced either as an AUv3 (iPlug2) or as a WebAudio Module bridge. | Depends on the chosen target. |
@@ -24,7 +24,7 @@ Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that driv
 - **Drag & drop uploads** – `src/application/aBox/index.js` streams blobs to `/api/uploads`, refreshes metadata, and offers one-click downloads.
 - **Multi-runtime parity** – Fastify (Node) and Axum (Rust) implement the same endpoints, so Tauri/AUv3 and the browser stay aligned.
 - **Audio tooling** –  GSAP animations, Tone.js helpers, and the shared iPlug2 DSP core.
-- **Automation scripts** – `run.sh` installs deps, configures PostgreSQL DSNs, launches Fastify + Tauri, or builds production bundles.
+- **Automation scripts** – `run.sh` installs deps, configures SQLite paths, launches Fastify + Tauri, or builds production bundles.
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ Squirrel provides a declarative UI DSL (expressed as plain JavaScript) that driv
 - Rust toolchain + `@tauri-apps/cli`
 - macOS toolchain for AUv3 (Xcode 15+, Command Line Tools, codesigning identities)
 - CMake + Ninja/Make for the DSP superbuild
-- PostgreSQL (optional, needed for features hitting Objection/Knex) – `run.sh` writes a default DSN to `.env`
+- SQLite3 (included by default on macOS/Linux) – `run.sh` auto-configures the database path
 - `brew install ripgrep` is convenient for searching (optional)
 
 ## Getting started
@@ -67,7 +67,7 @@ Tauri embeds the Axum server on port `3000`, points the webview to the same `src
 ./run.sh --prod       # builds frontend + tauri bundle, mounts the dmg
 ```
 
-`run.sh` also ensures `ADOLE_PG_DSN` (or equivalent) exists by generating `postgres://postgres:postgres@localhost:5432/squirrel` when nothing is configured.
+`run.sh` also ensures `SQLITE_PATH` exists by using `src/assets/adole.db` as the default database location. For cloud deployments, set `LIBSQL_URL` and `LIBSQL_AUTH_TOKEN` for Turso.
 
 ### 5. Production bundles & packages
 

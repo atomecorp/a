@@ -658,7 +658,16 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
      */
     server.post('/api/auth/change-password', async (request, reply) => {
         try {
-            const token = request.cookies.access_token;
+            // Try to get token from cookie first, then from Authorization header
+            let token = request.cookies.access_token;
+
+            if (!token) {
+                const authHeader = request.headers.authorization;
+                if (authHeader && authHeader.startsWith('Bearer ')) {
+                    token = authHeader.substring(7);
+                }
+            }
+
             if (!token) {
                 return reply.code(401).send({ success: false, error: 'Not authenticated' });
             }

@@ -9,15 +9,21 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { broadcastMessage } from './githubSync.js';
-import orm from '../database/orm.js';
+import db from '../database/adole.js';
 
 /**
  * Safely parse a JSON value, returning raw value if parsing fails
- * This handles cases where values are stored as raw strings vs JSON
+ * This handles cases where:
+ * - Values are stored as raw strings vs JSON (SQLite)
+ * - PostgreSQL json columns return already-parsed objects
  */
 function safeParseJSON(value) {
     if (value === null || value === undefined) {
         return null;
+    }
+    // If it's already an object (PostgreSQL json column), return as-is
+    if (typeof value === 'object') {
+        return value;
     }
     try {
         return JSON.parse(value);
@@ -66,33 +72,33 @@ async function ensureUserInORM(user) {
     const userId = user.id || user.userId;
 
     // Get or create tenant for this user
-    const tenant = await orm.getOrCreateTenant(phone);
+    const tenant = await db.getOrCreateTenant(phone);
 
     // Check if principal exists by phone first
-    let principal = await orm.findPrincipalByPhone(phone);
+    let principal = await db.findPrincipalByPhone(phone);
 
     if (!principal) {
         // Also check by principal_id (in case phone wasn't set)
-        principal = await orm.findPrincipalById(userId);
+        principal = await db.findPrincipalById(userId);
     }
 
     if (!principal) {
         // Create principal with try/catch for race conditions
         try {
-            await orm.createPrincipal({
+            await db.createPrincipal({
                 principal_id: userId,
                 tenant_id: tenant.tenant_id,
                 kind: 'user',
                 phone: phone,
                 username: user.username
             });
-            principal = await orm.findPrincipalById(userId);
+            principal = await db.findPrincipalById(userId);
         } catch (error) {
             // If duplicate key, try to find existing
             if (error.message.includes('duplicate key')) {
-                principal = await orm.findPrincipalById(userId);
+                principal = await db.findPrincipalById(userId);
                 if (!principal) {
-                    principal = await orm.findPrincipalByPhone(phone);
+                    principal = await db.findPrincipalByPhone(phone);
                 }
             }
             if (!principal) {
@@ -104,7 +110,7 @@ async function ensureUserInORM(user) {
     // Update phone if missing
     if (principal && !principal.phone && phone) {
         try {
-            const db = orm.getDatabase();
+            const db = db.getDatabase();
             await db('principals')
                 .where('principal_id', principal.principal_id)
                 .update({ phone: phone });
@@ -124,7 +130,7 @@ async function ensureUserInORM(user) {
  */
 export function registerAtomeRoutes(server, dataSource) {
     // Initialize ORM (non-blocking, will complete before first request)
-    orm.initDatabase().catch(err => {
+    db.initDatabase().catch(err => {
         console.error('[Atome] ORM initialization error:', err.message);
     });
 
@@ -139,7 +145,7 @@ export function registerAtomeRoutes(server, dataSource) {
 
         try {
             // Ensure ORM is initialized
-            await orm.initDatabase();
+            await db.initDatabase();
 
             // Ensure user exists in ORM
             const { tenant_id, principal_id } = await ensureUserInORM(user);
@@ -178,7 +184,7 @@ export function registerAtomeRoutes(server, dataSource) {
             };
 
             // Create atome via ORM
-            const { object_id } = await orm.createAtome({
+            const { object_id } = await db.createAtome({
                 object_id: atomeId,
                 tenant_id: tenant_id,
                 created_by: principal_id,
@@ -234,14 +240,14 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
             const { properties } = request.body;
 
             // Check if atome exists
-            const atome = await orm.getAtome(id);
+            const atome = await db.getAtome(id);
             if (!atome) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
@@ -249,7 +255,7 @@ export function registerAtomeRoutes(server, dataSource) {
             // Check ownership
             if (atome.created_by !== principal_id) {
                 // Check ACL
-                const hasAccess = await orm.hasPermission(principal_id, id, 'write');
+                const hasAccess = await db.hasPermission(principal_id, id, 'write');
                 if (!hasAccess) {
                     return reply.status(403).send({ success: false, error: 'Access denied' });
                 }
@@ -257,7 +263,7 @@ export function registerAtomeRoutes(server, dataSource) {
 
             // Update properties
             if (properties && typeof properties === 'object') {
-                await orm.updateAtome(id, properties, principal_id);
+                await db.updateAtome(id, properties, principal_id);
             }
 
             const now = new Date().toISOString();
@@ -301,13 +307,13 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
 
             // Check if atome exists
-            const atome = await orm.getAtome(id);
+            const atome = await db.getAtome(id);
             if (!atome) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
@@ -317,14 +323,14 @@ export function registerAtomeRoutes(server, dataSource) {
 
             if (atome.created_by && atome.created_by !== principal_id) {
                 // Check ACL
-                const hasAccess = await orm.hasPermission(principal_id, id, 'delete');
+                const hasAccess = await db.hasPermission(principal_id, id, 'delete');
                 if (!hasAccess) {
                     return reply.status(403).send({ success: false, error: 'Access denied' });
                 }
             }
 
             // Soft delete
-            await orm.deleteAtome(id);
+            await db.deleteAtome(id);
             const deletedAt = new Date().toISOString();
 
             console.log(`✅ [Atome] Deleted: ${id}`);
@@ -362,20 +368,20 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
 
             // Get atome
-            const atome = await orm.getAtome(id);
+            const atome = await db.getAtome(id);
             if (!atome) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
 
             // Check ownership or ACL
             if (atome.created_by !== principal_id) {
-                const hasAccess = await orm.hasPermission(principal_id, id, 'read');
+                const hasAccess = await db.hasPermission(principal_id, id, 'read');
                 if (!hasAccess) {
                     return reply.status(403).send({ success: false, error: 'Access denied' });
                 }
@@ -410,7 +416,7 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { project_id, kind, parent } = request.query;
@@ -418,7 +424,7 @@ export function registerAtomeRoutes(server, dataSource) {
             console.log(`[Atome] LIST - Looking for atomes for user: ${principal_id}`);
 
             // Get all atomes for this user
-            const atomes = await orm.getAtomesByUser(principal_id);
+            const atomes = await db.getAtomesByUser(principal_id);
 
             // Apply filters
             let results = atomes.map(atome => ({
@@ -470,20 +476,20 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
             const { key } = request.query;
 
             // Check atome exists and user has access
-            const atome = await orm.getAtome(id);
+            const atome = await db.getAtome(id);
             if (!atome) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
 
             if (atome.created_by !== principal_id) {
-                const hasAccess = await orm.hasPermission(principal_id, id, 'read');
+                const hasAccess = await db.hasPermission(principal_id, id, 'read');
                 if (!hasAccess) {
                     return reply.status(403).send({ success: false, error: 'Access denied' });
                 }
@@ -494,7 +500,7 @@ export function registerAtomeRoutes(server, dataSource) {
 
             if (key) {
                 // History for specific property
-                const history = await orm.getPropertyHistory(id, key);
+                const history = await db.getPropertyHistory(id, key);
                 versions = history.map(h => ({
                     key: h.key,
                     value: safeParseJSON(h.value),
@@ -505,9 +511,9 @@ export function registerAtomeRoutes(server, dataSource) {
                 }));
             } else {
                 // Get all properties and their histories
-                const allProperties = await orm.getAllProperties(id);
+                const allProperties = await db.getAllProperties(id);
                 for (const propKey of Object.keys(allProperties)) {
-                    const history = await orm.getPropertyHistory(id, propKey, 10);
+                    const history = await db.getPropertyHistory(id, propKey, 10);
                     for (const h of history) {
                         versions.push({
                             key: h.key,
@@ -549,7 +555,7 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
@@ -574,13 +580,13 @@ export function registerAtomeRoutes(server, dataSource) {
             }
 
             // Check atome exists and user has write access
-            const atome = await orm.getAtome(id);
+            const atome = await db.getAtome(id);
             if (!atome) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
 
             if (atome.created_by !== principal_id) {
-                const hasAccess = await orm.hasPermission(principal_id, id, 'write');
+                const hasAccess = await db.hasPermission(principal_id, id, 'write');
                 if (!hasAccess) {
                     return reply.status(403).send({ success: false, error: 'Access denied' });
                 }
@@ -596,10 +602,10 @@ export function registerAtomeRoutes(server, dataSource) {
                 }
 
                 // Get current value for history
-                const currentValue = await orm.getProperty(id, key);
+                const currentValue = await db.getProperty(id, key);
 
                 // Apply the alteration
-                await orm.setProperty(id, key, value, principal_id);
+                await db.setProperty(id, key, value, principal_id);
 
                 appliedAlterations.push({
                     key,
@@ -647,7 +653,7 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
@@ -662,23 +668,23 @@ export function registerAtomeRoutes(server, dataSource) {
             }
 
             // Check atome exists and user has write access
-            const atome = await orm.getAtome(id);
+            const atome = await db.getAtome(id);
             if (!atome) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
 
             if (atome.created_by !== principal_id) {
-                const hasAccess = await orm.hasPermission(principal_id, id, 'write');
+                const hasAccess = await db.hasPermission(principal_id, id, 'write');
                 if (!hasAccess) {
                     return reply.status(403).send({ success: false, error: 'Access denied' });
                 }
             }
 
             // Get current name for history
-            const oldName = await orm.getProperty(id, 'name');
+            const oldName = await db.getProperty(id, 'name');
 
             // Update the name
-            await orm.setProperty(id, 'name', new_name.trim(), principal_id);
+            await db.setProperty(id, 'name', new_name.trim(), principal_id);
 
             // Get client ID from header to exclude from broadcast
             const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
@@ -718,7 +724,7 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { id } = request.params;
@@ -739,20 +745,20 @@ export function registerAtomeRoutes(server, dataSource) {
             }
 
             // Check atome exists and user has write access
-            const atome = await orm.getAtome(id);
+            const atome = await db.getAtome(id);
             if (!atome) {
                 return reply.status(404).send({ success: false, error: 'Atome not found' });
             }
 
             if (atome.created_by !== principal_id) {
-                const hasAccess = await orm.hasPermission(principal_id, id, 'write');
+                const hasAccess = await db.hasPermission(principal_id, id, 'write');
                 if (!hasAccess) {
                     return reply.status(403).send({ success: false, error: 'Access denied' });
                 }
             }
 
             // Get property history
-            const history = await orm.getPropertyHistory(id, key);
+            const history = await db.getPropertyHistory(id, key);
 
             if (!history || history.length === 0) {
                 return reply.status(404).send({
@@ -770,11 +776,11 @@ export function registerAtomeRoutes(server, dataSource) {
 
             // Get the version to restore
             const versionToRestore = history[version_index];
-            const valueToRestore = JSON.parse(versionToRestore.value || 'null');
-            const currentValue = await orm.getProperty(id, key);
+            const valueToRestore = safeParseJSON(versionToRestore.value);
+            const currentValue = await db.getProperty(id, key);
 
             // Apply the restoration (this creates a new history entry)
-            await orm.setProperty(id, key, valueToRestore, principal_id);
+            await db.setProperty(id, key, valueToRestore, principal_id);
 
             // Get client ID from header to exclude from broadcast
             const senderClientId = request.headers['x-client-id'] || request.headers['x-ws-client-id'];
@@ -817,7 +823,7 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
             const { confirm } = request.body || {};
@@ -829,7 +835,7 @@ export function registerAtomeRoutes(server, dataSource) {
                 });
             }
 
-            const db = orm.getDatabase();
+            const db = db.getDatabase();
 
             // Count atomes before deletion
             const atomes = await db('atomes')
@@ -886,15 +892,11 @@ export function registerAtomeRoutes(server, dataSource) {
         }
 
         try {
-            await orm.initDatabase();
+            await db.initDatabase();
             const { tenant_id, principal_id } = await ensureUserInORM(user);
 
-            const db = orm.getDatabase();
-
-            // Get all user's atomes
-            const atomes = await db('atomes')
-                .where('created_by', principal_id)
-                .select('*');
+            // Use ORM function to get all atomes with properties
+            const atomes = await db.getAtomesByUser(principal_id);
 
             const exportData = {
                 exported_at: new Date().toISOString(),
@@ -903,13 +905,10 @@ export function registerAtomeRoutes(server, dataSource) {
             };
 
             for (const atome of atomes) {
-                // Get all properties for this atome
-                const properties = await orm.getAllProperties(atome.atome_id);
-
                 // Get history for each property
                 const history = {};
-                for (const key of Object.keys(properties)) {
-                    const propHistory = await orm.getPropertyHistory(atome.atome_id, key);
+                for (const key of Object.keys(atome.properties || {})) {
+                    const propHistory = await db.getPropertyHistory(atome.object_id, key);
                     history[key] = propHistory.map(h => ({
                         value: safeParseJSON(h.value),
                         previous_value: h.previous_value ? safeParseJSON(h.previous_value) : null,
@@ -919,11 +918,12 @@ export function registerAtomeRoutes(server, dataSource) {
                 }
 
                 exportData.atomes.push({
-                    atome_id: atome.atome_id,
-                    atome_type: atome.atome_type,
+                    atome_id: atome.object_id,
+                    atome_type: atome.type,
+                    kind: atome.kind,
                     created_at: atome.created_at,
                     updated_at: atome.updated_at,
-                    properties,
+                    properties: atome.properties,
                     history
                 });
             }

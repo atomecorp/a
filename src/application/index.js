@@ -53,10 +53,10 @@
 // import('./examples/user_creation.js');
 // import('./examples/update.js');
 // import('./examples/socket_test.js');
-// import('./examples/check.js');
+
 // import('./examples/ide_code_editor.js');
 import('./examples/apis.js');
-
+import('./examples/check.js');
 // import('./lyrix/index.js');
 // import('./examples/input_file.js');
 // import('./examples/iOS_app_launcher.js');
