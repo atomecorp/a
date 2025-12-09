@@ -138,6 +138,58 @@ export async function sendSMS(phone, message) {
     return true;
 }
 
+/**
+ * Sync a newly created user to Tauri server
+ * @param {string} username - User's username
+ * @param {string} phone - User's phone number
+ * @param {string} passwordHash - Bcrypt hashed password
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function syncUserToTauri(username, phone, passwordHash) {
+    const tauriUrl = process.env.TAURI_URL || 'http://localhost:3000';
+    const syncSecret = process.env.SYNC_SECRET || 'squirrel-sync-2024';
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(`${tauriUrl}/api/auth/local/sync-register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Sync-Secret': syncSecret
+            },
+            body: JSON.stringify({
+                username,
+                phone,
+                password_hash: passwordHash,
+                source_server: 'fastify'
+            }),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        const data = await response.json();
+        
+        if (data.success || data.alreadyExists) {
+            console.log(`🔄 User synced to Tauri: ${username} (${phone})`);
+            return { success: true, synced: true };
+        } else {
+            console.warn(`⚠️ Tauri sync response: ${data.error || 'Unknown error'}`);
+            return { success: false, error: data.error };
+        }
+    } catch (error) {
+        // Don't fail registration if Tauri is unavailable
+        if (error.name === 'AbortError') {
+            console.warn(`⚠️ Tauri sync timeout - server may be offline`);
+        } else {
+            console.warn(`⚠️ Tauri sync failed: ${error.message}`);
+        }
+        return { success: false, error: error.message };
+    }
+}
+
 // =============================================================================
 // FASTIFY PLUGIN REGISTRATION
 // =============================================================================
@@ -278,6 +330,14 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
 
             console.log(`✅ User registered: ${cleanUsername} (${cleanPhone}) [${principalId}]`);
 
+            // Sync to Tauri server (async, don't block response)
+            let syncResult = { success: false };
+            try {
+                syncResult = await syncUserToTauri(cleanUsername, cleanPhone, passwordHash);
+            } catch (e) {
+                console.warn('[auth] Tauri sync error:', e.message);
+            }
+
             // Emit account creation event for sync
             try {
                 const eventBus = getABoxEventBus();
@@ -302,7 +362,8 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             return {
                 success: true,
                 message: 'Account created successfully',
-                principalId
+                principalId,
+                synced: syncResult.success
             };
 
         } catch (error) {
@@ -496,7 +557,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         try {
             // Accept token from cookie OR Authorization header
             let token = request.cookies.access_token;
-            
+
             // Fallback to Authorization header if no cookie
             if (!token) {
                 const authHeader = request.headers.authorization;
@@ -504,7 +565,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
                     token = authHeader.substring(7);
                 }
             }
-            
+
             if (!token) {
                 // Return 200 with success:false to avoid browser console error
                 return { success: false, authenticated: false };

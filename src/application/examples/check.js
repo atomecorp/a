@@ -594,15 +594,19 @@ async function runTest2_FastifyToTauri() {
     log(`❌ TEST 2 FAILED: Cannot create user on Fastify - ${createResult.error}`, 'error');
     return false;
   }
-  log('✅ User created on Fastify', 'success');
+  log(`✅ User created on Fastify (synced: ${createResult.synced || 'unknown'})`, 'success');
 
-  // Step 2: Logout from Fastify
+  // Step 2: Sync to Tauri (same as manual button does)
+  log('Step 2: Syncing user to Tauri (client-side)...', 'info');
+  await syncUserToTauri(testUser, testPass);
+
+  // Step 3: Logout from Fastify
   FastifyAdapter.clearToken();
-  log('Step 2: Logged out from Fastify', 'info');
+  log('Step 3: Logged out from Fastify', 'info');
 
-  // Step 3: Try to login on Tauri WITHOUT page reload
-  log('Step 3: Attempting login on Tauri (no page reload)...', 'info');
-  const loginResult = await TauriAdapter.auth.login({
+  // Step 4: Try to login on Tauri - first attempt
+  log('Step 4: Attempting login on Tauri (first try)...', 'info');
+  let loginResult = await TauriAdapter.auth.login({
     phone: testUser,
     password: testPass
   });
@@ -612,9 +616,27 @@ async function runTest2_FastifyToTauri() {
     TauriAdapter.clearToken();
     await updateStatus();
     return true;
+  }
+
+  // Step 5: If first attempt failed, wait 5 seconds and retry
+  log(`⚠️ First login attempt failed: ${loginResult.error}`, 'warn');
+  log('Step 5: Waiting 5 seconds and retrying...', 'info');
+  await new Promise(r => setTimeout(r, 5000));
+
+  // Step 6: Second attempt
+  log('Step 6: Attempting login on Tauri (second try)...', 'info');
+  loginResult = await TauriAdapter.auth.login({
+    phone: testUser,
+    password: testPass
+  });
+
+  if (loginResult.success) {
+    log('✅ TEST 2 PASSED: User created in Fastify can login in Tauri (on retry)!', 'success');
+    TauriAdapter.clearToken();
+    await updateStatus();
+    return true;
   } else {
-    log(`⚠️ TEST 2 NOTE: Login on Tauri failed - ${loginResult.error}`, 'warn');
-    log('This is expected if Tauri and Fastify use separate databases.', 'warn');
+    log(`❌ TEST 2 FAILED: Login on Tauri failed after retry - ${loginResult.error}`, 'error');
     await updateStatus();
     return false;
   }
