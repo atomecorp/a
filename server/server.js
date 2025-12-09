@@ -1039,6 +1039,83 @@ async function startServer() {
     // 3. WEBSOCKET NATIF
     // ===========================
 
+    // Route WebSocket pour API calls (replaces HTTP fetch)
+    server.register(async function (fastify) {
+      fastify.get('/ws/api', { websocket: true }, async (connection) => {
+        console.log('🔗 New WebSocket API connection');
+
+        const safeSend = (payload) => {
+          try {
+            connection.send(JSON.stringify(payload));
+          } catch (error) {
+            console.error('❌ WebSocket send error:', error);
+          }
+        };
+
+        connection.on('message', async (message) => {
+          let data;
+          try {
+            data = JSON.parse(message.toString());
+          } catch (e) {
+            safeSend({ type: 'error', message: 'Invalid JSON' });
+            return;
+          }
+
+          // Handle ping/pong
+          if (data.type === 'ping') {
+            safeSend({ type: 'pong' });
+            return;
+          }
+
+          // Handle API requests
+          if (data.type === 'api-request') {
+            const { id, method, path, body, headers } = data;
+
+            try {
+              // Inject the request through Fastify's internal router
+              const response = await server.inject({
+                method: method || 'GET',
+                url: path,
+                payload: body,
+                headers: {
+                  'content-type': 'application/json',
+                  ...headers
+                }
+              });
+
+              safeSend({
+                type: 'api-response',
+                id,
+                response: {
+                  status: response.statusCode,
+                  headers: response.headers,
+                  body: response.json ? response.json() : response.payload
+                }
+              });
+            } catch (error) {
+              safeSend({
+                type: 'api-response',
+                id,
+                error: error.message || 'Internal server error'
+              });
+            }
+            return;
+          }
+
+          // Unknown message type
+          safeSend({ type: 'error', message: `Unknown message type: ${data.type}` });
+        });
+
+        connection.on('close', () => {
+          console.log('🔌 WebSocket API connection closed');
+        });
+
+        connection.on('error', (error) => {
+          console.error('❌ WebSocket API error:', error);
+        });
+      });
+    });
+
     // Route WebSocket unifiée pour sync (inclut file events, atome events, version sync)
     server.register(async function (fastify) {
       // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser

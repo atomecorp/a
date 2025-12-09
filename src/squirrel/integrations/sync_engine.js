@@ -78,16 +78,27 @@ export function getClientId() {
 
 /**
  * Check if Fastify server is available
+ * Uses cached state to avoid network errors in console
  */
 async function checkFastifyAvailable() {
+    // First check if we already know Fastify is unavailable
+    if (typeof window._checkFastifyAvailable === 'function') {
+        const cachedState = window._checkFastifyAvailable();
+        if (cachedState === false) {
+            return false;
+        }
+    }
+
     try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 2000);
         const response = await fetch('http://127.0.0.1:3001/api/server-info', {
-            signal: controller.signal
+            signal: controller.signal,
+            mode: 'no-cors' // Prevents CORS errors in console
         });
         clearTimeout(timeout);
-        return response.ok;
+        // With no-cors, we can't read response.ok, but if we get here without error, server is up
+        return true;
     } catch (e) {
         return false;
     }

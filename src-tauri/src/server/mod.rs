@@ -1,11 +1,15 @@
 use axum::{
     body::Bytes,
-    extract::{DefaultBodyLimit, Path as AxumPath, State},
-    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        DefaultBodyLimit, Path as AxumPath, State,
+    },
+    http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::IntoResponse,
     routing::{get, get_service, post},
     Json, Router,
 };
+use futures_util::StreamExt;
 use serde_json::json;
 use std::{
     borrow::Cow,
@@ -119,19 +123,25 @@ async fn server_info_handler(State(state): State<AppState>) -> impl IntoResponse
 /// Debug log handler - receives logs from frontend to survive page reloads
 async fn debug_log_handler(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
     // Print to terminal with timestamp
-    let level = payload.get("level").and_then(|v| v.as_str()).unwrap_or("info");
-    let message = payload.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    let level = payload
+        .get("level")
+        .and_then(|v| v.as_str())
+        .unwrap_or("info");
+    let message = payload
+        .get("message")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let elapsed = payload.get("elapsed").and_then(|v| v.as_i64()).unwrap_or(0);
     let data = payload.get("data");
-    
+
     let icon = match level {
         "error" => "❌",
         "warn" => "⚠️",
-        _ => "📝"
+        _ => "📝",
     };
-    
+
     println!("{} [FRONTEND +{}ms] {} {:?}", icon, elapsed, message, data);
-    
+
     Json(json!({ "success": true }))
 }
 
@@ -764,6 +774,161 @@ async fn sync_from_zip_handler(
     )
 }
 
+// =============================================================================
+// WEBSOCKET HANDLERS
+// =============================================================================
+
+/// WebSocket handler for API calls (replaces HTTP fetch for silent connection detection)
+async fn ws_api_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_ws_api(socket, state))
+}
+
+/// Handle WebSocket API connection
+async fn handle_ws_api(mut socket: WebSocket, _state: AppState) {
+    println!("🔗 New WebSocket API connection");
+
+    while let Some(msg) = socket.next().await {
+        let msg = match msg {
+            Ok(m) => m,
+            Err(_) => break,
+        };
+
+        match msg {
+            Message::Text(text) => {
+                // Parse JSON message
+                let data: serde_json::Value = match serde_json::from_str(&text) {
+                    Ok(v) => v,
+                    Err(_) => {
+                        let _ = socket
+                            .send(Message::Text(
+                                json!({"type": "error", "message": "Invalid JSON"}).to_string(),
+                            ))
+                            .await;
+                        continue;
+                    }
+                };
+
+                // Handle ping/pong
+                if data.get("type").and_then(|v| v.as_str()) == Some("ping") {
+                    let _ = socket
+                        .send(Message::Text(json!({"type": "pong"}).to_string()))
+                        .await;
+                    continue;
+                }
+
+                // Handle API requests
+                if data.get("type").and_then(|v| v.as_str()) == Some("api-request") {
+                    let id = data.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                    let method = data.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
+                    let path = data.get("path").and_then(|v| v.as_str()).unwrap_or("/");
+
+                    // For now, return a simple acknowledgment
+                    // TODO: Implement proper request routing
+                    let response = json!({
+                        "type": "api-response",
+                        "id": id,
+                        "response": {
+                            "status": 200,
+                            "headers": {},
+                            "body": {
+                                "success": true,
+                                "method": method,
+                                "path": path,
+                                "server": "Tauri/Axum"
+                            }
+                        }
+                    });
+
+                    let _ = socket.send(Message::Text(response.to_string())).await;
+                    continue;
+                }
+
+                // Unknown message type
+                let _ = socket
+                    .send(Message::Text(
+                        json!({"type": "error", "message": "Unknown message type"}).to_string(),
+                    ))
+                    .await;
+            }
+            Message::Ping(data) => {
+                let _ = socket.send(Message::Pong(data)).await;
+            }
+            Message::Close(_) => break,
+            _ => {}
+        }
+    }
+
+    println!("🔌 WebSocket API connection closed");
+}
+
+/// WebSocket handler for sync (compatible with sync_engine.js)
+async fn ws_sync_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(handle_ws_sync)
+}
+
+/// Handle WebSocket sync connection
+async fn handle_ws_sync(mut socket: WebSocket) {
+    println!("🔗 New WebSocket sync connection");
+
+    // Send welcome message
+    let _ = socket
+        .send(Message::Text(
+            json!({
+                "type": "connected",
+                "server": "Tauri",
+                "version": "1.0.0"
+            })
+            .to_string(),
+        ))
+        .await;
+
+    while let Some(msg) = socket.next().await {
+        let msg = match msg {
+            Ok(m) => m,
+            Err(_) => break,
+        };
+
+        match msg {
+            Message::Text(text) => {
+                let data: serde_json::Value = match serde_json::from_str(&text) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                // Handle ping
+                if data.get("type").and_then(|v| v.as_str()) == Some("ping") {
+                    let _ = socket
+                        .send(Message::Text(json!({"type": "pong"}).to_string()))
+                        .await;
+                    continue;
+                }
+
+                // Handle heartbeat
+                if data.get("type").and_then(|v| v.as_str()) == Some("heartbeat") {
+                    let _ = socket
+                        .send(Message::Text(json!({"type": "heartbeat_ack"}).to_string()))
+                        .await;
+                    continue;
+                }
+
+                // Echo other messages for now
+                let _ = socket
+                    .send(Message::Text(
+                        json!({"type": "ack", "received": data}).to_string(),
+                    ))
+                    .await;
+            }
+            Message::Ping(data) => {
+                let _ = socket.send(Message::Pong(data)).await;
+            }
+            Message::Close(_) => break,
+            _ => {}
+        }
+    }
+
+    println!("🔌 WebSocket sync connection closed");
+}
+
 pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     // Service principal
     let base_dir = static_dir.clone();
@@ -835,7 +1000,12 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            HeaderName::from_static("x-client-id"),
+        ])
         .allow_credentials(true);
 
     // Use a separate data directory for SQLite databases to avoid triggering Tauri hot-reload
@@ -844,7 +1014,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         // Try to use a 'data' folder at project root (outside src/)
         let project_root = static_dir.parent().unwrap_or(&static_dir);
         let data_path = project_root.join("data");
-        
+
         // Create the data directory if it doesn't exist
         if let Err(e) = std::fs::create_dir_all(&data_path) {
             eprintln!("⚠️ Could not create data directory {:?}: {}", data_path, e);
@@ -857,12 +1027,12 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
     };
 
     // Create local auth router (independent state) with CORS layer
-    let local_auth_router = local_auth::create_local_auth_router(data_dir.clone())
-        .layer(cors.clone());
+    let local_auth_router =
+        local_auth::create_local_auth_router(data_dir.clone()).layer(cors.clone());
 
     // Create local atome router with CORS layer
-    let local_atome_router = local_atome::create_local_atome_router(data_dir.clone())
-        .layer(cors.clone());
+    let local_atome_router =
+        local_atome::create_local_atome_router(data_dir.clone()).layer(cors.clone());
 
     let app = Router::new()
         .route("/api/server-info", get(server_info_handler))
@@ -875,6 +1045,9 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf) {
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))
         .route("/api/admin/sync-from-zip", post(sync_from_zip_handler))
+        // WebSocket endpoint for API calls (silent connection detection)
+        .route("/ws/api", get(ws_api_handler))
+        .route("/ws/sync", get(ws_sync_handler))
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)

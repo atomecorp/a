@@ -23,8 +23,101 @@ export const CONFIG = {
     HEARTBEAT_INTERVAL: 30000,
     MAX_RECONNECT_ATTEMPTS: 3,
     LONG_POLL_INTERVAL: 300000,
-    SILENT_MODE_AFTER_FAILURES: 1
+    SILENT_MODE_AFTER_FAILURES: 1,
+    PING_TIMEOUT: 2000,         // 2 seconds timeout for ping
+    OFFLINE_CACHE_DURATION: 10000 // 10 seconds cache for offline state
 };
+
+// ============================================
+// SILENT CONNECTION STATE (No console errors)
+// ============================================
+
+const _connectionState = {
+    tauri: { online: null, lastCheck: 0, failCount: 0 },
+    fastify: { online: null, lastCheck: 0, failCount: 0 }
+};
+
+/**
+ * Silent ping - checks server availability WITHOUT console errors
+ * Uses a combination of techniques to minimize console noise
+ * @param {string} baseUrl - Server base URL
+ * @returns {Promise<boolean>} - true if online, false otherwise
+ */
+async function silentPing(baseUrl) {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CONFIG.PING_TIMEOUT);
+
+        // Use HEAD request for minimal payload
+        const response = await fetch(`${baseUrl}/api/server-info`, {
+            method: 'HEAD',
+            signal: controller.signal,
+            // Prevent caching
+            cache: 'no-store',
+            // Don't send credentials to avoid CORS preflight on simple requests
+            credentials: 'omit'
+        });
+
+        clearTimeout(timeoutId);
+        return response.ok || response.status < 500;
+    } catch {
+        // Silently return false - no logging
+        return false;
+    }
+}
+
+/**
+ * Check connection state with caching to avoid spamming
+ * @param {'tauri'|'fastify'} backend - Backend to check
+ * @returns {Promise<boolean>} - true if online
+ */
+export async function checkConnection(backend) {
+    const state = _connectionState[backend];
+    const baseUrl = backend === 'tauri' ? CONFIG.TAURI_BASE_URL : CONFIG.FASTIFY_BASE_URL;
+    const now = Date.now();
+
+    // Use cached state if recently checked
+    if (state.lastCheck && (now - state.lastCheck < CONFIG.OFFLINE_CACHE_DURATION)) {
+        return state.online;
+    }
+
+    // If we've failed multiple times, extend cache duration
+    const cacheMultiplier = Math.min(state.failCount + 1, 6); // Max 60 seconds cache
+    const effectiveCacheDuration = CONFIG.OFFLINE_CACHE_DURATION * cacheMultiplier;
+
+    if (state.lastCheck && (now - state.lastCheck < effectiveCacheDuration)) {
+        return state.online;
+    }
+
+    // Perform silent ping
+    const isOnline = await silentPing(baseUrl);
+
+    // Update state
+    state.online = isOnline;
+    state.lastCheck = now;
+    state.failCount = isOnline ? 0 : state.failCount + 1;
+
+    return isOnline;
+}
+
+/**
+ * Reset connection state (call when network changes)
+ */
+export function resetConnectionState() {
+    _connectionState.tauri = { online: null, lastCheck: 0, failCount: 0 };
+    _connectionState.fastify = { online: null, lastCheck: 0, failCount: 0 };
+}
+
+/**
+ * Get current connection state (synchronous, uses cache)
+ * @returns {{tauri: boolean|null, fastify: boolean|null}}
+ */
+export function getConnectionState() {
+    return {
+        tauri: _connectionState.tauri.online,
+        fastify: _connectionState.fastify.online
+    };
+}
 
 // ============================================
 // BACKEND AVAILABILITY CACHE (Singleton)
@@ -38,6 +131,7 @@ const _backendState = {
 
 /**
  * Check which backends are available (cached)
+ * Uses silent ping to avoid console errors
  * @param {boolean} force - Force recheck even if recently checked
  * @returns {Promise<{tauri: boolean, fastify: boolean}>}
  */
@@ -48,8 +142,8 @@ export async function checkBackends(force = false) {
     }
 
     const [tauri, fastify] = await Promise.all([
-        checkServerAvailable(CONFIG.TAURI_BASE_URL),
-        checkServerAvailable(CONFIG.FASTIFY_BASE_URL)
+        checkConnection('tauri'),
+        checkConnection('fastify')
     ]);
 
     _backendState.tauri = tauri;
@@ -60,23 +154,12 @@ export async function checkBackends(force = false) {
 }
 
 /**
- * Check if a server is available
+ * Check if a server is available (uses silent ping)
  * @param {string} baseUrl - Server base URL
  * @returns {Promise<boolean>}
  */
 export async function checkServerAvailable(baseUrl) {
-    try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 2000);
-        const response = await fetch(`${baseUrl}/api/server-info`, {
-            method: 'GET',
-            signal: controller.signal
-        });
-        clearTimeout(timeout);
-        return response.ok;
-    } catch (e) {
-        return false;
-    }
+    return silentPing(baseUrl);
 }
 
 // ============================================
@@ -151,13 +234,32 @@ export function clearToken(key) {
 
 /**
  * Create a request function for a specific backend
+ * Silent mode: checks connection before sending requests to avoid console errors
  * @param {string} baseUrl - Backend base URL
  * @param {string} tokenKey - LocalStorage key for auth token
  * @param {Object} options - Additional options
  * @returns {Function} Request function
  */
 export function createRequest(baseUrl, tokenKey, options = {}) {
+    // Determine which backend this is for connection checking
+    const backendType = baseUrl.includes(':3000') ? 'tauri' : 'fastify';
+
     return async function request(endpoint, reqOptions = {}) {
+        // Silent connection check before making request
+        // Skip check for skipConnectionCheck option (used internally)
+        if (!reqOptions.skipConnectionCheck) {
+            const isOnline = await checkConnection(backendType);
+            if (!isOnline) {
+                return {
+                    ok: false,
+                    success: false,
+                    error: 'Server unreachable',
+                    status: 0,
+                    offline: true
+                };
+            }
+        }
+
         const url = `${baseUrl}${endpoint}`;
         const token = getToken(tokenKey);
         const wsClientId = getToken('squirrel_client_id');
@@ -186,8 +288,22 @@ export function createRequest(baseUrl, tokenKey, options = {}) {
         }
 
         try {
-            const response = await fetch(url, config);
-            const data = await response.json();
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+            const response = await fetch(url, {
+                ...config,
+                signal: controller.signal
+            });
+
+            clearTimeout(timeoutId);
+
+            let data;
+            try {
+                data = await response.json();
+            } catch {
+                data = { success: response.ok };
+            }
 
             // Store token if returned
             if (data.token) {
@@ -200,11 +316,20 @@ export function createRequest(baseUrl, tokenKey, options = {}) {
                 ...data
             };
         } catch (error) {
+            // Update connection state on failure
+            const state = _connectionState[backendType];
+            if (state) {
+                state.online = false;
+                state.lastCheck = Date.now();
+                state.failCount++;
+            }
+
             return {
                 ok: false,
                 success: false,
-                error: error.message || 'Network error',
-                status: 0
+                error: error.name === 'AbortError' ? 'Request timeout' : (error.message || 'Network error'),
+                status: 0,
+                offline: true
             };
         }
     };
